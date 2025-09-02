@@ -3,11 +3,8 @@
 name: Build WASM Artifacts
 on: workflow_dispatch
 jobs:
-  test-suite:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  build-wasm:
+    runs-on: ubuntu-latest
     
     name: Build WASM Artifacts
     
