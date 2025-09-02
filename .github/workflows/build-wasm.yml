@@ -1,0 +1,65 @@
+# Tests a broad set of Quarto functionality that users are likely to encounter.
+# A failure indicates some signficant portion of functionality is likely to be broken.
+name: Build WASM Artifacts
+on: workflow_dispatch
+jobs:
+  test-suite:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    
+    name: Build WASM Artifacts
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Set up build tools
+        if: runner.os == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl file git
+
+      - name: Set up Rust nightly (Linux)
+        if: runner.os == 'Linux'
+        run: rustup override set nightly
+        shell: bash
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+          platform: x64
+    
+      - name: Setup wasm-pack
+        shell: bash
+        run: |
+          cargo install wasm-pack
+
+      # tree-sitter setup
+      - name: Set up tree-sitter CLI (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install libc6-dev
+          sudo apt-get install gcc-multilib
+          curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+          gunzip tree-sitter-linux-x86.gz
+          chmod +x tree-sitter-linux-x86
+          sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
+
+      # build and run tests
+      - name: Build
+        run: |
+          cd crates/wasm-qmd-parser
+          wasm-pack build --target web --dev
+        shell: bash
+    
+      # upload artifacts
+      - name: Upload WASM Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-qmd-parser
+          path: crates/wasm-qmd-parser/pkg
