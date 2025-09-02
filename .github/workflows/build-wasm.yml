@@ -20,11 +20,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential curl file git
 
-      - name: Set up Rust nightly (Linux)
-        if: runner.os == 'Linux'
-        run: rustup override set nightly
-        shell: bash
-
       - name: Set up Clang
         uses: egor-tensin/setup-clang@v1
         with:
@@ -51,6 +46,7 @@ jobs:
       - name: Build
         run: |
           cd crates/wasm-qmd-parser
+          export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
           wasm-pack build --target web --dev
         shell: bash
     
