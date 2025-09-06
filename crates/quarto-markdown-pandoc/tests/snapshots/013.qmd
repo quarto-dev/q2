@@ -1,0 +1,1 @@
+[++insertions with markdown _inside_ them], [--deletions, **likewise**], [!! highlight this part][>> with a comment about the previous highlight].

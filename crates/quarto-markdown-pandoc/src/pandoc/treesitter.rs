@@ -10,9 +10,10 @@ use crate::pandoc::block::{
 };
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{
-    Citation, CitationMode, Cite, Code, Emph, Image, Inline, Inlines, LineBreak, Link, Math,
-    MathType, Note, NoteReference, QuoteType, Quoted, RawInline, SoftBreak, Space, Span, Str,
-    Strikeout, Strong, Subscript, Superscript, Target, is_empty_target,
+    Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Image, Inline,
+    Inlines, Insert, LineBreak, Link, Math, MathType, Note, NoteReference, QuoteType, Quoted,
+    RawInline, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Target,
+    is_empty_target,
 };
 
 use crate::pandoc::inline::{make_cite_inline, make_span_inline};
@@ -894,7 +895,11 @@ fn native_visitor<T: Write>(
         | "superscript_delimiter"
         | "subscript_delimiter"
         | "strikeout_delimiter"
-        | "emphasis_delimiter" => {
+        | "emphasis_delimiter"
+        | "insert_delimiter"
+        | "delete_delimiter"
+        | "highlight_delimiter"
+        | "edit_comment_delimiter" => {
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
         "soft_line_break" => {
@@ -968,6 +973,46 @@ fn native_visitor<T: Write>(
                 .map(native_inline)
                 .collect();
             PandocNativeIntermediate::IntermediateInline(Inline::Strikeout(Strikeout {
+                content: inlines,
+            }))
+        }
+        "insert" => {
+            let inlines: Vec<_> = children
+                .into_iter()
+                .filter(|(node, _)| node != "insert_delimiter")
+                .map(native_inline)
+                .collect();
+            PandocNativeIntermediate::IntermediateInline(Inline::Insert(Insert {
+                content: inlines,
+            }))
+        }
+        "delete" => {
+            let inlines: Vec<_> = children
+                .into_iter()
+                .filter(|(node, _)| node != "delete_delimiter")
+                .map(native_inline)
+                .collect();
+            PandocNativeIntermediate::IntermediateInline(Inline::Delete(Delete {
+                content: inlines,
+            }))
+        }
+        "highlight" => {
+            let inlines: Vec<_> = children
+                .into_iter()
+                .filter(|(node, _)| node != "highlight_delimiter")
+                .map(native_inline)
+                .collect();
+            PandocNativeIntermediate::IntermediateInline(Inline::Highlight(Highlight {
+                content: inlines,
+            }))
+        }
+        "edit_comment" => {
+            let inlines: Vec<_> = children
+                .into_iter()
+                .filter(|(node, _)| node != "edit_comment_delimiter")
+                .map(native_inline)
+                .collect();
+            PandocNativeIntermediate::IntermediateInline(Inline::EditComment(EditComment {
                 content: inlines,
             }))
         }
@@ -1893,6 +1938,62 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                         content: vec![],
                     })],
                     false,
+                )
+            })
+            .with_insert(|insert| {
+                let (content, _changed) = trim_inlines(insert.content);
+                FilterResult(
+                    vec![Inline::Span(Span {
+                        attr: (
+                            "".to_string(),
+                            vec!["quarto-insert".to_string()],
+                            HashMap::new(),
+                        ),
+                        content,
+                    })],
+                    true,
+                )
+            })
+            .with_delete(|delete| {
+                let (content, _changed) = trim_inlines(delete.content);
+                FilterResult(
+                    vec![Inline::Span(Span {
+                        attr: (
+                            "".to_string(),
+                            vec!["quarto-delete".to_string()],
+                            HashMap::new(),
+                        ),
+                        content,
+                    })],
+                    true,
+                )
+            })
+            .with_highlight(|highlight| {
+                let (content, _changed) = trim_inlines(highlight.content);
+                FilterResult(
+                    vec![Inline::Span(Span {
+                        attr: (
+                            "".to_string(),
+                            vec!["quarto-highlight".to_string()],
+                            HashMap::new(),
+                        ),
+                        content,
+                    })],
+                    true,
+                )
+            })
+            .with_edit_comment(|edit_comment| {
+                let (content, _changed) = trim_inlines(edit_comment.content);
+                FilterResult(
+                    vec![Inline::Span(Span {
+                        attr: (
+                            "".to_string(),
+                            vec!["quarto-edit-comment".to_string()],
+                            HashMap::new(),
+                        ),
+                        content,
+                    })],
+                    true,
                 )
             })
             .with_inlines(|inlines| {

@@ -2196,6 +2196,158 @@
         }
       ]
     },
+    "insert": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "\\[\\+\\+[ ]*"
+            },
+            "named": true,
+            "value": "insert_delimiter"
+          }
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_inline_element"
+          }
+        },
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "[ ]*\\]"
+            },
+            "named": true,
+            "value": "insert_delimiter"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "\\[\\-\\-[ ]*"
+            },
+            "named": true,
+            "value": "delete_delimiter"
+          }
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_inline_element"
+          }
+        },
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "[ ]*\\]"
+            },
+            "named": true,
+            "value": "delete_delimiter"
+          }
+        }
+      ]
+    },
+    "highlight": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "\\[\\!\\![ ]*"
+            },
+            "named": true,
+            "value": "highlight_delimiter"
+          }
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_inline_element"
+          }
+        },
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "[ ]*\\]"
+            },
+            "named": true,
+            "value": "highlight_delimiter"
+          }
+        }
+      ]
+    },
+    "edit_comment": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "\\[>>[ ]*"
+            },
+            "named": true,
+            "value": "edit_comment_delimiter"
+          }
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_inline_element"
+          }
+        },
+        {
+          "type": "PREC",
+          "value": 3,
+          "content": {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "[ ]*\\]"
+            },
+            "named": true,
+            "value": "edit_comment_delimiter"
+          }
+        }
+      ]
+    },
     "superscript": {
       "type": "SEQ",
       "members": [
@@ -3686,6 +3838,22 @@
             {
               "type": "SYMBOL",
               "name": "commonmark_attribute"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "insert"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "delete"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "highlight"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "edit_comment"
             },
             {
               "type": "ALIAS",

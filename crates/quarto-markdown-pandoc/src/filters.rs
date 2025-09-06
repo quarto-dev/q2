@@ -53,6 +53,10 @@ pub struct Filter<'a> {
     pub shortcode: InlineFilterField<'a, pandoc::Shortcode>,
     pub note_reference: InlineFilterField<'a, pandoc::NoteReference>,
     pub attr: InlineFilterField<'a, pandoc::Attr>,
+    pub insert: InlineFilterField<'a, pandoc::Insert>,
+    pub delete: InlineFilterField<'a, pandoc::Delete>,
+    pub highlight: InlineFilterField<'a, pandoc::Highlight>,
+    pub edit_comment: InlineFilterField<'a, pandoc::EditComment>,
 
     pub paragraph: BlockFilterField<'a, pandoc::Paragraph>,
     pub plain: BlockFilterField<'a, pandoc::Plain>,
@@ -118,6 +122,11 @@ impl Default for Filter<'static> {
             table: None,
             horizontal_rule: None,
             attr: None,
+
+            insert: None,
+            delete: None,
+            highlight: None,
+            edit_comment: None,
 
             meta: None,
         }
@@ -200,6 +209,10 @@ define_filter_with_methods!(
     shortcode,
     note_reference,
     attr,
+    insert,
+    delete,
+    highlight,
+    edit_comment
 );
 
 define_filter_with_methods!(
@@ -300,7 +313,11 @@ impl_inline_filterable_simple!(
     Quoted,
     Link,
     Image,
-    Span
+    Span,
+    Insert,
+    Delete,
+    Highlight,
+    EditComment
 );
 
 impl InlineFilterableStructure for pandoc::Note {
@@ -616,6 +633,18 @@ pub fn topdown_traverse_inline(inline: Inline, filter: &mut Filter) -> Inlines {
         }
         Inline::Attr(attr) => {
             handle_inline_filter!(Attr, attr, attr, filter)
+        }
+        Inline::Insert(ins) => {
+            handle_inline_filter!(Insert, ins, insert, filter)
+        }
+        Inline::Delete(del) => {
+            handle_inline_filter!(Delete, del, delete, filter)
+        }
+        Inline::Highlight(hl) => {
+            handle_inline_filter!(Highlight, hl, highlight, filter)
+        }
+        Inline::EditComment(ec) => {
+            handle_inline_filter!(EditComment, ec, edit_comment, filter)
         }
     }
 }

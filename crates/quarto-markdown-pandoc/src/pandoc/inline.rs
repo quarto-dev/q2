@@ -40,6 +40,12 @@ pub enum Inline {
     // this is used to represent commonmark attributes in the document in places
     // where they are not directly attached to a block, like in headings and tables
     Attr(Attr),
+
+    // CriticMarkup-like extensions
+    Insert(Insert),
+    Delete(Delete),
+    Highlight(Highlight),
+    EditComment(EditComment),
 }
 
 pub type Inlines = Vec<Inline>;
@@ -194,6 +200,26 @@ pub enum CitationMode {
     NormalCitation,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Insert {
+    pub content: Inlines,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Delete {
+    pub content: Inlines,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Highlight {
+    pub content: Inlines,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EditComment {
+    pub content: Inlines,
+}
+
 impl_source_location!(Space, LineBreak, SoftBreak);
 
 pub trait AsInline {
@@ -241,7 +267,11 @@ impl_as_inline!(
     Span,
     Shortcode,
     NoteReference,
-    Attr
+    Attr,
+    Insert,
+    Delete,
+    Highlight,
+    EditComment
 );
 
 pub fn is_empty_target(target: &Target) -> bool {

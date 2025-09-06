@@ -1,75 +1,5 @@
 ================================================================================
-code cell with id-only attribute
-================================================================================
-`hello`{#id}
---------------------------------------------------------------------------------
-(inline
-  (code_span
-    (code_span_delimiter)
-    (code_content)
-    (code_span_delimiter)
-    (commonmark_attribute
-      (id_specifier))))
-
-================================================================================
-code cell with class-only attribute
-================================================================================
-`code cell with attributes`{.class}
---------------------------------------------------------------------------------
-(inline
-  (code_span
-    (code_span_delimiter)
-    (code_content)
-    (code_span_delimiter)
-    (commonmark_attribute
-      (class_specifier))))
-
-================================================================================
-code cell with attributes
-================================================================================
-`code cell with attributes`{#id .class}
---------------------------------------------------------------------------------
-(inline
-  (code_span
-    (code_span_delimiter)
-    (code_content)
-    (code_span_delimiter)
-    (commonmark_attribute
-      (id_specifier)
-      (class_specifier))))
-
-================================================================================
-code cell with attributes
-================================================================================
-`code cell with attributes`{#id .another-class key=value}
---------------------------------------------------------------------------------
-(inline
-  (code_span
-    (code_span_delimiter)
-    (code_content)
-    (code_span_delimiter)
-    (commonmark_attribute
-      (id_specifier)
-      (class_specifier)
-      (key_value_specifier
-        (key_value_key)
-        (key_value_value)))))
-
-================================================================================
-raw format
-================================================================================
-`<hello>`{=html}
---------------------------------------------------------------------------------
-(inline
-  (code_span
-    (code_span_delimiter)
-    (code_content)
-    (code_span_delimiter)
-    (raw_attribute
-      (raw_specifier))))
-
-================================================================================
-inline code cell with language (new syntax)
+inline code cell with language
 ================================================================================
 `f(3 ** 4)`{python}
 --------------------------------------------------------------------------------
@@ -97,55 +27,6 @@ inline code cell with spaces (shouldn't count as attribute)
       (key_value_key))))
 
 ================================================================================
-link with attributes
-================================================================================
-[hello](world){#id .class key=value}
---------------------------------------------------------------------------------
-(inline
-  (inline_link
-    (link_text
-      (text_base))
-    (link_destination)
-    (commonmark_attribute
-      (id_specifier)
-      (class_specifier)
-      (key_value_specifier
-        (key_value_key)
-        (key_value_value)))))
-
-================================================================================
-image with attributes
-================================================================================
-![hello](world.png){#id .class key=value}
---------------------------------------------------------------------------------
-(inline
-  (image
-    (image_description
-      (text_base))
-    (link_destination)
-    (commonmark_attribute
-      (id_specifier)
-      (class_specifier)
-      (key_value_specifier
-        (key_value_key)
-        (key_value_value)))))
-
-================================================================================
-span with attributes (NB they're parsed as links w/o destination)
-================================================================================
-[hello]{#id .class key=value}
---------------------------------------------------------------------------------
-(inline
-  (inline_link
-    (link_text
-      (text_base))
-    (commonmark_attribute
-      (id_specifier)
-      (class_specifier)
-      (key_value_specifier
-        (key_value_key)
-        (key_value_value)))))
-================================================================================
 Footnote reference
 ================================================================================
 A note[^another-note] [^2].
@@ -165,22 +46,50 @@ A note[^another-note] [^2].
     (note_reference_delimiter))
   (text_base))
 ================================================================================
-Ext_smart handling of en dashes, em dashes, and ellipses
+Insert markers
 ================================================================================
-Wait... what--really? I---mean---yes!
+[++Hello world]
 --------------------------------------------------------------------------------
 (inline
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base)
-  (text_base))
+  (insert
+    (insert_delimiter)
+    (text_base)
+    (text_base)
+    (text_base)
+    (insert_delimiter)))
+================================================================================
+(QMD): Delete markers
+================================================================================
+[--Hello world]
+--------------------------------------------------------------------------------
+(inline
+  (delete
+    (delete_delimiter)
+    (text_base)
+    (text_base)
+    (text_base)
+    (delete_delimiter)))
+================================================================================
+Highlight markers
+================================================================================
+[!!Hello world]
+--------------------------------------------------------------------------------
+(inline
+  (highlight
+    (highlight_delimiter)
+    (text_base)
+    (text_base)
+    (text_base)
+    (highlight_delimiter)))
+================================================================================
+Edit comment markers
+================================================================================
+[>>Hello world]
+--------------------------------------------------------------------------------
+(inline
+  (edit_comment
+    (edit_comment_delimiter)
+    (text_base)
+    (text_base)
+    (text_base)
+    (edit_comment_delimiter)))

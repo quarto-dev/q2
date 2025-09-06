@@ -144,7 +144,13 @@ fn write_inline(inline: &Inline) -> Value {
                 })
             }).collect::<Vec<_>>()
         }),
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
+        Inline::Shortcode(_)
+        | Inline::NoteReference(_)
+        | Inline::Attr(_)
+        | Inline::Insert(_)
+        | Inline::Delete(_)
+        | Inline::Highlight(_)
+        | Inline::EditComment(_) => {
             panic!("Unsupported inline type: {:?}", inline)
         }
     }
