@@ -68,6 +68,14 @@ pub fn read<T: Write>(
             _ => {}
         })));
 
+    // inefficient, but safe: if no trailing newline, add one
+    if !input_bytes.ends_with(b"\n") {
+        let mut input_bytes_with_newline = Vec::with_capacity(input_bytes.len() + 1);
+        input_bytes_with_newline.extend_from_slice(input_bytes);
+        input_bytes_with_newline.push(b'\n');
+        return read(&input_bytes_with_newline, _loose, filename, output_stream);
+    }
+
     let tree = parser
         .parse(&input_bytes, None)
         .expect("Failed to parse input");
