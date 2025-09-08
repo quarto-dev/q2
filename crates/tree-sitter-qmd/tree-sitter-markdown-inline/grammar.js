@@ -440,7 +440,6 @@ module.exports = grammar(add_inline_rules({
 function add_inline_rules(grammar) {
     let conflicts = [];
     function add_conflict(rules) {
-        console.log("Adding conflict", rules);
         conflicts.push(rules);
     }
     for (let link of [true, false]) {
