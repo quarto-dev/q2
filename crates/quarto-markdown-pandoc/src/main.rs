@@ -1,3 +1,4 @@
+#![feature(trim_prefix_suffix)]
 #![allow(dead_code)]
 
 /*
@@ -29,6 +30,12 @@ struct Args {
 
     #[arg(short = 'i', long = "input", default_value = "-")]
     input: String,
+
+    #[arg(long = "loose")]
+    loose: bool,
+
+    #[arg(long = "_internal-report-error-state", hide = true)]
+    _internal_report_error_state: bool,
 }
 
 fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
@@ -47,6 +54,7 @@ fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf:
 fn main() {
     let args = Args::parse();
 
+    let mut input_filename = "<stdin>";
     let mut input = String::new();
     let mut output_stream = if args.verbose {
         VerboseOutput::Stderr(io::stderr())
@@ -60,6 +68,7 @@ fn main() {
             .expect("Failed to read from stdin");
     } else {
         // Read from file
+        input_filename = &args.input;
         std::fs::File::open(&args.input)
             .expect("Failed to open input file")
             .read_to_string(&mut input)
@@ -72,7 +81,20 @@ fn main() {
         input.push('\n'); // ensure the input ends with a newline
     }
 
-    let result = readers::qmd::read(input.as_bytes(), &mut output_stream);
+    if args._internal_report_error_state {
+        let error_messages = readers::qmd::read_bad_qmd_for_error_message(input.as_bytes());
+        for msg in error_messages {
+            eprintln!("{}", msg);
+        }
+        return;
+    }
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        args.loose,
+        input_filename,
+        &mut output_stream,
+    );
     let pandoc = match result {
         Ok(p) => p,
         Err(error_messages) => {

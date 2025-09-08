@@ -49,7 +49,7 @@ pub fn parse_qmd(input: JsValue) -> JsValue {
         None => panic!("Unable to parse `input` as a `String`."),
     };
 
-    let result = match qmd::read(input.as_bytes(), &mut output) {
+    let result = match qmd::read(input.as_bytes(), false, "<input>", &mut output) {
         Ok(result) => result,
         Err(err) => panic!("Unable to read as a qmd:\n{}", err.join("\n")),
     };

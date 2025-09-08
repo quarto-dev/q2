@@ -85,7 +85,7 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
 
-    let doc = readers::qmd::read(input.as_bytes(), &mut std::io::sink()).unwrap();
+    let doc = readers::qmd::read(input.as_bytes(), false, "<input>", &mut std::io::sink()).unwrap();
     writers::native::write(&doc, &mut buf1).unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
     writers::json::write(&doc, &mut buf2).unwrap();

@@ -4,3 +4,4 @@
  */
 
 pub mod qmd;
+pub mod qmd_error_messages;

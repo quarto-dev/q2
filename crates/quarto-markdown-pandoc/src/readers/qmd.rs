@@ -12,9 +12,10 @@ use crate::pandoc::block::MetaBlock;
 use crate::pandoc::meta::parse_metadata_strings;
 use crate::pandoc::{self, Block, Meta};
 use crate::pandoc::{MetaValue, rawblock_to_meta};
+use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
 use crate::traversals;
 use std::io::Write;
-// use tree_sitter::LogType;
+use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
 
 fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
@@ -30,29 +31,54 @@ fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf:
     });
 }
 
+pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
+    let mut parser = MarkdownParser::default();
+    let mut log_observer = crate::utils::tree_sitter_log_observer::TreeSitterLogObserver::default();
+    parser
+        .parser
+        .set_logger(Some(Box::new(|log_type, message| match log_type {
+            LogType::Parse => {
+                log_observer.log(log_type, message);
+            }
+            _ => {}
+        })));
+    let _tree = parser
+        .parse(&input_bytes, None)
+        .expect("Failed to parse input");
+    assert!(log_observer.had_errors());
+    return produce_error_message_json(&log_observer);
+}
+
 pub fn read<T: Write>(
     input_bytes: &[u8],
+    _loose: bool,
+    filename: &str,
     mut output_stream: &mut T,
 ) -> Result<pandoc::Pandoc, Vec<String>> {
     let mut parser = MarkdownParser::default();
     let mut error_messages: Vec<String> = Vec::new();
-    // let mut found_error: bool = false;
 
-    // parser
-    //     .parser
-    //     .set_logger(Some(Box::new(|log_type, message| match log_type {
-    //         LogType::Parse => {
-    //             // if message.contains("detect_error") {
-    //             //     found_error = true;
-    //             // }
-    //             eprintln!("tree-sitter: {:?}, {}", log_type, message);
-    //         }
-    //         _ => {}
-    //     })));
+    let mut log_observer = crate::utils::tree_sitter_log_observer::TreeSitterLogObserver::default();
+    parser
+        .parser
+        .set_logger(Some(Box::new(|log_type, message| match log_type {
+            LogType::Parse => {
+                log_observer.log(log_type, message);
+            }
+            _ => {}
+        })));
 
     let tree = parser
         .parse(&input_bytes, None)
         .expect("Failed to parse input");
+    if log_observer.had_errors() {
+        return Err(produce_error_message(input_bytes, &log_observer, filename));
+    }
+    log_observer.parses.into_iter().for_each(|parse| {
+        eprintln!("tree-sitter parse:");
+        parse.messages.iter().for_each(|msg| eprintln!("  {}", msg));
+        eprintln!("---");
+    });
 
     let depth = crate::utils::concrete_tree_depth::concrete_tree_depth(&tree);
     // this is here mostly to prevent our fuzzer from blowing the stack

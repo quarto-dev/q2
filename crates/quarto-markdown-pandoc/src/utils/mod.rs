@@ -6,3 +6,5 @@
 pub mod autoid;
 pub mod concrete_tree_depth;
 pub mod output;
+pub mod text;
+pub mod tree_sitter_log_observer;
