@@ -439,6 +439,10 @@ module.exports = grammar(add_inline_rules({
 // This is by far the most ugly part of this code and should be cleaned up.
 function add_inline_rules(grammar) {
     let conflicts = [];
+    function add_conflict(rules) {
+        console.log("Adding conflict", rules);
+        conflicts.push(rules);
+    }
     for (let link of [true, false]) {
         let suffix_link = link ? "" : "_no_link";
         for (let delimiter of [false, "star", "underscore", "tilde"]) {
@@ -467,15 +471,15 @@ function add_inline_rules(grammar) {
             };
             grammar.rules["_inline" + suffix] = $ => repeat1($["_inline_element" + suffix]);
             if (delimiter !== "star") {
-                conflicts.push(['_emphasis_star' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
-                conflicts.push(['_emphasis_star' + suffix_link, '_strong_emphasis_star' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
+                add_conflict(['_emphasis_star' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
+                add_conflict(['_emphasis_star' + suffix_link, '_strong_emphasis_star' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
             }
-            if (delimiter == 'star' || delimiter == 'underscore') {
-                conflicts.push(['_strong_emphasis_' + delimiter + suffix_link, '_inline_element_no_' + delimiter]);
+            if ((delimiter == 'star' || delimiter == 'underscore') && (suffix_link !== '_no_link')) {
+                add_conflict(['_strong_emphasis_' + delimiter + suffix_link, '_inline_element_no_' + delimiter]);
             }
             if (delimiter !== "underscore") {
-                conflicts.push(['_emphasis_underscore' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
-                conflicts.push(['_emphasis_underscore' + suffix_link, '_strong_emphasis_underscore' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
+                add_conflict(['_emphasis_underscore' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
+                add_conflict(['_emphasis_underscore' + suffix_link, '_strong_emphasis_underscore' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
             }
         }
 
@@ -497,6 +501,7 @@ function add_inline_rules(grammar) {
         }
         return cs;
     }
+
 
     return grammar;
 }

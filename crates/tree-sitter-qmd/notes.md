@@ -1,8 +1,6 @@
 
 ## TODO
 
-- delete `attributes/` and `shortcodes/` when we're positive they're unneeded
-
 - attribute handling in ATX headers
 
 - equation handling
