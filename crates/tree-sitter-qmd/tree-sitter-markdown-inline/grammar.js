@@ -2,8 +2,6 @@
 //
 // For more information see README.md
 
-/// <reference types="tree-sitter-cli/dsl" />
-
 const common = require('../common/common');
 
 // key_value defs are in common.js
@@ -86,9 +84,7 @@ module.exports = grammar(add_inline_rules({
         $._unclosed_span
     ],
     precedences: $ => [
-        // [$._strong_emphasis_star, $._inline_element_no_star],
         [$._strong_emphasis_star_no_link, $._inline_element_no_star_no_link],
-        // [$._strong_emphasis_underscore, $._inline_element_no_underscore],
         [$._strong_emphasis_underscore_no_link, $._inline_element_no_underscore_no_link],
         [$.hard_line_break, $._whitespace],
         [$.hard_line_break, $._text_base],
@@ -96,26 +92,10 @@ module.exports = grammar(add_inline_rules({
     // More conflicts are defined in `add_inline_rules`
     conflicts: $ => [
 
-        [$._link_text_non_empty, $._inline_element],
-        [$._link_text_non_empty, $._inline_element_no_star],
-        [$._link_text_non_empty, $._inline_element_no_underscore],
         [$._link_text_non_empty, $._inline_element_no_tilde],
-        [$._link_text, $._inline_element],
-        [$._link_text, $._inline_element_no_star],
-        [$._link_text, $._inline_element_no_underscore],
         [$._link_text, $._inline_element_no_tilde],
-
-        [$._image_description, $._image_description_non_empty, $._text_base],
-        // [$._image_description, $._image_description_non_empty, $._text_inline],
-        // [$._image_description, $._image_description_non_empty, $._text_inline_no_star],
-        // [$._image_description, $._image_description_non_empty, $._text_inline_no_underscore],
-
-        // [$._image_shortcut_link, $._image_description],
-        // [$.shortcut_link, $._link_text],
         [$.link_destination, $.link_title],
         [$._link_destination_parenthesis, $.link_title],
-
-        [$.commonmark_attribute, $.language_attribute],
         [$._shortcode_value, $.shortcode_keyword_param],
     ],
     extras: $ => [],
@@ -472,31 +452,19 @@ function add_inline_rules(grammar) {
                     alias($['_emphasis_underscore' + suffix_link], $.emphasis),
                     alias($['_strong_emphasis_underscore' + suffix_link], $.strong_emphasis),
                 ];
-                // elements.push(alias($['_strikeout' + suffix_link], $.strikeout));
                 if (delimiter !== "star") {
                     elements.push($._emphasis_open_star);
                 }
                 if (delimiter !== "underscore") {
                     elements.push($._emphasis_open_underscore);
                 }
-                // if (delimiter !== "tilde") {
-                //     elements.push($._strikeout_open);
-                // }
                 if (link) {
                     elements = elements.concat([
                         $.inline_link,
-                        // seq(choice('[', ']'), optional($._last_token_punctuation)),
                     ]);
                 }
                 return choice(...elements);
             };
-            // if (suffix === "") {
-            //   grammar.rules["_inline"] = $ => prec.left(1, seq(
-            //     repeat1($._inline_element), 
-            //     optional(seq($._whitespace, $._qmd_attribute))));
-            // } else {
-            //   grammar.rules["_inline" + suffix] = $ => repeat1($["_inline_element" + suffix]);
-            // }
             grammar.rules["_inline" + suffix] = $ => repeat1($["_inline_element" + suffix]);
             if (delimiter !== "star") {
                 conflicts.push(['_emphasis_star' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
@@ -509,12 +477,8 @@ function add_inline_rules(grammar) {
                 conflicts.push(['_emphasis_underscore' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
                 conflicts.push(['_emphasis_underscore' + suffix_link, '_strong_emphasis_underscore' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
             }
-            // if (delimiter !== "tilde") {
-            //     conflicts.push(['_strikeout' + suffix_link, '_inline_element' + suffix_delimiter + suffix_link]);
-            // }
         }
 
-        // grammar.rules['_strikeout' + suffix_link] = $ => prec.dynamic(PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._strikeout_open, $.strikeout_delimiter), optional($._last_token_punctuation), $['_inline' + '_no_tilde' + suffix_link], alias($._strikeout_close, $.strikeout_delimiter)));
         grammar.rules['_emphasis_star' + suffix_link] = $ => prec.dynamic(PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_star, $.emphasis_delimiter), optional($._last_token_punctuation), $['_inline' + '_no_star' + suffix_link], alias($._emphasis_close_star, $.emphasis_delimiter)));
         grammar.rules['_strong_emphasis_star' + suffix_link] = $ => prec.dynamic(2 * PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_star, $.emphasis_delimiter), $['_emphasis_star' + suffix_link], alias($._emphasis_close_star, $.emphasis_delimiter)));
         grammar.rules['_emphasis_underscore' + suffix_link] = $ => prec.dynamic(PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_underscore, $.emphasis_delimiter), optional($._last_token_punctuation), $['_inline' + '_no_underscore' + suffix_link], alias($._emphasis_close_underscore, $.emphasis_delimiter)));

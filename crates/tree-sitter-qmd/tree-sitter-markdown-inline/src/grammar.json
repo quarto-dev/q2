@@ -4979,40 +4979,11 @@
   "conflicts": [
     [
       "_link_text_non_empty",
-      "_inline_element"
-    ],
-    [
-      "_link_text_non_empty",
-      "_inline_element_no_star"
-    ],
-    [
-      "_link_text_non_empty",
-      "_inline_element_no_underscore"
-    ],
-    [
-      "_link_text_non_empty",
       "_inline_element_no_tilde"
     ],
     [
       "_link_text",
-      "_inline_element"
-    ],
-    [
-      "_link_text",
-      "_inline_element_no_star"
-    ],
-    [
-      "_link_text",
-      "_inline_element_no_underscore"
-    ],
-    [
-      "_link_text",
       "_inline_element_no_tilde"
-    ],
-    [
-      "_image_description",
-      "_image_description_non_empty",
-      "_text_base"
     ],
     [
       "link_destination",
@@ -5021,10 +4992,6 @@
     [
       "_link_destination_parenthesis",
       "link_title"
-    ],
-    [
-      "commonmark_attribute",
-      "language_attribute"
     ],
     [
       "_shortcode_value",
