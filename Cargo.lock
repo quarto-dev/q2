@@ -168,6 +168,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "error-message-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_json",
+ "syn",
+]
+
+[[package]]
 name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -327,6 +337,7 @@ name = "quarto-markdown-pandoc"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "error-message-macros",
  "glob",
  "once_cell",
  "paste",

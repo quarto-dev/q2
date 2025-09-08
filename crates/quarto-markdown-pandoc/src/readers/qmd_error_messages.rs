@@ -39,11 +39,15 @@ fn error_message_from_parse_state(
     //     crate::utils::text::row_column_to_byte_offset(&index, parse_state.row, parse_state.column)
     //         .unwrap_or(0);
 
+    let error_msg = crate::readers::qmd_error_message_table::lookup_error_message(parse_state)
+        .unwrap_or("unexpected");
+
     return vec![format!(
-        "{}:{}:{}: error: unexpected",
+        "{}:{}:{}: error: {}",
         filename,
         parse_state.row + 1,
         parse_state.column + 1,
+        error_msg,
     )];
 }
 
