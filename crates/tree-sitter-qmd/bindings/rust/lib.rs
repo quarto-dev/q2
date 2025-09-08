@@ -1,3 +1,8 @@
+/*
+ * lib.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 //! This crate provides Markdown language support for the [tree-sitter][] parsing library.
 //!
 //! It contains two grammars: [`LANGUAGE`] to parse the block structure of markdown documents and

@@ -1,3 +1,8 @@
+/*
+ * hello_fuzz.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 #![no_main]
 #[macro_use]
 extern crate libfuzzer_sys;

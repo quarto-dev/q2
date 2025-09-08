@@ -1,3 +1,8 @@
+/*
+ * qmd.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 use crate::errors;
 use crate::errors::parse_is_good;
 use crate::filters::FilterReturn::Unchanged;

@@ -1,3 +1,8 @@
+/*
+ * lib.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 // For `vsnprintf()` and `fprintf()`, which are variadic.
 // Otherwise rustc yells at us that we need to enable this.
 #![feature(c_variadic)]

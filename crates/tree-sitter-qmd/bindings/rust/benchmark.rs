@@ -1,3 +1,8 @@
+/*
+ * benchmark.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 use std::env::args;
 
 use tree_sitter::{InputEdit, Point};

@@ -1,3 +1,8 @@
+/*
+ * test_meta.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 use quarto_markdown_pandoc::pandoc::location::{Location, Range};
 use quarto_markdown_pandoc::pandoc::{MetaValue, RawBlock, rawblock_to_meta};
 use std::fs;

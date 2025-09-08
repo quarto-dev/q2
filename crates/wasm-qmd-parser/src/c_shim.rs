@@ -1,3 +1,8 @@
+/*
+ * c_shim.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 use std::{
     alloc::{self, Layout},
     ffi::{c_char, c_int, c_void},

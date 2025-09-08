@@ -1,3 +1,8 @@
+/*
+ * build.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 fn main() {
     let block_dir = std::path::Path::new("tree-sitter-markdown").join("src");
     let inline_dir = std::path::Path::new("tree-sitter-markdown-inline").join("src");

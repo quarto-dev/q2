@@ -1,3 +1,8 @@
+/*
+ * web.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
 //! Test suite for the Web and headless browsers.
 
 #![cfg(target_arch = "wasm32")]
