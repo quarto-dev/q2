@@ -1,5 +1,6 @@
-
 ## TODO
+
+- Allow attributes in editor marks (importantly for date/author)
 
 - attribute handling in ATX headers
 
@@ -32,28 +33,3 @@
 
         - in addition, if we _do_ add support for in-block equation ids, we should consider that the output
           will not only need to exist for LaTeX, but will need to exist for html and typst as well.
-
-
-## notes
-
-- I really think Pandoc would benefit from the following rawblock extensions, and I 
-  wonder if we should try to adopt this into Quarto somehow:
-
-  - `{<format}` parses input from the rawblock as if it were Pandoc's `format`
-
-    - This would be, then, how code opts into Quarto's html-table-is-ast feature.
-
-  - 
-    ```
-    ::: {>format}
-    :::
-    ```
-
-    process this output as if it were markdown, but only produce output in `format`.
-
-    In Quarto, this is "just" syntax for
-
-    ```
-    ::: {.content-visible when-format="format"}
-    :::
-    ```

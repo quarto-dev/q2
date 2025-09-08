@@ -8,16 +8,30 @@ We aim to be largely compatible with Pandoc's `markdown` and `Commonmark` format
 
 Syntax extensions are handled by [desugaring](https://cs.brown.edu/courses/cs173/2012/book/Desugaring_as_a_Language_Feature.html) into regular Pandoc AST nodes.
 
+### Scoped metadata
+
+Our intermediate representation can store a metadata block inside the document, allowing (in principle)
+for metadata in the document to be scoped to a particular portion of the document.
+
 ### Shortcodes
 
 We have "native" shortcode support in the "Pandoc" AST in pandoc.rs, and
 we desugar them to Pandoc spans in a Rust filter.
 
-### Notes
+### Footnotes
 
 We parse footnotes differently from Pandoc.
 We use NoteReference (Inline) and NoteDefinition (block) nodes.
 These are desugared into spans and divs in a Rust filter.
+
+### Editor markup
+
+Inspired by [CriticMarkup](https://fletcher.github.io/MultiMarkdown-6/syntax/critic.html) and [djot](https://djot.net), Quarto offers syntax for edit marks:
+
+- Insertions: `[++ Insert this markdown content]`
+- Deletions: `[-- Delete this sentence]`
+- Highlighting: `[!! this will be highlighted in rendering]`
+- Comment: `[>> this will show up as a comment]`
 
 ### Reader raw blocks
 
@@ -201,3 +215,15 @@ Consider `^[footnote-or-span]{.class}^`. `^[` denotes both the start of a footno
 
 Quarto-markdown's parser prefers the footnote interpretation. In case an immediately nested span is needed, use a space between `^` and `[`.
 Superscript nodes with leading spaces are disallowed in Pandoc, but Quarto-markdown will trim spaces.
+
+## QMD _REMOVALS_
+
+- Simplified link syntax. the only link syntax supported are _inline links_: `[text](destination title)`
+
+  - no wikilink support
+
+  - no shortcut reference link support, we use that syntax for spans instead
+
+- Similarly, the only image syntax supported is the one corresponding to inline links: `![text](image-name title)`
+
+- no HTML support: QMD is meant to translate into more than one syntax. We use rawblock instead.
