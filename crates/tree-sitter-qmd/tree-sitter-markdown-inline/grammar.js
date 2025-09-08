@@ -296,7 +296,7 @@ module.exports = grammar(add_inline_rules({
             seq($._link_text_non_empty, optional($._qmd_attribute)),
             seq('[', ']', optional($._qmd_attribute)),
         ))),
-        _link_text_non_empty: $ => prec(2, seq('[', alias($._inline_no_link, $.link_text), ']')),
+        _link_text_non_empty: $ => prec(2, seq('[', alias($._inline, $.link_text), ']')),
         // shortcut_link: $ => prec.dynamic(PRECEDENCE_LEVEL_LINK, $._link_text_non_empty),
         inline_link: $ => prec.dynamic(PRECEDENCE_LEVEL_LINK, prec.right(seq(
             $._link_text,

@@ -3113,7 +3113,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_inline_no_link"
+              "name": "_inline"
             },
             "named": true,
             "value": "link_text"

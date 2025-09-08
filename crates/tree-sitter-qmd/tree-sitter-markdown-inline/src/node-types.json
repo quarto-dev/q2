@@ -1323,6 +1323,10 @@
           "named": true
         },
         {
+          "type": "inline_link",
+          "named": true
+        },
+        {
           "type": "inline_note",
           "named": true
         },

@@ -177,3 +177,22 @@ code span with braces inside, inline-executable style
     (code_span_delimiter)
     (code_content)
     (code_span_delimiter)))
+===============================================================================
+Nested spans
+================================================================================
+[a nested [span]{.plox}]{.no}
+--------------------------------------------------------------------------------
+(inline
+  (inline_link
+    (link_text
+      (text_base)
+      (text_base)
+      (text_base)
+      (text_base)
+      (inline_link
+        (link_text
+          (text_base))
+        (commonmark_attribute
+          (class_specifier))))
+    (commonmark_attribute
+      (class_specifier))))
