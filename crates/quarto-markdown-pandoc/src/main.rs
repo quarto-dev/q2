@@ -88,7 +88,7 @@ fn main() {
     if args._internal_report_error_state {
         let error_messages = readers::qmd::read_bad_qmd_for_error_message(input.as_bytes());
         for msg in error_messages {
-            eprintln!("{}", msg);
+            println!("{}", msg);
         }
         return;
     }
