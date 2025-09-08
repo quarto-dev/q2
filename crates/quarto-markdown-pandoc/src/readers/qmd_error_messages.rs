@@ -19,12 +19,10 @@ pub fn produce_error_message(
     let mut result: Vec<String> = vec![];
 
     for parse in &tree_sitter_log.parses {
-        if !parse.found_accept {
-            // there was an error in the block structure; report that.
-            for state in &parse.error_states {
-                let mut msg = error_message_from_parse_state(input_bytes, state, filename);
-                result.append(&mut msg);
-            }
+        // there was an error in the block structure; report that.
+        for state in &parse.error_states {
+            let mut msg = error_message_from_parse_state(input_bytes, state, filename);
+            result.append(&mut msg);
         }
     }
 
@@ -61,19 +59,16 @@ pub fn produce_error_message_json(
     let mut result: Vec<String> = vec![];
 
     for parse in &tree_sitter_log.parses {
-        if !parse.found_accept {
-            // there was an error in the block structure; report that.
-            for state in &parse.error_states {
-                result.push(
-                    serde_json::to_string(&serde_json::json!({
-                        "state": state.state,
-                        "sym": state.sym,
-                        "row": state.row,
-                        "column": state.column,
-                    }))
-                    .unwrap(),
-                );
-            }
+        for state in &parse.error_states {
+            result.push(
+                serde_json::to_string(&serde_json::json!({
+                    "state": state.state,
+                    "sym": state.sym,
+                    "row": state.row,
+                    "column": state.column,
+                }))
+                .unwrap(),
+            );
         }
     }
 

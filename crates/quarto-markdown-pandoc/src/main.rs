@@ -34,7 +34,11 @@ struct Args {
     #[arg(long = "loose")]
     loose: bool,
 
-    #[arg(long = "_internal-report-error-state", hide = true)]
+    #[arg(
+        long = "_internal-report-error-state",
+        hide = true,
+        default_value_t = false
+    )]
     _internal_report_error_state: bool,
 }
 

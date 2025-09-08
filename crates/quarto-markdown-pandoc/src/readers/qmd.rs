@@ -71,14 +71,17 @@ pub fn read<T: Write>(
     let tree = parser
         .parse(&input_bytes, None)
         .expect("Failed to parse input");
+    log_observer.parses.iter().for_each(|parse| {
+        writeln!(output_stream, "tree-sitter parse:").unwrap();
+        parse
+            .messages
+            .iter()
+            .for_each(|msg| writeln!(output_stream, "  {}", msg).unwrap());
+        writeln!(output_stream, "---").unwrap();
+    });
     if log_observer.had_errors() {
         return Err(produce_error_message(input_bytes, &log_observer, filename));
     }
-    log_observer.parses.into_iter().for_each(|parse| {
-        eprintln!("tree-sitter parse:");
-        parse.messages.iter().for_each(|msg| eprintln!("  {}", msg));
-        eprintln!("---");
-    });
 
     let depth = crate::utils::concrete_tree_depth::concrete_tree_depth(&tree);
     // this is here mostly to prevent our fuzzer from blowing the stack

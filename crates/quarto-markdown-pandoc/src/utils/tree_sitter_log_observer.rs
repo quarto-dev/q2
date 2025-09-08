@@ -37,7 +37,10 @@ pub struct TreeSitterLogObserver {
 
 impl TreeSitterLogObserver {
     pub fn had_errors(&self) -> bool {
-        !self.parses.iter().all(|parse| parse.found_accept)
+        !self
+            .parses
+            .iter()
+            .all(|parse| parse.found_accept && parse.error_states.is_empty())
     }
     pub fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
         // Implement your logging logic here
@@ -151,6 +154,12 @@ impl TreeSitterLogObserver {
                     params.get("size").unwrap().parse::<usize>().unwrap();
             }
             "lex_external" | "lex_internal" | "shift" | "reduce" => {}
+            "accept" => {
+                self.parses
+                    .last_mut()
+                    .expect("No current parse to log process to")
+                    .found_accept = true;
+            }
             _ => {
                 if self.state != TreeSitterLogState::InParse {
                     return;
