@@ -1,0 +1,42 @@
+---
+bibliography:
+  - error_messages.bib
+---
+
+## Error messages
+
+Tree-sitter is not designed to support good error message generation - it's meant to be
+extremely fast as used at LSPs. Instead, it supports error recovery (so that there's some parse tree available as the user is typing code).
+
+For quarto-markdown, however, we need good error messages.
+
+We will attempt to use a technique from the literature (@jeffery_toplas_2003).
+
+At a high level, this technique associates an error message to pairs `(LR_state, token)`.
+Notably, however, the association happens indirectly, through known-ungrammatical documents.
+
+The parser author provides a set of `(known-ungrammatical documents, error messages)`; a
+preprocessing step attempts to parse the known-bad documents with the parser, hits error
+states `(LR_state, token)`, and then makes the association.
+
+This allows the grammar to evolve independently of the error messages (since LR_state values are not consistent from one version of the grammar to the next).
+
+## challenges specific to tree-sitter
+
+### tree-sitter doesn't offer easy inspection of error states
+
+We can work around that by capturing debug messages from tree-sitter's runtime.
+
+### tree-sitter is a GLR parser, so it allows conflicts
+
+GLR parsing allows nondeterminism, and so a parse with error states in it doesn't mean that the result is non-grammatical.
+
+## challenges specific to tree-sitter-qmd
+
+tree-sitter-qmd is actually a pair of tree-sitter grammars. One grammar is needed for the block structure, and another for the inline structure.
+
+- the block-structure parser is always the first to be invoked.
+
+- the debug messages from tree-sitter's runtime are bracketed with "new_parse" and "done" messages, and so we can 
+know which grammar is at play at any point in time.
+
