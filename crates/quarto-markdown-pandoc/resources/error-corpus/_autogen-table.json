@@ -20,11 +20,49 @@
       "notes": [
         {
           "message": "This is the opening bracket for the span",
-          "label": "span-start"
+          "label": "span-start",
+          "noteType": "simple"
         }
       ]
     },
     "name": "001"
+  },
+  {
+    "column": 20,
+    "row": 0,
+    "state": 2166,
+    "sym": "class_specifier",
+    "errorInfo": {
+      "title": "Key-value Pair Before Class Specifier in Attribute",
+      "message": "Key-value pairs must appear before class specifiers in attributes.",
+      "captures": [
+        {
+          "column": 10,
+          "lrState": 2219,
+          "row": 0,
+          "size": 3,
+          "sym": "key_value_key",
+          "label": "key-value-begin"
+        },
+        {
+          "column": 14,
+          "lrState": 2067,
+          "row": 0,
+          "size": 5,
+          "sym": "key_value_value_token1",
+          "label": "key-value-end"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The key-value specifier starts here.",
+          "noteType": "label-range",
+          "labelBegin": "key-value-begin",
+          "labelEnd": "key-value-end"
+        }
+      ]
+    },
+    "name": "003"
   },
   {
     "column": 18,
@@ -47,7 +85,8 @@
       "notes": [
         {
           "message": "The attribute specifier starts here.",
-          "label": "attribute-start"
+          "label": "attribute-start",
+          "noteType": "simple"
         }
       ]
     },

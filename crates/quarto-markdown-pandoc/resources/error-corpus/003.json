@@ -1,0 +1,26 @@
+{
+    "title": "Key-value Pair Before Class Specifier in Attribute",
+    "message": "Key-value pairs must appear before class specifiers in attributes.",
+    "captures": [
+        {
+            "label": "key-value-begin",
+            "row": 0,
+            "column": 10,
+            "size": 3
+        },
+        {
+            "label": "key-value-end",
+            "row": 0,
+            "column": 14,
+            "size": 5
+        }
+    ],
+    "notes": [
+        {
+            "message": "The key-value specifier starts here.",
+            "noteType": "label-range",            
+            "labelBegin": "key-value-begin",
+            "labelEnd": "key-value-end"
+        }
+    ]
+}

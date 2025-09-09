@@ -19,7 +19,8 @@ pub struct ErrorCapture {
 #[derive(Debug)]
 pub struct ErrorNote {
     pub message: &'static str,
-    pub label: &'static str,
+    pub label: Option<&'static str>,
+    pub note_type: Option<&'static str>,
 }
 
 #[derive(Debug)]

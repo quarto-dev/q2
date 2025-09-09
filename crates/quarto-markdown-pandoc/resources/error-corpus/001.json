@@ -12,7 +12,8 @@
     "notes": [
         {
             "message": "This is the opening bracket for the span",
-            "label": "span-start"
+            "label": "span-start",
+            "noteType": "simple"
         }
     ]
 }

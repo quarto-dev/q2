@@ -12,7 +12,8 @@
     "notes": [
         {
             "message": "The attribute specifier starts here.",
-            "label": "attribute-start"
+            "label": "attribute-start",
+            "noteType": "simple"
         }
     ]
 }
