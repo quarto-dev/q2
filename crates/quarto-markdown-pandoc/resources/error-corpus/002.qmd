@@ -1,1 +1,1 @@
-[a span with a bad attribute]{[
+A bad [attribute]{[

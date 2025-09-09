@@ -1,16 +1,56 @@
 [
   {
-    "column": 14,
+    "column": 17,
     "row": 0,
     "state": 933,
     "sym": "end",
-    "errorMsg": "Reached end of file before finding closing ']' for span."
+    "errorInfo": {
+      "title": "Unclosed Span",
+      "message": "I reached the end of the file before finding a closing ']' for the span or link.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 56,
+          "row": 0,
+          "size": 1,
+          "sym": "[",
+          "label": "span-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening bracket for the span",
+          "label": "span-start"
+        }
+      ]
+    },
+    "name": "001"
   },
   {
-    "column": 30,
+    "column": 18,
     "row": 0,
     "state": 1637,
     "sym": "_error",
-    "errorMsg": "Found an unexpected character instead of language specifier, an identifier, a class specifier, or a key-value pair."
+    "errorInfo": {
+      "title": "Mismatched Delimiter in Attribute Specifier",
+      "message": "I expected a '}', language specifier, an identifier, a class specifier, or a key-value pair.",
+      "captures": [
+        {
+          "column": 17,
+          "lrState": 1637,
+          "row": 0,
+          "size": 1,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "The attribute specifier starts here.",
+          "label": "attribute-start"
+        }
+      ]
+    },
+    "name": "002"
   }
 ]

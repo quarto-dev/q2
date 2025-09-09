@@ -1,0 +1,18 @@
+{
+    "title": "Unclosed Span",
+    "message": "I reached the end of the file before finding a closing ']' for the span or link.",
+    "captures": [
+        {
+            "label": "span-start",
+            "row": 0,
+            "column": 3,
+            "size": 1
+        }
+    ],
+    "notes": [
+        {
+            "message": "This is the opening bracket for the span",
+            "label": "span-start"
+        }
+    ]
+}

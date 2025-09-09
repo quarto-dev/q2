@@ -60,21 +60,38 @@ pub fn produce_error_message_json(
     assert!(tree_sitter_log.had_errors());
     assert!(tree_sitter_log.parses.len() > 0);
 
-    let mut result: Vec<String> = vec![];
+    let mut tokens: Vec<serde_json::Value> = vec![];
+    let mut error_states: Vec<serde_json::Value> = vec![];
 
     for parse in &tree_sitter_log.parses {
+        if parse.found_accept && parse.error_states.is_empty() {
+            continue;
+        }
+        for token in &parse.consumed_tokens {
+            tokens.push(serde_json::json!({
+                "row": token.row,
+                "column": token.column,
+                "size": token.size,
+                "lrState": token.lr_state,
+                "sym": token.sym,
+            }));
+        }
         for state in &parse.error_states {
-            result.push(
-                serde_json::to_string(&serde_json::json!({
-                    "state": state.state,
-                    "sym": state.sym,
-                    "row": state.row,
-                    "column": state.column,
-                }))
-                .unwrap(),
-            );
+            error_states.push(serde_json::json!({
+                "state": state.state,
+                "sym": state.sym,
+                "row": state.row,
+                "column": state.column,
+            }));
         }
     }
 
-    return result;
+    return serde_json::to_string_pretty(&serde_json::json!({
+        "tokens": tokens,
+        "errorStates": error_states,
+    }))
+    .unwrap()
+    .lines()
+    .map(|s| s.to_string())
+    .collect();
 }

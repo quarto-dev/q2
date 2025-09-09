@@ -21,6 +21,14 @@ pub struct ProcessMessage {
     pub size: usize,
 }
 
+pub struct ConsumedToken {
+    pub row: usize,
+    pub column: usize,
+    pub size: usize,
+    pub lr_state: usize,
+    pub sym: String,
+}
+
 pub struct TreeSitterParseLog {
     pub messages: Vec<String>,
     pub processes: HashMap<usize, ProcessMessage>,
@@ -28,6 +36,7 @@ pub struct TreeSitterParseLog {
     pub current_lookahead: Option<(String, usize)>,
     pub found_accept: bool,
     pub error_states: Vec<ProcessMessage>,
+    pub consumed_tokens: Vec<ConsumedToken>, // row, column, size, LR state
 }
 
 pub struct TreeSitterLogObserver {
@@ -74,6 +83,7 @@ impl TreeSitterLogObserver {
                     current_lookahead: None,
                     found_accept: false,
                     error_states: vec![],
+                    consumed_tokens: vec![],
                 });
             }
             "done" => {
@@ -153,7 +163,34 @@ impl TreeSitterLogObserver {
                 current_process_message.size =
                     params.get("size").unwrap().parse::<usize>().unwrap();
             }
-            "lex_external" | "lex_internal" | "shift" | "reduce" => {}
+            "shift" => {
+                let current_parse = self
+                    .parses
+                    .last_mut()
+                    .expect("No current parse to log process to");
+                let current_process_message = current_parse
+                    .processes
+                    .get_mut(&current_parse.current_process.expect("No current process"))
+                    .expect("No current process message");
+                let state = params
+                    .get("state")
+                    .expect("Missing 'state' in shift log")
+                    .parse::<usize>()
+                    .expect("Failed to parse 'state' as usize");
+                let size = current_parse
+                    .current_lookahead
+                    .as_ref()
+                    .map(|(_, s)| *s)
+                    .unwrap_or(0);
+                current_parse.consumed_tokens.push(ConsumedToken {
+                    lr_state: state,
+                    row: current_process_message.row,
+                    column: current_process_message.column,
+                    size,
+                    sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
+                })
+            }
+            "lex_external" | "lex_internal" | "reduce" => {}
             "accept" => {
                 self.parses
                     .last_mut()

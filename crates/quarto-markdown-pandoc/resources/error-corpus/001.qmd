@@ -1,1 +1,1 @@
-[unclosed span
+an [unclosed span
