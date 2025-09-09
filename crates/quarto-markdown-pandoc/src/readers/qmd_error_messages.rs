@@ -34,11 +34,10 @@ fn error_message_from_parse_state(
     parse_state: &crate::utils::tree_sitter_log_observer::ProcessMessage,
     filename: &str,
 ) -> Vec<String> {
-    // let index = crate::utils::text::build_row_column_index(&String::from_utf8_lossy(input_bytes));
-    // let offset =
-    //     crate::utils::text::row_column_to_byte_offset(&index, parse_state.row, parse_state.column)
-    //         .unwrap_or(0);
-
+    // TODO: This is a placeholder implementation.
+    // In the future, this should use the full ErrorInfo structure
+    // to produce richer error messages with captures and notes.
+    
     let error_msg = crate::readers::qmd_error_message_table::lookup_error_message(parse_state)
         .unwrap_or("unexpected");
 
