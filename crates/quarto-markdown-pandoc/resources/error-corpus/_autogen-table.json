@@ -6,7 +6,7 @@
     "sym": "end",
     "errorInfo": {
       "title": "Unclosed Span",
-      "message": "I reached the end of the file before finding a closing ']' for the span or link.",
+      "message": "I reached the end of the block before finding a closing ']' for the span or link.",
       "captures": [
         {
           "column": 3,

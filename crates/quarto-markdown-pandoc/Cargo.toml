@@ -24,6 +24,7 @@ paste = "1.0.15"
 once_cell = "1.21.3"
 yaml-rust2 = "0.10.3"
 error-message-macros = { path = "./error-message-macros" }
+ariadne = "0.4"
 
 [lints]
 workspace = true

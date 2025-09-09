@@ -1,1 +1,0 @@
-I reached the end of the file before finding a closing '[' for a 
