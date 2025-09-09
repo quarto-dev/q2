@@ -155,7 +155,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
     match meta {
         MetaValue::MetaString(s) => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
-            let result = readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream);
+            let result = readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream, None::<fn(&[u8], &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>);
             match result {
                 Ok(mut pandoc) => {
                     for (k, v) in pandoc.meta.into_iter() {

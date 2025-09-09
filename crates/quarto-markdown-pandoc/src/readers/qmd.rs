@@ -49,12 +49,16 @@ pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
     return produce_error_message_json(&log_observer);
 }
 
-pub fn read<T: Write>(
+pub fn read<T: Write, F>(
     input_bytes: &[u8],
     _loose: bool,
     filename: &str,
     mut output_stream: &mut T,
-) -> Result<pandoc::Pandoc, Vec<String>> {
+    error_formatter: Option<F>,
+) -> Result<pandoc::Pandoc, Vec<String>> 
+where
+    F: Fn(&[u8], &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>,
+{
     let mut parser = MarkdownParser::default();
     let mut error_messages: Vec<String> = Vec::new();
 
@@ -73,7 +77,7 @@ pub fn read<T: Write>(
         let mut input_bytes_with_newline = Vec::with_capacity(input_bytes.len() + 1);
         input_bytes_with_newline.extend_from_slice(input_bytes);
         input_bytes_with_newline.push(b'\n');
-        return read(&input_bytes_with_newline, _loose, filename, output_stream);
+        return read(&input_bytes_with_newline, _loose, filename, output_stream, error_formatter);
     }
 
     let tree = parser
@@ -88,7 +92,13 @@ pub fn read<T: Write>(
         writeln!(output_stream, "---").unwrap();
     });
     if log_observer.had_errors() {
-        return Err(produce_error_message(input_bytes, &log_observer, filename));
+        if let Some(formatter) = error_formatter {
+            // Use the provided error formatter
+            return Err(formatter(input_bytes, &log_observer, filename));
+        } else {
+            // Use the default ariadne formatter
+            return Err(produce_error_message(input_bytes, &log_observer, filename));
+        }
     }
 
     let depth = crate::utils::concrete_tree_depth::concrete_tree_depth(&tree);
