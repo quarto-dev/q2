@@ -446,6 +446,151 @@ fn process_backslash_escape(node: &tree_sitter::Node, input_bytes: &[u8]) -> Pan
     PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
 }
 
+fn process_shortcode(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let is_escaped = node.kind() == "shortcode_escaped";
+    let mut name = String::new();
+    let mut positional_args: Vec<ShortcodeArg> = Vec::new();
+    let mut keyword_args: HashMap<String, ShortcodeArg> = HashMap::new();
+    for (node, child) in children {
+        match (node.as_str(), child) {
+            (
+                "shortcode_naked_string",
+                PandocNativeIntermediate::IntermediateShortcodeArg(
+                    ShortcodeArg::String(text),
+                    _,
+                ),
+            )
+            | (
+                "shortcode_name",
+                PandocNativeIntermediate::IntermediateShortcodeArg(
+                    ShortcodeArg::String(text),
+                    _,
+                ),
+            )
+            | (
+                "shortcode_string",
+                PandocNativeIntermediate::IntermediateShortcodeArg(
+                    ShortcodeArg::String(text),
+                    _,
+                ),
+            ) => {
+                if name.is_empty() {
+                    name = text;
+                } else {
+                    positional_args.push(ShortcodeArg::String(text));
+                }
+            }
+            (
+                "shortcode_keyword_param",
+                PandocNativeIntermediate::IntermediateShortcodeArg(
+                    ShortcodeArg::KeyValue(spec),
+                    _,
+                ),
+            ) => {
+                for (key, value) in spec {
+                    keyword_args.insert(key, value);
+                }
+            }
+            (
+                "shortcode",
+                PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(arg)),
+            ) => {
+                positional_args.push(ShortcodeArg::Shortcode(arg));
+            }
+            (
+                "shortcode_number",
+                PandocNativeIntermediate::IntermediateShortcodeArg(arg, _),
+            )
+            | (
+                "shortcode_boolean",
+                PandocNativeIntermediate::IntermediateShortcodeArg(arg, _),
+            ) => {
+                positional_args.push(arg);
+            }
+            ("shortcode_delimiter", _) => {
+                // This is a marker node, we don't need to do anything with it
+            }
+            (child_type, child) => panic!(
+                "Unexpected node in {:?}: {:?} {:?}",
+                node,
+                child_type,
+                child.clone()
+            ),
+        }
+    }
+    PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(Shortcode {
+        is_escaped,
+        name,
+        positional_args,
+        keyword_args,
+    }))
+}
+
+fn process_inline_link<T: Write, F>(
+    link_buf: &mut T,
+    node_text: F,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate
+where
+    F: Fn() -> String,
+{
+    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut target = ("".to_string(), "".to_string());
+    let mut content: Vec<Inline> = Vec::new();
+
+    for (node, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
+                // TODO show position of this error
+                let _ = writeln!(
+                    link_buf,
+                    "Raw attribute specifiers are unsupported in links and spans: {}. Ignoring.",
+                    node_text()
+                );
+            }
+            PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
+            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
+                if node == "link_destination" {
+                    target.0 = text; // URL
+                } else if node == "link_title" {
+                    target.1 = text; // Title
+                } else if node == "language_attribute" {
+                    // TODO show position of this error
+                    let _ = writeln!(
+                        link_buf,
+                        "Language specifiers are unsupported in links and spans: {}. Ignoring.",
+                        node_text()
+                    );
+                } else {
+                    panic!("Unexpected inline_link node: {}", node);
+                }
+            }
+            PandocNativeIntermediate::IntermediateUnknown(_) => {}
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                content.extend(inlines)
+            }
+            PandocNativeIntermediate::IntermediateInline(inline) => content.push(inline),
+            _ => panic!("Unexpected child in inline_link: {:?}", child),
+        }
+    }
+    let has_citations = content
+        .iter()
+        .any(|inline| matches!(inline, Inline::Cite(_)));
+
+    // an inline link might be a Cite if it has citations, no destination, and no title
+    // and no attributes
+    let is_cite = has_citations && is_empty_target(&target) && is_empty_attr(&attr);
+
+    PandocNativeIntermediate::IntermediateInline(if is_cite {
+        make_cite_inline(attr, target, content)
+    } else {
+        make_span_inline(attr, target, content)
+    })
+}
+
 fn process_image<T: Write, F>(
     image_buf: &mut T,
     node_text: F,
@@ -1000,60 +1145,7 @@ fn native_visitor<T: Write>(
         "image_description" => {
             PandocNativeIntermediate::IntermediateInlines(native_inlines(children))
         }
-        "inline_link" => {
-            let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
-            let mut target = ("".to_string(), "".to_string());
-            let mut content: Vec<Inline> = Vec::new();
-
-            for (node, child) in children {
-                match child {
-                    PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
-                        // TODO show position of this error
-                        let _ = writeln!(
-                            link_buf,
-                            "Raw attribute specifiers are unsupported in links and spans: {}. Ignoring.",
-                            node_text()
-                        );
-                    }
-                    PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
-                    PandocNativeIntermediate::IntermediateBaseText(text, _) => {
-                        if node == "link_destination" {
-                            target.0 = text; // URL
-                        } else if node == "link_title" {
-                            target.1 = text; // Title
-                        } else if node == "language_attribute" {
-                            // TODO show position of this error
-                            let _ = writeln!(
-                                link_buf,
-                                "Language specifiers are unsupported in links and spans: {}. Ignoring.",
-                                node_text()
-                            );
-                        } else {
-                            panic!("Unexpected inline_link node: {}", node);
-                        }
-                    }
-                    PandocNativeIntermediate::IntermediateUnknown(_) => {}
-                    PandocNativeIntermediate::IntermediateInlines(inlines) => {
-                        content.extend(inlines)
-                    }
-                    PandocNativeIntermediate::IntermediateInline(inline) => content.push(inline),
-                    _ => panic!("Unexpected child in inline_link: {:?}", child),
-                }
-            }
-            let has_citations = content
-                .iter()
-                .any(|inline| matches!(inline, Inline::Cite(_)));
-
-            // an inline link might be a Cite if it has citations, no destination, and no title
-            // and no attributes
-            let is_cite = has_citations && is_empty_target(&target) && is_empty_attr(&attr);
-
-            PandocNativeIntermediate::IntermediateInline(if is_cite {
-                make_cite_inline(attr, target, content)
-            } else {
-                make_span_inline(attr, target, content)
-            })
-        }
+        "inline_link" => process_inline_link(&mut link_buf, node_text, children),
         "key_value_specifier" => {
             let mut spec = HashMap::new();
             let mut current_key: Option<String> = None;
@@ -1147,85 +1239,7 @@ fn native_visitor<T: Write>(
                 range: node_location(node),
             }))
         }
-        "shortcode" | "shortcode_escaped" => {
-            let is_escaped = node.kind() == "shortcode_escaped";
-            let mut name = String::new();
-            let mut positional_args: Vec<ShortcodeArg> = Vec::new();
-            let mut keyword_args: HashMap<String, ShortcodeArg> = HashMap::new();
-            for (node, child) in children {
-                match (node.as_str(), child) {
-                    (
-                        "shortcode_naked_string",
-                        PandocNativeIntermediate::IntermediateShortcodeArg(
-                            ShortcodeArg::String(text),
-                            _,
-                        ),
-                    )
-                    | (
-                        "shortcode_name",
-                        PandocNativeIntermediate::IntermediateShortcodeArg(
-                            ShortcodeArg::String(text),
-                            _,
-                        ),
-                    )
-                    | (
-                        "shortcode_string",
-                        PandocNativeIntermediate::IntermediateShortcodeArg(
-                            ShortcodeArg::String(text),
-                            _,
-                        ),
-                    ) => {
-                        if name.is_empty() {
-                            name = text;
-                        } else {
-                            positional_args.push(ShortcodeArg::String(text));
-                        }
-                    }
-                    (
-                        "shortcode_keyword_param",
-                        PandocNativeIntermediate::IntermediateShortcodeArg(
-                            ShortcodeArg::KeyValue(spec),
-                            _,
-                        ),
-                    ) => {
-                        for (key, value) in spec {
-                            keyword_args.insert(key, value);
-                        }
-                    }
-                    (
-                        "shortcode",
-                        PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(arg)),
-                    ) => {
-                        positional_args.push(ShortcodeArg::Shortcode(arg));
-                    }
-                    (
-                        "shortcode_number",
-                        PandocNativeIntermediate::IntermediateShortcodeArg(arg, _),
-                    )
-                    | (
-                        "shortcode_boolean",
-                        PandocNativeIntermediate::IntermediateShortcodeArg(arg, _),
-                    ) => {
-                        positional_args.push(arg);
-                    }
-                    ("shortcode_delimiter", _) => {
-                        // This is a marker node, we don't need to do anything with it
-                    }
-                    (child_type, child) => panic!(
-                        "Unexpected node in {:?}: {:?} {:?}",
-                        node,
-                        child_type,
-                        child.clone()
-                    ),
-                }
-            }
-            PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(Shortcode {
-                is_escaped,
-                name,
-                positional_args,
-                keyword_args,
-            }))
-        }
+        "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
         "shortcode_keyword_param" => {
             let mut result = HashMap::new();
             let mut name = String::new();
