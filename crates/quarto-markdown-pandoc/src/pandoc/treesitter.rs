@@ -1151,6 +1151,55 @@ fn process_code_span<T: Write>(
     }
 }
 
+fn process_latex_span(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+    let mut is_inline_math = false;
+    let mut is_display_math = false;
+    let mut inlines: Vec<_> = children
+        .into_iter()
+        .filter(|(_, child)| {
+            if matches!(
+                child,
+                PandocNativeIntermediate::IntermediateLatexInlineDelimiter(_)
+            ) {
+                is_inline_math = true;
+                false // skip the delimiter
+            } else if matches!(
+                child,
+                PandocNativeIntermediate::IntermediateLatexDisplayDelimiter(_)
+            ) {
+                is_display_math = true;
+                false // skip the delimiter
+            } else {
+                true // keep other nodes
+            }
+        })
+        .collect();
+    assert!(
+        inlines.len() == 1,
+        "Expected exactly one inline in latex_span, got {}",
+        inlines.len()
+    );
+    if is_inline_math && is_display_math {
+        panic!("Unexpected both inline and display math in latex_span");
+    }
+    if !is_inline_math && !is_display_math {
+        panic!("Expected either inline or display math in latex_span, got neither");
+    }
+    let math_type = if is_inline_math {
+        MathType::InlineMath
+    } else {
+        MathType::DisplayMath
+    };
+    let (_, child) = inlines.remove(0);
+    let PandocNativeIntermediate::IntermediateBaseText(text, _) = child else {
+        panic!("Expected BaseText in latex_span, got {:?}", child)
+    };
+    PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+        math_type: math_type,
+        text,
+    }))
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1475,54 +1524,7 @@ fn native_visitor<T: Write>(
             }))
         }
         "code_span" => process_code_span(buf, node, children),
-        "latex_span" => {
-            let mut is_inline_math = false;
-            let mut is_display_math = false;
-            let mut inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(_, child)| {
-                    if matches!(
-                        child,
-                        PandocNativeIntermediate::IntermediateLatexInlineDelimiter(_)
-                    ) {
-                        is_inline_math = true;
-                        false // skip the delimiter
-                    } else if matches!(
-                        child,
-                        PandocNativeIntermediate::IntermediateLatexDisplayDelimiter(_)
-                    ) {
-                        is_display_math = true;
-                        false // skip the delimiter
-                    } else {
-                        true // keep other nodes
-                    }
-                })
-                .collect();
-            assert!(
-                inlines.len() == 1,
-                "Expected exactly one inline in latex_span, got {}",
-                inlines.len()
-            );
-            if is_inline_math && is_display_math {
-                panic!("Unexpected both inline and display math in latex_span");
-            }
-            if !is_inline_math && !is_display_math {
-                panic!("Expected either inline or display math in latex_span, got neither");
-            }
-            let math_type = if is_inline_math {
-                MathType::InlineMath
-            } else {
-                MathType::DisplayMath
-            };
-            let (_, child) = inlines.remove(0);
-            let PandocNativeIntermediate::IntermediateBaseText(text, _) = child else {
-                panic!("Expected BaseText in latex_span, got {:?}", child)
-            };
-            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
-                math_type: math_type,
-                text,
-            }))
-        }
+        "latex_span" => process_latex_span(children),
         "list" => {
             // a list is loose if it has at least one loose item
             // an item is loose if
