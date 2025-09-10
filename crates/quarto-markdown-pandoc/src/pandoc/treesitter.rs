@@ -281,6 +281,149 @@ fn process_fenced_code_block(
     }
 }
 
+// Helper function to process numeric_character_reference nodes
+fn process_numeric_character_reference(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    // Convert numeric character references to their corresponding characters
+    // &#x0040; => @, &#64; => @, etc
+    let text = node.utf8_text(input_bytes).unwrap().to_string();
+    let char_value = if text.starts_with("&#x") || text.starts_with("&#X") {
+        // Hexadecimal reference
+        let hex_str = &text[3..text.len() - 1];
+        u32::from_str_radix(hex_str, 16).ok()
+    } else if text.starts_with("&#") {
+        // Decimal reference
+        let dec_str = &text[2..text.len() - 1];
+        dec_str.parse::<u32>().ok()
+    } else {
+        None
+    };
+
+    let result_text = match char_value.and_then(char::from_u32) {
+        Some(ch) => ch.to_string(),
+        None => text, // If we can't parse it, return the original text
+    };
+
+    PandocNativeIntermediate::IntermediateBaseText(result_text, node_location(node))
+}
+
+// Helper function to process section nodes
+fn process_section(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+    let mut blocks: Vec<Block> = Vec::new();
+    children.into_iter().for_each(|(node, child)| {
+        if node == "block_continuation" {
+            return;
+        }
+        match child {
+            PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
+            PandocNativeIntermediate::IntermediateSection(section) => {
+                blocks.extend(section);
+            }
+            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+                // for now we assume it's metadata and emit it as a rawblock
+                blocks.push(Block::RawBlock(RawBlock {
+                    format: "quarto_minus_metadata".to_string(),
+                    text,
+                    filename: None,
+                    range: range,
+                }));
+            }
+            _ => panic!("Expected Block or Section, got {:?}", child),
+        }
+    });
+    PandocNativeIntermediate::IntermediateSection(blocks)
+}
+
+// Helper function to process paragraph nodes
+fn process_paragraph(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+    let mut inlines: Vec<Inline> = Vec::new();
+    for (node, child) in children {
+        if node == "block_continuation" {
+            continue; // skip block continuation nodes
+        }
+        if let PandocNativeIntermediate::IntermediateInline(inline) = child {
+            inlines.push(inline);
+        } else if let PandocNativeIntermediate::IntermediateInlines(inner_inlines) = child {
+            inlines.extend(inner_inlines);
+        }
+    }
+    PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
+        content: inlines,
+        filename: None,
+        range: empty_range(),
+    }))
+}
+
+// Helper function to process shortcode_naked_string and shortcode_name nodes
+fn process_shortcode_string_arg(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    let id = node.utf8_text(input_bytes).unwrap().to_string();
+    PandocNativeIntermediate::IntermediateShortcodeArg(
+        ShortcodeArg::String(id),
+        node_location(node),
+    )
+}
+
+// Helper function to process shortcode_string nodes
+fn process_shortcode_string(extract_quoted_text: &dyn Fn() -> PandocNativeIntermediate, node: &tree_sitter::Node) -> PandocNativeIntermediate {
+    let PandocNativeIntermediate::IntermediateBaseText(id, _) = extract_quoted_text() else {
+        panic!("Expected BaseText in shortcode_string, got {:?}", extract_quoted_text())
+    };
+    PandocNativeIntermediate::IntermediateShortcodeArg(
+        ShortcodeArg::String(id),
+        node_location(node),
+    )
+}
+
+// Helper function to process link_title nodes
+fn process_link_title(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
+    let title = node.utf8_text(input_bytes).unwrap().to_string();
+    let title = title[1..title.len() - 1].to_string();
+    PandocNativeIntermediate::IntermediateBaseText(title, node_location(node))
+}
+
+// Helper function to process commonmark_attribute nodes
+fn process_commonmark_attribute(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+    let mut attr = ("".to_string(), vec![], HashMap::new());
+    children.into_iter().for_each(|(node, child)| match child {
+        PandocNativeIntermediate::IntermediateBaseText(id, _) => {
+            if node == "id_specifier" {
+                attr.0 = id;
+            } else if node == "class_specifier" {
+                attr.1.push(id);
+            } else {
+                panic!("Unexpected commonmark_attribute node: {}", node);
+            }
+        }
+        PandocNativeIntermediate::IntermediateKeyValueSpec(spec) => {
+            attr.2 = spec;
+        }
+        _ => panic!("Unexpected child in commonmark_attribute: {:?}", child),
+    });
+    PandocNativeIntermediate::IntermediateAttr(attr)
+}
+
+// Helper function to process raw_specifier nodes
+fn process_raw_specifier(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
+    // like code_content but skipping first character
+    let raw = node.utf8_text(input_bytes).unwrap().to_string();
+    if raw.chars().nth(0) == Some('<') {
+        PandocNativeIntermediate::IntermediateBaseText(
+            "pandoc-reader:".to_string() + &raw[1..],
+            node_location(node),
+        )
+    } else {
+        PandocNativeIntermediate::IntermediateBaseText(
+            raw[1..].to_string(),
+            node_location(node),
+        )
+    }
+}
+
 // Helper function to process code_span nodes
 fn process_code_span<T: Write>(
     buf: &mut T,
@@ -489,29 +632,7 @@ fn native_visitor<T: Write>(
     };
 
     let result = match node.kind() {
-        "numeric_character_reference" => {
-            // Convert numeric character references to their corresponding characters
-            // &#x0040; => @, &#64; => @, etc
-            let text = node_text();
-            let char_value = if text.starts_with("&#x") || text.starts_with("&#X") {
-                // Hexadecimal reference
-                let hex_str = &text[3..text.len() - 1];
-                u32::from_str_radix(hex_str, 16).ok()
-            } else if text.starts_with("&#") {
-                // Decimal reference
-                let dec_str = &text[2..text.len() - 1];
-                dec_str.parse::<u32>().ok()
-            } else {
-                None
-            };
-
-            let result_text = match char_value.and_then(char::from_u32) {
-                Some(ch) => ch.to_string(),
-                None => text, // If we can't parse it, return the original text
-            };
-
-            PandocNativeIntermediate::IntermediateBaseText(result_text, node_location(node))
-        }
+        "numeric_character_reference" => process_numeric_character_reference(node, input_bytes),
 
         "language"
         | "note_reference_id"
@@ -523,31 +644,7 @@ fn native_visitor<T: Write>(
         | "latex_content"
         | "text_base" => create_base_text_from_node_text(node, input_bytes),
         "document" => process_document(children),
-        "section" => {
-            let mut blocks: Vec<Block> = Vec::new();
-            children.into_iter().for_each(|(node, child)| {
-                if node == "block_continuation" {
-                    return;
-                }
-                match child {
-                    PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
-                    PandocNativeIntermediate::IntermediateSection(section) => {
-                        blocks.extend(section);
-                    }
-                    PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
-                        // for now we assume it's metadata and emit it as a rawblock
-                        blocks.push(Block::RawBlock(RawBlock {
-                            format: "quarto_minus_metadata".to_string(),
-                            text,
-                            filename: None,
-                            range: range,
-                        }));
-                    }
-                    _ => panic!("Expected Block or Section, got {:?} {:?}", node, child),
-                }
-            });
-            PandocNativeIntermediate::IntermediateSection(blocks)
-        }
+        "section" => process_section(children),
         "paragraph" => {
             let mut inlines: Vec<Inline> = Vec::new();
             for (node, child) in children {
@@ -609,32 +706,10 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateAttr(attr)
         }
         "class_specifier" | "id_specifier" => create_specifier_base_text(node, input_bytes),
-        "shortcode_naked_string" | "shortcode_name" => {
-            let id = node_text().to_string();
-            PandocNativeIntermediate::IntermediateShortcodeArg(
-                ShortcodeArg::String(id),
-                node_location(node),
-            )
-        }
-        "shortcode_string" => {
-            let PandocNativeIntermediate::IntermediateBaseText(id, _) = string_as_base_text()
-            else {
-                panic!(
-                    "Expected BaseText in shortcode_string, got {:?}",
-                    string_as_base_text()
-                )
-            };
-            PandocNativeIntermediate::IntermediateShortcodeArg(
-                ShortcodeArg::String(id),
-                node_location(node),
-            )
-        }
+        "shortcode_naked_string" | "shortcode_name" => process_shortcode_string_arg(node, input_bytes),
+        "shortcode_string" => process_shortcode_string(&string_as_base_text, node),
         "key_value_value" => string_as_base_text(),
-        "link_title" => {
-            let title = node_text();
-            let title = title[1..title.len() - 1].to_string();
-            PandocNativeIntermediate::IntermediateBaseText(title, node_location(node))
-        }
+        "link_title" => process_link_title(node, input_bytes),
         "link_text" => PandocNativeIntermediate::IntermediateInlines(native_inlines(children)),
         "image" => {
             let mut attr = ("".to_string(), vec![], HashMap::new());
@@ -765,21 +840,7 @@ fn native_visitor<T: Write>(
             }
             PandocNativeIntermediate::IntermediateKeyValueSpec(spec)
         }
-        "raw_specifier" => {
-            // like code_content but skipping first character
-            let raw = node_text();
-            if raw.chars().nth(0) == Some('<') {
-                PandocNativeIntermediate::IntermediateBaseText(
-                    "pandoc-reader:".to_string() + &raw[1..],
-                    node_location(node),
-                )
-            } else {
-                PandocNativeIntermediate::IntermediateBaseText(
-                    raw[1..].to_string(),
-                    node_location(node),
-                )
-            }
-        }
+        "raw_specifier" => process_raw_specifier(node, input_bytes),
         "emphasis" => {
             let inlines = process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Emph(Emph { content: inlines }))
