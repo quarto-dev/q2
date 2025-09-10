@@ -66,24 +66,62 @@ fn error_message_from_parse_state(
 
         // Add notes with their corresponding captures
         for note in entry.error_info.notes {
-            // Find the capture that this note refers to
-            if let Some(capture) = entry.error_info.captures.iter().find(|c| match note.label {
-                None => false,
-                Some(l) => c.label == l,
-            }) {
-                // Find the consumed token that matches this capture
-                if let Some(token) = find_matching_token(consumed_tokens, capture) {
-                    // Calculate the span for this token
-                    let token_byte_offset =
-                        calculate_byte_offset(&input_str, token.row, token.column);
-                    let token_span = token_byte_offset..(token_byte_offset + token.size.max(1));
+            match note.note_type {
+                "simple" => {
+                    // Find the capture that this note refers to
+                    if let Some(capture) = entry.error_info.captures.iter().find(|c| match note.label {
+                        None => false,
+                        Some(l) => c.label == l,
+                    }) {
+                        // Find the consumed token that matches this capture
+                        if let Some(token) = find_matching_token(consumed_tokens, capture) {
+                            // Calculate the span for this token
+                            let token_byte_offset =
+                                calculate_byte_offset(&input_str, token.row, token.column);
+                            let token_span = token_byte_offset..(token_byte_offset + token.size.max(1));
 
-                    // Add a label for this note
-                    report = report.with_label(
-                        Label::new((filename, token_span))
-                            .with_message(note.message)
-                            .with_color(Color::Blue),
-                    );
+                            // Add a label for this note
+                            report = report.with_label(
+                                Label::new((filename, token_span))
+                                    .with_message(note.message)
+                                    .with_color(Color::Blue),
+                            );
+                        }
+                    }
+                }
+                "label-range" => {
+                    // Find the begin and end captures
+                    let begin_capture = note.label_begin.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+                    let end_capture = note.label_end.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+
+                    if let (Some(begin_cap), Some(end_cap)) = (begin_capture, end_capture) {
+                        // Find the consumed tokens that match these captures
+                        let begin_token = find_matching_token(consumed_tokens, begin_cap);
+                        let end_token = find_matching_token(consumed_tokens, end_cap);
+
+                        if let (Some(begin_tok), Some(end_tok)) = (begin_token, end_token) {
+                            // Calculate the span from the beginning of begin_token to the end of end_token
+                            let begin_byte_offset =
+                                calculate_byte_offset(&input_str, begin_tok.row, begin_tok.column);
+                            let end_byte_offset =
+                                calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
+                            let range_span = begin_byte_offset..(end_byte_offset + end_tok.size.max(1));
+
+                            // Add a label for this note
+                            report = report.with_label(
+                                Label::new((filename, range_span))
+                                    .with_message(note.message)
+                                    .with_color(Color::Blue),
+                            );
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown note type, skip
                 }
             }
         }
@@ -145,26 +183,74 @@ pub fn json_error_message_from_parse_state(
         // Add notes with their corresponding captures
         let mut notes = Vec::new();
         for note in entry.error_info.notes {
-            // Find the capture that this note refers to
-            if let Some(capture) = entry.error_info.captures.iter().find(|c| match note.label {
-                None => false,
-                Some(l) => c.label == l,
-            }) {
-                // Find the consumed token that matches this capture
-                if let Some(token) = find_matching_token(consumed_tokens, capture) {
-                    // Calculate the span for this token
-                    let token_byte_offset =
-                        calculate_byte_offset(&input_str, token.row, token.column);
+            match note.note_type {
+                "simple" => {
+                    // Find the capture that this note refers to
+                    if let Some(capture) = entry.error_info.captures.iter().find(|c| match note.label {
+                        None => false,
+                        Some(l) => c.label == l,
+                    }) {
+                        // Find the consumed token that matches this capture
+                        if let Some(token) = find_matching_token(consumed_tokens, capture) {
+                            // Calculate the span for this token
+                            let token_byte_offset =
+                                calculate_byte_offset(&input_str, token.row, token.column);
 
-                    notes.push(json!({
-                        "message": note.message,
-                        "location": {
-                            "row": token.row + 1,  // Convert to 1-based
-                            "column": token.column + 1,  // Convert to 1-based
-                            "byte_offset": token_byte_offset,
-                            "size": token.size.max(1)
+                            notes.push(json!({
+                                "message": note.message,
+                                "noteType": note.note_type,
+                                "location": {
+                                    "row": token.row + 1,  // Convert to 1-based
+                                    "column": token.column + 1,  // Convert to 1-based
+                                    "byte_offset": token_byte_offset,
+                                    "size": token.size.max(1)
+                                }
+                            }));
                         }
-                    }));
+                    }
+                }
+                "label-range" => {
+                    // Find the begin and end captures
+                    let begin_capture = note.label_begin.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+                    let end_capture = note.label_end.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+
+                    if let (Some(begin_cap), Some(end_cap)) = (begin_capture, end_capture) {
+                        // Find the consumed tokens that match these captures
+                        let begin_token = find_matching_token(consumed_tokens, begin_cap);
+                        let end_token = find_matching_token(consumed_tokens, end_cap);
+
+                        if let (Some(begin_tok), Some(end_tok)) = (begin_token, end_token) {
+                            // Calculate the span from the beginning of begin_token to the end of end_token
+                            let begin_byte_offset =
+                                calculate_byte_offset(&input_str, begin_tok.row, begin_tok.column);
+                            let end_byte_offset =
+                                calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
+
+                            notes.push(json!({
+                                "message": note.message,
+                                "noteType": note.note_type,
+                                "range": {
+                                    "start": {
+                                        "row": begin_tok.row + 1,  // Convert to 1-based
+                                        "column": begin_tok.column + 1,  // Convert to 1-based
+                                        "byte_offset": begin_byte_offset
+                                    },
+                                    "end": {
+                                        "row": end_tok.row + 1,  // Convert to 1-based
+                                        "column": end_tok.column + 1,  // Convert to 1-based
+                                        "byte_offset": end_byte_offset + end_tok.size.max(1)
+                                    }
+                                }
+                            }));
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown note type, skip
                 }
             }
         }

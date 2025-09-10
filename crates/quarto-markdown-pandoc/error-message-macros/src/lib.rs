@@ -21,7 +21,7 @@ struct Note {
     message: String,
     label: Option<String>,
     #[serde(rename = "noteType")]
-    note_type: Option<String>,
+    note_type: String,
     #[serde(rename = "labelBegin")]
     label_begin: Option<String>,
     #[serde(rename = "labelEnd")]
@@ -97,8 +97,13 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                 Some(label) => quote! { Some(#label) },
                 None => quote! { None },
             };
-            let note_type = match &note.note_type {
-                Some(t) => quote! { Some(#t) },
+            let note_type = &note.note_type;
+            let note_label_begin = match &note.label_begin {
+                Some(label) => quote! { Some(#label) },
+                None => quote! { None },
+            };
+            let note_label_end = match &note.label_end {
+                Some(label) => quote! { Some(#label) },
                 None => quote! { None },
             };
 
@@ -107,6 +112,8 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     message: #note_message,
                     label: #note_label,
                     note_type: #note_type,
+                    label_begin: #note_label_begin,
+                    label_end: #note_label_end,
                 }
             }
         });
