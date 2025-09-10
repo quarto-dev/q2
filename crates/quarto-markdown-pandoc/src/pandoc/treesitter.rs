@@ -62,6 +62,47 @@ enum PandocNativeIntermediate {
     IntermediateSetextHeadingLevel(usize),
 }
 
+// Helper function to filter out delimiter nodes
+fn filter_delimiter_children(
+    children: Vec<(String, PandocNativeIntermediate)>,
+    delimiter_name: &str,
+) -> Vec<(String, PandocNativeIntermediate)> {
+    children
+        .into_iter()
+        .filter(|(node, _)| node != delimiter_name)
+        .collect()
+}
+
+// Helper function to extract text from string quotes
+fn extract_quoted_text(text: &str) -> String {
+    if text.starts_with('"') && text.ends_with('"') {
+        let escaped_double_quote_re: Lazy<Regex> = Lazy::new(|| Regex::new("[\\\\][\"]").unwrap());
+        let value = &text[1..text.len() - 1];
+        escaped_double_quote_re.replace_all(value, "\"").to_string()
+    } else if text.starts_with('\'') && text.ends_with('\'') {
+        let escaped_single_quote_re: Lazy<Regex> = Lazy::new(|| Regex::new("[\\\\][']").unwrap());
+        let value = &text[1..text.len() - 1];
+        escaped_single_quote_re.replace_all(value, "'").to_string()
+    } else {
+        text.to_string()
+    }
+}
+
+// Helper function to process inline emphasis-like constructs
+fn process_emphasis_like_inline<F>(
+    children: Vec<(String, PandocNativeIntermediate)>,
+    delimiter_name: &str,
+    mut native_inline: F,
+) -> Vec<Inline>
+where
+    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
+{
+    filter_delimiter_children(children, delimiter_name)
+        .into_iter()
+        .map(|child| native_inline(child))
+        .collect()
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -77,32 +118,13 @@ fn native_visitor<T: Write>(
 
     let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
     let indent_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"[ \t]+").unwrap());
-    let escaped_double_quote_re: Lazy<Regex> = Lazy::new(|| Regex::new("[\\\\][\"]").unwrap());
-    let escaped_single_quote_re: Lazy<Regex> = Lazy::new(|| Regex::new("[\\\\][']").unwrap());
 
     let node_text = || node.utf8_text(input_bytes).unwrap().to_string();
 
     let string_as_base_text = || {
         let location = node_location(node);
         let value = node_text();
-        if value.starts_with('"') && value.ends_with('"') {
-            let value = value[1..value.len() - 1].to_string();
-            PandocNativeIntermediate::IntermediateBaseText(
-                escaped_double_quote_re
-                    .replace_all(&value, "\"")
-                    .to_string(),
-                location,
-            )
-        } else if value.starts_with('\'') && value.ends_with('\'') {
-            let value = value[1..value.len() - 1].to_string();
-            PandocNativeIntermediate::IntermediateBaseText(
-                escaped_single_quote_re.replace_all(&value, "'").to_string(),
-                location,
-            )
-        } else {
-            // If not quoted, return as is
-            PandocNativeIntermediate::IntermediateBaseText(value, location)
-        }
+        PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
     };
     let native_inline = |(node, child)| match child {
         PandocNativeIntermediate::IntermediateInline(inline) => inline,
@@ -606,23 +628,11 @@ fn native_visitor<T: Write>(
             }
         }
         "emphasis" => {
-            let inlines: Vec<Inline> = children
-                .into_iter()
-                .filter(|(node, _)| {
-                    node != "emphasis_delimiter" // skip emphasis delimiters
-                })
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Emph(Emph { content: inlines }))
         }
         "strong_emphasis" => {
-            let inlines: Vec<Inline> = children
-                .into_iter()
-                .filter(|(node, _)| {
-                    node != "emphasis_delimiter" // skip emphasis delimiters
-                })
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Strong(Strong {
                 content: inlines,
             }))
@@ -932,11 +942,7 @@ fn native_visitor<T: Write>(
             }
         }
         "inline_note" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "inline_note_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "inline_note_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Note(Note {
                 content: vec![Block::Paragraph(Paragraph {
                     content: inlines,
@@ -947,71 +953,43 @@ fn native_visitor<T: Write>(
             }))
         }
         "superscript" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "superscript_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "superscript_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Superscript(Superscript {
                 content: inlines,
             }))
         }
         "subscript" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "subscript_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "subscript_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Subscript(Subscript {
                 content: inlines,
             }))
         }
         "strikeout" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "strikeout_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "strikeout_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Strikeout(Strikeout {
                 content: inlines,
             }))
         }
         "insert" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "insert_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "insert_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Insert(Insert {
                 content: inlines,
             }))
         }
         "delete" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "delete_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "delete_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Delete(Delete {
                 content: inlines,
             }))
         }
         "highlight" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "highlight_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "highlight_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::Highlight(Highlight {
                 content: inlines,
             }))
         }
         "edit_comment" => {
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, _)| node != "edit_comment_delimiter")
-                .map(native_inline)
-                .collect();
+            let inlines = process_emphasis_like_inline(children, "edit_comment_delimiter", native_inline);
             PandocNativeIntermediate::IntermediateInline(Inline::EditComment(EditComment {
                 content: inlines,
             }))

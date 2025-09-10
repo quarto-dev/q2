@@ -38,7 +38,7 @@ fn has_good_pandoc_version() -> bool {
         .output()
         .expect("Failed to execute pandoc command");
     let version_str = String::from_utf8_lossy(&output.stdout);
-    version_str.contains("3.6") || version_str.contains("3.7")
+    version_str.contains("3.6") || version_str.contains("3.7") || version_str.contains("3.8")
 }
 
 fn canonicalize_pandoc_ast(ast: &str, from: &str, to: &str) -> String {

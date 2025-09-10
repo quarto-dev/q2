@@ -11,3 +11,10 @@ need to be done with the traversal helpers in traversals.rs.
 ## Best practices in this repo
 
 - If you want to create a test file, do so in the `tests/` directory.
+- When making changes to the code, always run both `cargo check` AND `cargo test` to ensure changes compile and don't affect behavior. The test suite is fast enough to run after each change.
+- **CRITICAL**: Do NOT assume changes are safe if ANY tests fail, even if they seem unrelated. Some tests require pandoc to be properly installed to pass. Always ensure ALL tests pass before and after changes.
+
+## Environment setup
+
+- Rust toolchain is installed at `/home/claude-sandbox/.cargo/bin`
+- Pandoc is installed at `/home/claude-sandbox/local/bin`
