@@ -141,13 +141,38 @@ fn error_message_from_parse_state(
         let output_str = String::from_utf8_lossy(&output);
         return output_str.lines().map(|s| s.to_string()).collect();
     } else {
-        // Fallback for errors not in the table
-        return vec![format!(
-            "{}:{}:{}: error: unexpected",
-            filename,
-            parse_state.row + 1,
-            parse_state.column + 1,
-        )];
+        // Fallback for errors not in the table - use ariadne to show source context
+        let input_str = String::from_utf8_lossy(input_bytes);
+        
+        // Calculate byte offset from row/column
+        let byte_offset = calculate_byte_offset(&input_str, parse_state.row, parse_state.column);
+        let span = byte_offset..(byte_offset + parse_state.size.max(1));
+        
+        // Build a simple ariadne report with source context
+        let report = Report::build(ReportKind::Error, filename, byte_offset)
+            .with_message("Parse error")
+            .with_label(
+                Label::new((filename, span))
+                    .with_message("unexpected character or token here")
+                    .with_color(Color::Red),
+            )
+            .finish();
+        
+        // Generate the formatted error message
+        let mut output = Vec::new();
+        if let Ok(_) = report.write((filename, Source::from(&input_str)), &mut output) {
+            // Convert output to string and split into lines
+            let output_str = String::from_utf8_lossy(&output);
+            return output_str.lines().map(|s| s.to_string()).collect();
+        } else {
+            // If ariadne fails, fall back to the simple format
+            return vec![format!(
+                "{}:{}:{}: error: unexpected",
+                filename,
+                parse_state.row + 1,
+                parse_state.column + 1,
+            )];
+        }
     }
 }
 
