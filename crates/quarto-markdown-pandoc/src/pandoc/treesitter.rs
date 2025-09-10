@@ -1690,6 +1690,42 @@ fn process_native_inline<T: Write>(
     }
 }
 
+// Standalone function to process a collection of children into a vector of Inline objects
+fn process_native_inlines<T: Write>(
+    children: Vec<(String, PandocNativeIntermediate)>,
+    whitespace_re: &Regex,
+    inlines_buf: &mut T,
+) -> Vec<Inline> {
+    let mut inlines: Vec<Inline> = Vec::new();
+    for (_, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateInline(inline) => inlines.push(inline),
+            PandocNativeIntermediate::IntermediateInlines(inner_inlines) => {
+                inlines.extend(inner_inlines)
+            }
+            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
+                if let Some(_) = whitespace_re.find(&text) {
+                    inlines.push(Inline::Space(Space {
+                        filename: None,
+                        range,
+                    }))
+                } else {
+                    inlines.push(Inline::Str(Str { text }))
+                }
+            }
+            other => {
+                writeln!(
+                    inlines_buf,
+                    "Ignoring unexpected unknown node in native_inlines {:?}.",
+                    other
+                )
+                .unwrap();
+            }
+        }
+    }
+    inlines
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1723,34 +1759,7 @@ fn native_visitor<T: Write>(
         )
     };
     let mut native_inlines = |children| {
-        let mut inlines: Vec<Inline> = Vec::new();
-        for (_, child) in children {
-            match child {
-                PandocNativeIntermediate::IntermediateInline(inline) => inlines.push(inline),
-                PandocNativeIntermediate::IntermediateInlines(inner_inlines) => {
-                    inlines.extend(inner_inlines)
-                }
-                PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                    if let Some(_) = whitespace_re.find(&text) {
-                        inlines.push(Inline::Space(Space {
-                            filename: None,
-                            range,
-                        }))
-                    } else {
-                        inlines.push(Inline::Str(Str { text }))
-                    }
-                }
-                other => {
-                    writeln!(
-                        inlines_buf,
-                        "Ignoring unexpected unknown node in native_inlines {:?}.",
-                        other
-                    )
-                    .unwrap();
-                }
-            }
-        }
-        inlines
+        process_native_inlines(children, &whitespace_re, &mut inlines_buf)
     };
 
     let result = match node.kind() {
