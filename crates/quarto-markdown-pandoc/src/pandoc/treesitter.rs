@@ -1354,6 +1354,46 @@ fn process_list(
     }
 }
 
+fn process_list_item(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut list_attr: Option<ListAttributes> = None;
+    let children = children
+        .into_iter()
+        .filter(|(node, child)| {
+            if node == "list_marker_dot" || node == "list_marker_parenthesis" {
+                // this is an ordered list, so we need to set the flag
+                let PandocNativeIntermediate::IntermediateOrderedListMarker(
+                    marker_number,
+                    _,
+                ) = child
+                else {
+                    panic!("Expected OrderedListMarker in list_item, got {:?}", child);
+                };
+                list_attr = Some((
+                    *marker_number,
+                    ListNumberStyle::Decimal,
+                    match node.as_str() {
+                        "list_marker_parenthesis" => ListNumberDelim::OneParen,
+                        "list_marker_dot" => ListNumberDelim::Period,
+                        _ => panic!("Unexpected list marker node: {}", node),
+                    },
+                ));
+                return false; // skip the marker node
+            }
+            matches!(child, PandocNativeIntermediate::IntermediateBlock(_))
+        })
+        .map(|(_, child)| {
+            let PandocNativeIntermediate::IntermediateBlock(block) = child else {
+                panic!("Expected Block in paragraph, got {:?}", child);
+            };
+            block
+        })
+        .collect();
+    PandocNativeIntermediate::IntermediateListItem(children, node_location(node), list_attr)
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1680,42 +1720,7 @@ fn native_visitor<T: Write>(
         "code_span" => process_code_span(buf, node, children),
         "latex_span" => process_latex_span(children),
         "list" => process_list(node, children),
-        "list_item" => {
-            let mut list_attr: Option<ListAttributes> = None;
-            let children = children
-                .into_iter()
-                .filter(|(node, child)| {
-                    if node == "list_marker_dot" || node == "list_marker_parenthesis" {
-                        // this is an ordered list, so we need to set the flag
-                        let PandocNativeIntermediate::IntermediateOrderedListMarker(
-                            marker_number,
-                            _,
-                        ) = child
-                        else {
-                            panic!("Expected OrderedListMarker in list_item, got {:?}", child);
-                        };
-                        list_attr = Some((
-                            *marker_number,
-                            ListNumberStyle::Decimal,
-                            match node.as_str() {
-                                "list_marker_parenthesis" => ListNumberDelim::OneParen,
-                                "list_marker_dot" => ListNumberDelim::Period,
-                                _ => panic!("Unexpected list marker node: {}", node),
-                            },
-                        ));
-                        return false; // skip the marker node
-                    }
-                    matches!(child, PandocNativeIntermediate::IntermediateBlock(_))
-                })
-                .map(|(_, child)| {
-                    let PandocNativeIntermediate::IntermediateBlock(block) = child else {
-                        panic!("Expected Block in paragraph, got {:?}", child);
-                    };
-                    block
-                })
-                .collect();
-            PandocNativeIntermediate::IntermediateListItem(children, node_location(node), list_attr)
-        }
+        "list_item" => process_list_item(node, children),
         "info_string" => (|| {
             for (_, child) in children {
                 match child {
