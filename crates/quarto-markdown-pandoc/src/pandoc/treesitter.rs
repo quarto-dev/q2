@@ -1727,6 +1727,31 @@ fn process_language_attribute(
     panic!("Expected language_attribute to have a language, but found none");
 }
 
+// Process key_value_specifier to build a HashMap of key-value pairs
+fn process_key_value_specifier<T: Write>(
+    buf: &mut T,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut spec = HashMap::new();
+    let mut current_key: Option<String> = None;
+    for (node, child) in children {
+        if let PandocNativeIntermediate::IntermediateBaseText(value, _) = child {
+            if node == "key_value_key" {
+                current_key = Some(value);
+            } else if node == "key_value_value" {
+                if let Some(key) = current_key.take() {
+                    spec.insert(key, value);
+                } else {
+                    panic!("Found key_value_value without a preceding key_value_key");
+                }
+            } else {
+                writeln!(buf, "Unexpected key_value_specifier node: {}", node).unwrap();
+            }
+        }
+    }
+    PandocNativeIntermediate::IntermediateKeyValueSpec(spec)
+}
+
 // Standalone function to process a collection of children into a vector of Inline objects
 fn process_native_inlines<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -1833,26 +1858,7 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateInlines(native_inlines(children))
         }
         "inline_link" => process_inline_link(&mut link_buf, node_text, children),
-        "key_value_specifier" => {
-            let mut spec = HashMap::new();
-            let mut current_key: Option<String> = None;
-            for (node, child) in children {
-                if let PandocNativeIntermediate::IntermediateBaseText(value, _) = child {
-                    if node == "key_value_key" {
-                        current_key = Some(value);
-                    } else if node == "key_value_value" {
-                        if let Some(key) = current_key.take() {
-                            spec.insert(key, value);
-                        } else {
-                            panic!("Found key_value_value without a preceding key_value_key");
-                        }
-                    } else {
-                        writeln!(buf, "Unexpected key_value_specifier node: {}", node).unwrap();
-                    }
-                }
-            }
-            PandocNativeIntermediate::IntermediateKeyValueSpec(spec)
-        }
+        "key_value_specifier" => process_key_value_specifier(buf, children),
         "raw_specifier" => process_raw_specifier(node, input_bytes),
         "emphasis" => emphasis_inline!(children, "emphasis_delimiter", native_inline, Emph),
         "strong_emphasis" => {
