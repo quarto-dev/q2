@@ -17,12 +17,12 @@
     ],
     "notes": [
         {
-            "message": "This div fence needs a space before the attribute",
+            "message": "This div fence needs a space before the attribute.",
             "label": "fence-start",
             "noteType": "simple"
         },
         {
-            "message": "Add a space here before the attribute",
+            "message": "Add a space here before the attribute.",
             "label": "attribute-start",
             "noteType": "simple"
         }
