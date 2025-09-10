@@ -1598,6 +1598,39 @@ fn process_pipe_table(
     }))
 }
 
+fn process_quoted_span<F>(
+    children: Vec<(String, PandocNativeIntermediate)>,
+    native_inline: F,
+) -> PandocNativeIntermediate
+where
+    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
+{
+    let mut quote_type = QuoteType::SingleQuote;
+    let inlines: Vec<_> = children
+        .into_iter()
+        .filter(|(node, intermediate)| {
+            if node == "single_quoted_span_delimiter" {
+                quote_type = QuoteType::SingleQuote;
+                false // skip the opening delimiter
+            } else if node == "double_quoted_span_delimiter" {
+                quote_type = QuoteType::DoubleQuote;
+                false // skip the opening delimiter
+            } else {
+                match intermediate {
+                    PandocNativeIntermediate::IntermediateInline(_) => true,
+                    PandocNativeIntermediate::IntermediateBaseText(_, _) => true,
+                    _ => false,
+                }
+            }
+        })
+        .map(native_inline)
+        .collect();
+    PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
+        quote_type,
+        content: inlines,
+    }))
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1893,32 +1926,7 @@ fn native_visitor<T: Write>(
             |inlines| Inline::EditComment(EditComment { content: inlines }),
         ),
 
-        "quoted_span" => {
-            let mut quote_type = QuoteType::SingleQuote;
-            let inlines: Vec<_> = children
-                .into_iter()
-                .filter(|(node, intermediate)| {
-                    if node == "single_quoted_span_delimiter" {
-                        quote_type = QuoteType::SingleQuote;
-                        false // skip the opening delimiter
-                    } else if node == "double_quoted_span_delimiter" {
-                        quote_type = QuoteType::DoubleQuote;
-                        false // skip the opening delimiter
-                    } else {
-                        match intermediate {
-                            PandocNativeIntermediate::IntermediateInline(_) => true,
-                            PandocNativeIntermediate::IntermediateBaseText(_, _) => true,
-                            _ => false,
-                        }
-                    }
-                })
-                .map(native_inline)
-                .collect();
-            PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
-                quote_type,
-                content: inlines,
-            }))
-        }
+        "quoted_span" => process_quoted_span(children, native_inline),
         "code_span" => process_code_span(buf, node, children),
         "latex_span" => process_latex_span(children),
         "list" => process_list(node, children),
