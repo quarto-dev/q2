@@ -1200,6 +1200,160 @@ fn process_latex_span(children: Vec<(String, PandocNativeIntermediate)>) -> Pand
     }))
 }
 
+fn process_list(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    // a list is loose if it has at least one loose item
+    // an item is loose if
+    //   - it has more than one paragraph in the list
+    //   - it is a single paragraph with space between it and the next
+    //     beginning of list item. There must be a next item for this to be true
+    //     but the next item might not itself be a paragraph.
+
+    let mut has_loose_item = false;
+    let mut last_para_range: Option<Range> = None;
+    let mut list_items: Vec<Blocks> = Vec::new();
+    let mut is_ordered_list: Option<ListAttributes> = None;
+
+    for (node, child) in children {
+        if node == "block_continuation" {
+            // this is a marker node, we don't need to do anything with it
+            continue;
+        }
+        if node == "list_marker_parenthesis" || node == "list_marker_dot" {
+            // this is an ordered list, so we need to set the flag
+            let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) =
+                child
+            else {
+                panic!("Expected OrderedListMarker in list, got {:?}", child);
+            };
+
+            is_ordered_list = Some((
+                marker_number,
+                ListNumberStyle::Decimal,
+                match node.as_str() {
+                    "list_marker_parenthesis" => ListNumberDelim::OneParen,
+                    "list_marker_dot" => ListNumberDelim::Period,
+                    _ => panic!("Unexpected list marker node: {}", node),
+                },
+            ));
+        }
+
+        if node != "list_item" {
+            panic!("Expected list_item in list, got {}", node);
+        }
+        let PandocNativeIntermediate::IntermediateListItem(
+            blocks,
+            child_range,
+            ordered_list,
+        ) = child
+        else {
+            panic!("Expected Blocks in list_item, got {:?}", child);
+        };
+        if is_ordered_list == None {
+            match ordered_list {
+                attr @ Some(_) => is_ordered_list = attr,
+                _ => {}
+            }
+        }
+
+        // is the last item loose? Check the last paragraph range
+        if let Some(ref last_range) = last_para_range {
+            if last_range.end.row != child_range.start.row {
+                // if the last paragraph ends on a different line than the current item starts,
+                // then the last item was loose, mark it
+                has_loose_item = true;
+            }
+        }
+
+        // is this item definitely loose?
+        if blocks
+            .iter()
+            .filter(|block| {
+                if let Block::Paragraph(_) = block {
+                    true
+                } else {
+                    false
+                }
+            })
+            .count()
+            > 1
+        {
+            has_loose_item = true;
+
+            // technically, we don't need to worry about
+            // last paragraph range after setting has_loose_item,
+            // but we do it in case we want to use it later
+            last_para_range = None;
+            list_items.push(blocks);
+            continue;
+        }
+
+        // is this item possibly loose?
+        if blocks.len() == 1 {
+            if let Some(Block::Paragraph(para)) = blocks.first() {
+                // yes, so store the range and wait to finish the check on
+                // next item
+                last_para_range = Some(para.range.clone());
+            } else {
+                // if the first block is not a paragraph, it's not loose
+                last_para_range = None;
+            }
+        }
+        list_items.push(blocks);
+    }
+
+    let content = if has_loose_item {
+        // the AST representation of a loose bullet list is
+        // the same as what we've been building, so just return it
+        list_items
+    } else {
+        // turn list into tight list by replacing eligible Paragraph nodes
+        // Plain nodes.
+        list_items
+            .into_iter()
+            .map(|mut blocks| {
+                if blocks.len() != 1 {
+                    return blocks;
+                }
+                let first = blocks.pop().unwrap();
+                let Block::Paragraph(Paragraph {
+                    content,
+                    filename,
+                    range,
+                }) = first
+                else {
+                    return vec![first];
+                };
+                vec![Block::Plain(Plain {
+                    content: content,
+                    filename: filename,
+                    range: range,
+                })]
+            })
+            .collect()
+    };
+
+    match is_ordered_list {
+        Some(attr) => {
+            PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(OrderedList {
+                attr,
+                content,
+                filename: None,
+                range: node_location(node),
+            }))
+        }
+        None => {
+            PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
+                content,
+                filename: None,
+                range: node_location(node),
+            }))
+        }
+    }
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1525,156 +1679,7 @@ fn native_visitor<T: Write>(
         }
         "code_span" => process_code_span(buf, node, children),
         "latex_span" => process_latex_span(children),
-        "list" => {
-            // a list is loose if it has at least one loose item
-            // an item is loose if
-            //   - it has more than one paragraph in the list
-            //   - it is a single paragraph with space between it and the next
-            //     beginning of list item. There must be a next item for this to be true
-            //     but the next item might not itself be a paragraph.
-
-            let mut has_loose_item = false;
-            let mut last_para_range: Option<Range> = None;
-            let mut list_items: Vec<Blocks> = Vec::new();
-            let mut is_ordered_list: Option<ListAttributes> = None;
-
-            for (node, child) in children {
-                if node == "block_continuation" {
-                    // this is a marker node, we don't need to do anything with it
-                    continue;
-                }
-                if node == "list_marker_parenthesis" || node == "list_marker_dot" {
-                    // this is an ordered list, so we need to set the flag
-                    let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) =
-                        child
-                    else {
-                        panic!("Expected OrderedListMarker in list, got {:?}", child);
-                    };
-
-                    is_ordered_list = Some((
-                        marker_number,
-                        ListNumberStyle::Decimal,
-                        match node.as_str() {
-                            "list_marker_parenthesis" => ListNumberDelim::OneParen,
-                            "list_marker_dot" => ListNumberDelim::Period,
-                            _ => panic!("Unexpected list marker node: {}", node),
-                        },
-                    ));
-                }
-
-                if node != "list_item" {
-                    panic!("Expected list_item in list, got {}", node);
-                }
-                let PandocNativeIntermediate::IntermediateListItem(
-                    blocks,
-                    child_range,
-                    ordered_list,
-                ) = child
-                else {
-                    panic!("Expected Blocks in list_item, got {:?}", child);
-                };
-                if is_ordered_list == None {
-                    match ordered_list {
-                        attr @ Some(_) => is_ordered_list = attr,
-                        _ => {}
-                    }
-                }
-
-                // is the last item loose? Check the last paragraph range
-                if let Some(ref last_range) = last_para_range {
-                    if last_range.end.row != child_range.start.row {
-                        // if the last paragraph ends on a different line than the current item starts,
-                        // then the last item was loose, mark it
-                        has_loose_item = true;
-                    }
-                }
-
-                // is this item definitely loose?
-                if blocks
-                    .iter()
-                    .filter(|block| {
-                        if let Block::Paragraph(_) = block {
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                    .count()
-                    > 1
-                {
-                    has_loose_item = true;
-
-                    // technically, we don't need to worry about
-                    // last paragraph range after setting has_loose_item,
-                    // but we do it in case we want to use it later
-                    last_para_range = None;
-                    list_items.push(blocks);
-                    continue;
-                }
-
-                // is this item possibly loose?
-                if blocks.len() == 1 {
-                    if let Some(Block::Paragraph(para)) = blocks.first() {
-                        // yes, so store the range and wait to finish the check on
-                        // next item
-                        last_para_range = Some(para.range.clone());
-                    } else {
-                        // if the first block is not a paragraph, it's not loose
-                        last_para_range = None;
-                    }
-                }
-                list_items.push(blocks);
-            }
-
-            let content = if has_loose_item {
-                // the AST representation of a loose bullet list is
-                // the same as what we've been building, so just return it
-                list_items
-            } else {
-                // turn list into tight list by replacing eligible Paragraph nodes
-                // Plain nodes.
-                list_items
-                    .into_iter()
-                    .map(|mut blocks| {
-                        if blocks.len() != 1 {
-                            return blocks;
-                        }
-                        let first = blocks.pop().unwrap();
-                        let Block::Paragraph(Paragraph {
-                            content,
-                            filename,
-                            range,
-                        }) = first
-                        else {
-                            return vec![first];
-                        };
-                        vec![Block::Plain(Plain {
-                            content: content,
-                            filename: filename,
-                            range: range,
-                        })]
-                    })
-                    .collect()
-            };
-
-            match is_ordered_list {
-                Some(attr) => {
-                    PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(OrderedList {
-                        attr,
-                        content,
-                        filename: None,
-                        range: node_location(node),
-                    }))
-                }
-                None => {
-                    PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
-                        content,
-                        filename: None,
-                        range: node_location(node),
-                    }))
-                }
-            }
-        }
+        "list" => process_list(node, children),
         "list_item" => {
             let mut list_attr: Option<ListAttributes> = None;
             let children = children
