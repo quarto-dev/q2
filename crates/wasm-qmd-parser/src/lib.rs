@@ -21,6 +21,7 @@ use std::{io, panic};
 
 use quarto_markdown_pandoc::readers::qmd;
 use quarto_markdown_pandoc::utils::output::VerboseOutput;
+use quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver;
 use quarto_markdown_pandoc::writers::json;
 use wasm_bindgen::prelude::*;
 
@@ -49,7 +50,13 @@ pub fn parse_qmd(input: JsValue) -> JsValue {
         None => panic!("Unable to parse `input` as a `String`."),
     };
 
-    let result = match qmd::read(input.as_bytes(), false, "<input>", &mut output) {
+    let result = match qmd::read(
+        input.as_bytes(),
+        false,
+        "<input>",
+        &mut output,
+        None::<fn(&[u8], &TreeSitterLogObserver, &str) -> Vec<String>>,
+    ) {
         Ok(result) => result,
         Err(err) => panic!("Unable to read as a qmd:\n{}", err.join("\n")),
     };
