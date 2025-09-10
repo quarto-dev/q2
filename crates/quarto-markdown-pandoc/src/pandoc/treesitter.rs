@@ -446,6 +446,99 @@ fn process_backslash_escape(node: &tree_sitter::Node, input_bytes: &[u8]) -> Pan
     PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
 }
 
+fn process_shortcode_keyword_param<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut result = HashMap::new();
+    let mut name = String::new();
+    for (node, child) in children {
+        match node.as_str() {
+            "shortcode_name" => {
+                let PandocNativeIntermediate::IntermediateShortcodeArg(
+                    ShortcodeArg::String(text),
+                    _,
+                ) = child
+                else {
+                    panic!("Expected BaseText in shortcode_name, got {:?}", child)
+                };
+                if name.is_empty() {
+                    name = text;
+                } else {
+                    result.insert(name.clone(), ShortcodeArg::String(text));
+                }
+            }
+            "shortcode_string"
+            | "shortcode_number"
+            | "shortcode_naked_string"
+            | "shortcode_boolean" => {
+                let PandocNativeIntermediate::IntermediateShortcodeArg(arg, _) = child
+                else {
+                    panic!("Expected ShortcodeArg in shortcode_string, got {:?}", child)
+                };
+                result.insert(name.clone(), arg);
+            }
+            "block_continuation" => {
+                // This is a marker node, we don't need to do anything with it
+            }
+            _ => {
+                writeln!(buf, "Warning: Unhandled node kind: {}", node).unwrap();
+            }
+        }
+    }
+    let range = node_location(node);
+    PandocNativeIntermediate::IntermediateShortcodeArg(
+        ShortcodeArg::KeyValue(result),
+        range,
+    )
+}
+
+fn process_citation<F>(
+    node_text: F,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate
+where
+    F: Fn() -> String,
+{
+    let mut citation_type = CitationMode::NormalCitation;
+    let mut citation_id = String::new();
+    for (node, child) in children {
+        if node == "citation_id_suppress_author" {
+            citation_type = CitationMode::SuppressAuthor;
+            if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
+                citation_id = id;
+            } else {
+                panic!(
+                    "Expected BaseText in citation_id_suppress_author, got {:?}",
+                    child
+                );
+            }
+        } else if node == "citation_id_author_in_text" {
+            citation_type = CitationMode::AuthorInText;
+            if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
+                citation_id = id;
+            } else {
+                panic!(
+                    "Expected BaseText in citation_id_author_in_text, got {:?}",
+                    child
+                );
+            }
+        }
+    }
+    PandocNativeIntermediate::IntermediateInline(Inline::Cite(Cite {
+        citations: vec![Citation {
+            id: citation_id,
+            prefix: vec![],
+            suffix: vec![],
+            mode: citation_type,
+            note_num: 0, // this needs to be set later
+            hash: 0,
+        }],
+        content: vec![Inline::Str(Str { text: node_text() })],
+    }))
+}
+
 fn process_shortcode(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -1181,44 +1274,7 @@ fn native_visitor<T: Write>(
             let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
             PandocNativeIntermediate::IntermediateInlines(inlines)
         }
-        "citation" => {
-            let mut citation_type = CitationMode::NormalCitation;
-            let mut citation_id = String::new();
-            for (node, child) in children {
-                if node == "citation_id_suppress_author" {
-                    citation_type = CitationMode::SuppressAuthor;
-                    if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
-                        citation_id = id;
-                    } else {
-                        panic!(
-                            "Expected BaseText in citation_id_suppress_author, got {:?}",
-                            child
-                        );
-                    }
-                } else if node == "citation_id_author_in_text" {
-                    citation_type = CitationMode::AuthorInText;
-                    if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
-                        citation_id = id;
-                    } else {
-                        panic!(
-                            "Expected BaseText in citation_id_author_in_text, got {:?}",
-                            child
-                        );
-                    }
-                }
-            }
-            PandocNativeIntermediate::IntermediateInline(Inline::Cite(Cite {
-                citations: vec![Citation {
-                    id: citation_id,
-                    prefix: vec![],
-                    suffix: vec![],
-                    mode: citation_type,
-                    note_num: 0, // this needs to be set later
-                    hash: 0,
-                }],
-                content: vec![Inline::Str(Str { text: node_text() })],
-            }))
-        }
+        "citation" => process_citation(node_text, children),
         "note_reference" => {
             let mut id = String::new();
             for (node, child) in children {
@@ -1240,49 +1296,7 @@ fn native_visitor<T: Write>(
             }))
         }
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
-        "shortcode_keyword_param" => {
-            let mut result = HashMap::new();
-            let mut name = String::new();
-            for (node, child) in children {
-                match node.as_str() {
-                    "shortcode_name" => {
-                        let PandocNativeIntermediate::IntermediateShortcodeArg(
-                            ShortcodeArg::String(text),
-                            _,
-                        ) = child
-                        else {
-                            panic!("Expected BaseText in shortcode_name, got {:?}", child)
-                        };
-                        if name.is_empty() {
-                            name = text;
-                        } else {
-                            result.insert(name.clone(), ShortcodeArg::String(text));
-                        }
-                    }
-                    "shortcode_string"
-                    | "shortcode_number"
-                    | "shortcode_naked_string"
-                    | "shortcode_boolean" => {
-                        let PandocNativeIntermediate::IntermediateShortcodeArg(arg, _) = child
-                        else {
-                            panic!("Expected ShortcodeArg in shortcode_string, got {:?}", child)
-                        };
-                        result.insert(name.clone(), arg);
-                    }
-                    "block_continuation" => {
-                        // This is a marker node, we don't need to do anything with it
-                    }
-                    _ => {
-                        writeln!(buf, "Warning: Unhandled node kind: {}", node).unwrap();
-                    }
-                }
-            }
-            let range = node_location(node);
-            PandocNativeIntermediate::IntermediateShortcodeArg(
-                ShortcodeArg::KeyValue(result),
-                range,
-            )
-        }
+        "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
         "shortcode_boolean" => {
             let value = node_text();
             let value = match value.as_str() {
