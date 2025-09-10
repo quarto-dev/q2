@@ -1631,30 +1631,15 @@ where
     }))
 }
 
-fn native_visitor<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-    input_bytes: &[u8],
-) -> PandocNativeIntermediate {
-    // TODO What sounded like a good idea with two buffers
-    // is becoming annoying now...
-    let mut inline_buf = Vec::<u8>::new();
-    let mut inlines_buf = Vec::<u8>::new();
-    let mut link_buf = Vec::<u8>::new();
-    let mut image_buf = Vec::<u8>::new();
-
-    let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
-    let indent_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"[ \t]+").unwrap());
-
-    let node_text = || node.utf8_text(input_bytes).unwrap().to_string();
-
-    let string_as_base_text = || {
-        let location = node_location(node);
-        let value = node_text();
-        PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
-    };
-    let native_inline = |(node, child)| match child {
+// Standalone function to process intermediate inline elements into Inline objects
+fn process_native_inline<T: Write>(
+    node_name: String,
+    child: PandocNativeIntermediate,
+    whitespace_re: &Regex,
+    inline_buf: &mut T,
+    node_text_fn: impl Fn() -> String,
+) -> Inline {
+    match child {
         PandocNativeIntermediate::IntermediateInline(inline) => inline,
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
@@ -1679,12 +1664,12 @@ fn native_visitor<T: Write>(
                 "Ignoring unexpected unknown node in native inline at ({}:{}): {:?}.",
                 range.start.row + 1,
                 range.start.column + 1,
-                node
+                node_name
             )
             .unwrap();
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
-                text: node_text(),
+                text: node_text_fn(),
             })
         }
         other => {
@@ -1696,9 +1681,37 @@ fn native_visitor<T: Write>(
             .unwrap();
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
-                text: node_text(),
+                text: node_text_fn(),
             })
         }
+    }
+}
+
+fn native_visitor<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    // TODO What sounded like a good idea with two buffers
+    // is becoming annoying now...
+    let mut inline_buf = Vec::<u8>::new();
+    let mut inlines_buf = Vec::<u8>::new();
+    let mut link_buf = Vec::<u8>::new();
+    let mut image_buf = Vec::<u8>::new();
+
+    let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
+    let indent_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"[ \t]+").unwrap());
+
+    let node_text = || node.utf8_text(input_bytes).unwrap().to_string();
+
+    let string_as_base_text = || {
+        let location = node_location(node);
+        let value = node_text();
+        PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
+    };
+    let native_inline = |(node_name, child)| {
+        process_native_inline(node_name, child, &whitespace_re, &mut inline_buf, &node_text)
     };
     let mut native_inlines = |children| {
         let mut inlines: Vec<Inline> = Vec::new();
