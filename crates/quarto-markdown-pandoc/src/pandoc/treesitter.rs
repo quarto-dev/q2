@@ -139,6 +139,148 @@ fn create_line_break_inline(node: &tree_sitter::Node, is_hard: bool) -> PandocNa
     PandocNativeIntermediate::IntermediateInline(inline)
 }
 
+// Helper function to process document nodes
+fn process_document(
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut blocks: Vec<Block> = Vec::new();
+    children.into_iter().for_each(|(_, child)| {
+        match child {
+            PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
+            PandocNativeIntermediate::IntermediateSection(section) => {
+                blocks.extend(section);
+            }
+            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+                // for now we assume it's metadata and emit it as a rawblock
+                blocks.push(Block::RawBlock(RawBlock {
+                    format: "quarto_minus_metadata".to_string(),
+                    text,
+                    filename: None,
+                    range: range,
+                }));
+            }
+            _ => panic!("Expected Block or Section, got {:?}", child),
+        }
+    });
+    PandocNativeIntermediate::IntermediatePandoc(Pandoc {
+        meta: Meta::default(),
+        blocks,
+    })
+}
+
+// Helper function to process indented_code_block nodes
+fn process_indented_code_block(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+    input_bytes: &[u8],
+    indent_re: &Regex,
+) -> PandocNativeIntermediate {
+    let mut content: String = String::new();
+    let outer_range = node_location(node);
+    // first, find the beginning of the contents in the node itself
+    let outer_string = node.utf8_text(input_bytes).unwrap().to_string();
+    let mut start_offset = indent_re.find(&outer_string).map_or(0, |m| m.end());
+
+    for (node, children) in children {
+        if node == "block_continuation" {
+            // append all content up to the beginning of this continuation
+            match children {
+                PandocNativeIntermediate::IntermediateUnknown(range) => {
+                    // Calculate the relative offset of the continuation within outer_string
+                    let continuation_start =
+                        range.start.offset.saturating_sub(outer_range.start.offset);
+                    let continuation_end =
+                        range.end.offset.saturating_sub(outer_range.start.offset);
+
+                    // Append content before this continuation
+                    if continuation_start > start_offset
+                        && continuation_start <= outer_string.len()
+                    {
+                        content.push_str(&outer_string[start_offset..continuation_start]);
+                    }
+
+                    // Update start_offset to after this continuation
+                    start_offset = continuation_end.min(outer_string.len());
+                }
+                _ => panic!("Unexpected {:?} inside indented_code_block", children),
+            }
+        }
+    }
+    // append the remaining content after the last continuation
+    content.push_str(&outer_string[start_offset..]);
+    // TODO this will require careful encoding of the source map when we get to that point
+    PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
+        attr: empty_attr(),
+        text: content.trim_end().to_string(),
+        filename: None,
+        range: outer_range,
+    }))
+}
+
+// Helper function to process fenced_code_block nodes
+fn process_fenced_code_block(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut content: String = String::new();
+    let mut attr: Attr = empty_attr();
+    let mut raw_format: Option<String> = None;
+    for (node, child) in children {
+        if node == "block_continuation" {
+            continue; // skip block continuation nodes
+        }
+        if node == "code_fence_content" {
+            let PandocNativeIntermediate::IntermediateBaseText(text, _) = child else {
+                panic!("Expected BaseText in code_fence_content, got {:?}", child)
+            };
+            content = text;
+        } else if node == "commonmark_attribute" {
+            let PandocNativeIntermediate::IntermediateAttr(a) = child else {
+                panic!("Expected Attr in commonmark_attribute, got {:?}", child)
+            };
+            attr = a;
+        } else if node == "raw_attribute" {
+            let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child else {
+                panic!("Expected RawFormat in raw_attribute, got {:?}", child)
+            };
+            raw_format = Some(format);
+        } else if node == "language_attribute" {
+            let PandocNativeIntermediate::IntermediateBaseText(lang, _) = child else {
+                panic!("Expected BaseText in language_attribute, got {:?}", child)
+            };
+            attr.1.push(lang); // set the language
+        } else if node == "info_string" {
+            let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child else {
+                panic!("Expected Attr in info_string, got {:?}", child)
+            };
+            attr = inner_attr;
+        }
+    }
+    let location = node_location(node);
+
+    // it might be the case (because of tree-sitter error recovery)
+    // that the content does not end with a newline, so we ensure it does before popping
+    if content.ends_with('\n') {
+        content.pop(); // remove the trailing newline
+    }
+
+    if let Some(format) = raw_format {
+        PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
+            format,
+            text: content,
+            filename: None,
+            range: location,
+        }))
+    } else {
+        PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
+            attr,
+            text: content,
+            filename: None,
+            range: location,
+        }))
+    }
+}
+
 // Helper function to process code_span nodes
 fn process_code_span<T: Write>(
     buf: &mut T,
@@ -380,31 +522,7 @@ fn native_visitor<T: Write>(
         | "code_content"
         | "latex_content"
         | "text_base" => create_base_text_from_node_text(node, input_bytes),
-        "document" => {
-            let mut blocks: Vec<Block> = Vec::new();
-            children.into_iter().for_each(|(_, child)| {
-                match child {
-                    PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
-                    PandocNativeIntermediate::IntermediateSection(section) => {
-                        blocks.extend(section);
-                    }
-                    PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
-                        // for now we assume it's metadata and emit it as a rawblock
-                        blocks.push(Block::RawBlock(RawBlock {
-                            format: "quarto_minus_metadata".to_string(),
-                            text,
-                            filename: None,
-                            range: range,
-                        }));
-                    }
-                    _ => panic!("Expected Block or Section, got {:?}", child),
-                }
-            });
-            PandocNativeIntermediate::IntermediatePandoc(Pandoc {
-                meta: Meta::default(),
-                blocks,
-            })
-        }
+        "document" => process_document(children),
         "section" => {
             let mut blocks: Vec<Block> = Vec::new();
             children.into_iter().for_each(|(node, child)| {
@@ -449,107 +567,8 @@ fn native_visitor<T: Write>(
                 range: node_location(node),
             }))
         }
-        "indented_code_block" => {
-            let mut content: String = String::new();
-            let outer_range = node_location(node);
-            // first, find the beginning of the contents in the node itself
-            let outer_string = node_text();
-            let mut start_offset = indent_re.find(&outer_string).map_or(0, |m| m.end());
-
-            for (node, children) in children {
-                if node == "block_continuation" {
-                    // append all content up to the beginning of this continuation
-                    match children {
-                        PandocNativeIntermediate::IntermediateUnknown(range) => {
-                            // Calculate the relative offset of the continuation within outer_string
-                            let continuation_start =
-                                range.start.offset.saturating_sub(outer_range.start.offset);
-                            let continuation_end =
-                                range.end.offset.saturating_sub(outer_range.start.offset);
-
-                            // Append content before this continuation
-                            if continuation_start > start_offset
-                                && continuation_start <= outer_string.len()
-                            {
-                                content.push_str(&outer_string[start_offset..continuation_start]);
-                            }
-
-                            // Update start_offset to after this continuation
-                            start_offset = continuation_end.min(outer_string.len());
-                        }
-                        _ => panic!("Unexpected {:?} inside indented_code_block", children),
-                    }
-                }
-            }
-            // append the remaining content after the last continuation
-            content.push_str(&outer_string[start_offset..]);
-            // TODO this will require careful encoding of the source map when we get to that point
-            PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
-                attr: empty_attr(),
-                text: content.trim_end().to_string(),
-                filename: None,
-                range: outer_range,
-            }))
-        }
-        "fenced_code_block" => {
-            let mut content: String = String::new();
-            let mut attr: Attr = empty_attr();
-            let mut raw_format: Option<String> = None;
-            for (node, child) in children {
-                if node == "block_continuation" {
-                    continue; // skip block continuation nodes
-                }
-                if node == "code_fence_content" {
-                    let PandocNativeIntermediate::IntermediateBaseText(text, _) = child else {
-                        panic!("Expected BaseText in code_fence_content, got {:?}", child)
-                    };
-                    content = text;
-                } else if node == "commonmark_attribute" {
-                    let PandocNativeIntermediate::IntermediateAttr(a) = child else {
-                        panic!("Expected Attr in commonmark_attribute, got {:?}", child)
-                    };
-                    attr = a;
-                } else if node == "raw_attribute" {
-                    let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child else {
-                        panic!("Expected RawFormat in raw_attribute, got {:?}", child)
-                    };
-                    raw_format = Some(format);
-                } else if node == "language_attribute" {
-                    let PandocNativeIntermediate::IntermediateBaseText(lang, _) = child else {
-                        panic!("Expected BaseText in language_attribute, got {:?}", child)
-                    };
-                    attr.1.push(lang); // set the language
-                } else if node == "info_string" {
-                    let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child else {
-                        panic!("Expected Attr in info_string, got {:?}", child)
-                    };
-                    attr = inner_attr;
-                }
-            }
-            let location = node_location(node);
-
-            // it might be the case (because of tree-sitter error recovery)
-            // that the content does not end with a newline, so we ensure it does before popping
-            if content.ends_with('\n') {
-                content.pop(); // remove the trailing newline
-            }
-
-            if let Some(format) = raw_format {
-                PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
-                    format,
-                    text: content,
-                    filename: None,
-                    range: location,
-                }))
-            } else {
-                PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
-                    attr,
-                    text: content,
-                    filename: None,
-                    range: location,
-                }))
-            }
-        }
+        "indented_code_block" => process_indented_code_block(node, children, input_bytes, &indent_re),
+        "fenced_code_block" => process_fenced_code_block(node, children),
         "attribute" => (|| {
             for (node, child) in children {
                 match child {
