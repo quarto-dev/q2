@@ -446,6 +446,89 @@ fn process_backslash_escape(node: &tree_sitter::Node, input_bytes: &[u8]) -> Pan
     PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
 }
 
+fn process_list_marker(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    // we need to extract the marker number
+    let marker_text = node
+        .utf8_text(input_bytes)
+        .unwrap()
+        // we trim both ends instead of just trim_end()
+        // because the lexer might hand us a marker with tabs at the beginning,
+        // as a result of weird mixed-spaces-and-tabs cases like "> \t1."
+        .trim()
+        .trim_end_matches('.')
+        .trim_end_matches(')')
+        .to_string();
+    let marker_number: usize = marker_text
+        .parse()
+        .unwrap_or_else(|_| panic!("Invalid list marker number: {}", marker_text));
+    PandocNativeIntermediate::IntermediateOrderedListMarker(
+        marker_number,
+        node_location(node),
+    )
+}
+
+fn process_code_fence_content(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    let start = node.range().start_byte;
+    let end = node.range().end_byte;
+
+    // This is a code block, we need to extract the content
+    // by removing block_continuation markers
+    let mut current_location = start;
+
+    let mut content = String::new();
+    for (child_node, child) in children {
+        if child_node == "block_continuation" {
+            let PandocNativeIntermediate::IntermediateUnknown(child_range) = child else {
+                panic!(
+                    "Expected IntermediateUnknown in block_continuation, got {:?}",
+                    child
+                )
+            };
+            let slice_before_continuation =
+                &input_bytes[current_location..child_range.start.offset];
+            content.push_str(std::str::from_utf8(slice_before_continuation).unwrap());
+            current_location = child_range.end.offset;
+        }
+    }
+    // Add the remaining content after the last block_continuation
+    if current_location < end {
+        let slice_after_continuation = &input_bytes[current_location..end];
+        content.push_str(std::str::from_utf8(slice_after_continuation).unwrap());
+    }
+    PandocNativeIntermediate::IntermediateBaseText(content, node_location(node))
+}
+
+fn process_note_reference(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut id = String::new();
+    for (node, child) in children {
+        if node == "note_reference_delimiter" {
+            // This is a marker node, we don't need to do anything with it
+        } else if node == "note_reference_id" {
+            if let PandocNativeIntermediate::IntermediateBaseText(text, _) = child {
+                id = text;
+            } else {
+                panic!("Expected BaseText in note_reference_id, got {:?}", child);
+            }
+        } else {
+            panic!("Unexpected note_reference node: {}", node);
+        }
+    }
+    PandocNativeIntermediate::IntermediateInline(Inline::NoteReference(NoteReference {
+        id,
+        range: node_location(node),
+    }))
+}
+
 fn process_shortcode_keyword_param<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1219,7 +1302,6 @@ fn native_visitor<T: Write>(
             }
             PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
                 content: inlines,
-
                 filename: None,
                 range: node_location(node),
             }))
@@ -1275,26 +1357,7 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateInlines(inlines)
         }
         "citation" => process_citation(node_text, children),
-        "note_reference" => {
-            let mut id = String::new();
-            for (node, child) in children {
-                if node == "note_reference_delimiter" {
-                    // This is a marker node, we don't need to do anything with it
-                } else if node == "note_reference_id" {
-                    if let PandocNativeIntermediate::IntermediateBaseText(text, _) = child {
-                        id = text;
-                    } else {
-                        panic!("Expected BaseText in note_reference_id, got {:?}", child);
-                    }
-                } else {
-                    panic!("Unexpected note_reference node: {}", node);
-                }
-            }
-            PandocNativeIntermediate::IntermediateInline(Inline::NoteReference(NoteReference {
-                id,
-                range: node_location(node),
-            }))
-        }
+        "note_reference" => process_note_reference(node, children),
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
         "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
         "shortcode_boolean" => {
@@ -1315,56 +1378,8 @@ fn native_visitor<T: Write>(
             };
             PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::Number(num), range)
         }
-        "code_fence_content" => {
-            let start = node.range().start_byte;
-            let end = node.range().end_byte;
-
-            // This is a code block, we need to extract the content
-            // by removing block_continuation markers
-            let mut current_location = start;
-
-            let mut content = String::new();
-            for (child_node, child) in children {
-                if child_node == "block_continuation" {
-                    let PandocNativeIntermediate::IntermediateUnknown(child_range) = child else {
-                        panic!(
-                            "Expected IntermediateUnknown in block_continuation, got {:?}",
-                            child
-                        )
-                    };
-                    let slice_before_continuation =
-                        &input_bytes[current_location..child_range.start.offset];
-                    content.push_str(std::str::from_utf8(slice_before_continuation).unwrap());
-                    current_location = child_range.end.offset;
-                }
-            }
-            // Add the remaining content after the last block_continuation
-            if current_location < end {
-                let slice_after_continuation = &input_bytes[current_location..end];
-                content.push_str(std::str::from_utf8(slice_after_continuation).unwrap());
-            }
-            PandocNativeIntermediate::IntermediateBaseText(content, node_location(node))
-        }
-        "list_marker_parenthesis" | "list_marker_dot" => {
-            // we need to extract the marker number
-            let marker_text = node
-                .utf8_text(input_bytes)
-                .unwrap()
-                // we trim both ends instead of just trim_end()
-                // because the lexer might hand us a marker with tabs at the beginning,
-                // as a result of weird mixed-spaces-and-tabs cases like "> \t1."
-                .trim()
-                .trim_end_matches('.')
-                .trim_end_matches(')')
-                .to_string();
-            let marker_number: usize = marker_text
-                .parse()
-                .unwrap_or_else(|_| panic!("Invalid list marker number: {}", marker_text));
-            PandocNativeIntermediate::IntermediateOrderedListMarker(
-                marker_number,
-                node_location(node),
-            )
-        }
+        "code_fence_content" => process_code_fence_content(node, children, input_bytes),
+        "list_marker_parenthesis" | "list_marker_dot" => process_list_marker(node, input_bytes),
         // These are marker nodes, we don't need to do anything with it
         "block_quote_marker"
         | "list_marker_minus"
