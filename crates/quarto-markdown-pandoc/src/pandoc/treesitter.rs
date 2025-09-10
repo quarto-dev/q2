@@ -400,8 +400,11 @@ fn process_commonmark_attribute(children: Vec<(String, PandocNativeIntermediate)
             }
         }
         PandocNativeIntermediate::IntermediateKeyValueSpec(spec) => {
-            attr.2 = spec;
+            for (key, value) in spec {
+                attr.2.insert(key, value);
+            }
         }
+        PandocNativeIntermediate::IntermediateUnknown(_) => {}
         _ => panic!("Unexpected child in commonmark_attribute: {:?}", child),
     });
     PandocNativeIntermediate::IntermediateAttr(attr)
@@ -425,6 +428,265 @@ fn process_raw_specifier(node: &tree_sitter::Node, input_bytes: &[u8]) -> Pandoc
 }
 
 // Helper function to process code_span nodes
+fn process_thematic_break(node: &tree_sitter::Node) -> PandocNativeIntermediate {
+    PandocNativeIntermediate::IntermediateBlock(Block::HorizontalRule(HorizontalRule {
+        filename: None,
+        range: node_location(node),
+    }))
+}
+
+fn process_backslash_escape(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
+    // This is a backslash escape, we need to extract the content
+    // by removing the backslash
+    let text = node.utf8_text(input_bytes).unwrap();
+    if text.len() < 2 || !text.starts_with('\\') {
+        panic!("Invalid backslash escape: {}", text);
+    }
+    let content = &text[1..]; // remove the leading backslash
+    PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
+}
+
+fn process_uri_autolink(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
+    // This is a URI autolink, we need to extract the content
+    // by removing the angle brackets
+    let text = node.utf8_text(input_bytes).unwrap();
+    if text.len() < 2 || !text.starts_with('<') || !text.ends_with('>') {
+        panic!("Invalid URI autolink: {}", text);
+    }
+    let content = &text[1..text.len() - 1]; // remove the angle brackets
+    let mut attr = ("".to_string(), vec![], HashMap::new());
+    // pandoc adds the class "uri" to autolinks
+    attr.1.push("uri".to_string());
+    PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
+        content: vec![Inline::Str(Str {
+            text: content.to_string(),
+        })],
+        attr,
+        target: (content.to_string(), "".to_string()),
+    }))
+}
+
+fn process_setext_heading<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut content = Vec::new();
+    let mut level = 1;
+    for (_, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
+                content: inner_content,
+                ..
+            })) => {
+                content = inner_content;
+            }
+            PandocNativeIntermediate::IntermediateSetextHeadingLevel(l) => {
+                level = l;
+            }
+            _ => {
+                writeln!(
+                    buf,
+                    "[setext_heading] Warning: Unhandled node kind: {}",
+                    node.kind()
+                )
+                .unwrap();
+            }
+        }
+    }
+    PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
+        level,
+        attr: empty_attr(),
+        content,
+        filename: None,
+        range: node_location(node),
+    }))
+}
+
+fn process_atx_heading<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut level = 0;
+    let mut content: Vec<Inline> = Vec::new();
+    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    for (node, child) in children {
+        if node == "block_continuation" {
+            continue;
+            // This is a marker node, we don't need to do anything with it
+        } else if node == "atx_h1_marker" {
+            level = 1;
+        } else if node == "atx_h2_marker" {
+            level = 2;
+        } else if node == "atx_h3_marker" {
+            level = 3;
+        } else if node == "atx_h4_marker" {
+            level = 4;
+        } else if node == "atx_h5_marker" {
+            level = 5;
+        } else if node == "atx_h6_marker" {
+            level = 6;
+        } else if node == "inline" {
+            if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
+                content.extend(inlines);
+            } else {
+                panic!("Expected Inlines in atx_heading, got {:?}", child);
+            }
+        } else if node == "attribute" {
+            if let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child {
+                attr = inner_attr;
+            } else {
+                panic!("Expected Attr in attribute, got {:?}", child);
+            }
+        } else {
+            writeln!(buf, "Warning: Unhandled node kind in atx_heading: {}", node).unwrap();
+        }
+    }
+    PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
+        level,
+        attr,
+        content,
+        filename: None,
+        range: node_location(node),
+    }))
+}
+
+fn process_fenced_div_block<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut content: Vec<Block> = Vec::new();
+    for (node, child) in children {
+        if node == "block_continuation" {
+            continue;
+        }
+        match child {
+            PandocNativeIntermediate::IntermediateBaseText(_, _) => {
+                if node == "language_attribute" {
+                    writeln!(
+                        buf,
+                        "Warning: language attribute unsupported in divs: {:?} {:?}",
+                        node, child
+                    )
+                    .unwrap();
+                } else {
+                    writeln!(
+                        buf,
+                        "Warning: Unexpected base text in div, ignoring: {:?} {:?}",
+                        node, child
+                    )
+                    .unwrap();
+                }
+            }
+            PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
+                writeln!(
+                    buf,
+                    "Warning: Raw attribute specifiers are not supported in divs: {:?} {:?}",
+                    node, child
+                )
+                .unwrap();
+            }
+            PandocNativeIntermediate::IntermediateAttr(a) => {
+                attr = a;
+            }
+            PandocNativeIntermediate::IntermediateBlock(block) => {
+                content.push(block);
+            }
+            PandocNativeIntermediate::IntermediateSection(blocks) => {
+                content.extend(blocks);
+            }
+            _ => {
+                writeln!(
+                    buf,
+                    "Warning: Unhandled node kind in fenced_div_block: {:?} {:?}",
+                    node, child
+                )
+                .unwrap();
+            }
+        }
+    }
+    PandocNativeIntermediate::IntermediateBlock(Block::Div(Div {
+        attr,
+        content,
+        filename: None,
+        range: node_location(node),
+    }))
+}
+
+fn process_block_quote<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut content: Blocks = Vec::new();
+    for (node_type, child) in children {
+        if node_type == "block_quote_marker" {
+            if matches!(child, PandocNativeIntermediate::IntermediateUnknown(_)) {
+                if node_type != "block_continuation" {
+                    writeln!(
+                        buf,
+                        "Warning: Unhandled node kind in block_quote: {}, {:?}",
+                        node_type, child,
+                    )
+                    .unwrap();
+                }
+            }
+            continue;
+        }
+        match child {
+            PandocNativeIntermediate::IntermediateBlock(block) => {
+                content.push(block);
+            }
+            _ => {
+                writeln!(
+                buf,
+                "[block_quote] Will ignore unknown node. Expected Block in block_quote, got {:?}",
+                child
+                ).unwrap();
+            }
+        }
+    }
+    PandocNativeIntermediate::IntermediateBlock(Block::BlockQuote(BlockQuote {
+        content,
+        filename: None,
+        range: node_location(node),
+    }))
+}
+
+fn process_raw_attribute(node: &tree_sitter::Node, children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+    let range = node_location(node);
+    for (_, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateBaseText(raw, _) => {
+                return PandocNativeIntermediate::IntermediateRawFormat(raw, range);
+            }
+            _ => {}
+        }
+    }
+    panic!("Expected raw_attribute to have a format, but found none");
+}
+
+fn process_attribute(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+    for (node, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateAttr(attr) => {
+                if node == "commonmark_attribute" {
+                    return PandocNativeIntermediate::IntermediateAttr(attr);
+                } else if node == "raw_attribute" {
+                    panic!("Unexpected raw attribute in attribute: {:?}", attr);
+                } else {
+                    panic!("Unexpected attribute node: {}", node);
+                }
+            }
+            _ => panic!("Unexpected child in attribute: {:?}", child),
+        }
+    }
+    panic!("No commonmark_attribute found in attribute node");
+}
+
 fn process_code_span<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -666,45 +928,8 @@ fn native_visitor<T: Write>(
         }
         "indented_code_block" => process_indented_code_block(node, children, input_bytes, &indent_re),
         "fenced_code_block" => process_fenced_code_block(node, children),
-        "attribute" => (|| {
-            for (node, child) in children {
-                match child {
-                    PandocNativeIntermediate::IntermediateAttr(attr) => {
-                        if node == "commonmark_attribute" {
-                            return PandocNativeIntermediate::IntermediateAttr(attr);
-                        } else if node == "raw_attribute" {
-                            panic!("Unexpected raw attribute in attribute: {:?}", attr);
-                        } else {
-                            panic!("Unexpected attribute node: {}", node);
-                        }
-                    }
-                    _ => panic!("Unexpected child in attribute: {:?}", child),
-                }
-            }
-            panic!("No commonmark_attribute found in attribute node");
-        })(),
-        "commonmark_attribute" => {
-            let mut attr = ("".to_string(), vec![], HashMap::new());
-            children.into_iter().for_each(|(node, child)| match child {
-                PandocNativeIntermediate::IntermediateBaseText(id, _) => {
-                    if node == "id_specifier" {
-                        attr.0 = id;
-                    } else if node == "class_specifier" {
-                        attr.1.push(id);
-                    } else {
-                        panic!("Unexpected commonmark_attribute node: {}", node);
-                    }
-                }
-                PandocNativeIntermediate::IntermediateKeyValueSpec(spec) => {
-                    for (key, value) in spec {
-                        attr.2.insert(key, value);
-                    }
-                }
-                PandocNativeIntermediate::IntermediateUnknown(_) => {}
-                _ => panic!("Unexpected child in commonmark_attribute: {:?}", child),
-            });
-            PandocNativeIntermediate::IntermediateAttr(attr)
-        }
+        "attribute" => process_attribute(children),
+        "commonmark_attribute" => process_commonmark_attribute(children),
         "class_specifier" | "id_specifier" => create_specifier_base_text(node, input_bytes),
         "shortcode_naked_string" | "shortcode_name" => process_shortcode_string_arg(node, input_bytes),
         "shortcode_string" => process_shortcode_string(&string_as_base_text, node),
@@ -1487,172 +1712,12 @@ fn native_visitor<T: Write>(
             }
             panic!("Expected language_attribute to have a language, but found none");
         })(),
-        "raw_attribute" => (|| {
-            for (_, child) in children {
-                let range = node_location(node);
-                match child {
-                    PandocNativeIntermediate::IntermediateBaseText(raw, _) => {
-                        return PandocNativeIntermediate::IntermediateRawFormat(raw, range);
-                    }
-                    _ => {}
-                }
-            }
-            panic!("Expected raw_attribute to have a format, but found none");
-        })(),
-        "block_quote" => {
-            let mut content: Blocks = Vec::new();
-            for (node_type, child) in children {
-                if node_type == "block_quote_marker" {
-                    if matches!(child, PandocNativeIntermediate::IntermediateUnknown(_)) {
-                        if node_type != "block_continuation" {
-                            writeln!(
-                                buf,
-                                "Warning: Unhandled node kind in block_quote: {}, {:?}",
-                                node_type, child,
-                            )
-                            .unwrap();
-                        }
-                    }
-                    continue;
-                }
-                match child {
-                    PandocNativeIntermediate::IntermediateBlock(block) => {
-                        content.push(block);
-                    }
-                    _ => {
-                        writeln!(
-                        buf,
-                        "[block_quote] Will ignore unknown node. Expected Block in block_quote, got {:?}",
-                        child
-                        ).unwrap();
-                    }
-                }
-            }
-            PandocNativeIntermediate::IntermediateBlock(Block::BlockQuote(BlockQuote {
-                content,
-                filename: None,
-                range: node_location(node),
-            }))
-        }
-        "fenced_div_block" => {
-            let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
-            let mut content: Vec<Block> = Vec::new();
-            for (node, child) in children {
-                if node == "block_continuation" {
-                    continue;
-                }
-                match child {
-                    PandocNativeIntermediate::IntermediateBaseText(_, _) => {
-                        if node == "language_attribute" {
-                            writeln!(
-                                buf,
-                                "Warning: language attribute unsupported in divs: {:?} {:?}",
-                                node, child
-                            )
-                            .unwrap();
-                        } else {
-                            writeln!(
-                                buf,
-                                "Warning: Unexpected base text in div, ignoring: {:?} {:?}",
-                                node, child
-                            )
-                            .unwrap();
-                        }
-                    }
-                    PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
-                        writeln!(
-                            buf,
-                            "Warning: Raw attribute specifiers are not supported in divs: {:?} {:?}",
-                            node, child
-                        )
-                        .unwrap();
-                    }
-                    PandocNativeIntermediate::IntermediateAttr(a) => {
-                        attr = a;
-                    }
-                    PandocNativeIntermediate::IntermediateBlock(block) => {
-                        content.push(block);
-                    }
-                    PandocNativeIntermediate::IntermediateSection(blocks) => {
-                        content.extend(blocks);
-                    }
-                    _ => {
-                        writeln!(
-                            buf,
-                            "Warning: Unhandled node kind in fenced_div_block: {:?} {:?}",
-                            node, child
-                        )
-                        .unwrap();
-                    }
-                }
-            }
-            PandocNativeIntermediate::IntermediateBlock(Block::Div(Div {
-                attr,
-                content,
-                filename: None,
-                range: node_location(node),
-            }))
-        }
-        "atx_heading" => {
-            let mut level = 0;
-            let mut content: Vec<Inline> = Vec::new();
-            let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
-            for (node, child) in children {
-                if node == "block_continuation" {
-                    continue;
-                    // This is a marker node, we don't need to do anything with it
-                } else if node == "atx_h1_marker" {
-                    level = 1;
-                } else if node == "atx_h2_marker" {
-                    level = 2;
-                } else if node == "atx_h3_marker" {
-                    level = 3;
-                } else if node == "atx_h4_marker" {
-                    level = 4;
-                } else if node == "atx_h5_marker" {
-                    level = 5;
-                } else if node == "atx_h6_marker" {
-                    level = 6;
-                } else if node == "inline" {
-                    if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                        content.extend(inlines);
-                    } else {
-                        panic!("Expected Inlines in atx_heading, got {:?}", child);
-                    }
-                } else if node == "attribute" {
-                    if let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child {
-                        attr = inner_attr;
-                    } else {
-                        panic!("Expected Attr in attribute, got {:?}", child);
-                    }
-                } else {
-                    writeln!(buf, "Warning: Unhandled node kind in atx_heading: {}", node).unwrap();
-                }
-            }
-            PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
-                level,
-                attr,
-                content,
-                filename: None,
-                range: node_location(node),
-            }))
-        }
-        "thematic_break" => {
-            PandocNativeIntermediate::IntermediateBlock(Block::HorizontalRule(HorizontalRule {
-                filename: None,
-                range: node_location(node),
-            }))
-        }
-        "backslash_escape" => {
-            // This is a backslash escape, we need to extract the content
-            // by removing the backslash
-            let text = node.utf8_text(input_bytes).unwrap();
-            if text.len() < 2 || !text.starts_with('\\') {
-                panic!("Invalid backslash escape: {}", text);
-            }
-            let content = &text[1..]; // remove the leading backslash
-            PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
-        }
+        "raw_attribute" => process_raw_attribute(node, children),
+        "block_quote" => process_block_quote(buf, node, children),
+        "fenced_div_block" => process_fenced_div_block(buf, node, children),
+        "atx_heading" => process_atx_heading(buf, node, children),
+        "thematic_break" => process_thematic_break(node),
+        "backslash_escape" => process_backslash_escape(node, input_bytes),
         "minus_metadata" => {
             let text = node.utf8_text(input_bytes).unwrap();
             PandocNativeIntermediate::IntermediateMetadataString(
@@ -1660,25 +1725,7 @@ fn native_visitor<T: Write>(
                 node_location(node),
             )
         }
-        "uri_autolink" => {
-            // This is a URI autolink, we need to extract the content
-            // by removing the angle brackets
-            let text = node.utf8_text(input_bytes).unwrap();
-            if text.len() < 2 || !text.starts_with('<') || !text.ends_with('>') {
-                panic!("Invalid URI autolink: {}", text);
-            }
-            let content = &text[1..text.len() - 1]; // remove the angle brackets
-            let mut attr = ("".to_string(), vec![], HashMap::new());
-            // pandoc adds the class "uri" to autolinks
-            attr.1.push("uri".to_string());
-            PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
-                content: vec![Inline::Str(Str {
-                    text: content.to_string(),
-                })],
-                attr,
-                target: (content.to_string(), "".to_string()),
-            }))
-        }
+        "uri_autolink" => process_uri_autolink(node, input_bytes),
         "pipe_table_delimiter_cell" => {
             let mut has_starter_colon = false;
             let mut has_ending_colon = false;
@@ -1837,38 +1884,7 @@ fn native_visitor<T: Write>(
         }
         "setext_h1_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(1),
         "setext_h2_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(2),
-        "setext_heading" => {
-            let mut content = Vec::new();
-            let mut level = 1;
-            for (_, child) in children {
-                match child {
-                    PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
-                        content: inner_content,
-                        ..
-                    })) => {
-                        content = inner_content;
-                    }
-                    PandocNativeIntermediate::IntermediateSetextHeadingLevel(l) => {
-                        level = l;
-                    }
-                    _ => {
-                        writeln!(
-                            buf,
-                            "[setext_heading] Warning: Unhandled node kind: {}",
-                            node.kind()
-                        )
-                        .unwrap();
-                    }
-                }
-            }
-            PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
-                level,
-                attr: empty_attr(),
-                content,
-                filename: None,
-                range: node_location(node),
-            }))
-        }
+        "setext_heading" => process_setext_heading(buf, node, children),
         _ => {
             writeln!(
                 buf,
