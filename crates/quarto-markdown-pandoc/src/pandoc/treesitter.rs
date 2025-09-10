@@ -1690,6 +1690,43 @@ fn process_native_inline<T: Write>(
     }
 }
 
+// Process info_string to extract attributes
+fn process_info_string(
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    for (_, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
+                return PandocNativeIntermediate::IntermediateAttr((
+                    "".to_string(),
+                    vec![text],
+                    HashMap::new(),
+                ));
+            }
+            _ => {}
+        }
+    }
+    panic!("Expected info_string to have a string, but found none");
+}
+
+// Process language_attribute to format it with braces
+fn process_language_attribute(
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    for (_, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
+                return PandocNativeIntermediate::IntermediateBaseText(
+                    "{".to_string() + &text + "}",
+                    range,
+                );
+            }
+            _ => {}
+        }
+    }
+    panic!("Expected language_attribute to have a language, but found none");
+}
+
 // Standalone function to process a collection of children into a vector of Inline objects
 fn process_native_inlines<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -1929,35 +1966,8 @@ fn native_visitor<T: Write>(
         "latex_span" => process_latex_span(children),
         "list" => process_list(node, children),
         "list_item" => process_list_item(node, children),
-        "info_string" => (|| {
-            for (_, child) in children {
-                match child {
-                    PandocNativeIntermediate::IntermediateBaseText(text, _) => {
-                        return PandocNativeIntermediate::IntermediateAttr((
-                            "".to_string(),
-                            vec![text],
-                            HashMap::new(),
-                        ));
-                    }
-                    _ => {}
-                }
-            }
-            panic!("Expected info_string to have a string, but found none");
-        })(),
-        "language_attribute" => (|| {
-            for (_, child) in children {
-                match child {
-                    PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                        return PandocNativeIntermediate::IntermediateBaseText(
-                            "{".to_string() + &text + "}",
-                            range,
-                        );
-                    }
-                    _ => {}
-                }
-            }
-            panic!("Expected language_attribute to have a language, but found none");
-        })(),
+        "info_string" => process_info_string(children),
+        "language_attribute" => process_language_attribute(children),
         "raw_attribute" => process_raw_attribute(node, children),
         "block_quote" => process_block_quote(buf, node, children),
         "fenced_div_block" => process_fenced_div_block(buf, node, children),
