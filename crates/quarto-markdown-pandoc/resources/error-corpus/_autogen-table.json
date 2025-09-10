@@ -91,5 +91,46 @@
       ]
     },
     "name": "002"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 772,
+    "sym": "{",
+    "errorInfo": {
+      "title": "Missing Space After Div Fence",
+      "message": "A space is required after ':::' when specifying div attributes.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 772,
+          "row": 0,
+          "size": 3,
+          "sym": "_fenced_div_start",
+          "label": "fence-start"
+        },
+        {
+          "column": 3,
+          "lrState": 582,
+          "row": 0,
+          "size": 1,
+          "sym": "{",
+          "label": "attribute-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This div fence needs a space before the attribute",
+          "label": "fence-start",
+          "noteType": "simple"
+        },
+        {
+          "message": "Add a space here before the attribute",
+          "label": "attribute-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "004"
   }
 ]
