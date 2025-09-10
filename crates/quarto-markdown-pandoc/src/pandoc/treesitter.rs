@@ -446,6 +446,66 @@ fn process_backslash_escape(node: &tree_sitter::Node, input_bytes: &[u8]) -> Pan
     PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
 }
 
+fn process_image<T: Write, F>(
+    image_buf: &mut T,
+    node_text: F,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate 
+where
+    F: Fn() -> String,
+{
+    let mut attr = ("".to_string(), vec![], HashMap::new());
+    let mut target: Target = ("".to_string(), "".to_string());
+    let mut content: Vec<Inline> = Vec::new();
+    for (node, child) in children {
+        if node == "image_description" {
+            let PandocNativeIntermediate::IntermediateInlines(inlines) = child else {
+                panic!("Expected inlines in image_description, got {:?}", child)
+            };
+            content.extend(inlines);
+            continue;
+        }
+        match child {
+            PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
+                // TODO show position of this error
+                let _ = writeln!(
+                    image_buf,
+                    "Raw specifiers are unsupported in images: {}. Will ignore.",
+                    node_text()
+                );
+            }
+            PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
+            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
+                if node == "link_destination" {
+                    target.0 = text; // URL
+                } else if node == "link_title" {
+                    target.1 = text; // Title
+                } else if node == "language_attribute" {
+                    // TODO show position of this error
+                    let _ = writeln!(
+                        image_buf,
+                        "Language specifiers are unsupported in images: {}",
+                        node_text()
+                    );
+                } else {
+                    panic!("Unexpected image node: {}", node);
+                }
+            }
+            PandocNativeIntermediate::IntermediateUnknown(_) => {}
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                content.extend(inlines)
+            }
+            PandocNativeIntermediate::IntermediateInline(inline) => content.push(inline),
+            _ => panic!("Unexpected child in inline_link: {:?}", child),
+        }
+    }
+    PandocNativeIntermediate::IntermediateInline(Inline::Image(Image {
+        attr,
+        content,
+        target,
+    }))
+}
+
 fn process_uri_autolink(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
     // This is a URI autolink, we need to extract the content
     // by removing the angle brackets
@@ -936,58 +996,7 @@ fn native_visitor<T: Write>(
         "key_value_value" => string_as_base_text(),
         "link_title" => process_link_title(node, input_bytes),
         "link_text" => PandocNativeIntermediate::IntermediateInlines(native_inlines(children)),
-        "image" => {
-            let mut attr = ("".to_string(), vec![], HashMap::new());
-            let mut target: Target = ("".to_string(), "".to_string());
-            let mut content: Vec<Inline> = Vec::new();
-            for (node, child) in children {
-                if node == "image_description" {
-                    let PandocNativeIntermediate::IntermediateInlines(inlines) = child else {
-                        panic!("Expected inlines in image_description, got {:?}", child)
-                    };
-                    content.extend(inlines);
-                    continue;
-                }
-                match child {
-                    PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
-                        // TODO show position of this error
-                        let _ = writeln!(
-                            image_buf,
-                            "Raw specifiers are unsupported in images: {}. Will ignore.",
-                            node_text()
-                        );
-                    }
-                    PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
-                    PandocNativeIntermediate::IntermediateBaseText(text, _) => {
-                        if node == "link_destination" {
-                            target.0 = text; // URL
-                        } else if node == "link_title" {
-                            target.1 = text; // Title
-                        } else if node == "language_attribute" {
-                            // TODO show position of this error
-                            let _ = writeln!(
-                                image_buf,
-                                "Language specifiers are unsupported in images: {}",
-                                node_text()
-                            );
-                        } else {
-                            panic!("Unexpected image node: {}", node);
-                        }
-                    }
-                    PandocNativeIntermediate::IntermediateUnknown(_) => {}
-                    PandocNativeIntermediate::IntermediateInlines(inlines) => {
-                        content.extend(inlines)
-                    }
-                    PandocNativeIntermediate::IntermediateInline(inline) => content.push(inline),
-                    _ => panic!("Unexpected child in inline_link: {:?}", child),
-                }
-            }
-            PandocNativeIntermediate::IntermediateInline(Inline::Image(Image {
-                attr,
-                content,
-                target,
-            }))
-        }
+        "image" => process_image(&mut image_buf, node_text, children),
         "image_description" => {
             PandocNativeIntermediate::IntermediateInlines(native_inlines(children))
         }
