@@ -1631,6 +1631,25 @@ where
     }))
 }
 
+// Macro for simple emphasis-like inline processing
+macro_rules! emphasis_inline {
+    ($children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident) => {
+        process_emphasis_inline(
+            $children,
+            $delimiter,
+            $native_inline,
+            |inlines| Inline::$inline_type($inline_type { content: inlines }),
+        )
+    };
+}
+
+// Macro for emphasis-like inline processing that needs node access
+macro_rules! emphasis_inline_with_node {
+    ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $closure:expr) => {
+        process_emphasis_inline_with_node($node, $children, $delimiter, $native_inline, $closure)
+    };
+}
+
 // Standalone function to process intermediate inline elements into Inline objects
 fn process_native_inline<T: Write>(
     node_name: String,
@@ -1799,18 +1818,8 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateKeyValueSpec(spec)
         }
         "raw_specifier" => process_raw_specifier(node, input_bytes),
-        "emphasis" => process_emphasis_inline(
-            children,
-            "emphasis_delimiter",
-            native_inline,
-            |inlines| Inline::Emph(Emph { content: inlines }),
-        ),
-        "strong_emphasis" => process_emphasis_inline(
-            children,
-            "emphasis_delimiter",
-            native_inline,
-            |inlines| Inline::Strong(Strong { content: inlines }),
-        ),
+        "emphasis" => emphasis_inline!(children, "emphasis_delimiter", native_inline, Emph),
+        "strong_emphasis" => emphasis_inline!(children, "emphasis_delimiter", native_inline, Strong),
         "inline" => {
             let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
             PandocNativeIntermediate::IntermediateInlines(inlines)
@@ -1881,7 +1890,7 @@ fn native_visitor<T: Write>(
                 PandocNativeIntermediate::IntermediateLatexInlineDelimiter(range)
             }
         }
-        "inline_note" => process_emphasis_inline_with_node(
+        "inline_note" => emphasis_inline_with_node!(
             node,
             children,
             "inline_note_delimiter",
@@ -1894,50 +1903,15 @@ fn native_visitor<T: Write>(
                         range: node_location(node),
                     })],
                 })
-            },
+            }
         ),
-        "superscript" => process_emphasis_inline(
-            children,
-            "superscript_delimiter",
-            native_inline,
-            |inlines| Inline::Superscript(Superscript { content: inlines }),
-        ),
-        "subscript" => process_emphasis_inline(
-            children,
-            "subscript_delimiter",
-            native_inline,
-            |inlines| Inline::Subscript(Subscript { content: inlines }),
-        ),
-        "strikeout" => process_emphasis_inline(
-            children,
-            "strikeout_delimiter",
-            native_inline,
-            |inlines| Inline::Strikeout(Strikeout { content: inlines }),
-        ),
-        "insert" => process_emphasis_inline(
-            children,
-            "insert_delimiter",
-            native_inline,
-            |inlines| Inline::Insert(Insert { content: inlines }),
-        ),
-        "delete" => process_emphasis_inline(
-            children,
-            "delete_delimiter",
-            native_inline,
-            |inlines| Inline::Delete(Delete { content: inlines }),
-        ),
-        "highlight" => process_emphasis_inline(
-            children,
-            "highlight_delimiter",
-            native_inline,
-            |inlines| Inline::Highlight(Highlight { content: inlines }),
-        ),
-        "edit_comment" => process_emphasis_inline(
-            children,
-            "edit_comment_delimiter",
-            native_inline,
-            |inlines| Inline::EditComment(EditComment { content: inlines }),
-        ),
+        "superscript" => emphasis_inline!(children, "superscript_delimiter", native_inline, Superscript),
+        "subscript" => emphasis_inline!(children, "subscript_delimiter", native_inline, Subscript),
+        "strikeout" => emphasis_inline!(children, "strikeout_delimiter", native_inline, Strikeout),
+        "insert" => emphasis_inline!(children, "insert_delimiter", native_inline, Insert),
+        "delete" => emphasis_inline!(children, "delete_delimiter", native_inline, Delete),
+        "highlight" => emphasis_inline!(children, "highlight_delimiter", native_inline, Highlight),
+        "edit_comment" => emphasis_inline!(children, "edit_comment_delimiter", native_inline, EditComment),
 
         "quoted_span" => process_quoted_span(children, native_inline),
         "code_span" => process_code_span(buf, node, children),
