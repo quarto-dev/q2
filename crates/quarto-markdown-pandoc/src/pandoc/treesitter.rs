@@ -1182,7 +1182,9 @@ fn process_code_span<T: Write>(
     }
 }
 
-fn process_latex_span(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
+fn process_latex_span(
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
     let mut is_inline_math = false;
     let mut is_display_math = false;
     let mut inlines: Vec<_> = children
@@ -1254,8 +1256,7 @@ fn process_list(
         }
         if node == "list_marker_parenthesis" || node == "list_marker_dot" {
             // this is an ordered list, so we need to set the flag
-            let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) =
-                child
+            let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) = child
             else {
                 panic!("Expected OrderedListMarker in list, got {:?}", child);
             };
@@ -1274,11 +1275,8 @@ fn process_list(
         if node != "list_item" {
             panic!("Expected list_item in list, got {}", node);
         }
-        let PandocNativeIntermediate::IntermediateListItem(
-            blocks,
-            child_range,
-            ordered_list,
-        ) = child
+        let PandocNativeIntermediate::IntermediateListItem(blocks, child_range, ordered_list) =
+            child
         else {
             panic!("Expected Blocks in list_item, got {:?}", child);
         };
@@ -1375,13 +1373,11 @@ fn process_list(
                 range: node_location(node),
             }))
         }
-        None => {
-            PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
-                content,
-                filename: None,
-                range: node_location(node),
-            }))
-        }
+        None => PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
+            content,
+            filename: None,
+            range: node_location(node),
+        })),
     }
 }
 
@@ -1395,10 +1391,8 @@ fn process_list_item(
         .filter(|(node, child)| {
             if node == "list_marker_dot" || node == "list_marker_parenthesis" {
                 // this is an ordered list, so we need to set the flag
-                let PandocNativeIntermediate::IntermediateOrderedListMarker(
-                    marker_number,
-                    _,
-                ) = child
+                let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) =
+                    child
                 else {
                     panic!("Expected OrderedListMarker in list_item, got {:?}", child);
                 };
@@ -1634,19 +1628,9 @@ where
 // Macro for simple emphasis-like inline processing
 macro_rules! emphasis_inline {
     ($children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident) => {
-        process_emphasis_inline(
-            $children,
-            $delimiter,
-            $native_inline,
-            |inlines| Inline::$inline_type($inline_type { content: inlines }),
-        )
-    };
-}
-
-// Macro for emphasis-like inline processing that needs node access
-macro_rules! emphasis_inline_with_node {
-    ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $closure:expr) => {
-        process_emphasis_inline_with_node($node, $children, $delimiter, $native_inline, $closure)
+        process_emphasis_inline($children, $delimiter, $native_inline, |inlines| {
+            Inline::$inline_type($inline_type { content: inlines })
+        })
     };
 }
 
@@ -1730,7 +1714,13 @@ fn native_visitor<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
     };
     let native_inline = |(node_name, child)| {
-        process_native_inline(node_name, child, &whitespace_re, &mut inline_buf, &node_text)
+        process_native_inline(
+            node_name,
+            child,
+            &whitespace_re,
+            &mut inline_buf,
+            &node_text,
+        )
     };
     let mut native_inlines = |children| {
         let mut inlines: Vec<Inline> = Vec::new();
@@ -1819,7 +1809,9 @@ fn native_visitor<T: Write>(
         }
         "raw_specifier" => process_raw_specifier(node, input_bytes),
         "emphasis" => emphasis_inline!(children, "emphasis_delimiter", native_inline, Emph),
-        "strong_emphasis" => emphasis_inline!(children, "emphasis_delimiter", native_inline, Strong),
+        "strong_emphasis" => {
+            emphasis_inline!(children, "emphasis_delimiter", native_inline, Strong)
+        }
         "inline" => {
             let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
             PandocNativeIntermediate::IntermediateInlines(inlines)
@@ -1890,7 +1882,7 @@ fn native_visitor<T: Write>(
                 PandocNativeIntermediate::IntermediateLatexInlineDelimiter(range)
             }
         }
-        "inline_note" => emphasis_inline_with_node!(
+        "inline_note" => process_emphasis_inline_with_node(
             node,
             children,
             "inline_note_delimiter",
@@ -1903,15 +1895,25 @@ fn native_visitor<T: Write>(
                         range: node_location(node),
                     })],
                 })
-            }
+            },
         ),
-        "superscript" => emphasis_inline!(children, "superscript_delimiter", native_inline, Superscript),
+        "superscript" => emphasis_inline!(
+            children,
+            "superscript_delimiter",
+            native_inline,
+            Superscript
+        ),
         "subscript" => emphasis_inline!(children, "subscript_delimiter", native_inline, Subscript),
         "strikeout" => emphasis_inline!(children, "strikeout_delimiter", native_inline, Strikeout),
         "insert" => emphasis_inline!(children, "insert_delimiter", native_inline, Insert),
         "delete" => emphasis_inline!(children, "delete_delimiter", native_inline, Delete),
         "highlight" => emphasis_inline!(children, "highlight_delimiter", native_inline, Highlight),
-        "edit_comment" => emphasis_inline!(children, "edit_comment_delimiter", native_inline, EditComment),
+        "edit_comment" => emphasis_inline!(
+            children,
+            "edit_comment_delimiter",
+            native_inline,
+            EditComment
+        ),
 
         "quoted_span" => process_quoted_span(children, native_inline),
         "code_span" => process_code_span(buf, node, children),
