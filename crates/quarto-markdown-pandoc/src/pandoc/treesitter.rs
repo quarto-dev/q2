@@ -103,6 +103,42 @@ where
         .collect()
 }
 
+// Helper function for simple text extraction nodes
+fn create_base_text_from_node_text(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    let text = node.utf8_text(input_bytes).unwrap().to_string();
+    PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
+}
+
+// Helper function for specifiers that need first character removed
+fn create_specifier_base_text(
+    node: &tree_sitter::Node,
+    input_bytes: &[u8],
+) -> PandocNativeIntermediate {
+    let mut text = node.utf8_text(input_bytes).unwrap().to_string();
+    let id = if text.len() > 1 { text.split_off(1) } else { String::new() };
+    PandocNativeIntermediate::IntermediateBaseText(id, node_location(node))
+}
+
+// Helper function to create simple line break inlines
+fn create_line_break_inline(node: &tree_sitter::Node, is_hard: bool) -> PandocNativeIntermediate {
+    let range = node_location(node);
+    let inline = if is_hard {
+        Inline::LineBreak(LineBreak {
+            filename: None,
+            range,
+        })
+    } else {
+        Inline::SoftBreak(SoftBreak {
+            filename: None,
+            range,
+        })
+    };
+    PandocNativeIntermediate::IntermediateInline(inline)
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -236,9 +272,7 @@ fn native_visitor<T: Write>(
         | "key_value_key"
         | "code_content"
         | "latex_content"
-        | "text_base" => {
-            PandocNativeIntermediate::IntermediateBaseText(node_text(), node_location(node))
-        }
+        | "text_base" => create_base_text_from_node_text(node, input_bytes),
         "document" => {
             let mut blocks: Vec<Block> = Vec::new();
             children.into_iter().for_each(|(_, child)| {
@@ -448,14 +482,7 @@ fn native_visitor<T: Write>(
             });
             PandocNativeIntermediate::IntermediateAttr(attr)
         }
-        "class_specifier" => {
-            let id = node_text().split_off(1);
-            PandocNativeIntermediate::IntermediateBaseText(id, node_location(node))
-        }
-        "id_specifier" => {
-            let id = node_text().split_off(1);
-            PandocNativeIntermediate::IntermediateBaseText(id, node_location(node))
-        }
+        "class_specifier" | "id_specifier" => create_specifier_base_text(node, input_bytes),
         "shortcode_naked_string" | "shortcode_name" => {
             let id = node_text().to_string();
             PandocNativeIntermediate::IntermediateShortcodeArg(
@@ -909,21 +936,9 @@ fn native_visitor<T: Write>(
         | "insert_delimiter"
         | "delete_delimiter"
         | "highlight_delimiter"
-        | "edit_comment_delimiter" => {
-            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
-        }
-        "soft_line_break" => {
-            PandocNativeIntermediate::IntermediateInline(Inline::SoftBreak(SoftBreak {
-                filename: None,
-                range: node_location(node),
-            }))
-        }
-        "hard_line_break" => {
-            PandocNativeIntermediate::IntermediateInline(Inline::LineBreak(LineBreak {
-                filename: None,
-                range: node_location(node),
-            }))
-        }
+        | "edit_comment_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "soft_line_break" => create_line_break_inline(node, false),
+        "hard_line_break" => create_line_break_inline(node, true),
         "latex_span_delimiter" => {
             let str = node.utf8_text(input_bytes).unwrap();
             let range = node_location(node);
