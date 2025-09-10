@@ -103,6 +103,37 @@ where
         .collect()
 }
 
+// Helper function to process emphasis-like inlines with a closure to build the final result
+fn process_emphasis_inline<F, G>(
+    children: Vec<(String, PandocNativeIntermediate)>,
+    delimiter_name: &str,
+    native_inline: F,
+    build_inline: G,
+) -> PandocNativeIntermediate
+where
+    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
+    G: FnOnce(Vec<Inline>) -> Inline,
+{
+    let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
+    PandocNativeIntermediate::IntermediateInline(build_inline(inlines))
+}
+
+// Helper function to process emphasis-like inlines with a closure that needs node access
+fn process_emphasis_inline_with_node<F, G>(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+    delimiter_name: &str,
+    native_inline: F,
+    build_inline: G,
+) -> PandocNativeIntermediate
+where
+    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
+    G: FnOnce(Vec<Inline>, &tree_sitter::Node) -> Inline,
+{
+    let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
+    PandocNativeIntermediate::IntermediateInline(build_inline(inlines, node))
+}
+
 // Helper function for simple text extraction nodes
 fn create_base_text_from_node_text(
     node: &tree_sitter::Node,
@@ -1722,18 +1753,18 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateKeyValueSpec(spec)
         }
         "raw_specifier" => process_raw_specifier(node, input_bytes),
-        "emphasis" => {
-            let inlines =
-                process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Emph(Emph { content: inlines }))
-        }
-        "strong_emphasis" => {
-            let inlines =
-                process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Strong(Strong {
-                content: inlines,
-            }))
-        }
+        "emphasis" => process_emphasis_inline(
+            children,
+            "emphasis_delimiter",
+            native_inline,
+            |inlines| Inline::Emph(Emph { content: inlines }),
+        ),
+        "strong_emphasis" => process_emphasis_inline(
+            children,
+            "emphasis_delimiter",
+            native_inline,
+            |inlines| Inline::Strong(Strong { content: inlines }),
+        ),
         "inline" => {
             let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
             PandocNativeIntermediate::IntermediateInlines(inlines)
@@ -1804,65 +1835,63 @@ fn native_visitor<T: Write>(
                 PandocNativeIntermediate::IntermediateLatexInlineDelimiter(range)
             }
         }
-        "inline_note" => {
-            let inlines =
-                process_emphasis_like_inline(children, "inline_note_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Note(Note {
-                content: vec![Block::Paragraph(Paragraph {
-                    content: inlines,
-
-                    filename: None,
-                    range: node_location(node),
-                })],
-            }))
-        }
-        "superscript" => {
-            let inlines =
-                process_emphasis_like_inline(children, "superscript_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Superscript(Superscript {
-                content: inlines,
-            }))
-        }
-        "subscript" => {
-            let inlines =
-                process_emphasis_like_inline(children, "subscript_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Subscript(Subscript {
-                content: inlines,
-            }))
-        }
-        "strikeout" => {
-            let inlines =
-                process_emphasis_like_inline(children, "strikeout_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Strikeout(Strikeout {
-                content: inlines,
-            }))
-        }
-        "insert" => {
-            let inlines = process_emphasis_like_inline(children, "insert_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Insert(Insert {
-                content: inlines,
-            }))
-        }
-        "delete" => {
-            let inlines = process_emphasis_like_inline(children, "delete_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Delete(Delete {
-                content: inlines,
-            }))
-        }
-        "highlight" => {
-            let inlines =
-                process_emphasis_like_inline(children, "highlight_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::Highlight(Highlight {
-                content: inlines,
-            }))
-        }
-        "edit_comment" => {
-            let inlines =
-                process_emphasis_like_inline(children, "edit_comment_delimiter", native_inline);
-            PandocNativeIntermediate::IntermediateInline(Inline::EditComment(EditComment {
-                content: inlines,
-            }))
-        }
+        "inline_note" => process_emphasis_inline_with_node(
+            node,
+            children,
+            "inline_note_delimiter",
+            native_inline,
+            |inlines, node| {
+                Inline::Note(Note {
+                    content: vec![Block::Paragraph(Paragraph {
+                        content: inlines,
+                        filename: None,
+                        range: node_location(node),
+                    })],
+                })
+            },
+        ),
+        "superscript" => process_emphasis_inline(
+            children,
+            "superscript_delimiter",
+            native_inline,
+            |inlines| Inline::Superscript(Superscript { content: inlines }),
+        ),
+        "subscript" => process_emphasis_inline(
+            children,
+            "subscript_delimiter",
+            native_inline,
+            |inlines| Inline::Subscript(Subscript { content: inlines }),
+        ),
+        "strikeout" => process_emphasis_inline(
+            children,
+            "strikeout_delimiter",
+            native_inline,
+            |inlines| Inline::Strikeout(Strikeout { content: inlines }),
+        ),
+        "insert" => process_emphasis_inline(
+            children,
+            "insert_delimiter",
+            native_inline,
+            |inlines| Inline::Insert(Insert { content: inlines }),
+        ),
+        "delete" => process_emphasis_inline(
+            children,
+            "delete_delimiter",
+            native_inline,
+            |inlines| Inline::Delete(Delete { content: inlines }),
+        ),
+        "highlight" => process_emphasis_inline(
+            children,
+            "highlight_delimiter",
+            native_inline,
+            |inlines| Inline::Highlight(Highlight { content: inlines }),
+        ),
+        "edit_comment" => process_emphasis_inline(
+            children,
+            "edit_comment_delimiter",
+            native_inline,
+            |inlines| Inline::EditComment(EditComment { content: inlines }),
+        ),
 
         "quoted_span" => {
             let mut quote_type = QuoteType::SingleQuote;
