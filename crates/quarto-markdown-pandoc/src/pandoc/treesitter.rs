@@ -446,6 +446,28 @@ fn process_backslash_escape(node: &tree_sitter::Node, input_bytes: &[u8]) -> Pan
     PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
 }
 
+fn process_paragraph_with_range(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut inlines: Vec<Inline> = Vec::new();
+    for (node, child) in children {
+        if node == "block_continuation" {
+            continue; // skip block continuation nodes
+        }
+        if let PandocNativeIntermediate::IntermediateInline(inline) = child {
+            inlines.push(inline);
+        } else if let PandocNativeIntermediate::IntermediateInlines(inner_inlines) = child {
+            inlines.extend(inner_inlines);
+        }
+    }
+    PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
+        content: inlines,
+        filename: None,
+        range: node_location(node),
+    }))
+}
+
 fn process_list_marker(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
@@ -1288,24 +1310,7 @@ fn native_visitor<T: Write>(
         | "text_base" => create_base_text_from_node_text(node, input_bytes),
         "document" => process_document(children),
         "section" => process_section(children),
-        "paragraph" => {
-            let mut inlines: Vec<Inline> = Vec::new();
-            for (node, child) in children {
-                if node == "block_continuation" {
-                    continue; // skip block continuation nodes
-                }
-                if let PandocNativeIntermediate::IntermediateInline(inline) = child {
-                    inlines.push(inline);
-                } else if let PandocNativeIntermediate::IntermediateInlines(inner_inlines) = child {
-                    inlines.extend(inner_inlines);
-                }
-            }
-            PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
-                content: inlines,
-                filename: None,
-                range: node_location(node),
-            }))
-        }
+        "paragraph" => process_paragraph_with_range(node, children),
         "indented_code_block" => process_indented_code_block(node, children, input_bytes, &indent_re),
         "fenced_code_block" => process_fenced_code_block(node, children),
         "attribute" => process_attribute(children),
