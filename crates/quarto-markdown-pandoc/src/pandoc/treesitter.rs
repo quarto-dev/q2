@@ -139,6 +139,113 @@ fn create_line_break_inline(node: &tree_sitter::Node, is_hard: bool) -> PandocNa
     PandocNativeIntermediate::IntermediateInline(inline)
 }
 
+// Helper function to process code_span nodes
+fn process_code_span<T: Write>(
+    buf: &mut T,
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+) -> PandocNativeIntermediate {
+    let mut is_raw: Option<String> = None;
+    let mut attr = ("".to_string(), vec![], HashMap::new());
+    let mut language_attribute: Option<String> = None;
+    let mut inlines: Vec<_> = children
+        .into_iter()
+        .map(|(node_name, child)| {
+            let range = node_location(node);
+            match child {
+                PandocNativeIntermediate::IntermediateAttr(a) => {
+                    attr = a;
+                    // IntermediateUnknown here "consumes" the node
+                    (
+                        node_name,
+                        PandocNativeIntermediate::IntermediateUnknown(range),
+                    )
+                }
+                PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
+                    is_raw = Some(raw);
+                    // IntermediateUnknown here "consumes" the node
+                    (
+                        node_name,
+                        PandocNativeIntermediate::IntermediateUnknown(range),
+                    )
+                }
+                PandocNativeIntermediate::IntermediateBaseText(text, range) => {
+                    if node_name == "language_attribute" {
+                        language_attribute = Some(text);
+                        // IntermediateUnknown here "consumes" the node
+                        (
+                            node_name,
+                            PandocNativeIntermediate::IntermediateUnknown(range),
+                        )
+                    } else {
+                        (
+                            node_name,
+                            PandocNativeIntermediate::IntermediateBaseText(text, range),
+                        )
+                    }
+                }
+                _ => (node_name, child),
+            }
+        })
+        .filter(|(_, child)| {
+            match child {
+                PandocNativeIntermediate::IntermediateUnknown(_) => false, // skip unknown nodes
+                _ => true, // keep other nodes
+            }
+        })
+        .collect();
+    if inlines.len() == 0 {
+        writeln!(
+            buf,
+            "Warning: Expected exactly one inline in code_span, got none"
+        )
+        .unwrap();
+        return PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
+            attr,
+            text: "".to_string(),
+        }));
+    }
+    let (_, child) = inlines.remove(0);
+    if inlines.len() > 0 {
+        writeln!(
+            buf,
+            "Warning: Expected exactly one inline in code_span, got {}. Will ignore the rest.",
+            inlines.len() + 1
+        ).unwrap();
+    }
+    let text = match child {
+        PandocNativeIntermediate::IntermediateBaseText(text, _) => text,
+        _ => {
+            writeln!(
+                buf,
+                "Warning: Expected BaseText in code_span, got {:?}. Will ignore.",
+                child
+            )
+            .unwrap();
+            "".to_string()
+        }
+    };
+    if let Some(raw) = is_raw {
+        PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+            format: raw,
+            text,
+        }))
+    } else {
+        match language_attribute {
+            Some(lang) => {
+                PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
+                    attr,
+                    text: lang + &" " + &text,
+                }))
+            }
+            None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
+                attr,
+                text,
+            })),
+        }
+    }
+}
+
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -1036,107 +1143,7 @@ fn native_visitor<T: Write>(
                 content: inlines,
             }))
         }
-        "code_span" => (|| {
-            let mut is_raw: Option<String> = None;
-            let mut attr = ("".to_string(), vec![], HashMap::new());
-            let mut language_attribute: Option<String> = None;
-            let mut inlines: Vec<_> = children
-                .into_iter()
-                .map(|(node_name, child)| {
-                    let range = node_location(node);
-                    match child {
-                        PandocNativeIntermediate::IntermediateAttr(a) => {
-                            attr = a;
-                            // IntermediateUnknown here "consumes" the node
-                            (
-                                node_name,
-                                PandocNativeIntermediate::IntermediateUnknown(range),
-                            )
-                        }
-                        PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
-                            is_raw = Some(raw);
-                            // IntermediateUnknown here "consumes" the node
-                            (
-                                node_name,
-                                PandocNativeIntermediate::IntermediateUnknown(range),
-                            )
-                        }
-                        PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                            if node_name == "language_attribute" {
-                                language_attribute = Some(text);
-                                // IntermediateUnknown here "consumes" the node
-                                (
-                                    node_name,
-                                    PandocNativeIntermediate::IntermediateUnknown(range),
-                                )
-                            } else {
-                                (
-                                    node_name,
-                                    PandocNativeIntermediate::IntermediateBaseText(text, range),
-                                )
-                            }
-                        }
-                        _ => (node_name, child),
-                    }
-                })
-                .filter(|(_, child)| {
-                    match child {
-                        PandocNativeIntermediate::IntermediateUnknown(_) => false, // skip unknown nodes
-                        _ => true, // keep other nodes
-                    }
-                })
-                .collect();
-            if inlines.len() == 0 {
-                writeln!(
-                    buf,
-                    "Warning: Expected exactly one inline in code_span, got none"
-                )
-                .unwrap();
-                return PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
-                    attr,
-                    text: "".to_string(),
-                }));
-            }
-            let (_, child) = inlines.remove(0);
-            if inlines.len() > 0 {
-                writeln!(
-                    buf,
-                    "Warning: Expected exactly one inline in code_span, got {}. Will ignore the rest.",
-                    inlines.len() + 1
-                ).unwrap();
-            }
-            let text = match child {
-                PandocNativeIntermediate::IntermediateBaseText(text, _) => text,
-                _ => {
-                    writeln!(
-                        buf,
-                        "Warning: Expected BaseText in code_span, got {:?}. Will ignore.",
-                        child
-                    )
-                    .unwrap();
-                    "".to_string()
-                }
-            };
-            if let Some(raw) = is_raw {
-                PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
-                    format: raw,
-                    text,
-                }))
-            } else {
-                match language_attribute {
-                    Some(lang) => {
-                        PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
-                            attr,
-                            text: lang + &" " + &text,
-                        }))
-                    }
-                    None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
-                        attr,
-                        text,
-                    })),
-                }
-            }
-        })(),
+        "code_span" => process_code_span(buf, node, children),
         "latex_span" => {
             let mut is_inline_math = false;
             let mut is_display_math = false;
