@@ -42,14 +42,44 @@ impl<'a, W: Write + ?Sized> Write for BlockQuoteContext<'a, W> {
     }
 }
 
-pub fn write_meta<T: std::io::Write>(_meta: &Meta, buf: &mut T) -> std::io::Result<()> {
+fn write_meta<T: std::io::Write>(_meta: &Meta, buf: &mut T) -> std::io::Result<()> {
     writeln!(buf, "---")?;
     writeln!(buf, "unfinished: true")?;
     writeln!(buf, "---")?;
     Ok(())
 }
 
-pub fn write_blockquote<T: std::io::Write + ?Sized>(
+fn escape_quotes(s: &str) -> String {
+    s.replace("\\", "\\\\").replace('"', "\\\"")
+}
+
+fn write_attr(attr: &crate::pandoc::Attr, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    let (id, classes, keyvals) = attr;
+    let mut wrote_something = false;
+    write!(writer, "{{")?;
+    if !id.is_empty() {
+        write!(writer, "#{}", id)?;
+        wrote_something = true;
+    }
+    for class in classes {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, ".{}", class)?;
+        wrote_something = true;
+    }
+    for (key, value) in keyvals {
+        if wrote_something {
+            write!(writer, " ")?;
+        }
+        write!(writer, "{}=\"{}\"", key, escape_quotes(value))?;
+        wrote_something = true;
+    }
+    write!(writer, "}}")?;
+    Ok(())
+}
+
+fn write_blockquote<T: std::io::Write + ?Sized>(
     blockquote: &BlockQuote,
     buf: &mut T,
 ) -> std::io::Result<()> {
@@ -64,6 +94,21 @@ pub fn write_blockquote<T: std::io::Write + ?Sized>(
     Ok(())
 }
 
+fn write_div(div: &crate::pandoc::Div, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(writer, "::: ")?;
+    write_attr(&div.attr, writer)?;
+    writeln!(writer)?;
+
+    for block in div.content.iter() {
+        // Add a blank line between blocks in the blockquote
+        writeln!(writer)?;
+        write_block(block, writer)?;
+    }
+    writeln!(writer, "\n:::")?;
+
+    Ok(())
+}
+
 fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     match block {
         Block::Paragraph(para) => {
@@ -71,6 +116,9 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
         }
         Block::BlockQuote(blockquote) => {
             write_blockquote(blockquote, buf)?;
+        }
+        Block::Div(div) => {
+            write_div(div, buf)?;
         }
         _ => todo!(),
     }
