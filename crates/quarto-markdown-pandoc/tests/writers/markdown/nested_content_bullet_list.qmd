@@ -1,0 +1,9 @@
+* first item with some text
+  that continues on the next line
+  
+  and has another paragraph
+
+* second item with just one line
+
+* third item also
+  spans multiple lines
