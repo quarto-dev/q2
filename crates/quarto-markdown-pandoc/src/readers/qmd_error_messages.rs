@@ -69,16 +69,19 @@ fn error_message_from_parse_state(
             match note.note_type {
                 "simple" => {
                     // Find the capture that this note refers to
-                    if let Some(capture) = entry.error_info.captures.iter().find(|c| match note.label {
-                        None => false,
-                        Some(l) => c.label == l,
-                    }) {
+                    if let Some(capture) =
+                        entry.error_info.captures.iter().find(|c| match note.label {
+                            None => false,
+                            Some(l) => c.label == l,
+                        })
+                    {
                         // Find the consumed token that matches this capture
                         if let Some(token) = find_matching_token(consumed_tokens, capture) {
                             // Calculate the span for this token
                             let token_byte_offset =
                                 calculate_byte_offset(&input_str, token.row, token.column);
-                            let token_span = token_byte_offset..(token_byte_offset + token.size.max(1));
+                            let token_span =
+                                token_byte_offset..(token_byte_offset + token.size.max(1));
 
                             // Add a label for this note
                             report = report.with_label(
@@ -109,7 +112,8 @@ fn error_message_from_parse_state(
                                 calculate_byte_offset(&input_str, begin_tok.row, begin_tok.column);
                             let end_byte_offset =
                                 calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
-                            let range_span = begin_byte_offset..(end_byte_offset + end_tok.size.max(1));
+                            let range_span =
+                                begin_byte_offset..(end_byte_offset + end_tok.size.max(1));
 
                             // Add a label for this note
                             report = report.with_label(
@@ -143,11 +147,11 @@ fn error_message_from_parse_state(
     } else {
         // Fallback for errors not in the table - use ariadne to show source context
         let input_str = String::from_utf8_lossy(input_bytes);
-        
+
         // Calculate byte offset from row/column
         let byte_offset = calculate_byte_offset(&input_str, parse_state.row, parse_state.column);
         let span = byte_offset..(byte_offset + parse_state.size.max(1));
-        
+
         // Build a simple ariadne report with source context
         let report = Report::build(ReportKind::Error, filename, byte_offset)
             .with_message("Parse error")
@@ -157,7 +161,7 @@ fn error_message_from_parse_state(
                     .with_color(Color::Red),
             )
             .finish();
-        
+
         // Generate the formatted error message
         let mut output = Vec::new();
         if let Ok(_) = report.write((filename, Source::from(&input_str)), &mut output) {
@@ -211,10 +215,12 @@ pub fn json_error_message_from_parse_state(
             match note.note_type {
                 "simple" => {
                     // Find the capture that this note refers to
-                    if let Some(capture) = entry.error_info.captures.iter().find(|c| match note.label {
-                        None => false,
-                        Some(l) => c.label == l,
-                    }) {
+                    if let Some(capture) =
+                        entry.error_info.captures.iter().find(|c| match note.label {
+                            None => false,
+                            Some(l) => c.label == l,
+                        })
+                    {
                         // Find the consumed token that matches this capture
                         if let Some(token) = find_matching_token(consumed_tokens, capture) {
                             // Calculate the span for this token
@@ -370,9 +376,6 @@ pub fn produce_json_error_messages(
 pub fn produce_error_message_json(
     tree_sitter_log: &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
 ) -> Vec<String> {
-    assert!(tree_sitter_log.had_errors());
-    assert!(tree_sitter_log.parses.len() > 0);
-
     let mut tokens: Vec<serde_json::Value> = vec![];
     let mut error_states: Vec<serde_json::Value> = vec![];
 

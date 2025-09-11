@@ -45,7 +45,6 @@ pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
     let _tree = parser
         .parse(&input_bytes, None)
         .expect("Failed to parse input");
-    assert!(log_observer.had_errors());
     return produce_error_message_json(&log_observer);
 }
 
@@ -55,9 +54,13 @@ pub fn read<T: Write, F>(
     filename: &str,
     mut output_stream: &mut T,
     error_formatter: Option<F>,
-) -> Result<pandoc::Pandoc, Vec<String>> 
+) -> Result<pandoc::Pandoc, Vec<String>>
 where
-    F: Fn(&[u8], &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>,
+    F: Fn(
+        &[u8],
+        &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
+        &str,
+    ) -> Vec<String>,
 {
     let mut parser = MarkdownParser::default();
     let mut error_messages: Vec<String> = Vec::new();
@@ -77,7 +80,13 @@ where
         let mut input_bytes_with_newline = Vec::with_capacity(input_bytes.len() + 1);
         input_bytes_with_newline.extend_from_slice(input_bytes);
         input_bytes_with_newline.push(b'\n');
-        return read(&input_bytes_with_newline, _loose, filename, output_stream, error_formatter);
+        return read(
+            &input_bytes_with_newline,
+            _loose,
+            filename,
+            output_stream,
+            error_formatter,
+        );
     }
 
     let tree = parser
