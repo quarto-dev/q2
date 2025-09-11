@@ -50,4 +50,8 @@ for (const file of fs.globSync("resources/error-corpus/*.qmd")) {
   });
 }
 
-console.log(JSON.stringify(result, null, 2));
+Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json", JSON.stringify(result, null, 2) + "\n");
+
+const now = new Date();
+// Touch the source file so that cargo build rebuilds it.
+Deno.utimeSync("src/readers/qmd_error_message_table.rs", now, now);
