@@ -4,6 +4,43 @@
  */
 
 use crate::pandoc::{Block, BlockQuote, Meta, Pandoc, Paragraph, Space, Str};
+use std::io::{self, Write};
+
+struct BlockQuoteContext<'a, W: Write + ?Sized> {
+    inner: &'a mut W,
+    at_line_start: bool,
+}
+
+impl<'a, W: Write + ?Sized> BlockQuoteContext<'a, W> {
+    fn new(inner: &'a mut W) -> Self {
+        Self {
+            inner,
+            at_line_start: true,
+        }
+    }
+}
+
+impl<'a, W: Write + ?Sized> Write for BlockQuoteContext<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let mut written = 0;
+        for &byte in buf {
+            if self.at_line_start {
+                self.inner.write_all(b"> ")?;
+                self.at_line_start = false;
+            }
+            self.inner.write_all(&[byte])?;
+            written += 1;
+            if byte == b'\n' {
+                self.at_line_start = true;
+            }
+        }
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
 
 pub fn write_meta<T: std::io::Write>(_meta: &Meta, buf: &mut T) -> std::io::Result<()> {
     writeln!(buf, "---")?;
@@ -12,19 +49,38 @@ pub fn write_meta<T: std::io::Write>(_meta: &Meta, buf: &mut T) -> std::io::Resu
     Ok(())
 }
 
-pub fn write_blockquote<T: std::io::Write>(
+pub fn write_blockquote<T: std::io::Write + ?Sized>(
     blockquote: &BlockQuote,
     buf: &mut T,
 ) -> std::io::Result<()> {
-    // this implementation is incorrect!!
-    writeln!(buf, "> ")?;
-    for block in &blockquote.content {
-        write_block(block, buf)?;
+    let mut blockquote_writer = BlockQuoteContext::new(buf);
+    for (i, block) in blockquote.content.iter().enumerate() {
+        if i > 0 {
+            // Add a blank line between blocks in the blockquote
+            writeln!(&mut blockquote_writer)?;
+        }
+        write_block(block, &mut blockquote_writer)?;
     }
     Ok(())
 }
 
-pub fn write_paragraph<T: std::io::Write>(para: &Paragraph, buf: &mut T) -> std::io::Result<()> {
+fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    match block {
+        Block::Paragraph(para) => {
+            write_paragraph(para, buf)?;
+        }
+        Block::BlockQuote(blockquote) => {
+            write_blockquote(blockquote, buf)?;
+        }
+        _ => todo!(),
+    }
+    Ok(())
+}
+
+pub fn write_paragraph<T: std::io::Write + ?Sized>(
+    para: &Paragraph,
+    buf: &mut T,
+) -> std::io::Result<()> {
     for inline in &para.content {
         match inline {
             crate::pandoc::Inline::Str(s) => {
@@ -38,22 +94,6 @@ pub fn write_paragraph<T: std::io::Write>(para: &Paragraph, buf: &mut T) -> std:
         }
     }
     writeln!(buf)?;
-    Ok(())
-}
-
-pub fn write_block<T: std::io::Write>(
-    block: &crate::pandoc::Block,
-    buf: &mut T,
-) -> std::io::Result<()> {
-    match block {
-        Block::Paragraph(para) => {
-            write_paragraph(para, buf)?;
-        }
-        Block::BlockQuote(blockquote) => {
-            write_blockquote(blockquote, buf)?;
-        }
-        _ => todo!(),
-    }
     Ok(())
 }
 
