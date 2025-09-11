@@ -97,11 +97,18 @@ fn main() {
     }
 
     let error_formatter = if args.json_errors {
-        Some(readers::qmd_error_messages::produce_json_error_messages as fn(&[u8], &utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>)
+        Some(
+            readers::qmd_error_messages::produce_json_error_messages
+                as fn(
+                    &[u8],
+                    &utils::tree_sitter_log_observer::TreeSitterLogObserver,
+                    &str,
+                ) -> Vec<String>,
+        )
     } else {
         None
     };
-    
+
     let result = readers::qmd::read(
         input.as_bytes(),
         args.loose,
@@ -128,6 +135,7 @@ fn main() {
     match args.to.as_str() {
         "json" => writers::json::write(&pandoc, &mut buf),
         "native" => writers::native::write(&pandoc, &mut buf),
+        "markdown" => writers::qmd::write(&pandoc, &mut buf),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             return;
