@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::{Block, BlockQuote, Meta, Pandoc, Paragraph, Space, Str};
+use crate::pandoc::{Block, BlockQuote, Meta, Pandoc, Paragraph};
 use std::io::{self, Write};
 
 struct BlockQuoteContext<'a, W: Write + ?Sized> {
