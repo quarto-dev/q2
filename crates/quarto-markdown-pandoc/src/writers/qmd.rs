@@ -11,7 +11,7 @@ use crate::pandoc::{
     Str,
 };
 use crate::utils::string_write_adapter::StringWriteAdapter;
-use std::io::{self, Cursor, Write};
+use std::io::{self, Write};
 
 struct BlockQuoteContext<'a, W: Write + ?Sized> {
     inner: &'a mut W,
@@ -769,7 +769,7 @@ fn write_delete(
     delete: &crate::pandoc::Delete,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
-    write!(buf, "[--")?;
+    write!(buf, "[-- ")?;
     for inline in &delete.content {
         write_inline(inline, buf)?;
     }
@@ -779,7 +779,7 @@ fn write_highlight(
     highlight: &crate::pandoc::Highlight,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
-    write!(buf, "[!!")?;
+    write!(buf, "[!! ")?;
     for inline in &highlight.content {
         write_inline(inline, buf)?;
     }
@@ -789,7 +789,7 @@ fn write_editcomment(
     comment: &crate::pandoc::EditComment,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
-    write!(buf, "[>>")?;
+    write!(buf, "[>> ")?;
     for inline in &comment.content {
         write_inline(inline, buf)?;
     }
