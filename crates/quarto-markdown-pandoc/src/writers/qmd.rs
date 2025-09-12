@@ -7,9 +7,10 @@ use crate::pandoc::attr::is_empty_attr;
 use crate::pandoc::list::ListNumberDelim;
 use crate::pandoc::table::{Alignment, Cell, Table};
 use crate::pandoc::{
-    Block, BlockQuote, BulletList, CodeBlock, Header, Meta, OrderedList, Pandoc, Paragraph, Plain,
-    Str,
+    Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule, 
+    LineBlock, Meta, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
+use crate::pandoc::block::MetaBlock;
 use crate::utils::string_write_adapter::StringWriteAdapter;
 use std::io::{self, Write};
 
@@ -157,7 +158,7 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
     }
 }
 
-fn write_meta<T: std::io::Write>(_meta: &Meta, buf: &mut T) -> std::io::Result<()> {
+fn write_meta<T: std::io::Write + ?Sized>(_meta: &Meta, buf: &mut T) -> std::io::Result<()> {
     writeln!(buf, "---")?;
     writeln!(buf, "unfinished: true")?;
     writeln!(buf, "---")?;
@@ -365,6 +366,114 @@ fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::
     }
     writeln!(buf)?;
 
+    Ok(())
+}
+
+fn write_lineblock(lineblock: &LineBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    for (i, line) in lineblock.content.iter().enumerate() {
+        if i > 0 {
+            writeln!(buf)?;
+        }
+        write!(buf, "| ")?;
+        for inline in line {
+            write_inline(inline, buf)?;
+        }
+    }
+    writeln!(buf)?;
+    Ok(())
+}
+
+fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    // Only output raw content if it's for markdown format
+    if rawblock.format == "markdown" {
+        write!(buf, "{}", rawblock.text)?;
+    } else {
+        // For other formats, use fenced raw block notation
+        writeln!(buf, "```{{{}}}", rawblock.format)?;
+        write!(buf, "{}", rawblock.text)?;
+        if !rawblock.text.ends_with('\n') {
+            writeln!(buf)?;
+        }
+        writeln!(buf, "```")?;
+    }
+    Ok(())
+}
+
+fn write_definitionlist(deflist: &DefinitionList, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    for (i, (term, definitions)) in deflist.content.iter().enumerate() {
+        if i > 0 {
+            writeln!(buf)?;
+        }
+        
+        // Write the term
+        for inline in term {
+            write_inline(inline, buf)?;
+        }
+        writeln!(buf)?;
+        
+        // Write the definitions
+        for definition in definitions {
+            write!(buf, ":   ")?;
+            for (j, block) in definition.iter().enumerate() {
+                if j > 0 {
+                    writeln!(buf)?;
+                    write!(buf, "    ")?; // Indent subsequent blocks in definition
+                }
+                write_block(block, buf)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn write_horizontalrule(_rule: &HorizontalRule, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    writeln!(buf, "---")?;
+    Ok(())
+}
+
+fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    // Write figure using div syntax with fig- class
+    write!(buf, "::: ")?;
+    write_attr(&figure.attr, buf)?;
+    writeln!(buf)?;
+    
+    // Write the figure content
+    for block in &figure.content {
+        writeln!(buf)?;
+        write_block(block, buf)?;
+    }
+    
+    // Write caption if it exists
+    if let Some(ref long_caption) = figure.caption.long {
+        if !long_caption.is_empty() {
+            writeln!(buf)?;
+            for (i, block) in long_caption.iter().enumerate() {
+                if i > 0 {
+                    writeln!(buf)?;
+                }
+                write_block(block, buf)?;
+            }
+        }
+    } else if let Some(ref short_caption) = figure.caption.short {
+        if !short_caption.is_empty() {
+            writeln!(buf)?;
+            // Convert short caption (inlines) to a paragraph for consistency
+            for inline in short_caption {
+                write_inline(inline, buf)?;
+            }
+            writeln!(buf)?;
+        }
+    }
+    
+    writeln!(buf, "\n:::")?;
+    Ok(())
+}
+
+fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    // Write metadata as YAML front matter
+    writeln!(buf, "---")?;
+    write_meta(&metablock.meta, buf)?;
+    writeln!(buf, "---")?;
     Ok(())
 }
 
@@ -860,7 +969,24 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
         Block::CodeBlock(codeblock) => {
             write_codeblock(codeblock, buf)?;
         }
-        block => panic!("Unhandled block type in write_block: {:?}", block),
+        Block::LineBlock(lineblock) => {
+            write_lineblock(lineblock, buf)?;
+        }
+        Block::RawBlock(rawblock) => {
+            write_rawblock(rawblock, buf)?;
+        }
+        Block::DefinitionList(deflist) => {
+            write_definitionlist(deflist, buf)?;
+        }
+        Block::HorizontalRule(rule) => {
+            write_horizontalrule(rule, buf)?;
+        }
+        Block::Figure(figure) => {
+            write_figure(figure, buf)?;
+        }
+        Block::BlockMetadata(metablock) => {
+            write_metablock(metablock, buf)?;
+        }
     }
     Ok(())
 }
