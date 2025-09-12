@@ -401,3 +401,48 @@ fn test_do_not_smoke() {
     }
     assert!(file_count > 0, "No files found in tests/smoke directory");
 }
+
+#[test]
+fn test_markdown_writer_smoke() {
+    // Smoke test: read markdown, produce AST, write it back out
+    // Just verifying that the code runs without panicking
+    for pattern in &["tests/writers/markdown/*.qmd", "tests/smoke/*.qmd"] {
+        let mut file_count = 0;
+        for entry in glob(pattern).expect("Failed to read glob pattern") {
+            match entry {
+                Ok(path) => {
+                    eprintln!("Testing markdown writer on: {}", path.display());
+                    let markdown = std::fs::read_to_string(&path).expect("Failed to read file");
+                    
+                    // Parse with our qmd reader to get AST
+                    let doc_result = readers::qmd::read(
+                        markdown.as_bytes(), 
+                        false, 
+                        path.to_str().unwrap(), 
+                        &mut std::io::sink(), 
+                        None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>
+                    );
+                    
+                    match doc_result {
+                        Ok(doc) => {
+                            // Write it back out using the markdown writer
+                            let mut buf = Vec::new();
+                            writers::qmd::write(&doc, &mut buf).expect("Failed to write markdown");
+                            
+                            // Convert to string to ensure it's valid UTF-8
+                            let _output = String::from_utf8(buf).expect("Invalid UTF-8 in markdown writer output");
+                        }
+                        Err(_) => {
+                            // Skip files that have parse errors - they may be testing error cases
+                            eprintln!("Skipping {} due to parse error", path.display());
+                        }
+                    }
+                    
+                    file_count += 1;
+                }
+                Err(e) => panic!("Error reading glob entry: {}", e),
+            }
+        }
+        assert!(file_count > 0, "No files found in {} glob", pattern);
+    }
+}
