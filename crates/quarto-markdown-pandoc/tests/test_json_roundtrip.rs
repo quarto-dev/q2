@@ -1,0 +1,186 @@
+/*
+ * test_json_roundtrip.rs
+ * Copyright (c) 2025 Posit, PBC
+ */
+
+use quarto_markdown_pandoc::pandoc::{Pandoc, Block, Paragraph, Inline, Str};
+use quarto_markdown_pandoc::writers::json;
+use quarto_markdown_pandoc::readers;
+use std::collections::HashMap;
+
+#[test]
+fn test_json_roundtrip_simple_paragraph() {
+    // Create a simple Pandoc document
+    let original = Pandoc {
+        meta: HashMap::new(),
+        blocks: vec![Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str { 
+                text: "Hello, world!".to_string() 
+            })],
+            filename: None,
+            range: quarto_markdown_pandoc::pandoc::location::Range {
+                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 13, row: 0, column: 13 },
+            },
+        })],
+    };
+
+    // Write to JSON
+    let mut json_output = Vec::new();
+    json::write(&original, &mut json_output).expect("Failed to write JSON");
+
+    // Read back from JSON
+    let mut json_reader = std::io::Cursor::new(json_output);
+    let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+
+    // Compare the documents
+    assert_eq!(original.meta, parsed.meta);
+    assert_eq!(original.blocks.len(), parsed.blocks.len());
+    
+    // For now, just check that we can parse back what we wrote
+    // Full equality might be challenging due to location differences
+    match (&original.blocks[0], &parsed.blocks[0]) {
+        (Block::Paragraph(orig_para), Block::Paragraph(parsed_para)) => {
+            assert_eq!(orig_para.content.len(), parsed_para.content.len());
+            match (&orig_para.content[0], &parsed_para.content[0]) {
+                (Inline::Str(orig_str), Inline::Str(parsed_str)) => {
+                    assert_eq!(orig_str.text, parsed_str.text);
+                }
+                _ => panic!("Expected Str inline"),
+            }
+        }
+        _ => panic!("Expected paragraph blocks"),
+    }
+}
+
+#[test]
+fn test_json_roundtrip_complex_document() {
+    // Create a more complex document with multiple block types
+    let original = Pandoc {
+        meta: {
+            let mut meta = HashMap::new();
+            meta.insert(
+                "title".to_string(),
+                quarto_markdown_pandoc::pandoc::MetaValue::MetaString("Test Document".to_string())
+            );
+            meta
+        },
+        blocks: vec![
+            Block::Paragraph(Paragraph {
+                content: vec![
+                    Inline::Str(Str { text: "This is ".to_string() }),
+                    Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
+                        content: vec![Inline::Str(Str { text: "bold text".to_string() })]
+                    }),
+                    Inline::Str(Str { text: ".".to_string() }),
+                ],
+                filename: None,
+                range: quarto_markdown_pandoc::pandoc::location::Range {
+                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 20, row: 0, column: 20 },
+                },
+            }),
+            Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
+                attr: ("".to_string(), vec![], HashMap::new()),
+                text: "print('Hello, world!')".to_string(),
+                filename: None,
+                range: quarto_markdown_pandoc::pandoc::location::Range {
+                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 21, row: 1, column: 0 },
+                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 43, row: 1, column: 22 },
+                },
+            }),
+        ],
+    };
+
+    // Write to JSON
+    let mut json_output = Vec::new();
+    json::write(&original, &mut json_output).expect("Failed to write JSON");
+
+    // Read back from JSON
+    let mut json_reader = std::io::Cursor::new(json_output);
+    let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+
+    // Verify basic structure
+    assert_eq!(parsed.blocks.len(), 2);
+    assert!(parsed.meta.contains_key("title"));
+    
+    match parsed.meta.get("title") {
+        Some(quarto_markdown_pandoc::pandoc::MetaValue::MetaString(title)) => {
+            assert_eq!(title, "Test Document");
+        }
+        _ => panic!("Expected MetaString for title"),
+    }
+
+    // Verify first block (paragraph)
+    match &parsed.blocks[0] {
+        Block::Paragraph(para) => {
+            assert_eq!(para.content.len(), 3);
+        }
+        _ => panic!("Expected paragraph as first block"),
+    }
+
+    // Verify second block (code block)
+    match &parsed.blocks[1] {
+        Block::CodeBlock(code) => {
+            assert_eq!(code.text, "print('Hello, world!')");
+        }
+        _ => panic!("Expected code block as second block"),
+    }
+}
+
+#[test] 
+fn test_json_write_then_read_matches_original_structure() {
+    // This test ensures that anything we can write, we can also read back
+    // with the same basic structure, even if exact equality is not possible
+
+    let original = Pandoc {
+        meta: HashMap::new(),
+        blocks: vec![
+            Block::Plain(quarto_markdown_pandoc::pandoc::Plain {
+                content: vec![Inline::Str(Str { text: "Plain text".to_string() })],
+                filename: Some("test.md".to_string()),
+                range: quarto_markdown_pandoc::pandoc::location::Range {
+                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 10, row: 0, column: 10 },
+                },
+            }),
+            Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
+                format: "html".to_string(),
+                text: "<div>Raw HTML</div>".to_string(),
+                filename: Some("test.md".to_string()),
+                range: quarto_markdown_pandoc::pandoc::location::Range {
+                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 11, row: 1, column: 0 },
+                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 30, row: 1, column: 19 },
+                },
+            }),
+        ],
+    };
+
+    // Write to JSON
+    let mut json_output = Vec::new();
+    json::write(&original, &mut json_output).expect("Failed to write JSON");
+    
+    // Convert to string for debugging if needed
+    let json_string = String::from_utf8(json_output.clone()).expect("Invalid UTF-8");
+    println!("Generated JSON: {}", json_string);
+
+    // Read back from JSON
+    let mut json_reader = std::io::Cursor::new(json_output);
+    let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+
+    // Verify we can parse back the same structure
+    assert_eq!(parsed.blocks.len(), original.blocks.len());
+    
+    match (&original.blocks[0], &parsed.blocks[0]) {
+        (Block::Plain(_), Block::Plain(_)) => {}, // Structure matches
+        _ => panic!("Block type mismatch for first block"),
+    }
+    
+    match (&original.blocks[1], &parsed.blocks[1]) {
+        (Block::RawBlock(orig), Block::RawBlock(parsed)) => {
+            assert_eq!(orig.format, parsed.format);
+            assert_eq!(orig.text, parsed.text);
+        }
+        _ => panic!("Block type mismatch for second block"),
+    }
+}
