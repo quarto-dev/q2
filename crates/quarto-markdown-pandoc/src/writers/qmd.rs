@@ -3,11 +3,15 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::{Block, BlockQuote, BulletList, CodeBlock, Header, Meta, OrderedList, Pandoc, Paragraph, Plain};
-use crate::pandoc::table::{Alignment, Table, Cell};
-use crate::pandoc::list::ListNumberDelim;
 use crate::pandoc::attr::is_empty_attr;
-use std::io::{self, Write};
+use crate::pandoc::list::ListNumberDelim;
+use crate::pandoc::table::{Alignment, Cell, Table};
+use crate::pandoc::{
+    Block, BlockQuote, BulletList, CodeBlock, Header, Meta, OrderedList, Pandoc, Paragraph, Plain,
+    Str,
+};
+use crate::utils::string_write_adapter::StringWriteAdapter;
+use std::io::{self, Cursor, Write};
 
 struct BlockQuoteContext<'a, W: Write + ?Sized> {
     inner: &'a mut W,
@@ -108,7 +112,7 @@ impl<'a, W: Write + ?Sized> OrderedListContext<'a, W> {
         };
         let marker = format!("{}{} ", number, delim_str);
         let indent = " ".repeat(marker.len());
-        
+
         Self {
             inner,
             at_line_start: true,
@@ -164,7 +168,10 @@ fn escape_quotes(s: &str) -> String {
     s.replace("\\", "\\\\").replace('"', "\\\"")
 }
 
-fn write_attr<W: std::io::Write + ?Sized>(attr: &crate::pandoc::Attr, writer: &mut W) -> std::io::Result<()> {
+fn write_attr<W: std::io::Write + ?Sized>(
+    attr: &crate::pandoc::Attr,
+    writer: &mut W,
+) -> std::io::Result<()> {
     let (id, classes, keyvals) = attr;
     let mut wrote_something = false;
     write!(writer, "{{")?;
@@ -190,10 +197,7 @@ fn write_attr<W: std::io::Write + ?Sized>(attr: &crate::pandoc::Attr, writer: &m
     Ok(())
 }
 
-fn write_blockquote(
-    blockquote: &BlockQuote,
-    buf: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
+fn write_blockquote(blockquote: &BlockQuote, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     let mut blockquote_writer = BlockQuoteContext::new(buf);
     for (i, block) in blockquote.content.iter().enumerate() {
         if i > 0 {
@@ -220,16 +224,14 @@ fn write_div(div: &crate::pandoc::Div, writer: &mut dyn std::io::Write) -> std::
     Ok(())
 }
 
-fn write_bulletlist(
-    bulletlist: &BulletList,
-    buf: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
+fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Determine if this is a tight list
     // A list is tight if all items contain exactly one Plain block
-    let is_tight = bulletlist.content.iter().all(|item| {
-        item.len() == 1 && matches!(item[0], Block::Plain(_))
-    });
-    
+    let is_tight = bulletlist
+        .content
+        .iter()
+        .all(|item| item.len() == 1 && matches!(item[0], Block::Plain(_)));
+
     for (i, item) in bulletlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
             // Add blank line between items in loose lists
@@ -252,13 +254,14 @@ fn write_orderedlist(
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
     let (start_num, _number_style, delimiter) = &orderedlist.attr;
-    
+
     // Determine if this is a tight list
     // A list is tight if all items contain exactly one Plain block
-    let is_tight = orderedlist.content.iter().all(|item| {
-        item.len() == 1 && matches!(item[0], Block::Plain(_))
-    });
-    
+    let is_tight = orderedlist
+        .content
+        .iter()
+        .all(|item| item.len() == 1 && matches!(item[0], Block::Plain(_)));
+
     for (i, item) in orderedlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
             // Add blank line between items in loose lists
@@ -277,90 +280,35 @@ fn write_orderedlist(
     Ok(())
 }
 
-fn write_header(
-    header: &Header,
-    buf: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
+fn write_header(header: &Header, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Write the appropriate number of # symbols for the heading level
     for _ in 0..header.level {
         write!(buf, "#")?;
     }
     write!(buf, " ")?;
-    
+
     // Write the header content
     for inline in &header.content {
         write_inline(inline, buf)?;
     }
-    
+
     // Add attributes if they exist
     if !is_empty_attr(&header.attr) {
         write!(buf, " ")?;
         write_attr(&header.attr, buf)?;
     }
-    
+
     writeln!(buf)?;
     Ok(())
 }
 
-fn write_cell_content(cell: &Cell, buf: &mut String) -> std::io::Result<()> {
+// FIXME this is wrong because pipe tables are quite limited (cannot have newlines in them)
+fn write_cell_content(cell: &Cell, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     for (i, block) in cell.content.iter().enumerate() {
         if i > 0 {
-            buf.push(' '); // Join multiple blocks with space
+            write!(buf, " ")?; // Join multiple blocks with space
         }
-        match block {
-            Block::Plain(plain) => {
-                for inline in &plain.content {
-                    write_inline_to_string(inline, buf)?;
-                }
-            }
-            Block::Paragraph(para) => {
-                for inline in &para.content {
-                    write_inline_to_string(inline, buf)?;
-                }
-            }
-            _ => {
-                // For complex blocks, just use a placeholder
-                buf.push_str("[complex content]");
-            }
-        }
-    }
-    Ok(())
-}
-
-fn write_inline_to_string(inline: &crate::pandoc::Inline, buf: &mut String) -> std::io::Result<()> {
-    match inline {
-        crate::pandoc::Inline::Str(s) => {
-            buf.push_str(&s.text);
-        }
-        crate::pandoc::Inline::Space(_) => {
-            buf.push(' ');
-        }
-        crate::pandoc::Inline::SoftBreak(_) => {
-            buf.push(' ');
-        }
-        crate::pandoc::Inline::Emph(emph) => {
-            buf.push('*');
-            for inline in &emph.content {
-                write_inline_to_string(inline, buf)?;
-            }
-            buf.push('*');
-        }
-        crate::pandoc::Inline::Strong(strong) => {
-            buf.push_str("**");
-            for inline in &strong.content {
-                write_inline_to_string(inline, buf)?;
-            }
-            buf.push_str("**");
-        }
-        crate::pandoc::Inline::Code(code) => {
-            buf.push('`');
-            buf.push_str(&code.text);
-            buf.push('`');
-        }
-        _ => {
-            // For other inline types, use a placeholder for now
-            buf.push_str("[inline]");
-        }
+        write_block(block, buf)?;
     }
     Ok(())
 }
@@ -376,14 +324,18 @@ fn get_alignment_char(alignment: &Alignment) -> char {
 
 fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Determine fence type and length - use backticks unless the code contains them
-    let fence_char = if codeblock.text.contains("```") { '~' } else { '`' };
+    let fence_char = if codeblock.text.contains("```") {
+        '~'
+    } else {
+        '`'
+    };
     let fence_length = 3; // Start with 3, could be made smarter to handle nested fences
-    
+
     // Write opening fence
     for _ in 0..fence_length {
         write!(buf, "{}", fence_char)?;
     }
-    
+
     // Write language/attributes if they exist
     let (id, classes, keyvals) = &codeblock.attr;
     if !classes.is_empty() {
@@ -396,60 +348,61 @@ fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::
         write!(buf, " ")?;
         write_attr(&codeblock.attr, buf)?;
     }
-    
+
     writeln!(buf)?;
-    
+
     // Write the code content
     write!(buf, "{}", codeblock.text)?;
-    
+
     // Ensure we end on a newline
     if !codeblock.text.ends_with('\n') {
         writeln!(buf)?;
     }
-    
+
     // Write closing fence
     for _ in 0..fence_length {
         write!(buf, "{}", fence_char)?;
     }
     writeln!(buf)?;
-    
+
     Ok(())
 }
 
 fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Collect all rows (header + body rows)
     let mut all_rows = Vec::new();
-    
+
     // Add header rows if they exist
     for row in &table.head.rows {
         all_rows.push(row);
     }
-    
+
     // Add body rows
     for body in &table.bodies {
         for row in &body.body {
             all_rows.push(row);
         }
     }
-    
+
     if all_rows.is_empty() {
         return Ok(());
     }
-    
+
     // Determine number of columns
     let num_cols = table.colspec.len();
-    
+
     // Extract cell contents as strings for each row
     let mut row_contents: Vec<Vec<String>> = Vec::new();
     let mut max_widths = vec![0; num_cols];
-    
+
     for row in &all_rows {
         let mut cell_strings = Vec::new();
         for (i, cell) in row.cells.iter().take(num_cols).enumerate() {
             let mut content = String::new();
-            write_cell_content(cell, &mut content)?;
+            let mut adapter = StringWriteAdapter::new(&mut content);
+            write_cell_content(cell, &mut adapter)?;
             let content = content.trim().to_string();
-            
+
             if content.len() > max_widths[i] {
                 max_widths[i] = content.len();
             }
@@ -461,14 +414,14 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
         }
         row_contents.push(cell_strings);
     }
-    
+
     // Ensure minimum width of 3 for each column
     for width in &mut max_widths {
         if *width < 3 {
             *width = 3;
         }
     }
-    
+
     // Write header row (first row)
     if !row_contents.is_empty() {
         write!(buf, "|")?;
@@ -476,7 +429,7 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
             write!(buf, " {:width$} |", content, width = max_widths[i])?;
         }
         writeln!(buf)?;
-        
+
         // Write separator line
         write!(buf, "|")?;
         for (i, colspec) in table.colspec.iter().enumerate().take(num_cols) {
@@ -490,7 +443,7 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
             write!(buf, " {} |", sep)?;
         }
         writeln!(buf)?;
-        
+
         // Write body rows (skip first row which is header)
         for row_content in row_contents.iter().skip(1) {
             write!(buf, "|")?;
@@ -500,7 +453,7 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
             writeln!(buf)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -508,7 +461,7 @@ fn determine_backticks(text: &str) -> String {
     // Find the longest sequence of consecutive backticks in the text
     let mut max_backticks = 0;
     let mut current_backticks = 0;
-    
+
     for ch in text.chars() {
         if ch == '`' {
             current_backticks += 1;
@@ -517,9 +470,330 @@ fn determine_backticks(text: &str) -> String {
             current_backticks = 0;
         }
     }
-    
+
     // Use one more backtick than the longest sequence found
     "`".repeat(max_backticks + 1)
+}
+
+fn write_str(s: &Str, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    // FIXME what are the escaping rules that Pandoc uses?
+    write!(buf, "{}", s.text)
+}
+
+fn write_space(_: &crate::pandoc::Space, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(buf, " ")
+}
+
+fn write_soft_break(
+    _: &crate::pandoc::SoftBreak,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, " ")
+}
+
+fn write_emph(emph: &crate::pandoc::Emph, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(buf, "*")?;
+    for inline in &emph.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "*")
+}
+
+fn write_strong(
+    strong: &crate::pandoc::Strong,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "**")?;
+    for inline in &strong.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "**")
+}
+
+fn write_code(code: &crate::pandoc::Code, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    // Handle inline code with proper backtick escaping
+    let backticks = determine_backticks(&code.text);
+    write!(buf, "{}", backticks)?;
+    if code.text.starts_with('`') || code.text.ends_with('`') {
+        // Add spaces to prevent backticks from being interpreted as delimiters
+        write!(buf, " {} ", code.text)?;
+    } else {
+        write!(buf, "{}", code.text)?;
+    }
+    write!(buf, "{}", backticks)?;
+    // TODO: Handle attributes if non-empty
+    if !is_empty_attr(&code.attr) {
+        write_attr(&code.attr, buf)?;
+    }
+    Ok(())
+}
+
+fn write_linebreak(
+    _line_break: &crate::pandoc::LineBreak,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "\\")?;
+    writeln!(buf)
+}
+
+fn write_link(link: &crate::pandoc::Link, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(buf, "[")?;
+    for inline in &link.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "](")?;
+    write!(buf, "{}", link.target.0)?;
+    if !link.target.1.is_empty() {
+        write!(buf, " \"{}\"", escape_quotes(&link.target.1))?;
+    }
+    write!(buf, ")")?;
+    if !is_empty_attr(&link.attr) {
+        write_attr(&link.attr, buf)?;
+    }
+    Ok(())
+}
+
+fn write_image(image: &crate::pandoc::Image, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(buf, "![")?;
+    for inline in &image.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "](")?;
+    write!(buf, "{}", image.target.0)?;
+    if !image.target.1.is_empty() {
+        write!(buf, " \"{}\"", escape_quotes(&image.target.1))?;
+    }
+    write!(buf, ")")?;
+    if !is_empty_attr(&image.attr) {
+        write_attr(&image.attr, buf)?;
+    }
+    Ok(())
+}
+
+fn write_strikeout(
+    strikeout: &crate::pandoc::Strikeout,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "~~")?;
+    for inline in &strikeout.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "~~")
+}
+
+fn write_subscript(
+    subscript: &crate::pandoc::Subscript,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "~")?;
+    for inline in &subscript.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "~")
+}
+
+fn write_superscript(
+    superscript: &crate::pandoc::Superscript,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "^")?;
+    for inline in &superscript.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "^")
+}
+
+fn write_math(math: &crate::pandoc::Math, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    match math.math_type {
+        crate::pandoc::MathType::InlineMath => {
+            write!(buf, "${}$", math.text)?;
+        }
+        crate::pandoc::MathType::DisplayMath => {
+            write!(buf, "$${}$$", math.text)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_quoted(
+    quoted: &crate::pandoc::Quoted,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    match quoted.quote_type {
+        crate::pandoc::QuoteType::SingleQuote => {
+            write!(buf, "'")?;
+            for inline in &quoted.content {
+                write_inline(inline, buf)?;
+            }
+            write!(buf, "'")?;
+        }
+        crate::pandoc::QuoteType::DoubleQuote => {
+            write!(buf, "\"")?;
+            for inline in &quoted.content {
+                write_inline(inline, buf)?;
+            }
+            write!(buf, "\"")?;
+        }
+    }
+    Ok(())
+}
+fn write_span(span: &crate::pandoc::Span, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    // Spans with attributes use bracket syntax: [content]{#id .class key=value}
+    if !is_empty_attr(&span.attr) {
+        write!(buf, "[")?;
+        for inline in &span.content {
+            write_inline(inline, buf)?;
+        }
+        write!(buf, "]")?;
+        write_attr(&span.attr, buf)?;
+    } else {
+        // Spans without attributes just output their content
+        for inline in &span.content {
+            write_inline(inline, buf)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_underline(
+    underline: &crate::pandoc::Underline,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[")?;
+    for inline in &underline.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "]{{.underline}}")
+}
+fn write_smallcaps(
+    smallcaps: &crate::pandoc::SmallCaps,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[")?;
+    for inline in &smallcaps.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "]{{.smallcaps}}")
+}
+fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(buf, "[")?;
+    for (i, citation) in cite.citations.iter().enumerate() {
+        if i > 0 {
+            write!(buf, "; ")?;
+        }
+        // Write prefix
+        for inline in &citation.prefix {
+            write_inline(inline, buf)?;
+        }
+        if !citation.prefix.is_empty() {
+            write!(buf, " ")?;
+        }
+        // Write citation key with @ prefix
+        write!(buf, "@{}", citation.id)?;
+        // Write suffix
+        if !citation.suffix.is_empty() {
+            write!(buf, " ")?;
+        }
+        for inline in &citation.suffix {
+            write_inline(inline, buf)?;
+        }
+    }
+    write!(buf, "]")?;
+    // Write any additional content that might be in the cite
+    for inline in &cite.content {
+        write_inline(inline, buf)?;
+    }
+    Ok(())
+}
+fn write_rawinline(
+    raw: &crate::pandoc::RawInline,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    // Only output raw content if it's for markdown format
+    if raw.format == "markdown" {
+        write!(buf, "{}", raw.text)
+    } else {
+        // For other formats, use raw span notation
+        write!(buf, "`{}`{{{}}}", raw.text, raw.format)
+    }
+}
+fn write_note(note: &crate::pandoc::Note, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    write!(buf, "^[")?;
+    for (i, block) in note.content.iter().enumerate() {
+        if i > 0 {
+            write!(buf, " ")?;
+        }
+        // For inline notes, we need to flatten block content
+        match block {
+            crate::pandoc::Block::Plain(plain) => {
+                for inline in &plain.content {
+                    write_inline(inline, buf)?;
+                }
+            }
+            crate::pandoc::Block::Paragraph(para) => {
+                for inline in &para.content {
+                    write_inline(inline, buf)?;
+                }
+            }
+            _ => {
+                write!(buf, "[complex block]")?;
+            }
+        }
+    }
+    write!(buf, "]")?;
+    Ok(())
+}
+fn write_notereference(
+    noteref: &crate::pandoc::NoteReference,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[^{}]", noteref.id)
+}
+fn write_shortcode(
+    shortcode: &crate::pandoc::Shortcode,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "{{{{{}}}}}", shortcode.name)
+}
+fn write_insert(
+    insert: &crate::pandoc::Insert,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[++ ")?;
+    for inline in &insert.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "]")
+}
+fn write_delete(
+    delete: &crate::pandoc::Delete,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[--")?;
+    for inline in &delete.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "]")
+}
+fn write_highlight(
+    highlight: &crate::pandoc::Highlight,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[!!")?;
+    for inline in &highlight.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "]")
+}
+fn write_editcomment(
+    comment: &crate::pandoc::EditComment,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[>>")?;
+    for inline in &comment.content {
+        write_inline(inline, buf)?;
+    }
+    write!(buf, "]")
 }
 
 fn write_inline(
@@ -527,148 +801,34 @@ fn write_inline(
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
     match inline {
-        crate::pandoc::Inline::Str(s) => {
-            // FIXME what are the escaping rules that Pandoc uses?
-            write!(buf, "{}", s.text)?;
-        }
-        crate::pandoc::Inline::Space(_) => {
-            write!(buf, " ")?;
-        }
-        crate::pandoc::Inline::SoftBreak(_) => {
-            writeln!(buf)?;
-        }
-        crate::pandoc::Inline::Emph(emph) => {
-            write!(buf, "*")?;
-            for inline in &emph.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "*")?;
-        }
-        crate::pandoc::Inline::Strong(strong) => {
-            write!(buf, "**")?;
-            for inline in &strong.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "**")?;
-        }
-        crate::pandoc::Inline::Code(code) => {
-            // Handle inline code with proper backtick escaping
-            let backticks = determine_backticks(&code.text);
-            write!(buf, "{}", backticks)?;
-            if code.text.starts_with('`') || code.text.ends_with('`') {
-                // Add spaces to prevent backticks from being interpreted as delimiters
-                write!(buf, " {} ", code.text)?;
-            } else {
-                write!(buf, "{}", code.text)?;
-            }
-            write!(buf, "{}", backticks)?;
-            // TODO: Handle attributes if non-empty
-            if !is_empty_attr(&code.attr) {
-                write_attr(&code.attr, buf)?;
-            }
-        }
-        crate::pandoc::Inline::LineBreak(_) => {
-            write!(buf, "\\")?;
-            writeln!(buf)?;
-        }
-        crate::pandoc::Inline::Link(link) => {
-            write!(buf, "[")?;
-            for inline in &link.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "](")?;
-            write!(buf, "{}", link.target.0)?;
-            if !link.target.1.is_empty() {
-                write!(buf, " \"{}\"", escape_quotes(&link.target.1))?;
-            }
-            write!(buf, ")")?;
-            if !is_empty_attr(&link.attr) {
-                write_attr(&link.attr, buf)?;
-            }
-        }
-        crate::pandoc::Inline::Image(image) => {
-            write!(buf, "![")?;
-            for inline in &image.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "](")?;
-            write!(buf, "{}", image.target.0)?;
-            if !image.target.1.is_empty() {
-                write!(buf, " \"{}\"", escape_quotes(&image.target.1))?;
-            }
-            write!(buf, ")")?;
-            if !is_empty_attr(&image.attr) {
-                write_attr(&image.attr, buf)?;
-            }
-        }
-        crate::pandoc::Inline::Strikeout(strikeout) => {
-            write!(buf, "~~")?;
-            for inline in &strikeout.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "~~")?;
-        }
-        crate::pandoc::Inline::Superscript(superscript) => {
-            write!(buf, "^")?;
-            for inline in &superscript.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "^")?;
-        }
-        crate::pandoc::Inline::Subscript(subscript) => {
-            write!(buf, "~")?;
-            for inline in &subscript.content {
-                write_inline(inline, buf)?;
-            }
-            write!(buf, "~")?;
-        }
-        crate::pandoc::Inline::Math(math) => {
-            match math.math_type {
-                crate::pandoc::MathType::InlineMath => {
-                    write!(buf, "${}$", math.text)?;
-                }
-                crate::pandoc::MathType::DisplayMath => {
-                    write!(buf, "$${}$$", math.text)?;
-                }
-            }
-        }
-        crate::pandoc::Inline::Quoted(quoted) => {
-            match quoted.quote_type {
-                crate::pandoc::QuoteType::SingleQuote => {
-                    write!(buf, "'")?;
-                    for inline in &quoted.content {
-                        write_inline(inline, buf)?;
-                    }
-                    write!(buf, "'")?;
-                }
-                crate::pandoc::QuoteType::DoubleQuote => {
-                    write!(buf, "\"")?;
-                    for inline in &quoted.content {
-                        write_inline(inline, buf)?;
-                    }
-                    write!(buf, "\"")?;
-                }
-            }
-        }
-        crate::pandoc::Inline::Span(span) => {
-            // Spans with attributes use bracket syntax: [content]{#id .class key=value}
-            if !is_empty_attr(&span.attr) {
-                write!(buf, "[")?;
-                for inline in &span.content {
-                    write_inline(inline, buf)?;
-                }
-                write!(buf, "]")?;
-                write_attr(&span.attr, buf)?;
-            } else {
-                // Spans without attributes just output their content
-                for inline in &span.content {
-                    write_inline(inline, buf)?;
-                }
-            }
-        }
-        inline => panic!("Unhandled inline type: {:?}", inline),
+        crate::pandoc::Inline::EditComment(comment) => write_editcomment(comment, buf),
+        crate::pandoc::Inline::Highlight(highlight) => write_highlight(highlight, buf),
+        crate::pandoc::Inline::Delete(delete) => write_delete(delete, buf),
+        crate::pandoc::Inline::Insert(insert) => write_insert(insert, buf),
+        crate::pandoc::Inline::Shortcode(shortcode) => write_shortcode(shortcode, buf),
+        crate::pandoc::Inline::Attr(attr) => write_attr(attr, buf),
+        crate::pandoc::Inline::NoteReference(noteref) => write_notereference(noteref, buf),
+        crate::pandoc::Inline::Note(note) => write_note(note, buf),
+        crate::pandoc::Inline::RawInline(raw) => write_rawinline(raw, buf),
+        crate::pandoc::Inline::Cite(cite) => write_cite(cite, buf),
+        crate::pandoc::Inline::SmallCaps(smallcaps) => write_smallcaps(smallcaps, buf),
+        crate::pandoc::Inline::Underline(underline) => write_underline(underline, buf),
+        crate::pandoc::Inline::Span(span) => write_span(span, buf),
+        crate::pandoc::Inline::Quoted(quoted) => write_quoted(quoted, buf),
+        crate::pandoc::Inline::Math(node) => write_math(node, buf),
+        crate::pandoc::Inline::Subscript(node) => write_subscript(node, buf),
+        crate::pandoc::Inline::Superscript(node) => write_superscript(node, buf),
+        crate::pandoc::Inline::Strikeout(node) => write_strikeout(node, buf),
+        crate::pandoc::Inline::Str(node) => write_str(node, buf),
+        crate::pandoc::Inline::Space(node) => write_space(node, buf),
+        crate::pandoc::Inline::SoftBreak(node) => write_soft_break(node, buf),
+        crate::pandoc::Inline::Emph(node) => write_emph(node, buf),
+        crate::pandoc::Inline::Strong(node) => write_strong(node, buf),
+        crate::pandoc::Inline::Code(node) => write_code(node, buf),
+        crate::pandoc::Inline::LineBreak(node) => write_linebreak(node, buf),
+        crate::pandoc::Inline::Link(node) => write_link(node, buf),
+        crate::pandoc::Inline::Image(node) => write_image(node, buf),
     }
-    Ok(())
 }
 
 fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -705,10 +865,7 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
     Ok(())
 }
 
-pub fn write_paragraph(
-    para: &Paragraph,
-    buf: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
+pub fn write_paragraph(para: &Paragraph, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     for inline in &para.content {
         write_inline(inline, buf)?;
     }
@@ -716,10 +873,7 @@ pub fn write_paragraph(
     Ok(())
 }
 
-pub fn write_plain(
-    plain: &Plain,
-    buf: &mut dyn std::io::Write,
-) -> std::io::Result<()> {
+pub fn write_plain(plain: &Plain, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     for inline in &plain.content {
         write_inline(inline, buf)?;
     }
