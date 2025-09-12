@@ -40,60 +40,46 @@ The corpus of error examples in this repository exists in resources/error-corpus
 
 After changing any of the resources/error-corpus/*.{json,qmd} files, run the script `scripts/build_error_table.ts`. It's executable with a deno hashbang line. Deno is installed on the environment you'll be running.
 
-## Currently Working On: Markdown Writer (qmd.rs)
+## Currently Working On: JSON Reader
 
-### Overview
-We are implementing a Markdown writer that converts the Pandoc AST back to Markdown format. The writer is located at `src/writers/qmd.rs`.
+### Implementation Plan
 
-### Current Status
+1. **Examine existing JSON writer structure** ✓
+   - Understand the JSON format being produced by `src/writers/json.rs`
+   - The writer produces Pandoc-compatible JSON with location information ("l" fields)
 
-#### Implemented Elements
+2. **Create JSON reader in `src/readers/json.rs`**
+   - Implement parsing functions that mirror the writer functions:
+     - `read_pandoc()` - main entry point
+     - `read_blocks()`, `read_block()` - for Block types
+     - `read_inlines()`, `read_inline()` - for Inline types  
+     - `read_attr()` - for attributes
+     - `read_meta()`, `read_meta_value()` - for metadata
+     - Location parsing helpers
+   - Handle all supported Block and Inline variants from the writer
+   - Note: Some variants are marked as unsupported in the writer (Shortcode, NoteReference, etc.)
 
-**Block Elements:**
-- ✅ Plain
-- ✅ Paragraph  
-- ✅ BlockQuote (with proper `> ` prefixing for nested content)
-- ✅ BulletList (with tight/loose list detection)
-- ✅ Div (fenced div syntax with attributes)
+3. **Update module structure**
+   - Add `json` module to `src/readers/mod.rs`
+   - Export the public `read` function
 
-**Inline Elements:**
-- ✅ Str (basic text)
-- ✅ Space
-- ✅ SoftBreak
+4. **Create comprehensive tests**
+   - Round-trip tests: write JSON → read back → verify equality
+   - Test various Pandoc document structures
+   - Ensure location information is preserved correctly
 
-#### Missing Elements to Implement
+5. **Key Technical Considerations**
+   - Parse JSON using `serde_json::Value`
+   - Handle Pandoc API version compatibility  
+   - Preserve source location information from "l" fields
+   - Error handling for malformed JSON
+   - Support all the same Block/Inline types as the writer
+   - Match the exact JSON structure the writer produces
 
-**Block Elements (10 remaining):**
-1. LineBlock - Lines of text with preserved line breaks
-2. CodeBlock - Fenced code blocks with optional language/attributes
-3. RawBlock - Raw content in a specific format
-4. OrderedList - Numbered lists with configurable start/style
-5. DefinitionList - Term/definition pairs
-6. Header - Headings with levels 1-6
-7. HorizontalRule - Thematic breaks (`---`)
-8. Table - Tables with alignment and captions
-9. Figure - Figures with captions
-10. BlockMetadata - Quarto-specific metadata blocks
+6. **Testing Strategy**
+   - Create test documents with various markdown constructs
+   - Write → Read → Write again and verify consistency
+   - Test error cases (malformed JSON, missing fields)
+   - Verify location information round-trips correctly
 
-**Inline Elements:**
-✅ All inline elements have been implemented!
-
-### Implementation Strategy
-
-1. **Priority Order (UPDATED):**
-   - ✅ **COMPLETED: ALL inline elements** 
-   - ✅ **COMPLETED: Major block elements** (Header, CodeBlock, OrderedList, Table, etc.)
-   - REMAINING: Complex blocks (Figure, LineBlock, DefinitionList, etc.)
-
-2. **Key Considerations:**
-   - Proper escaping of special characters in different contexts
-   - Handling of attributes (Pandoc/Quarto style)
-   - Nesting and context management (e.g., lists within blockquotes)
-   - Tight vs loose list formatting
-   - Preserving roundtrip fidelity where possible
-
-3. **Testing Approach:**
-   - Write unit tests for each element type
-   - Test nested structures
-   - Verify escaping rules
-   - Compare output with Pandoc's markdown writer for compatibility
+### Status: Planning Complete, Ready for Implementation
