@@ -22,6 +22,9 @@ use utils::output::VerboseOutput;
 #[command(name = "quarto-markdown-pandoc")]
 #[command(about = "Convert Quarto markdown to various output formats")]
 struct Args {
+    #[arg(short = 'f', long = "from", default_value = "markdown")]
+    from: String,
+
     #[arg(short = 't', long = "to", default_value = "native")]
     to: String,
 
@@ -96,37 +99,55 @@ fn main() {
         return;
     }
 
-    let error_formatter = if args.json_errors {
-        Some(
-            readers::qmd_error_messages::produce_json_error_messages
-                as fn(
-                    &[u8],
-                    &utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                    &str,
-                ) -> Vec<String>,
-        )
-    } else {
-        None
-    };
-
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        args.loose,
-        input_filename,
-        &mut output_stream,
-        error_formatter,
-    );
-    let pandoc = match result {
-        Ok(p) => p,
-        Err(error_messages) => {
-            if args.json_errors {
-                // For JSON errors, print to stdout as a JSON array
-                println!("{}", error_messages.join(""));
+    let pandoc = match args.from.as_str() {
+        "markdown" | "qmd" => {
+            let error_formatter = if args.json_errors {
+                Some(
+                    readers::qmd_error_messages::produce_json_error_messages
+                        as fn(
+                            &[u8],
+                            &utils::tree_sitter_log_observer::TreeSitterLogObserver,
+                            &str,
+                        ) -> Vec<String>,
+                )
             } else {
-                for msg in error_messages {
-                    eprintln!("{}", msg);
+                None
+            };
+
+            let result = readers::qmd::read(
+                input.as_bytes(),
+                args.loose,
+                input_filename,
+                &mut output_stream,
+                error_formatter,
+            );
+            match result {
+                Ok(p) => p,
+                Err(error_messages) => {
+                    if args.json_errors {
+                        // For JSON errors, print to stdout as a JSON array
+                        println!("{}", error_messages.join(""));
+                    } else {
+                        for msg in error_messages {
+                            eprintln!("{}", msg);
+                        }
+                    }
+                    std::process::exit(1);
                 }
             }
+        }
+        "json" => {
+            let result = readers::json::read(&mut input.as_bytes());
+            match result {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("Error reading JSON: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => {
+            eprintln!("Unknown input format: {}", args.from);
             std::process::exit(1);
         }
     };
