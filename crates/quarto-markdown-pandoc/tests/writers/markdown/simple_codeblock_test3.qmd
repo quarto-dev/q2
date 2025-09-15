@@ -1,0 +1,5 @@
+````python
+def example():
+    """This has ```backticks``` in a docstring"""
+    return True
+````

@@ -1,0 +1,66 @@
+# Test Code Blocks with Backticks
+
+This tests that code blocks with backticks are properly handled.
+
+## Simple code with triple backticks
+
+````
+```
+This is a code block with triple backticks
+```
+````
+
+## Code with four backticks
+
+`````
+````
+This needs five backticks to fence it
+````
+`````
+
+## Code with inline backticks
+
+```
+This has a single ` backtick
+```
+
+## Code with double backticks
+
+```
+This has `` double backticks
+```
+
+## Nested markdown code blocks
+
+````markdown
+```python
+def hello():
+    print("Hello, world!")
+```
+````
+
+## Edge case: backticks at start
+
+````
+```starts with backticks
+````
+
+## Edge case: backticks at end
+
+````
+ends with backticks```
+````
+
+## Multiple sequences of backticks
+
+`````
+This has ``` three and then ```` four backticks
+`````
+
+## Code block with language
+
+```python
+def example():
+    """This has ```backticks``` in a docstring"""
+    return True
+```

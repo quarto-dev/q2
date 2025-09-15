@@ -158,10 +158,11 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
     }
 }
 
-fn write_meta<T: std::io::Write + ?Sized>(_meta: &Meta, buf: &mut T) -> std::io::Result<()> {
-    writeln!(buf, "---")?;
-    writeln!(buf, "unfinished: true")?;
-    writeln!(buf, "---")?;
+fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, _buf: &mut T) -> std::io::Result<()> {
+    if !meta.is_empty() {
+        panic!("Metadata writing is not yet implemented");
+    }
+    // Empty metadata - do nothing
     Ok(())
 }
 
@@ -324,17 +325,14 @@ fn get_alignment_char(alignment: &Alignment) -> char {
 }
 
 fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-    // Determine fence type and length - use backticks unless the code contains them
-    let fence_char = if codeblock.text.contains("```") {
-        '~'
-    } else {
-        '`'
-    };
-    let fence_length = 3; // Start with 3, could be made smarter to handle nested fences
+    // Determine the number of backticks needed
+    // Use at least 3, but more if the content contains backticks
+    let fence = determine_backticks(&codeblock.text);
+    let fence_length = fence.len().max(3);
 
-    // Write opening fence
+    // Write opening fence (always use backticks)
     for _ in 0..fence_length {
-        write!(buf, "{}", fence_char)?;
+        write!(buf, "`")?;
     }
 
     // Write language/attributes if they exist
@@ -360,9 +358,9 @@ fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::
         writeln!(buf)?;
     }
 
-    // Write closing fence
+    // Write closing fence (always use backticks)
     for _ in 0..fence_length {
-        write!(buf, "{}", fence_char)?;
+        write!(buf, "`")?;
     }
     writeln!(buf)?;
 
