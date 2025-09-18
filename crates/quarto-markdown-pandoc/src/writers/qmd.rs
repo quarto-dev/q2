@@ -104,15 +104,9 @@ struct OrderedListContext<'a, W: Write + ?Sized> {
 
 impl<'a, W: Write + ?Sized> OrderedListContext<'a, W> {
     fn new(inner: &'a mut W, number: usize, delimiter: ListNumberDelim) -> Self {
-        // Calculate indent based on the width of the number + delimiter
-        let delim_str = match delimiter {
-            ListNumberDelim::Period => ".",
-            ListNumberDelim::OneParen => ")",
-            ListNumberDelim::TwoParens => ")",
-            _ => ".",
-        };
-        let marker = format!("{}{} ", number, delim_str);
-        let indent = " ".repeat(marker.len());
+        // Pandoc uses consistent spacing: for numbers < 10, uses two spaces after delimiter
+        // For numbers >= 10, uses one space. Continuation lines always use 4 spaces indent.
+        let indent = "    ".to_string(); // Always 4 spaces for continuation lines
 
         Self {
             inner,
@@ -137,7 +131,13 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
                         ListNumberDelim::TwoParens => ")",
                         _ => ".",
                     };
-                    write!(self.inner, "{}{} ", self.number, delim_str)?;
+                    // Pandoc style: numbers < 10 get two spaces after delimiter,
+                    // numbers >= 10 get one space
+                    if self.number < 10 {
+                        write!(self.inner, "{}{}  ", self.number, delim_str)?;
+                    } else {
+                        write!(self.inner, "{}{} ", self.number, delim_str)?;
+                    }
                     self.is_first_line = false;
                 } else {
                     self.inner.write_all(self.indent.as_bytes())?;
