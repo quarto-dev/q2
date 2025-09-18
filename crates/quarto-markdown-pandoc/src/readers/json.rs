@@ -389,7 +389,7 @@ fn read_list_attributes(value: &Value) -> Result<ListAttributes> {
         "UpperAlpha" => ListNumberStyle::UpperAlpha,
         "LowerRoman" => ListNumberStyle::LowerRoman,
         "UpperRoman" => ListNumberStyle::UpperRoman,
-        "Default" => ListNumberStyle::Default,
+        "DefaultStyle" => ListNumberStyle::Default,
         _ => return Err(JsonReadError::UnsupportedVariant(format!("ListNumberStyle: {}", number_style_t))),
     };
     
@@ -399,7 +399,7 @@ fn read_list_attributes(value: &Value) -> Result<ListAttributes> {
         "Period" => ListNumberDelim::Period,
         "OneParen" => ListNumberDelim::OneParen,
         "TwoParens" => ListNumberDelim::TwoParens,
-        "Default" => ListNumberDelim::Default,
+        "DefaultDelim" => ListNumberDelim::Default,
         _ => return Err(JsonReadError::UnsupportedVariant(format!("ListNumberDelim: {}", number_delimiter_t))),
     };
     
