@@ -4,6 +4,7 @@
  */
 
 use crate::pandoc::inline::{Inline, Inlines, Span};
+use crate::pandoc::location::empty_source_info;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +37,7 @@ fn shortcode_value_span(str: String) -> Inline {
             attr_hash,
         ),
         content: vec![],
+        source_info: empty_source_info(),
     })
 }
 
@@ -58,6 +60,7 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
             attr_hash,
         ),
         content: vec![],
+        source_info: empty_source_info(),
     })
 }
 
@@ -121,5 +124,6 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
             attr_hash,
         ),
         content,
+        source_info: empty_source_info(),
     }
 }

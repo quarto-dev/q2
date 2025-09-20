@@ -18,7 +18,7 @@ use crate::pandoc::inline::{
 
 use crate::pandoc::inline::{make_cite_inline, make_span_inline};
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{Range, SourceInfo, empty_range, node_location};
+use crate::pandoc::location::{Range, SourceInfo, empty_range, node_location, node_source_info, empty_source_info};
 use crate::pandoc::meta::Meta;
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::{Shortcode, ShortcodeArg, shortcode_to_span};
@@ -105,6 +105,7 @@ where
 
 // Helper function to process emphasis-like inlines with a closure to build the final result
 fn process_emphasis_inline<F, G>(
+    node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     delimiter_name: &str,
     native_inline: F,
@@ -112,10 +113,10 @@ fn process_emphasis_inline<F, G>(
 ) -> PandocNativeIntermediate
 where
     F: FnMut((String, PandocNativeIntermediate)) -> Inline,
-    G: FnOnce(Vec<Inline>) -> Inline,
+    G: FnOnce(Vec<Inline>, &tree_sitter::Node) -> Inline,
 {
     let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
-    PandocNativeIntermediate::IntermediateInline(build_inline(inlines))
+    PandocNativeIntermediate::IntermediateInline(build_inline(inlines, node))
 }
 
 // Helper function to process emphasis-like inlines with a closure that needs node access
@@ -601,6 +602,7 @@ fn process_shortcode_keyword_param<T: Write>(
 }
 
 fn process_citation<F>(
+    node: &tree_sitter::Node,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
 ) -> PandocNativeIntermediate
@@ -641,7 +643,11 @@ where
             note_num: 0, // this needs to be set later
             hash: 0,
         }],
-        content: vec![Inline::Str(Str { text: node_text() })],
+        content: vec![Inline::Str(Str {
+            text: node_text(),
+            source_info: node_source_info(node),
+        })],
+        source_info: node_source_info(node),
     }))
 }
 
@@ -761,9 +767,9 @@ where
     let is_cite = has_citations && is_empty_target(&target) && is_empty_attr(&attr);
 
     PandocNativeIntermediate::IntermediateInline(if is_cite {
-        make_cite_inline(attr, target, content)
+        make_cite_inline(attr, target, content, empty_source_info())
     } else {
-        make_span_inline(attr, target, content)
+        make_span_inline(attr, target, content, empty_source_info())
     })
 }
 
@@ -822,6 +828,7 @@ where
         attr,
         content,
         target,
+        source_info: empty_source_info(),
     }))
 }
 
@@ -839,9 +846,11 @@ fn process_uri_autolink(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocN
     PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
         content: vec![Inline::Str(Str {
             text: content.to_string(),
+            source_info: node_source_info(node),
         })],
         attr,
         target: (content.to_string(), "".to_string()),
+        source_info: node_source_info(node),
     }))
 }
 
@@ -1130,6 +1139,7 @@ fn process_code_span<T: Write>(
         return PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
             attr,
             text: "".to_string(),
+            source_info: node_source_info(node),
         }));
     }
     let (_, child) = inlines.remove(0);
@@ -1157,19 +1167,26 @@ fn process_code_span<T: Write>(
         PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
             format: raw,
             text,
+            source_info: node_source_info(node),
         }))
     } else {
         match language_attribute {
             Some(lang) => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
                 text: lang + &" " + &text,
+                source_info: node_source_info(node),
             })),
-            None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code { attr, text })),
+            None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
+                attr,
+                text,
+                source_info: node_source_info(node),
+            })),
         }
     }
 }
 
 fn process_latex_span(
+    node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
 ) -> PandocNativeIntermediate {
     let mut is_inline_math = false;
@@ -1217,6 +1234,7 @@ fn process_latex_span(
     PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
         math_type: math_type,
         text,
+        source_info: node_source_info(node),
     }))
 }
 
@@ -1574,6 +1592,7 @@ fn process_pipe_table(
 }
 
 fn process_quoted_span<F>(
+    node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     native_inline: F,
 ) -> PandocNativeIntermediate
@@ -1603,14 +1622,18 @@ where
     PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
         quote_type,
         content: inlines,
+        source_info: node_source_info(node),
     }))
 }
 
 // Macro for simple emphasis-like inline processing
 macro_rules! emphasis_inline {
-    ($children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident) => {
-        process_emphasis_inline($children, $delimiter, $native_inline, |inlines| {
-            Inline::$inline_type($inline_type { content: inlines })
+    ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident) => {
+        process_emphasis_inline($node, $children, $delimiter, $native_inline, |inlines, node| {
+            Inline::$inline_type($inline_type {
+                content: inlines,
+                source_info: node_source_info(node),
+            })
         })
     };
 }
@@ -1631,7 +1654,10 @@ fn process_native_inline<T: Write>(
                     source_info: SourceInfo::with_range(range),
                 })
             } else {
-                Inline::Str(Str { text })
+                Inline::Str(Str {
+                    text,
+                    source_info: SourceInfo::with_range(range.clone()),
+                })
             }
         }
         // as a special inline, we need to allow commonmark attributes
@@ -1653,6 +1679,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
+                source_info: empty_source_info(),
             })
         }
         other => {
@@ -1665,6 +1692,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
+                source_info: empty_source_info(),
             })
         }
     }
@@ -1751,7 +1779,10 @@ fn process_native_inlines<T: Write>(
                         source_info: SourceInfo::with_range(range),
                     }))
                 } else {
-                    inlines.push(Inline::Str(Str { text }))
+                    inlines.push(Inline::Str(Str {
+                        text,
+                        source_info: SourceInfo::with_range(range.clone()),
+                    }))
                 }
             }
             other => {
@@ -1839,15 +1870,15 @@ fn native_visitor<T: Write>(
         "inline_link" => process_inline_link(&mut link_buf, node_text, children),
         "key_value_specifier" => process_key_value_specifier(buf, children),
         "raw_specifier" => process_raw_specifier(node, input_bytes),
-        "emphasis" => emphasis_inline!(children, "emphasis_delimiter", native_inline, Emph),
+        "emphasis" => emphasis_inline!(node, children, "emphasis_delimiter", native_inline, Emph),
         "strong_emphasis" => {
-            emphasis_inline!(children, "emphasis_delimiter", native_inline, Strong)
+            emphasis_inline!(node, children, "emphasis_delimiter", native_inline, Strong)
         }
         "inline" => {
             let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
             PandocNativeIntermediate::IntermediateInlines(inlines)
         }
-        "citation" => process_citation(node_text, children),
+        "citation" => process_citation(node, node_text, children),
         "note_reference" => process_note_reference(node, children),
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
         "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
@@ -1924,30 +1955,33 @@ fn native_visitor<T: Write>(
                         content: inlines,
                         source_info: SourceInfo::with_range(node_location(node)),
                     })],
+                    source_info: node_source_info(node),
                 })
             },
         ),
         "superscript" => emphasis_inline!(
+            node,
             children,
             "superscript_delimiter",
             native_inline,
             Superscript
         ),
-        "subscript" => emphasis_inline!(children, "subscript_delimiter", native_inline, Subscript),
-        "strikeout" => emphasis_inline!(children, "strikeout_delimiter", native_inline, Strikeout),
-        "insert" => emphasis_inline!(children, "insert_delimiter", native_inline, Insert),
-        "delete" => emphasis_inline!(children, "delete_delimiter", native_inline, Delete),
-        "highlight" => emphasis_inline!(children, "highlight_delimiter", native_inline, Highlight),
+        "subscript" => emphasis_inline!(node, children, "subscript_delimiter", native_inline, Subscript),
+        "strikeout" => emphasis_inline!(node, children, "strikeout_delimiter", native_inline, Strikeout),
+        "insert" => emphasis_inline!(node, children, "insert_delimiter", native_inline, Insert),
+        "delete" => emphasis_inline!(node, children, "delete_delimiter", native_inline, Delete),
+        "highlight" => emphasis_inline!(node, children, "highlight_delimiter", native_inline, Highlight),
         "edit_comment" => emphasis_inline!(
+            node,
             children,
             "edit_comment_delimiter",
             native_inline,
             EditComment
         ),
 
-        "quoted_span" => process_quoted_span(children, native_inline),
+        "quoted_span" => process_quoted_span(node, children, native_inline),
         "code_span" => process_code_span(buf, node, children),
-        "latex_span" => process_latex_span(children),
+        "latex_span" => process_latex_span(node, children),
         "list" => process_list(node, children),
         "list_item" => process_list_item(node, children),
         "info_string" => process_info_string(children),
@@ -2118,6 +2152,7 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                             kv,
                         ),
                         content: vec![],
+                        source_info: empty_source_info(),
                     })],
                     false,
                 )
@@ -2132,6 +2167,7 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                             HashMap::new(),
                         ),
                         content,
+                        source_info: empty_source_info(),
                     })],
                     true,
                 )
@@ -2146,6 +2182,7 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                             HashMap::new(),
                         ),
                         content,
+                        source_info: empty_source_info(),
                     })],
                     true,
                 )
@@ -2160,6 +2197,7 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                             HashMap::new(),
                         ),
                         content,
+                        source_info: empty_source_info(),
                     })],
                     true,
                 )
@@ -2174,6 +2212,7 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                             HashMap::new(),
                         ),
                         content,
+                        source_info: empty_source_info(),
                     })],
                     true,
                 )
@@ -2341,14 +2380,20 @@ fn merge_strs(pandoc: Pandoc) -> Pandoc {
                     }
                     _ => {
                         if let Some(current) = current_str.take() {
-                            result.push(Inline::Str(Str { text: current }));
+                            result.push(Inline::Str(Str {
+                                text: current,
+                                source_info: empty_source_info(),
+                            }));
                         }
                         result.push(inline);
                     }
                 }
             }
             if let Some(current) = current_str {
-                result.push(Inline::Str(Str { text: current }));
+                result.push(Inline::Str(Str {
+                    text: current,
+                    source_info: empty_source_info(),
+                }));
             }
             if did_merge {
                 FilterResult(result, true)

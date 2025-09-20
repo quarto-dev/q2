@@ -77,6 +77,10 @@ pub fn empty_range() -> Range {
     }
 }
 
+pub fn empty_source_info() -> SourceInfo {
+    SourceInfo::with_range(empty_range())
+}
+
 #[macro_export]
 macro_rules! impl_source_location {
     ($($type:ty),*) => {

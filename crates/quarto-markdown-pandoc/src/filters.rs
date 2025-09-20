@@ -324,6 +324,7 @@ impl InlineFilterableStructure for pandoc::Note {
     fn filter_structure(self, filter: &mut Filter) -> Inline {
         Inline::Note(pandoc::Note {
             content: topdown_traverse_blocks(self.content, filter),
+            source_info: self.source_info,
         })
     }
 }
@@ -344,6 +345,7 @@ impl InlineFilterableStructure for pandoc::Cite {
                 })
                 .collect(),
             content: topdown_traverse_inlines(self.content, filter),
+            source_info: self.source_info,
         })
     }
 }
@@ -747,28 +749,36 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
     match inline {
         Inline::Emph(e) => Inline::Emph(crate::pandoc::Emph {
             content: topdown_traverse_inlines(e.content, filter),
+            source_info: e.source_info,
         }),
         Inline::Underline(u) => Inline::Underline(crate::pandoc::Underline {
             content: topdown_traverse_inlines(u.content, filter),
+            source_info: u.source_info,
         }),
         Inline::Strong(sg) => Inline::Strong(crate::pandoc::Strong {
             content: topdown_traverse_inlines(sg.content, filter),
+            source_info: sg.source_info,
         }),
         Inline::Strikeout(st) => Inline::Strikeout(crate::pandoc::Strikeout {
             content: topdown_traverse_inlines(st.content, filter),
+            source_info: st.source_info,
         }),
         Inline::Superscript(sp) => Inline::Superscript(crate::pandoc::Superscript {
             content: topdown_traverse_inlines(sp.content, filter),
+            source_info: sp.source_info,
         }),
         Inline::Subscript(sb) => Inline::Subscript(crate::pandoc::Subscript {
             content: topdown_traverse_inlines(sb.content, filter),
+            source_info: sb.source_info,
         }),
         Inline::SmallCaps(sc) => Inline::SmallCaps(crate::pandoc::SmallCaps {
             content: topdown_traverse_inlines(sc.content, filter),
+            source_info: sc.source_info,
         }),
         Inline::Quoted(q) => Inline::Quoted(crate::pandoc::Quoted {
             quote_type: q.quote_type,
             content: topdown_traverse_inlines(q.content, filter),
+            source_info: q.source_info,
         }),
         Inline::Cite(c) => Inline::Cite(crate::pandoc::Cite {
             citations: c
@@ -784,23 +794,28 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
                 })
                 .collect(),
             content: topdown_traverse_inlines(c.content, filter),
+            source_info: c.source_info,
         }),
         Inline::Link(l) => Inline::Link(crate::pandoc::Link {
             attr: l.attr,
             target: l.target,
             content: topdown_traverse_inlines(l.content, filter),
+            source_info: l.source_info,
         }),
         Inline::Image(i) => Inline::Image(crate::pandoc::Image {
             attr: i.attr,
             target: i.target,
             content: topdown_traverse_inlines(i.content, filter),
+            source_info: i.source_info,
         }),
         Inline::Note(note) => Inline::Note(crate::pandoc::Note {
             content: topdown_traverse_blocks(note.content, filter),
+            source_info: note.source_info,
         }),
         Inline::Span(span) => Inline::Span(crate::pandoc::Span {
             attr: span.attr,
             content: topdown_traverse_inlines(span.content, filter),
+            source_info: span.source_info,
         }),
         _ => panic!("Unsupported inline type: {:?}", inline),
     }
