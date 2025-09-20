@@ -8,6 +8,7 @@ use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::location::Range;
 use crate::pandoc::location::SourceLocation;
+use crate::pandoc::location::SourceInfo;
 use crate::pandoc::shortcode::Shortcode;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -161,20 +162,17 @@ pub struct Span {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Space {
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineBreak {
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SoftBreak {
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]

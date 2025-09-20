@@ -6,7 +6,7 @@
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::Blocks;
 use crate::pandoc::caption::Caption;
-use crate::pandoc::location::Range;
+use crate::pandoc::location::SourceInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Alignment {
@@ -67,7 +67,5 @@ pub struct Table {
     pub head: TableHead,
     pub bodies: Vec<TableBody>,
     pub foot: TableFoot,
-
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }

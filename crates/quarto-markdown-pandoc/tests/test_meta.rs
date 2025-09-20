@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_markdown_pandoc::pandoc::location::{Location, Range};
+use quarto_markdown_pandoc::pandoc::location::{Location, Range, SourceInfo};
 use quarto_markdown_pandoc::pandoc::{MetaValue, RawBlock, rawblock_to_meta};
 use std::fs;
 
@@ -14,8 +14,7 @@ fn test_metadata_parsing() {
     let block = RawBlock {
         format: "quarto_minus_metadata".to_string(),
         text: content,
-        filename: None,
-        range: Range {
+        source_info: SourceInfo::with_range(Range {
             start: Location {
                 offset: 0,
                 row: 0,
@@ -26,7 +25,7 @@ fn test_metadata_parsing() {
                 row: 0,
                 column: 0,
             },
-        },
+        }),
     };
 
     let meta = rawblock_to_meta(block);

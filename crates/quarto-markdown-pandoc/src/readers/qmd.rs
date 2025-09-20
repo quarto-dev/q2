@@ -9,6 +9,7 @@ use crate::filters::FilterReturn::Unchanged;
 use crate::filters::topdown_traverse;
 use crate::filters::{Filter, FilterReturn};
 use crate::pandoc::block::MetaBlock;
+use crate::pandoc::location::SourceInfo;
 use crate::pandoc::meta::parse_metadata_strings;
 use crate::pandoc::{self, Block, Meta};
 use crate::pandoc::{MetaValue, rawblock_to_meta};
@@ -142,8 +143,8 @@ where
             if rb.format != "quarto_minus_metadata" {
                 return Unchanged(rb);
             }
-            let filename = rb.filename.clone();
-            let range = rb.range.clone();
+            let filename = rb.source_info.filename.clone();
+            let range = rb.source_info.range.clone();
             let result = rawblock_to_meta(rb);
             let is_lexical = {
                 let val = result.get("_scope");
@@ -165,8 +166,7 @@ where
                 return FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
                         meta: meta_map,
-                        filename,
-                        range,
+                        source_info: SourceInfo::new(filename, range),
                     })],
                     false,
                 );

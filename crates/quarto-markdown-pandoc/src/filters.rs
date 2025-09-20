@@ -699,21 +699,18 @@ pub fn topdown_traverse_block(block: Block, filter: &mut Filter) -> Blocks {
                 return match f(meta.meta) {
                     FilterReturn::Unchanged(m) => vec![Block::BlockMetadata(MetaBlock {
                         meta: m,
-                        filename: meta.filename,
-                        range: meta.range,
+                        source_info: meta.source_info.clone(),
                     })],
                     FilterReturn::FilterResult(new_meta, recurse) => {
                         if !recurse {
                             vec![Block::BlockMetadata(MetaBlock {
                                 meta: new_meta,
-                                filename: meta.filename,
-                                range: meta.range,
+                                source_info: meta.source_info.clone(),
                             })]
                         } else {
                             vec![Block::BlockMetadata(MetaBlock {
                                 meta: topdown_traverse_meta(new_meta, filter),
-                                filename: meta.filename,
-                                range: meta.range,
+                                source_info: meta.source_info.clone(),
                             })]
                         }
                     }
