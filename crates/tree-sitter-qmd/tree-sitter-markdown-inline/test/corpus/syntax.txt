@@ -37,11 +37,9 @@ star strong emphasis
 (inline
   (strong_emphasis
     (emphasis_delimiter)
-    (emphasis_delimiter)
     (text_base)
     (text_base)
     (text_base)
-    (emphasis_delimiter)
     (emphasis_delimiter)))
 ================================================================================
 underline emphasis
@@ -196,3 +194,22 @@ Nested spans
           (class_specifier))))
     (commonmark_attribute
       (class_specifier))))
+================================================================================
+Mixed nested spans
+================================================================================
+`hel*lo` and *emph*
+
+--------------------------------------------------------------------------------
+(inline
+  (code_span
+    (code_span_delimiter)
+    (code_content)
+    (code_span_delimiter))
+  (text_base)
+  (text_base)
+  (text_base)
+  (emphasis
+    (emphasis_delimiter)
+    (text_base)
+    (emphasis_delimiter))
+  (soft_line_break))
