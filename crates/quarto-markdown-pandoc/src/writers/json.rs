@@ -46,28 +46,35 @@ fn write_inline(inline: &Inline) -> Value {
     match inline {
         Inline::Str(s) => json!({
             "t": "Str",
-            "c": s.text
+            "c": s.text,
+            "l": write_location(s)
         }),
-        Inline::Space(_) => json!({
-            "t": "Space"
+        Inline::Space(space) => json!({
+            "t": "Space",
+            "l": write_location(space)
         }),
-        Inline::LineBreak(_) => json!({
-            "t": "LineBreak"
+        Inline::LineBreak(lb) => json!({
+            "t": "LineBreak",
+            "l": write_location(lb)
         }),
-        Inline::SoftBreak(_) => json!({
-            "t": "SoftBreak"
+        Inline::SoftBreak(sb) => json!({
+            "t": "SoftBreak",
+            "l": write_location(sb)
         }),
         Inline::Emph(e) => json!({
             "t": "Emph",
-            "c": write_inlines(&e.content)
+            "c": write_inlines(&e.content),
+            "l": write_location(e)
         }),
         Inline::Strong(s) => json!({
             "t": "Strong",
-            "c": write_inlines(&s.content)
+            "c": write_inlines(&s.content),
+            "l": write_location(s)
         }),
         Inline::Code(c) => json!({
             "t": "Code",
-            "c": [write_attr(&c.attr), c.text]
+            "c": [write_attr(&c.attr), c.text],
+            "l": write_location(c)
         }),
         Inline::Math(m) => {
             let math_type = match m.math_type {
@@ -76,28 +83,34 @@ fn write_inline(inline: &Inline) -> Value {
             };
             json!({
                 "t": "Math",
-                "c": [math_type, m.text]
+                "c": [math_type, m.text],
+                "l": write_location(m)
             })
         }
         Inline::Underline(u) => json!({
             "t": "Underline",
-            "c": write_inlines(&u.content)
+            "c": write_inlines(&u.content),
+            "l": write_location(u)
         }),
         Inline::Strikeout(s) => json!({
             "t": "Strikeout",
-            "c": write_inlines(&s.content)
+            "c": write_inlines(&s.content),
+            "l": write_location(s)
         }),
         Inline::Superscript(s) => json!({
             "t": "Superscript",
-            "c": write_inlines(&s.content)
+            "c": write_inlines(&s.content),
+            "l": write_location(s)
         }),
         Inline::Subscript(s) => json!({
             "t": "Subscript",
-            "c": write_inlines(&s.content)
+            "c": write_inlines(&s.content),
+            "l": write_location(s)
         }),
         Inline::SmallCaps(s) => json!({
             "t": "SmallCaps",
-            "c": write_inlines(&s.content)
+            "c": write_inlines(&s.content),
+            "l": write_location(s)
         }),
         Inline::Quoted(q) => {
             let quote_type = match q.quote_type {
@@ -106,28 +119,34 @@ fn write_inline(inline: &Inline) -> Value {
             };
             json!({
                 "t": "Quoted",
-                "c": [quote_type, write_inlines(&q.content)]
+                "c": [quote_type, write_inlines(&q.content)],
+                "l": write_location(q)
             })
         }
         Inline::Link(link) => json!({
             "t": "Link",
-            "c": [write_attr(&link.attr), write_inlines(&link.content), [link.target.0, link.target.1]]
+            "c": [write_attr(&link.attr), write_inlines(&link.content), [link.target.0, link.target.1]],
+            "l": write_location(link)
         }),
         Inline::RawInline(raw) => json!({
             "t": "RawInline",
-            "c": [raw.format.clone(), raw.text.clone()]
+            "c": [raw.format.clone(), raw.text.clone()],
+            "l": write_location(raw)
         }),
         Inline::Image(image) => json!({
             "t": "Image",
-            "c": [write_attr(&image.attr), write_inlines(&image.content), [image.target.0, image.target.1]]
+            "c": [write_attr(&image.attr), write_inlines(&image.content), [image.target.0, image.target.1]],
+            "l": write_location(image)
         }),
         Inline::Span(span) => json!({
             "t": "Span",
-            "c": [write_attr(&span.attr), write_inlines(&span.content)]
+            "c": [write_attr(&span.attr), write_inlines(&span.content)],
+            "l": write_location(span)
         }),
         Inline::Note(note) => json!({
             "t": "Note",
-            "c": write_blocks(&note.content)
+            "c": write_blocks(&note.content),
+            "l": write_location(note)
         }),
         // we can't test this just yet because
         // our citationNoteNum counter doesn't match Pandoc's
@@ -142,7 +161,8 @@ fn write_inline(inline: &Inline) -> Value {
                     "citationHash": citation.hash,
                     "citationNoteNum": citation.note_num
                 })
-            }).collect::<Vec<_>>()
+            }).collect::<Vec<_>>(),
+            "l": write_location(cite)
         }),
         Inline::Shortcode(_)
         | Inline::NoteReference(_)
