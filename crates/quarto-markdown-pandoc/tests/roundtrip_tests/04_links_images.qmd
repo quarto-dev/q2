@@ -1,0 +1,25 @@
+# Links and Images
+
+## Links
+
+Simple link: [GitHub](https://github.com)
+
+Link with title: [GitHub](https://github.com "GitHub Homepage")
+
+Reference link: [GitHub][gh]
+
+Another reference: [Example][1]
+
+Autolink: <https://github.com>
+
+## Images
+
+Simple image: ![Alt text](image.png)
+
+Image with title: ![Alt text](image.png "Image Title")
+
+Reference image: ![Alt text][img]
+
+[gh]: https://github.com
+[1]: https://example.com
+[img]: image.png

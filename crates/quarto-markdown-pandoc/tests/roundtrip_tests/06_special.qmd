@@ -1,0 +1,35 @@
+# Special Elements
+
+## Line Breaks
+
+Line with two spaces at the end
+should create a line break.
+
+Line with backslash\
+should also create a line break.
+
+## Horizontal Rules
+
+---
+
+***
+
+___
+
+## Escaping
+
+Escape \*asterisks\* to prevent emphasis.
+
+Escape \[brackets\] and \(parentheses\).
+
+Escape \`backticks\` in text.
+
+## Special Characters
+
+Em dash --- like this.
+
+En dash -- like this.
+
+Ellipsis... in text.
+
+"Smart quotes" and 'single quotes'.

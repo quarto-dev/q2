@@ -1,0 +1,32 @@
+# Blockquotes
+
+> This is a simple blockquote.
+
+> This is a blockquote
+> that spans multiple lines
+> with continuous markers.
+
+Multiple paragraphs in blockquote:
+
+> First paragraph in quote.
+>
+> Second paragraph in quote.
+
+Nested blockquotes:
+
+> Outer quote
+> > Nested quote
+> > > Deeply nested quote
+> > Back to nested
+> Back to outer
+
+Blockquote with other elements:
+
+> ## Header in blockquote
+>
+> - List item 1
+> - List item 2
+>
+> ```
+> code in blockquote
+> ```

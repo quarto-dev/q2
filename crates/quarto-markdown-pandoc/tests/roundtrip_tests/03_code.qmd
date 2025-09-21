@@ -1,0 +1,30 @@
+# Code Tests
+
+Inline code: `let x = 42;` in a sentence.
+
+Code block without language:
+
+```
+function hello() {
+    console.log("Hello, world!");
+}
+```
+
+Code block with language:
+
+```javascript
+function hello() {
+    console.log("Hello, world!");
+}
+```
+
+```python
+def hello():
+    print("Hello, world!")
+```
+
+Indented code block:
+
+    This is indented code
+    with multiple lines
+    preserving spaces

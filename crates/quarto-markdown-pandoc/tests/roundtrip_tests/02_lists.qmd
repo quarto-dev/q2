@@ -1,0 +1,40 @@
+# List Tests
+
+## Unordered Lists
+
+- First item
+- Second item
+- Third item
+
+* Alternative bullet
+* Another item
+  * Nested item
+  * Another nested
+    * Deeply nested
+
+## Ordered Lists
+
+1. First item
+2. Second item
+3. Third item
+
+Stop list.
+
+1. Auto-numbered
+1. Auto-numbered
+1. Auto-numbered
+
+Stop list.
+
+10. Starting at 10
+11. Next item
+12. And another
+
+## Mixed Lists
+
+1. Ordered first
+   - Unordered nested
+   - Another nested
+2. Back to ordered
+   1. Nested ordered
+   2. Another nested ordered

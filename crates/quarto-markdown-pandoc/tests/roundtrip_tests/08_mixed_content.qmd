@@ -1,0 +1,31 @@
+# Complex Mixed Content
+
+This paragraph has **bold**, *italic*, `code`, and [links](https://example.com) all mixed together. It even has ***bold italic*** and a line break\
+right here.
+
+## Lists with Complex Content
+
+1. First item with **bold text**
+
+   Additional paragraph in the list item.
+
+   ```python
+   def code_in_list():
+       return "code block in list"
+   ```
+
+2. Second item with a blockquote:
+
+   > Quote within a list item
+   > spanning multiple lines
+
+3. Third item with nested list:
+   - Nested item one
+   - Nested item two with `inline code`
+
+## Table-like Structure (if supported)
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Data 1   | Data 2   | Data 3   |
+| Data 4   | Data 5   | Data 6   |

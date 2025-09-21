@@ -1027,10 +1027,13 @@ fn process_block_quote<T: Write>(
             PandocNativeIntermediate::IntermediateBlock(block) => {
                 content.push(block);
             }
+            PandocNativeIntermediate::IntermediateSection(section) => {
+                content.extend(section);
+            }
             _ => {
                 writeln!(
                 buf,
-                "[block_quote] Will ignore unknown node. Expected Block in block_quote, got {:?}",
+                "[block_quote] Will ignore unknown node. Expected Block or Section in block_quote, got {:?}",
                 child
                 ).unwrap();
             }

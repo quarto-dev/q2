@@ -1,0 +1,7 @@
+# Emphasis Tests
+
+This is *italic text* and this is **bold text**.
+
+We can have _underscores for italic_ and __double underscores for bold__.
+
+Nested emphasis: **bold with some text inside** and *italic with text inside*.

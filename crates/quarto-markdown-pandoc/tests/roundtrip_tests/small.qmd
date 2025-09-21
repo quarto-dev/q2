@@ -1,0 +1,3 @@
+> This is a blockquote
+> that spans multiple lines
+> with continuous markers.
