@@ -595,7 +595,7 @@ fn write_soft_break(
     _: &crate::pandoc::SoftBreak,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
-    write!(buf, " ")
+    writeln!(buf)
 }
 
 fn write_emph(emph: &crate::pandoc::Emph, buf: &mut dyn std::io::Write) -> std::io::Result<()> {

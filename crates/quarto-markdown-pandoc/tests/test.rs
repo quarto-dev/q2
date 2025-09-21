@@ -446,3 +446,78 @@ fn test_markdown_writer_smoke() {
         assert!(file_count > 0, "No files found in {} glob", pattern);
     }
 }
+
+#[test]
+fn test_qmd_roundtrip_consistency() {
+    // Test that QMD -> JSON -> QMD produces consistent results
+    let test_files = glob("tests/roundtrip_tests/qmd-json-qmd/*.qmd")
+        .expect("Failed to read glob pattern");
+
+    let mut file_count = 0;
+    for entry in test_files {
+        match entry {
+            Ok(path) => {
+                eprintln!("Testing roundtrip consistency for: {}", path.display());
+                let original_qmd = std::fs::read_to_string(&path).expect("Failed to read file");
+
+                // Step 1: QMD -> JSON
+                let doc1 = readers::qmd::read(
+                    original_qmd.as_bytes(),
+                    false,
+                    path.to_str().unwrap(),
+                    &mut std::io::sink(),
+                    None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>
+                ).expect("Failed to parse original QMD");
+
+                let mut json_buf = Vec::new();
+                writers::json::write(&doc1, &mut json_buf).expect("Failed to write JSON");
+                let json_str = String::from_utf8(json_buf).expect("Invalid UTF-8 in JSON");
+
+                // Step 2: JSON -> QMD
+                let doc2 = readers::json::read(&mut json_str.as_bytes())
+                    .expect("Failed to read JSON back");
+
+                let mut qmd_buf = Vec::new();
+                writers::qmd::write(&doc2, &mut qmd_buf).expect("Failed to write QMD");
+                let regenerated_qmd = String::from_utf8(qmd_buf).expect("Invalid UTF-8 in QMD");
+
+                // Step 3: QMD -> JSON again
+                let doc3 = readers::qmd::read(
+                    regenerated_qmd.as_bytes(),
+                    false,
+                    "<generated>",
+                    &mut std::io::sink(),
+                    None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>
+                ).expect("Failed to parse regenerated QMD");
+
+                // Compare JSON representations (without location fields)
+                let mut json1_buf = Vec::new();
+                writers::json::write(&doc1, &mut json1_buf).expect("Failed to write JSON1");
+                let json1_str = String::from_utf8(json1_buf).expect("Invalid UTF-8 in JSON1");
+                let mut json1_value: serde_json::Value = serde_json::from_str(&json1_str)
+                    .expect("Failed to parse JSON1");
+                remove_location_fields(&mut json1_value);
+
+                let mut json3_buf = Vec::new();
+                writers::json::write(&doc3, &mut json3_buf).expect("Failed to write JSON3");
+                let json3_str = String::from_utf8(json3_buf).expect("Invalid UTF-8 in JSON3");
+                let mut json3_value: serde_json::Value = serde_json::from_str(&json3_str)
+                    .expect("Failed to parse JSON3");
+                remove_location_fields(&mut json3_value);
+
+                if json1_value != json3_value {
+                    eprintln!("Roundtrip failed for: {}", path.display());
+                    eprintln!("Original QMD:\n{}", original_qmd);
+                    eprintln!("Regenerated QMD:\n{}", regenerated_qmd);
+                    eprintln!("Original JSON (normalized):\n{}", serde_json::to_string_pretty(&json1_value).unwrap());
+                    eprintln!("Final JSON (normalized):\n{}", serde_json::to_string_pretty(&json3_value).unwrap());
+                    panic!("Roundtrip consistency test failed for {}", path.display());
+                }
+
+                file_count += 1;
+            }
+            Err(e) => panic!("Error reading glob entry: {}", e),
+        }
+    }
+    assert!(file_count > 0, "No files found in tests/roundtrip_tests/qmd-json-qmd/");
+}

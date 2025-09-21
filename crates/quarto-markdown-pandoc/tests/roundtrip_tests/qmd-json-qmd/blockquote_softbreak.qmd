@@ -1,0 +1,9 @@
+# Blockquote SoftBreak Test
+
+> This is a blockquote
+> that spans multiple lines
+> with continuous markers.
+
+> Another blockquote
+> with line breaks
+> to test SoftBreak handling.
