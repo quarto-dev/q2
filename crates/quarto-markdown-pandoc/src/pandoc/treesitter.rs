@@ -18,7 +18,9 @@ use crate::pandoc::inline::{
 
 use crate::pandoc::inline::{make_cite_inline, make_span_inline};
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{Range, SourceInfo, empty_range, node_location, node_source_info, empty_source_info};
+use crate::pandoc::location::{
+    Range, SourceInfo, empty_range, empty_source_info, node_location, node_source_info,
+};
 use crate::pandoc::meta::Meta;
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::{Shortcode, ShortcodeArg, shortcode_to_span};
@@ -1629,12 +1631,18 @@ where
 // Macro for simple emphasis-like inline processing
 macro_rules! emphasis_inline {
     ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident) => {
-        process_emphasis_inline($node, $children, $delimiter, $native_inline, |inlines, node| {
-            Inline::$inline_type($inline_type {
-                content: inlines,
-                source_info: node_source_info(node),
-            })
-        })
+        process_emphasis_inline(
+            $node,
+            $children,
+            $delimiter,
+            $native_inline,
+            |inlines, node| {
+                Inline::$inline_type($inline_type {
+                    content: inlines,
+                    source_info: node_source_info(node),
+                })
+            },
+        )
     };
 }
 
@@ -1656,7 +1664,7 @@ fn process_native_inline<T: Write>(
             } else {
                 Inline::Str(Str {
                     text,
-                    source_info: SourceInfo::with_range(range.clone()),
+                    source_info: SourceInfo::with_range(range),
                 })
             }
         }
@@ -1781,7 +1789,7 @@ fn process_native_inlines<T: Write>(
                 } else {
                     inlines.push(Inline::Str(Str {
                         text,
-                        source_info: SourceInfo::with_range(range.clone()),
+                        source_info: SourceInfo::with_range(range),
                     }))
                 }
             }
@@ -1830,9 +1838,8 @@ fn native_visitor<T: Write>(
             &node_text,
         )
     };
-    let mut native_inlines = |children| {
-        process_native_inlines(children, &whitespace_re, &mut inlines_buf)
-    };
+    let mut native_inlines =
+        |children| process_native_inlines(children, &whitespace_re, &mut inlines_buf);
 
     let result = match node.kind() {
         "numeric_character_reference" => process_numeric_character_reference(node, input_bytes),
@@ -1966,11 +1973,29 @@ fn native_visitor<T: Write>(
             native_inline,
             Superscript
         ),
-        "subscript" => emphasis_inline!(node, children, "subscript_delimiter", native_inline, Subscript),
-        "strikeout" => emphasis_inline!(node, children, "strikeout_delimiter", native_inline, Strikeout),
+        "subscript" => emphasis_inline!(
+            node,
+            children,
+            "subscript_delimiter",
+            native_inline,
+            Subscript
+        ),
+        "strikeout" => emphasis_inline!(
+            node,
+            children,
+            "strikeout_delimiter",
+            native_inline,
+            Strikeout
+        ),
         "insert" => emphasis_inline!(node, children, "insert_delimiter", native_inline, Insert),
         "delete" => emphasis_inline!(node, children, "delete_delimiter", native_inline, Delete),
-        "highlight" => emphasis_inline!(node, children, "highlight_delimiter", native_inline, Highlight),
+        "highlight" => emphasis_inline!(
+            node,
+            children,
+            "highlight_delimiter",
+            native_inline,
+            Highlight
+        ),
         "edit_comment" => emphasis_inline!(
             node,
             children,
@@ -2365,24 +2390,29 @@ fn merge_strs(pandoc: Pandoc) -> Pandoc {
         pandoc,
         &mut Filter::new().with_inlines(|inlines| {
             let mut current_str: Option<String> = None;
+            let mut current_source_info: Option<SourceInfo> = None;
             let mut result: Inlines = Vec::new();
             let mut did_merge = false;
             for inline in inlines {
                 match inline {
                     Inline::Str(s) => {
-                        let str_text = as_smart_str(s.text);
+                        let str_text = as_smart_str(s.text.clone());
                         if let Some(ref mut current) = current_str {
                             current.push_str(&str_text);
+                            if let Some(ref mut info) = current_source_info {
+                                *info = info.combine(&s.source_info);
+                            }
                             did_merge = true;
                         } else {
                             current_str = Some(str_text);
+                            current_source_info = Some(s.source_info);
                         }
                     }
                     _ => {
                         if let Some(current) = current_str.take() {
                             result.push(Inline::Str(Str {
                                 text: current,
-                                source_info: empty_source_info(),
+                                source_info: current_source_info.take().unwrap_or_else(empty_source_info),
                             }));
                         }
                         result.push(inline);
@@ -2392,7 +2422,7 @@ fn merge_strs(pandoc: Pandoc) -> Pandoc {
             if let Some(current) = current_str {
                 result.push(Inline::Str(Str {
                     text: current,
-                    source_info: empty_source_info(),
+                    source_info: current_source_info.unwrap_or_else(empty_source_info),
                 }));
             }
             if did_merge {

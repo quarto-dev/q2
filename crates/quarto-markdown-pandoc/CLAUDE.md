@@ -39,3 +39,13 @@ The corpus of error examples in this repository exists in resources/error-corpus
 ## Recompiling
 
 After changing any of the resources/error-corpus/*.{json,qmd} files, run the script `scripts/build_error_table.ts`. It's executable with a deno hashbang line. Deno is installed on the environment you'll be running.
+
+## Binary usage
+
+The `quarto-markdown-pandoc` binary accepts the following options:
+- `-t, --to <TO>`: Output format (default: native)
+- `-v, --verbose`: Verbose output
+- `-i, --input <INPUT>`: Input file (default: stdin)
+- `--loose`: Loose parsing mode
+- `--json-errors`: Output errors as JSON
+- `-h, --help`: Show help

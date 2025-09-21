@@ -34,6 +34,24 @@ impl SourceInfo {
     pub fn with_range(range: Range) -> Self {
         SourceInfo { filename: None, range }
     }
+
+    pub fn combine(&self, other: &SourceInfo) -> SourceInfo {
+        SourceInfo {
+            filename: self.filename.clone().or(other.filename.clone()),
+            range: Range {
+                start: if self.range.start < other.range.start {
+                    self.range.start.clone()
+                } else {
+                    other.range.start.clone()
+                },
+                end: if self.range.end > other.range.end {
+                    self.range.end.clone()
+                } else {
+                    other.range.end.clone()
+                },
+            },
+        }
+    }
 }
 
 pub trait SourceLocation {
