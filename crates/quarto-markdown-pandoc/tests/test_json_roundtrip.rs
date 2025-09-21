@@ -4,6 +4,7 @@
  */
 
 use quarto_markdown_pandoc::pandoc::{Pandoc, Block, Paragraph, Inline, Str};
+use quarto_markdown_pandoc::pandoc::location::SourceInfo;
 use quarto_markdown_pandoc::writers::json;
 use quarto_markdown_pandoc::readers;
 use std::collections::HashMap;
@@ -14,14 +15,23 @@ fn test_json_roundtrip_simple_paragraph() {
     let original = Pandoc {
         meta: HashMap::new(),
         blocks: vec![Block::Paragraph(Paragraph {
-            content: vec![Inline::Str(Str { 
-                text: "Hello, world!".to_string() 
+            content: vec![Inline::Str(Str {
+                text: "Hello, world!".to_string(),
+                source_info: SourceInfo::new(
+                    None,
+                    quarto_markdown_pandoc::pandoc::location::Range {
+                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 13, row: 0, column: 13 },
+                    }
+                )
             })],
-            filename: None,
-            range: quarto_markdown_pandoc::pandoc::location::Range {
-                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 13, row: 0, column: 13 },
-            },
+            source_info: SourceInfo::new(
+                None,
+                quarto_markdown_pandoc::pandoc::location::Range {
+                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 13, row: 0, column: 13 },
+                }
+            ),
         })],
     };
 
@@ -68,26 +78,64 @@ fn test_json_roundtrip_complex_document() {
         blocks: vec![
             Block::Paragraph(Paragraph {
                 content: vec![
-                    Inline::Str(Str { text: "This is ".to_string() }),
-                    Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
-                        content: vec![Inline::Str(Str { text: "bold text".to_string() })]
+                    Inline::Str(Str {
+                        text: "This is ".to_string(),
+                        source_info: SourceInfo::new(
+                            None,
+                            quarto_markdown_pandoc::pandoc::location::Range {
+                                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 8, row: 0, column: 8 },
+                            }
+                        )
                     }),
-                    Inline::Str(Str { text: ".".to_string() }),
+                    Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
+                        content: vec![Inline::Str(Str {
+                            text: "bold text".to_string(),
+                            source_info: SourceInfo::new(
+                                None,
+                                quarto_markdown_pandoc::pandoc::location::Range {
+                                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 8, row: 0, column: 8 },
+                                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 17, row: 0, column: 17 },
+                                }
+                            )
+                        })],
+                        source_info: SourceInfo::new(
+                            None,
+                            quarto_markdown_pandoc::pandoc::location::Range {
+                                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 8, row: 0, column: 8 },
+                                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 17, row: 0, column: 17 },
+                            }
+                        )
+                    }),
+                    Inline::Str(Str {
+                        text: ".".to_string(),
+                        source_info: SourceInfo::new(
+                            None,
+                            quarto_markdown_pandoc::pandoc::location::Range {
+                                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 17, row: 0, column: 17 },
+                                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 18, row: 0, column: 18 },
+                            }
+                        )
+                    }),
                 ],
-                filename: None,
-                range: quarto_markdown_pandoc::pandoc::location::Range {
-                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 20, row: 0, column: 20 },
-                },
+                source_info: SourceInfo::new(
+                    None,
+                    quarto_markdown_pandoc::pandoc::location::Range {
+                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 20, row: 0, column: 20 },
+                    }
+                ),
             }),
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
                 attr: ("".to_string(), vec![], HashMap::new()),
                 text: "print('Hello, world!')".to_string(),
-                filename: None,
-                range: quarto_markdown_pandoc::pandoc::location::Range {
-                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 21, row: 1, column: 0 },
-                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 43, row: 1, column: 22 },
-                },
+                source_info: SourceInfo::new(
+                    None,
+                    quarto_markdown_pandoc::pandoc::location::Range {
+                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 21, row: 1, column: 0 },
+                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 43, row: 1, column: 22 },
+                    }
+                ),
             }),
         ],
     };
@@ -137,21 +185,34 @@ fn test_json_write_then_read_matches_original_structure() {
         meta: HashMap::new(),
         blocks: vec![
             Block::Plain(quarto_markdown_pandoc::pandoc::Plain {
-                content: vec![Inline::Str(Str { text: "Plain text".to_string() })],
-                filename: Some("test.md".to_string()),
-                range: quarto_markdown_pandoc::pandoc::location::Range {
-                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 10, row: 0, column: 10 },
-                },
+                content: vec![Inline::Str(Str {
+                    text: "Plain text".to_string(),
+                    source_info: SourceInfo::new(
+                        Some("test.md".to_string()),
+                        quarto_markdown_pandoc::pandoc::location::Range {
+                            start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                            end: quarto_markdown_pandoc::pandoc::location::Location { offset: 10, row: 0, column: 10 },
+                        }
+                    )
+                })],
+                source_info: SourceInfo::new(
+                    Some("test.md".to_string()),
+                    quarto_markdown_pandoc::pandoc::location::Range {
+                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
+                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 10, row: 0, column: 10 },
+                    }
+                ),
             }),
             Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
                 format: "html".to_string(),
                 text: "<div>Raw HTML</div>".to_string(),
-                filename: Some("test.md".to_string()),
-                range: quarto_markdown_pandoc::pandoc::location::Range {
-                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 11, row: 1, column: 0 },
-                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 30, row: 1, column: 19 },
-                },
+                source_info: SourceInfo::new(
+                    Some("test.md".to_string()),
+                    quarto_markdown_pandoc::pandoc::location::Range {
+                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 11, row: 1, column: 0 },
+                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 30, row: 1, column: 19 },
+                    }
+                ),
             }),
         ],
     };

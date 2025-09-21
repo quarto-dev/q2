@@ -12,7 +12,7 @@ use crate::pandoc::{
     Subscript, Superscript, Underline
 };
 use crate::pandoc::block::MetaBlock;
-use crate::pandoc::location::{Range, Location};
+use crate::pandoc::location::{Range, Location, SourceInfo};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -38,6 +38,13 @@ impl std::fmt::Display for JsonReadError {
 impl std::error::Error for JsonReadError {}
 
 type Result<T> = std::result::Result<T, JsonReadError>;
+
+fn empty_range() -> Range {
+    Range {
+        start: Location { offset: 0, row: 0, column: 0 },
+        end: Location { offset: 0, row: 0, column: 0 },
+    }
+}
 
 fn read_location(value: &Value) -> Option<Range> {
     let obj = value.as_object()?;
@@ -112,7 +119,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
         "Str" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let text = c.as_str().ok_or_else(|| JsonReadError::InvalidType("Str content must be string".to_string()))?.to_string();
-            Ok(Inline::Str(Str { text }))
+            Ok(Inline::Str(Str { text, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Space" => {
             let location = obj.get("l").and_then(read_location);
@@ -125,7 +132,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .and_then(|lo| lo.get("filename"))
                 .and_then(|f| f.as_str())
                 .map(|s| s.to_string());
-            Ok(Inline::Space(Space { filename, range }))
+            Ok(Inline::Space(Space { source_info: SourceInfo::new(filename, range) }))
         }
         "LineBreak" => {
             let location = obj.get("l").and_then(read_location);
@@ -138,7 +145,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .and_then(|lo| lo.get("filename"))
                 .and_then(|f| f.as_str())
                 .map(|s| s.to_string());
-            Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak { filename, range }))
+            Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak { source_info: SourceInfo::new(filename, range) }))
         }
         "SoftBreak" => {
             let location = obj.get("l").and_then(read_location);
@@ -151,17 +158,17 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .and_then(|lo| lo.get("filename"))
                 .and_then(|f| f.as_str())
                 .map(|s| s.to_string());
-            Ok(Inline::SoftBreak(SoftBreak { filename, range }))
+            Ok(Inline::SoftBreak(SoftBreak { source_info: SourceInfo::new(filename, range) }))
         }
         "Emph" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::Emph(Emph { content }))
+            Ok(Inline::Emph(Emph { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Strong" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::Strong(Strong { content }))
+            Ok(Inline::Strong(Strong { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Code" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -171,7 +178,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }
             let attr = read_attr(&arr[0])?;
             let text = arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("Code text must be string".to_string()))?.to_string();
-            Ok(Inline::Code(Code { attr, text }))
+            Ok(Inline::Code(Code { attr, text, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Math" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -189,32 +196,32 @@ fn read_inline(value: &Value) -> Result<Inline> {
             };
             
             let text = arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("Math text must be string".to_string()))?.to_string();
-            Ok(Inline::Math(Math { math_type, text }))
+            Ok(Inline::Math(Math { math_type, text, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Underline" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::Underline(Underline { content }))
+            Ok(Inline::Underline(Underline { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Strikeout" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::Strikeout(Strikeout { content }))
+            Ok(Inline::Strikeout(Strikeout { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Superscript" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::Superscript(Superscript { content }))
+            Ok(Inline::Superscript(Superscript { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Subscript" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::Subscript(Subscript { content }))
+            Ok(Inline::Subscript(Subscript { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "SmallCaps" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Inline::SmallCaps(SmallCaps { content }))
+            Ok(Inline::SmallCaps(SmallCaps { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Quoted" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -232,7 +239,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             };
             
             let content = read_inlines(&arr[1])?;
-            Ok(Inline::Quoted(Quoted { quote_type, content }))
+            Ok(Inline::Quoted(Quoted { quote_type, content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Link" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -252,7 +259,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             let title = target_arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("Link title must be string".to_string()))?.to_string();
             let target = (url, title);
             
-            Ok(Inline::Link(Link { attr, content, target }))
+            Ok(Inline::Link(Link { attr, content, target, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "RawInline" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -262,7 +269,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }
             let format = arr[0].as_str().ok_or_else(|| JsonReadError::InvalidType("RawInline format must be string".to_string()))?.to_string();
             let text = arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("RawInline text must be string".to_string()))?.to_string();
-            Ok(Inline::RawInline(RawInline { format, text }))
+            Ok(Inline::RawInline(RawInline { format, text, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Image" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -282,7 +289,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             let title = target_arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("Image title must be string".to_string()))?.to_string();
             let target = (url, title);
             
-            Ok(Inline::Image(Image { attr, content, target }))
+            Ok(Inline::Image(Image { attr, content, target, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Span" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -293,12 +300,12 @@ fn read_inline(value: &Value) -> Result<Inline> {
             
             let attr = read_attr(&arr[0])?;
             let content = read_inlines(&arr[1])?;
-            Ok(Inline::Span(Span { attr, content }))
+            Ok(Inline::Span(Span { attr, content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Note" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_blocks(c)?;
-            Ok(Inline::Note(Note { content }))
+            Ok(Inline::Note(Note { content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         "Cite" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -335,7 +342,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             // We'll use empty content for now since the writer doesn't provide it
             let content = vec![];
             
-            Ok(Inline::Cite(Cite { citations, content }))
+            Ok(Inline::Cite(Cite { citations, content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
     }
@@ -453,18 +460,18 @@ fn read_block(value: &Value) -> Result<Block> {
         "Para" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Block::Paragraph(Paragraph { content, filename, range }))
+            Ok(Block::Paragraph(Paragraph { content, source_info: SourceInfo::new(filename, range) }))
         }
         "Plain" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_inlines(c)?;
-            Ok(Block::Plain(Plain { content, filename, range }))
+            Ok(Block::Plain(Plain { content, source_info: SourceInfo::new(filename, range) }))
         }
         "LineBlock" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let arr = c.as_array().ok_or_else(|| JsonReadError::InvalidType("LineBlock content must be array".to_string()))?;
             let content = arr.iter().map(read_inlines).collect::<Result<Vec<_>>>()?;
-            Ok(Block::LineBlock(LineBlock { content, filename, range }))
+            Ok(Block::LineBlock(LineBlock { content, source_info: SourceInfo::new(filename, range) }))
         }
         "CodeBlock" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -474,7 +481,7 @@ fn read_block(value: &Value) -> Result<Block> {
             }
             let attr = read_attr(&arr[0])?;
             let text = arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("CodeBlock text must be string".to_string()))?.to_string();
-            Ok(Block::CodeBlock(CodeBlock { attr, text, filename, range }))
+            Ok(Block::CodeBlock(CodeBlock { attr, text, source_info: SourceInfo::new(filename, range) }))
         }
         "RawBlock" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -484,12 +491,12 @@ fn read_block(value: &Value) -> Result<Block> {
             }
             let format = arr[0].as_str().ok_or_else(|| JsonReadError::InvalidType("RawBlock format must be string".to_string()))?.to_string();
             let text = arr[1].as_str().ok_or_else(|| JsonReadError::InvalidType("RawBlock text must be string".to_string()))?.to_string();
-            Ok(Block::RawBlock(RawBlock { format, text, filename, range }))
+            Ok(Block::RawBlock(RawBlock { format, text, source_info: SourceInfo::new(filename, range) }))
         }
         "BlockQuote" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_blocks(c)?;
-            Ok(Block::BlockQuote(BlockQuote { content, filename, range }))
+            Ok(Block::BlockQuote(BlockQuote { content, source_info: SourceInfo::new(filename, range) }))
         }
         "OrderedList" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -499,12 +506,12 @@ fn read_block(value: &Value) -> Result<Block> {
             }
             let attr = read_list_attributes(&arr[0])?;
             let content = read_blockss(&arr[1])?;
-            Ok(Block::OrderedList(OrderedList { attr, content, filename, range }))
+            Ok(Block::OrderedList(OrderedList { attr, content, source_info: SourceInfo::new(filename, range) }))
         }
         "BulletList" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let content = read_blockss(c)?;
-            Ok(Block::BulletList(BulletList { content, filename, range }))
+            Ok(Block::BulletList(BulletList { content, source_info: SourceInfo::new(filename, range) }))
         }
         "DefinitionList" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -521,7 +528,7 @@ fn read_block(value: &Value) -> Result<Block> {
                     Ok((term, definition))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            Ok(Block::DefinitionList(DefinitionList { content, filename, range }))
+            Ok(Block::DefinitionList(DefinitionList { content, source_info: SourceInfo::new(filename, range) }))
         }
         "Header" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -532,10 +539,10 @@ fn read_block(value: &Value) -> Result<Block> {
             let level = arr[0].as_u64().ok_or_else(|| JsonReadError::InvalidType("Header level must be number".to_string()))? as usize;
             let attr = read_attr(&arr[1])?;
             let content = read_inlines(&arr[2])?;
-            Ok(Block::Header(Header { level, attr, content, filename, range }))
+            Ok(Block::Header(Header { level, attr, content, source_info: SourceInfo::new(filename, range) }))
         }
         "HorizontalRule" => {
-            Ok(Block::HorizontalRule(HorizontalRule { filename, range }))
+            Ok(Block::HorizontalRule(HorizontalRule { source_info: SourceInfo::new(filename, range) }))
         }
         "Figure" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -546,7 +553,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let attr = read_attr(&arr[0])?;
             let caption = read_caption(&arr[1])?;
             let content = read_blocks(&arr[2])?;
-            Ok(Block::Figure(Figure { attr, caption, content, filename, range }))
+            Ok(Block::Figure(Figure { attr, caption, content, source_info: SourceInfo::new(filename, range) }))
         }
         "Div" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
@@ -556,12 +563,12 @@ fn read_block(value: &Value) -> Result<Block> {
             }
             let attr = read_attr(&arr[0])?;
             let content = read_blocks(&arr[1])?;
-            Ok(Block::Div(Div { attr, content, filename, range }))
+            Ok(Block::Div(Div { attr, content, source_info: SourceInfo::new(filename, range) }))
         }
         "BlockMetadata" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let meta = read_meta(c)?;
-            Ok(Block::BlockMetadata(MetaBlock { meta, filename, range }))
+            Ok(Block::BlockMetadata(MetaBlock { meta, source_info: SourceInfo::new(filename, range) }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Block: {}", t))),
     }
