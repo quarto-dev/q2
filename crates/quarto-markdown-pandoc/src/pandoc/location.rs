@@ -19,6 +19,41 @@ pub struct Range {
     pub end: Location,
 }
 
+/// Encapsulates source location information for AST nodes
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceInfo {
+    pub filename: Option<String>,
+    pub range: Range,
+}
+
+impl SourceInfo {
+    pub fn new(filename: Option<String>, range: Range) -> Self {
+        SourceInfo { filename, range }
+    }
+
+    pub fn with_range(range: Range) -> Self {
+        SourceInfo { filename: None, range }
+    }
+
+    pub fn combine(&self, other: &SourceInfo) -> SourceInfo {
+        SourceInfo {
+            filename: self.filename.clone().or(other.filename.clone()),
+            range: Range {
+                start: if self.range.start < other.range.start {
+                    self.range.start.clone()
+                } else {
+                    other.range.start.clone()
+                },
+                end: if self.range.end > other.range.end {
+                    self.range.end.clone()
+                } else {
+                    other.range.end.clone()
+                },
+            },
+        }
+    }
+}
+
 pub trait SourceLocation {
     fn filename(&self) -> Option<String>;
     fn range(&self) -> Range;
@@ -41,6 +76,10 @@ pub fn node_location(node: &tree_sitter::Node) -> Range {
     }
 }
 
+pub fn node_source_info(node: &tree_sitter::Node) -> SourceInfo {
+    SourceInfo::with_range(node_location(node))
+}
+
 pub fn empty_range() -> Range {
     Range {
         start: Location {
@@ -56,17 +95,21 @@ pub fn empty_range() -> Range {
     }
 }
 
+pub fn empty_source_info() -> SourceInfo {
+    SourceInfo::with_range(empty_range())
+}
+
 #[macro_export]
 macro_rules! impl_source_location {
     ($($type:ty),*) => {
         $(
             impl SourceLocation for $type {
                 fn filename(&self) -> Option<String> {
-                    self.filename.clone()
+                    self.source_info.filename.clone()
                 }
 
                 fn range(&self) -> Range {
-                    self.range.clone()
+                    self.source_info.range.clone()
                 }
             }
         )*

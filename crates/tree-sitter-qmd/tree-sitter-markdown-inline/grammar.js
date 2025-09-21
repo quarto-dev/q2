@@ -79,9 +79,15 @@ module.exports = grammar(add_inline_rules({
         $._shortcode_open,
         $._shortcode_close,
 
-        // Token emmited when encountering opening delimiters for a leaf span
+        // Token emitted when encountering opening delimiters for a leaf span
         // e.g. a code span, that does not have a matching closing span
-        $._unclosed_span
+        $._unclosed_span,
+
+        $._strong_emphasis_open_star,
+        $._strong_emphasis_close_star,
+        $._strong_emphasis_open_underscore,
+        $._strong_emphasis_close_underscore,
+
     ],
     precedences: $ => [
         [$._strong_emphasis_star_no_link, $._inline_element_no_star_no_link],
@@ -260,8 +266,8 @@ module.exports = grammar(add_inline_rules({
         //   - URLs with query parameters have both question marks and equals signs
 
         shortcode_naked_string: $ => 
-            choice(token(prec(1, /(?:[A-Za-z0-9_\-.~:/?#\]@!$&()*+,;]|\[)+/)),
-                   token(prec(1, /(?:[A-Za-z0-9_\-.~:/?#\]@!$&()*+,;]|\[)+[?](?:[A-Za-z0-9_\-.~:/?#\]@!$&()*+,;?=]|\[)+/))),
+            choice(token(prec(1, /(?:[A-Za-z0-9_\-.~:/?#\]@!$&()+,;]|\[)+/)),
+                   token(prec(1, /(?:[A-Za-z0-9_\-.~:/?#\]@!$&()+,;]|\[)+[?](?:[A-Za-z0-9_\-.~:/?#\]@!$&()+,;?=]|\[)+/))),
 
         // shortcode_string: $ => new RegExp("[a-zA-Z_][a-zA-Z0-9_-]*"),
         shortcode_string: $ => choice(
@@ -417,7 +423,7 @@ module.exports = grammar(add_inline_rules({
             "--",
             "---",
             "...",
-            common.punctuation_without($, ['[', '{', '}', ']', "@"]),
+            common.punctuation_without($, ['[', '{', '}', ']', "@", "_"]),
             $._whitespace,
         )),
         _code_span_text_base: $ => prec.right(choice(
@@ -482,10 +488,10 @@ function add_inline_rules(grammar) {
             }
         }
 
-        grammar.rules['_emphasis_star' + suffix_link] = $ => prec.dynamic(PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_star, $.emphasis_delimiter), optional($._last_token_punctuation), $['_inline' + '_no_star' + suffix_link], alias($._emphasis_close_star, $.emphasis_delimiter)));
-        grammar.rules['_strong_emphasis_star' + suffix_link] = $ => prec.dynamic(2 * PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_star, $.emphasis_delimiter), $['_emphasis_star' + suffix_link], alias($._emphasis_close_star, $.emphasis_delimiter)));
-        grammar.rules['_emphasis_underscore' + suffix_link] = $ => prec.dynamic(PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_underscore, $.emphasis_delimiter), optional($._last_token_punctuation), $['_inline' + '_no_underscore' + suffix_link], alias($._emphasis_close_underscore, $.emphasis_delimiter)));
-        grammar.rules['_strong_emphasis_underscore' + suffix_link] = $ => prec.dynamic(2 * PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_underscore, $.emphasis_delimiter), $['_emphasis_underscore' + suffix_link], alias($._emphasis_close_underscore, $.emphasis_delimiter)));
+        grammar.rules['_emphasis_star'              + suffix_link] = $ => prec.dynamic(    PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_star,       $.emphasis_delimiter), optional($._last_token_punctuation), $['_inline_no_star' + suffix_link], alias($._emphasis_close_star, $.emphasis_delimiter)));
+        grammar.rules['_strong_emphasis_star'       + suffix_link] = $ => prec.dynamic(2 * PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._strong_emphasis_open_star, $.emphasis_delimiter), $['_inline_no_star' + suffix_link], alias($._strong_emphasis_close_star, $.emphasis_delimiter)));
+        grammar.rules['_emphasis_underscore'        + suffix_link] = $ => prec.dynamic(    PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._emphasis_open_underscore, $.emphasis_delimiter), optional($._last_token_punctuation), $['_inline_no_underscore' + suffix_link], alias($._emphasis_close_underscore, $.emphasis_delimiter)));
+        grammar.rules['_strong_emphasis_underscore' + suffix_link] = $ => prec.dynamic(2 * PRECEDENCE_LEVEL_EMPHASIS, seq(alias($._strong_emphasis_open_underscore, $.emphasis_delimiter), $['_inline_no_underscore' + suffix_link], alias($._strong_emphasis_close_underscore, $.emphasis_delimiter)));
     }
 
     let old = grammar.conflicts

@@ -8,6 +8,8 @@ use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::location::Range;
 use crate::pandoc::location::SourceLocation;
+use crate::pandoc::location::SourceInfo;
+use crate::pandoc::location::node_source_info;
 use crate::pandoc::shortcode::Shortcode;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,71 +69,84 @@ pub enum MathType {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Str {
     pub text: String,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Emph {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Underline {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Strong {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Strikeout {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Superscript {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Subscript {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SmallCaps {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Quoted {
     pub quote_type: QuoteType,
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Cite {
     pub citations: Vec<Citation>,
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Code {
     pub attr: Attr,
     pub text: String,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Math {
     pub math_type: MathType,
     pub text: String,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawInline {
     pub format: String,
     pub text: String,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,6 +154,7 @@ pub struct Link {
     pub attr: Attr,
     pub content: Inlines,
     pub target: Target,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,35 +162,35 @@ pub struct Image {
     pub attr: Attr,
     pub content: Inlines,
     pub target: Target,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Note {
     pub content: Blocks,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span {
     pub attr: Attr,
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Space {
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineBreak {
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SoftBreak {
-    pub filename: Option<String>,
-    pub range: Range,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -203,24 +219,53 @@ pub enum CitationMode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Insert {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Delete {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Highlight {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditComment {
     pub content: Inlines,
+    pub source_info: SourceInfo,
 }
 
-impl_source_location!(Space, LineBreak, SoftBreak);
+impl_source_location!(
+    Str,
+    Emph,
+    Underline,
+    Strong,
+    Strikeout,
+    Superscript,
+    Subscript,
+    SmallCaps,
+    Quoted,
+    Cite,
+    Code,
+    Math,
+    RawInline,
+    Link,
+    Image,
+    Note,
+    Span,
+    Space,
+    LineBreak,
+    SoftBreak,
+    Insert,
+    Delete,
+    Highlight,
+    EditComment
+);
 
 pub trait AsInline {
     fn as_inline(self) -> Inline;
@@ -278,13 +323,14 @@ pub fn is_empty_target(target: &Target) -> bool {
     target.0.is_empty() && target.1.is_empty()
 }
 
-pub fn make_span_inline(attr: Attr, target: Target, content: Inlines) -> Inline {
+pub fn make_span_inline(attr: Attr, target: Target, content: Inlines, source_info: SourceInfo) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
         return Inline::Link(Link {
             attr,
             content,
             target,
+            source_info: source_info.clone(),
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -295,21 +341,29 @@ pub fn make_span_inline(attr: Attr, target: Target, content: Inlines) -> Inline 
             .filter(|s| s != "smallcaps")
             .collect();
         if is_empty_attr(&new_attr) {
-            return Inline::SmallCaps(SmallCaps { content });
+            return Inline::SmallCaps(SmallCaps {
+                content,
+                source_info: source_info.clone(),
+            });
         }
-        let inner_inline = make_span_inline(new_attr, target, content);
+        let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
+            source_info: source_info.clone(),
         });
     } else if attr.1.contains(&"ul".to_string()) {
         let mut new_attr = attr.clone();
         new_attr.1 = new_attr.1.into_iter().filter(|s| s != "ul").collect();
         if is_empty_attr(&new_attr) {
-            return Inline::Underline(Underline { content });
+            return Inline::Underline(Underline {
+                content,
+                source_info: source_info.clone(),
+            });
         }
-        let inner_inline = make_span_inline(new_attr, target, content);
+        let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
+            source_info: source_info.clone(),
         });
     } else if attr.1.contains(&"underline".to_string()) {
         let mut new_attr = attr.clone();
@@ -319,24 +373,32 @@ pub fn make_span_inline(attr: Attr, target: Target, content: Inlines) -> Inline 
             .filter(|s| s != "underline")
             .collect();
         if is_empty_attr(&new_attr) {
-            return Inline::Underline(Underline { content });
+            return Inline::Underline(Underline {
+                content,
+                source_info: source_info.clone(),
+            });
         }
-        let inner_inline = make_span_inline(new_attr, target, content);
+        let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
+            source_info: source_info.clone(),
         });
     }
 
-    return Inline::Span(Span { attr, content });
+    return Inline::Span(Span {
+        attr,
+        content,
+        source_info,
+    });
 }
 
-pub fn make_cite_inline(attr: Attr, target: Target, content: Inlines) -> Inline {
+pub fn make_cite_inline(attr: Attr, target: Target, content: Inlines, source_info: SourceInfo) -> Inline {
     // the traversal here is slightly inefficient because we need
     // to non-destructively check for the goodness of the content
     // before deciding to destructively create a Cite
 
     let is_semicolon = |inline: &Inline| match &inline {
-        Inline::Str(Str { text }) => text == ";",
+        Inline::Str(Str { text, .. }) => text == ";",
         _ => false,
     };
 
@@ -349,7 +411,7 @@ pub fn make_cite_inline(attr: Attr, target: Target, content: Inlines) -> Inline 
 
     if !is_good_cite {
         // if the content is not a good Cite, we backtrack and return a Span
-        return make_span_inline(attr, target, content);
+        return make_span_inline(attr, target, content, source_info);
     }
 
     // we can now destructively create a Cite inline
@@ -399,6 +461,7 @@ pub fn make_cite_inline(attr: Attr, target: Target, content: Inlines) -> Inline 
     return Inline::Cite(Cite {
         citations,
         content: vec![],
+        source_info,
     });
 }
 
@@ -407,5 +470,6 @@ fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline 
     Inline::RawInline(RawInline {
         format: "quarto-internal-leftover".to_string(),
         text,
+        source_info: node_source_info(node),
     })
 }

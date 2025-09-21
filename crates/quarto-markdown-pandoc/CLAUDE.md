@@ -40,46 +40,12 @@ The corpus of error examples in this repository exists in resources/error-corpus
 
 After changing any of the resources/error-corpus/*.{json,qmd} files, run the script `scripts/build_error_table.ts`. It's executable with a deno hashbang line. Deno is installed on the environment you'll be running.
 
-## Currently Working On: JSON Reader
+## Binary usage
 
-### Implementation Plan
-
-1. **Examine existing JSON writer structure** ✓
-   - Understand the JSON format being produced by `src/writers/json.rs`
-   - The writer produces Pandoc-compatible JSON with location information ("l" fields)
-
-2. **Create JSON reader in `src/readers/json.rs`**
-   - Implement parsing functions that mirror the writer functions:
-     - `read_pandoc()` - main entry point
-     - `read_blocks()`, `read_block()` - for Block types
-     - `read_inlines()`, `read_inline()` - for Inline types  
-     - `read_attr()` - for attributes
-     - `read_meta()`, `read_meta_value()` - for metadata
-     - Location parsing helpers
-   - Handle all supported Block and Inline variants from the writer
-   - Note: Some variants are marked as unsupported in the writer (Shortcode, NoteReference, etc.)
-
-3. **Update module structure**
-   - Add `json` module to `src/readers/mod.rs`
-   - Export the public `read` function
-
-4. **Create comprehensive tests**
-   - Round-trip tests: write JSON → read back → verify equality
-   - Test various Pandoc document structures
-   - Ensure location information is preserved correctly
-
-5. **Key Technical Considerations**
-   - Parse JSON using `serde_json::Value`
-   - Handle Pandoc API version compatibility  
-   - Preserve source location information from "l" fields
-   - Error handling for malformed JSON
-   - Support all the same Block/Inline types as the writer
-   - Match the exact JSON structure the writer produces
-
-6. **Testing Strategy**
-   - Create test documents with various markdown constructs
-   - Write → Read → Write again and verify consistency
-   - Test error cases (malformed JSON, missing fields)
-   - Verify location information round-trips correctly
-
-### Status: Planning Complete, Ready for Implementation
+The `quarto-markdown-pandoc` binary accepts the following options:
+- `-t, --to <TO>`: Output format (default: native)
+- `-v, --verbose`: Verbose output
+- `-i, --input <INPUT>`: Input file (default: stdin)
+- `--loose`: Loose parsing mode
+- `--json-errors`: Output errors as JSON
+- `-h, --help`: Show help

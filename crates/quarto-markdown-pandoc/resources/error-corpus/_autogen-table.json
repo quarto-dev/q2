@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 933,
+    "state": 1201,
     "sym": "end",
     "errorInfo": {
       "title": "Unclosed Span",
@@ -10,7 +10,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 56,
+          "lrState": 67,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -30,7 +30,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2166,
+    "state": 2520,
     "sym": "class_specifier",
     "errorInfo": {
       "title": "Key-value Pair Before Class Specifier in Attribute",
@@ -38,7 +38,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2219,
+          "lrState": 2632,
           "row": 0,
           "size": 3,
           "sym": "key_value_key",
@@ -46,7 +46,7 @@
         },
         {
           "column": 14,
-          "lrState": 2067,
+          "lrState": 2473,
           "row": 0,
           "size": 5,
           "sym": "key_value_value_token1",
@@ -67,7 +67,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 1637,
+    "state": 1902,
     "sym": "_error",
     "errorInfo": {
       "title": "Mismatched Delimiter in Attribute Specifier",
@@ -75,7 +75,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 1637,
+          "lrState": 1902,
           "row": 0,
           "size": 1,
           "sym": "{",

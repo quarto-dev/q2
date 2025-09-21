@@ -417,8 +417,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
         Block::CodeBlock(crate::pandoc::CodeBlock {
             attr,
             text,
-            filename: _,
-            range: _,
+            source_info: _,
         }) => {
             write!(buf, "CodeBlock ")?;
             write_native_attr(attr, buf)?;
