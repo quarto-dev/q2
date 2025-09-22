@@ -12,4 +12,5 @@ pub mod pandoc;
 pub mod readers;
 pub mod traversals;
 pub mod utils;
+pub mod wasm_entry_points;
 pub mod writers;

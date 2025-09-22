@@ -17,11 +17,10 @@ pub mod c_shim;
 
 mod utils;
 
-use std::{io, panic};
+use std::panic;
 
 use quarto_markdown_pandoc::readers;
-use quarto_markdown_pandoc::utils::output::VerboseOutput;
-use quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver;
+use quarto_markdown_pandoc::wasm_entry_points;
 use quarto_markdown_pandoc::writers;
 use wasm_bindgen::prelude::*;
 
@@ -60,23 +59,11 @@ fn pandoc_to_json(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String
 
 #[wasm_bindgen]
 pub fn parse_qmd(input: JsValue) -> JsValue {
-    let mut output = VerboseOutput::Sink(io::sink());
     let input = match input.as_string() {
         Some(input) => input,
         None => panic!("Unable to parse `input` as a `String`."),
     };
-    let result = match readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "<input>",
-        &mut output,
-        None::<fn(&[u8], &TreeSitterLogObserver, &str) -> Vec<String>>,
-    ) {
-        Ok(result) => result,
-        Err(err) => panic!("Unable to read as a qmd:\n{}", err.join("\n")),
-    };
-
-    let json = pandoc_to_json(&result).unwrap();
+    let json = wasm_entry_points::parse_qmd(input.as_bytes());
     JsValue::from_str(&json)
 }
 
