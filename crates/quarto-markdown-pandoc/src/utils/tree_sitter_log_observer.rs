@@ -85,7 +85,8 @@ impl TreeSitterLogObserver {
 
         let words: Vec<&str> = str.split_whitespace().collect();
         if words.len() == 0 {
-            panic!("Empty log message from tree-sitter");
+            eprintln!("Empty log message from tree-sitter");
+            return;
         }
         let params: HashMap<String, String> = words[1..]
             .iter()

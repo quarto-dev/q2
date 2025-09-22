@@ -63,5 +63,4 @@ Parses [quarto-web](https://github.com/quarto-dev/quarto-web) with a small numbe
 ## TODOs
 
 - actually good error messages
-- fine-grained source location tracking
 - solve glaring performance issues
