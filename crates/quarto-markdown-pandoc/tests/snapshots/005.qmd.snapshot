@@ -1,1 +1,1 @@
-[ Para [Str "Wickham", Space, Str "says", Space, Str "blah", Space, Cite [Citation { citationId = "wickham2015", citationPrefix = [], citationSuffix = [], citationMode = SuppressAuthor, citationNoteNum = 0, citationHash = 0 }] []] ]
+[ Para [Str "Wickham", Space, Str "says", Space, Str "blah", Space, Cite [Citation { citationId = "wickham2015", citationPrefix = [], citationSuffix = [], citationMode = SuppressAuthor, citationNoteNum = 1, citationHash = 0 }] []] ]
