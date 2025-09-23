@@ -642,7 +642,7 @@ where
             prefix: vec![],
             suffix: vec![],
             mode: citation_type,
-            note_num: 0, // this needs to be set later
+            note_num: 1, // Pandoc expects citations to be numbered from 1
             hash: 0,
         }],
         content: vec![Inline::Str(Str {

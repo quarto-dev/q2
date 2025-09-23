@@ -40,6 +40,9 @@ struct Args {
     #[arg(long = "json-errors")]
     json_errors: bool,
 
+    #[arg(short = 'o', long = "output")]
+    output: Option<String>,
+
     #[arg(
         long = "_internal-report-error-state",
         hide = true,
@@ -163,6 +166,13 @@ fn main() {
         }
     }
     .unwrap();
-    let output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
-    println!("{}", output);
+
+    // Write output to file or stdout
+    if let Some(output_path) = args.output {
+        std::fs::write(&output_path, &buf)
+            .expect(&format!("Failed to write output to file: {}", output_path));
+    } else {
+        let output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
+        print!("{}", output);
+    }
 }

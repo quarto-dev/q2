@@ -152,16 +152,19 @@ fn write_inline(inline: &Inline) -> Value {
         // our citationNoteNum counter doesn't match Pandoc's
         Inline::Cite(cite) => json!({
             "t": "Cite",
-            "c": cite.citations.iter().map(|citation| {
-                json!({
-                    "citationId": citation.id.clone(),
-                    "citationPrefix": write_inlines(&citation.prefix),
-                    "citationSuffix": write_inlines(&citation.suffix),
-                    "citationMode": write_citation_mode(&citation.mode),
-                    "citationHash": citation.hash,
-                    "citationNoteNum": citation.note_num
-                })
-            }).collect::<Vec<_>>(),
+            "c": [
+                cite.citations.iter().map(|citation| {
+                    json!({
+                        "citationId": citation.id.clone(),
+                        "citationPrefix": write_inlines(&citation.prefix),
+                        "citationSuffix": write_inlines(&citation.suffix),
+                        "citationMode": write_citation_mode(&citation.mode),
+                        "citationHash": citation.hash,
+                        "citationNoteNum": citation.note_num
+                    })
+                }).collect::<Vec<_>>(),
+                write_inlines(&cite.content)
+            ],
             "l": write_location(cite)
         }),
         Inline::Shortcode(_)

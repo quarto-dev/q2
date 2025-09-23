@@ -8,3 +8,4 @@ The main documentation for this repository is located at:
 - When fixing bugs, always try to isolate and fix one bug at a time.
 - When fixing bugs using tests, run the failing test before attempting to fix issues. This helps ensuring that tests are exercising the failure as expected, and fixes actually fix the particular issue.
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.
+- use "cargo run --" instead of trying to find the binary location, which will often be outside of this crate.
