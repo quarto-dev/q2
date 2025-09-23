@@ -2662,7 +2662,7 @@
               "type": "ALIAS",
               "content": {
                 "type": "PATTERN",
-                "value": "[0-9A-Za-z_]+([:.#$%&-+?<>~/][0-9A-Za-z_]+)*"
+                "value": "[0-9A-Za-z_]+([:.#$%&+?<>~/-][0-9A-Za-z_]+)*"
               },
               "named": true,
               "value": "citation_id_author_in_text"
@@ -2685,7 +2685,7 @@
               "type": "ALIAS",
               "content": {
                 "type": "PATTERN",
-                "value": "[0-9A-Za-z_]+([:.#$%&-+?<>~/][0-9A-Za-z_]+)*"
+                "value": "[0-9A-Za-z_]+([:.#$%&+?<>~/-][0-9A-Za-z_]+)*"
               },
               "named": true,
               "value": "citation_id_suppress_author"
@@ -2878,7 +2878,7 @@
             "value": 1,
             "content": {
               "type": "PATTERN",
-              "value": "(?:[A-Za-z0-9_\\-.~:/?#\\]@!$&()+,;]|\\[)+"
+              "value": "(?:[A-Za-z0-9_.~:/?#\\]@!$&()+,;-]|\\[)+"
             }
           }
         },
@@ -2889,7 +2889,7 @@
             "value": 1,
             "content": {
               "type": "PATTERN",
-              "value": "(?:[A-Za-z0-9_\\-.~:/?#\\]@!$&()+,;]|\\[)+[?](?:[A-Za-z0-9_\\-.~:/?#\\]@!$&()+,;?=]|\\[)+"
+              "value": "(?:[A-Za-z0-9_.~:/?#\\]@!$&()+,;-]|\\[)+[?](?:[A-Za-z0-9_.~:/?#\\]@!$&()+,;?=-]|\\[)+"
             }
           }
         }

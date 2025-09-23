@@ -213,3 +213,14 @@ Mixed nested spans
     (text_base)
     (emphasis_delimiter))
   (soft_line_break))
+================================================================================
+cites with dashes
+================================================================================
+see @fig-1
+--------------------------------------------------------------------------------
+(inline
+  (text_base)
+  (text_base)
+  (citation
+    (citation_delimiter)
+    (citation_id_author_in_text)))

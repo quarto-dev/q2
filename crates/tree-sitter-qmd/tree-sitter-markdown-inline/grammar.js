@@ -216,10 +216,10 @@ module.exports = grammar(add_inline_rules({
                 alias("}", $.citation_delimiter),
             ),
             seq(alias($._cite_author_in_text, $.citation_delimiter),
-                alias(new RegExp('[0-9A-Za-z_]+([:.#$%&-+?<>~/][0-9A-Za-z_]+)*'), $.citation_id_author_in_text)
+                alias(new RegExp('[0-9A-Za-z_]+([:.#$%&+?<>~/-][0-9A-Za-z_]+)*'), $.citation_id_author_in_text)
             ),
             seq(alias($._cite_suppress_author, $.citation_delimiter),
-                alias(new RegExp('[0-9A-Za-z_]+([:.#$%&-+?<>~/][0-9A-Za-z_]+)*'), $.citation_id_suppress_author)
+                alias(new RegExp('[0-9A-Za-z_]+([:.#$%&+?<>~/-][0-9A-Za-z_]+)*'), $.citation_id_suppress_author)
             ),
         ),
 
@@ -266,8 +266,8 @@ module.exports = grammar(add_inline_rules({
         //   - URLs with query parameters have both question marks and equals signs
 
         shortcode_naked_string: $ => 
-            choice(token(prec(1, /(?:[A-Za-z0-9_\-.~:/?#\]@!$&()+,;]|\[)+/)),
-                   token(prec(1, /(?:[A-Za-z0-9_\-.~:/?#\]@!$&()+,;]|\[)+[?](?:[A-Za-z0-9_\-.~:/?#\]@!$&()+,;?=]|\[)+/))),
+            choice(token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$&()+,;-]|\[)+/)),
+                   token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$&()+,;-]|\[)+[?](?:[A-Za-z0-9_.~:/?#\]@!$&()+,;?=-]|\[)+/))),
 
         // shortcode_string: $ => new RegExp("[a-zA-Z_][a-zA-Z0-9_-]*"),
         shortcode_string: $ => choice(
