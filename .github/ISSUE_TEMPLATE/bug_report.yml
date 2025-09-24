@@ -15,7 +15,7 @@ body:
 
         - If you're reporting an issue with the **Visual Editor** or with the **Visual Studio Code / Positron extension**, visit https://github.com/quarto-dev/quarto
         - If you're reporting an issue in **RStudio**, visit https://github.com/rstudio/rstudio
-        - If you're reporting an issue in **Positron**, visit https://github.com/posit-dev/positron
+        - If you're reporting an issue in **Positron**, visit https://github.com/posit-dev/positron/discussions
         - If you want to ask for a Quarto feature, use the [Feature Requests GitHub Discussions](https://github.com/quarto-dev/quarto-cli/discussions/categories/feature-requests).
         - If you want to ask for Quarto help, use the [Q&A GitHub Discussions](https://github.com/quarto-dev/quarto-cli/discussions/categories/q-a).
 
