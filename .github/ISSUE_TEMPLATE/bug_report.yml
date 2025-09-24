@@ -1,0 +1,26 @@
+name: Bug report
+description: Report an error or unexpected behavior
+labels: [bug]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Welcome to the `quarto-markdown` GitHub repository!
+        We are always happy to hear feedback from our users.
+
+        This is the repository for the markdown parsing libraries used by the Quarto system.
+        
+        **Please make sure you are in the right place before filing your issue**.
+
+        - If you're reporting an issue with the **Visual Editor** or with the **Visual Studio Code / Positron extension**, visit https://github.com/quarto-dev/quarto
+        - If you're reporting an issue in **RStudio**, visit https://github.com/rstudio/rstudio
+        - If you're reporting an issue in **Positron**, visit https://github.com/posit-dev/positron
+        - If you want to ask for a Quarto feature, use the [Feature Requests GitHub Discussions](https://github.com/quarto-dev/quarto-cli/discussions/categories/feature-requests).
+        - If you want to ask for Quarto help, use the [Q&A GitHub Discussions](https://github.com/quarto-dev/quarto-cli/discussions/categories/q-a).
+
+  - type: checkboxes
+    attributes:
+      label: "I have:"
+      options:
+        - label: read and understood the above
