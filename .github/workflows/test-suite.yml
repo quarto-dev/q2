@@ -60,6 +60,7 @@ jobs:
       - name: Set up tree-sitter CLI (Linux)
         if: runner.os == 'Linux'
         run: |
+          sudo apt-get update
           sudo apt-get install libc6-dev
           sudo apt-get install gcc-multilib
           curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
