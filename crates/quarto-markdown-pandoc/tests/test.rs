@@ -212,28 +212,51 @@ fn unit_test_corpus_matches_pandoc_commonmark() {
 }
 
 #[test]
-fn unit_test_snapshots() {
+fn unit_test_snapshots_native() {
+    test_snapshots_for_format("native", |pandoc, buffer| {
+        writers::native::write(pandoc, buffer).map_err(|e| e.into())
+    });
+}
+
+#[test]
+fn unit_test_snapshots_qmd() {
+    test_snapshots_for_format("qmd", |pandoc, buffer| {
+        writers::qmd::write(pandoc, buffer).map_err(|e| e.into())
+    });
+}
+
+#[test]
+fn unit_test_snapshots_json() {
+    test_snapshots_for_format("json", |pandoc, buffer| {
+        writers::json::write(pandoc, buffer).map_err(|e| e.into())
+    });
+}
+
+fn test_snapshots_for_format<F>(format: &str, writer: F)
+where
+    F: Fn(&quarto_markdown_pandoc::pandoc::Pandoc, &mut Vec<u8>) -> Result<(), Box<dyn std::error::Error + 'static>>,
+{
+    let pattern = format!("tests/snapshots/{}/*.qmd", format);
     let mut file_count = 0;
-    for entry in glob("tests/snapshots/*.qmd").expect("Failed to read glob pattern") {
+    for entry in glob(&pattern).expect("Failed to read glob pattern") {
         match entry {
             Ok(path) => {
                 eprintln!("Opening file: {}", path.display());
                 let input = std::fs::read_to_string(&path).expect("Failed to read file");
                 let snapshot_path = path.with_extension("qmd.snapshot");
                 let mut buffer = Vec::new();
-                writers::native::write(
-                    &treesitter_to_pandoc(
-                        &mut std::io::sink(),
-                        &MarkdownParser::default()
-                            .parse(input.as_bytes(), None)
-                            .unwrap(),
-                        input.as_bytes(),
-                    )
-                    .unwrap(),
-                    &mut buffer,
+
+                let pandoc = treesitter_to_pandoc(
+                    &mut std::io::sink(),
+                    &MarkdownParser::default()
+                        .parse(input.as_bytes(), None)
+                        .unwrap(),
+                    input.as_bytes(),
                 )
                 .unwrap();
-                let ast = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
+
+                writer(&pandoc, &mut buffer).unwrap();
+                let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
                 let snapshot = std::fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
                     panic!(
                         "Snapshot file {} does not exist, please create it",
@@ -241,7 +264,7 @@ fn unit_test_snapshots() {
                     )
                 });
                 assert_eq!(
-                    ast.trim(),
+                    output.trim(),
                     snapshot.trim(),
                     "Snapshot mismatch for file {}",
                     path.display()
@@ -253,7 +276,8 @@ fn unit_test_snapshots() {
     }
     assert!(
         file_count > 0,
-        "No files found in tests/snapshots directory"
+        "No files found in tests/snapshots/{} directory",
+        format
     );
 }
 
