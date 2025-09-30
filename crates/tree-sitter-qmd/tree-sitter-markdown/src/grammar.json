@@ -2177,6 +2177,14 @@
         {
           "type": "SYMBOL",
           "name": "pipe_table"
+        },
+        {
+          "type": "PREC",
+          "value": -1,
+          "content": {
+            "type": "SYMBOL",
+            "name": "minus_metadata"
+          }
         }
       ]
     },

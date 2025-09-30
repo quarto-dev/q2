@@ -1067,7 +1067,7 @@ Bar
       (setext_h2_underline))))
 
 ================================================================================
-Example 66 - https://github.github.com/gfm/#example-66
+Example 66 - https://github.github.com/gfm/#example-66 (NA, qmd doesn't promise setext)
 ================================================================================
 Extra text so this is not parsed as metadata.
 
@@ -1084,11 +1084,7 @@ Baz
   (section
     (paragraph
       (inline))
-    (thematic_break)
-    (setext_heading
-      (paragraph
-        (inline))
-      (setext_h2_underline))
+    (minus_metadata)
     (setext_heading
       (paragraph
         (inline))
@@ -1110,7 +1106,7 @@ Example 67 - https://github.github.com/gfm/#example-67
       (inline))))
 
 ================================================================================
-Example 68 - https://github.github.com/gfm/#example-68
+Example 68 - https://github.github.com/gfm/#example-68 (NA, we pick yaml block)
 ================================================================================
 Extra text so this is not parsed as metadata.
 
@@ -1123,8 +1119,7 @@ Extra text so this is not parsed as metadata.
   (section
     (paragraph
       (inline))
-    (thematic_break)
-    (thematic_break)))
+    (minus_metadata)))
 
 ================================================================================
 Example 69 - https://github.github.com/gfm/#example-69

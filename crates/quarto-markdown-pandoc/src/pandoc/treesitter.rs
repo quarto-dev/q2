@@ -986,6 +986,14 @@ fn process_fenced_div_block<T: Write>(
             PandocNativeIntermediate::IntermediateSection(blocks) => {
                 content.extend(blocks);
             }
+            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+                // for now we assume it's metadata and emit it as a rawblock
+                content.push(Block::RawBlock(RawBlock {
+                    format: "quarto_minus_metadata".to_string(),
+                    text,
+                    source_info: SourceInfo::with_range(range),
+                }));
+            }
             _ => {
                 writeln!(
                     buf,
@@ -1029,6 +1037,14 @@ fn process_block_quote<T: Write>(
             }
             PandocNativeIntermediate::IntermediateSection(section) => {
                 content.extend(section);
+            }
+            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+                // for now we assume it's metadata and emit it as a rawblock
+                content.push(Block::RawBlock(RawBlock {
+                    format: "quarto_minus_metadata".to_string(),
+                    text,
+                    source_info: SourceInfo::with_range(range),
+                }));
             }
             _ => {
                 writeln!(
@@ -1394,7 +1410,7 @@ fn process_list_item(
     let mut list_attr: Option<ListAttributes> = None;
     let children = children
         .into_iter()
-        .filter(|(node, child)| {
+        .filter_map(|(node, child)| {
             if node == "list_marker_dot" || node == "list_marker_parenthesis" {
                 // this is an ordered list, so we need to set the flag
                 let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) =
@@ -1403,7 +1419,7 @@ fn process_list_item(
                     panic!("Expected OrderedListMarker in list_item, got {:?}", child);
                 };
                 list_attr = Some((
-                    *marker_number,
+                    marker_number,
                     ListNumberStyle::Decimal,
                     match node.as_str() {
                         "list_marker_parenthesis" => ListNumberDelim::OneParen,
@@ -1411,15 +1427,20 @@ fn process_list_item(
                         _ => panic!("Unexpected list marker node: {}", node),
                     },
                 ));
-                return false; // skip the marker node
+                return None; // skip the marker node
             }
-            matches!(child, PandocNativeIntermediate::IntermediateBlock(_))
-        })
-        .map(|(_, child)| {
-            let PandocNativeIntermediate::IntermediateBlock(block) = child else {
-                panic!("Expected Block in paragraph, got {:?}", child);
-            };
-            block
+            match child {
+                PandocNativeIntermediate::IntermediateBlock(block) => Some(block),
+                PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+                    // for now we assume it's metadata and emit it as a rawblock
+                    Some(Block::RawBlock(RawBlock {
+                        format: "quarto_minus_metadata".to_string(),
+                        text,
+                        source_info: SourceInfo::with_range(range),
+                    }))
+                }
+                _ => None,
+            }
         })
         .collect();
     PandocNativeIntermediate::IntermediateListItem(children, node_location(node), list_attr)

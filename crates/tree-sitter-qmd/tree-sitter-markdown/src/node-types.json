@@ -113,6 +113,10 @@
           "named": true
         },
         {
+          "type": "minus_metadata",
+          "named": true
+        },
+        {
           "type": "paragraph",
           "named": true
         },
@@ -274,6 +278,10 @@
         },
         {
           "type": "list",
+          "named": true
+        },
+        {
+          "type": "minus_metadata",
           "named": true
         },
         {
@@ -462,6 +470,10 @@
         },
         {
           "type": "list_marker_star",
+          "named": true
+        },
+        {
+          "type": "minus_metadata",
           "named": true
         },
         {
@@ -686,6 +698,10 @@
         },
         {
           "type": "list",
+          "named": true
+        },
+        {
+          "type": "minus_metadata",
           "named": true
         },
         {

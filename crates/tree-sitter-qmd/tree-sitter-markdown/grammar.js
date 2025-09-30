@@ -45,6 +45,7 @@ module.exports = grammar({
             $.fenced_div_block,
             $._blank_line,
             $.pipe_table,
+            prec(-1, $.minus_metadata),
         ),
         section: $ => choice($._section1, $._section2, $._section3, $._section4, $._section5, $._section6),
         _section1: $ => prec.right(seq(
