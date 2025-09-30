@@ -1,0 +1,28 @@
+---
+title: abc
+format: pdf
+---
+# Test
+
+:::: {.callout-tip}
+To generate random numbers, you can use
+
+::: {.columns}
+::: {.column width="50%"}
+Standard python
+
+```py
+import python
+random.randint(0,100)
+```
+:::
+::: {.column width="50%"}
+Numpy
+
+```py
+import numpy as np
+np.random.default_rng().integers(0,100)
+```
+:::
+:::
+::::

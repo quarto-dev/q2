@@ -6,8 +6,9 @@
 use glob::glob;
 use quarto_markdown_pandoc::errors::parse_is_good;
 use quarto_markdown_pandoc::pandoc::treesitter_to_pandoc;
+use quarto_markdown_pandoc::utils::output::VerboseOutput;
 use quarto_markdown_pandoc::{readers, writers};
-use std::io::Write;
+use std::io::{self, Write};
 use std::process::{Command, Stdio};
 use tree_sitter_qmd::MarkdownParser;
 
@@ -242,18 +243,20 @@ where
         match entry {
             Ok(path) => {
                 eprintln!("Opening file: {}", path.display());
-                let input = std::fs::read_to_string(&path).expect("Failed to read file");
                 let snapshot_path = path.with_extension("qmd.snapshot");
                 let mut buffer = Vec::new();
-
-                let pandoc = treesitter_to_pandoc(
-                    &mut std::io::sink(),
-                    &MarkdownParser::default()
-                        .parse(input.as_bytes(), None)
-                        .unwrap(),
+                let mut input = std::fs::read_to_string(&path).expect("Failed to read file");
+                if !input.ends_with("\n") {
+                    input.push('\n'); // ensure the input ends with a newline
+                }
+                let mut output_stream = VerboseOutput::Sink(io::sink());
+                let pandoc = readers::qmd::read(
                     input.as_bytes(),
-                )
-                .unwrap();
+                    false,
+                    &path.to_string_lossy(),
+                    &mut output_stream,
+                    None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>,
+                ).unwrap();
 
                 writer(&pandoc, &mut buffer).unwrap();
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
