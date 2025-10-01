@@ -4,13 +4,13 @@
  */
 
 use crate::pandoc::attr::is_empty_attr;
+use crate::pandoc::block::MetaBlock;
 use crate::pandoc::list::ListNumberDelim;
 use crate::pandoc::table::{Alignment, Cell, Table};
 use crate::pandoc::{
-    Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule, 
+    Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, Meta, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
-use crate::pandoc::block::MetaBlock;
 use crate::utils::string_write_adapter::StringWriteAdapter;
 use std::io::{self, Write};
 
@@ -158,12 +158,15 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
     }
 }
 
-fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, _buf: &mut T) -> std::io::Result<()> {
-    if !meta.is_empty() {
+fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, _buf: &mut T) -> std::io::Result<bool> {
+    if meta.is_empty() {
+        Ok(false)
+    } else {
         panic!("Metadata writing is not yet implemented");
+        // eventually we'll return true here so
+        // that the caller knows to add a newline after the metadata block
+        // Ok(true)
     }
-    // Empty metadata - do nothing
-    Ok(())
 }
 
 fn escape_quotes(s: &str) -> String {
@@ -397,18 +400,21 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
     Ok(())
 }
 
-fn write_definitionlist(deflist: &DefinitionList, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_definitionlist(
+    deflist: &DefinitionList,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
     for (i, (term, definitions)) in deflist.content.iter().enumerate() {
         if i > 0 {
             writeln!(buf)?;
         }
-        
+
         // Write the term
         for inline in term {
             write_inline(inline, buf)?;
         }
         writeln!(buf)?;
-        
+
         // Write the definitions
         for definition in definitions {
             write!(buf, ":   ")?;
@@ -424,7 +430,10 @@ fn write_definitionlist(deflist: &DefinitionList, buf: &mut dyn std::io::Write) 
     Ok(())
 }
 
-fn write_horizontalrule(_rule: &HorizontalRule, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_horizontalrule(
+    _rule: &HorizontalRule,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
     writeln!(buf, "---")?;
     Ok(())
 }
@@ -434,13 +443,13 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
     write!(buf, "::: ")?;
     write_attr(&figure.attr, buf)?;
     writeln!(buf)?;
-    
+
     // Write the figure content
     for block in &figure.content {
         writeln!(buf)?;
         write_block(block, buf)?;
     }
-    
+
     // Write caption if it exists
     if let Some(ref long_caption) = figure.caption.long {
         if !long_caption.is_empty() {
@@ -462,17 +471,13 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
             writeln!(buf)?;
         }
     }
-    
+
     writeln!(buf, "\n:::")?;
     Ok(())
 }
 
-fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-    // Write metadata as YAML front matter
-    writeln!(buf, "---")?;
-    write_meta(&metablock.meta, buf)?;
-    writeln!(buf, "---")?;
-    Ok(())
+fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::io::Result<bool> {
+    write_meta(&metablock.meta, buf)
 }
 
 fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
@@ -1006,10 +1011,13 @@ pub fn write_plain(plain: &Plain, buf: &mut dyn std::io::Write) -> std::io::Resu
 }
 
 pub fn write<T: std::io::Write>(pandoc: &Pandoc, buf: &mut T) -> std::io::Result<()> {
-    write_meta(&pandoc.meta, buf)?;
+    let mut need_newline = write_meta(&pandoc.meta, buf)?;
     for block in &pandoc.blocks {
-        write!(buf, "\n")?;
+        if need_newline {
+            write!(buf, "\n")?
+        };
         write_block(block, buf)?;
+        need_newline = true;
     }
     Ok(())
 }
