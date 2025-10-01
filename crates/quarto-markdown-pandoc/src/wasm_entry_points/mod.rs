@@ -3,11 +3,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use std::{io, panic};
-
 use crate::readers;
 use crate::utils::output::VerboseOutput;
 use crate::utils::tree_sitter_log_observer::TreeSitterLogObserver;
+use std::io;
 
 fn pandoc_to_json(doc: &crate::pandoc::Pandoc) -> Result<String, String> {
     let mut buf = Vec::new();
@@ -26,18 +25,17 @@ fn pandoc_to_json(doc: &crate::pandoc::Pandoc) -> Result<String, String> {
     }
 }
 
-pub fn parse_qmd(input: &[u8]) -> String {
+pub fn qmd_to_pandoc(input: &[u8]) -> Result<crate::pandoc::Pandoc, Vec<String>> {
     let mut output = VerboseOutput::Sink(io::sink());
-    let result = match readers::qmd::read(
+    readers::qmd::read(
         input,
         false,
         "<input>",
         &mut output,
         None::<fn(&[u8], &TreeSitterLogObserver, &str) -> Vec<String>>,
-    ) {
-        Ok(result) => result,
-        Err(err) => panic!("Unable to read as a qmd:\n{}", err.join("\n")),
-    };
+    )
+}
 
-    pandoc_to_json(&result).unwrap()
+pub fn parse_qmd(input: &[u8]) -> String {
+    pandoc_to_json(&qmd_to_pandoc(input).unwrap()).unwrap()
 }

@@ -24,20 +24,17 @@ use quarto_markdown_pandoc::wasm_entry_points;
 use quarto_markdown_pandoc::writers;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-}
-
-#[wasm_bindgen]
-pub fn greet() {
-    alert("Hello, wasm-qmd-parser!");
-}
-
 #[wasm_bindgen(start)]
 pub fn run() {
     // Set a panic hook on program start that prints panics to the console
     panic::set_hook(Box::new(console_error_panic_hook::hook));
+}
+
+fn json_to_pandoc(input: &str) -> Result<quarto_markdown_pandoc::pandoc::Pandoc, String> {
+    match readers::json::read(&mut input.as_bytes()) {
+        Ok(doc) => Ok(doc),
+        Err(err) => Err(format!("Unable to read as json: {:?}", err)),
+    }
 }
 
 fn pandoc_to_json(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String, String> {
@@ -57,27 +54,60 @@ fn pandoc_to_json(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String
     }
 }
 
+fn pandoc_to_qmd(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String, String> {
+    let mut buf = Vec::new();
+    match writers::qmd::write(doc, &mut buf) {
+        Ok(_) => {
+            // Nothing to do
+        }
+        Err(err) => {
+            return Err(format!("Unable to write as qmd: {:?}", err));
+        }
+    }
+
+    match String::from_utf8(buf) {
+        Ok(qmd) => Ok(qmd),
+        Err(err) => Err(format!("Unable to convert qmd to string: {:?}", err)),
+    }
+}
+
 #[wasm_bindgen]
 pub fn parse_qmd(input: JsValue) -> JsValue {
-    let input = match input.as_string() {
-        Some(input) => input,
-        None => panic!("Unable to parse `input` as a `String`."),
-    };
+    let input = as_string(&input, "input");
     let json = wasm_entry_points::parse_qmd(input.as_bytes());
     JsValue::from_str(&json)
 }
 
 #[wasm_bindgen]
 pub fn write_qmd(input: JsValue) -> JsValue {
-    let input = match input.as_string() {
-        Some(input) => input,
-        None => panic!("Unable to parse `input` as a `String`."),
-    };
-    let result = match readers::json::read(&mut input.as_bytes()) {
-        Ok(result) => result,
-        Err(err) => panic!("Unable to read as json:\n{}", err),
-    };
+    let input = as_string(&input, "input");
+    let result = json_to_pandoc(&input).unwrap();
 
     let json = pandoc_to_json(&result).unwrap();
     JsValue::from_str(&json)
+}
+
+#[wasm_bindgen]
+pub fn convert(document: JsValue, input_format: JsValue, output_format: JsValue) -> JsValue {
+    let input = as_string(&document, "document");
+    let input_format = as_string(&input_format, "input_format");
+    let output_format = as_string(&output_format, "output_format");
+    let doc = match input_format.as_str() {
+        "qmd" => wasm_entry_points::qmd_to_pandoc(&input.as_bytes()).unwrap(),
+        "json" => json_to_pandoc(&input).unwrap(),
+        _ => panic!("Unsupported input format: {}", input_format),
+    };
+    let output = match output_format.as_str() {
+        "qmd" => pandoc_to_qmd(&doc).unwrap(),
+        "json" => pandoc_to_json(&doc).unwrap(),
+        _ => panic!("Unsupported output format: {}", output_format),
+    };
+    JsValue::from_str(&output)
+}
+
+fn as_string(value: &JsValue, name: &str) -> String {
+    match value.as_string() {
+        Some(s) => s,
+        None => panic!("Unable to parse `{}` as a `String`.", name),
+    }
 }
