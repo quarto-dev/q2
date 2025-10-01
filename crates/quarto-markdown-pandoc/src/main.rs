@@ -159,7 +159,7 @@ fn main() {
     match args.to.as_str() {
         "json" => writers::json::write(&pandoc, &mut buf),
         "native" => writers::native::write(&pandoc, &mut buf),
-        "markdown" => writers::qmd::write(&pandoc, &mut buf),
+        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             return;
