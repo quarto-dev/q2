@@ -4,17 +4,17 @@
  */
 
 use crate::pandoc::{
-    Attr, Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, Code, CodeBlock, 
-    DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, Inlines, 
-    LineBlock, Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType, 
-    Meta, MetaValue, Note, OrderedList, Pandoc, Paragraph, Plain, Quoted, QuoteType, 
-    RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, 
+    Attr, Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, Code, CodeBlock,
+    DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, Inlines,
+    LineBlock, Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType,
+    Meta, MetaValue, Note, OrderedList, Pandoc, Paragraph, Plain, Quoted, QuoteType,
+    RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong,
     Subscript, Superscript, Underline
 };
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::{Range, Location, SourceInfo};
+use hashlink::LinkedHashMap;
 use serde_json::Value;
-use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum JsonReadError {
@@ -576,12 +576,12 @@ fn read_block(value: &Value) -> Result<Block> {
 
 fn read_meta(value: &Value) -> Result<Meta> {
     let obj = value.as_object().ok_or_else(|| JsonReadError::InvalidType("Expected object for Meta".to_string()))?;
-    
-    let mut meta = HashMap::new();
+
+    let mut meta = LinkedHashMap::new();
     for (key, val) in obj {
         meta.insert(key.clone(), read_meta_value(val)?);
     }
-    
+
     Ok(meta)
 }
 
@@ -617,7 +617,7 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
         "MetaMap" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let arr = c.as_array().ok_or_else(|| JsonReadError::InvalidType("MetaMap content must be array".to_string()))?;
-            let mut map = HashMap::new();
+            let mut map = LinkedHashMap::new();
             for item in arr {
                 let kv_arr = item.as_array().ok_or_else(|| JsonReadError::InvalidType("MetaMap item must be array".to_string()))?;
                 if kv_arr.len() != 2 {

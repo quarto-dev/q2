@@ -1,0 +1,10 @@
+---
+zebra: last
+apple: first
+middle: second
+banana: third
+---
+
+# Test Document
+
+This tests that YAML key order is preserved.

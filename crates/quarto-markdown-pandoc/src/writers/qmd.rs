@@ -198,13 +198,9 @@ fn meta_value_to_yaml(value: &MetaValue) -> std::io::Result<Yaml> {
             Ok(Yaml::Array(yaml_list))
         }
         MetaValue::MetaMap(map) => {
-            // Sort keys to ensure deterministic output
-            let mut sorted_keys: Vec<_> = map.keys().collect();
-            sorted_keys.sort();
-
+            // LinkedHashMap preserves insertion order
             let mut yaml_map = LinkedHashMap::new();
-            for key in sorted_keys {
-                let val = &map[key];
+            for (key, val) in map {
                 yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(val)?);
             }
             Ok(Yaml::Hash(yaml_map))
@@ -217,13 +213,9 @@ fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, buf: &mut T) -> std::io::
         Ok(false)
     } else {
         // Convert Meta to YAML
-        // Sort keys to ensure deterministic output
-        let mut sorted_keys: Vec<_> = meta.keys().collect();
-        sorted_keys.sort();
-
+        // LinkedHashMap preserves insertion order
         let mut yaml_map = LinkedHashMap::new();
-        for key in sorted_keys {
-            let value = &meta[key];
+        for (key, value) in meta {
             yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(value)?);
         }
         let yaml = Yaml::Hash(yaml_map);

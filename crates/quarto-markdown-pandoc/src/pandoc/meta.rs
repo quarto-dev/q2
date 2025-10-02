@@ -7,7 +7,7 @@ use crate::pandoc::block::Blocks;
 use crate::pandoc::inline::Inlines;
 use crate::readers;
 use crate::{pandoc::RawBlock, utils::output::VerboseOutput};
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 use std::{io, mem};
 use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser};
 
@@ -20,16 +20,16 @@ pub enum MetaValue {
     MetaInlines(Inlines),
     MetaBlocks(Blocks),
     MetaList(Vec<MetaValue>),
-    MetaMap(HashMap<String, MetaValue>),
+    MetaMap(LinkedHashMap<String, MetaValue>),
 }
 
 impl Default for MetaValue {
     fn default() -> Self {
-        MetaValue::MetaMap(HashMap::new())
+        MetaValue::MetaMap(LinkedHashMap::new())
     }
 }
 
-pub type Meta = HashMap<String, MetaValue>;
+pub type Meta = LinkedHashMap<String, MetaValue>;
 
 fn extract_between_delimiters(input: &str) -> Option<&str> {
     let parts: Vec<&str> = input.split("---").collect();
@@ -41,7 +41,7 @@ fn extract_between_delimiters(input: &str) -> Option<&str> {
 }
 
 enum ContextFrame {
-    Map(HashMap<String, MetaValue>, Option<String>),
+    Map(LinkedHashMap<String, MetaValue>, Option<String>),
     List(Vec<MetaValue>),
     Root,
 }
@@ -100,7 +100,7 @@ impl MarkedEventReceiver for YamlEventHandler {
         match ev {
             Event::StreamStart | Event::DocumentStart => {}
             Event::MappingStart(..) => {
-                self.stack.push(ContextFrame::Map(HashMap::new(), None));
+                self.stack.push(ContextFrame::Map(LinkedHashMap::new(), None));
             }
             Event::MappingEnd => {
                 if let Some(ContextFrame::Map(map, _)) = self.stack.pop() {
