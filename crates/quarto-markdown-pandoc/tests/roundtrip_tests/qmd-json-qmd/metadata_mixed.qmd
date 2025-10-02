@@ -1,0 +1,14 @@
+---
+title: Test Document
+draft: true
+tags:
+  - science
+  - research
+settings:
+  toc: true
+  number-sections: false
+---
+
+# Introduction
+
+This is a test document.

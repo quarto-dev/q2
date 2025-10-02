@@ -6,13 +6,16 @@
 use crate::pandoc::attr::is_empty_attr;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::list::ListNumberDelim;
+use crate::pandoc::meta::MetaValue;
 use crate::pandoc::table::{Alignment, Cell, Table};
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, Meta, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
 use crate::utils::string_write_adapter::StringWriteAdapter;
+use hashlink::LinkedHashMap;
 use std::io::{self, Write};
+use yaml_rust2::{Yaml, YamlEmitter};
 
 struct BlockQuoteContext<'a, W: Write + ?Sized> {
     inner: &'a mut W,
@@ -158,14 +161,92 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
     }
 }
 
-fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, _buf: &mut T) -> std::io::Result<bool> {
+/// Convert a MetaValue to a yaml_rust2::Yaml value
+/// MetaInlines and MetaBlocks are rendered using the qmd writer
+fn meta_value_to_yaml(value: &MetaValue) -> std::io::Result<Yaml> {
+    match value {
+        MetaValue::MetaString(s) => Ok(Yaml::String(s.clone())),
+        MetaValue::MetaBool(b) => Ok(Yaml::Boolean(*b)),
+        MetaValue::MetaInlines(inlines) => {
+            // Render inlines using the qmd writer
+            let mut buffer = String::new();
+            let mut adapter = StringWriteAdapter::new(&mut buffer);
+            for inline in inlines {
+                write_inline(inline, &mut adapter)?;
+            }
+            Ok(Yaml::String(buffer))
+        }
+        MetaValue::MetaBlocks(blocks) => {
+            // Render blocks using the qmd writer
+            let mut buffer = String::new();
+            let mut adapter = StringWriteAdapter::new(&mut buffer);
+            for (i, block) in blocks.iter().enumerate() {
+                if i > 0 {
+                    writeln!(&mut adapter)?;
+                }
+                write_block(block, &mut adapter)?;
+            }
+            // Trim trailing newline to avoid extra spacing in YAML
+            let trimmed = buffer.trim_end();
+            Ok(Yaml::String(trimmed.to_string()))
+        }
+        MetaValue::MetaList(list) => {
+            let mut yaml_list = Vec::new();
+            for item in list {
+                yaml_list.push(meta_value_to_yaml(item)?);
+            }
+            Ok(Yaml::Array(yaml_list))
+        }
+        MetaValue::MetaMap(map) => {
+            // Sort keys to ensure deterministic output
+            let mut sorted_keys: Vec<_> = map.keys().collect();
+            sorted_keys.sort();
+
+            let mut yaml_map = LinkedHashMap::new();
+            for key in sorted_keys {
+                let val = &map[key];
+                yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(val)?);
+            }
+            Ok(Yaml::Hash(yaml_map))
+        }
+    }
+}
+
+fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, buf: &mut T) -> std::io::Result<bool> {
     if meta.is_empty() {
         Ok(false)
     } else {
-        panic!("Metadata writing is not yet implemented");
-        // eventually we'll return true here so
-        // that the caller knows to add a newline after the metadata block
-        // Ok(true)
+        // Convert Meta to YAML
+        // Sort keys to ensure deterministic output
+        let mut sorted_keys: Vec<_> = meta.keys().collect();
+        sorted_keys.sort();
+
+        let mut yaml_map = LinkedHashMap::new();
+        for key in sorted_keys {
+            let value = &meta[key];
+            yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(value)?);
+        }
+        let yaml = Yaml::Hash(yaml_map);
+
+        // Emit YAML to string
+        let mut yaml_str = String::new();
+        let mut emitter = YamlEmitter::new(&mut yaml_str);
+        emitter
+            .dump(&yaml)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        // The YamlEmitter adds "---\n" at the start and includes the content
+        // We need to add the closing "---\n"
+        // First, ensure yaml_str ends with a newline
+        if !yaml_str.ends_with('\n') {
+            yaml_str.push('\n');
+        }
+
+        // Write the YAML metadata block
+        write!(buf, "{}", yaml_str)?;
+        writeln!(buf, "---")?;
+
+        Ok(true)
     }
 }
 

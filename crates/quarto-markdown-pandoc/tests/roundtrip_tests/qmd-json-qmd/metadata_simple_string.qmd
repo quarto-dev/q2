@@ -1,0 +1,8 @@
+---
+title: Simple Title
+author: John Doe
+---
+
+# Test Document
+
+This is a test.

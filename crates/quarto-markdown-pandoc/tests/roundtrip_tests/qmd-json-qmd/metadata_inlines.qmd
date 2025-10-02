@@ -1,0 +1,6 @@
+---
+title: A **bold** title with *emphasis*
+subtitle: Testing inline elements
+---
+
+# Test Document

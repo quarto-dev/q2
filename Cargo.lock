@@ -351,6 +351,7 @@ dependencies = [
  "clap",
  "error-message-macros",
  "glob",
+ "hashlink",
  "once_cell",
  "paste",
  "regex",

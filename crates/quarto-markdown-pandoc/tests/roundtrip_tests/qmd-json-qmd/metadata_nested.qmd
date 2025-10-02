@@ -1,0 +1,7 @@
+---
+author:
+  name: John Doe
+  affiliation: Example University
+---
+
+# Test Document
