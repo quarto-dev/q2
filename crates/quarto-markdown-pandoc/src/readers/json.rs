@@ -309,39 +309,45 @@ fn read_inline(value: &Value) -> Result<Inline> {
         }
         "Cite" => {
             let c = obj.get("c").ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let citations_arr = c.as_array().ok_or_else(|| JsonReadError::InvalidType("Cite content must be array".to_string()))?;
-            
+            let c_arr = c.as_array().ok_or_else(|| JsonReadError::InvalidType("Cite content must be array".to_string()))?;
+
+            if c_arr.len() != 2 {
+                return Err(JsonReadError::InvalidType("Cite content must have 2 elements".to_string()));
+            }
+
+            // First element is the array of citations
+            let citations_arr = c_arr[0].as_array().ok_or_else(|| JsonReadError::InvalidType("Citations must be array".to_string()))?;
+
             let citations = citations_arr
                 .iter()
                 .map(|citation_val| {
                     let citation_obj = citation_val.as_object().ok_or_else(|| JsonReadError::InvalidType("Citation must be object".to_string()))?;
-                    
+
                     let id = citation_obj.get("citationId")
                         .and_then(|v| v.as_str())
                         .ok_or_else(|| JsonReadError::MissingField("citationId".to_string()))?
                         .to_string();
-                    
+
                     let prefix = read_inlines(citation_obj.get("citationPrefix").ok_or_else(|| JsonReadError::MissingField("citationPrefix".to_string()))?)?;
                     let suffix = read_inlines(citation_obj.get("citationSuffix").ok_or_else(|| JsonReadError::MissingField("citationSuffix".to_string()))?)?;
-                    
+
                     let mode = read_citation_mode(citation_obj.get("citationMode").ok_or_else(|| JsonReadError::MissingField("citationMode".to_string()))?)?;
-                    
+
                     let hash = citation_obj.get("citationHash")
                         .and_then(|v| v.as_i64())
                         .ok_or_else(|| JsonReadError::MissingField("citationHash".to_string()))? as usize;
-                    
+
                     let note_num = citation_obj.get("citationNoteNum")
                         .and_then(|v| v.as_i64())
                         .ok_or_else(|| JsonReadError::MissingField("citationNoteNum".to_string()))? as usize;
-                    
+
                     Ok(Citation { id, prefix, suffix, mode, hash, note_num })
                 })
                 .collect::<Result<Vec<_>>>()?;
-            
-            // The JSON writer only outputs citations, but the Cite inline needs content too
-            // We'll use empty content for now since the writer doesn't provide it
-            let content = vec![];
-            
+
+            // Second element is the content inlines
+            let content = read_inlines(&c_arr[1])?;
+
             Ok(Inline::Cite(Cite { citations, content, source_info: SourceInfo::new(None, empty_range()) }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),

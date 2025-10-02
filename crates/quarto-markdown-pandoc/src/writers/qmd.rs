@@ -861,33 +861,71 @@ fn write_smallcaps(
     write!(buf, "]{{.smallcaps}}")
 }
 fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-    write!(buf, "[")?;
-    for (i, citation) in cite.citations.iter().enumerate() {
-        if i > 0 {
-            write!(buf, "; ")?;
+    use crate::pandoc::CitationMode;
+
+    // Check if we have any NormalCitation or SuppressAuthor citations
+    // These need to be wrapped in brackets together
+    let has_bracketed = cite
+        .citations
+        .iter()
+        .any(|c| matches!(c.mode, CitationMode::NormalCitation | CitationMode::SuppressAuthor));
+
+    if has_bracketed {
+        // All citations go in one set of brackets
+        write!(buf, "[")?;
+        for (i, citation) in cite.citations.iter().enumerate() {
+            if i > 0 {
+                write!(buf, "; ")?;
+            }
+
+            // Write prefix
+            let has_prefix = !citation.prefix.is_empty();
+            for inline in &citation.prefix {
+                write_inline(inline, buf)?;
+            }
+            // Only add space if prefix exists and doesn't end with whitespace
+            if has_prefix {
+                let ends_with_space = citation
+                    .prefix
+                    .last()
+                    .map(|inline| matches!(inline, crate::pandoc::Inline::Space(_)))
+                    .unwrap_or(false);
+                if !ends_with_space {
+                    write!(buf, " ")?;
+                }
+            }
+
+            // Write the citation itself
+            match citation.mode {
+                CitationMode::AuthorInText => {
+                    write!(buf, "@{}", citation.id)?;
+                }
+                CitationMode::NormalCitation => {
+                    write!(buf, "@{}", citation.id)?;
+                }
+                CitationMode::SuppressAuthor => {
+                    write!(buf, "-@{}", citation.id)?;
+                }
+            }
+
+            // Write suffix
+            for inline in &citation.suffix {
+                write_inline(inline, buf)?;
+            }
         }
-        // Write prefix
-        for inline in &citation.prefix {
-            write_inline(inline, buf)?;
-        }
-        if !citation.prefix.is_empty() {
-            write!(buf, " ")?;
-        }
-        // Write citation key with @ prefix
-        write!(buf, "@{}", citation.id)?;
-        // Write suffix
-        if !citation.suffix.is_empty() {
-            write!(buf, " ")?;
-        }
-        for inline in &citation.suffix {
-            write_inline(inline, buf)?;
+        write!(buf, "]")?;
+    } else {
+        // All citations are AuthorInText, write them without brackets
+        for (i, citation) in cite.citations.iter().enumerate() {
+            if i > 0 {
+                write!(buf, "; ")?;
+            }
+            write!(buf, "@{}", citation.id)?;
         }
     }
-    write!(buf, "]")?;
-    // Write any additional content that might be in the cite
-    for inline in &cite.content {
-        write_inline(inline, buf)?;
-    }
+
+    // Note: We don't write cite.content as it's just a rendered representation
+    // of what we've already written above
     Ok(())
 }
 fn write_rawinline(
