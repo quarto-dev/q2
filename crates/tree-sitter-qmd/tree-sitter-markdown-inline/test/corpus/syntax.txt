@@ -224,3 +224,12 @@ see @fig-1
   (citation
     (citation_delimiter)
     (citation_id_author_in_text)))
+===============================================================================
+emails (do not split @ to avoid becoming a Cite, but do split .)
+================================================================================
+hello@world.com
+--------------------------------------------------------------------------------
+(inline
+  (text_base)
+  (text_base)
+  (text_base))
