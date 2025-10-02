@@ -1,14 +1,14 @@
 ---
-title: Test Document
 draft: true
+settings:
+  number-sections: false
+  toc: true
 tags:
   - science
   - research
-settings:
-  toc: true
-  number-sections: false
+title: Test Document
 ---
 
-# Introduction
+# Introduction {#introduction}
 
 This is a test document.

@@ -4,4 +4,4 @@ author:
   affiliation: Example University
 ---
 
-# Test Document
+# Test Document {#test-document}
