@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+@theme {
+  --color-scheme: light dark;
+}
+
+body {
+  @apply bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 min-h-screen;
+}
