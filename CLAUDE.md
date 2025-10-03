@@ -9,5 +9,7 @@ The main documentation for this repository is located at:
 - When fixing bugs using tests, run the failing test before attempting to fix issues. This helps ensuring that tests are exercising the failure as expected, and fixes actually fix the particular issue.
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.
 - use "cargo run --" instead of trying to find the binary location, which will often be outside of this crate.
-- when calling shell scripts, be mindful of the current directory you're operating in. use `pwd` as necessary to avoid confusing yourself over commands that use relative paths.
+- when calling shell scripts, ALWAYS BE MINDFUL of the current directory you're operating in. use `pwd` as necessary to avoid confusing yourself over commands that use relative paths.
+- When a cd command fails for you, that means you're confused about the current directory. In this situations, ALWAYS run `pwd` before doing anything else.
 - use `jq` instead of `python3 -m json.tool` for pretty-printing. When processing JSON in a shell pipeline, prefer `jq` when possible.
+- Always create a plan. Always work on the plan one item at a time.
