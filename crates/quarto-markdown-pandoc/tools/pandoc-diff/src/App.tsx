@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react'
+import { create } from 'jsondiffpatch'
+import { format } from 'jsondiffpatch/formatters/html'
+import './jsondiffpatch.css'
 
 interface CompareResult {
   pandoc: any;
@@ -112,13 +115,16 @@ function App() {
       </div>
 
       {result && (
-        <TabGroup>
+        <TabGroup defaultIndex={2}>
           <TabList className="flex gap-2 border-b-2 border-gray-300 dark:border-gray-600">
             <Tab className="px-6 py-3 text-gray-600 dark:text-gray-400 border-b-2 border-transparent -mb-0.5 data-[selected]:text-indigo-600 data-[selected]:border-indigo-600 hover:text-indigo-500 transition-colors">
               Pandoc Output
             </Tab>
             <Tab className="px-6 py-3 text-gray-600 dark:text-gray-400 border-b-2 border-transparent -mb-0.5 data-[selected]:text-indigo-600 data-[selected]:border-indigo-600 hover:text-indigo-500 transition-colors">
               Quarto Markdown Output
+            </Tab>
+            <Tab className="px-6 py-3 text-gray-600 dark:text-gray-400 border-b-2 border-transparent -mb-0.5 data-[selected]:text-indigo-600 data-[selected]:border-indigo-600 hover:text-indigo-500 transition-colors">
+              Diff
             </Tab>
           </TabList>
           <TabPanels className="mt-4">
@@ -142,6 +148,27 @@ function App() {
                 <pre className="overflow-x-auto bg-gray-100 dark:bg-gray-900 text-black dark:text-white p-4 rounded text-xs max-h-[600px] overflow-y-auto border border-gray-300 dark:border-gray-600">
                   {JSON.stringify(sortKeys(removeLocations ? removeLocationInfo(result.qmd) : result.qmd), null, 2)}
                 </pre>
+              )}
+            </TabPanel>
+            <TabPanel>
+              {result.pandocError || result.qmdError ? (
+                <div className="text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950 p-4 rounded font-mono whitespace-pre-wrap">
+                  Cannot compute diff due to errors
+                </div>
+              ) : (
+                <div className="overflow-x-auto bg-white dark:bg-gray-900 p-4 rounded max-h-[600px] overflow-y-auto border border-gray-300 dark:border-gray-600">
+                  {(() => {
+                    const pandocProcessed = sortKeys(removeLocations ? removeLocationInfo(result.pandoc) : result.pandoc);
+                    const qmdProcessed = sortKeys(removeLocations ? removeLocationInfo(result.qmd) : result.qmd);
+                    const differ = create();
+                    const delta = differ.diff(pandocProcessed, qmdProcessed);
+                    if (!delta) {
+                      return <div className="text-green-600 dark:text-green-400">No differences found</div>;
+                    }
+                    const html = format(delta, pandocProcessed);
+                    return <div dangerouslySetInnerHTML={{ __html: html }} />;
+                  })()}
+                </div>
               )}
             </TabPanel>
           </TabPanels>

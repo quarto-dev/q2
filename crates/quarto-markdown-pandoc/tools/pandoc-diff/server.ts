@@ -55,8 +55,8 @@ app.post('/compare', async (req, res) => {
 
     // Run quarto-markdown-pandoc
     try {
-      const { stdout, stderr } = await execAsync(`cargo run --bin quarto-markdown-pandoc -- -i "${tmpFile.name}" -t json`, {
-        cwd: path.resolve(__dirname, '../../../..'),
+      const binaryPath = path.resolve(__dirname, '../../../../target/debug/quarto-markdown-pandoc');
+      const { stdout, stderr } = await execAsync(`"${binaryPath}" -i "${tmpFile.name}" -t json`, {
         maxBuffer: 10 * 1024 * 1024, // 10MB buffer
       });
       result.qmd = JSON.parse(stdout);
