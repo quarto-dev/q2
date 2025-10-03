@@ -865,10 +865,12 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
 
     // Check if we have any NormalCitation or SuppressAuthor citations
     // These need to be wrapped in brackets together
-    let has_bracketed = cite
-        .citations
-        .iter()
-        .any(|c| matches!(c.mode, CitationMode::NormalCitation | CitationMode::SuppressAuthor));
+    let has_bracketed = cite.citations.iter().any(|c| {
+        matches!(
+            c.mode,
+            CitationMode::NormalCitation | CitationMode::SuppressAuthor
+        )
+    });
 
     if has_bracketed {
         // All citations go in one set of brackets
@@ -894,19 +896,13 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
                     write!(buf, " ")?;
                 }
             }
-
             // Write the citation itself
-            match citation.mode {
-                CitationMode::AuthorInText => {
-                    write!(buf, "@{}", citation.id)?;
-                }
-                CitationMode::NormalCitation => {
-                    write!(buf, "@{}", citation.id)?;
-                }
-                CitationMode::SuppressAuthor => {
-                    write!(buf, "-@{}", citation.id)?;
-                }
-            }
+            let prefix = if matches!(citation.mode, CitationMode::SuppressAuthor) {
+                "-@"
+            } else {
+                "@"
+            };
+            write!(buf, "{}{}", prefix, citation.id)?;
 
             // Write suffix
             for inline in &citation.suffix {
