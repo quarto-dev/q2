@@ -7,8 +7,8 @@ use crate::impl_source_location;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceLocation;
 use crate::pandoc::location::SourceInfo;
+use crate::pandoc::location::SourceLocation;
 use crate::pandoc::location::node_source_info;
 use crate::pandoc::shortcode::Shortcode;
 
@@ -323,7 +323,12 @@ pub fn is_empty_target(target: &Target) -> bool {
     target.0.is_empty() && target.1.is_empty()
 }
 
-pub fn make_span_inline(attr: Attr, target: Target, content: Inlines, source_info: SourceInfo) -> Inline {
+pub fn make_span_inline(
+    attr: Attr,
+    target: Target,
+    content: Inlines,
+    source_info: SourceInfo,
+) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
         return Inline::Link(Link {
@@ -392,7 +397,12 @@ pub fn make_span_inline(attr: Attr, target: Target, content: Inlines, source_inf
     });
 }
 
-pub fn make_cite_inline(attr: Attr, target: Target, content: Inlines, source_info: SourceInfo) -> Inline {
+pub fn make_cite_inline(
+    attr: Attr,
+    target: Target,
+    content: Inlines,
+    source_info: SourceInfo,
+) -> Inline {
     // the traversal here is slightly inefficient because we need
     // to non-destructively check for the goodness of the content
     // before deciding to destructively create a Cite

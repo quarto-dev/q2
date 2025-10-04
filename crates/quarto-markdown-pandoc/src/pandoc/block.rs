@@ -10,8 +10,8 @@ use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
 use crate::pandoc::list::ListAttributes;
 use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceLocation;
 use crate::pandoc::location::SourceInfo;
+use crate::pandoc::location::SourceLocation;
 use crate::pandoc::location::node_source_info;
 use crate::pandoc::table::Table;
 

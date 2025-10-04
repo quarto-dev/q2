@@ -1,6 +1,6 @@
+use quarto_markdown_pandoc::readers::json;
 use std::fs;
 use std::path::PathBuf;
-use quarto_markdown_pandoc::readers::json;
 
 #[test]
 fn test_read_all_json_files_in_tests_readers() {
@@ -66,11 +66,9 @@ fn test_manybullets_json_specifically() {
         return;
     }
 
-    let mut file = fs::File::open(&json_file)
-        .expect("Failed to open manybullets.json");
+    let mut file = fs::File::open(&json_file).expect("Failed to open manybullets.json");
 
-    let pandoc = json::read(&mut file)
-        .expect("Failed to read manybullets.json");
+    let pandoc = json::read(&mut file).expect("Failed to read manybullets.json");
 
     // Verify the content matches what we expect
     assert_eq!(pandoc.blocks.len(), 1, "Should have exactly one block");

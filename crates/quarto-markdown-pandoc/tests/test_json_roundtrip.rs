@@ -3,11 +3,11 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_markdown_pandoc::pandoc::{Pandoc, Block, Paragraph, Inline, Str};
-use quarto_markdown_pandoc::pandoc::location::SourceInfo;
-use quarto_markdown_pandoc::writers::json;
-use quarto_markdown_pandoc::readers;
 use hashlink::LinkedHashMap;
+use quarto_markdown_pandoc::pandoc::location::SourceInfo;
+use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
+use quarto_markdown_pandoc::readers;
+use quarto_markdown_pandoc::writers::json;
 use std::collections::HashMap;
 
 #[test]
@@ -21,17 +21,33 @@ fn test_json_roundtrip_simple_paragraph() {
                 source_info: SourceInfo::new(
                     None,
                     quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 13, row: 0, column: 13 },
-                    }
-                )
+                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 0,
+                            row: 0,
+                            column: 0,
+                        },
+                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 13,
+                            row: 0,
+                            column: 13,
+                        },
+                    },
+                ),
             })],
             source_info: SourceInfo::new(
                 None,
                 quarto_markdown_pandoc::pandoc::location::Range {
-                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 13, row: 0, column: 13 },
-                }
+                    start: quarto_markdown_pandoc::pandoc::location::Location {
+                        offset: 0,
+                        row: 0,
+                        column: 0,
+                    },
+                    end: quarto_markdown_pandoc::pandoc::location::Location {
+                        offset: 13,
+                        row: 0,
+                        column: 13,
+                    },
+                },
             ),
         })],
     };
@@ -47,7 +63,7 @@ fn test_json_roundtrip_simple_paragraph() {
     // Compare the documents
     assert_eq!(original.meta, parsed.meta);
     assert_eq!(original.blocks.len(), parsed.blocks.len());
-    
+
     // For now, just check that we can parse back what we wrote
     // Full equality might be challenging due to location differences
     match (&original.blocks[0], &parsed.blocks[0]) {
@@ -72,7 +88,7 @@ fn test_json_roundtrip_complex_document() {
             let mut meta = LinkedHashMap::new();
             meta.insert(
                 "title".to_string(),
-                quarto_markdown_pandoc::pandoc::MetaValue::MetaString("Test Document".to_string())
+                quarto_markdown_pandoc::pandoc::MetaValue::MetaString("Test Document".to_string()),
             );
             meta
         },
@@ -84,10 +100,18 @@ fn test_json_roundtrip_complex_document() {
                         source_info: SourceInfo::new(
                             None,
                             quarto_markdown_pandoc::pandoc::location::Range {
-                                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 8, row: 0, column: 8 },
-                            }
-                        )
+                                start: quarto_markdown_pandoc::pandoc::location::Location {
+                                    offset: 0,
+                                    row: 0,
+                                    column: 0,
+                                },
+                                end: quarto_markdown_pandoc::pandoc::location::Location {
+                                    offset: 8,
+                                    row: 0,
+                                    column: 8,
+                                },
+                            },
+                        ),
                     }),
                     Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
                         content: vec![Inline::Str(Str {
@@ -95,36 +119,68 @@ fn test_json_roundtrip_complex_document() {
                             source_info: SourceInfo::new(
                                 None,
                                 quarto_markdown_pandoc::pandoc::location::Range {
-                                    start: quarto_markdown_pandoc::pandoc::location::Location { offset: 8, row: 0, column: 8 },
-                                    end: quarto_markdown_pandoc::pandoc::location::Location { offset: 17, row: 0, column: 17 },
-                                }
-                            )
+                                    start: quarto_markdown_pandoc::pandoc::location::Location {
+                                        offset: 8,
+                                        row: 0,
+                                        column: 8,
+                                    },
+                                    end: quarto_markdown_pandoc::pandoc::location::Location {
+                                        offset: 17,
+                                        row: 0,
+                                        column: 17,
+                                    },
+                                },
+                            ),
                         })],
                         source_info: SourceInfo::new(
                             None,
                             quarto_markdown_pandoc::pandoc::location::Range {
-                                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 8, row: 0, column: 8 },
-                                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 17, row: 0, column: 17 },
-                            }
-                        )
+                                start: quarto_markdown_pandoc::pandoc::location::Location {
+                                    offset: 8,
+                                    row: 0,
+                                    column: 8,
+                                },
+                                end: quarto_markdown_pandoc::pandoc::location::Location {
+                                    offset: 17,
+                                    row: 0,
+                                    column: 17,
+                                },
+                            },
+                        ),
                     }),
                     Inline::Str(Str {
                         text: ".".to_string(),
                         source_info: SourceInfo::new(
                             None,
                             quarto_markdown_pandoc::pandoc::location::Range {
-                                start: quarto_markdown_pandoc::pandoc::location::Location { offset: 17, row: 0, column: 17 },
-                                end: quarto_markdown_pandoc::pandoc::location::Location { offset: 18, row: 0, column: 18 },
-                            }
-                        )
+                                start: quarto_markdown_pandoc::pandoc::location::Location {
+                                    offset: 17,
+                                    row: 0,
+                                    column: 17,
+                                },
+                                end: quarto_markdown_pandoc::pandoc::location::Location {
+                                    offset: 18,
+                                    row: 0,
+                                    column: 18,
+                                },
+                            },
+                        ),
                     }),
                 ],
                 source_info: SourceInfo::new(
                     None,
                     quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 20, row: 0, column: 20 },
-                    }
+                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 0,
+                            row: 0,
+                            column: 0,
+                        },
+                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 20,
+                            row: 0,
+                            column: 20,
+                        },
+                    },
                 ),
             }),
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
@@ -133,9 +189,17 @@ fn test_json_roundtrip_complex_document() {
                 source_info: SourceInfo::new(
                     None,
                     quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 21, row: 1, column: 0 },
-                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 43, row: 1, column: 22 },
-                    }
+                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 21,
+                            row: 1,
+                            column: 0,
+                        },
+                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 43,
+                            row: 1,
+                            column: 22,
+                        },
+                    },
                 ),
             }),
         ],
@@ -152,7 +216,7 @@ fn test_json_roundtrip_complex_document() {
     // Verify basic structure
     assert_eq!(parsed.blocks.len(), 2);
     assert!(parsed.meta.contains_key("title"));
-    
+
     match parsed.meta.get("title") {
         Some(quarto_markdown_pandoc::pandoc::MetaValue::MetaString(title)) => {
             assert_eq!(title, "Test Document");
@@ -177,7 +241,7 @@ fn test_json_roundtrip_complex_document() {
     }
 }
 
-#[test] 
+#[test]
 fn test_json_write_then_read_matches_original_structure() {
     // This test ensures that anything we can write, we can also read back
     // with the same basic structure, even if exact equality is not possible
@@ -191,17 +255,33 @@ fn test_json_write_then_read_matches_original_structure() {
                     source_info: SourceInfo::new(
                         Some("test.md".to_string()),
                         quarto_markdown_pandoc::pandoc::location::Range {
-                            start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                            end: quarto_markdown_pandoc::pandoc::location::Location { offset: 10, row: 0, column: 10 },
-                        }
-                    )
+                            start: quarto_markdown_pandoc::pandoc::location::Location {
+                                offset: 0,
+                                row: 0,
+                                column: 0,
+                            },
+                            end: quarto_markdown_pandoc::pandoc::location::Location {
+                                offset: 10,
+                                row: 0,
+                                column: 10,
+                            },
+                        },
+                    ),
                 })],
                 source_info: SourceInfo::new(
                     Some("test.md".to_string()),
                     quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 0, row: 0, column: 0 },
-                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 10, row: 0, column: 10 },
-                    }
+                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 0,
+                            row: 0,
+                            column: 0,
+                        },
+                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 10,
+                            row: 0,
+                            column: 10,
+                        },
+                    },
                 ),
             }),
             Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
@@ -210,9 +290,17 @@ fn test_json_write_then_read_matches_original_structure() {
                 source_info: SourceInfo::new(
                     Some("test.md".to_string()),
                     quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location { offset: 11, row: 1, column: 0 },
-                        end: quarto_markdown_pandoc::pandoc::location::Location { offset: 30, row: 1, column: 19 },
-                    }
+                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 11,
+                            row: 1,
+                            column: 0,
+                        },
+                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                            offset: 30,
+                            row: 1,
+                            column: 19,
+                        },
+                    },
                 ),
             }),
         ],
@@ -221,7 +309,7 @@ fn test_json_write_then_read_matches_original_structure() {
     // Write to JSON
     let mut json_output = Vec::new();
     json::write(&original, &mut json_output).expect("Failed to write JSON");
-    
+
     // Convert to string for debugging if needed
     let json_string = String::from_utf8(json_output.clone()).expect("Invalid UTF-8");
     println!("Generated JSON: {}", json_string);
@@ -231,13 +319,13 @@ fn test_json_write_then_read_matches_original_structure() {
     let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
 
     // Verify we can parse back the same structure
-    assert_eq!(parsed.blocks.len(), original.blocks.len());
-    
+    assert_eq!(original.blocks.len(), parsed.blocks.len());
+
     match (&original.blocks[0], &parsed.blocks[0]) {
-        (Block::Plain(_), Block::Plain(_)) => {}, // Structure matches
+        (Block::Plain(_), Block::Plain(_)) => {} // Structure matches
         _ => panic!("Block type mismatch for first block"),
     }
-    
+
     match (&original.blocks[1], &parsed.blocks[1]) {
         (Block::RawBlock(orig), Block::RawBlock(parsed)) => {
             assert_eq!(orig.format, parsed.format);

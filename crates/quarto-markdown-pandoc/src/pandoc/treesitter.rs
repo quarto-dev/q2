@@ -470,12 +470,38 @@ fn process_backslash_escape(
 // Pandoc's default abbreviations list
 // From Text.Pandoc.Parsing in pandoc source
 fn is_abbreviation(text: &str) -> bool {
-    matches!(text,
-        "Mr." | "Mrs." | "Ms." | "Capt." | "Dr." | "Prof." |
-        "Gen." | "Gov." | "e.g." | "i.e." | "Sgt." | "St." |
-        "vol." | "vs." | "Sen." | "Rep." | "Pres." | "Hon." |
-        "Rev." | "Ph.D." | "M.D." | "M.A." | "p." | "pp." |
-        "ch." | "chap." | "sec." | "cf." | "cp.")
+    matches!(
+        text,
+        "Mr."
+            | "Mrs."
+            | "Ms."
+            | "Capt."
+            | "Dr."
+            | "Prof."
+            | "Gen."
+            | "Gov."
+            | "e.g."
+            | "i.e."
+            | "Sgt."
+            | "St."
+            | "vol."
+            | "vs."
+            | "Sen."
+            | "Rep."
+            | "Pres."
+            | "Hon."
+            | "Rev."
+            | "Ph.D."
+            | "M.D."
+            | "M.A."
+            | "p."
+            | "pp."
+            | "ch."
+            | "chap."
+            | "sec."
+            | "cf."
+            | "cp."
+    )
 }
 
 // Coalesce Str nodes that end with abbreviations with following words
@@ -497,9 +523,16 @@ fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             if is_abbreviation(&current_text) {
                 // Coalesce with following Space + Str until we hit a capital letter
                 while j + 1 < inlines.len() {
-                    if let (Inline::Space(_), Inline::Str(next_str)) = (&inlines[j], &inlines[j + 1]) {
+                    if let (Inline::Space(_), Inline::Str(next_str)) =
+                        (&inlines[j], &inlines[j + 1])
+                    {
                         // Stop before uppercase letters (potential sentence boundaries)
-                        if next_str.text.chars().next().map_or(false, |c| c.is_uppercase()) {
+                        if next_str
+                            .text
+                            .chars()
+                            .next()
+                            .map_or(false, |c| c.is_uppercase())
+                        {
                             break;
                         }
 
@@ -2529,7 +2562,9 @@ fn merge_strs(pandoc: Pandoc) -> Pandoc {
                         if let Some(current) = current_str.take() {
                             result.push(Inline::Str(Str {
                                 text: current,
-                                source_info: current_source_info.take().unwrap_or_else(empty_source_info),
+                                source_info: current_source_info
+                                    .take()
+                                    .unwrap_or_else(empty_source_info),
                             }));
                         }
                         result.push(inline);

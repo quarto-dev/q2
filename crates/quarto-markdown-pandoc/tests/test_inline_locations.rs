@@ -23,8 +23,8 @@ fn test_inline_source_locations() {
     writers::json::write(&pandoc, &mut buf).unwrap();
     let json_output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
 
-    let json_value: serde_json::Value = serde_json::from_str(&json_output)
-        .expect("Failed to parse JSON output");
+    let json_value: serde_json::Value =
+        serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     // Check that the source locations are correct for the inline nodes
     let blocks = json_value["blocks"].as_array().unwrap();
@@ -99,8 +99,8 @@ fn test_merged_strings_preserve_location() {
     writers::json::write(&pandoc, &mut buf).unwrap();
     let json_output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
 
-    let json_value: serde_json::Value = serde_json::from_str(&json_output)
-        .expect("Failed to parse JSON output");
+    let json_value: serde_json::Value =
+        serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];
@@ -153,8 +153,8 @@ fn test_separate_strings_keep_separate_locations() {
     writers::json::write(&pandoc, &mut buf).unwrap();
     let json_output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
 
-    let json_value: serde_json::Value = serde_json::from_str(&json_output)
-        .expect("Failed to parse JSON output");
+    let json_value: serde_json::Value =
+        serde_json::from_str(&json_output).expect("Failed to parse JSON output");
 
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];

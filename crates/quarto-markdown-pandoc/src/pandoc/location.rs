@@ -32,7 +32,10 @@ impl SourceInfo {
     }
 
     pub fn with_range(range: Range) -> Self {
-        SourceInfo { filename: None, range }
+        SourceInfo {
+            filename: None,
+            range,
+        }
     }
 
     pub fn combine(&self, other: &SourceInfo) -> SourceInfo {
