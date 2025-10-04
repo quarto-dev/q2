@@ -304,11 +304,11 @@ fn write_div(div: &crate::pandoc::Div, writer: &mut dyn std::io::Write) -> std::
 
 fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Determine if this is a tight list
-    // A list is tight if all items contain exactly one Plain block
+    // A list is tight if the first block of all items is Plain (not Para)
     let is_tight = bulletlist
         .content
         .iter()
-        .all(|item| item.len() == 1 && matches!(item[0], Block::Plain(_)));
+        .all(|item| !item.is_empty() && matches!(item[0], Block::Plain(_)));
 
     for (i, item) in bulletlist.content.iter().enumerate() {
         if i > 0 && !is_tight {
@@ -334,11 +334,11 @@ fn write_orderedlist(
     let (start_num, _number_style, delimiter) = &orderedlist.attr;
 
     // Determine if this is a tight list
-    // A list is tight if all items contain exactly one Plain block
+    // A list is tight if the first block of all items is Plain (not Para)
     let is_tight = orderedlist
         .content
         .iter()
-        .all(|item| item.len() == 1 && matches!(item[0], Block::Plain(_)));
+        .all(|item| !item.is_empty() && matches!(item[0], Block::Plain(_)));
 
     for (i, item) in orderedlist.content.iter().enumerate() {
         if i > 0 && !is_tight {

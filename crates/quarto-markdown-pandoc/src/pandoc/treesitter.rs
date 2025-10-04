@@ -1369,21 +1369,25 @@ fn process_list(
         list_items
             .into_iter()
             .map(|mut blocks| {
-                if blocks.len() != 1 {
+                if blocks.is_empty() {
                     return blocks;
                 }
-                let first = blocks.pop().unwrap();
+                // Convert the first block if it's a Paragraph
+                let first = blocks.remove(0);
                 let Block::Paragraph(Paragraph {
                     content,
                     source_info,
                 }) = first
                 else {
-                    return vec![first];
+                    blocks.insert(0, first);
+                    return blocks;
                 };
-                vec![Block::Plain(Plain {
+                let mut result = vec![Block::Plain(Plain {
                     content: content,
                     source_info: source_info,
-                })]
+                })];
+                result.extend(blocks);
+                result
             })
             .collect()
     };
