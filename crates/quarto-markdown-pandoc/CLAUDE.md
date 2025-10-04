@@ -62,3 +62,4 @@ The `quarto-markdown-pandoc` binary accepts the following options:
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.
 - When fixing inconsistency bugs, use `pandoc -t json -i <input_file>` to get Pandoc's output, and `cargo run -- -t json -i <input_file>` to get our output.
 - When fixing roundtripping bugs, make sure to always add a roundtripping test to `tests/roundtrip_tests/qmd-json-qmd`.
+- When I say "@doit", I mean "create a plan, and work on it item by item."

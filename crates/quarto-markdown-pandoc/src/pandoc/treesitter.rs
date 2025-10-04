@@ -160,6 +160,12 @@ fn create_specifier_base_text(
     PandocNativeIntermediate::IntermediateBaseText(id, node_location(node))
 }
 
+// Helper function to convert straight apostrophes to smart quotes
+// Converts ASCII apostrophe (') to Unicode right single quotation mark (')
+fn apply_smart_quotes(text: String) -> String {
+    text.replace('\'', "\u{2019}")
+}
+
 // Helper function to create simple line break inlines
 fn create_line_break_inline(node: &tree_sitter::Node, is_hard: bool) -> PandocNativeIntermediate {
     let range = node_location(node);
@@ -1696,7 +1702,7 @@ fn process_native_inline<T: Write>(
                 })
             } else {
                 Inline::Str(Str {
-                    text,
+                    text: apply_smart_quotes(text),
                     source_info: SourceInfo::with_range(range),
                 })
             }

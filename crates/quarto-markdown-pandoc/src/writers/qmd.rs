@@ -660,9 +660,15 @@ fn determine_backticks(text: &str) -> String {
     "`".repeat(max_backticks + 1)
 }
 
+// Helper function to reverse smart quotes conversion
+// Converts Unicode right single quotation mark (') back to ASCII apostrophe (')
+fn reverse_smart_quotes(text: &str) -> String {
+    text.replace('\u{2019}', "'")
+}
+
 fn write_str(s: &Str, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // FIXME what are the escaping rules that Pandoc uses?
-    write!(buf, "{}", s.text)
+    write!(buf, "{}", reverse_smart_quotes(&s.text))
 }
 
 fn write_space(_: &crate::pandoc::Space, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
