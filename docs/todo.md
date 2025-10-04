@@ -33,3 +33,7 @@
 
         - in addition, if we _do_ add support for in-block equation ids, we should consider that the output
           will not only need to exist for LaTeX, but will need to exist for html and typst as well.
+
+## parsing differences
+
+- Lines that end with spaces might be interpreted differently.

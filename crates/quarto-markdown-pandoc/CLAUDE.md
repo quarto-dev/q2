@@ -63,3 +63,4 @@ The `quarto-markdown-pandoc` binary accepts the following options:
 - When fixing inconsistency bugs, use `pandoc -t json -i <input_file>` to get Pandoc's output, and `cargo run -- -t json -i <input_file>` to get our output.
 - When fixing roundtripping bugs, make sure to always add a roundtripping test to `tests/roundtrip_tests/qmd-json-qmd`.
 - When I say "@doit", I mean "create a plan, and work on it item by item."
+- When you're done editing a Rust file, run `cargo fmt` on it.
