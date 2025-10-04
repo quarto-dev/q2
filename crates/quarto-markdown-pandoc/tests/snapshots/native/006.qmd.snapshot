@@ -1,1 +1,1 @@
-[ Para [Cite [Citation { citationId = "smith04", citationPrefix = [], citationSuffix = [Str "p.", Space, Str "33"], citationMode = AuthorInText, citationNoteNum = 1, citationHash = 0 }] [Str "@smith04"]] ]
+[ Para [Cite [Citation { citationId = "smith04", citationPrefix = [], citationSuffix = [Str "p. 33"], citationMode = AuthorInText, citationNoteNum = 1, citationHash = 0 }] [Str "@smith04"]] ]

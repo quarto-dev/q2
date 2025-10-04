@@ -467,6 +467,84 @@ fn process_backslash_escape(
     PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
 }
 
+// Pandoc's default abbreviations list
+// From Text.Pandoc.Parsing in pandoc source
+fn is_abbreviation(text: &str) -> bool {
+    matches!(text,
+        "Mr." | "Mrs." | "Ms." | "Capt." | "Dr." | "Prof." |
+        "Gen." | "Gov." | "e.g." | "i.e." | "Sgt." | "St." |
+        "vol." | "vs." | "Sen." | "Rep." | "Pres." | "Hon." |
+        "Rev." | "Ph.D." | "M.D." | "M.A." | "p." | "pp." |
+        "ch." | "chap." | "sec." | "cf." | "cp.")
+}
+
+// Coalesce Str nodes that end with abbreviations with following words
+// This matches Pandoc's behavior of keeping abbreviations with the next word
+// Returns (result, did_coalesce) tuple
+fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
+    let mut result: Vec<Inline> = Vec::new();
+    let mut i = 0;
+    let mut did_coalesce = false;
+
+    while i < inlines.len() {
+        if let Inline::Str(ref str_inline) = inlines[i] {
+            let mut current_text = str_inline.text.clone();
+            let start_info = str_inline.source_info.clone();
+            let mut end_info = str_inline.source_info.clone();
+            let mut j = i + 1;
+
+            // Check if current text is an abbreviation
+            if is_abbreviation(&current_text) {
+                // Coalesce with following Space + Str until we hit a capital letter
+                while j + 1 < inlines.len() {
+                    if let (Inline::Space(_), Inline::Str(next_str)) = (&inlines[j], &inlines[j + 1]) {
+                        // Stop before uppercase letters (potential sentence boundaries)
+                        if next_str.text.chars().next().map_or(false, |c| c.is_uppercase()) {
+                            break;
+                        }
+
+                        // Coalesce
+                        current_text.push(' ');
+                        current_text.push_str(&next_str.text);
+                        end_info = next_str.source_info.clone();
+                        j += 2;
+                        did_coalesce = true;
+
+                        // If this word is also an abbreviation, continue coalescing
+                        // Otherwise, stop after this word
+                        if !is_abbreviation(&next_str.text) {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+
+            // Create the Str node (possibly coalesced)
+            let source_info = if j > i + 1 {
+                SourceInfo::with_range(Range {
+                    start: start_info.range.start.clone(),
+                    end: end_info.range.end.clone(),
+                })
+            } else {
+                start_info
+            };
+
+            result.push(Inline::Str(Str {
+                text: current_text,
+                source_info,
+            }));
+            i = j;
+        } else {
+            result.push(inlines[i].clone());
+            i += 1;
+        }
+    }
+
+    (result, did_coalesce)
+}
+
 fn process_paragraph(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -2464,10 +2542,15 @@ fn merge_strs(pandoc: Pandoc) -> Pandoc {
                     source_info: current_source_info.unwrap_or_else(empty_source_info),
                 }));
             }
+
+            // Apply abbreviation coalescing after merging strings
+            let (coalesced_result, did_coalesce) = coalesce_abbreviations(result);
+            did_merge = did_merge || did_coalesce;
+
             if did_merge {
-                FilterResult(result, true)
+                FilterResult(coalesced_result, true)
             } else {
-                Unchanged(result)
+                Unchanged(coalesced_result)
             }
         }),
     )
@@ -2487,5 +2570,6 @@ pub fn treesitter_to_pandoc<T: Write>(
         panic!("Expected Pandoc, got {:?}", result)
     };
     let result = desugar(pandoc)?;
-    Ok(merge_strs(result))
+    let result = merge_strs(result);
+    Ok(result)
 }
