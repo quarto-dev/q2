@@ -679,6 +679,8 @@ fn write_soft_break(
     _: &crate::pandoc::SoftBreak,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
+    // Pandoc's writer for markdown outputs a space for soft breaks
+    // We choose to deviate from Pandoc for roundtripping purposes
     writeln!(buf)
 }
 
