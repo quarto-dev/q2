@@ -2236,6 +2236,9 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
     let raw_reader_format_specifier: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"<(?P<reader>.+)").unwrap());
     let result = {
+        // Track seen header IDs to avoid duplicates
+        let mut seen_ids: HashMap<String, usize> = HashMap::new();
+
         let mut filter = Filter::new()
             .with_superscript(|mut superscript| {
                 let (content, changed) = trim_inlines(superscript.content);
@@ -2250,7 +2253,7 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                 }
             })
             // add attribute to headers that have them.
-            .with_header(|mut header| {
+            .with_header(move |mut header| {
                 let is_last_attr = header
                     .content
                     .last()
@@ -2258,7 +2261,18 @@ fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                 if !is_last_attr {
                     let mut attr = header.attr.clone();
                     if attr.0.is_empty() {
-                        attr.0 = autoid::auto_generated_id(&header.content);
+                        let base_id = autoid::auto_generated_id(&header.content);
+
+                        // Deduplicate the ID by appending -1, -2, etc. for duplicates
+                        let final_id = if let Some(count) = seen_ids.get_mut(&base_id) {
+                            *count += 1;
+                            format!("{}-{}", base_id, count)
+                        } else {
+                            seen_ids.insert(base_id.clone(), 0);
+                            base_id
+                        };
+
+                        attr.0 = final_id;
                         if !is_empty_attr(&attr) {
                             header.attr = attr;
                             FilterResult(vec![Block::Header(header)], true)
