@@ -317,8 +317,8 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
         }
         let mut item_writer = BulletListContext::new(buf);
         for (j, block) in item.iter().enumerate() {
-            if j > 0 {
-                // Add a blank line between blocks within a list item
+            if j > 0 && !is_tight {
+                // Add a blank line between blocks within a list item in loose lists
                 writeln!(&mut item_writer)?;
             }
             write_block(block, &mut item_writer)?;
@@ -348,8 +348,8 @@ fn write_orderedlist(
         let current_num = start_num + i;
         let mut item_writer = OrderedListContext::new(buf, current_num, delimiter.clone());
         for (j, block) in item.iter().enumerate() {
-            if j > 0 {
-                // Add a blank line between blocks within a list item
+            if j > 0 && !is_tight {
+                // Add a blank line between blocks within a list item in loose lists
                 writeln!(&mut item_writer)?;
             }
             write_block(block, &mut item_writer)?;

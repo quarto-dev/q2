@@ -1355,6 +1355,11 @@ fn process_list(
                 // if the first block is not a paragraph, it's not loose
                 last_para_range = None;
             }
+        } else {
+            // if the item has multiple blocks (but not multiple paragraphs,
+            // which would have been caught above), we need to reset the
+            // last_para_range since this item can't participate in loose detection
+            last_para_range = None;
         }
         list_items.push(blocks);
     }
