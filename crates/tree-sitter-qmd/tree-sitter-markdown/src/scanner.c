@@ -1444,6 +1444,9 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
 }
 
 static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(valid_symbols);
+    
     // precondition: lexer->lookahead == '['
     advance(s, lexer);
     if (lexer->lookahead != '^') {
