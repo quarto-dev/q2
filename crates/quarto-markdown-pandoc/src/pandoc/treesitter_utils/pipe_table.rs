@@ -152,6 +152,9 @@ pub fn process_pipe_table(
     let mut colspec: Vec<ColSpec> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
     for (node, child) in children {
+        if node == "block_continuation" {
+            continue; // skip block continuation nodes
+        }
         if node == "pipe_table_header" {
             if let PandocNativeIntermediate::IntermediateRow(row) = child {
                 header = Some(row);

@@ -1,0 +1,9 @@
+::: {#fig-table .column-margin}
+
+| A | B |
+|---|---|
+| C | D |
+
+A table treated like a figure 
+
+:::
