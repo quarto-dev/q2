@@ -18,6 +18,10 @@ use crate::pandoc::treesitter_utils::postprocess::{desugar, merge_strs};
 use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
 use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
 use crate::pandoc::treesitter_utils::raw_specifier::process_raw_specifier;
+use crate::pandoc::treesitter_utils::shortcode::{
+    process_shortcode, process_shortcode_boolean, process_shortcode_keyword_param,
+    process_shortcode_number, process_shortcode_string, process_shortcode_string_arg,
+};
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
 
@@ -40,7 +44,6 @@ use crate::pandoc::location::{
 };
 use crate::pandoc::meta::Meta;
 use crate::pandoc::pandoc::Pandoc;
-use crate::pandoc::shortcode::{Shortcode, ShortcodeArg};
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
@@ -215,35 +218,6 @@ fn process_section(children: Vec<(String, PandocNativeIntermediate)>) -> PandocN
     PandocNativeIntermediate::IntermediateSection(blocks)
 }
 
-// Helper function to process shortcode_naked_string and shortcode_name nodes
-fn process_shortcode_string_arg(
-    node: &tree_sitter::Node,
-    input_bytes: &[u8],
-) -> PandocNativeIntermediate {
-    let id = node.utf8_text(input_bytes).unwrap().to_string();
-    PandocNativeIntermediate::IntermediateShortcodeArg(
-        ShortcodeArg::String(id),
-        node_location(node),
-    )
-}
-
-// Helper function to process shortcode_string nodes
-fn process_shortcode_string(
-    extract_quoted_text: &dyn Fn() -> PandocNativeIntermediate,
-    node: &tree_sitter::Node,
-) -> PandocNativeIntermediate {
-    let PandocNativeIntermediate::IntermediateBaseText(id, _) = extract_quoted_text() else {
-        panic!(
-            "Expected BaseText in shortcode_string, got {:?}",
-            extract_quoted_text()
-        )
-    };
-    PandocNativeIntermediate::IntermediateShortcodeArg(
-        ShortcodeArg::String(id),
-        node_location(node),
-    )
-}
-
 fn process_code_fence_content(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -303,50 +277,6 @@ fn process_note_reference(
     }))
 }
 
-fn process_shortcode_keyword_param<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut result = HashMap::new();
-    let mut name = String::new();
-    for (node, child) in children {
-        match node.as_str() {
-            "shortcode_name" => {
-                let PandocNativeIntermediate::IntermediateShortcodeArg(
-                    ShortcodeArg::String(text),
-                    _,
-                ) = child
-                else {
-                    panic!("Expected BaseText in shortcode_name, got {:?}", child)
-                };
-                if name.is_empty() {
-                    name = text;
-                } else {
-                    result.insert(name.clone(), ShortcodeArg::String(text));
-                }
-            }
-            "shortcode_string"
-            | "shortcode_number"
-            | "shortcode_naked_string"
-            | "shortcode_boolean" => {
-                let PandocNativeIntermediate::IntermediateShortcodeArg(arg, _) = child else {
-                    panic!("Expected ShortcodeArg in shortcode_string, got {:?}", child)
-                };
-                result.insert(name.clone(), arg);
-            }
-            "block_continuation" => {
-                // This is a marker node, we don't need to do anything with it
-            }
-            _ => {
-                writeln!(buf, "Warning: Unhandled node kind: {}", node).unwrap();
-            }
-        }
-    }
-    let range = node_location(node);
-    PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(result), range)
-}
-
 fn process_citation<F>(
     node: &tree_sitter::Node,
     node_text: F,
@@ -394,68 +324,6 @@ where
             source_info: node_source_info(node),
         })],
         source_info: node_source_info(node),
-    }))
-}
-
-fn process_shortcode(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let is_escaped = node.kind() == "shortcode_escaped";
-    let mut name = String::new();
-    let mut positional_args: Vec<ShortcodeArg> = Vec::new();
-    let mut keyword_args: HashMap<String, ShortcodeArg> = HashMap::new();
-    for (node, child) in children {
-        match (node.as_str(), child) {
-            (
-                "shortcode_naked_string",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
-            )
-            | (
-                "shortcode_name",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
-            )
-            | (
-                "shortcode_string",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
-            ) => {
-                if name.is_empty() {
-                    name = text;
-                } else {
-                    positional_args.push(ShortcodeArg::String(text));
-                }
-            }
-            (
-                "shortcode_keyword_param",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(spec), _),
-            ) => {
-                for (key, value) in spec {
-                    keyword_args.insert(key, value);
-                }
-            }
-            ("shortcode", PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(arg))) => {
-                positional_args.push(ShortcodeArg::Shortcode(arg));
-            }
-            ("shortcode_number", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _))
-            | ("shortcode_boolean", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _)) => {
-                positional_args.push(arg);
-            }
-            ("shortcode_delimiter", _) => {
-                // This is a marker node, we don't need to do anything with it
-            }
-            (child_type, child) => panic!(
-                "Unexpected node in {:?}: {:?} {:?}",
-                node,
-                child_type,
-                child.clone()
-            ),
-        }
-    }
-    PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(Shortcode {
-        is_escaped,
-        name,
-        positional_args,
-        keyword_args,
     }))
 }
 
@@ -1474,24 +1342,8 @@ fn native_visitor<T: Write>(
         "note_reference" => process_note_reference(node, children),
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
         "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
-        "shortcode_boolean" => {
-            let value = node_text();
-            let value = match value.as_str() {
-                "true" => ShortcodeArg::Boolean(true),
-                "false" => ShortcodeArg::Boolean(false),
-                _ => panic!("Unexpected shortcode_boolean value: {}", value),
-            };
-            let range = node_location(node);
-            PandocNativeIntermediate::IntermediateShortcodeArg(value, range)
-        }
-        "shortcode_number" => {
-            let value = node_text();
-            let range = node_location(node);
-            let Ok(num) = value.parse::<f64>() else {
-                panic!("Invalid shortcode_number: {}", value)
-            };
-            PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::Number(num), range)
-        }
+        "shortcode_boolean" => process_shortcode_boolean(node, input_bytes),
+        "shortcode_number" => process_shortcode_number(node, input_bytes),
         "code_fence_content" => process_code_fence_content(node, children, input_bytes),
         "list_marker_parenthesis" | "list_marker_dot" => process_list_marker(node, input_bytes),
         // These are marker nodes, we don't need to do anything with it

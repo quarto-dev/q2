@@ -19,5 +19,6 @@ pub mod postprocess;
 pub mod quoted_span;
 pub mod raw_attribute;
 pub mod raw_specifier;
+pub mod shortcode;
 pub mod text_helpers;
 pub mod thematic_break;
