@@ -30,14 +30,25 @@ pub fn run() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 }
 
-fn json_to_pandoc(input: &str) -> Result<(quarto_markdown_pandoc::pandoc::Pandoc, quarto_markdown_pandoc::pandoc::ASTContext), String> {
+fn json_to_pandoc(
+    input: &str,
+) -> Result<
+    (
+        quarto_markdown_pandoc::pandoc::Pandoc,
+        quarto_markdown_pandoc::pandoc::ASTContext,
+    ),
+    String,
+> {
     match readers::json::read(&mut input.as_bytes()) {
         Ok(doc) => Ok(doc),
         Err(err) => Err(format!("Unable to read as json: {:?}", err)),
     }
 }
 
-fn pandoc_to_json(doc: &quarto_markdown_pandoc::pandoc::Pandoc, context: &quarto_markdown_pandoc::pandoc::ASTContext) -> Result<String, String> {
+fn pandoc_to_json(
+    doc: &quarto_markdown_pandoc::pandoc::Pandoc,
+    context: &quarto_markdown_pandoc::pandoc::ASTContext,
+) -> Result<String, String> {
     let mut buf = Vec::new();
     match writers::json::write(doc, context, &mut buf) {
         Ok(_) => {
