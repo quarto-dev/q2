@@ -180,6 +180,27 @@ pub fn process_pipe_table(
             panic!("Unexpected node in pipe_table: {}", node);
         }
     }
+
+    // Check if header row has all empty cells
+    let header_is_empty = header.as_ref().map_or(false, |h| {
+        h.cells.iter().all(|cell| {
+            cell.content.iter().all(|block| {
+                if let Block::Plain(plain) = block {
+                    plain.content.is_empty()
+                } else {
+                    false
+                }
+            })
+        })
+    });
+
+    // If header is empty, discard it and use empty thead
+    let (thead_rows, body_rows) = if header_is_empty {
+        (vec![], rows)
+    } else {
+        (vec![header.unwrap()], rows)
+    };
+
     PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
         attr,
         caption: Caption {
@@ -189,13 +210,13 @@ pub fn process_pipe_table(
         colspec,
         head: TableHead {
             attr: empty_attr(),
-            rows: vec![header.unwrap()],
+            rows: thead_rows,
         },
         bodies: vec![TableBody {
             attr: empty_attr(),
             rowhead_columns: 0,
             head: vec![],
-            body: rows,
+            body: body_rows,
         }],
         foot: TableFoot {
             attr: empty_attr(),
