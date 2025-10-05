@@ -104,7 +104,7 @@ pub fn process_pipe_table_cell(
 ) -> PandocNativeIntermediate {
     let mut plain_content: Inlines = Vec::new();
     let mut table_cell = Cell {
-        alignment: Alignment::Left,
+        alignment: Alignment::Default,
         col_span: 1,
         row_span: 1,
         attr: ("".to_string(), vec![], HashMap::new()),
@@ -125,6 +125,16 @@ pub fn process_pipe_table_cell(
             );
         }
     }
+
+    // Trim trailing spaces from cell content to match Pandoc behavior
+    while let Some(last) = plain_content.last() {
+        if matches!(last, crate::pandoc::inline::Inline::Space(_)) {
+            plain_content.pop();
+        } else {
+            break;
+        }
+    }
+
     table_cell.content.push(Block::Plain(Plain {
         content: plain_content,
         source_info: node_source_info_with_context(node, context),

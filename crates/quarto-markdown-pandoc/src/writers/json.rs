@@ -215,7 +215,11 @@ fn write_blockss(blockss: &[Vec<Block>]) -> Value {
 fn write_caption(caption: &Caption) -> Value {
     json!([
         &caption.short.as_ref().map(|s| write_inlines(&s)),
-        &caption.long.as_ref().map(|l| write_blocks(&l)),
+        &caption
+            .long
+            .as_ref()
+            .map(|l| write_blocks(&l))
+            .unwrap_or_else(|| json!([])),
     ])
 }
 
