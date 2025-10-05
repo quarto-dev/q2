@@ -1480,6 +1480,9 @@ static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid
 
 static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
                                       const bool *valid_symbols) {
+    // unused
+    (void)(valid_symbols);
+    
     // precondition: lexer->lookahead == '^'
     advance(s, lexer);
 
