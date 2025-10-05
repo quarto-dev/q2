@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+pub mod ast_context;
 pub mod attr;
 pub mod block;
 pub mod caption;
@@ -11,7 +12,6 @@ pub mod list;
 pub mod location;
 pub mod meta;
 pub mod pandoc;
-pub mod parse_context;
 pub mod shortcode;
 pub mod table;
 pub mod treesitter;
@@ -36,6 +36,6 @@ pub use crate::pandoc::table::{
     Alignment, Cell, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
 
+pub use crate::pandoc::ast_context::ASTContext;
 pub use crate::pandoc::meta::{Meta, MetaValue, rawblock_to_meta};
-pub use crate::pandoc::parse_context::ParseContext;
 pub use crate::pandoc::treesitter::treesitter_to_pandoc;

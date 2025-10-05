@@ -3,15 +3,15 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a raw format specifier, handling pandoc-reader format
 pub fn process_raw_specifier(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     // like code_content but skipping first character
     let raw = node.utf8_text(input_bytes).unwrap().to_string();

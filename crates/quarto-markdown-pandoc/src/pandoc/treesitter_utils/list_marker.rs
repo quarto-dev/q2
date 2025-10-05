@@ -3,15 +3,15 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a list marker, extracting the marker number
 pub fn process_list_marker(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     // we need to extract the marker number
     let marker_text = node

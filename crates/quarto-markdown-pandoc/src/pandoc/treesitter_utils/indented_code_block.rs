@@ -6,10 +6,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::empty_attr;
 use crate::pandoc::block::{Block, CodeBlock};
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 use regex::Regex;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -19,7 +19,7 @@ pub fn process_indented_code_block(
     children: Vec<(String, PandocNativeIntermediate)>,
     input_bytes: &[u8],
     indent_re: &Regex,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut content: String = String::new();
     let outer_range = node_source_info_with_context(node, context);

@@ -6,15 +6,16 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, RawBlock};
-use crate::pandoc::location::SourceInfo;
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_section(
+    section_node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut blocks: Vec<Block> = Vec::new();
     children.into_iter().for_each(|(node, child)| {
@@ -26,12 +27,12 @@ pub fn process_section(
             PandocNativeIntermediate::IntermediateSection(section) => {
                 blocks.extend(section);
             }
-            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+            PandocNativeIntermediate::IntermediateMetadataString(text, _range) => {
                 // for now we assume it's metadata and emit it as a rawblock
                 blocks.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: SourceInfo::with_range(range),
+                    source_info: node_source_info_with_context(section_node, context),
                 }));
             }
             _ => panic!("Expected Block or Section, got {:?}", child),

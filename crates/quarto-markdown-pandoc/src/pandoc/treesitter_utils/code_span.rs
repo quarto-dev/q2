@@ -6,9 +6,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Code, Inline, RawInline};
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -18,7 +18,7 @@ pub fn process_code_span<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut is_raw: Option<String> = None;
     let mut attr = ("".to_string(), vec![], HashMap::new());

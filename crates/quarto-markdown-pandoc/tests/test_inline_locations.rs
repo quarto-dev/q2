@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_markdown_pandoc::pandoc::{ParseContext, treesitter_to_pandoc};
+use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
 use quarto_markdown_pandoc::writers;
 use tree_sitter_qmd::MarkdownParser;
 
@@ -20,7 +20,7 @@ fn test_inline_source_locations() {
         &mut std::io::sink(),
         &tree,
         &input_bytes,
-        &ParseContext::anonymous(),
+        &ASTContext::anonymous(),
     )
     .expect("Failed to convert to Pandoc AST");
 
@@ -101,7 +101,7 @@ fn test_merged_strings_preserve_location() {
         &mut std::io::sink(),
         &tree,
         &input_bytes,
-        &ParseContext::anonymous(),
+        &ASTContext::anonymous(),
     )
     .expect("Failed to convert to Pandoc AST");
 
@@ -160,7 +160,7 @@ fn test_separate_strings_keep_separate_locations() {
         &mut std::io::sink(),
         &tree,
         &input_bytes,
-        &ParseContext::anonymous(),
+        &ASTContext::anonymous(),
     )
     .expect("Failed to convert to Pandoc AST");
 

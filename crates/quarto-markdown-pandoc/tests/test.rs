@@ -5,7 +5,7 @@
 
 use glob::glob;
 use quarto_markdown_pandoc::errors::parse_is_good;
-use quarto_markdown_pandoc::pandoc::{ParseContext, treesitter_to_pandoc};
+use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
 use quarto_markdown_pandoc::utils::output::VerboseOutput;
 use quarto_markdown_pandoc::{readers, writers};
 use std::io::{self, Write};
@@ -27,7 +27,7 @@ fn unit_test_simple_qmd_parses() {
                 &mut std::io::sink(),
                 &tree,
                 &input_bytes,
-                &ParseContext::anonymous(),
+                &ASTContext::anonymous(),
             )
             .unwrap(),
             &mut buf,
@@ -133,7 +133,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .parse(input.as_bytes(), None)
                 .unwrap(),
             input.as_bytes(),
-            &ParseContext::anonymous(),
+            &ASTContext::anonymous(),
         )
         .unwrap(),
         &mut buf1,
@@ -147,7 +147,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .parse(input.as_bytes(), None)
                 .unwrap(),
             input.as_bytes(),
-            &ParseContext::anonymous(),
+            &ASTContext::anonymous(),
         )
         .unwrap(),
         &mut buf2,
@@ -338,7 +338,7 @@ fn test_json_writer() {
                     &mut std::io::sink(),
                     &tree,
                     input_bytes,
-                    &ParseContext::anonymous(),
+                    &ASTContext::anonymous(),
                 )
                 .unwrap();
                 let mut buf = Vec::new();
@@ -447,7 +447,7 @@ fn test_do_not_smoke() {
                     &mut std::io::sink(),
                     &tree,
                     input_bytes,
-                    &ParseContext::anonymous(),
+                    &ASTContext::anonymous(),
                 );
                 file_count += 1;
             }

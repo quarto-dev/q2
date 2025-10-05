@@ -46,6 +46,7 @@ use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
 use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
     Delete, EditComment, Emph, Highlight, Inline, Insert, Note, RawInline, Space, Str, Strikeout,
@@ -57,7 +58,6 @@ use crate::pandoc::location::{
     node_source_info_with_context,
 };
 use crate::pandoc::pandoc::Pandoc;
-use crate::pandoc::parse_context::ParseContext;
 use core::panic;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -70,7 +70,7 @@ use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 fn process_list(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     // a list is loose if it has at least one loose item
     // an item is loose if
@@ -222,9 +222,9 @@ fn process_list(
 }
 
 fn process_list_item(
-    node: &tree_sitter::Node,
+    list_item_node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut list_attr: Option<ListAttributes> = None;
     let children = children
@@ -250,19 +250,23 @@ fn process_list_item(
             }
             match child {
                 PandocNativeIntermediate::IntermediateBlock(block) => Some(block),
-                PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
+                PandocNativeIntermediate::IntermediateMetadataString(text, _range) => {
                     // for now we assume it's metadata and emit it as a rawblock
                     Some(Block::RawBlock(RawBlock {
                         format: "quarto_minus_metadata".to_string(),
                         text,
-                        source_info: SourceInfo::with_range(range),
+                        source_info: node_source_info_with_context(list_item_node, context),
                     }))
                 }
                 _ => None,
             }
         })
         .collect();
-    PandocNativeIntermediate::IntermediateListItem(children, node_location(node), list_attr)
+    PandocNativeIntermediate::IntermediateListItem(
+        children,
+        node_location(list_item_node),
+        list_attr,
+    )
 }
 
 // Macro for simple emphasis-like inline processing
@@ -290,19 +294,19 @@ fn process_native_inline<T: Write>(
     whitespace_re: &Regex,
     inline_buf: &mut T,
     node_text_fn: impl Fn() -> String,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> Inline {
     match child {
         PandocNativeIntermediate::IntermediateInline(inline) => inline,
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: SourceInfo::new(context.filename.clone(), range),
+                    source_info: SourceInfo::new(context.primary_filename().cloned(), range),
                 })
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: SourceInfo::new(context.filename.clone(), range),
+                    source_info: SourceInfo::new(context.primary_filename().cloned(), range),
                 })
             }
         }
@@ -349,7 +353,7 @@ fn process_native_inlines<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
     whitespace_re: &Regex,
     inlines_buf: &mut T,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
     for (_, child) in children {
@@ -361,12 +365,12 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: SourceInfo::new(context.filename.clone(), range),
+                        source_info: SourceInfo::new(context.primary_filename().cloned(), range),
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
                         text,
-                        source_info: SourceInfo::new(context.filename.clone(), range),
+                        source_info: SourceInfo::new(context.primary_filename().cloned(), range),
                     }))
                 }
             }
@@ -388,7 +392,7 @@ fn native_visitor<T: Write>(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     // TODO What sounded like a good idea with two buffers
     // is becoming annoying now...
@@ -436,8 +440,8 @@ fn native_visitor<T: Write>(
         | "code_content"
         | "latex_content"
         | "text_base" => create_base_text_from_node_text(node, input_bytes),
-        "document" => process_document(children, context),
-        "section" => process_section(children, context),
+        "document" => process_document(node, children, context),
+        "section" => process_section(node, children, context),
         "paragraph" => process_paragraph(node, children, context),
         "indented_code_block" => {
             process_indented_code_block(node, children, input_bytes, &indent_re, context)
@@ -453,13 +457,17 @@ fn native_visitor<T: Write>(
         "key_value_value" => string_as_base_text(),
         "link_title" => process_link_title(node, input_bytes, context),
         "link_text" => PandocNativeIntermediate::IntermediateInlines(native_inlines(children)),
-        "image" => {
-            treesitter_utils::image::process_image(&mut image_buf, node_text, children, context)
-        }
+        "image" => treesitter_utils::image::process_image(
+            node,
+            &mut image_buf,
+            node_text,
+            children,
+            context,
+        ),
         "image_description" => {
             PandocNativeIntermediate::IntermediateInlines(native_inlines(children))
         }
-        "inline_link" => process_inline_link(&mut link_buf, node_text, children, context),
+        "inline_link" => process_inline_link(node, &mut link_buf, node_text, children, context),
         "key_value_specifier" => process_key_value_specifier(buf, children, context),
         "raw_specifier" => process_raw_specifier(node, input_bytes, context),
         "emphasis" => emphasis_inline!(
@@ -665,7 +673,7 @@ pub fn treesitter_to_pandoc<T: Write>(
     buf: &mut T,
     tree: &tree_sitter_qmd::MarkdownTree,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> Result<Pandoc, Vec<String>> {
     let result = bottomup_traverse_concrete_tree(
         &mut tree.walk(),

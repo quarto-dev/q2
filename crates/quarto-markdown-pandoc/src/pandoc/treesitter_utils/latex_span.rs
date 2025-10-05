@@ -6,16 +6,16 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, Math, MathType};
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_latex_span(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut is_inline_math = false;
     let mut is_display_math = false;

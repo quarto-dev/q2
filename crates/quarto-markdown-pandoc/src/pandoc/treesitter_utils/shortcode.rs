@@ -6,9 +6,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::Inline;
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::shortcode::{Shortcode, ShortcodeArg};
 use std::collections::HashMap;
 use std::io::Write;
@@ -19,7 +19,7 @@ use super::pandocnativeintermediate::PandocNativeIntermediate;
 pub fn process_shortcode_string_arg(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let id = node.utf8_text(input_bytes).unwrap().to_string();
     PandocNativeIntermediate::IntermediateShortcodeArg(
@@ -32,7 +32,7 @@ pub fn process_shortcode_string_arg(
 pub fn process_shortcode_string(
     extract_quoted_text_fn: &dyn Fn() -> PandocNativeIntermediate,
     node: &tree_sitter::Node,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let PandocNativeIntermediate::IntermediateBaseText(id, _) = extract_quoted_text_fn() else {
         panic!(
@@ -50,7 +50,7 @@ pub fn process_shortcode_keyword_param<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut result = HashMap::new();
     let mut name = String::new();
@@ -94,7 +94,7 @@ pub fn process_shortcode_keyword_param<T: Write>(
 pub fn process_shortcode(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    _context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let is_escaped = node.kind() == "shortcode_escaped";
     let mut name = String::new();
@@ -157,7 +157,7 @@ pub fn process_shortcode(
 pub fn process_shortcode_boolean(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let value = node.utf8_text(input_bytes).unwrap();
     let value = match value {
@@ -172,7 +172,7 @@ pub fn process_shortcode_boolean(
 pub fn process_shortcode_number(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let value = node.utf8_text(input_bytes).unwrap();
     let range = node_source_info_with_context(node, context).range;

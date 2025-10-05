@@ -3,8 +3,8 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process numeric character references to their corresponding characters
@@ -12,7 +12,7 @@ use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeInter
 pub fn process_numeric_character_reference(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let text = node.utf8_text(input_bytes).unwrap().to_string();
     let char_value = if text.starts_with("&#x") || text.starts_with("&#X") {

@@ -3,17 +3,17 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, Paragraph};
 use crate::pandoc::inline::Inline;
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a paragraph node, collecting inlines and filtering out block continuations
 pub fn process_paragraph(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut inlines: Vec<Inline> = Vec::new();
     for (node, child) in children {

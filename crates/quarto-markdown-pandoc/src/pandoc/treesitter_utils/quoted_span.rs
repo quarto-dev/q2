@@ -3,9 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, QuoteType, Quoted};
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a quoted span (single or double quotes)
@@ -13,7 +13,7 @@ pub fn process_quoted_span<F>(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     native_inline: F,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate
 where
     F: FnMut((String, PandocNativeIntermediate)) -> Inline,

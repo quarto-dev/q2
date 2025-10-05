@@ -6,10 +6,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::empty_attr;
 use crate::pandoc::block::{Block, Header, Paragraph};
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -18,7 +18,7 @@ pub fn process_setext_heading<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut content = Vec::new();
     let mut level = 1;

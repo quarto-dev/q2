@@ -6,15 +6,17 @@
 use std::{collections::HashMap, io::Write};
 
 use crate::pandoc::{
-    Image, Inline, inline::Target, location::empty_source_info, parse_context::ParseContext,
+    Image, Inline, ast_context::ASTContext, inline::Target,
+    location::node_source_info_with_context,
     treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate,
 };
 
 pub fn process_image<T: Write, F>(
+    node: &tree_sitter::Node,
     image_buf: &mut T,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate
 where
     F: Fn() -> String,
@@ -66,6 +68,6 @@ where
         attr,
         content,
         target,
-        source_info: empty_source_info(),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

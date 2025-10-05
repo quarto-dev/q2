@@ -6,20 +6,21 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::inline::{Inline, is_empty_target, make_cite_inline, make_span_inline};
-use crate::pandoc::location::empty_source_info;
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 use std::collections::HashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_inline_link<T: Write, F>(
+    node: &tree_sitter::Node,
     link_buf: &mut T,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate
 where
     F: Fn() -> String,
@@ -70,8 +71,18 @@ where
     let is_cite = has_citations && is_empty_target(&target) && is_empty_attr(&attr);
 
     PandocNativeIntermediate::IntermediateInline(if is_cite {
-        make_cite_inline(attr, target, content, empty_source_info())
+        make_cite_inline(
+            attr,
+            target,
+            content,
+            node_source_info_with_context(node, context),
+        )
     } else {
-        make_span_inline(attr, target, content, empty_source_info())
+        make_span_inline(
+            attr,
+            target,
+            content,
+            node_source_info_with_context(node, context),
+        )
     })
 }

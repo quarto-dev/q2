@@ -6,17 +6,17 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, empty_attr};
 use crate::pandoc::block::{Block, CodeBlock, RawBlock};
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_fenced_code_block(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut content: String = String::new();
     let mut attr: Attr = empty_attr();

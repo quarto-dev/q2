@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::ast_context::ASTContext;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Source location tracking
@@ -85,11 +85,8 @@ pub fn node_source_info(node: &tree_sitter::Node) -> SourceInfo {
     SourceInfo::with_range(node_location(node))
 }
 
-pub fn node_source_info_with_context(
-    node: &tree_sitter::Node,
-    context: &ParseContext,
-) -> SourceInfo {
-    SourceInfo::new(context.filename.clone(), node_location(node))
+pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> SourceInfo {
+    SourceInfo::new(context.primary_filename().cloned(), node_location(node))
 }
 
 pub fn empty_range() -> Range {

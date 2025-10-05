@@ -6,9 +6,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, BlockQuote, Blocks, RawBlock};
 use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
-use crate::pandoc::parse_context::ParseContext;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -17,7 +17,7 @@ pub fn process_block_quote<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut content: Blocks = Vec::new();
     for (node_type, child) in children {

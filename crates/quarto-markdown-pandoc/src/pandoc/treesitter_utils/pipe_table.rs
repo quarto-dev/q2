@@ -6,12 +6,12 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::empty_attr;
 use crate::pandoc::block::{Block, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
-use crate::pandoc::parse_context::ParseContext;
+use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
@@ -21,7 +21,7 @@ use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_pipe_table_delimiter_cell(
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    _context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut has_starter_colon = false;
     let mut has_ending_colon = false;
@@ -48,7 +48,7 @@ pub fn process_pipe_table_delimiter_cell(
 
 pub fn process_pipe_table_header_or_row(
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    _context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut row = Row {
         attr: empty_attr(),
@@ -76,7 +76,7 @@ pub fn process_pipe_table_header_or_row(
 
 pub fn process_pipe_table_delimiter_row(
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    _context: &ASTContext,
 ) -> PandocNativeIntermediate {
     // This is a row of delimiters, we don't need to do anything with it
     // but we need to return an empty row
@@ -100,7 +100,7 @@ pub fn process_pipe_table_delimiter_row(
 pub fn process_pipe_table_cell(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut plain_content: Inlines = Vec::new();
     let mut table_cell = Cell {
@@ -135,7 +135,7 @@ pub fn process_pipe_table_cell(
 pub fn process_pipe_table(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let attr = empty_attr();
     let mut header: Option<Row> = None;

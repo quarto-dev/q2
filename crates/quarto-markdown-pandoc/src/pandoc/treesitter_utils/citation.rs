@@ -6,9 +6,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Citation, CitationMode, Cite, Inline, Str};
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -16,7 +16,7 @@ pub fn process_citation<F>(
     node: &tree_sitter::Node,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ParseContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate
 where
     F: Fn() -> String,
