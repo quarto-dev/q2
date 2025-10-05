@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::{Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc};
+use crate::pandoc::{ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc};
 use serde_json::{Value, json};
 
 fn write_location<T: crate::pandoc::location::SourceLocation>(item: &T) -> Value {
@@ -19,7 +19,7 @@ fn write_location<T: crate::pandoc::location::SourceLocation>(item: &T) -> Value
             "row": range.end.row,
             "column": range.end.column,
         },
-        "filename": item.filename(),
+        "filenameIndex": item.filename_index(),
     })
 }
 
@@ -361,16 +361,19 @@ fn write_blocks(blocks: &[Block]) -> Value {
     json!(blocks.iter().map(write_block).collect::<Vec<_>>())
 }
 
-fn write_pandoc(pandoc: &Pandoc) -> Value {
+fn write_pandoc(pandoc: &Pandoc, context: &ASTContext) -> Value {
     json!({
         "pandoc-api-version": [1, 23, 1],
         "meta": write_meta(&pandoc.meta),
         "blocks": write_blocks(&pandoc.blocks),
+        "astContext": {
+            "filenames": context.filenames,
+        },
     })
 }
 
-pub fn write<W: std::io::Write>(pandoc: &Pandoc, writer: &mut W) -> std::io::Result<()> {
-    let json = write_pandoc(pandoc);
+pub fn write<W: std::io::Write>(pandoc: &Pandoc, context: &ASTContext, writer: &mut W) -> std::io::Result<()> {
+    let json = write_pandoc(pandoc, context);
     serde_json::to_writer(writer, &json)?;
     Ok(())
 }

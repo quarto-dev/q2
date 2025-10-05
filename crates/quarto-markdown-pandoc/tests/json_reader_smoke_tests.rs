@@ -26,7 +26,7 @@ fn test_read_all_json_files_in_tests_readers() {
             .expect(&format!("Failed to open file: {}", json_file.display()));
 
         match json::read(&mut file) {
-            Ok(pandoc) => {
+            Ok((pandoc, _context)) => {
                 println!("  ✓ Successfully read {}", json_file.display());
                 // Basic validation - ensure we got some content
                 assert!(
@@ -68,7 +68,7 @@ fn test_manybullets_json_specifically() {
 
     let mut file = fs::File::open(&json_file).expect("Failed to open manybullets.json");
 
-    let pandoc = json::read(&mut file).expect("Failed to read manybullets.json");
+    let (pandoc, _context) = json::read(&mut file).expect("Failed to read manybullets.json");
 
     // Verify the content matches what we expect
     assert_eq!(pandoc.blocks.len(), 1, "Should have exactly one block");

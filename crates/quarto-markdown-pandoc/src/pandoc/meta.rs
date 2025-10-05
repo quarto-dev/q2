@@ -170,7 +170,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                 >,
             );
             match result {
-                Ok(mut pandoc) => {
+                Ok((mut pandoc, _context)) => {
                     for (k, v) in pandoc.meta.into_iter() {
                         outer_metadata.insert(k, v);
                     }

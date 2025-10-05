@@ -92,7 +92,7 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
 
-    let doc = readers::qmd::read(
+    let (doc, context) = readers::qmd::read(
         input.as_bytes(),
         false,
         "<input>",
@@ -108,7 +108,7 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
     .unwrap();
     writers::native::write(&doc, &mut buf1).unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
-    writers::json::write(&doc, &mut buf2).unwrap();
+    writers::json::write(&doc, &context, &mut buf2).unwrap();
     let json_output = String::from_utf8(buf2).expect("Invalid UTF-8 in output");
 
     let mut our_value: serde_json::Value =
@@ -140,6 +140,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     )
     .unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
+    let context_for_json = ASTContext::anonymous();
     writers::json::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -147,9 +148,10 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .parse(input.as_bytes(), None)
                 .unwrap(),
             input.as_bytes(),
-            &ASTContext::anonymous(),
+            &context_for_json,
         )
         .unwrap(),
+        &context_for_json,
         &mut buf2,
     )
     .unwrap();
@@ -229,22 +231,22 @@ fn unit_test_corpus_matches_pandoc_commonmark() {
 
 #[test]
 fn unit_test_snapshots_native() {
-    test_snapshots_for_format("native", |pandoc, buffer| {
+    test_snapshots_for_format("native", |pandoc, _context, buffer| {
         writers::native::write(pandoc, buffer).map_err(|e| e.into())
     });
 }
 
 #[test]
 fn unit_test_snapshots_qmd() {
-    test_snapshots_for_format("qmd", |pandoc, buffer| {
+    test_snapshots_for_format("qmd", |pandoc, _context, buffer| {
         writers::qmd::write(pandoc, buffer).map_err(|e| e.into())
     });
 }
 
 #[test]
 fn unit_test_snapshots_json() {
-    test_snapshots_for_format("json", |pandoc, buffer| {
-        writers::json::write(pandoc, buffer).map_err(|e| e.into())
+    test_snapshots_for_format("json", |pandoc, context, buffer| {
+        writers::json::write(pandoc, context, buffer).map_err(|e| e.into())
     });
 }
 
@@ -252,11 +254,14 @@ fn test_snapshots_for_format<F>(format: &str, writer: F)
 where
     F: Fn(
         &quarto_markdown_pandoc::pandoc::Pandoc,
+        &quarto_markdown_pandoc::pandoc::ast_context::ASTContext,
         &mut Vec<u8>,
     ) -> Result<(), Box<dyn std::error::Error + 'static>>,
 {
     let pattern = format!("tests/snapshots/{}/*.qmd", format);
     let mut file_count = 0;
+    let mut failures = Vec::new();
+
     for entry in glob(&pattern).expect("Failed to read glob pattern") {
         match entry {
             Ok(path) => {
@@ -268,7 +273,7 @@ where
                     input.push('\n'); // ensure the input ends with a newline
                 }
                 let mut output_stream = VerboseOutput::Sink(io::sink());
-                let pandoc = readers::qmd::read(
+                let (pandoc, context) = readers::qmd::read(
                     input.as_bytes(),
                     false,
                     &path.to_string_lossy(),
@@ -276,7 +281,7 @@ where
                     None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>,
                 ).unwrap();
 
-                writer(&pandoc, &mut buffer).unwrap();
+                writer(&pandoc, &context, &mut buffer).unwrap();
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
                 let snapshot = std::fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
                     panic!(
@@ -284,27 +289,40 @@ where
                         snapshot_path.display()
                     )
                 });
-                assert_eq!(
-                    output.trim(),
-                    snapshot.trim(),
-                    "Snapshot mismatch for file {}",
-                    path.display()
-                );
+
+                if output.trim() != snapshot.trim() {
+                    failures.push(format!(
+                        "Snapshot mismatch for file: {}\n  Snapshot path: {}",
+                        path.display(),
+                        snapshot_path.display()
+                    ));
+                }
                 file_count += 1;
             }
             Err(e) => panic!("Error reading glob entry: {}", e),
         }
     }
+
     assert!(
         file_count > 0,
         "No files found in tests/snapshots/{} directory",
         format
     );
+
+    if !failures.is_empty() {
+        panic!(
+            "\n\n{} snapshot(s) failed for format '{}':\n\n{}\n",
+            failures.len(),
+            format,
+            failures.join("\n")
+        );
+    }
 }
 
 fn remove_location_fields(json: &mut serde_json::Value) {
     if let Some(obj) = json.as_object_mut() {
         obj.remove("l"); // Remove the "l" field
+        obj.remove("astContext"); // Remove the astContext field
         for value in obj.values_mut() {
             remove_location_fields(value);
         }
@@ -334,15 +352,16 @@ fn test_json_writer() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
+                let test_context = ASTContext::anonymous();
                 let pandoc = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
                     input_bytes,
-                    &ASTContext::anonymous(),
+                    &test_context,
                 )
                 .unwrap();
                 let mut buf = Vec::new();
-                writers::json::write(&pandoc, &mut buf).unwrap();
+                writers::json::write(&pandoc, &test_context, &mut buf).unwrap();
                 let our_json = String::from_utf8(buf).expect("Invalid UTF-8 in our JSON output");
 
                 // Get Pandoc's output
@@ -479,7 +498,7 @@ fn test_markdown_writer_smoke() {
                     );
 
                     match doc_result {
-                        Ok(doc) => {
+                        Ok((doc, _context)) => {
                             // Write it back out using the markdown writer
                             let mut buf = Vec::new();
                             writers::qmd::write(&doc, &mut buf).expect("Failed to write markdown");
@@ -510,6 +529,8 @@ fn test_qmd_roundtrip_consistency() {
         glob("tests/roundtrip_tests/qmd-json-qmd/*.qmd").expect("Failed to read glob pattern");
 
     let mut file_count = 0;
+    let mut failures = Vec::new();
+
     for entry in test_files {
         match entry {
             Ok(path) => {
@@ -517,7 +538,7 @@ fn test_qmd_roundtrip_consistency() {
                 let original_qmd = std::fs::read_to_string(&path).expect("Failed to read file");
 
                 // Step 1: QMD -> JSON
-                let doc1 = readers::qmd::read(
+                let (doc1, context1) = readers::qmd::read(
                     original_qmd.as_bytes(),
                     false,
                     path.to_str().unwrap(),
@@ -526,11 +547,11 @@ fn test_qmd_roundtrip_consistency() {
                 ).expect("Failed to parse original QMD");
 
                 let mut json_buf = Vec::new();
-                writers::json::write(&doc1, &mut json_buf).expect("Failed to write JSON");
+                writers::json::write(&doc1, &context1, &mut json_buf).expect("Failed to write JSON");
                 let json_str = String::from_utf8(json_buf).expect("Invalid UTF-8 in JSON");
 
                 // Step 2: JSON -> QMD
-                let doc2 = readers::json::read(&mut json_str.as_bytes())
+                let (doc2, _context2) = readers::json::read(&mut json_str.as_bytes())
                     .expect("Failed to read JSON back");
 
                 let mut qmd_buf = Vec::new();
@@ -538,7 +559,7 @@ fn test_qmd_roundtrip_consistency() {
                 let regenerated_qmd = String::from_utf8(qmd_buf).expect("Invalid UTF-8 in QMD");
 
                 // Step 3: QMD -> JSON again
-                let doc3 = readers::qmd::read(
+                let (doc3, context3) = readers::qmd::read(
                     regenerated_qmd.as_bytes(),
                     false,
                     "<generated>",
@@ -548,32 +569,21 @@ fn test_qmd_roundtrip_consistency() {
 
                 // Compare JSON representations (without location fields)
                 let mut json1_buf = Vec::new();
-                writers::json::write(&doc1, &mut json1_buf).expect("Failed to write JSON1");
+                writers::json::write(&doc1, &context1, &mut json1_buf).expect("Failed to write JSON1");
                 let json1_str = String::from_utf8(json1_buf).expect("Invalid UTF-8 in JSON1");
                 let mut json1_value: serde_json::Value =
                     serde_json::from_str(&json1_str).expect("Failed to parse JSON1");
                 remove_location_fields(&mut json1_value);
 
                 let mut json3_buf = Vec::new();
-                writers::json::write(&doc3, &mut json3_buf).expect("Failed to write JSON3");
+                writers::json::write(&doc3, &context3, &mut json3_buf).expect("Failed to write JSON3");
                 let json3_str = String::from_utf8(json3_buf).expect("Invalid UTF-8 in JSON3");
                 let mut json3_value: serde_json::Value =
                     serde_json::from_str(&json3_str).expect("Failed to parse JSON3");
                 remove_location_fields(&mut json3_value);
 
                 if json1_value != json3_value {
-                    eprintln!("Roundtrip failed for: {}", path.display());
-                    eprintln!("Original QMD:\n{}", original_qmd);
-                    eprintln!("Regenerated QMD:\n{}", regenerated_qmd);
-                    eprintln!(
-                        "Original JSON (normalized):\n{}",
-                        serde_json::to_string_pretty(&json1_value).unwrap()
-                    );
-                    eprintln!(
-                        "Final JSON (normalized):\n{}",
-                        serde_json::to_string_pretty(&json3_value).unwrap()
-                    );
-                    panic!("Roundtrip consistency test failed for {}", path.display());
+                    failures.push(format!("Roundtrip failed for: {}", path.display()));
                 }
 
                 file_count += 1;
@@ -581,10 +591,19 @@ fn test_qmd_roundtrip_consistency() {
             Err(e) => panic!("Error reading glob entry: {}", e),
         }
     }
+
     assert!(
         file_count > 0,
         "No files found in tests/roundtrip_tests/qmd-json-qmd/"
     );
+
+    if !failures.is_empty() {
+        panic!(
+            "\n\n{} roundtrip test(s) failed:\n\n{}\n",
+            failures.len(),
+            failures.join("\n")
+        );
+    }
 }
 
 #[test]
@@ -596,7 +615,7 @@ fn test_empty_blockquote_roundtrip() {
     let original_qmd = std::fs::read_to_string(test_file).expect("Failed to read file");
 
     // Step 1: QMD -> JSON
-    let doc1 = readers::qmd::read(
+    let (doc1, context1) = readers::qmd::read(
         original_qmd.as_bytes(),
         false,
         test_file,
@@ -612,18 +631,18 @@ fn test_empty_blockquote_roundtrip() {
     .expect("Failed to parse original QMD");
 
     let mut json_buf = Vec::new();
-    writers::json::write(&doc1, &mut json_buf).expect("Failed to write JSON");
+    writers::json::write(&doc1, &context1, &mut json_buf).expect("Failed to write JSON");
     let json_str = String::from_utf8(json_buf).expect("Invalid UTF-8 in JSON");
 
     // Step 2: JSON -> QMD
-    let doc2 = readers::json::read(&mut json_str.as_bytes()).expect("Failed to read JSON back");
+    let (doc2, _context2) = readers::json::read(&mut json_str.as_bytes()).expect("Failed to read JSON back");
 
     let mut qmd_buf = Vec::new();
     writers::qmd::write(&doc2, &mut qmd_buf).expect("Failed to write QMD");
     let regenerated_qmd = String::from_utf8(qmd_buf).expect("Invalid UTF-8 in QMD");
 
     // Step 3: QMD -> JSON again
-    let doc3 = readers::qmd::read(
+    let (doc3, context3) = readers::qmd::read(
         regenerated_qmd.as_bytes(),
         false,
         "<generated>",
@@ -640,14 +659,14 @@ fn test_empty_blockquote_roundtrip() {
 
     // Compare JSON representations (without location fields)
     let mut json1_buf = Vec::new();
-    writers::json::write(&doc1, &mut json1_buf).expect("Failed to write JSON1");
+    writers::json::write(&doc1, &context1, &mut json1_buf).expect("Failed to write JSON1");
     let json1_str = String::from_utf8(json1_buf).expect("Invalid UTF-8 in JSON1");
     let mut json1_value: serde_json::Value =
         serde_json::from_str(&json1_str).expect("Failed to parse JSON1");
     remove_location_fields(&mut json1_value);
 
     let mut json3_buf = Vec::new();
-    writers::json::write(&doc3, &mut json3_buf).expect("Failed to write JSON3");
+    writers::json::write(&doc3, &context3, &mut json3_buf).expect("Failed to write JSON3");
     let json3_str = String::from_utf8(json3_buf).expect("Invalid UTF-8 in JSON3");
     let mut json3_value: serde_json::Value =
         serde_json::from_str(&json3_str).expect("Failed to parse JSON3");

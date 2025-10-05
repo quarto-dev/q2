@@ -56,7 +56,7 @@ pub fn read<T: Write, F>(
     filename: &str,
     mut output_stream: &mut T,
     error_formatter: Option<F>,
-) -> Result<pandoc::Pandoc, Vec<String>>
+) -> Result<(pandoc::Pandoc, ASTContext), Vec<String>>
 where
     F: Fn(
         &[u8],
@@ -146,7 +146,7 @@ where
             if rb.format != "quarto_minus_metadata" {
                 return Unchanged(rb);
             }
-            let filename = rb.source_info.filename.clone();
+            let filename_index = rb.source_info.filename_index;
             let range = rb.source_info.range.clone();
             let result = rawblock_to_meta(rb);
             let is_lexical = {
@@ -169,7 +169,7 @@ where
                 return FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
                         meta: meta_map,
-                        source_info: SourceInfo::new(filename, range),
+                        source_info: SourceInfo::new(filename_index, range),
                     })],
                     false,
                 );
@@ -191,5 +191,5 @@ where
     for (k, v) in meta_from_parses.into_iter() {
         result.meta.insert(k, v);
     }
-    Ok(result)
+    Ok((result, context))
 }

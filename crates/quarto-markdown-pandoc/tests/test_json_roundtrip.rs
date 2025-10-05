@@ -4,6 +4,7 @@
  */
 
 use hashlink::LinkedHashMap;
+use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
 use quarto_markdown_pandoc::pandoc::location::SourceInfo;
 use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
 use quarto_markdown_pandoc::readers;
@@ -53,12 +54,13 @@ fn test_json_roundtrip_simple_paragraph() {
     };
 
     // Write to JSON
+    let context = ASTContext::new(); // Empty context since we have no filenames
     let mut json_output = Vec::new();
-    json::write(&original, &mut json_output).expect("Failed to write JSON");
+    json::write(&original, &context, &mut json_output).expect("Failed to write JSON");
 
     // Read back from JSON
     let mut json_reader = std::io::Cursor::new(json_output);
-    let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+    let (parsed, _parsed_context) = readers::json::read(&mut json_reader).expect("Failed to read JSON");
 
     // Compare the documents
     assert_eq!(original.meta, parsed.meta);
@@ -206,12 +208,13 @@ fn test_json_roundtrip_complex_document() {
     };
 
     // Write to JSON
+    let context = ASTContext::new(); // Empty context since we have no filenames
     let mut json_output = Vec::new();
-    json::write(&original, &mut json_output).expect("Failed to write JSON");
+    json::write(&original, &context, &mut json_output).expect("Failed to write JSON");
 
     // Read back from JSON
     let mut json_reader = std::io::Cursor::new(json_output);
-    let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+    let (parsed, _parsed_context) = readers::json::read(&mut json_reader).expect("Failed to read JSON");
 
     // Verify basic structure
     assert_eq!(parsed.blocks.len(), 2);
@@ -253,7 +256,7 @@ fn test_json_write_then_read_matches_original_structure() {
                 content: vec![Inline::Str(Str {
                     text: "Plain text".to_string(),
                     source_info: SourceInfo::new(
-                        Some("test.md".to_string()),
+                        Some(0), // Index 0 will point to "test.md" in the context
                         quarto_markdown_pandoc::pandoc::location::Range {
                             start: quarto_markdown_pandoc::pandoc::location::Location {
                                 offset: 0,
@@ -269,7 +272,7 @@ fn test_json_write_then_read_matches_original_structure() {
                     ),
                 })],
                 source_info: SourceInfo::new(
-                    Some("test.md".to_string()),
+                    Some(0),
                     quarto_markdown_pandoc::pandoc::location::Range {
                         start: quarto_markdown_pandoc::pandoc::location::Location {
                             offset: 0,
@@ -288,7 +291,7 @@ fn test_json_write_then_read_matches_original_structure() {
                 format: "html".to_string(),
                 text: "<div>Raw HTML</div>".to_string(),
                 source_info: SourceInfo::new(
-                    Some("test.md".to_string()),
+                    Some(0),
                     quarto_markdown_pandoc::pandoc::location::Range {
                         start: quarto_markdown_pandoc::pandoc::location::Location {
                             offset: 11,
@@ -307,8 +310,9 @@ fn test_json_write_then_read_matches_original_structure() {
     };
 
     // Write to JSON
+    let context = ASTContext::with_filename("test.md"); // Create context with filename at index 0
     let mut json_output = Vec::new();
-    json::write(&original, &mut json_output).expect("Failed to write JSON");
+    json::write(&original, &context, &mut json_output).expect("Failed to write JSON");
 
     // Convert to string for debugging if needed
     let json_string = String::from_utf8(json_output.clone()).expect("Invalid UTF-8");
@@ -316,7 +320,10 @@ fn test_json_write_then_read_matches_original_structure() {
 
     // Read back from JSON
     let mut json_reader = std::io::Cursor::new(json_output);
-    let parsed = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+    let (parsed, parsed_context) = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+
+    // Verify context was preserved
+    assert_eq!(parsed_context.filenames, vec!["test.md"]);
 
     // Verify we can parse back the same structure
     assert_eq!(original.blocks.len(), parsed.blocks.len());

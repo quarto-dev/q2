@@ -21,7 +21,7 @@ fn test_ordered_list_10plus_formatting() {
 11. Eleventh item"#;
 
     // Parse the markdown
-    let doc = readers::qmd::read(
+    let (doc, _context) = readers::qmd::read(
         input.as_bytes(),
         false,
         "<test>",
@@ -87,7 +87,7 @@ fn test_ordered_list_continuation_indentation() {
     with continuation"#;
 
     // Parse the markdown
-    let doc = readers::qmd::read(
+    let (doc, _context) = readers::qmd::read(
         input.as_bytes(),
         false,
         "<test>",

@@ -102,7 +102,7 @@ fn main() {
         return;
     }
 
-    let pandoc = match args.from.as_str() {
+    let (pandoc, context) = match args.from.as_str() {
         "markdown" | "qmd" => {
             let error_formatter = if args.json_errors {
                 Some(
@@ -157,7 +157,7 @@ fn main() {
 
     let mut buf = Vec::new();
     match args.to.as_str() {
-        "json" => writers::json::write(&pandoc, &mut buf),
+        "json" => writers::json::write(&pandoc, &context, &mut buf),
         "native" => writers::native::write(&pandoc, &mut buf),
         "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
         _ => {

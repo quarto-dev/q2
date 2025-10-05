@@ -16,16 +16,17 @@ fn test_inline_source_locations() {
         .parse(input_bytes, None)
         .expect("Failed to parse input");
 
+    let context = ASTContext::anonymous();
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
         &input_bytes,
-        &ASTContext::anonymous(),
+        &context,
     )
     .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
-    writers::json::write(&pandoc, &mut buf).unwrap();
+    writers::json::write(&pandoc, &context, &mut buf).unwrap();
     let json_output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
 
     let json_value: serde_json::Value =
@@ -97,16 +98,17 @@ fn test_merged_strings_preserve_location() {
         .parse(input_bytes, None)
         .expect("Failed to parse input");
 
+    let context = ASTContext::anonymous();
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
         &input_bytes,
-        &ASTContext::anonymous(),
+        &context,
     )
     .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
-    writers::json::write(&pandoc, &mut buf).unwrap();
+    writers::json::write(&pandoc, &context, &mut buf).unwrap();
     let json_output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
 
     let json_value: serde_json::Value =
@@ -156,16 +158,17 @@ fn test_separate_strings_keep_separate_locations() {
         .parse(input_bytes, None)
         .expect("Failed to parse input");
 
+    let context = ASTContext::anonymous();
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
         &input_bytes,
-        &ASTContext::anonymous(),
+        &context,
     )
     .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
-    writers::json::write(&pandoc, &mut buf).unwrap();
+    writers::json::write(&pandoc, &context, &mut buf).unwrap();
     let json_output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
 
     let json_value: serde_json::Value =

@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::{Location, Range, SourceInfo};
 use crate::pandoc::{
@@ -55,7 +56,7 @@ fn empty_range() -> Range {
     }
 }
 
-fn read_location(value: &Value) -> Option<Range> {
+fn read_location(value: &Value) -> Option<(Option<usize>, Range)> {
     let obj = value.as_object()?;
     let start_obj = obj.get("start")?.as_object()?;
     let end_obj = obj.get("end")?.as_object()?;
@@ -72,7 +73,11 @@ fn read_location(value: &Value) -> Option<Range> {
         column: end_obj.get("column")?.as_u64()? as usize,
     };
 
-    Some(Range { start, end })
+    let filename_index = obj.get("filenameIndex")
+        .and_then(|v| v.as_u64())
+        .map(|i| i as usize);
+
+    Some((filename_index, Range { start, end }))
 }
 
 fn read_attr(value: &Value) -> Result<Attr> {
@@ -177,75 +182,27 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }))
         }
         "Space" => {
-            let location = obj.get("l").and_then(read_location);
-            let range = location.unwrap_or_else(|| Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-            });
-            let filename = obj
-                .get("l")
-                .and_then(|l| l.as_object())
-                .and_then(|lo| lo.get("filename"))
-                .and_then(|f| f.as_str())
-                .map(|s| s.to_string());
+            let (filename_index, range) = obj.get("l")
+                .and_then(read_location)
+                .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::Space(Space {
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "LineBreak" => {
-            let location = obj.get("l").and_then(read_location);
-            let range = location.unwrap_or_else(|| Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-            });
-            let filename = obj
-                .get("l")
-                .and_then(|l| l.as_object())
-                .and_then(|lo| lo.get("filename"))
-                .and_then(|f| f.as_str())
-                .map(|s| s.to_string());
+            let (filename_index, range) = obj.get("l")
+                .and_then(read_location)
+                .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "SoftBreak" => {
-            let location = obj.get("l").and_then(read_location);
-            let range = location.unwrap_or_else(|| Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-            });
-            let filename = obj
-                .get("l")
-                .and_then(|l| l.as_object())
-                .and_then(|lo| lo.get("filename"))
-                .and_then(|f| f.as_str())
-                .map(|s| s.to_string());
+            let (filename_index, range) = obj.get("l")
+                .and_then(read_location)
+                .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "Emph" => {
@@ -654,7 +611,31 @@ fn read_inlines(value: &Value) -> Result<Inlines> {
     arr.iter().map(read_inline).collect()
 }
 
-pub fn read<R: std::io::Read>(reader: &mut R) -> Result<Pandoc> {
+fn read_ast_context(value: &Value) -> Result<ASTContext> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected object for ASTContext".to_string()))?;
+
+    let filenames_val = obj.get("filenames")
+        .ok_or_else(|| JsonReadError::MissingField("filenames".to_string()))?;
+
+    let filenames_arr = filenames_val
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("filenames must be array".to_string()))?;
+
+    let filenames = filenames_arr
+        .iter()
+        .map(|v| {
+            v.as_str()
+                .ok_or_else(|| JsonReadError::InvalidType("filename must be string".to_string()))
+                .map(|s| s.to_string())
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ASTContext { filenames })
+}
+
+pub fn read<R: std::io::Read>(reader: &mut R) -> Result<(Pandoc, ASTContext)> {
     let mut buffer = String::new();
     reader
         .read_to_string(&mut buffer)
@@ -663,7 +644,7 @@ pub fn read<R: std::io::Read>(reader: &mut R) -> Result<Pandoc> {
     read_pandoc(&json)
 }
 
-fn read_pandoc(value: &Value) -> Result<Pandoc> {
+fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Pandoc".to_string()))?;
@@ -680,7 +661,14 @@ fn read_pandoc(value: &Value) -> Result<Pandoc> {
             .ok_or_else(|| JsonReadError::MissingField("blocks".to_string()))?,
     )?;
 
-    Ok(Pandoc { meta, blocks })
+    let context = if let Some(ast_context_val) = obj.get("astContext") {
+        read_ast_context(ast_context_val)?
+    } else {
+        // If no astContext is present, create an empty one for backward compatibility
+        ASTContext::new()
+    };
+
+    Ok((Pandoc { meta, blocks }, context))
 }
 
 fn read_blockss(value: &Value) -> Result<Vec<Vec<Block>>> {
@@ -795,25 +783,9 @@ fn read_block(value: &Value) -> Result<Block> {
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
     // Extract location information if present
-    let location = obj.get("l").and_then(read_location);
-    let range = location.unwrap_or_else(|| Range {
-        start: Location {
-            offset: 0,
-            row: 0,
-            column: 0,
-        },
-        end: Location {
-            offset: 0,
-            row: 0,
-            column: 0,
-        },
-    });
-    let filename = obj
-        .get("l")
-        .and_then(|l| l.as_object())
-        .and_then(|lo| lo.get("filename"))
-        .and_then(|f| f.as_str())
-        .map(|s| s.to_string());
+    let (filename_index, range) = obj.get("l")
+        .and_then(read_location)
+        .unwrap_or_else(|| (None, empty_range()));
 
     match t {
         "Para" => {
@@ -823,7 +795,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let content = read_inlines(c)?;
             Ok(Block::Paragraph(Paragraph {
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "Plain" => {
@@ -833,7 +805,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let content = read_inlines(c)?;
             Ok(Block::Plain(Plain {
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "LineBlock" => {
@@ -846,7 +818,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let content = arr.iter().map(read_inlines).collect::<Result<Vec<_>>>()?;
             Ok(Block::LineBlock(LineBlock {
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "CodeBlock" => {
@@ -871,7 +843,7 @@ fn read_block(value: &Value) -> Result<Block> {
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "RawBlock" => {
@@ -901,7 +873,7 @@ fn read_block(value: &Value) -> Result<Block> {
             Ok(Block::RawBlock(RawBlock {
                 format,
                 text,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "BlockQuote" => {
@@ -911,7 +883,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let content = read_blocks(c)?;
             Ok(Block::BlockQuote(BlockQuote {
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "OrderedList" => {
@@ -931,7 +903,7 @@ fn read_block(value: &Value) -> Result<Block> {
             Ok(Block::OrderedList(OrderedList {
                 attr,
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "BulletList" => {
@@ -941,7 +913,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let content = read_blockss(c)?;
             Ok(Block::BulletList(BulletList {
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "DefinitionList" => {
@@ -969,7 +941,7 @@ fn read_block(value: &Value) -> Result<Block> {
                 .collect::<Result<Vec<_>>>()?;
             Ok(Block::DefinitionList(DefinitionList {
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "Header" => {
@@ -993,11 +965,11 @@ fn read_block(value: &Value) -> Result<Block> {
                 level,
                 attr,
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule {
-            source_info: SourceInfo::new(filename, range),
+            source_info: SourceInfo::new(filename_index, range),
         })),
         "Figure" => {
             let c = obj
@@ -1018,7 +990,7 @@ fn read_block(value: &Value) -> Result<Block> {
                 attr,
                 caption,
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "Div" => {
@@ -1038,7 +1010,7 @@ fn read_block(value: &Value) -> Result<Block> {
             Ok(Block::Div(Div {
                 attr,
                 content,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "BlockMetadata" => {
@@ -1048,7 +1020,7 @@ fn read_block(value: &Value) -> Result<Block> {
             let meta = read_meta(c)?;
             Ok(Block::BlockMetadata(MetaBlock {
                 meta,
-                source_info: SourceInfo::new(filename, range),
+                source_info: SourceInfo::new(filename_index, range),
             }))
         }
         "NoteDefinitionPara" => {
@@ -1074,7 +1046,7 @@ fn read_block(value: &Value) -> Result<Block> {
                 crate::pandoc::block::NoteDefinitionPara {
                     id,
                     content,
-                    source_info: SourceInfo::new(filename, range),
+                    source_info: SourceInfo::new(filename_index, range),
                 },
             ))
         }
@@ -1105,7 +1077,7 @@ fn read_block(value: &Value) -> Result<Block> {
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id,
                     content,
-                    source_info: SourceInfo::new(filename, range),
+                    source_info: SourceInfo::new(filename_index, range),
                 },
             ))
         }

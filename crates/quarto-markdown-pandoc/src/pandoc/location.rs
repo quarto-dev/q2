@@ -22,27 +22,31 @@ pub struct Range {
 }
 
 /// Encapsulates source location information for AST nodes
+/// The filename field now holds an index into the ASTContext.filenames vector
 #[derive(Debug, Clone, PartialEq)]
 pub struct SourceInfo {
-    pub filename: Option<String>,
+    pub filename_index: Option<usize>,
     pub range: Range,
 }
 
 impl SourceInfo {
-    pub fn new(filename: Option<String>, range: Range) -> Self {
-        SourceInfo { filename, range }
+    pub fn new(filename_index: Option<usize>, range: Range) -> Self {
+        SourceInfo {
+            filename_index,
+            range,
+        }
     }
 
     pub fn with_range(range: Range) -> Self {
         SourceInfo {
-            filename: None,
+            filename_index: None,
             range,
         }
     }
 
     pub fn combine(&self, other: &SourceInfo) -> SourceInfo {
         SourceInfo {
-            filename: self.filename.clone().or(other.filename.clone()),
+            filename_index: self.filename_index.or(other.filename_index),
             range: Range {
                 start: if self.range.start < other.range.start {
                     self.range.start.clone()
@@ -60,8 +64,14 @@ impl SourceInfo {
 }
 
 pub trait SourceLocation {
-    fn filename(&self) -> Option<String>;
+    fn filename_index(&self) -> Option<usize>;
     fn range(&self) -> Range;
+
+    /// Resolve the filename from the ASTContext using the stored index
+    fn filename<'a>(&self, context: &'a ASTContext) -> Option<&'a String> {
+        self.filename_index()
+            .and_then(|idx| context.filenames.get(idx))
+    }
 }
 
 pub fn node_location(node: &tree_sitter::Node) -> Range {
@@ -86,7 +96,13 @@ pub fn node_source_info(node: &tree_sitter::Node) -> SourceInfo {
 }
 
 pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> SourceInfo {
-    SourceInfo::new(context.primary_filename().cloned(), node_location(node))
+    // If the context has at least one filename, use index 0
+    let filename_index = if context.filenames.is_empty() {
+        None
+    } else {
+        Some(0)
+    };
+    SourceInfo::new(filename_index, node_location(node))
 }
 
 pub fn empty_range() -> Range {
@@ -113,8 +129,8 @@ macro_rules! impl_source_location {
     ($($type:ty),*) => {
         $(
             impl SourceLocation for $type {
-                fn filename(&self) -> Option<String> {
-                    self.source_info.filename.clone()
+                fn filename_index(&self) -> Option<usize> {
+                    self.source_info.filename_index
                 }
 
                 fn range(&self) -> Range {
