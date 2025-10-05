@@ -14,6 +14,7 @@ pub mod pandoc;
 pub mod shortcode;
 pub mod table;
 pub mod treesitter;
+pub mod treesitter_utils;
 
 pub use crate::pandoc::attr::Attr;
 pub use crate::pandoc::block::{
