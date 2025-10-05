@@ -554,7 +554,7 @@ fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::
 }
 
 fn write_inlinerefdef(
-    refdef: &crate::pandoc::block::InlineRefDef,
+    refdef: &crate::pandoc::block::NoteDefinitionPara,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
     write!(buf, "[^{}]: ", refdef.id)?;
@@ -1117,7 +1117,7 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
         Block::BlockMetadata(metablock) => {
             write_metablock(metablock, buf)?;
         }
-        Block::InlineRefDef(refdef) => {
+        Block::NoteDefinitionPara(refdef) => {
             write_inlinerefdef(refdef, buf)?;
         }
     }

@@ -1,17 +1,17 @@
 /*
- * inline_ref_def.rs
+ * note_definition_para.rs
  *
- * Functions for processing inline reference definition nodes in the tree-sitter AST.
+ * Functions for processing note definition paragraph nodes in the tree-sitter AST.
  *
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::block::{Block, InlineRefDef};
+use crate::pandoc::block::{Block, NoteDefinitionPara};
 use crate::pandoc::location::node_source_info;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
-pub fn process_inline_ref_def(
+pub fn process_note_definition_para(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
 ) -> PandocNativeIntermediate {
@@ -40,7 +40,7 @@ pub fn process_inline_ref_def(
         }
     }
 
-    PandocNativeIntermediate::IntermediateBlock(Block::InlineRefDef(InlineRefDef {
+    PandocNativeIntermediate::IntermediateBlock(Block::NoteDefinitionPara(NoteDefinitionPara {
         id,
         content,
         source_info: node_source_info(node),

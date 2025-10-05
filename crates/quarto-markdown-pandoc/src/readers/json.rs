@@ -1051,30 +1051,32 @@ fn read_block(value: &Value) -> Result<Block> {
                 source_info: SourceInfo::new(filename, range),
             }))
         }
-        "InlineRefDef" => {
+        "NoteDefinitionPara" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let arr = c.as_array().ok_or_else(|| {
-                JsonReadError::InvalidType("InlineRefDef content must be array".to_string())
+                JsonReadError::InvalidType("NoteDefinitionPara content must be array".to_string())
             })?;
             if arr.len() != 2 {
                 return Err(JsonReadError::InvalidType(
-                    "InlineRefDef array must have 2 elements".to_string(),
+                    "NoteDefinitionPara array must have 2 elements".to_string(),
                 ));
             }
             let id = arr[0]
                 .as_str()
                 .ok_or_else(|| {
-                    JsonReadError::InvalidType("InlineRefDef id must be string".to_string())
+                    JsonReadError::InvalidType("NoteDefinitionPara id must be string".to_string())
                 })?
                 .to_string();
             let content = read_inlines(&arr[1])?;
-            Ok(Block::InlineRefDef(crate::pandoc::block::InlineRefDef {
-                id,
-                content,
-                source_info: SourceInfo::new(filename, range),
-            }))
+            Ok(Block::NoteDefinitionPara(
+                crate::pandoc::block::NoteDefinitionPara {
+                    id,
+                    content,
+                    source_info: SourceInfo::new(filename, range),
+                },
+            ))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Block: {}", t))),
     }

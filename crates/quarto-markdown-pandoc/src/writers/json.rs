@@ -307,8 +307,8 @@ fn write_block(block: &Block) -> Value {
             "c": write_meta(&meta.meta),
             "l": write_location(meta),
         }),
-        Block::InlineRefDef(refdef) => json!({
-            "t": "InlineRefDef",
+        Block::NoteDefinitionPara(refdef) => json!({
+            "t": "NoteDefinitionPara",
             "c": [refdef.id, write_inlines(&refdef.content)],
             "l": write_location(refdef),
         }),

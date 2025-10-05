@@ -720,14 +720,16 @@ pub fn topdown_traverse_block(block: Block, filter: &mut Filter) -> Blocks {
             }
             vec![Block::BlockMetadata(meta)]
         }
-        Block::InlineRefDef(refdef) => {
+        Block::NoteDefinitionPara(refdef) => {
             // Process the inline content of the reference definition
             let content = topdown_traverse_inlines(refdef.content, filter);
-            vec![Block::InlineRefDef(crate::pandoc::block::InlineRefDef {
-                id: refdef.id,
-                content,
-                source_info: refdef.source_info,
-            })]
+            vec![Block::NoteDefinitionPara(
+                crate::pandoc::block::NoteDefinitionPara {
+                    id: refdef.id,
+                    content,
+                    source_info: refdef.source_info,
+                },
+            )]
         }
     }
 }
