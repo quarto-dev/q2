@@ -5,3 +5,5 @@
 
 pub mod image;
 pub mod pandocnativeintermediate;
+pub mod postprocess;
+pub mod text_helpers;
