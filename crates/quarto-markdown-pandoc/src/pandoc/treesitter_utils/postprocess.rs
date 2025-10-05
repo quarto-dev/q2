@@ -135,9 +135,10 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
 
             // Check if current text ends with an abbreviation
             if ends_with_abbreviation(&current_text) {
+                let original_j = j;
                 // Coalesce with following Space + Str
                 while j + 1 < inlines.len() {
-                    if let (Inline::Space(_), Inline::Str(next_str)) =
+                    if let (Inline::Space(_space_info), Inline::Str(next_str)) =
                         (&inlines[j], &inlines[j + 1])
                     {
                         // Coalesce with non-breaking space (U+00A0) to match Pandoc
@@ -154,6 +155,17 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
                         }
                     } else {
                         break;
+                    }
+                }
+
+                // If we didn't coalesce with any Str nodes but have a Space following
+                // the abbreviation, include the space in the abbreviation to match Pandoc
+                if j == original_j && j < inlines.len() && matches!(inlines[j], Inline::Space(_)) {
+                    if let Inline::Space(space_info) = &inlines[j] {
+                        current_text.push('\u{00A0}');
+                        end_info = space_info.source_info.clone();
+                        j += 1;
+                        did_coalesce = true;
                     }
                 }
             }
