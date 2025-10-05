@@ -18,6 +18,7 @@ pub mod image;
 pub mod indented_code_block;
 pub mod info_string;
 pub mod inline_link;
+pub mod inline_ref_def;
 pub mod key_value_specifier;
 pub mod language_attribute;
 pub mod latex_span;

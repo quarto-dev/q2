@@ -553,6 +553,18 @@ fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::
     write_meta(&metablock.meta, buf)
 }
 
+fn write_inlinerefdef(
+    refdef: &crate::pandoc::block::InlineRefDef,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    write!(buf, "[^{}]: ", refdef.id)?;
+    for inline in &refdef.content {
+        write_inline(inline, buf)?;
+    }
+    writeln!(buf)?;
+    Ok(())
+}
+
 fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Collect all rows (header + body rows)
     let mut all_rows = Vec::new();
@@ -1104,6 +1116,9 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
         }
         Block::BlockMetadata(metablock) => {
             write_metablock(metablock, buf)?;
+        }
+        Block::InlineRefDef(refdef) => {
+            write_inlinerefdef(refdef, buf)?;
         }
     }
     Ok(())

@@ -18,6 +18,7 @@ use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
 use crate::pandoc::treesitter_utils::indented_code_block::process_indented_code_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
 use crate::pandoc::treesitter_utils::inline_link::process_inline_link;
+use crate::pandoc::treesitter_utils::inline_ref_def::process_inline_ref_def;
 use crate::pandoc::treesitter_utils::key_value_specifier::process_key_value_specifier;
 use crate::pandoc::treesitter_utils::language_attribute::process_language_attribute;
 use crate::pandoc::treesitter_utils::latex_span::process_latex_span;
@@ -415,6 +416,7 @@ fn native_visitor<T: Write>(
 
         "language"
         | "note_reference_id"
+        | "ref_id_specifier"
         | "citation_id_suppress_author"
         | "citation_id_author_in_text"
         | "link_destination"
@@ -456,6 +458,7 @@ fn native_visitor<T: Write>(
         }
         "citation" => process_citation(node, node_text, children),
         "note_reference" => process_note_reference(node, children),
+        "inline_ref_def" => process_inline_ref_def(node, children),
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
         "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
         "shortcode_boolean" => process_shortcode_boolean(node, input_bytes),

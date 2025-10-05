@@ -33,6 +33,7 @@ pub enum Block {
     Div(Div),
     // quarto extensions
     BlockMetadata(MetaBlock),
+    InlineRefDef(InlineRefDef),
 }
 
 pub type Blocks = Vec<Block>;
@@ -128,6 +129,13 @@ pub struct MetaBlock {
     pub source_info: SourceInfo,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct InlineRefDef {
+    pub id: String,
+    pub content: Inlines,
+    pub source_info: SourceInfo,
+}
+
 impl_source_location!(
     // blocks
     Plain,
@@ -145,7 +153,8 @@ impl_source_location!(
     Figure,
     Div,
     // quarto extensions
-    MetaBlock
+    MetaBlock,
+    InlineRefDef
 );
 
 fn make_block_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
