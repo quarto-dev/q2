@@ -1,0 +1,7 @@
+# Note Definition Fenced Block - With Formatting
+
+::: ^formatted
+This note has **bold** and *italic* text.
+
+It also has `code` and [links](https://example.com).
+:::

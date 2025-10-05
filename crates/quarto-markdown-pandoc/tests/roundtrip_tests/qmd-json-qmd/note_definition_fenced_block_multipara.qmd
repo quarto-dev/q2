@@ -1,0 +1,9 @@
+# Note Definition Fenced Block - Multiple Paragraphs
+
+::: ^my-note
+First paragraph in the note.
+
+Second paragraph in the note.
+
+Third paragraph in the note.
+:::

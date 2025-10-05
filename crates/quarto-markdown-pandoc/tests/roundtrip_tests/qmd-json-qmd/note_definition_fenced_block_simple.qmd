@@ -1,0 +1,5 @@
+# Note Definition Fenced Block - Simple
+
+::: ^1
+This is a simple note with a single paragraph.
+:::

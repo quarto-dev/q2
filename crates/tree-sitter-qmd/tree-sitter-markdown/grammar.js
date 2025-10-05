@@ -38,6 +38,7 @@ module.exports = grammar({
             alias($._setext_heading2, $.setext_heading),
             $.paragraph,
             $.inline_ref_def,
+            $.note_definition_fenced_block,
             $.indented_code_block,
             $.block_quote,
             $.thematic_break,
@@ -203,9 +204,10 @@ module.exports = grammar({
         // QMD CHANGES
         // we support a stricter set of infostrings, namely the ones that Pandoc appears to support
         // We do not allow curly braces in the content of the infostring (which pandoc does)
+        // We also don't allow starting with ^ (reserved for note definitions)
         // https://pandoc.org/MANUAL.html#extension-fenced_code_attributes
 
-        info_string: $ => alias(/[^{}\s]+/, $.language),
+        info_string: $ => alias(/[^{}\s^][^{}\s]*/, $.language),
         // language: $ => prec.right(repeat1(choice($._word, common.punctuation_without($, ['{', '}', ',']), $.backslash_escape, $.entity_reference, $.numeric_character_reference))),
 
         // A paragraph. The parsing tactic for deciding when a paragraph ends is as follows:
@@ -232,6 +234,16 @@ module.exports = grammar({
             $.ref_id_specifier,
             $._whitespace,
             $.paragraph),
+
+        note_definition_fenced_block: $ => seq(
+            $._fenced_div_start,
+            $._whitespace,
+            $.fenced_div_note_id,
+            $._newline,
+            repeat($._block),
+            optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
+            $._block_close,
+        ),
 
         // A blank line including the following newline.
         //
@@ -541,6 +553,7 @@ module.exports = grammar({
         $._fenced_div_end,
 
         $.ref_id_specifier,
+        $.fenced_div_note_id,
     ],
     precedences: $ => [
         [$._setext_heading1, $._block],

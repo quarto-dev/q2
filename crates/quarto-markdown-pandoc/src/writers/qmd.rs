@@ -565,6 +565,22 @@ fn write_inlinerefdef(
     Ok(())
 }
 
+fn write_fenced_note_definition(
+    refdef: &crate::pandoc::block::NoteDefinitionFencedBlock,
+    buf: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    writeln!(buf, "::: ^{}", refdef.id)?;
+    for (i, block) in refdef.content.iter().enumerate() {
+        if i > 0 {
+            // Add a blank line between blocks
+            writeln!(buf)?;
+        }
+        write_block(block, buf)?;
+    }
+    writeln!(buf, ":::")?;
+    Ok(())
+}
+
 fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
     // Collect all rows (header + body rows)
     let mut all_rows = Vec::new();
@@ -1119,6 +1135,9 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
         }
         Block::NoteDefinitionPara(refdef) => {
             write_inlinerefdef(refdef, buf)?;
+        }
+        Block::NoteDefinitionFencedBlock(refdef) => {
+            write_fenced_note_definition(refdef, buf)?;
         }
     }
     Ok(())

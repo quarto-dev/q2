@@ -23,6 +23,7 @@ pub mod language_attribute;
 pub mod latex_span;
 pub mod link_title;
 pub mod list_marker;
+pub mod note_definition_fenced_block;
 pub mod note_definition_para;
 pub mod note_reference;
 pub mod numeric_character_reference;

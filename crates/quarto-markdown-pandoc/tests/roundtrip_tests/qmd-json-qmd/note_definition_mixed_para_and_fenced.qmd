@@ -1,0 +1,11 @@
+# Mixed Note Definitions - Para and Fenced Block
+
+[^inline]: This is an inline-style note definition.
+
+::: ^fenced
+This is a fenced block note definition.
+
+With multiple paragraphs.
+:::
+
+Some text that references the notes[^inline] and[^fenced].

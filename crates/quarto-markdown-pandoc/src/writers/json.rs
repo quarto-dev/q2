@@ -312,6 +312,11 @@ fn write_block(block: &Block) -> Value {
             "c": [refdef.id, write_inlines(&refdef.content)],
             "l": write_location(refdef),
         }),
+        Block::NoteDefinitionFencedBlock(refdef) => json!({
+            "t": "NoteDefinitionFencedBlock",
+            "c": [refdef.id, write_blocks(&refdef.content)],
+            "l": write_location(refdef),
+        }),
     }
 }
 

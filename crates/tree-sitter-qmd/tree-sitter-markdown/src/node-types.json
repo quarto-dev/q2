@@ -121,6 +121,10 @@
           "named": true
         },
         {
+          "type": "note_definition_fenced_block",
+          "named": true
+        },
+        {
           "type": "paragraph",
           "named": true
         },
@@ -290,6 +294,10 @@
         },
         {
           "type": "minus_metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
           "named": true
         },
         {
@@ -508,6 +516,10 @@
           "named": true
         },
         {
+          "type": "note_definition_fenced_block",
+          "named": true
+        },
+        {
           "type": "paragraph",
           "named": true
         },
@@ -554,6 +566,77 @@
     "type": "list_marker_star",
     "named": true,
     "fields": {}
+  },
+  {
+    "type": "note_definition_fenced_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "block_quote",
+          "named": true
+        },
+        {
+          "type": "fenced_code_block",
+          "named": true
+        },
+        {
+          "type": "fenced_div_block",
+          "named": true
+        },
+        {
+          "type": "fenced_div_note_id",
+          "named": true
+        },
+        {
+          "type": "indented_code_block",
+          "named": true
+        },
+        {
+          "type": "inline_ref_def",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "minus_metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
+          "named": true
+        },
+        {
+          "type": "paragraph",
+          "named": true
+        },
+        {
+          "type": "pipe_table",
+          "named": true
+        },
+        {
+          "type": "section",
+          "named": true
+        },
+        {
+          "type": "setext_heading",
+          "named": true
+        },
+        {
+          "type": "thematic_break",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "paragraph",
@@ -737,6 +820,10 @@
         },
         {
           "type": "minus_metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
           "named": true
         },
         {
@@ -969,6 +1056,10 @@
   },
   {
     "type": "fenced_code_block_delimiter",
+    "named": true
+  },
+  {
+    "type": "fenced_div_note_id",
     "named": true
   },
   {

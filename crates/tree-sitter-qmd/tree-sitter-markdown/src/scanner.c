@@ -56,6 +56,7 @@ typedef enum {
     FENCED_DIV_START,
     FENCED_DIV_END,
     REF_ID_SPECIFIER,
+    FENCED_DIV_NOTE_ID,
 } TokenType;
 
 // Description of a block on the block stack.
@@ -432,6 +433,9 @@ static bool match(Scanner *s, TSLexer *lexer, Block block) {
     }
     return false;
 }
+
+static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
+                                      const bool *valid_symbols);
 
 static bool parse_fenced_div_marker(Scanner *s, TSLexer *lexer,
                                     const bool *valid_symbols) {
@@ -1474,6 +1478,23 @@ static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid
     return true;
 }
 
+static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
+                                      const bool *valid_symbols) {
+    // precondition: lexer->lookahead == '^'
+    advance(s, lexer);
+
+    // https://pandoc.org/MANUAL.html#extension-footnotes
+    // The identifiers in footnote references may not contain spaces, tabs, newlines,
+    // or the characters ^, [, or ].
+    while (lexer->lookahead != ' ' && lexer->lookahead != '\t' && lexer->lookahead != '\n' &&
+           lexer->lookahead != '^' && lexer->lookahead != '['  && lexer->lookahead != ']') {
+        advance(s, lexer);
+    }
+    lexer->mark_end(lexer);
+    lexer->result_symbol = FENCED_DIV_NOTE_ID;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
@@ -1597,6 +1618,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case '[':
                 if (valid_symbols[REF_ID_SPECIFIER]) {
                     return parse_ref_id_specifier(s, lexer, valid_symbols);
+                }
+                break;
+            case '^':
+                if (valid_symbols[FENCED_DIV_NOTE_ID]) {
+                    return parse_fenced_div_note_id(s, lexer, valid_symbols);
                 }
                 break;
         }

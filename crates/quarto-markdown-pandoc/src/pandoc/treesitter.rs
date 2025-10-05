@@ -23,6 +23,7 @@ use crate::pandoc::treesitter_utils::language_attribute::process_language_attrib
 use crate::pandoc::treesitter_utils::latex_span::process_latex_span;
 use crate::pandoc::treesitter_utils::link_title::process_link_title;
 use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
+use crate::pandoc::treesitter_utils::note_definition_fenced_block::process_note_definition_fenced_block;
 use crate::pandoc::treesitter_utils::note_definition_para::process_note_definition_para;
 use crate::pandoc::treesitter_utils::note_reference::process_note_reference;
 use crate::pandoc::treesitter_utils::numeric_character_reference::process_numeric_character_reference;
@@ -417,6 +418,7 @@ fn native_visitor<T: Write>(
         "language"
         | "note_reference_id"
         | "ref_id_specifier"
+        | "fenced_div_note_id"
         | "citation_id_suppress_author"
         | "citation_id_author_in_text"
         | "link_destination"
@@ -459,6 +461,7 @@ fn native_visitor<T: Write>(
         "citation" => process_citation(node, node_text, children),
         "note_reference" => process_note_reference(node, children),
         "inline_ref_def" => process_note_definition_para(node, children),
+        "note_definition_fenced_block" => process_note_definition_fenced_block(node, children),
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
         "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
         "shortcode_boolean" => process_shortcode_boolean(node, input_bytes),

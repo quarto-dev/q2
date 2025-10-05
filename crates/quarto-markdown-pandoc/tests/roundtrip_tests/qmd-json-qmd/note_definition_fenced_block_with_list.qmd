@@ -1,0 +1,9 @@
+# Note Definition Fenced Block - With List
+
+::: ^note-with-list
+This note contains a list:
+
+- First item
+- Second item
+- Third item
+:::

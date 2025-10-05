@@ -240,3 +240,24 @@ And a new para?
         (inline)))
     (paragraph
       (inline))))
+================================================================================
+Fenced block note definitions
+================================================================================
+::: ^my-note
+This is a note with multiple blocks.
+
+Another paragraph in the note.
+:::
+--------------------------------------------------------------------------------
+(document
+  (section
+    (note_definition_fenced_block
+      (fenced_div_note_id)
+      (block_continuation)
+      (paragraph
+        (inline)
+        (block_continuation))
+      (block_continuation)
+      (paragraph
+        (inline)
+        (block_continuation)))))

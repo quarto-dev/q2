@@ -1078,6 +1078,37 @@ fn read_block(value: &Value) -> Result<Block> {
                 },
             ))
         }
+        "NoteDefinitionFencedBlock" => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let arr = c.as_array().ok_or_else(|| {
+                JsonReadError::InvalidType(
+                    "NoteDefinitionFencedBlock content must be array".to_string(),
+                )
+            })?;
+            if arr.len() != 2 {
+                return Err(JsonReadError::InvalidType(
+                    "NoteDefinitionFencedBlock array must have 2 elements".to_string(),
+                ));
+            }
+            let id = arr[0]
+                .as_str()
+                .ok_or_else(|| {
+                    JsonReadError::InvalidType(
+                        "NoteDefinitionFencedBlock id must be string".to_string(),
+                    )
+                })?
+                .to_string();
+            let content = read_blocks(&arr[1])?;
+            Ok(Block::NoteDefinitionFencedBlock(
+                crate::pandoc::block::NoteDefinitionFencedBlock {
+                    id,
+                    content,
+                    source_info: SourceInfo::new(filename, range),
+                },
+            ))
+        }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Block: {}", t))),
     }
 }

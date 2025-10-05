@@ -731,6 +731,17 @@ pub fn topdown_traverse_block(block: Block, filter: &mut Filter) -> Blocks {
                 },
             )]
         }
+        Block::NoteDefinitionFencedBlock(refdef) => {
+            // Process the block content of the fenced reference definition
+            let content = topdown_traverse_blocks(refdef.content, filter);
+            vec![Block::NoteDefinitionFencedBlock(
+                crate::pandoc::block::NoteDefinitionFencedBlock {
+                    id: refdef.id,
+                    content,
+                    source_info: refdef.source_info,
+                },
+            )]
+        }
     }
 }
 
