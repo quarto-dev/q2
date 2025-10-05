@@ -37,3 +37,23 @@
 ## parsing differences
 
 - Lines that end with spaces might be interpreted differently.
+
+
+## Things to handle from quarto-web we're leaving behind for now
+
+### docs/advanced/typst/typst-css.qmd
+
+|                  | span | div | table | td  |
+|------------------|------|-----|-------|-----|
+| background-color |   ✓  |  ✓  |       |  ✓  |
+| border[^1]       |      |     |       |  ✓  |
+| color            |   ✓  |  ✓  |       |  ✓  |
+| font-family      |      |  ✓  |   ✓   |     |
+| font-size        |      |  ✓  |   ✓   |     |
+| opacity          |   ✓  |     |       |  ✓  |
+| align[^2]        |      |     |       |  ✓  |
+
+
+[^1]: `border`, `border-left` etc, `border-width`, `border-style`, `border-color`, `border-left-width` etc
+
+[^2]: `text-align`, `vertical-align`
