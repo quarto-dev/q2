@@ -27,7 +27,7 @@ function App() {
     if (typeof obj === 'object') {
       const newObj: any = {};
       for (const key in obj) {
-        if (key !== 'l') {
+        if (key !== 'l' && key !== 'astContext') {
           newObj[key] = removeLocationInfo(obj[key]);
         }
       }
