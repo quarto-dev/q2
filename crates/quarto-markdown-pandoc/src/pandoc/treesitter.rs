@@ -4,14 +4,27 @@
  */
 
 use crate::pandoc::treesitter_utils;
+use crate::pandoc::treesitter_utils::attribute::process_attribute;
+use crate::pandoc::treesitter_utils::backslash_escape::process_backslash_escape;
+use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
+use crate::pandoc::treesitter_utils::info_string::process_info_string;
+use crate::pandoc::treesitter_utils::key_value_specifier::process_key_value_specifier;
+use crate::pandoc::treesitter_utils::language_attribute::process_language_attribute;
+use crate::pandoc::treesitter_utils::link_title::process_link_title;
+use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
+use crate::pandoc::treesitter_utils::numeric_character_reference::process_numeric_character_reference;
+use crate::pandoc::treesitter_utils::paragraph::process_paragraph;
 use crate::pandoc::treesitter_utils::postprocess::{desugar, merge_strs};
 use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
+use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
+use crate::pandoc::treesitter_utils::raw_specifier::process_raw_specifier;
 use crate::pandoc::treesitter_utils::text_helpers::*;
+use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
 
 use crate::pandoc::attr::{Attr, empty_attr, is_empty_attr};
 use crate::pandoc::block::{
-    Block, BlockQuote, Blocks, BulletList, CodeBlock, Div, Header, HorizontalRule, OrderedList,
-    Paragraph, Plain, RawBlock,
+    Block, BlockQuote, Blocks, BulletList, CodeBlock, Div, Header, OrderedList, Paragraph, Plain,
+    RawBlock,
 };
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{
@@ -176,34 +189,6 @@ fn process_fenced_code_block(
     }
 }
 
-// Helper function to process numeric_character_reference nodes
-fn process_numeric_character_reference(
-    node: &tree_sitter::Node,
-    input_bytes: &[u8],
-) -> PandocNativeIntermediate {
-    // Convert numeric character references to their corresponding characters
-    // &#x0040; => @, &#64; => @, etc
-    let text = node.utf8_text(input_bytes).unwrap().to_string();
-    let char_value = if text.starts_with("&#x") || text.starts_with("&#X") {
-        // Hexadecimal reference
-        let hex_str = &text[3..text.len() - 1];
-        u32::from_str_radix(hex_str, 16).ok()
-    } else if text.starts_with("&#") {
-        // Decimal reference
-        let dec_str = &text[2..text.len() - 1];
-        dec_str.parse::<u32>().ok()
-    } else {
-        None
-    };
-
-    let result_text = match char_value.and_then(char::from_u32) {
-        Some(ch) => ch.to_string(),
-        None => text, // If we can't parse it, return the original text
-    };
-
-    PandocNativeIntermediate::IntermediateBaseText(result_text, node_location(node))
-}
-
 // Helper function to process section nodes
 fn process_section(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
     let mut blocks: Vec<Block> = Vec::new();
@@ -257,113 +242,6 @@ fn process_shortcode_string(
         ShortcodeArg::String(id),
         node_location(node),
     )
-}
-
-// Helper function to process link_title nodes
-fn process_link_title(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
-    let title = node.utf8_text(input_bytes).unwrap().to_string();
-    let title = title[1..title.len() - 1].to_string();
-    PandocNativeIntermediate::IntermediateBaseText(title, node_location(node))
-}
-
-// Helper function to process commonmark_attribute nodes
-fn process_commonmark_attribute(
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut attr = ("".to_string(), vec![], HashMap::new());
-    children.into_iter().for_each(|(node, child)| match child {
-        PandocNativeIntermediate::IntermediateBaseText(id, _) => {
-            if node == "id_specifier" {
-                attr.0 = id;
-            } else if node == "class_specifier" {
-                attr.1.push(id);
-            } else {
-                panic!("Unexpected commonmark_attribute node: {}", node);
-            }
-        }
-        PandocNativeIntermediate::IntermediateKeyValueSpec(spec) => {
-            for (key, value) in spec {
-                attr.2.insert(key, value);
-            }
-        }
-        PandocNativeIntermediate::IntermediateUnknown(_) => {}
-        _ => panic!("Unexpected child in commonmark_attribute: {:?}", child),
-    });
-    PandocNativeIntermediate::IntermediateAttr(attr)
-}
-
-// Helper function to process raw_specifier nodes
-fn process_raw_specifier(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
-    // like code_content but skipping first character
-    let raw = node.utf8_text(input_bytes).unwrap().to_string();
-    if raw.chars().nth(0) == Some('<') {
-        PandocNativeIntermediate::IntermediateBaseText(
-            "pandoc-reader:".to_string() + &raw[1..],
-            node_location(node),
-        )
-    } else {
-        PandocNativeIntermediate::IntermediateBaseText(raw[1..].to_string(), node_location(node))
-    }
-}
-
-// Helper function to process code_span nodes
-fn process_thematic_break(node: &tree_sitter::Node) -> PandocNativeIntermediate {
-    PandocNativeIntermediate::IntermediateBlock(Block::HorizontalRule(HorizontalRule {
-        source_info: SourceInfo::with_range(node_location(node)),
-    }))
-}
-
-fn process_backslash_escape(
-    node: &tree_sitter::Node,
-    input_bytes: &[u8],
-) -> PandocNativeIntermediate {
-    // This is a backslash escape, we need to extract the content
-    // by removing the backslash
-    let text = node.utf8_text(input_bytes).unwrap();
-    if text.len() < 2 || !text.starts_with('\\') {
-        panic!("Invalid backslash escape: {}", text);
-    }
-    let content = &text[1..]; // remove the leading backslash
-    PandocNativeIntermediate::IntermediateBaseText(content.to_string(), node_location(node))
-}
-
-fn process_paragraph(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut inlines: Vec<Inline> = Vec::new();
-    for (node, child) in children {
-        if node == "block_continuation" {
-            continue; // skip block continuation nodes
-        }
-        if let PandocNativeIntermediate::IntermediateInline(inline) = child {
-            inlines.push(inline);
-        } else if let PandocNativeIntermediate::IntermediateInlines(inner_inlines) = child {
-            inlines.extend(inner_inlines);
-        }
-    }
-    PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
-        content: inlines,
-        source_info: SourceInfo::with_range(node_location(node)),
-    }))
-}
-
-fn process_list_marker(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
-    // we need to extract the marker number
-    let marker_text = node
-        .utf8_text(input_bytes)
-        .unwrap()
-        // we trim both ends instead of just trim_end()
-        // because the lexer might hand us a marker with tabs at the beginning,
-        // as a result of weird mixed-spaces-and-tabs cases like "> \t1."
-        .trim()
-        .trim_end_matches('.')
-        .trim_end_matches(')')
-        .to_string();
-    let marker_number: usize = marker_text
-        .parse()
-        .unwrap_or_else(|_| panic!("Invalid list marker number: {}", marker_text));
-    PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, node_location(node))
 }
 
 fn process_code_fence_content(
@@ -866,42 +744,6 @@ fn process_block_quote<T: Write>(
         content,
         source_info: SourceInfo::with_range(node_location(node)),
     }))
-}
-
-fn process_raw_attribute(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let range = node_location(node);
-    for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(raw, _) => {
-                return PandocNativeIntermediate::IntermediateRawFormat(raw, range);
-            }
-            _ => {}
-        }
-    }
-    panic!("Expected raw_attribute to have a format, but found none");
-}
-
-fn process_attribute(
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    for (node, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateAttr(attr) => {
-                if node == "commonmark_attribute" {
-                    return PandocNativeIntermediate::IntermediateAttr(attr);
-                } else if node == "raw_attribute" {
-                    panic!("Unexpected raw attribute in attribute: {:?}", attr);
-                } else {
-                    panic!("Unexpected attribute node: {}", node);
-                }
-            }
-            _ => panic!("Unexpected child in attribute: {:?}", child),
-        }
-    }
-    panic!("No commonmark_attribute found in attribute node");
 }
 
 fn process_code_span<T: Write>(
@@ -1509,68 +1351,6 @@ fn process_native_inline<T: Write>(
             })
         }
     }
-}
-
-// Process info_string to extract attributes
-fn process_info_string(
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
-                return PandocNativeIntermediate::IntermediateAttr((
-                    "".to_string(),
-                    vec![text],
-                    HashMap::new(),
-                ));
-            }
-            _ => {}
-        }
-    }
-    panic!("Expected info_string to have a string, but found none");
-}
-
-// Process language_attribute to format it with braces
-fn process_language_attribute(
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                return PandocNativeIntermediate::IntermediateBaseText(
-                    "{".to_string() + &text + "}",
-                    range,
-                );
-            }
-            _ => {}
-        }
-    }
-    panic!("Expected language_attribute to have a language, but found none");
-}
-
-// Process key_value_specifier to build a HashMap of key-value pairs
-fn process_key_value_specifier<T: Write>(
-    buf: &mut T,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut spec = HashMap::new();
-    let mut current_key: Option<String> = None;
-    for (node, child) in children {
-        if let PandocNativeIntermediate::IntermediateBaseText(value, _) = child {
-            if node == "key_value_key" {
-                current_key = Some(value);
-            } else if node == "key_value_value" {
-                if let Some(key) = current_key.take() {
-                    spec.insert(key, value);
-                } else {
-                    panic!("Found key_value_value without a preceding key_value_key");
-                }
-            } else {
-                writeln!(buf, "Unexpected key_value_specifier node: {}", node).unwrap();
-            }
-        }
-    }
-    PandocNativeIntermediate::IntermediateKeyValueSpec(spec)
 }
 
 // Standalone function to process a collection of children into a vector of Inline objects
