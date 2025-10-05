@@ -55,6 +55,7 @@ typedef enum {
     PIPE_TABLE_LINE_ENDING,
     FENCED_DIV_START,
     FENCED_DIV_END,
+    REF_ID_SPECIFIER,
 } TokenType;
 
 // Description of a block on the block stack.
@@ -1442,6 +1443,34 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
     return true;
 }
 
+static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // precondition: lexer->lookahead == '['
+    advance(s, lexer);
+    if (lexer->lookahead != '^') {
+        return false;
+    }
+    advance(s, lexer);
+
+    // https://pandoc.org/MANUAL.html#extension-footnotes
+    // The identifiers in footnote references may not contain spaces, tabs, newlines, 
+    // or the characters ^, [, or ].
+    while (lexer->lookahead != ' ' && lexer->lookahead != '\t' && lexer->lookahead != '\n' &&
+           lexer->lookahead != '^' && lexer->lookahead != '['  && lexer->lookahead != ']') {
+        advance(s, lexer);        
+    }
+    if (lexer->lookahead != ']') {
+        return false;
+    }
+    advance(s, lexer);        
+    if (lexer->lookahead != ':') {
+        return false;
+    }
+    advance(s, lexer);
+    lexer->mark_end(lexer);
+    lexer->result_symbol = REF_ID_SPECIFIER;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
@@ -1562,6 +1591,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case '<':
                 // A < could mark the beginning of a html block
                 return parse_html_block(s, lexer, valid_symbols);
+            case '[':
+                if (valid_symbols[REF_ID_SPECIFIER]) {
+                    return parse_ref_id_specifier(s, lexer, valid_symbols);
+                }
+                break;
         }
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
             valid_symbols[PIPE_TABLE_START]) {

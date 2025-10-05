@@ -2148,6 +2148,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "inline_ref_def"
+        },
+        {
+          "type": "SYMBOL",
           "name": "indented_code_block"
         },
         {
@@ -3302,6 +3306,23 @@
               "name": "_eof"
             }
           ]
+        }
+      ]
+    },
+    "inline_ref_def": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "ref_id_specifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_whitespace"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "paragraph"
         }
       ]
     },
@@ -5544,6 +5565,10 @@
     {
       "type": "SYMBOL",
       "name": "_fenced_div_end"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "ref_id_specifier"
     }
   ],
   "inline": [],

@@ -37,6 +37,7 @@ module.exports = grammar({
             alias($._setext_heading1, $.setext_heading),
             alias($._setext_heading2, $.setext_heading),
             $.paragraph,
+            $.inline_ref_def,
             $.indented_code_block,
             $.block_quote,
             $.thematic_break,
@@ -226,6 +227,11 @@ module.exports = grammar({
         //
         // https://github.github.com/gfm/#paragraphs
         paragraph: $ => seq(alias(repeat1(choice($._line, $._soft_line_break)), $.inline), choice($._newline, $._eof)),
+
+        inline_ref_def: $ => seq(
+            $.ref_id_specifier,
+            $._whitespace,
+            $.paragraph),
 
         // A blank line including the following newline.
         //
@@ -533,6 +539,8 @@ module.exports = grammar({
 
         $._fenced_div_start,
         $._fenced_div_end,
+
+        $.ref_id_specifier,
     ],
     precedences: $ => [
         [$._setext_heading1, $._block],

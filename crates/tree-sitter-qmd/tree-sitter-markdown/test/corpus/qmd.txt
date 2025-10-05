@@ -224,3 +224,19 @@ printf("hello");
       (block_continuation)
       (code_fence_content
         (block_continuation)))))
+================================================================================
+Inline reference id definitions
+================================================================================
+[^no-way]: this actually worked.
+Can we do soft breaks?
+
+And a new para?
+--------------------------------------------------------------------------------
+(document
+  (section
+    (inline_ref_def
+      (ref_id_specifier)
+      (paragraph
+        (inline)))
+    (paragraph
+      (inline))))
