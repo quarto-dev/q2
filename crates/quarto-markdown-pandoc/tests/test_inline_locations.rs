@@ -17,13 +17,8 @@ fn test_inline_source_locations() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let pandoc = treesitter_to_pandoc(
-        &mut std::io::sink(),
-        &tree,
-        &input_bytes,
-        &context,
-    )
-    .expect("Failed to convert to Pandoc AST");
+    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes, &context)
+        .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &context, &mut buf).unwrap();
@@ -99,13 +94,8 @@ fn test_merged_strings_preserve_location() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let pandoc = treesitter_to_pandoc(
-        &mut std::io::sink(),
-        &tree,
-        &input_bytes,
-        &context,
-    )
-    .expect("Failed to convert to Pandoc AST");
+    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes, &context)
+        .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &context, &mut buf).unwrap();
@@ -159,13 +149,8 @@ fn test_separate_strings_keep_separate_locations() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let pandoc = treesitter_to_pandoc(
-        &mut std::io::sink(),
-        &tree,
-        &input_bytes,
-        &context,
-    )
-    .expect("Failed to convert to Pandoc AST");
+    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes, &context)
+        .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &context, &mut buf).unwrap();

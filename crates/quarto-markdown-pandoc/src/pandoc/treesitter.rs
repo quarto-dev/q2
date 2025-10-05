@@ -301,12 +301,26 @@ fn process_native_inline<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: SourceInfo::new(if context.filenames.is_empty() { None } else { Some(0) }, range),
+                    source_info: SourceInfo::new(
+                        if context.filenames.is_empty() {
+                            None
+                        } else {
+                            Some(0)
+                        },
+                        range,
+                    ),
                 })
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: SourceInfo::new(if context.filenames.is_empty() { None } else { Some(0) }, range),
+                    source_info: SourceInfo::new(
+                        if context.filenames.is_empty() {
+                            None
+                        } else {
+                            Some(0)
+                        },
+                        range,
+                    ),
                 })
             }
         }
@@ -365,12 +379,26 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: SourceInfo::new(if context.filenames.is_empty() { None } else { Some(0) }, range),
+                        source_info: SourceInfo::new(
+                            if context.filenames.is_empty() {
+                                None
+                            } else {
+                                Some(0)
+                            },
+                            range,
+                        ),
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
                         text,
-                        source_info: SourceInfo::new(if context.filenames.is_empty() { None } else { Some(0) }, range),
+                        source_info: SourceInfo::new(
+                            if context.filenames.is_empty() {
+                                None
+                            } else {
+                                Some(0)
+                            },
+                            range,
+                        ),
                     }))
                 }
             }

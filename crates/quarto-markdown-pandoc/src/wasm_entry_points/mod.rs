@@ -8,7 +8,10 @@ use crate::utils::output::VerboseOutput;
 use crate::utils::tree_sitter_log_observer::TreeSitterLogObserver;
 use std::io;
 
-fn pandoc_to_json(doc: &crate::pandoc::Pandoc, context: &crate::pandoc::ast_context::ASTContext) -> Result<String, String> {
+fn pandoc_to_json(
+    doc: &crate::pandoc::Pandoc,
+    context: &crate::pandoc::ast_context::ASTContext,
+) -> Result<String, String> {
     let mut buf = Vec::new();
     match crate::writers::json::write(doc, context, &mut buf) {
         Ok(_) => {
@@ -25,7 +28,15 @@ fn pandoc_to_json(doc: &crate::pandoc::Pandoc, context: &crate::pandoc::ast_cont
     }
 }
 
-pub fn qmd_to_pandoc(input: &[u8]) -> Result<(crate::pandoc::Pandoc, crate::pandoc::ast_context::ASTContext), Vec<String>> {
+pub fn qmd_to_pandoc(
+    input: &[u8],
+) -> Result<
+    (
+        crate::pandoc::Pandoc,
+        crate::pandoc::ast_context::ASTContext,
+    ),
+    Vec<String>,
+> {
     let mut output = VerboseOutput::Sink(io::sink());
     readers::qmd::read(
         input,

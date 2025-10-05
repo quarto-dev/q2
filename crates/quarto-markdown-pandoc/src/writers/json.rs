@@ -3,7 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::{ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc};
+use crate::pandoc::{
+    ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
+};
 use serde_json::{Value, json};
 
 fn write_location<T: crate::pandoc::location::SourceLocation>(item: &T) -> Value {
@@ -217,6 +219,66 @@ fn write_caption(caption: &Caption) -> Value {
     ])
 }
 
+fn write_alignment(alignment: &crate::pandoc::table::Alignment) -> Value {
+    match alignment {
+        crate::pandoc::table::Alignment::Left => json!({"t": "AlignLeft"}),
+        crate::pandoc::table::Alignment::Center => json!({"t": "AlignCenter"}),
+        crate::pandoc::table::Alignment::Right => json!({"t": "AlignRight"}),
+        crate::pandoc::table::Alignment::Default => json!({"t": "AlignDefault"}),
+    }
+}
+
+fn write_colwidth(colwidth: &crate::pandoc::table::ColWidth) -> Value {
+    match colwidth {
+        crate::pandoc::table::ColWidth::Default => json!({"t": "ColWidthDefault"}),
+        crate::pandoc::table::ColWidth::Percentage(p) => json!({"t": "ColWidth", "c": p}),
+    }
+}
+
+fn write_colspec(colspec: &crate::pandoc::table::ColSpec) -> Value {
+    json!([write_alignment(&colspec.0), write_colwidth(&colspec.1)])
+}
+
+fn write_cell(cell: &crate::pandoc::table::Cell) -> Value {
+    json!([
+        write_attr(&cell.attr),
+        write_alignment(&cell.alignment),
+        cell.row_span,
+        cell.col_span,
+        write_blocks(&cell.content)
+    ])
+}
+
+fn write_row(row: &crate::pandoc::table::Row) -> Value {
+    json!([
+        write_attr(&row.attr),
+        row.cells.iter().map(write_cell).collect::<Vec<_>>()
+    ])
+}
+
+fn write_table_head(head: &crate::pandoc::table::TableHead) -> Value {
+    json!([
+        write_attr(&head.attr),
+        head.rows.iter().map(write_row).collect::<Vec<_>>()
+    ])
+}
+
+fn write_table_body(body: &crate::pandoc::table::TableBody) -> Value {
+    json!([
+        write_attr(&body.attr),
+        body.rowhead_columns,
+        body.head.iter().map(write_row).collect::<Vec<_>>(),
+        body.body.iter().map(write_row).collect::<Vec<_>>()
+    ])
+}
+
+fn write_table_foot(foot: &crate::pandoc::table::TableFoot) -> Value {
+    json!([
+        write_attr(&foot.attr),
+        foot.rows.iter().map(write_row).collect::<Vec<_>>()
+    ])
+}
+
 fn write_block(block: &Block) -> Value {
     match block {
         Block::Figure(figure) => json!({
@@ -258,7 +320,18 @@ fn write_block(block: &Block) -> Value {
             "t": "HorizontalRule",
             "l": write_location(block),
         }),
-        Block::Table(_) => panic!("unimplemented block: Table"),
+        Block::Table(table) => json!({
+            "t": "Table",
+            "c": [
+                write_attr(&table.attr),
+                write_caption(&table.caption),
+                table.colspec.iter().map(write_colspec).collect::<Vec<_>>(),
+                write_table_head(&table.head),
+                table.bodies.iter().map(write_table_body).collect::<Vec<_>>(),
+                write_table_foot(&table.foot)
+            ],
+            "l": write_location(table),
+        }),
 
         Block::Div(div) => json!({
             "t": "Div",
@@ -372,7 +445,11 @@ fn write_pandoc(pandoc: &Pandoc, context: &ASTContext) -> Value {
     })
 }
 
-pub fn write<W: std::io::Write>(pandoc: &Pandoc, context: &ASTContext, writer: &mut W) -> std::io::Result<()> {
+pub fn write<W: std::io::Write>(
+    pandoc: &Pandoc,
+    context: &ASTContext,
+    writer: &mut W,
+) -> std::io::Result<()> {
     let json = write_pandoc(pandoc, context);
     serde_json::to_writer(writer, &json)?;
     Ok(())

@@ -60,7 +60,8 @@ fn test_json_roundtrip_simple_paragraph() {
 
     // Read back from JSON
     let mut json_reader = std::io::Cursor::new(json_output);
-    let (parsed, _parsed_context) = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+    let (parsed, _parsed_context) =
+        readers::json::read(&mut json_reader).expect("Failed to read JSON");
 
     // Compare the documents
     assert_eq!(original.meta, parsed.meta);
@@ -214,7 +215,8 @@ fn test_json_roundtrip_complex_document() {
 
     // Read back from JSON
     let mut json_reader = std::io::Cursor::new(json_output);
-    let (parsed, _parsed_context) = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+    let (parsed, _parsed_context) =
+        readers::json::read(&mut json_reader).expect("Failed to read JSON");
 
     // Verify basic structure
     assert_eq!(parsed.blocks.len(), 2);
@@ -320,7 +322,8 @@ fn test_json_write_then_read_matches_original_structure() {
 
     // Read back from JSON
     let mut json_reader = std::io::Cursor::new(json_output);
-    let (parsed, parsed_context) = readers::json::read(&mut json_reader).expect("Failed to read JSON");
+    let (parsed, parsed_context) =
+        readers::json::read(&mut json_reader).expect("Failed to read JSON");
 
     // Verify context was preserved
     assert_eq!(parsed_context.filenames, vec!["test.md"]);

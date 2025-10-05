@@ -6,6 +6,9 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::{Location, Range, SourceInfo};
+use crate::pandoc::table::{
+    Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
+};
 use crate::pandoc::{
     Attr, Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, Code, CodeBlock,
     DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, Inlines, LineBlock,
@@ -73,7 +76,8 @@ fn read_location(value: &Value) -> Option<(Option<usize>, Range)> {
         column: end_obj.get("column")?.as_u64()? as usize,
     };
 
-    let filename_index = obj.get("filenameIndex")
+    let filename_index = obj
+        .get("filenameIndex")
         .and_then(|v| v.as_u64())
         .map(|i| i as usize);
 
@@ -182,7 +186,8 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }))
         }
         "Space" => {
-            let (filename_index, range) = obj.get("l")
+            let (filename_index, range) = obj
+                .get("l")
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::Space(Space {
@@ -190,7 +195,8 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }))
         }
         "LineBreak" => {
-            let (filename_index, range) = obj.get("l")
+            let (filename_index, range) = obj
+                .get("l")
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
@@ -198,7 +204,8 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }))
         }
         "SoftBreak" => {
-            let (filename_index, range) = obj.get("l")
+            let (filename_index, range) = obj
+                .get("l")
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::SoftBreak(SoftBreak {
@@ -616,7 +623,8 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for ASTContext".to_string()))?;
 
-    let filenames_val = obj.get("filenames")
+    let filenames_val = obj
+        .get("filenames")
         .ok_or_else(|| JsonReadError::MissingField("filenames".to_string()))?;
 
     let filenames_arr = filenames_val
@@ -773,6 +781,197 @@ fn read_blocks(value: &Value) -> Result<Vec<Block>> {
     arr.iter().map(read_block).collect()
 }
 
+fn read_alignment(value: &Value) -> Result<Alignment> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected object for Alignment".to_string()))?;
+    let t = obj
+        .get("t")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
+
+    match t {
+        "AlignLeft" => Ok(Alignment::Left),
+        "AlignCenter" => Ok(Alignment::Center),
+        "AlignRight" => Ok(Alignment::Right),
+        "AlignDefault" => Ok(Alignment::Default),
+        _ => Err(JsonReadError::UnsupportedVariant(format!(
+            "Alignment: {}",
+            t
+        ))),
+    }
+}
+
+fn read_colwidth(value: &Value) -> Result<ColWidth> {
+    let obj = value
+        .as_object()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected object for ColWidth".to_string()))?;
+    let t = obj
+        .get("t")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
+
+    match t {
+        "ColWidthDefault" => Ok(ColWidth::Default),
+        "ColWidth" => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let percentage = c.as_f64().ok_or_else(|| {
+                JsonReadError::InvalidType("ColWidth percentage must be number".to_string())
+            })?;
+            Ok(ColWidth::Percentage(percentage))
+        }
+        _ => Err(JsonReadError::UnsupportedVariant(format!(
+            "ColWidth: {}",
+            t
+        ))),
+    }
+}
+
+fn read_colspec(value: &Value) -> Result<ColSpec> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected array for ColSpec".to_string()))?;
+
+    if arr.len() != 2 {
+        return Err(JsonReadError::InvalidType(
+            "ColSpec array must have 2 elements".to_string(),
+        ));
+    }
+
+    let alignment = read_alignment(&arr[0])?;
+    let colwidth = read_colwidth(&arr[1])?;
+    Ok((alignment, colwidth))
+}
+
+fn read_cell(value: &Value) -> Result<Cell> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected array for Cell".to_string()))?;
+
+    if arr.len() != 5 {
+        return Err(JsonReadError::InvalidType(
+            "Cell array must have 5 elements".to_string(),
+        ));
+    }
+
+    let attr = read_attr(&arr[0])?;
+    let alignment = read_alignment(&arr[1])?;
+    let row_span = arr[2]
+        .as_u64()
+        .ok_or_else(|| JsonReadError::InvalidType("Cell row_span must be number".to_string()))?
+        as usize;
+    let col_span = arr[3]
+        .as_u64()
+        .ok_or_else(|| JsonReadError::InvalidType("Cell col_span must be number".to_string()))?
+        as usize;
+    let content = read_blocks(&arr[4])?;
+
+    Ok(Cell {
+        attr,
+        alignment,
+        row_span,
+        col_span,
+        content,
+    })
+}
+
+fn read_row(value: &Value) -> Result<Row> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected array for Row".to_string()))?;
+
+    if arr.len() != 2 {
+        return Err(JsonReadError::InvalidType(
+            "Row array must have 2 elements".to_string(),
+        ));
+    }
+
+    let attr = read_attr(&arr[0])?;
+    let cells_arr = arr[1]
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Row cells must be array".to_string()))?;
+    let cells = cells_arr
+        .iter()
+        .map(read_cell)
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(Row { attr, cells })
+}
+
+fn read_table_head(value: &Value) -> Result<TableHead> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableHead".to_string()))?;
+
+    if arr.len() != 2 {
+        return Err(JsonReadError::InvalidType(
+            "TableHead array must have 2 elements".to_string(),
+        ));
+    }
+
+    let attr = read_attr(&arr[0])?;
+    let rows_arr = arr[1]
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("TableHead rows must be array".to_string()))?;
+    let rows = rows_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+
+    Ok(TableHead { attr, rows })
+}
+
+fn read_table_body(value: &Value) -> Result<TableBody> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableBody".to_string()))?;
+
+    if arr.len() != 4 {
+        return Err(JsonReadError::InvalidType(
+            "TableBody array must have 4 elements".to_string(),
+        ));
+    }
+
+    let attr = read_attr(&arr[0])?;
+    let rowhead_columns = arr[1].as_u64().ok_or_else(|| {
+        JsonReadError::InvalidType("TableBody rowhead_columns must be number".to_string())
+    })? as usize;
+    let head_arr = arr[2]
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("TableBody head must be array".to_string()))?;
+    let head = head_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+    let body_arr = arr[3]
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("TableBody body must be array".to_string()))?;
+    let body = body_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+
+    Ok(TableBody {
+        attr,
+        rowhead_columns,
+        head,
+        body,
+    })
+}
+
+fn read_table_foot(value: &Value) -> Result<TableFoot> {
+    let arr = value
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableFoot".to_string()))?;
+
+    if arr.len() != 2 {
+        return Err(JsonReadError::InvalidType(
+            "TableFoot array must have 2 elements".to_string(),
+        ));
+    }
+
+    let attr = read_attr(&arr[0])?;
+    let rows_arr = arr[1]
+        .as_array()
+        .ok_or_else(|| JsonReadError::InvalidType("TableFoot rows must be array".to_string()))?;
+    let rows = rows_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+
+    Ok(TableFoot { attr, rows })
+}
+
 fn read_block(value: &Value) -> Result<Block> {
     let obj = value
         .as_object()
@@ -783,7 +982,8 @@ fn read_block(value: &Value) -> Result<Block> {
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
     // Extract location information if present
-    let (filename_index, range) = obj.get("l")
+    let (filename_index, range) = obj
+        .get("l")
         .and_then(read_location)
         .unwrap_or_else(|| (None, empty_range()));
 
@@ -990,6 +1190,46 @@ fn read_block(value: &Value) -> Result<Block> {
                 attr,
                 caption,
                 content,
+                source_info: SourceInfo::new(filename_index, range),
+            }))
+        }
+        "Table" => {
+            let c = obj
+                .get("c")
+                .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
+            let arr = c.as_array().ok_or_else(|| {
+                JsonReadError::InvalidType("Table content must be array".to_string())
+            })?;
+            if arr.len() != 6 {
+                return Err(JsonReadError::InvalidType(
+                    "Table array must have 6 elements".to_string(),
+                ));
+            }
+            let attr = read_attr(&arr[0])?;
+            let caption = read_caption(&arr[1])?;
+            let colspec_arr = arr[2].as_array().ok_or_else(|| {
+                JsonReadError::InvalidType("Table colspec must be array".to_string())
+            })?;
+            let colspec = colspec_arr
+                .iter()
+                .map(read_colspec)
+                .collect::<Result<Vec<_>>>()?;
+            let head = read_table_head(&arr[3])?;
+            let bodies_arr = arr[4].as_array().ok_or_else(|| {
+                JsonReadError::InvalidType("Table bodies must be array".to_string())
+            })?;
+            let bodies = bodies_arr
+                .iter()
+                .map(read_table_body)
+                .collect::<Result<Vec<_>>>()?;
+            let foot = read_table_foot(&arr[5])?;
+            Ok(Block::Table(Table {
+                attr,
+                caption,
+                colspec,
+                head,
+                bodies,
+                foot,
                 source_info: SourceInfo::new(filename_index, range),
             }))
         }
