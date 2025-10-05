@@ -7,13 +7,15 @@
  */
 
 use crate::pandoc::inline::{Inline, NoteReference};
-use crate::pandoc::location::node_location;
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_note_reference(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut id = String::new();
     for (node, child) in children {
@@ -31,6 +33,6 @@ pub fn process_note_reference(
     }
     PandocNativeIntermediate::IntermediateInline(Inline::NoteReference(NoteReference {
         id,
-        range: node_location(node),
+        range: node_source_info_with_context(node, context).range,
     }))
 }

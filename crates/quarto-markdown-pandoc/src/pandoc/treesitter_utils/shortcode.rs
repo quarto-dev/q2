@@ -7,7 +7,8 @@
  */
 
 use crate::pandoc::inline::Inline;
-use crate::pandoc::location::node_location;
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::shortcode::{Shortcode, ShortcodeArg};
 use std::collections::HashMap;
 use std::io::Write;
@@ -18,11 +19,12 @@ use super::pandocnativeintermediate::PandocNativeIntermediate;
 pub fn process_shortcode_string_arg(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let id = node.utf8_text(input_bytes).unwrap().to_string();
     PandocNativeIntermediate::IntermediateShortcodeArg(
         ShortcodeArg::String(id),
-        node_location(node),
+        node_source_info_with_context(node, context).range,
     )
 }
 
@@ -30,6 +32,7 @@ pub fn process_shortcode_string_arg(
 pub fn process_shortcode_string(
     extract_quoted_text_fn: &dyn Fn() -> PandocNativeIntermediate,
     node: &tree_sitter::Node,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let PandocNativeIntermediate::IntermediateBaseText(id, _) = extract_quoted_text_fn() else {
         panic!(
@@ -39,7 +42,7 @@ pub fn process_shortcode_string(
     };
     PandocNativeIntermediate::IntermediateShortcodeArg(
         ShortcodeArg::String(id),
-        node_location(node),
+        node_source_info_with_context(node, context).range,
     )
 }
 
@@ -47,6 +50,7 @@ pub fn process_shortcode_keyword_param<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut result = HashMap::new();
     let mut name = String::new();
@@ -83,13 +87,14 @@ pub fn process_shortcode_keyword_param<T: Write>(
             }
         }
     }
-    let range = node_location(node);
+    let range = node_source_info_with_context(node, context).range;
     PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(result), range)
 }
 
 pub fn process_shortcode(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let is_escaped = node.kind() == "shortcode_escaped";
     let mut name = String::new();
@@ -152,6 +157,7 @@ pub fn process_shortcode(
 pub fn process_shortcode_boolean(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let value = node.utf8_text(input_bytes).unwrap();
     let value = match value {
@@ -159,16 +165,17 @@ pub fn process_shortcode_boolean(
         "false" => ShortcodeArg::Boolean(false),
         _ => panic!("Unexpected shortcode_boolean value: {}", value),
     };
-    let range = node_location(node);
+    let range = node_source_info_with_context(node, context).range;
     PandocNativeIntermediate::IntermediateShortcodeArg(value, range)
 }
 
 pub fn process_shortcode_number(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let value = node.utf8_text(input_bytes).unwrap();
-    let range = node_location(node);
+    let range = node_source_info_with_context(node, context).range;
     let Ok(num) = value.parse::<f64>() else {
         panic!("Invalid shortcode_number: {}", value)
     };

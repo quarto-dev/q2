@@ -54,8 +54,10 @@ use crate::pandoc::inline::{
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{
     Range, SourceInfo, empty_source_info, node_location, node_source_info,
+    node_source_info_with_context,
 };
 use crate::pandoc::pandoc::Pandoc;
+use crate::pandoc::parse_context::ParseContext;
 use core::panic;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -68,6 +70,7 @@ use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 fn process_list(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     // a list is loose if it has at least one loose item
     // an item is loose if
@@ -208,12 +211,12 @@ fn process_list(
             PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(OrderedList {
                 attr,
                 content,
-                source_info: SourceInfo::with_range(node_location(node)),
+                source_info: node_source_info_with_context(node, context),
             }))
         }
         None => PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
             content,
-            source_info: SourceInfo::with_range(node_location(node)),
+            source_info: node_source_info_with_context(node, context),
         })),
     }
 }
@@ -221,6 +224,7 @@ fn process_list(
 fn process_list_item(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut list_attr: Option<ListAttributes> = None;
     let children = children
@@ -263,7 +267,7 @@ fn process_list_item(
 
 // Macro for simple emphasis-like inline processing
 macro_rules! emphasis_inline {
-    ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident) => {
+    ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident, $context:expr) => {
         process_emphasis_inline(
             $node,
             $children,
@@ -272,7 +276,7 @@ macro_rules! emphasis_inline {
             |inlines, node| {
                 Inline::$inline_type($inline_type {
                     content: inlines,
-                    source_info: node_source_info(node),
+                    source_info: node_source_info_with_context(node, $context),
                 })
             },
         )
@@ -286,18 +290,19 @@ fn process_native_inline<T: Write>(
     whitespace_re: &Regex,
     inline_buf: &mut T,
     node_text_fn: impl Fn() -> String,
+    context: &ParseContext,
 ) -> Inline {
     match child {
         PandocNativeIntermediate::IntermediateInline(inline) => inline,
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: SourceInfo::with_range(range),
+                    source_info: SourceInfo::new(context.filename.clone(), range),
                 })
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: SourceInfo::with_range(range),
+                    source_info: SourceInfo::new(context.filename.clone(), range),
                 })
             }
         }
@@ -344,6 +349,7 @@ fn process_native_inlines<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
     whitespace_re: &Regex,
     inlines_buf: &mut T,
+    context: &ParseContext,
 ) -> Vec<Inline> {
     let mut inlines: Vec<Inline> = Vec::new();
     for (_, child) in children {
@@ -355,12 +361,12 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: SourceInfo::with_range(range),
+                        source_info: SourceInfo::new(context.filename.clone(), range),
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
                         text,
-                        source_info: SourceInfo::with_range(range),
+                        source_info: SourceInfo::new(context.filename.clone(), range),
                     }))
                 }
             }
@@ -382,6 +388,7 @@ fn native_visitor<T: Write>(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     // TODO What sounded like a good idea with two buffers
     // is becoming annoying now...
@@ -407,13 +414,16 @@ fn native_visitor<T: Write>(
             &whitespace_re,
             &mut inline_buf,
             &node_text,
+            context,
         )
     };
     let mut native_inlines =
-        |children| process_native_inlines(children, &whitespace_re, &mut inlines_buf);
+        |children| process_native_inlines(children, &whitespace_re, &mut inlines_buf, context);
 
     let result = match node.kind() {
-        "numeric_character_reference" => process_numeric_character_reference(node, input_bytes),
+        "numeric_character_reference" => {
+            process_numeric_character_reference(node, input_bytes, context)
+        }
 
         "language"
         | "note_reference_id"
@@ -426,48 +436,68 @@ fn native_visitor<T: Write>(
         | "code_content"
         | "latex_content"
         | "text_base" => create_base_text_from_node_text(node, input_bytes),
-        "document" => process_document(children),
-        "section" => process_section(children),
-        "paragraph" => process_paragraph(node, children),
+        "document" => process_document(children, context),
+        "section" => process_section(children, context),
+        "paragraph" => process_paragraph(node, children, context),
         "indented_code_block" => {
-            process_indented_code_block(node, children, input_bytes, &indent_re)
+            process_indented_code_block(node, children, input_bytes, &indent_re, context)
         }
-        "fenced_code_block" => process_fenced_code_block(node, children),
-        "attribute" => process_attribute(children),
-        "commonmark_attribute" => process_commonmark_attribute(children),
+        "fenced_code_block" => process_fenced_code_block(node, children, context),
+        "attribute" => process_attribute(children, context),
+        "commonmark_attribute" => process_commonmark_attribute(children, context),
         "class_specifier" | "id_specifier" => create_specifier_base_text(node, input_bytes),
         "shortcode_naked_string" | "shortcode_name" => {
-            process_shortcode_string_arg(node, input_bytes)
+            process_shortcode_string_arg(node, input_bytes, context)
         }
-        "shortcode_string" => process_shortcode_string(&string_as_base_text, node),
+        "shortcode_string" => process_shortcode_string(&string_as_base_text, node, context),
         "key_value_value" => string_as_base_text(),
-        "link_title" => process_link_title(node, input_bytes),
+        "link_title" => process_link_title(node, input_bytes, context),
         "link_text" => PandocNativeIntermediate::IntermediateInlines(native_inlines(children)),
-        "image" => treesitter_utils::image::process_image(&mut image_buf, node_text, children),
+        "image" => {
+            treesitter_utils::image::process_image(&mut image_buf, node_text, children, context)
+        }
         "image_description" => {
             PandocNativeIntermediate::IntermediateInlines(native_inlines(children))
         }
-        "inline_link" => process_inline_link(&mut link_buf, node_text, children),
-        "key_value_specifier" => process_key_value_specifier(buf, children),
-        "raw_specifier" => process_raw_specifier(node, input_bytes),
-        "emphasis" => emphasis_inline!(node, children, "emphasis_delimiter", native_inline, Emph),
+        "inline_link" => process_inline_link(&mut link_buf, node_text, children, context),
+        "key_value_specifier" => process_key_value_specifier(buf, children, context),
+        "raw_specifier" => process_raw_specifier(node, input_bytes, context),
+        "emphasis" => emphasis_inline!(
+            node,
+            children,
+            "emphasis_delimiter",
+            native_inline,
+            Emph,
+            context
+        ),
         "strong_emphasis" => {
-            emphasis_inline!(node, children, "emphasis_delimiter", native_inline, Strong)
+            emphasis_inline!(
+                node,
+                children,
+                "emphasis_delimiter",
+                native_inline,
+                Strong,
+                context
+            )
         }
         "inline" => {
             let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
             PandocNativeIntermediate::IntermediateInlines(inlines)
         }
-        "citation" => process_citation(node, node_text, children),
-        "note_reference" => process_note_reference(node, children),
-        "inline_ref_def" => process_note_definition_para(node, children),
-        "note_definition_fenced_block" => process_note_definition_fenced_block(node, children),
-        "shortcode" | "shortcode_escaped" => process_shortcode(node, children),
-        "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children),
-        "shortcode_boolean" => process_shortcode_boolean(node, input_bytes),
-        "shortcode_number" => process_shortcode_number(node, input_bytes),
-        "code_fence_content" => process_code_fence_content(node, children, input_bytes),
-        "list_marker_parenthesis" | "list_marker_dot" => process_list_marker(node, input_bytes),
+        "citation" => process_citation(node, node_text, children, context),
+        "note_reference" => process_note_reference(node, children, context),
+        "inline_ref_def" => process_note_definition_para(node, children, context),
+        "note_definition_fenced_block" => {
+            process_note_definition_fenced_block(node, children, context)
+        }
+        "shortcode" | "shortcode_escaped" => process_shortcode(node, children, context),
+        "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children, context),
+        "shortcode_boolean" => process_shortcode_boolean(node, input_bytes, context),
+        "shortcode_number" => process_shortcode_number(node, input_bytes, context),
+        "code_fence_content" => process_code_fence_content(node, children, input_bytes, context),
+        "list_marker_parenthesis" | "list_marker_dot" => {
+            process_list_marker(node, input_bytes, context)
+        }
         // These are marker nodes, we don't need to do anything with it
         "block_quote_marker"
         | "list_marker_minus"
@@ -530,52 +560,71 @@ fn native_visitor<T: Write>(
             children,
             "superscript_delimiter",
             native_inline,
-            Superscript
+            Superscript,
+            context
         ),
         "subscript" => emphasis_inline!(
             node,
             children,
             "subscript_delimiter",
             native_inline,
-            Subscript
+            Subscript,
+            context
         ),
         "strikeout" => emphasis_inline!(
             node,
             children,
             "strikeout_delimiter",
             native_inline,
-            Strikeout
+            Strikeout,
+            context
         ),
-        "insert" => emphasis_inline!(node, children, "insert_delimiter", native_inline, Insert),
-        "delete" => emphasis_inline!(node, children, "delete_delimiter", native_inline, Delete),
+        "insert" => emphasis_inline!(
+            node,
+            children,
+            "insert_delimiter",
+            native_inline,
+            Insert,
+            context
+        ),
+        "delete" => emphasis_inline!(
+            node,
+            children,
+            "delete_delimiter",
+            native_inline,
+            Delete,
+            context
+        ),
         "highlight" => emphasis_inline!(
             node,
             children,
             "highlight_delimiter",
             native_inline,
-            Highlight
+            Highlight,
+            context
         ),
         "edit_comment" => emphasis_inline!(
             node,
             children,
             "edit_comment_delimiter",
             native_inline,
-            EditComment
+            EditComment,
+            context
         ),
 
-        "quoted_span" => process_quoted_span(node, children, native_inline),
-        "code_span" => process_code_span(buf, node, children),
-        "latex_span" => process_latex_span(node, children),
-        "list" => process_list(node, children),
-        "list_item" => process_list_item(node, children),
-        "info_string" => process_info_string(children),
-        "language_attribute" => process_language_attribute(children),
-        "raw_attribute" => process_raw_attribute(node, children),
-        "block_quote" => process_block_quote(buf, node, children),
-        "fenced_div_block" => process_fenced_div_block(buf, node, children),
-        "atx_heading" => process_atx_heading(buf, node, children),
-        "thematic_break" => process_thematic_break(node),
-        "backslash_escape" => process_backslash_escape(node, input_bytes),
+        "quoted_span" => process_quoted_span(node, children, native_inline, context),
+        "code_span" => process_code_span(buf, node, children, context),
+        "latex_span" => process_latex_span(node, children, context),
+        "list" => process_list(node, children, context),
+        "list_item" => process_list_item(node, children, context),
+        "info_string" => process_info_string(children, context),
+        "language_attribute" => process_language_attribute(children, context),
+        "raw_attribute" => process_raw_attribute(node, children, context),
+        "block_quote" => process_block_quote(buf, node, children, context),
+        "fenced_div_block" => process_fenced_div_block(buf, node, children, context),
+        "atx_heading" => process_atx_heading(buf, node, children, context),
+        "thematic_break" => process_thematic_break(node, context),
+        "backslash_escape" => process_backslash_escape(node, input_bytes, context),
         "minus_metadata" => {
             let text = node.utf8_text(input_bytes).unwrap();
             PandocNativeIntermediate::IntermediateMetadataString(
@@ -583,15 +632,17 @@ fn native_visitor<T: Write>(
                 node_location(node),
             )
         }
-        "uri_autolink" => process_uri_autolink(node, input_bytes),
-        "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children),
-        "pipe_table_header" | "pipe_table_row" => process_pipe_table_header_or_row(children),
-        "pipe_table_delimiter_row" => process_pipe_table_delimiter_row(children),
-        "pipe_table_cell" => process_pipe_table_cell(node, children),
-        "pipe_table" => process_pipe_table(node, children),
+        "uri_autolink" => process_uri_autolink(node, input_bytes, context),
+        "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
+        "pipe_table_header" | "pipe_table_row" => {
+            process_pipe_table_header_or_row(children, context)
+        }
+        "pipe_table_delimiter_row" => process_pipe_table_delimiter_row(children, context),
+        "pipe_table_cell" => process_pipe_table_cell(node, children, context),
+        "pipe_table" => process_pipe_table(node, children, context),
         "setext_h1_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(1),
         "setext_h2_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(2),
-        "setext_heading" => process_setext_heading(buf, node, children),
+        "setext_heading" => process_setext_heading(buf, node, children, context),
         _ => {
             writeln!(
                 buf,
@@ -614,11 +665,15 @@ pub fn treesitter_to_pandoc<T: Write>(
     buf: &mut T,
     tree: &tree_sitter_qmd::MarkdownTree,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> Result<Pandoc, Vec<String>> {
     let result = bottomup_traverse_concrete_tree(
         &mut tree.walk(),
-        &mut |node, children, input_bytes| native_visitor(buf, node, children, input_bytes),
+        &mut |node, children, input_bytes, context| {
+            native_visitor(buf, node, children, input_bytes, context)
+        },
         &input_bytes,
+        context,
     );
     let (_, PandocNativeIntermediate::IntermediatePandoc(pandoc)) = result else {
         panic!("Expected Pandoc, got {:?}", result)

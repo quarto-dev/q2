@@ -11,6 +11,7 @@ pub mod list;
 pub mod location;
 pub mod meta;
 pub mod pandoc;
+pub mod parse_context;
 pub mod shortcode;
 pub mod table;
 pub mod treesitter;
@@ -36,4 +37,5 @@ pub use crate::pandoc::table::{
 };
 
 pub use crate::pandoc::meta::{Meta, MetaValue, rawblock_to_meta};
+pub use crate::pandoc::parse_context::ParseContext;
 pub use crate::pandoc::treesitter::treesitter_to_pandoc;

@@ -8,7 +8,8 @@
 
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::{Block, Div, RawBlock};
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::parse_context::ParseContext;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -18,6 +19,7 @@ pub fn process_fenced_div_block<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
     let mut content: Vec<Block> = Vec::new();
@@ -81,6 +83,6 @@ pub fn process_fenced_div_block<T: Write>(
     PandocNativeIntermediate::IntermediateBlock(Block::Div(Div {
         attr,
         content,
-        source_info: SourceInfo::with_range(node_location(node)),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

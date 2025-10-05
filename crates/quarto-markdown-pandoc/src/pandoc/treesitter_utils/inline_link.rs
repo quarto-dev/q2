@@ -9,6 +9,7 @@
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::inline::{Inline, is_empty_target, make_cite_inline, make_span_inline};
 use crate::pandoc::location::empty_source_info;
+use crate::pandoc::parse_context::ParseContext;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -18,6 +19,7 @@ pub fn process_inline_link<T: Write, F>(
     link_buf: &mut T,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate
 where
     F: Fn() -> String,

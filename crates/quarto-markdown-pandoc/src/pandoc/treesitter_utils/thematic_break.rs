@@ -4,12 +4,16 @@
  */
 
 use crate::pandoc::block::{Block, HorizontalRule};
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a thematic break (horizontal rule)
-pub fn process_thematic_break(node: &tree_sitter::Node) -> PandocNativeIntermediate {
+pub fn process_thematic_break(
+    node: &tree_sitter::Node,
+    context: &ParseContext,
+) -> PandocNativeIntermediate {
     PandocNativeIntermediate::IntermediateBlock(Block::HorizontalRule(HorizontalRule {
-        source_info: SourceInfo::with_range(node_location(node)),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

@@ -10,7 +10,8 @@ use crate::pandoc::attr::empty_attr;
 use crate::pandoc::block::{Block, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
@@ -20,6 +21,7 @@ use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_pipe_table_delimiter_cell(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut has_starter_colon = false;
     let mut has_ending_colon = false;
@@ -46,6 +48,7 @@ pub fn process_pipe_table_delimiter_cell(
 
 pub fn process_pipe_table_header_or_row(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut row = Row {
         attr: empty_attr(),
@@ -73,6 +76,7 @@ pub fn process_pipe_table_header_or_row(
 
 pub fn process_pipe_table_delimiter_row(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     // This is a row of delimiters, we don't need to do anything with it
     // but we need to return an empty row
@@ -96,6 +100,7 @@ pub fn process_pipe_table_delimiter_row(
 pub fn process_pipe_table_cell(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut plain_content: Inlines = Vec::new();
     let mut table_cell = Cell {
@@ -122,7 +127,7 @@ pub fn process_pipe_table_cell(
     }
     table_cell.content.push(Block::Plain(Plain {
         content: plain_content,
-        source_info: SourceInfo::with_range(node_location(node)),
+        source_info: node_source_info_with_context(node, context),
     }));
     PandocNativeIntermediate::IntermediateCell(table_cell)
 }
@@ -130,6 +135,7 @@ pub fn process_pipe_table_cell(
 pub fn process_pipe_table(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let attr = empty_attr();
     let mut header: Option<Row> = None;
@@ -185,6 +191,6 @@ pub fn process_pipe_table(
             attr: empty_attr(),
             rows: vec![],
         },
-        source_info: SourceInfo::with_range(node_location(node)),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

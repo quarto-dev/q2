@@ -9,7 +9,8 @@
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::{Block, Header};
 use crate::pandoc::inline::Inline;
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::parse_context::ParseContext;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -19,6 +20,7 @@ pub fn process_atx_heading<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut level = 0;
     let mut content: Vec<Inline> = Vec::new();
@@ -59,6 +61,6 @@ pub fn process_atx_heading<T: Write>(
         level,
         attr,
         content,
-        source_info: SourceInfo::with_range(node_location(node)),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

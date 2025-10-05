@@ -7,7 +7,8 @@
  */
 
 use crate::pandoc::inline::{Code, Inline, RawInline};
-use crate::pandoc::location::{node_location, node_source_info};
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -17,6 +18,7 @@ pub fn process_code_span<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut is_raw: Option<String> = None;
     let mut attr = ("".to_string(), vec![], HashMap::new());
@@ -24,14 +26,14 @@ pub fn process_code_span<T: Write>(
     let mut inlines: Vec<_> = children
         .into_iter()
         .map(|(node_name, child)| {
-            let range = node_location(node);
+            let range = node_source_info_with_context(node, context);
             match child {
                 PandocNativeIntermediate::IntermediateAttr(a) => {
                     attr = a;
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range),
+                        PandocNativeIntermediate::IntermediateUnknown(range.range),
                     )
                 }
                 PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
@@ -39,7 +41,7 @@ pub fn process_code_span<T: Write>(
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range),
+                        PandocNativeIntermediate::IntermediateUnknown(range.range),
                     )
                 }
                 PandocNativeIntermediate::IntermediateBaseText(text, range) => {
@@ -76,7 +78,7 @@ pub fn process_code_span<T: Write>(
         return PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
             attr,
             text: "".to_string(),
-            source_info: node_source_info(node),
+            source_info: node_source_info_with_context(node, context),
         }));
     }
     let (_, child) = inlines.remove(0);
@@ -104,19 +106,19 @@ pub fn process_code_span<T: Write>(
         PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
             format: raw,
             text,
-            source_info: node_source_info(node),
+            source_info: node_source_info_with_context(node, context),
         }))
     } else {
         match language_attribute {
             Some(lang) => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
                 text: lang + &" " + &text,
-                source_info: node_source_info(node),
+                source_info: node_source_info_with_context(node, context),
             })),
             None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
                 text,
-                source_info: node_source_info(node),
+                source_info: node_source_info_with_context(node, context),
             })),
         }
     }

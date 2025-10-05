@@ -8,13 +8,15 @@
 
 use crate::pandoc::attr::{Attr, empty_attr};
 use crate::pandoc::block::{Block, CodeBlock, RawBlock};
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_fenced_code_block(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut content: String = String::new();
     let mut attr: Attr = empty_attr();
@@ -50,7 +52,7 @@ pub fn process_fenced_code_block(
             attr = inner_attr;
         }
     }
-    let location = node_location(node);
+    let location = node_source_info_with_context(node, context);
 
     // it might be the case (because of tree-sitter error recovery)
     // that the content does not end with a newline, so we ensure it does before popping
@@ -62,13 +64,13 @@ pub fn process_fenced_code_block(
         PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
             format,
             text: content,
-            source_info: SourceInfo::with_range(location),
+            source_info: location,
         }))
     } else {
         PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
             attr,
             text: content,
-            source_info: SourceInfo::with_range(location),
+            source_info: location,
         }))
     }
 }

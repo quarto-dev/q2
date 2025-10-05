@@ -7,13 +7,15 @@
  */
 
 use crate::pandoc::block::{Block, Blocks, NoteDefinitionFencedBlock};
-use crate::pandoc::location::node_source_info;
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_note_definition_fenced_block(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut id = String::new();
     let mut content: Blocks = Vec::new();
@@ -47,7 +49,7 @@ pub fn process_note_definition_fenced_block(
         NoteDefinitionFencedBlock {
             id,
             content,
-            source_info: node_source_info(node),
+            source_info: node_source_info_with_context(node, context),
         },
     ))
 }

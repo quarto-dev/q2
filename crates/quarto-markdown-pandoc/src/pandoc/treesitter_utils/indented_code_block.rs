@@ -8,7 +8,8 @@
 
 use crate::pandoc::attr::empty_attr;
 use crate::pandoc::block::{Block, CodeBlock};
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::parse_context::ParseContext;
 use regex::Regex;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -18,9 +19,10 @@ pub fn process_indented_code_block(
     children: Vec<(String, PandocNativeIntermediate)>,
     input_bytes: &[u8],
     indent_re: &Regex,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut content: String = String::new();
-    let outer_range = node_location(node);
+    let outer_range = node_source_info_with_context(node, context);
     // first, find the beginning of the contents in the node itself
     let outer_string = node.utf8_text(input_bytes).unwrap().to_string();
     let mut start_offset = indent_re.find(&outer_string).map_or(0, |m| m.end());
@@ -31,10 +33,14 @@ pub fn process_indented_code_block(
             match children {
                 PandocNativeIntermediate::IntermediateUnknown(range) => {
                     // Calculate the relative offset of the continuation within outer_string
-                    let continuation_start =
-                        range.start.offset.saturating_sub(outer_range.start.offset);
-                    let continuation_end =
-                        range.end.offset.saturating_sub(outer_range.start.offset);
+                    let continuation_start = range
+                        .start
+                        .offset
+                        .saturating_sub(outer_range.range.start.offset);
+                    let continuation_end = range
+                        .end
+                        .offset
+                        .saturating_sub(outer_range.range.start.offset);
 
                     // Append content before this continuation
                     if continuation_start > start_offset && continuation_start <= outer_string.len()
@@ -55,6 +61,6 @@ pub fn process_indented_code_block(
     PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
         attr: empty_attr(),
         text: content.trim_end().to_string(),
-        source_info: SourceInfo::with_range(outer_range),
+        source_info: outer_range,
     }))
 }

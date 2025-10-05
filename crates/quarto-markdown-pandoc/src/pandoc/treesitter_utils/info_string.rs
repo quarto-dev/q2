@@ -3,12 +3,14 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use std::collections::HashMap;
 
 /// Process info_string to extract language as an attribute
 pub fn process_info_string(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     for (_, child) in children {
         match child {

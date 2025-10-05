@@ -7,7 +7,8 @@
  */
 
 use crate::pandoc::inline::{Inline, Link, Str};
-use crate::pandoc::location::node_source_info;
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 use std::collections::HashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -15,6 +16,7 @@ use super::pandocnativeintermediate::PandocNativeIntermediate;
 pub fn process_uri_autolink(
     node: &tree_sitter::Node,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     // This is a URI autolink, we need to extract the content
     // by removing the angle brackets
@@ -29,10 +31,10 @@ pub fn process_uri_autolink(
     PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
         content: vec![Inline::Str(Str {
             text: content.to_string(),
-            source_info: node_source_info(node),
+            source_info: node_source_info_with_context(node, context),
         })],
         attr,
         target: (content.to_string(), "".to_string()),
-        source_info: node_source_info(node),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

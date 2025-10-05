@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_markdown_pandoc::pandoc::treesitter_to_pandoc;
+use quarto_markdown_pandoc::pandoc::{ParseContext, treesitter_to_pandoc};
 use quarto_markdown_pandoc::writers;
 use tree_sitter_qmd::MarkdownParser;
 
@@ -16,8 +16,13 @@ fn test_inline_source_locations() {
         .parse(input_bytes, None)
         .expect("Failed to parse input");
 
-    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes)
-        .expect("Failed to convert to Pandoc AST");
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &ParseContext::anonymous(),
+    )
+    .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &mut buf).unwrap();
@@ -92,8 +97,13 @@ fn test_merged_strings_preserve_location() {
         .parse(input_bytes, None)
         .expect("Failed to parse input");
 
-    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes)
-        .expect("Failed to convert to Pandoc AST");
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &ParseContext::anonymous(),
+    )
+    .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &mut buf).unwrap();
@@ -146,8 +156,13 @@ fn test_separate_strings_keep_separate_locations() {
         .parse(input_bytes, None)
         .expect("Failed to parse input");
 
-    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes)
-        .expect("Failed to convert to Pandoc AST");
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &ParseContext::anonymous(),
+    )
+    .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &mut buf).unwrap();

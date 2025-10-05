@@ -6,7 +6,7 @@
 use std::{collections::HashMap, io::Write};
 
 use crate::pandoc::{
-    Image, Inline, inline::Target, location::empty_source_info,
+    Image, Inline, inline::Target, location::empty_source_info, parse_context::ParseContext,
     treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate,
 };
 
@@ -14,6 +14,7 @@ pub fn process_image<T: Write, F>(
     image_buf: &mut T,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate
 where
     F: Fn() -> String,

@@ -3,11 +3,13 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process attribute node to extract commonmark attributes
 pub fn process_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     for (node, child) in children {
         match child {

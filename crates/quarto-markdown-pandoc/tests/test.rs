@@ -5,7 +5,7 @@
 
 use glob::glob;
 use quarto_markdown_pandoc::errors::parse_is_good;
-use quarto_markdown_pandoc::pandoc::treesitter_to_pandoc;
+use quarto_markdown_pandoc::pandoc::{ParseContext, treesitter_to_pandoc};
 use quarto_markdown_pandoc::utils::output::VerboseOutput;
 use quarto_markdown_pandoc::{readers, writers};
 use std::io::{self, Write};
@@ -23,7 +23,13 @@ fn unit_test_simple_qmd_parses() {
             .expect("Failed to parse input");
         let mut buf = Vec::new();
         writers::native::write(
-            &treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes).unwrap(),
+            &treesitter_to_pandoc(
+                &mut std::io::sink(),
+                &tree,
+                &input_bytes,
+                &ParseContext::anonymous(),
+            )
+            .unwrap(),
             &mut buf,
         )
         .unwrap();
@@ -127,6 +133,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .parse(input.as_bytes(), None)
                 .unwrap(),
             input.as_bytes(),
+            &ParseContext::anonymous(),
         )
         .unwrap(),
         &mut buf1,
@@ -140,6 +147,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .parse(input.as_bytes(), None)
                 .unwrap(),
             input.as_bytes(),
+            &ParseContext::anonymous(),
         )
         .unwrap(),
         &mut buf2,
@@ -326,8 +334,13 @@ fn test_json_writer() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
-                let pandoc =
-                    treesitter_to_pandoc(&mut std::io::sink(), &tree, input_bytes).unwrap();
+                let pandoc = treesitter_to_pandoc(
+                    &mut std::io::sink(),
+                    &tree,
+                    input_bytes,
+                    &ParseContext::anonymous(),
+                )
+                .unwrap();
                 let mut buf = Vec::new();
                 writers::json::write(&pandoc, &mut buf).unwrap();
                 let our_json = String::from_utf8(buf).expect("Invalid UTF-8 in our JSON output");
@@ -430,7 +443,12 @@ fn test_do_not_smoke() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
-                let _ = treesitter_to_pandoc(&mut std::io::sink(), &tree, input_bytes);
+                let _ = treesitter_to_pandoc(
+                    &mut std::io::sink(),
+                    &tree,
+                    input_bytes,
+                    &ParseContext::anonymous(),
+                );
                 file_count += 1;
             }
             Err(e) => panic!("Error reading glob entry: {}", e),

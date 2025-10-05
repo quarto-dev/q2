@@ -3,11 +3,13 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process language_attribute to format it with braces
 pub fn process_language_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     for (_, child) in children {
         match child {

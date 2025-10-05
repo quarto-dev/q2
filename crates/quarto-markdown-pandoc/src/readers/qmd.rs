@@ -11,6 +11,7 @@ use crate::filters::{Filter, FilterReturn};
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::SourceInfo;
 use crate::pandoc::meta::parse_metadata_strings;
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::{self, Block, Meta};
 use crate::pandoc::{MetaValue, rawblock_to_meta};
 use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
@@ -135,7 +136,9 @@ where
         return Err(error_messages);
     }
 
-    let mut result = pandoc::treesitter_to_pandoc(&mut output_stream, &tree, &input_bytes)?;
+    let context = ParseContext::new(Some(filename.to_string()));
+    let mut result =
+        pandoc::treesitter_to_pandoc(&mut output_stream, &tree, &input_bytes, &context)?;
     let mut meta_from_parses = Meta::default();
 
     result = {

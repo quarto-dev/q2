@@ -8,11 +8,13 @@
 
 use crate::pandoc::block::{Block, RawBlock};
 use crate::pandoc::location::SourceInfo;
+use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_section(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut blocks: Vec<Block> = Vec::new();
     children.into_iter().for_each(|(node, child)| {

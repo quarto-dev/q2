@@ -6,7 +6,8 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::location::node_location;
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -14,6 +15,7 @@ pub fn process_code_fence_content(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let start = node.range().start_byte;
     let end = node.range().end_byte;
@@ -42,5 +44,8 @@ pub fn process_code_fence_content(
         let slice_after_continuation = &input_bytes[current_location..end];
         content.push_str(std::str::from_utf8(slice_after_continuation).unwrap());
     }
-    PandocNativeIntermediate::IntermediateBaseText(content, node_location(node))
+    PandocNativeIntermediate::IntermediateBaseText(
+        content,
+        node_source_info_with_context(node, context).range,
+    )
 }

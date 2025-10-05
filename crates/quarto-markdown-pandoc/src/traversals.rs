@@ -11,6 +11,8 @@
  *
  */
 
+use crate::pandoc::parse_context::ParseContext;
+
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub enum TraversePhase {
     Enter,
@@ -62,9 +64,10 @@ pub fn bottomup_traverse_concrete_tree<F, T: std::fmt::Debug>(
     cursor: &mut tree_sitter_qmd::MarkdownCursor,
     visitor: &mut F,
     input_bytes: &[u8],
+    context: &ParseContext,
 ) -> (String, T)
 where
-    F: for<'a> FnMut(&'a tree_sitter::Node, Vec<(String, T)>, &[u8]) -> T,
+    F: for<'a> FnMut(&'a tree_sitter::Node, Vec<(String, T)>, &[u8], &ParseContext) -> T,
 {
     let mut stack: Vec<BottomUpTraversePhase<T>> =
         vec![BottomUpTraversePhase::Enter(cursor.node())];
@@ -95,7 +98,7 @@ where
                 };
                 let (kind, result) = (
                     node.kind().to_string(),
-                    visitor(&node, children, input_bytes),
+                    visitor(&node, children, input_bytes, context),
                 );
                 match stack.last_mut() {
                     None => return (kind, result), // we are done

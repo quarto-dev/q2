@@ -7,7 +7,8 @@
  */
 
 use crate::pandoc::inline::{Citation, CitationMode, Cite, Inline, Str};
-use crate::pandoc::location::node_source_info;
+use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::parse_context::ParseContext;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -15,6 +16,7 @@ pub fn process_citation<F>(
     node: &tree_sitter::Node,
     node_text: F,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate
 where
     F: Fn() -> String,
@@ -55,8 +57,8 @@ where
         }],
         content: vec![Inline::Str(Str {
             text: node_text(),
-            source_info: node_source_info(node),
+            source_info: node_source_info_with_context(node, context),
         })],
-        source_info: node_source_info(node),
+        source_info: node_source_info_with_context(node, context),
     }))
 }

@@ -3,12 +3,14 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use std::collections::HashMap;
 
 /// Process a commonmark attribute (id, classes, key-value pairs)
 pub fn process_commonmark_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut attr = ("".to_string(), vec![], HashMap::new());
     children.into_iter().for_each(|(node, child)| match child {

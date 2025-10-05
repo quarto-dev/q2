@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::parse_context::ParseContext;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use std::collections::HashMap;
 use std::io::Write;
@@ -11,6 +12,7 @@ use std::io::Write;
 pub fn process_key_value_specifier<T: Write>(
     buf: &mut T,
     children: Vec<(String, PandocNativeIntermediate)>,
+    context: &ParseContext,
 ) -> PandocNativeIntermediate {
     let mut spec = HashMap::new();
     let mut current_key: Option<String> = None;
