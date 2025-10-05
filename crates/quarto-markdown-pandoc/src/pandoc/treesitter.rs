@@ -8,17 +8,22 @@ use crate::pandoc::treesitter_utils::attribute::process_attribute;
 use crate::pandoc::treesitter_utils::atx_heading::process_atx_heading;
 use crate::pandoc::treesitter_utils::backslash_escape::process_backslash_escape;
 use crate::pandoc::treesitter_utils::block_quote::process_block_quote;
+use crate::pandoc::treesitter_utils::citation::process_citation;
 use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_content;
+use crate::pandoc::treesitter_utils::code_span::process_code_span;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
 use crate::pandoc::treesitter_utils::document::process_document;
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
 use crate::pandoc::treesitter_utils::indented_code_block::process_indented_code_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
+use crate::pandoc::treesitter_utils::inline_link::process_inline_link;
 use crate::pandoc::treesitter_utils::key_value_specifier::process_key_value_specifier;
 use crate::pandoc::treesitter_utils::language_attribute::process_language_attribute;
+use crate::pandoc::treesitter_utils::latex_span::process_latex_span;
 use crate::pandoc::treesitter_utils::link_title::process_link_title;
 use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
+use crate::pandoc::treesitter_utils::note_reference::process_note_reference;
 use crate::pandoc::treesitter_utils::numeric_character_reference::process_numeric_character_reference;
 use crate::pandoc::treesitter_utils::paragraph::process_paragraph;
 use crate::pandoc::treesitter_utils::pipe_table::{
@@ -37,16 +42,13 @@ use crate::pandoc::treesitter_utils::shortcode::{
 };
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
+use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 
-use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Inline, Insert, Link,
-    Math, MathType, Note, NoteReference, RawInline, Space, Str, Strikeout, Strong, Subscript,
-    Superscript, is_empty_target,
+    Delete, EditComment, Emph, Highlight, Inline, Insert, Note, RawInline, Space, Str, Strikeout,
+    Strong, Subscript, Superscript,
 };
-
-use crate::pandoc::inline::{make_cite_inline, make_span_inline};
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{
     Range, SourceInfo, empty_source_info, node_location, node_source_info,
@@ -55,330 +57,11 @@ use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 use std::io::Write;
 
 use crate::traversals::bottomup_traverse_concrete_tree;
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
-
-fn process_note_reference(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut id = String::new();
-    for (node, child) in children {
-        if node == "note_reference_delimiter" {
-            // This is a marker node, we don't need to do anything with it
-        } else if node == "note_reference_id" {
-            if let PandocNativeIntermediate::IntermediateBaseText(text, _) = child {
-                id = text;
-            } else {
-                panic!("Expected BaseText in note_reference_id, got {:?}", child);
-            }
-        } else {
-            panic!("Unexpected note_reference node: {}", node);
-        }
-    }
-    PandocNativeIntermediate::IntermediateInline(Inline::NoteReference(NoteReference {
-        id,
-        range: node_location(node),
-    }))
-}
-
-fn process_citation<F>(
-    node: &tree_sitter::Node,
-    node_text: F,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate
-where
-    F: Fn() -> String,
-{
-    let mut citation_type = CitationMode::NormalCitation;
-    let mut citation_id = String::new();
-    for (node, child) in children {
-        if node == "citation_id_suppress_author" {
-            citation_type = CitationMode::SuppressAuthor;
-            if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
-                citation_id = id;
-            } else {
-                panic!(
-                    "Expected BaseText in citation_id_suppress_author, got {:?}",
-                    child
-                );
-            }
-        } else if node == "citation_id_author_in_text" {
-            citation_type = CitationMode::AuthorInText;
-            if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
-                citation_id = id;
-            } else {
-                panic!(
-                    "Expected BaseText in citation_id_author_in_text, got {:?}",
-                    child
-                );
-            }
-        }
-    }
-    PandocNativeIntermediate::IntermediateInline(Inline::Cite(Cite {
-        citations: vec![Citation {
-            id: citation_id,
-            prefix: vec![],
-            suffix: vec![],
-            mode: citation_type,
-            note_num: 1, // Pandoc expects citations to be numbered from 1
-            hash: 0,
-        }],
-        content: vec![Inline::Str(Str {
-            text: node_text(),
-            source_info: node_source_info(node),
-        })],
-        source_info: node_source_info(node),
-    }))
-}
-
-fn process_inline_link<T: Write, F>(
-    link_buf: &mut T,
-    node_text: F,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate
-where
-    F: Fn() -> String,
-{
-    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
-    let mut target = ("".to_string(), "".to_string());
-    let mut content: Vec<Inline> = Vec::new();
-
-    for (node, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
-                // TODO show position of this error
-                let _ = writeln!(
-                    link_buf,
-                    "Raw attribute specifiers are unsupported in links and spans: {}. Ignoring.",
-                    node_text()
-                );
-            }
-            PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
-            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
-                if node == "link_destination" {
-                    target.0 = text; // URL
-                } else if node == "link_title" {
-                    target.1 = text; // Title
-                } else if node == "language_attribute" {
-                    // TODO show position of this error
-                    let _ = writeln!(
-                        link_buf,
-                        "Language specifiers are unsupported in links and spans: {}. Ignoring.",
-                        node_text()
-                    );
-                } else {
-                    panic!("Unexpected inline_link node: {}", node);
-                }
-            }
-            PandocNativeIntermediate::IntermediateUnknown(_) => {}
-            PandocNativeIntermediate::IntermediateInlines(inlines) => content.extend(inlines),
-            PandocNativeIntermediate::IntermediateInline(inline) => content.push(inline),
-            _ => panic!("Unexpected child in inline_link: {:?}", child),
-        }
-    }
-    let has_citations = content
-        .iter()
-        .any(|inline| matches!(inline, Inline::Cite(_)));
-
-    // an inline link might be a Cite if it has citations, no destination, and no title
-    // and no attributes
-    let is_cite = has_citations && is_empty_target(&target) && is_empty_attr(&attr);
-
-    PandocNativeIntermediate::IntermediateInline(if is_cite {
-        make_cite_inline(attr, target, content, empty_source_info())
-    } else {
-        make_span_inline(attr, target, content, empty_source_info())
-    })
-}
-
-fn process_uri_autolink(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocNativeIntermediate {
-    // This is a URI autolink, we need to extract the content
-    // by removing the angle brackets
-    let text = node.utf8_text(input_bytes).unwrap();
-    if text.len() < 2 || !text.starts_with('<') || !text.ends_with('>') {
-        panic!("Invalid URI autolink: {}", text);
-    }
-    let content = &text[1..text.len() - 1]; // remove the angle brackets
-    let mut attr = ("".to_string(), vec![], HashMap::new());
-    // pandoc adds the class "uri" to autolinks
-    attr.1.push("uri".to_string());
-    PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
-        content: vec![Inline::Str(Str {
-            text: content.to_string(),
-            source_info: node_source_info(node),
-        })],
-        attr,
-        target: (content.to_string(), "".to_string()),
-        source_info: node_source_info(node),
-    }))
-}
-
-fn process_code_span<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut is_raw: Option<String> = None;
-    let mut attr = ("".to_string(), vec![], HashMap::new());
-    let mut language_attribute: Option<String> = None;
-    let mut inlines: Vec<_> = children
-        .into_iter()
-        .map(|(node_name, child)| {
-            let range = node_location(node);
-            match child {
-                PandocNativeIntermediate::IntermediateAttr(a) => {
-                    attr = a;
-                    // IntermediateUnknown here "consumes" the node
-                    (
-                        node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range),
-                    )
-                }
-                PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
-                    is_raw = Some(raw);
-                    // IntermediateUnknown here "consumes" the node
-                    (
-                        node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range),
-                    )
-                }
-                PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                    if node_name == "language_attribute" {
-                        language_attribute = Some(text);
-                        // IntermediateUnknown here "consumes" the node
-                        (
-                            node_name,
-                            PandocNativeIntermediate::IntermediateUnknown(range),
-                        )
-                    } else {
-                        (
-                            node_name,
-                            PandocNativeIntermediate::IntermediateBaseText(text, range),
-                        )
-                    }
-                }
-                _ => (node_name, child),
-            }
-        })
-        .filter(|(_, child)| {
-            match child {
-                PandocNativeIntermediate::IntermediateUnknown(_) => false, // skip unknown nodes
-                _ => true,                                                 // keep other nodes
-            }
-        })
-        .collect();
-    if inlines.len() == 0 {
-        writeln!(
-            buf,
-            "Warning: Expected exactly one inline in code_span, got none"
-        )
-        .unwrap();
-        return PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
-            attr,
-            text: "".to_string(),
-            source_info: node_source_info(node),
-        }));
-    }
-    let (_, child) = inlines.remove(0);
-    if inlines.len() > 0 {
-        writeln!(
-            buf,
-            "Warning: Expected exactly one inline in code_span, got {}. Will ignore the rest.",
-            inlines.len() + 1
-        )
-        .unwrap();
-    }
-    let text = match child {
-        PandocNativeIntermediate::IntermediateBaseText(text, _) => text,
-        _ => {
-            writeln!(
-                buf,
-                "Warning: Expected BaseText in code_span, got {:?}. Will ignore.",
-                child
-            )
-            .unwrap();
-            "".to_string()
-        }
-    };
-    if let Some(raw) = is_raw {
-        PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
-            format: raw,
-            text,
-            source_info: node_source_info(node),
-        }))
-    } else {
-        match language_attribute {
-            Some(lang) => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
-                attr,
-                text: lang + &" " + &text,
-                source_info: node_source_info(node),
-            })),
-            None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
-                attr,
-                text,
-                source_info: node_source_info(node),
-            })),
-        }
-    }
-}
-
-fn process_latex_span(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut is_inline_math = false;
-    let mut is_display_math = false;
-    let mut inlines: Vec<_> = children
-        .into_iter()
-        .filter(|(_, child)| {
-            if matches!(
-                child,
-                PandocNativeIntermediate::IntermediateLatexInlineDelimiter(_)
-            ) {
-                is_inline_math = true;
-                false // skip the delimiter
-            } else if matches!(
-                child,
-                PandocNativeIntermediate::IntermediateLatexDisplayDelimiter(_)
-            ) {
-                is_display_math = true;
-                false // skip the delimiter
-            } else {
-                true // keep other nodes
-            }
-        })
-        .collect();
-    assert!(
-        inlines.len() == 1,
-        "Expected exactly one inline in latex_span, got {}",
-        inlines.len()
-    );
-    if is_inline_math && is_display_math {
-        panic!("Unexpected both inline and display math in latex_span");
-    }
-    if !is_inline_math && !is_display_math {
-        panic!("Expected either inline or display math in latex_span, got neither");
-    }
-    let math_type = if is_inline_math {
-        MathType::InlineMath
-    } else {
-        MathType::DisplayMath
-    };
-    let (_, child) = inlines.remove(0);
-    let PandocNativeIntermediate::IntermediateBaseText(text, _) = child else {
-        panic!("Expected BaseText in latex_span, got {:?}", child)
-    };
-    PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
-        math_type: math_type,
-        text,
-        source_info: node_source_info(node),
-    }))
-}
 
 fn process_list(
     node: &tree_sitter::Node,
