@@ -15,6 +15,7 @@ pub mod list_marker;
 pub mod numeric_character_reference;
 pub mod pandocnativeintermediate;
 pub mod paragraph;
+pub mod pipe_table;
 pub mod postprocess;
 pub mod quoted_span;
 pub mod raw_attribute;
