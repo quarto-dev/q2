@@ -30,16 +30,16 @@ pub fn run() {
     panic::set_hook(Box::new(console_error_panic_hook::hook));
 }
 
-fn json_to_pandoc(input: &str) -> Result<quarto_markdown_pandoc::pandoc::Pandoc, String> {
+fn json_to_pandoc(input: &str) -> Result<(quarto_markdown_pandoc::pandoc::Pandoc, quarto_markdown_pandoc::pandoc::ASTContext), String> {
     match readers::json::read(&mut input.as_bytes()) {
         Ok(doc) => Ok(doc),
         Err(err) => Err(format!("Unable to read as json: {:?}", err)),
     }
 }
 
-fn pandoc_to_json(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String, String> {
+fn pandoc_to_json(doc: &quarto_markdown_pandoc::pandoc::Pandoc, context: &quarto_markdown_pandoc::pandoc::ASTContext) -> Result<String, String> {
     let mut buf = Vec::new();
-    match writers::json::write(doc, &mut buf) {
+    match writers::json::write(doc, context, &mut buf) {
         Ok(_) => {
             // Nothing to do
         }
@@ -81,9 +81,9 @@ pub fn parse_qmd(input: JsValue) -> JsValue {
 #[wasm_bindgen]
 pub fn write_qmd(input: JsValue) -> JsValue {
     let input = as_string(&input, "input");
-    let result = json_to_pandoc(&input).unwrap();
+    let (result, context) = json_to_pandoc(&input).unwrap();
 
-    let json = pandoc_to_json(&result).unwrap();
+    let json = pandoc_to_json(&result, &context).unwrap();
     JsValue::from_str(&json)
 }
 
@@ -92,14 +92,14 @@ pub fn convert(document: JsValue, input_format: JsValue, output_format: JsValue)
     let input = as_string(&document, "document");
     let input_format = as_string(&input_format, "input_format");
     let output_format = as_string(&output_format, "output_format");
-    let doc = match input_format.as_str() {
+    let (doc, context) = match input_format.as_str() {
         "qmd" => wasm_entry_points::qmd_to_pandoc(&input.as_bytes()).unwrap(),
         "json" => json_to_pandoc(&input).unwrap(),
         _ => panic!("Unsupported input format: {}", input_format),
     };
     let output = match output_format.as_str() {
         "qmd" => pandoc_to_qmd(&doc).unwrap(),
-        "json" => pandoc_to_json(&doc).unwrap(),
+        "json" => pandoc_to_json(&doc, &context).unwrap(),
         _ => panic!("Unsupported output format: {}", output_format),
     };
     JsValue::from_str(&output)
