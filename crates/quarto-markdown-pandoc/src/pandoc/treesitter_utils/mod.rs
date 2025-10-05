@@ -6,4 +6,5 @@
 pub mod image;
 pub mod pandocnativeintermediate;
 pub mod postprocess;
+pub mod quoted_span;
 pub mod text_helpers;

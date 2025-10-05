@@ -5,6 +5,7 @@
 
 use crate::pandoc::treesitter_utils;
 use crate::pandoc::treesitter_utils::postprocess::{desugar, merge_strs};
+use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
 use crate::pandoc::treesitter_utils::text_helpers::*;
 
 use crate::pandoc::attr::{Attr, empty_attr, is_empty_attr};
@@ -15,13 +16,15 @@ use crate::pandoc::block::{
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{
     Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Inline, Inlines,
-    Insert, Link, Math, MathType, Note, NoteReference, QuoteType, Quoted, RawInline, Space, Str,
-    Strikeout, Strong, Subscript, Superscript, is_empty_target,
+    Insert, Link, Math, MathType, Note, NoteReference, RawInline, Space, Str, Strikeout, Strong,
+    Subscript, Superscript, is_empty_target,
 };
 
 use crate::pandoc::inline::{make_cite_inline, make_span_inline};
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{Range, SourceInfo, empty_source_info, node_location, node_source_info};
+use crate::pandoc::location::{
+    Range, SourceInfo, empty_source_info, node_location, node_source_info,
+};
 use crate::pandoc::meta::Meta;
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::{Shortcode, ShortcodeArg};
@@ -1427,41 +1430,6 @@ fn process_pipe_table(
             rows: vec![],
         },
         source_info: SourceInfo::with_range(node_location(node)),
-    }))
-}
-
-fn process_quoted_span<F>(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-    native_inline: F,
-) -> PandocNativeIntermediate
-where
-    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
-{
-    let mut quote_type = QuoteType::SingleQuote;
-    let inlines: Vec<_> = children
-        .into_iter()
-        .filter(|(node, intermediate)| {
-            if node == "single_quoted_span_delimiter" {
-                quote_type = QuoteType::SingleQuote;
-                false // skip the opening delimiter
-            } else if node == "double_quoted_span_delimiter" {
-                quote_type = QuoteType::DoubleQuote;
-                false // skip the opening delimiter
-            } else {
-                match intermediate {
-                    PandocNativeIntermediate::IntermediateInline(_) => true,
-                    PandocNativeIntermediate::IntermediateBaseText(_, _) => true,
-                    _ => false,
-                }
-            }
-        })
-        .map(native_inline)
-        .collect();
-    PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
-        quote_type,
-        content: inlines,
-        source_info: node_source_info(node),
     }))
 }
 
