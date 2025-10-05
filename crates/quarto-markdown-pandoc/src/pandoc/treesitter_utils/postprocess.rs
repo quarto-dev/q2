@@ -85,6 +85,39 @@ fn is_abbreviation(text: &str) -> bool {
     )
 }
 
+/// Check if a text string ends with a known abbreviation
+fn ends_with_abbreviation(text: &str) -> bool {
+    text.ends_with("Mr.")
+        || text.ends_with("Mrs.")
+        || text.ends_with("Ms.")
+        || text.ends_with("Capt.")
+        || text.ends_with("Dr.")
+        || text.ends_with("Prof.")
+        || text.ends_with("Gen.")
+        || text.ends_with("Gov.")
+        || text.ends_with("e.g.")
+        || text.ends_with("i.e.")
+        || text.ends_with("Sgt.")
+        || text.ends_with("St.")
+        || text.ends_with("vol.")
+        || text.ends_with("vs.")
+        || text.ends_with("Sen.")
+        || text.ends_with("Rep.")
+        || text.ends_with("Pres.")
+        || text.ends_with("Hon.")
+        || text.ends_with("Rev.")
+        || text.ends_with("Ph.D.")
+        || text.ends_with("M.D.")
+        || text.ends_with("M.A.")
+        || text.ends_with("p.")
+        || text.ends_with("pp.")
+        || text.ends_with("ch.")
+        || text.ends_with("chap.")
+        || text.ends_with("sec.")
+        || text.ends_with("cf.")
+        || text.ends_with("cp.")
+}
+
 /// Coalesce Str nodes that end with abbreviations with following words
 /// This matches Pandoc's behavior of keeping abbreviations with the next word
 /// Returns (result, did_coalesce) tuple
@@ -100,33 +133,23 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             let mut end_info = str_inline.source_info.clone();
             let mut j = i + 1;
 
-            // Check if current text is an abbreviation
-            if is_abbreviation(&current_text) {
-                // Coalesce with following Space + Str until we hit a capital letter
+            // Check if current text ends with an abbreviation
+            if ends_with_abbreviation(&current_text) {
+                // Coalesce with following Space + Str
                 while j + 1 < inlines.len() {
                     if let (Inline::Space(_), Inline::Str(next_str)) =
                         (&inlines[j], &inlines[j + 1])
                     {
-                        // Stop before uppercase letters (potential sentence boundaries)
-                        if next_str
-                            .text
-                            .chars()
-                            .next()
-                            .map_or(false, |c| c.is_uppercase())
-                        {
-                            break;
-                        }
-
-                        // Coalesce
-                        current_text.push(' ');
+                        // Coalesce with non-breaking space (U+00A0) to match Pandoc
+                        current_text.push('\u{00A0}');
                         current_text.push_str(&next_str.text);
                         end_info = next_str.source_info.clone();
                         j += 2;
                         did_coalesce = true;
 
-                        // If this word is also an abbreviation, continue coalescing
+                        // If this word also ends with an abbreviation, continue coalescing
                         // Otherwise, stop after this word
-                        if !is_abbreviation(&next_str.text) {
+                        if !ends_with_abbreviation(&current_text) {
                             break;
                         }
                     } else {
