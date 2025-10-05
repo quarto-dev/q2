@@ -4,9 +4,16 @@
  */
 
 pub mod attribute;
+pub mod atx_heading;
 pub mod backslash_escape;
+pub mod block_quote;
+pub mod code_fence_content;
 pub mod commonmark_attribute;
+pub mod document;
+pub mod fenced_code_block;
+pub mod fenced_div_block;
 pub mod image;
+pub mod indented_code_block;
 pub mod info_string;
 pub mod key_value_specifier;
 pub mod language_attribute;
@@ -20,6 +27,8 @@ pub mod postprocess;
 pub mod quoted_span;
 pub mod raw_attribute;
 pub mod raw_specifier;
+pub mod section;
+pub mod setext_heading;
 pub mod shortcode;
 pub mod text_helpers;
 pub mod thematic_break;

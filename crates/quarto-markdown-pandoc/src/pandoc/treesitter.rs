@@ -5,8 +5,15 @@
 
 use crate::pandoc::treesitter_utils;
 use crate::pandoc::treesitter_utils::attribute::process_attribute;
+use crate::pandoc::treesitter_utils::atx_heading::process_atx_heading;
 use crate::pandoc::treesitter_utils::backslash_escape::process_backslash_escape;
+use crate::pandoc::treesitter_utils::block_quote::process_block_quote;
+use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_content;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
+use crate::pandoc::treesitter_utils::document::process_document;
+use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
+use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
+use crate::pandoc::treesitter_utils::indented_code_block::process_indented_code_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
 use crate::pandoc::treesitter_utils::key_value_specifier::process_key_value_specifier;
 use crate::pandoc::treesitter_utils::language_attribute::process_language_attribute;
@@ -22,6 +29,8 @@ use crate::pandoc::treesitter_utils::postprocess::{desugar, merge_strs};
 use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
 use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
 use crate::pandoc::treesitter_utils::raw_specifier::process_raw_specifier;
+use crate::pandoc::treesitter_utils::section::process_section;
+use crate::pandoc::treesitter_utils::setext_heading::process_setext_heading;
 use crate::pandoc::treesitter_utils::shortcode::{
     process_shortcode, process_shortcode_boolean, process_shortcode_keyword_param,
     process_shortcode_number, process_shortcode_string, process_shortcode_string_arg,
@@ -29,11 +38,8 @@ use crate::pandoc::treesitter_utils::shortcode::{
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
 
-use crate::pandoc::attr::{Attr, empty_attr, is_empty_attr};
-use crate::pandoc::block::{
-    Block, BlockQuote, Blocks, BulletList, CodeBlock, Div, Header, OrderedList, Paragraph, Plain,
-    RawBlock,
-};
+use crate::pandoc::attr::{Attr, is_empty_attr};
+use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
     Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Inline, Insert, Link,
     Math, MathType, Note, NoteReference, RawInline, Space, Str, Strikeout, Strong, Subscript,
@@ -45,7 +51,6 @@ use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{
     Range, SourceInfo, empty_source_info, node_location, node_source_info,
 };
-use crate::pandoc::meta::Meta;
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -56,202 +61,6 @@ use std::io::Write;
 use crate::traversals::bottomup_traverse_concrete_tree;
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
-
-// Helper function to process document nodes
-fn process_document(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
-    let mut blocks: Vec<Block> = Vec::new();
-    children.into_iter().for_each(|(_, child)| {
-        match child {
-            PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
-            PandocNativeIntermediate::IntermediateSection(section) => {
-                blocks.extend(section);
-            }
-            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
-                // for now we assume it's metadata and emit it as a rawblock
-                blocks.push(Block::RawBlock(RawBlock {
-                    format: "quarto_minus_metadata".to_string(),
-                    text,
-                    source_info: SourceInfo::with_range(range),
-                }));
-            }
-            _ => panic!("Expected Block or Section, got {:?}", child),
-        }
-    });
-    PandocNativeIntermediate::IntermediatePandoc(Pandoc {
-        meta: Meta::default(),
-        blocks,
-    })
-}
-
-// Helper function to process indented_code_block nodes
-fn process_indented_code_block(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-    input_bytes: &[u8],
-    indent_re: &Regex,
-) -> PandocNativeIntermediate {
-    let mut content: String = String::new();
-    let outer_range = node_location(node);
-    // first, find the beginning of the contents in the node itself
-    let outer_string = node.utf8_text(input_bytes).unwrap().to_string();
-    let mut start_offset = indent_re.find(&outer_string).map_or(0, |m| m.end());
-
-    for (node, children) in children {
-        if node == "block_continuation" {
-            // append all content up to the beginning of this continuation
-            match children {
-                PandocNativeIntermediate::IntermediateUnknown(range) => {
-                    // Calculate the relative offset of the continuation within outer_string
-                    let continuation_start =
-                        range.start.offset.saturating_sub(outer_range.start.offset);
-                    let continuation_end =
-                        range.end.offset.saturating_sub(outer_range.start.offset);
-
-                    // Append content before this continuation
-                    if continuation_start > start_offset && continuation_start <= outer_string.len()
-                    {
-                        content.push_str(&outer_string[start_offset..continuation_start]);
-                    }
-
-                    // Update start_offset to after this continuation
-                    start_offset = continuation_end.min(outer_string.len());
-                }
-                _ => panic!("Unexpected {:?} inside indented_code_block", children),
-            }
-        }
-    }
-    // append the remaining content after the last continuation
-    content.push_str(&outer_string[start_offset..]);
-    // TODO this will require careful encoding of the source map when we get to that point
-    PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
-        attr: empty_attr(),
-        text: content.trim_end().to_string(),
-        source_info: SourceInfo::with_range(outer_range),
-    }))
-}
-
-// Helper function to process fenced_code_block nodes
-fn process_fenced_code_block(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut content: String = String::new();
-    let mut attr: Attr = empty_attr();
-    let mut raw_format: Option<String> = None;
-    for (node, child) in children {
-        if node == "block_continuation" {
-            continue; // skip block continuation nodes
-        }
-        if node == "code_fence_content" {
-            let PandocNativeIntermediate::IntermediateBaseText(text, _) = child else {
-                panic!("Expected BaseText in code_fence_content, got {:?}", child)
-            };
-            content = text;
-        } else if node == "commonmark_attribute" {
-            let PandocNativeIntermediate::IntermediateAttr(a) = child else {
-                panic!("Expected Attr in commonmark_attribute, got {:?}", child)
-            };
-            attr = a;
-        } else if node == "raw_attribute" {
-            let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child else {
-                panic!("Expected RawFormat in raw_attribute, got {:?}", child)
-            };
-            raw_format = Some(format);
-        } else if node == "language_attribute" {
-            let PandocNativeIntermediate::IntermediateBaseText(lang, _) = child else {
-                panic!("Expected BaseText in language_attribute, got {:?}", child)
-            };
-            attr.1.push(lang); // set the language
-        } else if node == "info_string" {
-            let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child else {
-                panic!("Expected Attr in info_string, got {:?}", child)
-            };
-            attr = inner_attr;
-        }
-    }
-    let location = node_location(node);
-
-    // it might be the case (because of tree-sitter error recovery)
-    // that the content does not end with a newline, so we ensure it does before popping
-    if content.ends_with('\n') {
-        content.pop(); // remove the trailing newline
-    }
-
-    if let Some(format) = raw_format {
-        PandocNativeIntermediate::IntermediateBlock(Block::RawBlock(RawBlock {
-            format,
-            text: content,
-            source_info: SourceInfo::with_range(location),
-        }))
-    } else {
-        PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
-            attr,
-            text: content,
-            source_info: SourceInfo::with_range(location),
-        }))
-    }
-}
-
-// Helper function to process section nodes
-fn process_section(children: Vec<(String, PandocNativeIntermediate)>) -> PandocNativeIntermediate {
-    let mut blocks: Vec<Block> = Vec::new();
-    children.into_iter().for_each(|(node, child)| {
-        if node == "block_continuation" {
-            return;
-        }
-        match child {
-            PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
-            PandocNativeIntermediate::IntermediateSection(section) => {
-                blocks.extend(section);
-            }
-            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
-                // for now we assume it's metadata and emit it as a rawblock
-                blocks.push(Block::RawBlock(RawBlock {
-                    format: "quarto_minus_metadata".to_string(),
-                    text,
-                    source_info: SourceInfo::with_range(range),
-                }));
-            }
-            _ => panic!("Expected Block or Section, got {:?}", child),
-        }
-    });
-    PandocNativeIntermediate::IntermediateSection(blocks)
-}
-
-fn process_code_fence_content(
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-    input_bytes: &[u8],
-) -> PandocNativeIntermediate {
-    let start = node.range().start_byte;
-    let end = node.range().end_byte;
-
-    // This is a code block, we need to extract the content
-    // by removing block_continuation markers
-    let mut current_location = start;
-
-    let mut content = String::new();
-    for (child_node, child) in children {
-        if child_node == "block_continuation" {
-            let PandocNativeIntermediate::IntermediateUnknown(child_range) = child else {
-                panic!(
-                    "Expected IntermediateUnknown in block_continuation, got {:?}",
-                    child
-                )
-            };
-            let slice_before_continuation =
-                &input_bytes[current_location..child_range.start.offset];
-            content.push_str(std::str::from_utf8(slice_before_continuation).unwrap());
-            current_location = child_range.end.offset;
-        }
-    }
-    // Add the remaining content after the last block_continuation
-    if current_location < end {
-        let slice_after_continuation = &input_bytes[current_location..end];
-        content.push_str(std::str::from_utf8(slice_after_continuation).unwrap());
-    }
-    PandocNativeIntermediate::IntermediateBaseText(content, node_location(node))
-}
 
 fn process_note_reference(
     node: &tree_sitter::Node,
@@ -406,211 +215,6 @@ fn process_uri_autolink(node: &tree_sitter::Node, input_bytes: &[u8]) -> PandocN
         attr,
         target: (content.to_string(), "".to_string()),
         source_info: node_source_info(node),
-    }))
-}
-
-fn process_setext_heading<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut content = Vec::new();
-    let mut level = 1;
-    for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {
-                content: inner_content,
-                ..
-            })) => {
-                content = inner_content;
-            }
-            PandocNativeIntermediate::IntermediateSetextHeadingLevel(l) => {
-                level = l;
-            }
-            _ => {
-                writeln!(
-                    buf,
-                    "[setext_heading] Warning: Unhandled node kind: {}",
-                    node.kind()
-                )
-                .unwrap();
-            }
-        }
-    }
-    PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
-        level,
-        attr: empty_attr(),
-        content,
-        source_info: SourceInfo::with_range(node_location(node)),
-    }))
-}
-
-fn process_atx_heading<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut level = 0;
-    let mut content: Vec<Inline> = Vec::new();
-    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
-    for (node, child) in children {
-        if node == "block_continuation" {
-            continue;
-            // This is a marker node, we don't need to do anything with it
-        } else if node == "atx_h1_marker" {
-            level = 1;
-        } else if node == "atx_h2_marker" {
-            level = 2;
-        } else if node == "atx_h3_marker" {
-            level = 3;
-        } else if node == "atx_h4_marker" {
-            level = 4;
-        } else if node == "atx_h5_marker" {
-            level = 5;
-        } else if node == "atx_h6_marker" {
-            level = 6;
-        } else if node == "inline" {
-            if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                content.extend(inlines);
-            } else {
-                panic!("Expected Inlines in atx_heading, got {:?}", child);
-            }
-        } else if node == "attribute" {
-            if let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child {
-                attr = inner_attr;
-            } else {
-                panic!("Expected Attr in attribute, got {:?}", child);
-            }
-        } else {
-            writeln!(buf, "Warning: Unhandled node kind in atx_heading: {}", node).unwrap();
-        }
-    }
-    PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
-        level,
-        attr,
-        content,
-        source_info: SourceInfo::with_range(node_location(node)),
-    }))
-}
-
-fn process_fenced_div_block<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
-    let mut content: Vec<Block> = Vec::new();
-    for (node, child) in children {
-        if node == "block_continuation" {
-            continue;
-        }
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(_, _) => {
-                if node == "language_attribute" {
-                    writeln!(
-                        buf,
-                        "Warning: language attribute unsupported in divs: {:?} {:?}",
-                        node, child
-                    )
-                    .unwrap();
-                } else {
-                    writeln!(
-                        buf,
-                        "Warning: Unexpected base text in div, ignoring: {:?} {:?}",
-                        node, child
-                    )
-                    .unwrap();
-                }
-            }
-            PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
-                writeln!(
-                    buf,
-                    "Warning: Raw attribute specifiers are not supported in divs: {:?} {:?}",
-                    node, child
-                )
-                .unwrap();
-            }
-            PandocNativeIntermediate::IntermediateAttr(a) => {
-                attr = a;
-            }
-            PandocNativeIntermediate::IntermediateBlock(block) => {
-                content.push(block);
-            }
-            PandocNativeIntermediate::IntermediateSection(blocks) => {
-                content.extend(blocks);
-            }
-            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
-                // for now we assume it's metadata and emit it as a rawblock
-                content.push(Block::RawBlock(RawBlock {
-                    format: "quarto_minus_metadata".to_string(),
-                    text,
-                    source_info: SourceInfo::with_range(range),
-                }));
-            }
-            _ => {
-                writeln!(
-                    buf,
-                    "Warning: Unhandled node kind in fenced_div_block: {:?} {:?}",
-                    node, child
-                )
-                .unwrap();
-            }
-        }
-    }
-    PandocNativeIntermediate::IntermediateBlock(Block::Div(Div {
-        attr,
-        content,
-        source_info: SourceInfo::with_range(node_location(node)),
-    }))
-}
-
-fn process_block_quote<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-) -> PandocNativeIntermediate {
-    let mut content: Blocks = Vec::new();
-    for (node_type, child) in children {
-        if node_type == "block_quote_marker" {
-            if matches!(child, PandocNativeIntermediate::IntermediateUnknown(_)) {
-                if node_type != "block_continuation" {
-                    writeln!(
-                        buf,
-                        "Warning: Unhandled node kind in block_quote: {}, {:?}",
-                        node_type, child,
-                    )
-                    .unwrap();
-                }
-            }
-            continue;
-        }
-        match child {
-            PandocNativeIntermediate::IntermediateBlock(block) => {
-                content.push(block);
-            }
-            PandocNativeIntermediate::IntermediateSection(section) => {
-                content.extend(section);
-            }
-            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
-                // for now we assume it's metadata and emit it as a rawblock
-                content.push(Block::RawBlock(RawBlock {
-                    format: "quarto_minus_metadata".to_string(),
-                    text,
-                    source_info: SourceInfo::with_range(range),
-                }));
-            }
-            _ => {
-                writeln!(
-                buf,
-                "[block_quote] Will ignore unknown node. Expected Block or Section in block_quote, got {:?}",
-                child
-                ).unwrap();
-            }
-        }
-    }
-    PandocNativeIntermediate::IntermediateBlock(Block::BlockQuote(BlockQuote {
-        content,
-        source_info: SourceInfo::with_range(node_location(node)),
     }))
 }
 
