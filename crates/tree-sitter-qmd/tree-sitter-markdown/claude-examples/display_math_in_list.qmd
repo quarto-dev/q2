@@ -1,0 +1,7 @@
+* item 1
+* item 2 with math:
+$$
+* not a list item
++ also not a list item
+$$
+* item 3

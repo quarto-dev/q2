@@ -1,9 +1,9 @@
 #include "tree_sitter/parser.h"
 #include <assert.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
 #include <wctype.h>
-// #include <stdio.h>
 
 // For explanation of the tokens see grammar.js
 typedef enum {
@@ -58,9 +58,6 @@ typedef enum {
     FENCED_DIV_END,
     REF_ID_SPECIFIER,
     FENCED_DIV_NOTE_ID,
-    // special tokens to trigger serialization to track in-display-math mode
-    DISPLAY_MATH_STATE_TRACK_MARKER,
-    INLINE_MATH_STATE_TRACK_MARKER 
 } TokenType;
 
 // Description of a block on the block stack.
@@ -129,60 +126,6 @@ static const char *const HTML_TAG_NAMES_RULE_7[NUM_HTML_TAG_NAMES_RULE_7] = {
     "track",    "ul"};
 
 // For explanation of the tokens see grammar.js
-static const bool display_math_paragraph_interrupt_symbols[] = {
-    false, // LINE_ENDING,
-    false, // SOFT_LINE_ENDING,
-    false, // BLOCK_CLOSE,
-    false, // BLOCK_CONTINUATION,
-    true,  // BLOCK_QUOTE_START,
-    false, // INDENTED_CHUNK_START,
-    true,  // ATX_H1_MARKER,
-    true,  // ATX_H2_MARKER,
-    true,  // ATX_H3_MARKER,
-    true,  // ATX_H4_MARKER,
-    true,  // ATX_H5_MARKER,
-    true,  // ATX_H6_MARKER,
-    true,  // SETEXT_H1_UNDERLINE,
-    true,  // SETEXT_H2_UNDERLINE,
-    true,  // THEMATIC_BREAK,
-    false,  // LIST_MARKER_MINUS,
-    false,  // LIST_MARKER_PLUS,
-    false,  // LIST_MARKER_STAR,
-    false,  // LIST_MARKER_PARENTHESIS,
-    false,  // LIST_MARKER_DOT,
-    false, // LIST_MARKER_MINUS_DONT_INTERRUPT,
-    false, // LIST_MARKER_PLUS_DONT_INTERRUPT,
-    false, // LIST_MARKER_STAR_DONT_INTERRUPT,
-    false, // LIST_MARKER_PARENTHESIS_DONT_INTERRUPT,
-    false, // LIST_MARKER_DOT_DONT_INTERRUPT,
-    true,  // FENCED_CODE_BLOCK_START_BACKTICK,
-    true,  // FENCED_CODE_BLOCK_START_TILDE,
-    true,  // BLANK_LINE_START,
-    false, // FENCED_CODE_BLOCK_END_BACKTICK,
-    false, // FENCED_CODE_BLOCK_END_TILDE,
-    true,  // HTML_BLOCK_1_START,
-    false, // HTML_BLOCK_1_END,
-    true,  // HTML_BLOCK_2_START,
-    true,  // HTML_BLOCK_3_START,
-    true,  // HTML_BLOCK_4_START,
-    true,  // HTML_BLOCK_5_START,
-    true,  // HTML_BLOCK_6_START,
-    false, // HTML_BLOCK_7_START,
-    false, // CLOSE_BLOCK,
-    false, // NO_INDENTED_CHUNK,
-    false, // ERROR,
-    false, // TRIGGER_ERROR,
-    false, // EOF,
-    false, // MINUS_METADATA,
-    false, // PLUS_METADATA,
-    true,  // PIPE_TABLE_START,
-    false, // PIPE_TABLE_LINE_ENDING,
-    true,  // FENCED_DIV_START,
-    true,  // FENCED_DIV_END,
-    false, // DISPLAY_MATH_STATE_TRACK_MARKER
-    false, // INLINE_MATH_STATE_TRACK_MARKER
-};
-
 static const bool paragraph_interrupt_symbols[] = {
     false, // LINE_ENDING,
     false, // SOFT_LINE_ENDING,
@@ -233,8 +176,6 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // PIPE_TABLE_LINE_ENDING,
     true,  // FENCED_DIV_START,
     true,  // FENCED_DIV_END,
-    false, // DISPLAY_MATH_STATE_TRACK_MARKER
-    false, // INLINE_MATH_STATE_TRACK_MARKER
 };
 
 // State bitflags used with `Scanner.state`
@@ -243,10 +184,10 @@ static const bool paragraph_interrupt_symbols[] = {
 static const uint8_t STATE_MATCHING = 0x1 << 0;
 // Last line break was inside a paragraph
 static const uint8_t STATE_WAS_SOFT_LINE_BREAK = 0x1 << 1;
+// Currently inside display math ($$...$$)
+static const uint8_t STATE_IN_DISPLAY_MATH = 0x1 << 2;
 // Block should be closed after next line break
 static const uint8_t STATE_CLOSE_BLOCK = 0x1 << 4;
-// Currently inside display math ($$...$$)
-static const uint8_t STATE_IN_DISPLAY_MATH = 0x1 << 5;
 
 static size_t roundup_32(size_t x) {
     x--;
@@ -292,6 +233,26 @@ typedef struct {
     bool simulate;
 } Scanner;
 
+// Check if a token can interrupt a paragraph, accounting for display math state
+static bool can_interrupt_paragraph(Scanner *s, TokenType token) {
+    // Inside display math blocks, list markers should not interrupt paragraphs
+    if (s->state & STATE_IN_DISPLAY_MATH) {
+        printf("[DEBUG] In display math, checking token %d\n", token);
+        switch (token) {
+            case LIST_MARKER_MINUS:
+            case LIST_MARKER_PLUS:
+            case LIST_MARKER_STAR:
+            case LIST_MARKER_PARENTHESIS:
+            case LIST_MARKER_DOT:
+                printf("[DEBUG] Blocking list marker from interrupting\n");
+                return false;
+            default:
+                break;
+        }
+    }
+    return paragraph_interrupt_symbols[token];
+}
+
 static bool can_push_block(Scanner *s) {
     // the serialization state size is equal
     // to sizeof(Scanner) + sizeof(Block) * open_blocks.size
@@ -324,6 +285,7 @@ static inline Block pop_block(Scanner *s) {
 
 // Write the whole state of a Scanner to a byte buffer
 static unsigned serialize(Scanner *s, char *buffer) {
+    printf("[SERIALIZE] state=0x%x\n", s->state);
     unsigned size = 0;
     for (size_t i = 0; i < sizeof(unsigned); i++) {
         buffer[size++] = '\0';
@@ -359,6 +321,7 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         s->own_size = length;
         size += sizeof(unsigned);
         s->state = (uint8_t)buffer[size++];
+        printf("[DESERIALIZE] state=0x%x\n", s->state);
         s->matched = (uint8_t)buffer[size++];
         s->indentation = (uint8_t)buffer[size++];
         s->column = (uint8_t)buffer[size++];
@@ -656,8 +619,9 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         s->indentation = 0;
         return true;
     }
-    if ((dont_interrupt ? valid_symbols[LIST_MARKER_STAR_DONT_INTERRUPT]
-                        : valid_symbols[LIST_MARKER_STAR]) &&
+    TokenType star_token = dont_interrupt ? LIST_MARKER_STAR_DONT_INTERRUPT : LIST_MARKER_STAR;
+    if (valid_symbols[star_token] &&
+        can_interrupt_paragraph(s, star_token) &&
         list_marker_star) {
         // List markers take precedence over emphasis markers
         // If star_count > 1 then we already called mark_end at the right point.
@@ -688,8 +652,7 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             push_block(s, (Block)(LIST_ITEM + extra_indentation));
         }
-        lexer->result_symbol =
-            dont_interrupt ? LIST_MARKER_STAR_DONT_INTERRUPT : LIST_MARKER_STAR;
+        lexer->result_symbol = star_token;
         return true;
     }
     return false;
@@ -859,12 +822,11 @@ static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             dont_interrupt =
                 dont_interrupt && s->matched == s->open_blocks.size;
+            TokenType plus_token = dont_interrupt ? LIST_MARKER_PLUS_DONT_INTERRUPT : LIST_MARKER_PLUS;
             if (extra_indentation >= 1 &&
-                (dont_interrupt ? valid_symbols[LIST_MARKER_PLUS_DONT_INTERRUPT]
-                                : valid_symbols[LIST_MARKER_PLUS])) {
-                lexer->result_symbol = dont_interrupt
-                                           ? LIST_MARKER_PLUS_DONT_INTERRUPT
-                                           : LIST_MARKER_PLUS;
+                valid_symbols[plus_token] &&
+                can_interrupt_paragraph(s, plus_token)) {
+                lexer->result_symbol = plus_token;
                 extra_indentation--;
                 if (extra_indentation <= 3) {
                     extra_indentation += s->indentation;
@@ -925,16 +887,16 @@ static bool parse_ordered_list_marker(Scanner *s, TSLexer *lexer,
                 }
                 dont_interrupt =
                     dont_interrupt && s->matched == s->open_blocks.size;
+                TokenType ordered_token;
+                if (dot) {
+                    ordered_token = dont_interrupt ? LIST_MARKER_DOT_DONT_INTERRUPT : LIST_MARKER_DOT;
+                } else {
+                    ordered_token = dont_interrupt ? LIST_MARKER_PARENTHESIS_DONT_INTERRUPT : LIST_MARKER_PARENTHESIS;
+                }
                 if (extra_indentation >= 1 &&
-                    (dot ? (dont_interrupt
-                                ? valid_symbols[LIST_MARKER_DOT_DONT_INTERRUPT]
-                                : valid_symbols[LIST_MARKER_DOT])
-                         : (dont_interrupt
-                                ? valid_symbols
-                                      [LIST_MARKER_PARENTHESIS_DONT_INTERRUPT]
-                                : valid_symbols[LIST_MARKER_PARENTHESIS]))) {
-                    lexer->result_symbol =
-                        dot ? LIST_MARKER_DOT : LIST_MARKER_PARENTHESIS;
+                    valid_symbols[ordered_token] &&
+                    can_interrupt_paragraph(s, ordered_token)) {
+                    lexer->result_symbol = dot ? LIST_MARKER_DOT : LIST_MARKER_PARENTHESIS;
                     extra_indentation--;
                     if (extra_indentation <= 3) {
                         extra_indentation += s->indentation;
@@ -1017,10 +979,11 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             mark_end(s, lexer);
             s->indentation = 0;
             success = true;
-        } else if ((dont_interrupt
-                        ? valid_symbols[LIST_MARKER_MINUS_DONT_INTERRUPT]
-                        : valid_symbols[LIST_MARKER_MINUS]) &&
-                   list_marker_minus) {
+        }
+        TokenType minus_token = dont_interrupt ? LIST_MARKER_MINUS_DONT_INTERRUPT : LIST_MARKER_MINUS;
+        if (valid_symbols[minus_token] &&
+            can_interrupt_paragraph(s, minus_token) &&
+            list_marker_minus) {
             if (minus_count == 1) {
                 mark_end(s, lexer);
             }
@@ -1039,9 +1002,7 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 push_block(s, (Block)(LIST_ITEM + extra_indentation));
             }
-            lexer->result_symbol = dont_interrupt
-                                       ? LIST_MARKER_MINUS_DONT_INTERRUPT
-                                       : LIST_MARKER_MINUS;
+            lexer->result_symbol = minus_token;
             return true;
         }
         if (minus_count == 3 && (!minus_after_whitespace) && line_end &&
@@ -1561,32 +1522,10 @@ static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
 }
 
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
-    // printf("-- scan() state=%d\n", s->state);
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
     if (valid_symbols[TRIGGER_ERROR]) {
         return error(lexer);
-    }
-
-    // the logic here is tricky. We're trying to see a $$, mark STATE_IN_DISPLAY_MATH
-    // and go on. But we can only serialize state if we successfully return an external
-    // token. 
-    //
-    if (!s->simulate && lexer->lookahead == '$' && valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
-        advance(s, lexer);
-        if (lexer->lookahead == '$') {
-            advance(s, lexer);
-            s->state ^= STATE_IN_DISPLAY_MATH;
-            // printf("-- TOGGLED! it's now %d\n", s->state);
-            lexer->mark_end(lexer);
-            lexer->result_symbol = DISPLAY_MATH_STATE_TRACK_MARKER;
-            return true;
-        }
-        // this token isn't really used anywhere, but it's here because
-        // we can no longer backtrack after advancing the lexer to see if we had a $$.
-        lexer->mark_end(lexer);
-        lexer->result_symbol = INLINE_MATH_STATE_TRACK_MARKER;
-        return true;
     }
 
     // Close the inner most block after the next line break as requested. See
@@ -1614,16 +1553,40 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return false;
     }
 
-    if (!(s->state & STATE_MATCHING)) {
-        // Parse any preceeding whitespace and remember its length. This makes a
-        // lot of parsing quite a bit easier.
-        for (;;) {
-            if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
-                s->indentation += advance(s, lexer);
-            } else {
-                break;
-            }
+    // Parse any preceeding whitespace (needed both in matching and non-matching states)
+    for (;;) {
+        if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            s->indentation += advance(s, lexer);
+        } else {
+            break;
         }
+    }
+
+    // Check if this line starts with a display math delimiter ($$)
+    // Track this to prevent list markers from interrupting paragraphs inside display math
+    // Do this BEFORE checking matching state, but only when not simulating
+    if (lexer->lookahead == '$' && s->indentation < 4 && !s->simulate) {
+            static int toggle_count = 0;
+            printf("[DEBUG %d] Saw $ at col:%d (simulate=%d)\n", toggle_count, lexer->get_column(lexer), s->simulate);
+            TSLexer saved_lexer = *lexer;
+            uint8_t saved_indentation = s->indentation;
+            uint8_t saved_column = s->column;
+
+            advance(s, lexer);
+            if (lexer->lookahead == '$') {
+                printf("[DEBUG %d] Saw second $ - toggling display math\n", toggle_count);
+                // Toggle display math state (odd/even number of $$ seen)
+                // No need to check for end of line - $$ is $$ regardless of what follows
+                s->state ^= STATE_IN_DISPLAY_MATH;
+                printf("[DEBUG %d] Toggled display math state, now: %d (raw state=0x%x)\n", toggle_count++, (s->state & STATE_IN_DISPLAY_MATH) ? 1 : 0, s->state);
+            }
+            // Restore lexer and scanner position - let paragraph parser handle the $$
+            *lexer = saved_lexer;
+            s->indentation = saved_indentation;
+            s->column = saved_column;
+    }
+
+    if (!(s->state & STATE_MATCHING)) {
         // We are not matching. This is where the parsing logic for most
         // "normal" token is. Most importantly parsing logic for the start of
         // new blocks.
@@ -1793,12 +1756,24 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
             bool all_will_be_matched = s->matched == s->open_blocks.size;
-            const bool *symbols = s->state & STATE_IN_DISPLAY_MATH ?
-                display_math_paragraph_interrupt_symbols :
-                paragraph_interrupt_symbols;
-            // printf("-- recursive call to scan for closing line. State: %d\n", s->state);
+
+            // Create a modified interrupt symbols array if we're in display math
+            bool modified_interrupt_symbols[sizeof(paragraph_interrupt_symbols) / sizeof(bool)];
+            printf("[DEBUG] Checking for paragraph interruption at col=%d, display_math_state=%d, simulate=%d (raw state=0x%x)\n",
+                   lexer->get_column(lexer), (s->state & STATE_IN_DISPLAY_MATH) ? 1 : 0, s->simulate, s->state);
+            if (s->state & STATE_IN_DISPLAY_MATH) {
+                printf("[DEBUG] In display math, modifying interrupt symbols\n");
+                memcpy(modified_interrupt_symbols, paragraph_interrupt_symbols, sizeof(paragraph_interrupt_symbols));
+                // Disable list markers from interrupting
+                modified_interrupt_symbols[LIST_MARKER_MINUS] = false;
+                modified_interrupt_symbols[LIST_MARKER_PLUS] = false;
+                modified_interrupt_symbols[LIST_MARKER_STAR] = false;
+                modified_interrupt_symbols[LIST_MARKER_PARENTHESIS] = false;
+                modified_interrupt_symbols[LIST_MARKER_DOT] = false;
+            }
+
             if (!lexer->eof(lexer) &&
-                !scan(s, lexer, symbols)) {
+                !scan(s, lexer, (s->state & STATE_IN_DISPLAY_MATH) ? modified_interrupt_symbols : paragraph_interrupt_symbols)) {
                 s->matched = matched_temp;
                 // If the last line break ended a paragraph and no new block
                 // opened, the last line break should have been a soft line

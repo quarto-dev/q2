@@ -1,0 +1,13 @@
+Outer paragraph:
+$$
+Inner content:
+* 1
+- 2
++ 3
+1. 4
+2) 5
+$$
+Back to paragraph.
+
+* Now a real list
+* With real items

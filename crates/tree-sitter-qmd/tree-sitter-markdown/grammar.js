@@ -354,15 +354,15 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
         // Some symbols get parsed as single tokens so that html blocks get detected properly
-        _code_line:        $ => prec.right(repeat1(choice($._word, $._whitespace, common.punctuation_without($, [])))),
+        _code_line:        $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
         
         // the gymnastics around `:` in _line exist to make the parser reject paragraphs that start with a colon.
         // Those are technically valid in Markdown, but disallowing them here makes it possible to detect an
         // accidentally-continued paragraph with a colon that should have been a fenced div marker.
         // In these cases, users can use \: to escape the first colon.
-        _line:             $ => prec.right(seq(prec.right(choice($._word, $._whitespace, common.punctuation_without($, [":"]))),
-                                               prec.right(repeat(choice($._word, $._whitespace, common.punctuation_without($, [])))))),
-        _atx_heading_line: $ => prec.right(repeat1(choice($._word, $._whitespace, common.punctuation_without($, [])))),
+        _line:             $ => prec.right(seq(prec.right(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [":"]))),
+                                               prec.right(repeat(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))))),
+        _atx_heading_line: $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
         _word: $ => new RegExp('[^' + PUNCTUATION_CHARACTERS_REGEX + ' \\t\\n\\r]+'),
         // The external scanner emits some characters that should just be ignored.
         _whitespace: $ => /[ \t]+/,
@@ -442,11 +442,15 @@ module.exports = grammar({
                 seq(
                     choice(
                         $._word,
+                        $._display_math_state_track_marker, 
+                        $._inline_math_state_track_marker, 
                         $._backslash_escape,
                         common.punctuation_without($, ['|']),
                     ),
                     repeat(choice(
                         $._word,
+                        $._display_math_state_track_marker, 
+                        $._inline_math_state_track_marker, 
                         $._whitespace,
                         $._backslash_escape,
                         common.punctuation_without($, ['|']),
@@ -554,6 +558,10 @@ module.exports = grammar({
 
         $.ref_id_specifier,
         $.fenced_div_note_id,
+
+        // special tokens to allow external scanner serialization to happen
+        $._display_math_state_track_marker,
+        $._inline_math_state_track_marker,
     ],
     precedences: $ => [
         [$._setext_heading1, $._block],

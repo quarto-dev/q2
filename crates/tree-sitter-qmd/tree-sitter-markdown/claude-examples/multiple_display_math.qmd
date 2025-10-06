@@ -1,0 +1,15 @@
+First paragraph with math:
+$$
+1. not a list
+2. still not a list
+$$
+
+Second paragraph:
+$$
+- not a list item either
+* nor this
+$$
+
+Regular list after math:
+* real list item 1
+* real list item 2
