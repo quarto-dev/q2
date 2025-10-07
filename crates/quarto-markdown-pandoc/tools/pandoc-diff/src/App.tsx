@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react'
 import { create } from 'jsondiffpatch'
-import { format } from 'jsondiffpatch/formatters/html'
+import { format, hideUnchanged } from 'jsondiffpatch/formatters/html'
 import './jsondiffpatch.css'
 
 interface CompareResult {
@@ -12,6 +12,7 @@ interface CompareResult {
 }
 
 function App() {
+  hideUnchanged();
   const [markdown, setMarkdown] = useState('')
   const [result, setResult] = useState<CompareResult | null>(null)
   const [loading, setLoading] = useState(false)
