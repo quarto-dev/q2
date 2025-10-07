@@ -32,7 +32,7 @@ use crate::pandoc::treesitter_utils::pipe_table::{
     process_pipe_table, process_pipe_table_cell, process_pipe_table_delimiter_cell,
     process_pipe_table_delimiter_row, process_pipe_table_header_or_row,
 };
-use crate::pandoc::treesitter_utils::postprocess::{desugar, merge_strs};
+use crate::pandoc::treesitter_utils::postprocess::{merge_strs, postprocess};
 use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
 use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
 use crate::pandoc::treesitter_utils::raw_specifier::process_raw_specifier;
@@ -714,7 +714,7 @@ pub fn treesitter_to_pandoc<T: Write>(
     let (_, PandocNativeIntermediate::IntermediatePandoc(pandoc)) = result else {
         panic!("Expected Pandoc, got {:?}", result)
     };
-    let result = desugar(pandoc)?;
+    let result = postprocess(pandoc)?;
     let result = merge_strs(result);
     Ok(result)
 }

@@ -194,16 +194,28 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
     (result, did_coalesce)
 }
 
-/// Apply desugaring transformations to the Pandoc AST
-pub fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
+/// Apply post-processing transformations to the Pandoc AST
+pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
     let mut errors = Vec::new();
     let raw_reader_format_specifier: Lazy<Regex> =
         Lazy::new(|| Regex::new(r"<(?P<reader>.+)").unwrap());
     let result = {
         // Track seen header IDs to avoid duplicates
         let mut seen_ids: HashMap<String, usize> = HashMap::new();
+        // Track citation count for numbering
+        let mut citation_counter: usize = 0;
 
         let mut filter = Filter::new()
+            .with_cite(|mut cite| {
+                // Increment citation counter for each Cite element
+                citation_counter += 1;
+                // Update all citations in this Cite element with the current counter
+                for citation in &mut cite.citations {
+                    citation.note_num = citation_counter;
+                }
+                // Return Unchanged to allow recursion into cite content while avoiding re-filtering
+                Unchanged(cite)
+            })
             .with_superscript(|mut superscript| {
                 let (content, changed) = trim_inlines(superscript.content);
                 if !changed {
@@ -487,7 +499,7 @@ pub fn desugar(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
             .with_attr(|attr| {
                 // TODO in order to do good error messages here, attr will need source mapping
                 errors.push(format!(
-                    "Found attr in desugar: {:?} - this should have been removed",
+                    "Found attr in postprocess: {:?} - this should have been removed",
                     attr
                 ));
                 FilterResult(vec![], false)
