@@ -5610,38 +5610,6 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_html_block_1_start"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_1_end"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_2_start"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_3_start"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_4_start"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_5_start"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_6_start"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_html_block_7_start"
-    },
-    {
-      "type": "SYMBOL",
       "name": "_close_block"
     },
     {

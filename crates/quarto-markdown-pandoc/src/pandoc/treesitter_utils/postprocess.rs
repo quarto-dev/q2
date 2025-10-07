@@ -7,15 +7,13 @@ use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
 };
 use crate::pandoc::attr::{Attr, is_empty_attr};
-use crate::pandoc::block::{Block, Figure, Plain, RawBlock};
+use crate::pandoc::block::{Block, Figure, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{Inline, Inlines, Space, Span, Str, Superscript};
 use crate::pandoc::location::{Range, SourceInfo, empty_range, empty_source_info};
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
-use once_cell::sync::Lazy;
-use regex::Regex;
 use std::collections::HashMap;
 
 /// Trim leading and trailing spaces from inlines
@@ -171,8 +169,6 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
 /// Apply post-processing transformations to the Pandoc AST
 pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
     let mut errors = Vec::new();
-    let raw_reader_format_specifier: Lazy<Regex> =
-        Lazy::new(|| Regex::new(r"<(?P<reader>.+)").unwrap());
     let result = {
         // Track seen header IDs to avoid duplicates
         let mut seen_ids: HashMap<String, usize> = HashMap::new();
@@ -457,18 +453,6 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                 }
 
                 FilterResult(result, true)
-            })
-            .with_raw_block(move |raw_block| {
-                let Some(captures) = raw_reader_format_specifier.captures(&raw_block.text) else {
-                    return Unchanged(raw_block);
-                };
-                return FilterResult(
-                    vec![Block::RawBlock(RawBlock {
-                        format: "pandoc-reader:".to_string() + &captures["reader"],
-                        ..raw_block
-                    })],
-                    false,
-                );
             })
             .with_attr(|attr| {
                 // TODO in order to do good error messages here, attr will need source mapping

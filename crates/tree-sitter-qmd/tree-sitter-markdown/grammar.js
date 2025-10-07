@@ -522,15 +522,6 @@ module.exports = grammar({
         $._fenced_code_block_end_backtick,
         $._fenced_code_block_end_tilde,
 
-        $._html_block_1_start,
-        $._html_block_1_end,
-        $._html_block_2_start,
-        $._html_block_3_start,
-        $._html_block_4_start,
-        $._html_block_5_start,
-        $._html_block_6_start,
-        $._html_block_7_start,
-
         // Similarly this is used if the closing of a block is not decided by the external parser.
         // A `$._block_close` will be emitted at the beginning of the next line. Notice that a
         // `$._block_close` can also get emitted if the parent block closes.

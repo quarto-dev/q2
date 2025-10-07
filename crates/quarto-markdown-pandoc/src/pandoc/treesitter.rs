@@ -390,7 +390,7 @@ fn process_native_inlines<T: Write>(
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
-                        text,
+                        text: apply_smart_quotes(text),
                         source_info: SourceInfo::new(
                             if context.filenames.is_empty() {
                                 None
