@@ -67,6 +67,28 @@ use crate::traversals::bottomup_traverse_concrete_tree;
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
+fn get_block_source_info(block: &Block) -> &SourceInfo {
+    match block {
+        Block::Plain(b) => &b.source_info,
+        Block::Paragraph(b) => &b.source_info,
+        Block::LineBlock(b) => &b.source_info,
+        Block::CodeBlock(b) => &b.source_info,
+        Block::RawBlock(b) => &b.source_info,
+        Block::BlockQuote(b) => &b.source_info,
+        Block::OrderedList(b) => &b.source_info,
+        Block::BulletList(b) => &b.source_info,
+        Block::DefinitionList(b) => &b.source_info,
+        Block::Header(b) => &b.source_info,
+        Block::HorizontalRule(b) => &b.source_info,
+        Block::Table(b) => &b.source_info,
+        Block::Figure(b) => &b.source_info,
+        Block::Div(b) => &b.source_info,
+        Block::BlockMetadata(b) => &b.source_info,
+        Block::NoteDefinitionPara(b) => &b.source_info,
+        Block::NoteDefinitionFencedBlock(b) => &b.source_info,
+    }
+}
+
 fn process_list(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -81,6 +103,7 @@ fn process_list(
 
     let mut has_loose_item = false;
     let mut last_para_range: Option<Range> = None;
+    let mut last_item_end_row: Option<usize> = None;
     let mut list_items: Vec<Blocks> = Vec::new();
     let mut is_ordered_list: Option<ListAttributes> = None;
 
@@ -131,6 +154,14 @@ fn process_list(
             }
         }
 
+        // Check if there's a blank line between the last item and this item
+        if let Some(last_end) = last_item_end_row {
+            if child_range.start.row > last_end {
+                // There's at least one blank line between items
+                has_loose_item = true;
+            }
+        }
+
         // is this item definitely loose?
         if blocks
             .iter()
@@ -150,6 +181,9 @@ fn process_list(
             // last paragraph range after setting has_loose_item,
             // but we do it in case we want to use it later
             last_para_range = None;
+            last_item_end_row = blocks
+                .last()
+                .map(|b| get_block_source_info(b).range.end.row);
             list_items.push(blocks);
             continue;
         }
@@ -170,6 +204,9 @@ fn process_list(
             // last_para_range since this item can't participate in loose detection
             last_para_range = None;
         }
+        last_item_end_row = blocks
+            .last()
+            .map(|b| get_block_source_info(b).range.end.row);
         list_items.push(blocks);
     }
 
