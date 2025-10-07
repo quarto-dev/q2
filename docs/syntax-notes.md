@@ -21,7 +21,7 @@ we desugar them to Pandoc spans in a Rust filter.
 ### Footnotes
 
 We parse footnotes differently from Pandoc.
-We use NoteReference (Inline) and NoteDefinition (block) nodes.
+We use NoteReference (Inline), NoteDefinitionPara (single paragraph), and NoteDefinitionBlock (multiple paragraph) nodes.
 These are desugared into spans and divs in a Rust filter.
 
 ### Editor markup
@@ -216,14 +216,26 @@ Consider `^[footnote-or-span]{.class}^`. `^[` denotes both the start of a footno
 Quarto-markdown's parser prefers the footnote interpretation. In case an immediately nested span is needed, use a space between `^` and `[`.
 Superscript nodes with leading spaces are disallowed in Pandoc, but Quarto-markdown will trim spaces.
 
-## QMD _REMOVALS_
+## Differences from Pandoc
 
-- Simplified link syntax. the only link syntax supported are _inline links_: `[text](destination title)`
+### Single link syntax
 
-  - no wikilink support
+Links always need to be defined fully. `[LaTeX Output]` doesn't work; `[LaTeX Output](#latex-output)` does.
 
-  - no shortcut reference link support, we use that syntax for spans instead
+We have no support for wikilink syntax.
 
-- Similarly, the only image syntax supported is the one corresponding to inline links: `![text](image-name title)`
+We have no shortcut reference link support: that syntax is used for spans.
 
-- no HTML support: QMD is meant to translate into more than one syntax. We use rawblock instead.
+Similarly, the only image syntax supported is the one corresponding to inline links: `![text](image-name title)`
+
+### Quoting differences
+
+`''` and `""` are parsed as empty `Quoted` objects by `quarto-markdown`.
+
+### No naked HTML support
+
+In Pandoc, you can intersperse HTML and Markdown, and Pandoc will (attempt to) parse the HTML into
+its AST format. This is brittle and inefficient because it relies heavily on backtracking through
+parser combinators. In `quarto-markdown`, use the raw block and inline syntax directly.
+
+

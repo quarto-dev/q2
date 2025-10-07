@@ -30,7 +30,7 @@ The error message infrastructure is based on Clinton Jeffery's TOPLAS 2003 paper
 
 LR parser generators are powerful and well-understood, but the parsers they generate are not suited to provide good error messages. Many compilers incur extensive modifications to the source grammar to produce useful syntax error messages. Interpreting the parse state (and input token) at the time of error is a nonintrusive alternative that does not entangle the error recovery mechanism in error message production. Unfortunately, every change to the grammar may significantly alter the mapping from parse states to diagnostic messages, creating a maintenance problem. Merr is a tool that allows a compiler writer to associate diagnostic messages with syntax errors by example, avoiding the need to add error productions to the grammar or interpret integer parse states. From a specification of errors and messages, Merr runs the compiler on each example error to obtain the relevant parse state and input token, and generates a yyerror() function that maps parse states and input tokens to diagnostic messages. Merr enables useful syntax error messages in LR-based compilers in a manner that is robust in the presence of grammar changes.
 
-We're not using "merr" here; we are implementing the same technique.
+We're not using "merr" here; we are merely implementing the same technique.
 
 ## Creating error examples
 
@@ -65,3 +65,4 @@ The `quarto-markdown-pandoc` binary accepts the following options:
 - When I say "@doit", I mean "create a plan, and work on it item by item."
 - When you're done editing a Rust file, run `cargo fmt` on it.
 - If I ask you to write notes to yourself, do it in markdown and write the output in the `docs/for-claude` directory.
+- If you need more information on the syntax differences, you are allowed to read the [syntax notes](../../docs/syntax-notes.md) file.
