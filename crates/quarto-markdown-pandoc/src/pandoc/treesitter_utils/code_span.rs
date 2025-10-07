@@ -91,7 +91,7 @@ pub fn process_code_span<T: Write>(
         .unwrap();
     }
     let text = match child {
-        PandocNativeIntermediate::IntermediateBaseText(text, _) => text,
+        PandocNativeIntermediate::IntermediateBaseText(text, _) => text.trim().to_string(),
         _ => {
             writeln!(
                 buf,
