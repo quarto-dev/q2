@@ -49,73 +49,47 @@ pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {
     (result, changed)
 }
 
+/// List of known abbreviations
+const ABBREVIATIONS: &[&str] = &[
+    "Mr.", "Mrs.", "Ms.", "Capt.", "Dr.", "Prof.", "Gen.", "Gov.", "e.g.", "i.e.", "Sgt.", "St.",
+    "vol.", "vs.", "Sen.", "Rep.", "Pres.", "Hon.", "Rev.", "Ph.D.", "M.D.", "M.A.", "p.", "pp.",
+    "ch.", "chap.", "sec.", "cf.", "cp.",
+];
+
 /// Check if a text string is a known abbreviation
 fn is_abbreviation(text: &str) -> bool {
-    matches!(
-        text,
-        "Mr."
-            | "Mrs."
-            | "Ms."
-            | "Capt."
-            | "Dr."
-            | "Prof."
-            | "Gen."
-            | "Gov."
-            | "e.g."
-            | "i.e."
-            | "Sgt."
-            | "St."
-            | "vol."
-            | "vs."
-            | "Sen."
-            | "Rep."
-            | "Pres."
-            | "Hon."
-            | "Rev."
-            | "Ph.D."
-            | "M.D."
-            | "M.A."
-            | "p."
-            | "pp."
-            | "ch."
-            | "chap."
-            | "sec."
-            | "cf."
-            | "cp."
-    )
+    ABBREVIATIONS.contains(&text)
+}
+
+/// Check if text ends with an abbreviation AND has a valid word boundary before it
+/// A valid boundary means the abbreviation is either at the start of the string,
+/// or preceded by a non-alphanumeric character (punctuation is OK, letters/digits are not)
+fn has_valid_abbrev_boundary(text: &str, abbrev: &str) -> bool {
+    if !text.ends_with(abbrev) {
+        return false;
+    }
+
+    // Check if there's a valid word boundary before the abbreviation
+    if text.len() == abbrev.len() {
+        return true; // abbreviation is the entire string
+    }
+
+    // Get the prefix before the abbreviation
+    let prefix = &text[..text.len() - abbrev.len()];
+
+    // Check the last character of the prefix - must not be alphanumeric
+    if let Some(last_char) = prefix.chars().last() {
+        !last_char.is_alphanumeric()
+    } else {
+        true
+    }
 }
 
 /// Check if a text string ends with a known abbreviation
 fn ends_with_abbreviation(text: &str) -> bool {
-    text.ends_with("Mr.")
-        || text.ends_with("Mrs.")
-        || text.ends_with("Ms.")
-        || text.ends_with("Capt.")
-        || text.ends_with("Dr.")
-        || text.ends_with("Prof.")
-        || text.ends_with("Gen.")
-        || text.ends_with("Gov.")
-        || text.ends_with("e.g.")
-        || text.ends_with("i.e.")
-        || text.ends_with("Sgt.")
-        || text.ends_with("St.")
-        || text.ends_with("vol.")
-        || text.ends_with("vs.")
-        || text.ends_with("Sen.")
-        || text.ends_with("Rep.")
-        || text.ends_with("Pres.")
-        || text.ends_with("Hon.")
-        || text.ends_with("Rev.")
-        || text.ends_with("Ph.D.")
-        || text.ends_with("M.D.")
-        || text.ends_with("M.A.")
-        || text.ends_with("p.")
-        || text.ends_with("pp.")
-        || text.ends_with("ch.")
-        || text.ends_with("chap.")
-        || text.ends_with("sec.")
-        || text.ends_with("cf.")
-        || text.ends_with("cp.")
+    ABBREVIATIONS
+        .iter()
+        .any(|abbrev| has_valid_abbrev_boundary(text, abbrev))
 }
 
 /// Coalesce Str nodes that end with abbreviations with following words
