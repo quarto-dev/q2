@@ -694,9 +694,30 @@ fn reverse_smart_quotes(text: &str) -> String {
     text.replace('\u{2019}', "'")
 }
 
+// Helper function to escape special markdown characters
+// This follows Pandoc's escaping rules for text strings
+fn escape_markdown(text: &str) -> String {
+    let mut result = String::new();
+    for ch in text.chars() {
+        match ch {
+            // Backslash must be escaped first (conceptually)
+            // But since we're processing char by char, we just escape it when we see it
+            '\\' => result.push_str("\\\\"),
+            // Greater-than sign must be escaped to avoid blockquote interpretation
+            '>' => result.push_str("\\>"),
+            // Hash must be escaped to avoid header interpretation
+            '#' => result.push_str("\\#"),
+            // Other characters pass through unchanged
+            _ => result.push(ch),
+        }
+    }
+    result
+}
+
 fn write_str(s: &Str, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-    // FIXME what are the escaping rules that Pandoc uses?
-    write!(buf, "{}", reverse_smart_quotes(&s.text))
+    let text = reverse_smart_quotes(&s.text);
+    let escaped = escape_markdown(&text);
+    write!(buf, "{}", escaped)
 }
 
 fn write_space(_: &crate::pandoc::Space, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
