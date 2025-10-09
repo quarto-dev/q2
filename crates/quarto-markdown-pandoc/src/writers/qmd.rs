@@ -989,8 +989,8 @@ fn write_rawinline(
     if raw.format == "markdown" {
         write!(buf, "{}", raw.text)
     } else {
-        // For other formats, use raw span notation
-        write!(buf, "`{}`{{{}}}", raw.text, raw.format)
+        // For other formats, use raw span notation with = prefix
+        write!(buf, "`{}`{{={}}}", raw.text, raw.format)
     }
 }
 fn write_note(note: &crate::pandoc::Note, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
