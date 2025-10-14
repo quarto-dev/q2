@@ -562,6 +562,32 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write!(buf, "] ")?;
             write_native_table_foot(foot, buf)?;
         }
+        Block::DefinitionList(crate::pandoc::DefinitionList { content, .. }) => {
+            write!(buf, "DefinitionList [")?;
+            for (i, (term, definitions)) in content.iter().enumerate() {
+                if i > 0 {
+                    write!(buf, ", ")?;
+                }
+                write!(buf, "(")?;
+                write_inlines(term, buf)?;
+                write!(buf, ", [")?;
+                for (j, def_blocks) in definitions.iter().enumerate() {
+                    if j > 0 {
+                        write!(buf, ", ")?;
+                    }
+                    write!(buf, "[")?;
+                    for (k, block) in def_blocks.iter().enumerate() {
+                        if k > 0 {
+                            write!(buf, ", ")?;
+                        }
+                        write_block(block, buf)?;
+                    }
+                    write!(buf, "]")?;
+                }
+                write!(buf, "])")?;
+            }
+            write!(buf, "]")?;
+        }
         _ => panic!("Unsupported block type in native writer: {:?}", block),
     }
     Ok(())

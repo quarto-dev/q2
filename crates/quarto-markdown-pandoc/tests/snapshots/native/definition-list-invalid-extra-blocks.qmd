@@ -1,0 +1,7 @@
+::: {.definition-list}
+* term
+
+  extra paragraph
+
+  - definition
+:::

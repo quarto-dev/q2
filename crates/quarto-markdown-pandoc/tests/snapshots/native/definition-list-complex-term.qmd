@@ -1,0 +1,6 @@
+::: {.definition-list}
+* **term with emphasis**
+  - definition for emphasized term
+* `code term`
+  - definition for code term
+:::

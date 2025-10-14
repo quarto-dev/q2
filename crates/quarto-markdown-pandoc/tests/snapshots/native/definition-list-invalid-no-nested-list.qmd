@@ -1,0 +1,4 @@
+::: {.definition-list}
+* term without nested list
+* another term
+:::

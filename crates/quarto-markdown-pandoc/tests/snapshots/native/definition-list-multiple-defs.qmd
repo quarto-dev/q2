@@ -1,0 +1,9 @@
+::: {.definition-list}
+* term 1
+  - definition 1a
+  - definition 1b
+* term 2
+  - definition 2a
+  - definition 2b
+  - definition 2c
+:::

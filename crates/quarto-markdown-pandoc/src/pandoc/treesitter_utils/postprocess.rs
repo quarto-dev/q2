@@ -7,7 +7,7 @@ use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
 };
 use crate::pandoc::attr::{Attr, is_empty_attr};
-use crate::pandoc::block::{Block, Figure, Plain};
+use crate::pandoc::block::{Block, DefinitionList, Div, Figure, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{Inline, Inlines, Space, Span, Str, Superscript};
 use crate::pandoc::location::{Range, SourceInfo, empty_range, empty_source_info};
@@ -166,6 +166,99 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
     (result, did_coalesce)
 }
 
+/// Validate that a div has the structure required for a definition list.
+///
+/// Valid structure:
+/// - Div must have "definition-list" class
+/// - Div must contain exactly one block, which must be a BulletList
+/// - Each item in the BulletList must have:
+///   - Exactly two blocks
+///   - First block must be Plain or Paragraph (contains the term)
+///   - Second block must be a BulletList (contains the definitions)
+///
+/// Returns true if valid, false otherwise.
+fn is_valid_definition_list_div(div: &Div) -> bool {
+    // Check if div has "definition-list" class
+    if !div.attr.1.contains(&"definition-list".to_string()) {
+        return false;
+    }
+
+    // Must contain exactly one block
+    if div.content.len() != 1 {
+        // FUTURE: issue linter warning: "definition-list div must contain exactly one bullet list"
+        return false;
+    }
+
+    // That block must be a BulletList
+    let Block::BulletList(bullet_list) = &div.content[0] else {
+        // FUTURE: issue linter warning: "definition-list div must contain a bullet list"
+        return false;
+    };
+
+    // Check each item in the bullet list
+    for item_blocks in &bullet_list.content {
+        // Each item must have exactly 2 blocks
+        if item_blocks.len() != 2 {
+            // FUTURE: issue linter warning: "each definition list item must have a term and a nested bullet list"
+            return false;
+        }
+
+        // First block must be Plain or Paragraph
+        match &item_blocks[0] {
+            Block::Plain(_) | Block::Paragraph(_) => {}
+            _ => {
+                // FUTURE: issue linter warning: "definition list term must be Plain or Paragraph"
+                return false;
+            }
+        }
+
+        // Second block must be BulletList
+        if !matches!(&item_blocks[1], Block::BulletList(_)) {
+            // FUTURE: issue linter warning: "definitions must be in a nested bullet list"
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Transform a valid definition-list div into a DefinitionList block.
+///
+/// PRECONDITION: div must pass is_valid_definition_list_div() check.
+/// This function uses unwrap() liberally since the structure has been pre-validated.
+fn transform_definition_list_div(div: Div) -> Block {
+    // Extract the bullet list (validated to exist)
+    let Block::BulletList(bullet_list) = div.content.into_iter().next().unwrap() else {
+        panic!("BulletList expected after validation");
+    };
+
+    // Transform each item into (term, definitions) tuple
+    let mut definition_items: Vec<(Inlines, Vec<crate::pandoc::block::Blocks>)> = Vec::new();
+
+    for mut item_blocks in bullet_list.content {
+        // Extract term from first block (Plain or Paragraph)
+        let term_inlines = match item_blocks.remove(0) {
+            Block::Plain(plain) => plain.content,
+            Block::Paragraph(para) => para.content,
+            _ => panic!("Plain or Paragraph expected after validation"),
+        };
+
+        // Extract definitions from second block (BulletList)
+        let Block::BulletList(definitions_list) = item_blocks.remove(0) else {
+            panic!("BulletList expected after validation");
+        };
+
+        // Each item in the definitions bullet list is a definition (Vec<Block>)
+        definition_items.push((term_inlines, definitions_list.content));
+    }
+
+    // Preserve source location from the original div
+    Block::DefinitionList(DefinitionList {
+        content: definition_items,
+        source_info: div.source_info,
+    })
+}
+
 /// Apply post-processing transformations to the Pandoc AST
 pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
     let mut errors = Vec::new();
@@ -272,6 +365,14 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                     })],
                     true,
                 )
+            })
+            // Convert definition-list divs to DefinitionList blocks
+            .with_div(|div| {
+                if is_valid_definition_list_div(&div) {
+                    FilterResult(vec![transform_definition_list_div(div)], false)
+                } else {
+                    Unchanged(div)
+                }
             })
             .with_shortcode(|shortcode| {
                 FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
