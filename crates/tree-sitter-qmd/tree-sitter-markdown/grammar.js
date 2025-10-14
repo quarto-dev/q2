@@ -355,7 +355,7 @@ module.exports = grammar({
         ),
         // Some symbols get parsed as single tokens so that html blocks get detected properly
         _code_line:        $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
-        
+
         // the gymnastics around `:` in _line exist to make the parser reject paragraphs that start with a colon.
         // Those are technically valid in Markdown, but disallowing them here makes it possible to detect an
         // accidentally-continued paragraph with a colon that should have been a fenced div marker.
@@ -375,7 +375,23 @@ module.exports = grammar({
                 $.pipe_table_delimiter_row,
                 repeat(seq($._pipe_table_newline, optional($.pipe_table_row))),
                 choice($._newline, $._eof),
+                optional($.table_caption),
             )),
+
+            // Table caption: blank line followed by ": caption text"
+            // This is a Pandoc extension for table captions
+            table_caption: $ => prec(1, seq(
+                $._blank_line,
+                ':',
+                optional(seq(
+                    optional($._whitespace),
+                    alias($._table_caption_line, $.inline)
+                )),
+                choice($._newline, $._eof),
+            )),
+
+            // Caption line content - similar to _line but only used in table_caption context
+            _table_caption_line: $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
 
             _pipe_table_newline: $ => seq(
                 $._pipe_table_line_ending,

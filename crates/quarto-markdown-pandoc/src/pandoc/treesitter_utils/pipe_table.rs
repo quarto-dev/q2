@@ -151,6 +151,7 @@ pub fn process_pipe_table(
     let mut header: Option<Row> = None;
     let mut colspec: Vec<ColSpec> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
+    let mut caption_inlines: Option<Inlines> = None;
     for (node, child) in children {
         if node == "block_continuation" {
             continue; // skip block continuation nodes
@@ -179,6 +180,12 @@ pub fn process_pipe_table(
             } else {
                 panic!("Expected Row in pipe_table_row, got {:?}", child);
             }
+        } else if node == "table_caption" {
+            if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
+                caption_inlines = Some(inlines);
+            } else {
+                panic!("Expected Inlines in table_caption, got {:?}", child);
+            }
         } else {
             panic!("Unexpected node in pipe_table: {}", node);
         }
@@ -204,12 +211,25 @@ pub fn process_pipe_table(
         (vec![header.unwrap()], rows)
     };
 
-    PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
-        attr,
-        caption: Caption {
+    // Construct caption from caption_inlines if present
+    let caption = if let Some(inlines) = caption_inlines {
+        Caption {
+            short: None,
+            long: Some(vec![Block::Plain(Plain {
+                content: inlines,
+                source_info: node_source_info_with_context(node, context),
+            })]),
+        }
+    } else {
+        Caption {
             short: None,
             long: None,
-        },
+        }
+    };
+
+    PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
+        attr,
+        caption,
         colspec,
         head: TableHead {
             attr: empty_attr(),

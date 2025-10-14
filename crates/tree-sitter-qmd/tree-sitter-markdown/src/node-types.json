@@ -680,6 +680,10 @@
         {
           "type": "pipe_table_row",
           "named": true
+        },
+        {
+          "type": "table_caption",
+          "named": true
         }
       ]
     }
@@ -878,6 +882,25 @@
         },
         {
           "type": "setext_h2_underline",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "table_caption",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "inline",
           "named": true
         }
       ]

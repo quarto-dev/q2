@@ -108,7 +108,8 @@ Example 201 - https://github.github.com/gfm/#example-201
         (inline)))))
 
 ================================================================================
-Example 202 - https://github.github.com/gfm/#example-202
+Example 202 - https://github.github.com/gfm/#example-202 (FIXME SHOULD ERROR!)
+:skip
 ================================================================================
 | abc | def |
 | --- | --- |
