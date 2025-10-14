@@ -1,0 +1,13 @@
+---
+title: "Syntax Extensions"
+---
+
+This section documents syntax extensions and features specific to `quarto-markdown`.
+
+## Work in Progress
+
+The features documented here are currently under development. The syntax and behavior may change as we refine the implementation.
+
+## Available Features
+
+- [Definition Lists](definition-lists.qmd) - Create definition lists using an embedded markdown DSL

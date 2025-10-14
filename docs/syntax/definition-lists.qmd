@@ -1,0 +1,171 @@
+---
+title: "Definition Lists"
+---
+
+## Overview
+
+Definition lists allow you to create term-definition pairs, commonly used for glossaries, dictionaries, or technical documentation. In `quarto-markdown`, definition lists are created using an embedded markdown DSL with divs and bullet lists.
+
+## Syntax
+
+To create a definition list, use a fenced div with the `.definition-list` class containing a bullet list with a specific structure:
+
+```markdown
+::: {.definition-list}
+* Term 1
+  - Definition for term 1
+* Term 2
+  - First definition for term 2
+  - Second definition for term 2
+:::
+```
+
+### Structure Requirements
+
+Each definition list item must follow this structure:
+
+1. **Top-level bullet item**: Contains the term (as plain text or paragraph)
+2. **Nested bullet list**: Contains one or more definitions
+
+The term can include inline formatting like **bold**, *emphasis*, or `code`.
+
+## Examples
+
+### Basic Definition List
+
+::: {.definition-list}
+* Quarto
+  - An open-source scientific and technical publishing system
+* Markdown
+  - A lightweight markup language for creating formatted text
+* Pandoc
+  - A universal document converter
+:::
+
+```markdown
+::: {.definition-list}
+* Quarto
+  - An open-source scientific and technical publishing system
+* Markdown
+  - A lightweight markup language for creating formatted text
+* Pandoc
+  - A universal document converter
+:::
+```
+
+### Multiple Definitions per Term
+
+::: {.definition-list}
+* Set
+  - A collection of distinct objects
+  - In programming, an unordered collection with unique elements
+  - In mathematics, a well-defined collection of distinct objects
+:::
+
+```markdown
+::: {.definition-list}
+* Set
+  - A collection of distinct objects
+  - In programming, an unordered collection with unique elements
+  - In mathematics, a well-defined collection of distinct objects
+:::
+```
+
+### Terms with Inline Formatting
+
+::: {.definition-list}
+* **HTML**
+  - HyperText Markup Language, the standard markup language for web pages
+* `malloc()`
+  - A C function that allocates memory dynamically
+* *API*
+  - Application Programming Interface
+:::
+
+```markdown
+::: {.definition-list}
+* **HTML**
+  - HyperText Markup Language, the standard markup language for web pages
+* `malloc()`
+  - A C function that allocates memory dynamically
+* *API*
+  - Application Programming Interface
+:::
+```
+
+## Invalid Syntax
+
+The following patterns will **not** create a definition list and will remain as regular divs:
+
+### Missing Nested List
+
+```markdown
+::: {.definition-list}
+* Term without definition
+* Another term
+:::
+```
+
+This is invalid because the terms don't have nested bullet lists for definitions.
+
+### Extra Content
+
+```markdown
+::: {.definition-list}
+* Term
+
+  Extra paragraph here
+
+  - Definition
+:::
+```
+
+This is invalid because there's additional content (a paragraph) between the term and the definition list.
+
+### Empty Div
+
+```markdown
+::: {.definition-list}
+:::
+```
+
+This is invalid because the div is empty.
+
+## Technical Details
+
+### AST Representation
+
+Definition lists are converted to Pandoc's `DefinitionList` AST node during post-processing. The structure is:
+
+- Each item is a tuple of `(term, definitions)` where:
+  - `term` is a list of inline elements
+  - `definitions` is a list of definition blocks (each definition is a list of blocks)
+
+### Source Location Preservation
+
+The implementation preserves source location information from the original div, enabling accurate error reporting and source mapping.
+
+### Validation
+
+The parser strictly validates the structure. Invalid definition list divs remain as regular divs with the `.definition-list` class, allowing for graceful degradation and future linting support.
+
+## Comparison with Standard Pandoc Syntax
+
+Standard Pandoc supports definition lists with this syntax:
+
+```markdown
+Term 1
+: Definition 1
+
+Term 2
+: Definition 2a
+: Definition 2b
+```
+
+`quarto-markdown` currently does **not** support this syntax due to parsing complexity. The embedded div syntax provides an explicit, easy-to-parse alternative that's consistent with other Quarto features like [list tables](https://github.com/pandoc-ext/list-table).
+
+## Future Enhancements
+
+- Linter warnings for invalid definition list structures
+- Potential roundtrip support (writing definition lists back to the div syntax)
+- Additional styling options via attributes

@@ -1,0 +1,52 @@
+---
+title: "Quarto Markdown"
+---
+
+## Overview
+
+`quarto-markdown` is a Markdown variant designed for scientific and technical publishing. It builds on CommonMark and Pandoc's Markdown with enhanced error reporting, stricter validation, and syntax extensions tailored for modern publishing workflows.
+
+## Project Goals
+
+**Better Error Messages**: `quarto-markdown` provides clear, actionable error messages when parsing fails, helping authors quickly identify and fix syntax issues in their documents.
+
+**Strict Validation**: Unlike traditional Markdown parsers that silently accept ambiguous input, `quarto-markdown` validates document structure and reports problems, ensuring documents are well-formed and portable.
+
+**Modern Syntax**: `quarto-markdown` introduces new syntax features using embedded markdown DSLs (like definition lists) that are explicit, easy to parse, and integrate naturally with Quarto's ecosystem.
+
+**Performance**: Built with Rust and tree-sitter, `quarto-markdown` is designed for speed and efficiency, making it suitable for large documents and batch processing.
+
+## Current Status
+
+This project is under active development. The parser supports most common Markdown features and is being progressively enhanced with:
+
+- Core Markdown syntax (headings, lists, links, images, code blocks, etc.)
+- Pandoc-compatible extensions (tables, fenced divs, attributes, citations)
+- Quarto-specific features (shortcodes, metadata, callouts)
+- Enhanced syntax features (definition lists, improved table formats)
+
+## Features
+
+### Enhanced Error Reporting
+
+`quarto-markdown` uses tree-sitter for parsing and provides detailed error messages with source locations, making it easier to debug syntax issues in your documents.
+
+### Syntax Extensions
+
+`quarto-markdown` introduces new syntax features using explicit, parseable patterns:
+
+- [**Definition Lists**](syntax/definition-lists.qmd): Create glossaries and term-definition pairs using a div-based syntax
+
+More syntax extensions are planned as the project develops.
+
+### Compatibility
+
+`quarto-markdown` aims to be largely compatible with Pandoc's Markdown, supporting most standard Markdown features while providing stricter validation and better error messages. Some syntax variations (like reference-style links) are not supported to keep parsing deterministic and error reporting precise.
+
+## Getting Started
+
+`quarto-markdown` is currently in active development. Documentation for specific syntax features can be found in the [Syntax](syntax/index.qmd) section.
+
+## Contributing
+
+This is an experimental project exploring how to improve Markdown parsing for scientific publishing. Feedback and contributions are welcome as we refine the syntax and implementation.

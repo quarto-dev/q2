@@ -1,0 +1,93 @@
+[
+  {
+    "objectID": "syntax/definition-lists.html",
+    "href": "syntax/definition-lists.html",
+    "title": "Definition Lists",
+    "section": "",
+    "text": "Definition lists allow you to create term-definition pairs, commonly used for glossaries, dictionaries, or technical documentation. In Quarto Markdown, definition lists are created using an embedded markdown DSL with divs and bullet lists."
+  },
+  {
+    "objectID": "syntax/definition-lists.html#overview",
+    "href": "syntax/definition-lists.html#overview",
+    "title": "Definition Lists",
+    "section": "",
+    "text": "Definition lists allow you to create term-definition pairs, commonly used for glossaries, dictionaries, or technical documentation. In Quarto Markdown, definition lists are created using an embedded markdown DSL with divs and bullet lists."
+  },
+  {
+    "objectID": "syntax/definition-lists.html#syntax",
+    "href": "syntax/definition-lists.html#syntax",
+    "title": "Definition Lists",
+    "section": "Syntax",
+    "text": "Syntax\nTo create a definition list, use a fenced div with the .definition-list class containing a bullet list with a specific structure:\n::: {.definition-list}\n* Term 1\n  - Definition for term 1\n* Term 2\n  - First definition for term 2\n  - Second definition for term 2\n:::\n\nStructure Requirements\nEach definition list item must follow this structure:\n\nTop-level bullet item: Contains the term (as plain text or paragraph)\nNested bullet list: Contains one or more definitions\n\nThe term can include inline formatting like bold, emphasis, or code."
+  },
+  {
+    "objectID": "syntax/definition-lists.html#examples",
+    "href": "syntax/definition-lists.html#examples",
+    "title": "Definition Lists",
+    "section": "Examples",
+    "text": "Examples\n\nBasic Definition List\n\n\nQuarto\n\nAn open-source scientific and technical publishing system\n\nMarkdown\n\nA lightweight markup language for creating formatted text\n\nPandoc\n\nA universal document converter\n\n\n\n::: {.definition-list}\n* Quarto\n  - An open-source scientific and technical publishing system\n* Markdown\n  - A lightweight markup language for creating formatted text\n* Pandoc\n  - A universal document converter\n:::\n\n\nMultiple Definitions per Term\n\n\nSet\n\nA collection of distinct objects\nIn programming, an unordered collection with unique elements\nIn mathematics, a well-defined collection of distinct objects\n\n\n\n::: {.definition-list}\n* Set\n  - A collection of distinct objects\n  - In programming, an unordered collection with unique elements\n  - In mathematics, a well-defined collection of distinct objects\n:::\n\n\nTerms with Inline Formatting\n\n\nHTML\n\nHyperText Markup Language, the standard markup language for web pages\n\nmalloc()\n\nA C function that allocates memory dynamically\n\nAPI\n\nApplication Programming Interface\n\n\n\n::: {.definition-list}\n* **HTML**\n  - HyperText Markup Language, the standard markup language for web pages\n* `malloc()`\n  - A C function that allocates memory dynamically\n* *API*\n  - Application Programming Interface\n:::"
+  },
+  {
+    "objectID": "syntax/definition-lists.html#invalid-syntax",
+    "href": "syntax/definition-lists.html#invalid-syntax",
+    "title": "Definition Lists",
+    "section": "Invalid Syntax",
+    "text": "Invalid Syntax\nThe following patterns will not create a definition list and will remain as regular divs:\n\nMissing Nested List\n::: {.definition-list}\n* Term without definition\n* Another term\n:::\nThis is invalid because the terms don’t have nested bullet lists for definitions.\n\n\nExtra Content\n::: {.definition-list}\n* Term\n\n  Extra paragraph here\n\n  - Definition\n:::\nThis is invalid because there’s additional content (a paragraph) between the term and the definition list.\n\n\nEmpty Div\n::: {.definition-list}\n:::\nThis is invalid because the div is empty."
+  },
+  {
+    "objectID": "syntax/definition-lists.html#technical-details",
+    "href": "syntax/definition-lists.html#technical-details",
+    "title": "Definition Lists",
+    "section": "Technical Details",
+    "text": "Technical Details\n\nAST Representation\nDefinition lists are converted to Pandoc’s DefinitionList AST node during post-processing. The structure is:\n\nEach item is a tuple of (term, definitions) where:\n\nterm is a list of inline elements\ndefinitions is a list of definition blocks (each definition is a list of blocks)\n\n\n\n\nSource Location Preservation\nThe implementation preserves source location information from the original div, enabling accurate error reporting and source mapping.\n\n\nValidation\nThe parser strictly validates the structure. Invalid definition list divs remain as regular divs with the .definition-list class, allowing for graceful degradation and future linting support."
+  },
+  {
+    "objectID": "syntax/definition-lists.html#comparison-with-standard-pandoc-syntax",
+    "href": "syntax/definition-lists.html#comparison-with-standard-pandoc-syntax",
+    "title": "Definition Lists",
+    "section": "Comparison with Standard Pandoc Syntax",
+    "text": "Comparison with Standard Pandoc Syntax\nStandard Pandoc supports definition lists with this syntax:\nTerm 1\n: Definition 1\n\nTerm 2\n: Definition 2a\n: Definition 2b\nQuarto Markdown currently does not support this syntax due to parsing complexity. The embedded div syntax provides an explicit, easy-to-parse alternative that’s consistent with other Quarto features like list tables."
+  },
+  {
+    "objectID": "syntax/definition-lists.html#future-enhancements",
+    "href": "syntax/definition-lists.html#future-enhancements",
+    "title": "Definition Lists",
+    "section": "Future Enhancements",
+    "text": "Future Enhancements\n\nLinter warnings for invalid definition list structures\nPotential roundtrip support (writing definition lists back to the div syntax)\nAdditional styling options via attributes"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "About this site"
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Quarto-markdown",
+    "section": "",
+    "text": "This is a Quarto website.\nTo learn more about Quarto websites visit https://quarto.org/docs/websites."
+  },
+  {
+    "objectID": "syntax/index.html",
+    "href": "syntax/index.html",
+    "title": "Syntax Extensions",
+    "section": "",
+    "text": "This section documents syntax extensions and features specific to Quarto Markdown (QMD)."
+  },
+  {
+    "objectID": "syntax/index.html#work-in-progress",
+    "href": "syntax/index.html#work-in-progress",
+    "title": "Syntax Extensions",
+    "section": "Work in Progress",
+    "text": "Work in Progress\nThe features documented here are currently under development. The syntax and behavior may change as we refine the implementation."
+  },
+  {
+    "objectID": "syntax/index.html#available-features",
+    "href": "syntax/index.html#available-features",
+    "title": "Syntax Extensions",
+    "section": "Available Features",
+    "text": "Available Features\n\nDefinition Lists - Create definition lists using an embedded markdown DSL"
+  }
+]
