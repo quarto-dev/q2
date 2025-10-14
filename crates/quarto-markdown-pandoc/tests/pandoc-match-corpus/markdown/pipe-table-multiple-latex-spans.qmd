@@ -1,0 +1,5 @@
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| $|$ | normal text | $a|b$ |
+| regular | $||$ | more text |
+| $x | y$ | text | $|>$ |

@@ -225,3 +225,55 @@ Example 205 - https://github.github.com/gfm/#example-205
         (pipe_table_cell)
         (pipe_table_cell
           (inline))))))
+
+================================================================================
+#29 - Pipe table with backtick code containing pipe
+================================================================================
+| a | b |
+|---|---|
+| `|` | oh no |
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (inline))
+        (pipe_table_cell
+          (inline)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell)
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (inline))
+        (pipe_table_cell
+          (inline))))))
+
+================================================================================
+Pipe table with latex span containing pipe
+================================================================================
+| a | b |
+|---|---|
+| $|$ | math |
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pipe_table
+      (pipe_table_header
+        (pipe_table_cell
+          (inline))
+        (pipe_table_cell
+          (inline)))
+      (pipe_table_delimiter_row
+        (pipe_table_delimiter_cell)
+        (pipe_table_delimiter_cell))
+      (pipe_table_row
+        (pipe_table_cell
+          (inline))
+        (pipe_table_cell
+          (inline))))))

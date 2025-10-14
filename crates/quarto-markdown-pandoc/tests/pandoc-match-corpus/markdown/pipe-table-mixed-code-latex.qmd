@@ -1,0 +1,6 @@
+| Test | Description |
+|------|-------------|
+| `|` | backtick code with pipe |
+| $|$ | latex span with pipe |
+| `a|b` | more code |
+| $x|y$ | more math |

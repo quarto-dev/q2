@@ -52,7 +52,13 @@ typedef enum {
     FENCED_DIV_NOTE_ID,
     // special tokens to trigger serialization to track in-display-math mode
     DISPLAY_MATH_STATE_TRACK_MARKER,
-    INLINE_MATH_STATE_TRACK_MARKER 
+    INLINE_MATH_STATE_TRACK_MARKER,
+    // code span delimiters for parsing pipe table cells
+    CODE_SPAN_START,
+    CODE_SPAN_CLOSE,
+    // latex span delimiters for parsing pipe table cells
+    LATEX_SPAN_START,
+    LATEX_SPAN_CLOSE,
 } TokenType;
 
 // Description of a block on the block stack.
@@ -145,6 +151,10 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     true,  // FENCED_DIV_END,
     false, // DISPLAY_MATH_STATE_TRACK_MARKER
     false, // INLINE_MATH_STATE_TRACK_MARKER
+    false, // CODE_SPAN_START
+    false, // CODE_SPAN_CLOSE
+    false, // LATEX_SPAN_START
+    false, // LATEX_SPAN_CLOSE
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -191,6 +201,10 @@ static const bool paragraph_interrupt_symbols[] = {
     true,  // FENCED_DIV_END,
     false, // DISPLAY_MATH_STATE_TRACK_MARKER
     false, // INLINE_MATH_STATE_TRACK_MARKER
+    false, // CODE_SPAN_START
+    false, // CODE_SPAN_CLOSE
+    false, // LATEX_SPAN_START
+    false, // LATEX_SPAN_CLOSE
 };
 
 // State bitflags used with `Scanner.state`
@@ -244,6 +258,14 @@ typedef struct {
     uint8_t column;
     // The delimiter length of the currently open fenced code block
     uint8_t fenced_code_block_delimiter_length;
+    // The delimiter length of the currently open code span (for pipe table cells)
+    uint8_t code_span_delimiter_length;
+    // Whether we're inside a code span (for pipe table cells)
+    uint8_t inside_code_span;
+    // The delimiter length of the currently open latex span (for pipe table cells)
+    uint8_t latex_span_delimiter_length;
+    // Whether we're inside a latex span (for pipe table cells)
+    uint8_t inside_latex_span;
 
     bool simulate;
 } Scanner;
@@ -289,6 +311,10 @@ static unsigned serialize(Scanner *s, char *buffer) {
     buffer[size++] = (char)s->indentation;
     buffer[size++] = (char)s->column;
     buffer[size++] = (char)s->fenced_code_block_delimiter_length;
+    buffer[size++] = (char)s->code_span_delimiter_length;
+    buffer[size++] = (char)s->inside_code_span;
+    buffer[size++] = (char)s->latex_span_delimiter_length;
+    buffer[size++] = (char)s->inside_latex_span;
     size_t blocks_count = s->open_blocks.size;
     if (blocks_count > 0) {
         memcpy(&buffer[size], s->open_blocks.items,
@@ -310,6 +336,10 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
     s->indentation = 0;
     s->column = 0;
     s->fenced_code_block_delimiter_length = 0;
+    s->code_span_delimiter_length = 0;
+    s->inside_code_span = 0;
+    s->latex_span_delimiter_length = 0;
+    s->inside_latex_span = 0;
     if (length > 0) {
         size_t size = 0;
         s->own_size = length;
@@ -319,6 +349,10 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         s->indentation = (uint8_t)buffer[size++];
         s->column = (uint8_t)buffer[size++];
         s->fenced_code_block_delimiter_length = (uint8_t)buffer[size++];
+        s->code_span_delimiter_length = (uint8_t)buffer[size++];
+        s->inside_code_span = (uint8_t)buffer[size++];
+        s->latex_span_delimiter_length = (uint8_t)buffer[size++];
+        s->inside_latex_span = (uint8_t)buffer[size++];
         size_t blocks_size = length - size;
         if (blocks_size > 0) {
             size_t blocks_count = blocks_size / sizeof(Block);
@@ -1229,7 +1263,7 @@ static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
                                       const bool *valid_symbols) {
     // unused
     (void)(valid_symbols);
-    
+
     // precondition: lexer->lookahead == '^'
     advance(s, lexer);
 
@@ -1245,6 +1279,103 @@ static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
     return true;
 }
 
+// Parse code span delimiters for pipe table cells
+// This is similar to the inline scanner's parse_backtick but simplified
+// since we only need to handle code spans within a single line
+static bool parse_code_span(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // Count backticks
+    uint8_t level = 0;
+    while (lexer->lookahead == '`') {
+        lexer->advance(lexer, false);
+        level++;
+    }
+    mark_end(s, lexer);
+
+    // Try to close an open code span
+    if (level == s->code_span_delimiter_length && valid_symbols[CODE_SPAN_CLOSE]) {
+        s->code_span_delimiter_length = 0;
+        s->inside_code_span = 0;
+        lexer->result_symbol = CODE_SPAN_CLOSE;
+        return true;
+    }
+
+    // Try to open a new code span by looking ahead for a matching closing delimiter
+    if (valid_symbols[CODE_SPAN_START]) {
+        size_t close_level = 0;
+        // Look ahead within the same line to find a closing delimiter
+        while (!lexer->eof(lexer) && lexer->lookahead != '\n' && lexer->lookahead != '\r') {
+            if (lexer->lookahead == '`') {
+                close_level++;
+            } else {
+                if (close_level == level) {
+                    // Found a matching delimiter
+                    break;
+                }
+                close_level = 0;
+            }
+            lexer->advance(lexer, false);
+        }
+
+        if (close_level == level) {
+            // Found matching closing delimiter
+            s->code_span_delimiter_length = level;
+            s->inside_code_span = 1;
+            lexer->result_symbol = CODE_SPAN_START;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Parse latex span delimiters for pipe table cells
+// This is similar to parse_code_span but for dollar signs
+static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // Count dollar signs
+    uint8_t level = 0;
+    while (lexer->lookahead == '$') {
+        lexer->advance(lexer, false);
+        level++;
+    }
+    mark_end(s, lexer);
+
+    // Try to close an open latex span
+    if (level == s->latex_span_delimiter_length && valid_symbols[LATEX_SPAN_CLOSE]) {
+        s->latex_span_delimiter_length = 0;
+        s->inside_latex_span = 0;
+        lexer->result_symbol = LATEX_SPAN_CLOSE;
+        return true;
+    }
+
+    // Try to open a new latex span by looking ahead for a matching closing delimiter
+    if (valid_symbols[LATEX_SPAN_START]) {
+        size_t close_level = 0;
+        // Look ahead within the same line to find a closing delimiter
+        while (!lexer->eof(lexer) && lexer->lookahead != '\n' && lexer->lookahead != '\r') {
+            if (lexer->lookahead == '$') {
+                close_level++;
+            } else {
+                if (close_level == level) {
+                    // Found a matching delimiter
+                    break;
+                }
+                close_level = 0;
+            }
+            lexer->advance(lexer, false);
+        }
+
+        if (close_level == level) {
+            // Found matching closing delimiter
+            s->latex_span_delimiter_length = level;
+            s->inside_latex_span = 1;
+            lexer->result_symbol = LATEX_SPAN_START;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // printf("-- scan() state=%d\n", s->state);
     // A normal tree-sitter rule decided that the current branch is invalid and
@@ -1253,9 +1384,21 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return error(lexer);
     }
 
+    // Handle code spans for pipe table cells
+    if (lexer->lookahead == '`' && (valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
+        return parse_code_span(s, lexer, valid_symbols);
+    }
+
+    // Handle latex spans for pipe table cells
+    // This must come BEFORE the display math state tracking below, so that
+    // latex spans in pipe table cells are parsed correctly
+    if (lexer->lookahead == '$' && (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE])) {
+        return parse_latex_span(s, lexer, valid_symbols);
+    }
+
     // the logic here is tricky. We're trying to see a $$, mark STATE_IN_DISPLAY_MATH
     // and go on. But we can only serialize state if we successfully return an external
-    // token. 
+    // token.
     //
     if (!s->simulate && lexer->lookahead == '$' && valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
         advance(s, lexer);
