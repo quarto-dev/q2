@@ -412,6 +412,64 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                                     if let Some(mut cite) = pending_cite.take() {
                                         // Add span content to the citation's suffix
                                         cite.citations[0].suffix = span.content.clone();
+
+                                        // Update the content field to include the rendered suffix with brackets
+                                        // Pandoc breaks up the bracketed suffix text by spaces, with the opening
+                                        // bracket attached to the first word and closing bracket to the last word
+                                        // e.g., "@knuth [p. 33]" becomes: Str("@knuth"), Space, Str("[p."), Space, Str("33]")
+                                        cite.content.push(Inline::Space(Space {
+                                            source_info: SourceInfo::with_range(empty_range()),
+                                        }));
+
+                                        // The span content may have been merged into a single string, so we need to
+                                        // intelligently break it up to match Pandoc's behavior
+                                        let mut bracketed_content: Vec<Inline> = vec![];
+                                        for inline in &span.content {
+                                            if let Inline::Str(s) = inline {
+                                                // Split the string by spaces and create Str/Space inlines
+                                                let words: Vec<&str> = s.text.split(' ').collect();
+                                                for (i, word) in words.iter().enumerate() {
+                                                    if i > 0 {
+                                                        bracketed_content.push(Inline::Space(
+                                                            Space {
+                                                                source_info: SourceInfo::with_range(
+                                                                    empty_range(),
+                                                                ),
+                                                            },
+                                                        ));
+                                                    }
+                                                    if !word.is_empty() {
+                                                        bracketed_content.push(Inline::Str(Str {
+                                                            text: word.to_string(),
+                                                            source_info: s.source_info.clone(),
+                                                        }));
+                                                    }
+                                                }
+                                            } else {
+                                                bracketed_content.push(inline.clone());
+                                            }
+                                        }
+
+                                        // Now add brackets to the first and last Str elements
+                                        if !bracketed_content.is_empty() {
+                                            // Prepend "[" to the first Str element
+                                            if let Some(Inline::Str(first_str)) =
+                                                bracketed_content.first_mut()
+                                            {
+                                                first_str.text = format!("[{}", first_str.text);
+                                            }
+                                            // Append "]" to the last Str element (search from the end)
+                                            for i in (0..bracketed_content.len()).rev() {
+                                                if let Inline::Str(last_str) =
+                                                    &mut bracketed_content[i]
+                                                {
+                                                    last_str.text = format!("{}]", last_str.text);
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        cite.content.extend(bracketed_content);
                                         result.push(Inline::Cite(cite));
                                     }
                                     state = 0;

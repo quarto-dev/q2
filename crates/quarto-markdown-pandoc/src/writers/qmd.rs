@@ -974,6 +974,16 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
                 write!(buf, "; ")?;
             }
             write!(buf, "@{}", citation.id)?;
+
+            // Write suffix if it exists
+            // For AuthorInText mode, suffix appears as: @citation [suffix]
+            if !citation.suffix.is_empty() {
+                write!(buf, " [")?;
+                for inline in &citation.suffix {
+                    write_inline(inline, buf)?;
+                }
+                write!(buf, "]")?;
+            }
         }
     }
 
