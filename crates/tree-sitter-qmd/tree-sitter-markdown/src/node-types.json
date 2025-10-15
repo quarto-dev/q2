@@ -496,6 +496,10 @@
           "named": true
         },
         {
+          "type": "list_marker_example",
+          "named": true
+        },
+        {
           "type": "list_marker_minus",
           "named": true
         },
@@ -544,6 +548,11 @@
   },
   {
     "type": "list_marker_dot",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "list_marker_example",
     "named": true,
     "fields": {}
   },

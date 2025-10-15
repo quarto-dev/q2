@@ -20,7 +20,19 @@ pub fn process_list_marker(
         // we trim both ends instead of just trim_end()
         // because the lexer might hand us a marker with tabs at the beginning,
         // as a result of weird mixed-spaces-and-tabs cases like "> \t1."
-        .trim()
+        .trim();
+
+    // Check if this is an example list marker (@)
+    if marker_text == "(@)" {
+        // For example lists, we use 1 as the starting number
+        // The actual numbering will be handled in postprocessing
+        return PandocNativeIntermediate::IntermediateOrderedListMarker(
+            1,
+            node_source_info_with_context(node, context).range,
+        );
+    }
+
+    let marker_text = marker_text
         .trim_end_matches('.')
         .trim_end_matches(')')
         .to_string();

@@ -277,13 +277,15 @@ module.exports = grammar({
             $._list_minus,
             $._list_star,
             $._list_dot,
-            $._list_parenthesis
+            $._list_parenthesis,
+            $._list_example
         )),
         _list_plus: $ => prec.right(repeat1(alias($._list_item_plus, $.list_item))),
         _list_minus: $ => prec.right(repeat1(alias($._list_item_minus, $.list_item))),
         _list_star: $ => prec.right(repeat1(alias($._list_item_star, $.list_item))),
         _list_dot: $ => prec.right(repeat1(alias($._list_item_dot, $.list_item))),
         _list_parenthesis: $ => prec.right(repeat1(alias($._list_item_parenthesis, $.list_item))),
+        _list_example: $ => prec.right(repeat1(alias($._list_item_example, $.list_item))),
         // Some list items can not interrupt a paragraph and are marked as such by the external
         // scanner.
         list_marker_plus: $ => choice($._list_marker_plus, $._list_marker_plus_dont_interrupt),
@@ -291,6 +293,7 @@ module.exports = grammar({
         list_marker_star: $ => choice($._list_marker_star, $._list_marker_star_dont_interrupt),
         list_marker_dot: $ => choice($._list_marker_dot, $._list_marker_dot_dont_interrupt),
         list_marker_parenthesis: $ => choice($._list_marker_parenthesis, $._list_marker_parenthesis_dont_interrupt),
+        list_marker_example: $ => choice($._list_marker_example, $._list_marker_example_dont_interrupt),
         _list_item_plus: $ => seq(
             $.list_marker_plus,
             optional($.block_continuation),
@@ -321,6 +324,13 @@ module.exports = grammar({
         ),
         _list_item_parenthesis: $ => seq(
             $.list_marker_parenthesis,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        _list_item_example: $ => seq(
+            $.list_marker_example,
             optional($.block_continuation),
             $._list_item_content,
             $._block_close,
@@ -553,6 +563,8 @@ module.exports = grammar({
         $._list_marker_star_dont_interrupt,
         $._list_marker_parenthesis_dont_interrupt,
         $._list_marker_dot_dont_interrupt,
+        $._list_marker_example,
+        $._list_marker_example_dont_interrupt,
         $._fenced_code_block_start_backtick,
         $._fenced_code_block_start_tilde,
         $._blank_line_start, // Does not contain the newline characters. Blank lines do not need a `$._block_close`

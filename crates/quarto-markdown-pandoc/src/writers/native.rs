@@ -358,6 +358,7 @@ fn write_list_number_style<T: std::io::Write>(
         crate::pandoc::ListNumberStyle::UpperAlpha => write!(buf, "UpperAlpha"),
         crate::pandoc::ListNumberStyle::LowerRoman => write!(buf, "LowerRoman"),
         crate::pandoc::ListNumberStyle::UpperRoman => write!(buf, "UpperRoman"),
+        crate::pandoc::ListNumberStyle::Example => write!(buf, "Example"),
         crate::pandoc::ListNumberStyle::Default => write!(buf, "Decimal"), // Is this supposed to be the default?
     }
 }

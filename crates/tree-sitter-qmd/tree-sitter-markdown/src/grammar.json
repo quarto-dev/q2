@@ -3492,6 +3492,10 @@
           {
             "type": "SYMBOL",
             "name": "_list_parenthesis"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_list_example"
           }
         ]
       }
@@ -3576,6 +3580,22 @@
         }
       }
     },
+    "_list_example": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "REPEAT1",
+        "content": {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_list_item_example"
+          },
+          "named": true,
+          "value": "list_item"
+        }
+      }
+    },
     "list_marker_plus": {
       "type": "CHOICE",
       "members": [
@@ -3638,6 +3658,19 @@
         {
           "type": "SYMBOL",
           "name": "_list_marker_parenthesis_dont_interrupt"
+        }
+      ]
+    },
+    "list_marker_example": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_list_marker_example"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_list_marker_example_dont_interrupt"
         }
       ]
     },
@@ -3811,6 +3844,47 @@
         {
           "type": "SYMBOL",
           "name": "list_marker_parenthesis"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "block_continuation"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_list_item_content"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_block_close"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "block_continuation"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        }
+      ]
+    },
+    "_list_item_example": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "list_marker_example"
         },
         {
           "type": "CHOICE",
@@ -6215,6 +6289,14 @@
     {
       "type": "SYMBOL",
       "name": "_list_marker_dot_dont_interrupt"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_list_marker_example"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_list_marker_example_dont_interrupt"
     },
     {
       "type": "SYMBOL",

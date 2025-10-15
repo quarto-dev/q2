@@ -261,3 +261,67 @@ Another paragraph in the note.
       (paragraph
         (inline)
         (block_continuation)))))
+================================================================================
+Example list with (@) syntax
+================================================================================
+(@) First item
+
+(@) Second item
+
+(@) Third item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (list
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline)
+          (block_continuation)))
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline)
+          (block_continuation)))
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline))))))
+================================================================================
+Multiple example lists separated by text
+================================================================================
+(@) First item
+
+(@) Second item
+
+Some text in between.
+
+(@) Third item
+
+(@) Fourth item
+--------------------------------------------------------------------------------
+(document
+  (section
+    (list
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline)
+          (block_continuation)))
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline)
+          (block_continuation))))
+    (paragraph
+      (inline))
+    (list
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline)
+          (block_continuation)))
+      (list_item
+        (list_marker_example)
+        (paragraph
+          (inline))))))

@@ -192,6 +192,7 @@ fn write_list_attributes(attr: &ListAttributes) -> Value {
         crate::pandoc::ListNumberStyle::UpperAlpha => json!({"t": "UpperAlpha"}),
         crate::pandoc::ListNumberStyle::LowerRoman => json!({"t": "LowerRoman"}),
         crate::pandoc::ListNumberStyle::UpperRoman => json!({"t": "UpperRoman"}),
+        crate::pandoc::ListNumberStyle::Example => json!({"t": "Example"}),
         crate::pandoc::ListNumberStyle::Default => json!({"t": "Default"}),
     };
     let number_delimiter = match attr.2 {

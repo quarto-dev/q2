@@ -5,7 +5,7 @@
 
 use crate::pandoc::attr::is_empty_attr;
 use crate::pandoc::block::MetaBlock;
-use crate::pandoc::list::ListNumberDelim;
+use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
 use crate::pandoc::meta::MetaValue;
 use crate::pandoc::table::{Alignment, Cell, Table};
 use crate::pandoc::{
@@ -101,12 +101,18 @@ struct OrderedListContext<'a, W: Write + ?Sized> {
     at_line_start: bool,
     is_first_line: bool,
     number: usize,
+    number_style: ListNumberStyle,
     delimiter: ListNumberDelim,
     indent: String,
 }
 
 impl<'a, W: Write + ?Sized> OrderedListContext<'a, W> {
-    fn new(inner: &'a mut W, number: usize, delimiter: ListNumberDelim) -> Self {
+    fn new(
+        inner: &'a mut W,
+        number: usize,
+        number_style: ListNumberStyle,
+        delimiter: ListNumberDelim,
+    ) -> Self {
         // Pandoc uses consistent spacing: for numbers < 10, uses two spaces after delimiter
         // For numbers >= 10, uses one space. Continuation lines always use 4 spaces indent.
         let indent = "    ".to_string(); // Always 4 spaces for continuation lines
@@ -116,6 +122,7 @@ impl<'a, W: Write + ?Sized> OrderedListContext<'a, W> {
             at_line_start: true,
             is_first_line: true,
             number,
+            number_style,
             delimiter,
             indent,
         }
@@ -128,18 +135,23 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
         for &byte in buf {
             if self.at_line_start {
                 if self.is_first_line {
-                    let delim_str = match self.delimiter {
-                        ListNumberDelim::Period => ".",
-                        ListNumberDelim::OneParen => ")",
-                        ListNumberDelim::TwoParens => ")",
-                        _ => ".",
-                    };
-                    // Pandoc style: numbers < 10 get two spaces after delimiter,
-                    // numbers >= 10 get one space
-                    if self.number < 10 {
-                        write!(self.inner, "{}{}  ", self.number, delim_str)?;
+                    // For example lists, always use (@) marker
+                    if matches!(self.number_style, ListNumberStyle::Example) {
+                        write!(self.inner, "(@)  ")?;
                     } else {
-                        write!(self.inner, "{}{} ", self.number, delim_str)?;
+                        let delim_str = match self.delimiter {
+                            ListNumberDelim::Period => ".",
+                            ListNumberDelim::OneParen => ")",
+                            ListNumberDelim::TwoParens => ")",
+                            _ => ".",
+                        };
+                        // Pandoc style: numbers < 10 get two spaces after delimiter,
+                        // numbers >= 10 get one space
+                        if self.number < 10 {
+                            write!(self.inner, "{}{}  ", self.number, delim_str)?;
+                        } else {
+                            write!(self.inner, "{}{} ", self.number, delim_str)?;
+                        }
                     }
                     self.is_first_line = false;
                 } else {
@@ -331,7 +343,7 @@ fn write_orderedlist(
     orderedlist: &OrderedList,
     buf: &mut dyn std::io::Write,
 ) -> std::io::Result<()> {
-    let (start_num, _number_style, delimiter) = &orderedlist.attr;
+    let (start_num, number_style, delimiter) = &orderedlist.attr;
 
     // Determine if this is a tight list
     // A list is tight if the first block of all items is Plain (not Para)
@@ -346,7 +358,8 @@ fn write_orderedlist(
             writeln!(buf)?;
         }
         let current_num = start_num + i;
-        let mut item_writer = OrderedListContext::new(buf, current_num, delimiter.clone());
+        let mut item_writer =
+            OrderedListContext::new(buf, current_num, number_style.clone(), delimiter.clone());
         for (j, block) in item.iter().enumerate() {
             if j > 0 && !is_tight {
                 // Add a blank line between blocks within a list item in loose lists

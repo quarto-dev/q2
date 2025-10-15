@@ -112,7 +112,10 @@ fn process_list(
             // this is a marker node, we don't need to do anything with it
             continue;
         }
-        if node == "list_marker_parenthesis" || node == "list_marker_dot" {
+        if node == "list_marker_parenthesis"
+            || node == "list_marker_dot"
+            || node == "list_marker_example"
+        {
             // this is an ordered list, so we need to set the flag
             let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) = child
             else {
@@ -121,10 +124,14 @@ fn process_list(
 
             is_ordered_list = Some((
                 marker_number,
-                ListNumberStyle::Decimal,
+                match node.as_str() {
+                    "list_marker_example" => ListNumberStyle::Example,
+                    _ => ListNumberStyle::Decimal,
+                },
                 match node.as_str() {
                     "list_marker_parenthesis" => ListNumberDelim::OneParen,
                     "list_marker_dot" => ListNumberDelim::Period,
+                    "list_marker_example" => ListNumberDelim::TwoParens,
                     _ => panic!("Unexpected list marker node: {}", node),
                 },
             ));
@@ -244,7 +251,14 @@ fn process_list(
     };
 
     match is_ordered_list {
-        Some(attr) => {
+        Some(mut attr) => {
+            // For example lists, use and update the global counter
+            if attr.1 == ListNumberStyle::Example {
+                let start_num = context.example_list_counter.get();
+                attr.0 = start_num;
+                // Increment counter by the number of items in this list
+                context.example_list_counter.set(start_num + content.len());
+            }
             PandocNativeIntermediate::IntermediateBlock(Block::OrderedList(OrderedList {
                 attr,
                 content,
@@ -267,7 +281,10 @@ fn process_list_item(
     let children = children
         .into_iter()
         .filter_map(|(node, child)| {
-            if node == "list_marker_dot" || node == "list_marker_parenthesis" {
+            if node == "list_marker_dot"
+                || node == "list_marker_parenthesis"
+                || node == "list_marker_example"
+            {
                 // this is an ordered list, so we need to set the flag
                 let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) =
                     child
@@ -276,10 +293,14 @@ fn process_list_item(
                 };
                 list_attr = Some((
                     marker_number,
-                    ListNumberStyle::Decimal,
+                    match node.as_str() {
+                        "list_marker_example" => ListNumberStyle::Example,
+                        _ => ListNumberStyle::Decimal,
+                    },
                     match node.as_str() {
                         "list_marker_parenthesis" => ListNumberDelim::OneParen,
                         "list_marker_dot" => ListNumberDelim::Period,
+                        "list_marker_example" => ListNumberDelim::TwoParens,
                         _ => panic!("Unexpected list marker node: {}", node),
                     },
                 ));
@@ -568,7 +589,7 @@ fn native_visitor<T: Write>(
         "shortcode_boolean" => process_shortcode_boolean(node, input_bytes, context),
         "shortcode_number" => process_shortcode_number(node, input_bytes, context),
         "code_fence_content" => process_code_fence_content(node, children, input_bytes, context),
-        "list_marker_parenthesis" | "list_marker_dot" => {
+        "list_marker_parenthesis" | "list_marker_dot" | "list_marker_example" => {
             process_list_marker(node, input_bytes, context)
         }
         // These are marker nodes, we don't need to do anything with it

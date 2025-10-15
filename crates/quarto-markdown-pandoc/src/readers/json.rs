@@ -640,7 +640,10 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(ASTContext { filenames })
+    Ok(ASTContext {
+        filenames,
+        example_list_counter: std::cell::Cell::new(1),
+    })
 }
 
 pub fn read<R: std::io::Read>(reader: &mut R) -> Result<(Pandoc, ASTContext)> {

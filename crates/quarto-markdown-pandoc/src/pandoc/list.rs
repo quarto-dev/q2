@@ -6,6 +6,7 @@
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ListNumberStyle {
     Default,
+    Example,
     Decimal,
     LowerRoman,
     UpperRoman,

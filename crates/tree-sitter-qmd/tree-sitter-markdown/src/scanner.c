@@ -32,6 +32,8 @@ typedef enum {
     LIST_MARKER_STAR_DONT_INTERRUPT,
     LIST_MARKER_PARENTHESIS_DONT_INTERRUPT,
     LIST_MARKER_DOT_DONT_INTERRUPT,
+    LIST_MARKER_EXAMPLE,
+    LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
     FENCED_CODE_BLOCK_START_BACKTICK,
     FENCED_CODE_BLOCK_START_TILDE,
     BLANK_LINE_START,
@@ -133,6 +135,8 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // LIST_MARKER_STAR_DONT_INTERRUPT,
     false, // LIST_MARKER_PARENTHESIS_DONT_INTERRUPT,
     false, // LIST_MARKER_DOT_DONT_INTERRUPT,
+    false, // LIST_MARKER_EXAMPLE,
+    false, // LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
     true,  // FENCED_CODE_BLOCK_START_BACKTICK,
     true,  // FENCED_CODE_BLOCK_START_TILDE,
     true,  // BLANK_LINE_START,
@@ -183,6 +187,8 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // LIST_MARKER_STAR_DONT_INTERRUPT,
     false, // LIST_MARKER_PARENTHESIS_DONT_INTERRUPT,
     false, // LIST_MARKER_DOT_DONT_INTERRUPT,
+    true,  // LIST_MARKER_EXAMPLE,
+    false, // LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
     true,  // FENCED_CODE_BLOCK_START_BACKTICK,
     true,  // FENCED_CODE_BLOCK_START_TILDE,
     true,  // BLANK_LINE_START,
@@ -949,6 +955,64 @@ static bool parse_ordered_list_marker(Scanner *s, TSLexer *lexer,
     return false;
 }
 
+static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
+                                       const bool *valid_symbols) {
+    if (s->indentation <= 3 &&
+        (valid_symbols[LIST_MARKER_EXAMPLE] ||
+         valid_symbols[LIST_MARKER_EXAMPLE_DONT_INTERRUPT])) {
+        // Must be (@)
+        if (lexer->lookahead != '(') {
+            return false;
+        }
+        advance(s, lexer);
+        if (lexer->lookahead != '@') {
+            return false;
+        }
+        advance(s, lexer);
+        if (lexer->lookahead != ')') {
+            return false;
+        }
+        advance(s, lexer);
+
+        uint8_t extra_indentation = 0;
+        while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            extra_indentation += advance(s, lexer);
+        }
+        bool line_end = lexer->lookahead == '\n' || lexer->lookahead == '\r';
+        bool dont_interrupt = false;
+        if (line_end) {
+            extra_indentation = 1;
+            dont_interrupt = true;
+        }
+        dont_interrupt = dont_interrupt && s->matched == s->open_blocks.size;
+        if (extra_indentation >= 1 &&
+            (dont_interrupt ? valid_symbols[LIST_MARKER_EXAMPLE_DONT_INTERRUPT]
+                            : valid_symbols[LIST_MARKER_EXAMPLE])) {
+            lexer->result_symbol = dont_interrupt
+                                       ? LIST_MARKER_EXAMPLE_DONT_INTERRUPT
+                                       : LIST_MARKER_EXAMPLE;
+            extra_indentation--;
+            if (extra_indentation <= 3) {
+                extra_indentation += s->indentation;
+                s->indentation = 0;
+            } else {
+                uint8_t temp = s->indentation;
+                s->indentation = extra_indentation;
+                extra_indentation = temp;
+            }
+            if (!s->simulate) {
+                if (!can_push_block(s)) {
+                    return error(lexer);
+                }
+                // Use 3 as the indentation offset (length of "(@)")
+                push_block(s, (Block)(LIST_ITEM + extra_indentation + 3));
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (s->indentation <= 3 &&
         (valid_symbols[LIST_MARKER_MINUS] ||
@@ -1417,6 +1481,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return true;
     }
 
+    // Handle code spans for pipe table cells
+    if (lexer->lookahead == '`' && (valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
+        return parse_code_span(s, lexer, valid_symbols);
+    }
+
     // Close the inner most block after the next line break as requested. See
     // `$._close_block` in grammar.js
     if (valid_symbols[CLOSE_BLOCK]) {
@@ -1537,6 +1606,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     return parse_fenced_div_note_id(s, lexer, valid_symbols);
                 }
                 break;
+            case '(':
+                // A '(' could be an example list marker (@)
+                return parse_example_list_marker(s, lexer, valid_symbols);
         }
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
             valid_symbols[PIPE_TABLE_START]) {
