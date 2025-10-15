@@ -160,6 +160,7 @@ fn main() {
         "json" => writers::json::write(&pandoc, &context, &mut buf),
         "native" => writers::native::write(&pandoc, &mut buf),
         "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
+        "html" => writers::html::write(&pandoc, &mut buf),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             return;

@@ -398,6 +398,89 @@ fn test_json_writer() {
     );
 }
 
+/// Normalize HTML for comparison by removing extra whitespace
+fn normalize_html(html: &str) -> String {
+    // First, join all lines with spaces to handle attributes split across lines
+    let single_line = html
+        .lines()
+        .map(|line| line.trim())
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    // Then split by > to preserve tag boundaries
+    single_line
+        .split('>')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(">\n")
+}
+
+#[test]
+fn test_html_writer() {
+    assert!(
+        has_good_pandoc_version(),
+        "Pandoc version is not suitable for testing"
+    );
+    let mut file_count = 0;
+    for entry in glob("tests/writers/html/*.md").expect("Failed to read glob pattern") {
+        match entry {
+            Ok(path) => {
+                eprintln!("Opening file: {}", path.display());
+                let markdown = std::fs::read_to_string(&path).expect("Failed to read file");
+
+                // Parse with our parser
+                let mut parser = MarkdownParser::default();
+                let input_bytes = markdown.as_bytes();
+                let tree = parser
+                    .parse(input_bytes, None)
+                    .expect("Failed to parse input");
+                let pandoc = treesitter_to_pandoc(
+                    &mut std::io::sink(),
+                    &tree,
+                    input_bytes,
+                    &ASTContext::anonymous(),
+                )
+                .unwrap();
+                let mut buf = Vec::new();
+                writers::html::write(&pandoc, &mut buf).unwrap();
+                let our_html = String::from_utf8(buf).expect("Invalid UTF-8 in our HTML output");
+
+                // Get Pandoc's output
+                let output = Command::new("pandoc")
+                    .arg("-t")
+                    .arg("html")
+                    .arg("-f")
+                    .arg("markdown")
+                    .arg(&path)
+                    .output()
+                    .expect("Failed to execute pandoc");
+
+                let pandoc_html = String::from_utf8(output.stdout).expect("Invalid UTF-8");
+
+                // Normalize both HTML outputs for comparison
+                let our_normalized = normalize_html(&our_html);
+                let pandoc_normalized = normalize_html(&pandoc_html);
+
+                assert_eq!(
+                    our_normalized,
+                    pandoc_normalized,
+                    "HTML outputs don't match for file {}.\n\nOurs:\n{}\n\nPandoc's:\n{}",
+                    path.display(),
+                    our_html,
+                    pandoc_html
+                );
+                file_count += 1;
+            }
+            Err(e) => panic!("Error reading glob entry: {}", e),
+        }
+    }
+    assert!(
+        file_count > 0,
+        "No files found in tests/writers/html directory"
+    );
+}
+
 fn ensure_file_does_not_parse(path: &std::path::Path) {
     let markdown = std::fs::read_to_string(path).expect("Failed to read file");
     let mut parser = MarkdownParser::default();
