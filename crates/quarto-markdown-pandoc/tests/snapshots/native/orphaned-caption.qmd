@@ -1,0 +1,5 @@
+Some paragraph text.
+
+: This is an orphaned caption
+
+Another paragraph.

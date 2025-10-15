@@ -97,6 +97,10 @@
           "named": true
         },
         {
+          "type": "caption",
+          "named": true
+        },
+        {
           "type": "fenced_code_block",
           "named": true
         },
@@ -142,6 +146,25 @@
         },
         {
           "type": "thematic_break",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "caption",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "inline",
           "named": true
         }
       ]
@@ -258,6 +281,10 @@
         },
         {
           "type": "block_quote",
+          "named": true
+        },
+        {
+          "type": "caption",
           "named": true
         },
         {
@@ -472,6 +499,10 @@
           "named": true
         },
         {
+          "type": "caption",
+          "named": true
+        },
+        {
           "type": "fenced_code_block",
           "named": true
         },
@@ -593,6 +624,10 @@
           "named": true
         },
         {
+          "type": "caption",
+          "named": true
+        },
+        {
           "type": "fenced_code_block",
           "named": true
         },
@@ -688,10 +723,6 @@
         },
         {
           "type": "pipe_table_row",
-          "named": true
-        },
-        {
-          "type": "table_caption",
           "named": true
         }
       ]
@@ -812,6 +843,10 @@
           "named": true
         },
         {
+          "type": "caption",
+          "named": true
+        },
+        {
           "type": "fenced_code_block",
           "named": true
         },
@@ -891,25 +926,6 @@
         },
         {
           "type": "setext_h2_underline",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "table_caption",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": true,
-      "required": false,
-      "types": [
-        {
-          "type": "block_continuation",
-          "named": true
-        },
-        {
-          "type": "inline",
           "named": true
         }
       ]

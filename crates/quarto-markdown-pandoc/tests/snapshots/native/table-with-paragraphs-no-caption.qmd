@@ -1,0 +1,7 @@
+| Name  | Age |
+|-------|-----|
+| Alice | 30  |
+
+This is a regular paragraph after the table.
+
+This is another paragraph.

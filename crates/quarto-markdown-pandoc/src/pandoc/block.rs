@@ -35,6 +35,7 @@ pub enum Block {
     BlockMetadata(MetaBlock),
     NoteDefinitionPara(NoteDefinitionPara),
     NoteDefinitionFencedBlock(NoteDefinitionFencedBlock),
+    CaptionBlock(CaptionBlock),
 }
 
 pub type Blocks = Vec<Block>;
@@ -144,6 +145,12 @@ pub struct NoteDefinitionFencedBlock {
     pub source_info: SourceInfo,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct CaptionBlock {
+    pub content: Inlines,
+    pub source_info: SourceInfo,
+}
+
 impl_source_location!(
     // blocks
     Plain,
@@ -163,7 +170,8 @@ impl_source_location!(
     // quarto extensions
     MetaBlock,
     NoteDefinitionPara,
-    NoteDefinitionFencedBlock
+    NoteDefinitionFencedBlock,
+    CaptionBlock
 );
 
 fn make_block_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {

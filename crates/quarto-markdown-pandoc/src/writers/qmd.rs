@@ -680,6 +680,23 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
         }
     }
 
+    // Write caption if it exists
+    if let Some(ref long_caption) = table.caption.long {
+        if !long_caption.is_empty() {
+            writeln!(buf)?; // Blank line before caption
+            for block in long_caption {
+                // Extract inline content from Plain blocks in caption
+                if let Block::Plain(plain) = block {
+                    write!(buf, ": ")?;
+                    for inline in &plain.content {
+                        write_inline(inline, buf)?;
+                    }
+                    writeln!(buf)?;
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -1182,6 +1199,11 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
         }
         Block::NoteDefinitionFencedBlock(refdef) => {
             write_fenced_note_definition(refdef, buf)?;
+        }
+        Block::CaptionBlock(_) => {
+            panic!(
+                "CaptionBlock found in QMD writer - should have been processed during postprocessing"
+            )
         }
     }
     Ok(())

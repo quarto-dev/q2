@@ -742,6 +742,12 @@ pub fn topdown_traverse_block(block: Block, filter: &mut Filter) -> Blocks {
                 },
             )]
         }
+        Block::CaptionBlock(_) => {
+            // CaptionBlock should have been removed by postprocessing
+            panic!(
+                "CaptionBlock found in filter - should have been processed during postprocessing"
+            )
+        }
     }
 }
 

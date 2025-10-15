@@ -47,6 +47,7 @@ module.exports = grammar({
             $.fenced_div_block,
             $._blank_line,
             $.pipe_table,
+            $.caption,
             prec(-1, $.minus_metadata),
         ),
         section: $ => choice($._section1, $._section2, $._section3, $._section4, $._section5, $._section6),
@@ -250,6 +251,25 @@ module.exports = grammar({
         // https://github.github.com/gfm/#blank-lines
         _blank_line: $ => seq($._blank_line_start, choice($._newline, $._eof)),
 
+        // A caption block: blank line followed by ": caption text"
+        // Used for table captions (and potentially other elements)
+        // Note: This matches a SINGLE colon only, not multiple colons (which would be fenced divs)
+        caption: $ => prec.right(seq(
+            $._blank_line,
+            ':',
+            optional(seq(
+                $._whitespace,
+                alias($._caption_line, $.inline)
+            )),
+            choice($._newline, $._eof),
+        )),
+
+        // Caption line content - similar to _line but doesn't start with whitespace
+        _caption_line: $ => prec.right(seq(
+            choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, common.punctuation_without($, [])),
+            repeat(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))
+        )),
+
 
         // CONTAINER BLOCKS
 
@@ -385,23 +405,7 @@ module.exports = grammar({
                 $.pipe_table_delimiter_row,
                 repeat(seq($._pipe_table_newline, optional($.pipe_table_row))),
                 choice($._newline, $._eof),
-                optional($.table_caption),
             )),
-
-            // Table caption: blank line followed by ": caption text"
-            // This is a Pandoc extension for table captions
-            table_caption: $ => prec(1, seq(
-                $._blank_line,
-                ':',
-                optional(seq(
-                    optional($._whitespace),
-                    alias($._table_caption_line, $.inline)
-                )),
-                choice($._newline, $._eof),
-            )),
-
-            // Caption line content - similar to _line but only used in table_caption context
-            _table_caption_line: $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
 
             _pipe_table_newline: $ => seq(
                 $._pipe_table_line_ending,

@@ -7,7 +7,7 @@ use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
 };
 use crate::pandoc::attr::{Attr, is_empty_attr};
-use crate::pandoc::block::{Block, DefinitionList, Div, Figure, Plain};
+use crate::pandoc::block::{Block, Blocks, DefinitionList, Div, Figure, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{Inline, Inlines, Space, Span, Str, Superscript};
 use crate::pandoc::location::{Range, SourceInfo, empty_range, empty_source_info};
@@ -620,6 +620,42 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                     attr
                 ));
                 FilterResult(vec![], false)
+            })
+            .with_blocks(|blocks| {
+                // Process CaptionBlock nodes: attach to preceding tables or issue warnings
+                let mut result: Blocks = Vec::new();
+
+                for block in blocks {
+                    // Check if current block is a CaptionBlock
+                    if let Block::CaptionBlock(caption_block) = block {
+                        // Look for a preceding Table
+                        if let Some(Block::Table(table)) = result.last_mut() {
+                            // Attach caption to the table
+                            table.caption = Caption {
+                                short: None,
+                                long: Some(vec![Block::Plain(Plain {
+                                    content: caption_block.content.clone(),
+                                    source_info: caption_block.source_info.clone(),
+                                })]),
+                            };
+                            // Don't add the CaptionBlock to the result (it's now attached)
+                        } else {
+                            // TODO: Issue a warning/error when proper error infrastructure is ready
+                            // For now, print a warning to stderr
+                            eprintln!(
+                                "Warning: Caption found without a preceding table at {}:{}",
+                                caption_block.source_info.range.start.row + 1,
+                                caption_block.source_info.range.start.column + 1
+                            );
+                            // Remove the caption from the output (don't add to result)
+                        }
+                    } else {
+                        // Not a CaptionBlock, add it to result
+                        result.push(block);
+                    }
+                }
+
+                FilterResult(result, true)
             });
         topdown_traverse(doc, &mut filter)
     };

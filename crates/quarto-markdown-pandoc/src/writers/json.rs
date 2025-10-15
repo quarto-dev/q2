@@ -395,6 +395,11 @@ fn write_block(block: &Block) -> Value {
             "c": [refdef.id, write_blocks(&refdef.content)],
             "l": write_location(refdef),
         }),
+        Block::CaptionBlock(_) => {
+            panic!(
+                "CaptionBlock found in JSON writer - should have been processed during postprocessing"
+            )
+        }
     }
 }
 

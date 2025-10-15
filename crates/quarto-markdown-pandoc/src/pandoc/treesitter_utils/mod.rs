@@ -7,6 +7,7 @@ pub mod attribute;
 pub mod atx_heading;
 pub mod backslash_escape;
 pub mod block_quote;
+pub mod caption;
 pub mod citation;
 pub mod code_fence_content;
 pub mod code_span;

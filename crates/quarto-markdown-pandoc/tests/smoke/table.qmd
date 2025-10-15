@@ -1,0 +1,5 @@
+| hello | world |
+|-|-|
+| 1 | 2 |
+
+Table: that doesn't work.

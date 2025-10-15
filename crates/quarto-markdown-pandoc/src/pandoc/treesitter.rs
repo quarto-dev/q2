@@ -8,6 +8,7 @@ use crate::pandoc::treesitter_utils::attribute::process_attribute;
 use crate::pandoc::treesitter_utils::atx_heading::process_atx_heading;
 use crate::pandoc::treesitter_utils::backslash_escape::process_backslash_escape;
 use crate::pandoc::treesitter_utils::block_quote::process_block_quote;
+use crate::pandoc::treesitter_utils::caption::process_caption;
 use crate::pandoc::treesitter_utils::citation::process_citation;
 use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_content;
 use crate::pandoc::treesitter_utils::code_span::process_code_span;
@@ -86,6 +87,7 @@ fn get_block_source_info(block: &Block) -> &SourceInfo {
         Block::BlockMetadata(b) => &b.source_info,
         Block::NoteDefinitionPara(b) => &b.source_info,
         Block::NoteDefinitionFencedBlock(b) => &b.source_info,
+        Block::CaptionBlock(b) => &b.source_info,
     }
 }
 
@@ -733,7 +735,7 @@ fn native_visitor<T: Write>(
         }
         "pipe_table_delimiter_row" => process_pipe_table_delimiter_row(children, context),
         "pipe_table_cell" => process_pipe_table_cell(node, children, context),
-        "table_caption" => PandocNativeIntermediate::IntermediateInlines(native_inlines(children)),
+        "caption" => process_caption(node, children, context),
         "pipe_table" => process_pipe_table(node, children, context),
         "setext_h1_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(1),
         "setext_h2_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(2),

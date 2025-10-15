@@ -19,10 +19,18 @@ need to be done with the traversal helpers in traversals.rs.
 - **IMPORTANT**: When making changes to the code, ALWAYS run both `cargo check` AND `cargo test` to ensure changes compile and don't affect behavior. The test suite is fast enough to run after each change. Never skip running `cargo test` - it must always be executed together with `cargo check`.
 - **CRITICAL**: Do NOT assume changes are safe if ANY tests fail, even if they seem unrelated. Some tests require pandoc to be properly installed to pass. Always ensure ALL tests pass before and after changes.
 
-## Environment setup
+## **CRITICAL**: HOW TO DO CODING WORK IN THIS REPO
 
-- Rust toolchain is installed at `/home/claude-sandbox/.cargo/bin`
-- Pandoc is installed at `/home/claude-sandbox/local/bin`
+Whenever you start working on a coding task, follow these steps:
+
+- Make a plan to yourself.
+  - The plan should include adding appropriate tests to the test suite.
+  - Before implementing the feature, write the test that you think should fail, and ensure that the test fails the way you expect to!
+- Work on the plan item by item.
+- You are not done until the test you wrote passes.
+- You are not done until the test you wrote is integrated to our test suite.
+- If you run out of ideas and still can't make the test pass, do not erase the test. Report back to me and we will work on it together.
+- If in the process of writing tests you run into an unexpected parse error, store it in a separate file and report it to me. We're still improving the parser and it's possible that you will run into bugs.
 
 # Error messages
 
@@ -44,6 +52,7 @@ After changing any of the resources/error-corpus/*.{json,qmd} files, run the scr
 
 The `quarto-markdown-pandoc` binary accepts the following options:
 - `-t, --to <TO>`: Output format (default: native)
+- `-f, --from <FROM>`: Input format (default: qmd)
 - `-v, --verbose`: Verbose output
 - `-i, --input <INPUT>`: Input file (default: stdin)
 - `--loose`: Loose parsing mode
@@ -52,8 +61,8 @@ The `quarto-markdown-pandoc` binary accepts the following options:
 
 ## Instructions
 
-- in this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, it is not necessarily the case that a discrepancy in the behavior is a bug.
-- the qmd format only supports the inline syntax for a link [link](./target.html), and not the reference-style syntax [link][1].
+- In this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, it is not necessarily the case that a discrepancy in the behavior is a bug.
+- The qmd format only supports the inline syntax for a link [link](./target.html), and not the reference-style syntax [link][1].
 - Always strive for test documents as small as possible. Prefer a large number of small test documents instead of small number of large documents.
 - When fixing bugs, always try to isolate and fix one bug at a time.
 - When fixing bugs using tests, run the failing test before attempting to fix issues. This helps ensuring that tests are exercising the failure as expected, and fixes actually fix the particular issue.
