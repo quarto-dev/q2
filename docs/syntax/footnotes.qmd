@@ -1,0 +1,187 @@
+---
+title: "Footnotes"
+---
+
+## Overview
+
+Footnotes allow you to add references and additional information without cluttering your main text. In `quarto-markdown`, footnotes support both inline and fenced block syntax for definitions, giving you flexibility in how you structure your content.
+
+## Syntax
+
+### Inline Footnote Definitions
+
+The standard Pandoc-style inline syntax uses square brackets with a caret:
+
+```markdown
+[^id]: The footnote definition text goes here.
+```
+
+This syntax is best for short, single-paragraph footnotes.
+
+### Fenced Block Footnote Definitions
+
+For longer footnotes that contain multiple paragraphs, lists, or other block-level content, use the fenced block syntax:
+
+```markdown
+::: ^id
+Footnote content goes here.
+
+You can include multiple paragraphs, lists, and other block elements.
+:::
+```
+
+The fenced block syntax starts with `:::` followed by a space and `^` with the footnote identifier. The content is enclosed between the opening `:::` and closing `:::` markers.
+
+### Footnote References
+
+Reference a footnote in your text using the same `[^id]` syntax:
+
+```markdown
+Here is some text with a footnote reference[^1].
+```
+
+## Examples
+
+### Basic Inline Footnote
+
+Here is a sentence with a footnote[^basic].
+
+[^basic]: This is a simple inline footnote definition.
+
+```markdown
+Here is a sentence with a footnote[^basic].
+
+[^basic]: This is a simple inline footnote definition.
+```
+
+### Fenced Block with Single Paragraph
+
+This example demonstrates a simple fenced block footnote[^simple].
+
+::: ^simple
+This is a footnote defined using the fenced block syntax. It contains a single paragraph.
+:::
+
+```markdown
+This example demonstrates a simple fenced block footnote[^simple].
+
+::: ^simple
+This is a footnote defined using the fenced block syntax. It contains a single paragraph.
+:::
+```
+
+### Fenced Block with Multiple Paragraphs
+
+For more detailed footnotes, you can include multiple paragraphs[^multipara].
+
+::: ^multipara
+This is the first paragraph of the footnote.
+
+This is the second paragraph, providing additional context or information.
+
+And here's a third paragraph for even more detail.
+:::
+
+```markdown
+For more detailed footnotes, you can include multiple paragraphs[^multipara].
+
+::: ^multipara
+This is the first paragraph of the footnote.
+
+This is the second paragraph, providing additional context or information.
+
+And here's a third paragraph for even more detail.
+:::
+```
+
+### Fenced Block with Lists
+
+Footnotes can contain complex content like lists[^withlist].
+
+::: ^withlist
+This footnote contains a bulleted list:
+
+- First item in the list
+- Second item in the list
+- Third item in the list
+
+Lists help organize information within footnotes.
+:::
+
+```markdown
+Footnotes can contain complex content like lists[^withlist].
+
+::: ^withlist
+This footnote contains a bulleted list:
+
+- First item in the list
+- Second item in the list
+- Third item in the list
+
+Lists help organize information within footnotes.
+:::
+```
+
+### Fenced Block with Inline Formatting
+
+Footnotes support rich inline formatting[^formatted].
+
+::: ^formatted
+This footnote has **bold text**, *italic text*, and `inline code`.
+
+It also supports [links](https://example.com) and other inline elements.
+:::
+
+```markdown
+Footnotes support rich inline formatting[^formatted].
+
+::: ^formatted
+This footnote has **bold text**, *italic text*, and `inline code`.
+
+It also supports [links](https://example.com) and other inline elements.
+:::
+```
+
+### Mixing Inline and Fenced Block Footnotes
+
+You can use both styles in the same document[^inline][^fenced].
+
+[^inline]: This is an inline-style footnote definition.
+
+::: ^fenced
+This is a fenced block footnote definition.
+
+It can contain multiple paragraphs and other block-level content.
+:::
+
+```markdown
+You can use both styles in the same document[^inline][^fenced].
+
+[^inline]: This is an inline-style footnote definition.
+
+::: ^fenced
+This is a fenced block footnote definition.
+
+It can contain multiple paragraphs and other block-level content.
+:::
+```
+
+### Named Footnote Identifiers
+
+Footnote identifiers can be descriptive names, not just numbers[^descriptive-name].
+
+::: ^descriptive-name
+Using descriptive names like `^descriptive-name` instead of numbers like `^1` can make your markdown more readable and maintainable.
+
+Identifiers can include letters, numbers, and hyphens.
+:::
+
+```markdown
+Footnote identifiers can be descriptive names, not just numbers[^descriptive-name].
+
+::: ^descriptive-name
+Using descriptive names like `^descriptive-name` instead of numbers like `^1` can make your markdown more readable and maintainable.
+
+Identifiers can include letters, numbers, and hyphens.
+:::
+```

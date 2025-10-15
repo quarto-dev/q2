@@ -11,3 +11,4 @@ The features documented here are currently under development. The syntax and beh
 ## Available Features
 
 - [Definition Lists](definition-lists.qmd) - Create definition lists using an embedded markdown DSL
+- [Footnotes](footnotes.qmd) - Add footnotes with inline or fenced block syntax

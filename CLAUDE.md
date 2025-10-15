@@ -17,3 +17,4 @@ The main documentation for this repository is located at:
 - When attempting to find binary differences between files, always use `xxd` instead of other tools.
 - .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use docs/for-claude in this directory)
 - Sometimes you get confused by macOS's weird renaming of /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
+- The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.
