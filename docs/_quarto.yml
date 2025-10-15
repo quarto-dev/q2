@@ -10,6 +10,8 @@ website:
       - about.qmd
       - href: syntax/index.qmd
         text: Syntax
+      - href: writers/index.qmd
+        text: Writers
 
 format:
   html:

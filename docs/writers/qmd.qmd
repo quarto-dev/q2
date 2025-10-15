@@ -1,0 +1,64 @@
+---
+title: "QMD Writer"
+---
+
+The QMD writer converts the parsed AST representation back into Quarto Markdown (`.qmd`) format. This writer is designed to support roundtripping: parsing a document and writing it back should preserve the original structure and meaning.
+
+## Purpose
+
+The QMD writer is used for:
+
+- **Roundtripping**: Converting documents through the parse → AST → write pipeline while preserving content
+- **Format normalization**: Standardizing markdown formatting across documents
+- **Document transformation**: Making programmatic changes to documents via the AST
+
+## Differences from Pandoc
+
+While `quarto-markdown` aims to be largely compatible with Pandoc, the QMD writer intentionally differs from Pandoc's markdown writer in certain cases to support better roundtripping and preserve explicit markup.
+
+### Span Elements with Empty Attributes
+
+**Pandoc behavior**: When a span has empty attributes (`["", [], []]`), Pandoc's markdown writer omits the brackets and braces, outputting only the content.
+
+```markdown
+Input:  [hello]{}
+Pandoc: hello
+```
+
+**quarto-markdown behavior**: The QMD writer preserves the explicit span syntax, even when attributes are empty.
+
+```markdown
+Input:           [hello]{}
+quarto-markdown: [hello]{}
+```
+
+**Rationale**: Preserving the explicit span markup supports proper roundtripping. If a document author wrote `[content]{}`, they did so intentionally, and this information should be preserved through the parse-write cycle. This also maintains the distinction between:
+
+- Text that was marked up as a span: `[hello]{}`
+- Plain text that happens to have no special formatting: `hello`
+
+## Usage
+
+The QMD writer can be invoked using the `quarto-markdown-pandoc` binary:
+
+```bash
+# Read from stdin, write QMD to stdout
+echo "**bold text**" | quarto-markdown-pandoc -t qmd
+
+# Read from file, write QMD to stdout
+quarto-markdown-pandoc -i input.qmd -t qmd
+
+# Roundtrip through JSON
+quarto-markdown-pandoc -i input.qmd -t json | \
+  quarto-markdown-pandoc -f json -t qmd
+```
+
+## Formatting Conventions
+
+The QMD writer follows these formatting conventions:
+
+- **Emphasis**: Uses `*` for emphasis and `**` for strong emphasis
+- **Line breaks**: Soft breaks become newlines (differs from Pandoc which uses spaces)
+- **Smart quotes**: Unicode right single quotation marks (') are converted back to ASCII apostrophes (')
+- **Escaping**: Special markdown characters (`\`, `>`, `#`) are escaped as needed
+- **Attributes**: Written in the format `{#id .class key="value"}`

@@ -468,6 +468,12 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write_blocks(&note.content, buf)?;
             writeln!(buf, "</div>")?;
         }
+        Block::CaptionBlock(caption) => {
+            // Caption blocks are rendered as divs with caption class
+            write!(buf, "<div class=\"caption\">")?;
+            write_inlines(&caption.content, buf)?;
+            writeln!(buf, "</div>")?;
+        }
     }
     Ok(())
 }

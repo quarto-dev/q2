@@ -910,20 +910,14 @@ fn write_quoted(
     Ok(())
 }
 fn write_span(span: &crate::pandoc::Span, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-    // Spans with attributes use bracket syntax: [content]{#id .class key=value}
-    if !is_empty_attr(&span.attr) {
-        write!(buf, "[")?;
-        for inline in &span.content {
-            write_inline(inline, buf)?;
-        }
-        write!(buf, "]")?;
-        write_attr(&span.attr, buf)?;
-    } else {
-        // Spans without attributes just output their content
-        for inline in &span.content {
-            write_inline(inline, buf)?;
-        }
+    // Spans always use bracket syntax: [content]{#id .class key=value}
+    // Even empty attributes should be written as [content]{} for proper roundtripping
+    write!(buf, "[")?;
+    for inline in &span.content {
+        write_inline(inline, buf)?;
     }
+    write!(buf, "]")?;
+    write_attr(&span.attr, buf)?;
     Ok(())
 }
 
