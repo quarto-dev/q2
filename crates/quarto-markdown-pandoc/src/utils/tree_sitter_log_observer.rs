@@ -42,26 +42,27 @@ pub struct TreeSitterParseLog {
 #[derive(Debug)]
 pub struct TreeSitterProcessLog {
     pub found_accept: bool,
+    pub found_bad_message: bool,
     pub error_states: Vec<ProcessMessage>,
     pub current_message: Option<ProcessMessage>,
 }
 
 impl TreeSitterProcessLog {
     pub fn is_good(&self) -> bool {
-        self.found_accept && self.error_states.is_empty()
+        self.found_accept && self.error_states.is_empty() && !self.found_bad_message
     }
 }
 
 impl TreeSitterParseLog {
     pub fn is_good(&self) -> bool {
-        // for every process, there needs to be at least one version that reached an accept state
-        // with no error states
+        // for every process, there can't be any version that reached a state
+        // with error states
         for (_, process) in &self.processes {
-            if process.is_good() {
-                return true;
+            if !process.is_good() {
+                return false;
             }
         }
-        false
+        true
     }
 }
 
@@ -165,6 +166,7 @@ impl TreeSitterLogObserver {
                 let current_process = current_parse.processes.entry(version).or_insert_with(|| {
                     TreeSitterProcessLog {
                         found_accept: false,
+                        found_bad_message: false,
                         error_states: vec![],
                         current_message: None,
                     }
@@ -179,7 +181,7 @@ impl TreeSitterLogObserver {
                 });
                 current_parse.current_process = Some(version);
             }
-            "detect_error" | "skip_token" | "recover_to_previous" => {
+            "detect_error" => {
                 let current_parse = self
                     .parses
                     .last_mut()
@@ -244,6 +246,19 @@ impl TreeSitterLogObserver {
                     size,
                     sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
                 })
+            }
+            "skip_token" | "recover_to_previous" => {
+                // we want to mark these processes as bad, but we don't want to record the state here
+                // because we only care about states we find via "detect_error"
+                let current_parse = self
+                    .parses
+                    .last_mut()
+                    .expect("No current parse to log process to");
+                let current_process = current_parse
+                    .processes
+                    .get_mut(&current_parse.current_process.expect("No current process"))
+                    .expect("No current process message");
+                current_process.found_bad_message = true;
             }
             "lex_external" | "lex_internal" | "reduce" => {}
             "accept" => {

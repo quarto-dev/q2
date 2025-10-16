@@ -423,7 +423,7 @@ module.exports = grammar(add_inline_rules({
             "--",
             "---",
             "...",
-            common.punctuation_without($, ['[', '{', '}', ']', "@", "_"]),
+            common.punctuation_without($, ['[', '{', '}', ']', "@", "_", "*"]),
             $._whitespace,
         )),
         _code_span_text_base: $ => prec.right(choice(
@@ -461,12 +461,6 @@ function add_inline_rules(grammar) {
                     alias($['_emphasis_underscore' + suffix_link], $.emphasis),
                     alias($['_strong_emphasis_underscore' + suffix_link], $.strong_emphasis),
                 ];
-                if (delimiter !== "star") {
-                    elements.push($._emphasis_open_star);
-                }
-                if (delimiter !== "underscore") {
-                    elements.push($._emphasis_open_underscore);
-                }
                 if (link) {
                     elements = elements.concat([
                         $.inline_link,

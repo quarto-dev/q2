@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1201,
+    "state": 1133,
     "sym": "end",
     "errorInfo": {
       "title": "Unclosed Span",
@@ -10,7 +10,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 67,
+          "lrState": 241,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -30,7 +30,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2520,
+    "state": 2557,
     "sym": "class_specifier",
     "errorInfo": {
       "title": "Key-value Pair Before Class Specifier in Attribute",
@@ -38,7 +38,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2632,
+          "lrState": 2618,
           "row": 0,
           "size": 3,
           "sym": "key_value_key",
@@ -46,7 +46,7 @@
         },
         {
           "column": 14,
-          "lrState": 2473,
+          "lrState": 2464,
           "row": 0,
           "size": 5,
           "sym": "key_value_value_token1",
@@ -67,7 +67,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 1902,
+    "state": 1926,
     "sym": "_error",
     "errorInfo": {
       "title": "Mismatched Delimiter in Attribute Specifier",
@@ -75,7 +75,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 1902,
+          "lrState": 1926,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -95,7 +95,7 @@
   {
     "column": 3,
     "row": 0,
-    "state": 772,
+    "state": 932,
     "sym": "{",
     "errorInfo": {
       "title": "Missing Space After Div Fence",
@@ -103,7 +103,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 772,
+          "lrState": 932,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",
@@ -111,7 +111,7 @@
         },
         {
           "column": 3,
-          "lrState": 582,
+          "lrState": 689,
           "row": 0,
           "size": 1,
           "sym": "{",

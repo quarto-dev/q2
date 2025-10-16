@@ -411,16 +411,18 @@ pub fn produce_error_message_json(
                 }));
             }
 
-            // when erroring, produce the errors only for the
-            // first failing state.
-            return serde_json::to_string_pretty(&serde_json::json!({
-                "tokens": tokens,
-                "errorStates": error_states,
-            }))
-            .unwrap()
-            .lines()
-            .map(|s| s.to_string())
-            .collect();
+            if error_states.len() > 0 {
+                // when erroring, produce the errors only for the
+                // first failing state.
+                return serde_json::to_string_pretty(&serde_json::json!({
+                    "tokens": tokens,
+                    "errorStates": error_states,
+                }))
+                .unwrap()
+                .lines()
+                .map(|s| s.to_string())
+                .collect();
+            }
         }
     }
     vec![]
