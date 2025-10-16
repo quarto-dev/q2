@@ -1,0 +1,7 @@
+Here is [!! a highlight].
+
+Here is [++ an insertion].
+
+Here is [-- a deletion].
+
+Here is [>> a comment].

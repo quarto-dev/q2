@@ -11,4 +11,5 @@ The features documented here are currently under development. The syntax and beh
 ## Available Features
 
 - [Definition Lists](definition-lists.qmd) - Create definition lists using an embedded markdown DSL
+- [Editorial Marks](editorial-marks.qmd) - Annotate text with highlights, insertions, deletions, and comments
 - [Footnotes](footnotes.qmd) - Add footnotes with inline or fenced block syntax

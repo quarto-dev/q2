@@ -910,6 +910,30 @@ fn write_quoted(
     Ok(())
 }
 fn write_span(span: &crate::pandoc::Span, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    let (id, classes, keyvals) = &span.attr;
+
+    // Check if this is an editorial mark span that should use decorated syntax
+    // These spans have exactly one class, no ID, and no key-value pairs
+    if id.is_empty() && classes.len() == 1 && keyvals.is_empty() {
+        let marker = match classes[0].as_str() {
+            "quarto-highlight" => Some("!! "),
+            "quarto-insert" => Some("++ "),
+            "quarto-delete" => Some("-- "),
+            "quarto-edit-comment" => Some(">> "),
+            _ => None,
+        };
+
+        if let Some(marker) = marker {
+            // Write using decorated syntax
+            write!(buf, "[{}", marker)?;
+            for inline in &span.content {
+                write_inline(inline, buf)?;
+            }
+            write!(buf, "]")?;
+            return Ok(());
+        }
+    }
+
     // Spans always use bracket syntax: [content]{#id .class key=value}
     // Even empty attributes should be written as [content]{} for proper roundtripping
     write!(buf, "[")?;

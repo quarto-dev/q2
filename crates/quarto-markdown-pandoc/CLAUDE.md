@@ -25,12 +25,26 @@ Whenever you start working on a coding task, follow these steps:
 
 - Make a plan to yourself.
   - The plan should include adding appropriate tests to the test suite.
-  - Before implementing the feature, write the test that you think should fail, and ensure that the test fails the way you expect to!
+  - **FIRST**: Write the test that you think should fail
+  - **SECOND**: Run ONLY that test and verify it fails with the expected error
+  - **THIRD**: Implement the fix
+  - **FOURTH**: Run the test again and verify it now passes
 - Work on the plan item by item.
 - You are not done until the test you wrote passes.
 - You are not done until the test you wrote is integrated to our test suite.
 - If you run out of ideas and still can't make the test pass, do not erase the test. Report back to me and we will work on it together.
 - If in the process of writing tests you run into an unexpected parse error, store it in a separate file and report it to me. We're still improving the parser and it's possible that you will run into bugs.
+
+## BEFORE YOU IMPLEMENT ANY BUG FIX - MANDATORY CHECKLIST
+
+Before implementing ANY bug fix, you MUST complete this checklist in order:
+
+- [ ] Have you written the test?
+- [ ] Have you run the test and confirmed it fails?
+- [ ] Have you verified the failure is exactly what you expected?
+- [ ] Only after all three above are complete: proceed with implementation
+
+This is non-negotiable. Do not skip this process.
 
 # Error messages
 
@@ -65,12 +79,12 @@ The `quarto-markdown-pandoc` binary accepts the following options:
 - The qmd format only supports the inline syntax for a link [link](./target.html), and not the reference-style syntax [link][1].
 - Always strive for test documents as small as possible. Prefer a large number of small test documents instead of small number of large documents.
 - When fixing bugs, always try to isolate and fix one bug at a time.
-- When fixing bugs using tests, run the failing test before attempting to fix issues. This helps ensuring that tests are exercising the failure as expected, and fixes actually fix the particular issue.
+- **CRITICAL - TEST FIRST**: When fixing bugs using tests, you MUST run the failing test BEFORE implementing any fix. This is non-negotiable. Verify the test fails in the expected way, then implement the fix, then verify the test passes.
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.
 - use "cargo run --" instead of trying to find the binary location, which will often be outside of this crate.
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.
 - When fixing inconsistency bugs, use `pandoc -t json -i <input_file>` to get Pandoc's output, and `cargo run -- -t json -i <input_file>` to get our output.
-- When fixing roundtripping bugs, make sure to always add a roundtripping test to `tests/roundtrip_tests/qmd-json-qmd`.
+- **When fixing roundtripping bugs**: FIRST add the failing test to `tests/roundtrip_tests/qmd-json-qmd`, run it to verify it fails with the expected output, THEN implement the fix, THEN verify the test passes.
 - When I say "@doit", I mean "create a plan, and work on it item by item."
 - When you're done editing a Rust file, run `cargo fmt` on it.
 - If I ask you to write notes to yourself, do it in markdown and write the output in the `docs/for-claude` directory.
