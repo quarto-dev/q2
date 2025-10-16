@@ -135,29 +135,33 @@ module.exports = grammar(add_inline_rules({
             alias($._latex_span_close, $.latex_span_delimiter),
         ),
 
-        insert: $ => seq(
+        insert: $ => prec.right(seq(
             prec(3, alias(/\[\+\+[ ]*/, $.insert_delimiter)),
             repeat($._inline_element),
             prec(3, alias(/[ ]*\]/, $.insert_delimiter)),
-        ),
+            optional($._qmd_attribute)
+        )),
 
-        delete: $ => seq(
+        delete: $ => prec.right(seq(
             prec(3, alias(/\[\-\-[ ]*/, $.delete_delimiter)),
             repeat($._inline_element),
             prec(3, alias(/[ ]*\]/, $.delete_delimiter)),
-        ),
+            optional($._qmd_attribute)
+        )),
 
-        highlight: $ => seq(
+        highlight: $ => prec.right(seq(
             prec(3, alias(/\[\!\![ ]*/, $.highlight_delimiter)),
             repeat($._inline_element),
             prec(3, alias(/[ ]*\]/, $.highlight_delimiter)),
-        ),
+            optional($._qmd_attribute)
+        )),
 
-        edit_comment: $ => seq(
+        edit_comment: $ => prec.right(seq(
             prec(3, alias(/\[>>[ ]*/, $.edit_comment_delimiter)),
             repeat($._inline_element),
             prec(3, alias(/[ ]*\]/, $.edit_comment_delimiter)),
-        ),
+            optional($._qmd_attribute)
+        )),
         
         superscript: $ => seq(
             alias($._superscript_open, $.superscript_delimiter),

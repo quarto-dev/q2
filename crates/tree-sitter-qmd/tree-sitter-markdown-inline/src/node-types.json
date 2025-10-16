@@ -159,6 +159,10 @@
           "named": true
         },
         {
+          "type": "language_attribute",
+          "named": true
+        },
+        {
           "type": "latex_span",
           "named": true
         },
@@ -172,6 +176,10 @@
         },
         {
           "type": "quoted_span",
+          "named": true
+        },
+        {
+          "type": "raw_attribute",
           "named": true
         },
         {
@@ -286,6 +294,10 @@
           "named": true
         },
         {
+          "type": "language_attribute",
+          "named": true
+        },
+        {
           "type": "latex_span",
           "named": true
         },
@@ -299,6 +311,10 @@
         },
         {
           "type": "quoted_span",
+          "named": true
+        },
+        {
+          "type": "raw_attribute",
           "named": true
         },
         {
@@ -545,6 +561,10 @@
           "named": true
         },
         {
+          "type": "language_attribute",
+          "named": true
+        },
+        {
           "type": "latex_span",
           "named": true
         },
@@ -558,6 +578,10 @@
         },
         {
           "type": "quoted_span",
+          "named": true
+        },
+        {
+          "type": "raw_attribute",
           "named": true
         },
         {
@@ -1116,6 +1140,10 @@
           "named": true
         },
         {
+          "type": "language_attribute",
+          "named": true
+        },
+        {
           "type": "latex_span",
           "named": true
         },
@@ -1129,6 +1157,10 @@
         },
         {
           "type": "quoted_span",
+          "named": true
+        },
+        {
+          "type": "raw_attribute",
           "named": true
         },
         {

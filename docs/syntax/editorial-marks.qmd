@@ -17,16 +17,7 @@ Editorial marks use a square bracket syntax with special marker characters:
 
 The opening bracket is followed by two marker characters, then a space, and then the content to be marked. The mark is closed with a closing bracket.
 
-## Conversion to Pandoc AST
-
-When converted to Pandoc AST, editorial marks become `Span` elements with specific CSS classes:
-
-- `[!! ...]` → `Span ("", ["quarto-highlight"], []) [...]`
-- `[++ ...]` → `Span ("", ["quarto-insert"], []) [...]`
-- `[-- ...]` → `Span ("", ["quarto-delete"], []) [...]`
-- `[>> ...]` → `Span ("", ["quarto-edit-comment"], []) [...]`
-
-These classes can be used to apply styling in HTML output or to process the marks with Pandoc filters.
+Editorial marks can also include attributes (IDs, classes, and key-value pairs) immediately after the closing bracket, like spans: `[!! text]{#my-id}`, `[++ text]{.my-class}`, etc.
 
 ## Examples
 
@@ -54,10 +45,10 @@ The document needs [++ additional context here] to be complete.
 
 Use `[-- text]` to suggest text that should be removed:
 
-This sentence has [-- unnecessary words] that can be deleted.
+This sentence has [-- unnecessary] words that can be deleted.
 
 ```markdown
-This sentence has [-- unnecessary words] that can be deleted.
+This sentence has [-- unnecessary] words that can be deleted.
 ```
 
 ### Comment
@@ -98,42 +89,6 @@ Editorial marks are particularly useful for:
 - **Review workflows**: Reviewers can highlight issues and suggest improvements
 - **Track changes**: Similar to word processor track changes, but in plain text
 - **Editorial comments**: Editors can leave notes without disrupting the flow of the document
-
-## Processing Editorial Marks
-
-Since editorial marks are converted to spans with CSS classes, you can:
-
-1. **Style them in HTML output**: Use CSS to visually distinguish different mark types
-2. **Process with Lua filters**: Write Pandoc Lua filters to convert marks to other formats
-3. **Accept/reject suggestions**: Build tools to process insertion and deletion suggestions
-4. **Generate reports**: Extract all comments and highlights for review
-
-### Example CSS Styling
-
-```css
-.quarto-highlight {
-  background-color: yellow;
-}
-
-.quarto-insert {
-  color: green;
-  text-decoration: underline;
-}
-
-.quarto-delete {
-  color: red;
-  text-decoration: line-through;
-}
-
-.quarto-edit-comment {
-  color: blue;
-  font-style: italic;
-}
-```
-
-## Availability
-
-Editorial marks are currently only available when using `quarto-markdown-pandoc`. This syntax will be integrated into Quarto's markdown processing in future releases.
 
 ## Limitations
 

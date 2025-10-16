@@ -14,6 +14,9 @@ use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_cont
 use crate::pandoc::treesitter_utils::code_span::process_code_span;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
 use crate::pandoc::treesitter_utils::document::process_document;
+use crate::pandoc::treesitter_utils::editorial_marks::{
+    process_delete, process_editcomment, process_highlight, process_insert,
+};
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
 use crate::pandoc::treesitter_utils::indented_code_block::process_indented_code_block;
@@ -50,8 +53,7 @@ use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Delete, EditComment, Emph, Highlight, Inline, Insert, Note, RawInline, Space, Str, Strikeout,
-    Strong, Subscript, Superscript,
+    Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{
@@ -675,38 +677,10 @@ fn native_visitor<T: Write>(
             Strikeout,
             context
         ),
-        "insert" => emphasis_inline!(
-            node,
-            children,
-            "insert_delimiter",
-            native_inline,
-            Insert,
-            context
-        ),
-        "delete" => emphasis_inline!(
-            node,
-            children,
-            "delete_delimiter",
-            native_inline,
-            Delete,
-            context
-        ),
-        "highlight" => emphasis_inline!(
-            node,
-            children,
-            "highlight_delimiter",
-            native_inline,
-            Highlight,
-            context
-        ),
-        "edit_comment" => emphasis_inline!(
-            node,
-            children,
-            "edit_comment_delimiter",
-            native_inline,
-            EditComment,
-            context
-        ),
+        "insert" => process_insert(buf, node, children, context),
+        "delete" => process_delete(buf, node, children, context),
+        "highlight" => process_highlight(buf, node, children, context),
+        "edit_comment" => process_editcomment(buf, node, children, context),
 
         "quoted_span" => process_quoted_span(node, children, native_inline, context),
         "code_span" => process_code_span(buf, node, children, context),

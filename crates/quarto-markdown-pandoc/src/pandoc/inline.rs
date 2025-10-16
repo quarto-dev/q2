@@ -218,24 +218,28 @@ pub enum CitationMode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Insert {
+    pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Delete {
+    pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Highlight {
+    pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EditComment {
+    pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }

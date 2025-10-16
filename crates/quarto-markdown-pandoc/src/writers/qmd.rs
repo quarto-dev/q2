@@ -1097,7 +1097,11 @@ fn write_insert(
     for inline in &insert.content {
         write_inline(inline, buf)?;
     }
-    write!(buf, "]")
+    write!(buf, "]")?;
+    if !is_empty_attr(&insert.attr) {
+        write_attr(&insert.attr, buf)?;
+    }
+    Ok(())
 }
 fn write_delete(
     delete: &crate::pandoc::Delete,
@@ -1107,7 +1111,11 @@ fn write_delete(
     for inline in &delete.content {
         write_inline(inline, buf)?;
     }
-    write!(buf, "]")
+    write!(buf, "]")?;
+    if !is_empty_attr(&delete.attr) {
+        write_attr(&delete.attr, buf)?;
+    }
+    Ok(())
 }
 fn write_highlight(
     highlight: &crate::pandoc::Highlight,
@@ -1117,7 +1125,11 @@ fn write_highlight(
     for inline in &highlight.content {
         write_inline(inline, buf)?;
     }
-    write!(buf, "]")
+    write!(buf, "]")?;
+    if !is_empty_attr(&highlight.attr) {
+        write_attr(&highlight.attr, buf)?;
+    }
+    Ok(())
 }
 fn write_editcomment(
     comment: &crate::pandoc::EditComment,
@@ -1127,7 +1139,11 @@ fn write_editcomment(
     for inline in &comment.content {
         write_inline(inline, buf)?;
     }
-    write!(buf, "]")
+    write!(buf, "]")?;
+    if !is_empty_attr(&comment.attr) {
+        write_attr(&comment.attr, buf)?;
+    }
+    Ok(())
 }
 
 fn write_inline(

@@ -1,0 +1,1 @@
+Editorial marks with attributes: [!! highlighted text]{#my-id .myclass}, [++ inserted text]{.insert-class}, [-- deleted text]{key="value"}, and [>> comment text]{#comment-id .comment-class key="value"}.

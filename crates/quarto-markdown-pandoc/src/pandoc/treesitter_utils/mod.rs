@@ -13,6 +13,7 @@ pub mod code_fence_content;
 pub mod code_span;
 pub mod commonmark_attribute;
 pub mod document;
+pub mod editorial_marks;
 pub mod fenced_code_block;
 pub mod fenced_div_block;
 pub mod image;
