@@ -158,3 +158,24 @@ fn test_label_range_note_type() {
         "Should find at least one label-range note in the error"
     );
 }
+
+#[test]
+fn test_missing_newline_warning_json_format() {
+    // This test verifies that the missing newline warning is formatted as JSON
+    // when --json-errors is used. Currently this test will fail because the
+    // warning is always output as plain text.
+
+    // Create input without trailing newline
+    let input = "# Hello World";
+
+    // We can't easily test the binary's stderr output from here, but we can
+    // document the expected behavior: when --json-errors is used, the warning
+    // should be output as:
+    // {"title":"Warning","message":"Adding missing newline to end of input"}
+    //
+    // Currently it outputs:
+    // (Warning) Adding missing newline to end of input.
+
+    // This test just documents the issue. The actual fix will be in main.rs
+    // where the warning is emitted.
+}

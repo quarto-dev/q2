@@ -89,8 +89,17 @@ fn main() {
     }
 
     if !input.ends_with("\n") {
-        eprintln!("(Warning) Adding missing newline to end of input.");
-        //
+        if args.json_errors {
+            // Output as JSON to stderr
+            let warning_json = serde_json::json!({
+                "title": "Warning",
+                "message": "Adding missing newline to end of input"
+            });
+            eprintln!("{}", warning_json);
+        } else {
+            // Output as plain text to stderr
+            eprintln!("(Warning) Adding missing newline to end of input.");
+        }
         input.push('\n'); // ensure the input ends with a newline
     }
 
