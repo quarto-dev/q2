@@ -4,10 +4,12 @@
  */
 
 use crate::pandoc::block::Blocks;
-use crate::pandoc::inline::Inlines;
+use crate::pandoc::inline::{Inline, Inlines, Span, Str};
+use crate::pandoc::location::empty_source_info;
 use crate::readers;
 use crate::{pandoc::RawBlock, utils::output::VerboseOutput};
 use hashlink::LinkedHashMap;
+use std::collections::HashMap;
 use std::{io, mem};
 use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser};
 
@@ -82,7 +84,29 @@ impl YamlEventHandler {
         }
     }
 
-    fn parse_scalar(&self, s: &str) -> MetaValue {
+    fn parse_scalar(&self, s: &str, tag: Option<yaml_rust2::parser::Tag>) -> MetaValue {
+        // Check if this scalar has a YAML tag (like !path, !glob, !str)
+        if let Some(t) = tag {
+            // Tagged strings bypass markdown parsing - wrap in Span immediately
+            let mut attributes = HashMap::new();
+            attributes.insert("tag".to_string(), t.suffix.clone());
+
+            let span = Span {
+                attr: (
+                    String::new(),
+                    vec!["yaml-tagged-string".to_string()],
+                    attributes,
+                ),
+                content: vec![Inline::Str(Str {
+                    text: s.to_string(),
+                    source_info: empty_source_info(),
+                })],
+                source_info: empty_source_info(),
+            };
+            return MetaValue::MetaInlines(vec![Inline::Span(span)]);
+        }
+
+        // Untagged scalars: parse as booleans or strings (will be parsed as markdown later)
         if s == "true" {
             MetaValue::MetaBool(true)
         } else if s == "false" {
@@ -116,12 +140,12 @@ impl MarkedEventReceiver for YamlEventHandler {
                     self.push_value(MetaValue::MetaList(list));
                 }
             }
-            Event::Scalar(s, ..) => match self.stack.last_mut() {
+            Event::Scalar(s, _style, _anchor, tag) => match self.stack.last_mut() {
                 Some(ContextFrame::Map(_, key_slot @ None)) => {
                     *key_slot = Some(s.to_string());
                 }
                 Some(ContextFrame::Map(_, Some(_))) | Some(ContextFrame::List(_)) => {
-                    let value = self.parse_scalar(&s);
+                    let value = self.parse_scalar(&s, tag);
                     self.push_value(value);
                 }
                 _ => {}
@@ -187,10 +211,22 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                     }
                     MetaValue::MetaBlocks(pandoc.blocks)
                 }
-                _ => panic!(
-                    "(unimplemented syntax error, this is a bug!) Failed to parse metadata string as markdown: {}",
-                    s
-                ),
+                Err(_) => {
+                    // Markdown parse failed - wrap in Span with class "yaml-markdown-syntax-error"
+                    let span = Span {
+                        attr: (
+                            String::new(),
+                            vec!["yaml-markdown-syntax-error".to_string()],
+                            HashMap::new(),
+                        ),
+                        content: vec![Inline::Str(Str {
+                            text: s.clone(),
+                            source_info: empty_source_info(),
+                        })],
+                        source_info: empty_source_info(),
+                    };
+                    MetaValue::MetaInlines(vec![Inline::Span(span)])
+                }
             }
         }
         MetaValue::MetaList(list) => {

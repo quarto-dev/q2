@@ -1,0 +1,9 @@
+---
+title: Test YAML Tagged Strings
+plain_path: !path images/neovim-*.png
+glob_pattern: !glob posts/*/index.qmd
+literal_string: !str _foo_.py
+regular_markdown: This has *emphasis*
+---
+
+Test document for YAML tag support.

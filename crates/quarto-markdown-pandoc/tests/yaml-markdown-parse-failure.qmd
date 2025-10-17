@@ -1,0 +1,8 @@
+---
+title: Test Markdown Parse Failure Fallback
+untagged_path: posts/*/index.qmd
+another_glob: images/*.png
+underscore_file: _foo_.py
+---
+
+Test document for graceful handling of markdown parse failures in untagged strings.

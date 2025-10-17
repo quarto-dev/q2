@@ -1,0 +1,242 @@
+---
+title: "YAML Metadata"
+---
+
+## Overview
+
+YAML front matter provides document-level metadata in Quarto documents. In `quarto-markdown`, metadata values are parsed as markdown by default, allowing you to use formatting like `*emphasis*` and `[links](url)`. However, some values—like file paths and glob patterns—should be treated as literal strings.
+
+## Default Behavior: Markdown Parsing
+
+By default, string values in YAML metadata are parsed as markdown:
+
+```yaml
+---
+title: This has *emphasis*
+description: Visit [our website](https://example.com) for more info
+---
+```
+
+The `title` will render with italicized "emphasis", and the `description` will include a clickable link.
+
+## YAML Tags for Literal Strings
+
+When you need to prevent markdown parsing, use YAML tags to mark values as literal strings:
+
+### Available Tags
+
+- `!str` - Plain string, no markdown parsing
+- `!path` - File path (same as `!str`, but semantically clearer)
+- `!glob` - Glob pattern (same as `!str`, but semantically clearer)
+
+### Syntax
+
+Prefix the value with the tag:
+
+```yaml
+---
+title: My Blog
+resources:
+  - !path images/neovim-*.png
+  - !path _foo_.py
+listing:
+  contents: !glob posts/*/index.qmd
+plain: !str "Text with * and _ chars that won't be parsed"
+---
+```
+
+## Why Use Tags?
+
+### Problem: Wildcard Characters
+
+File paths and glob patterns often contain characters that have special meaning in markdown:
+
+- `*` - Indicates emphasis in markdown
+- `_` - Also indicates emphasis in markdown
+- `[` and `]` - Indicate links in markdown
+
+Without tags, these can cause unexpected results:
+
+```yaml
+---
+# Without tag: _foo_.py is parsed as markdown
+# The underscore characters create italic emphasis!
+file: _foo_.py  # Parsed as: <em>foo</em>.py
+
+# With tag: preserved literally
+file: !path _foo_.py  # Parsed as: "_foo_.py"
+---
+```
+
+### Examples Where Tags Help
+
+**Glob patterns with wildcards:**
+
+```yaml
+---
+# ❌ Without tag: asterisk triggers markdown parsing error
+listing: posts/*/index.qmd
+
+# ✅ With tag: preserved as literal glob pattern
+listing: !glob posts/*/index.qmd
+---
+```
+
+**File paths with underscores:**
+
+```yaml
+---
+# ❌ Without tag: underscores create italic emphasis
+script: _build_helper.py  # Parsed as: <em>build</em>helper.py
+
+# ✅ With tag: preserved as literal file path
+script: !path _build_helper.py
+---
+```
+
+**Relative paths:**
+
+```yaml
+---
+# ❌ Without tag: parsed as markdown, leading dots may confuse parser
+redirect: ../_redirect.html
+
+# ✅ With tag: preserved as literal path
+redirect: !path ../_redirect.html
+---
+```
+
+## Graceful Fallback
+
+If a string fails to parse as markdown (e.g., because it contains `*` wildcard characters), `quarto-markdown` will gracefully preserve it as a literal string instead of crashing.
+
+The parser wraps failed parses in a special marker that downstream tools can detect:
+
+```json
+{
+  "t": "MetaInlines",
+  "c": [{
+    "t": "Span",
+    "c": [
+      ["", ["yaml-markdown-syntax-error"], []],
+      [{"t": "Str", "c": "posts/*/index.qmd"}]
+    ]
+  }]
+}
+```
+
+While this graceful fallback prevents crashes, using explicit tags is better practice:
+
+1. **Intent**: Tags clearly communicate that a value should be literal
+2. **Reliability**: Tags work even if the string happens to be valid markdown
+3. **Tooling**: Downstream tools can recognize tagged strings by the `yaml-tagged-string` class
+
+## When to Use Tags
+
+Use YAML tags when metadata values contain:
+
+- **File paths**: Especially those with wildcards, underscores, or special characters
+- **Glob patterns**: Any pattern using `*`, `?`, or `[...]` syntax
+- **Configuration strings**: Technical strings that shouldn't be formatted
+
+**Don't need tags** for:
+
+- **Titles and descriptions**: Where you want markdown formatting
+- **Plain text**: Simple strings without special characters
+- **Booleans and numbers**: These are never parsed as markdown
+
+## Complete Example
+
+```yaml
+---
+title: My Data Science Blog
+description: Articles about *statistics* and [machine learning](ml.html)
+
+# File paths with wildcards - use tags
+resources:
+  - !path images/*.png
+  - !path data/**/*.csv
+  - !path _utils.py
+
+# Glob patterns - use tags
+listing:
+  contents: !glob posts/*/index.qmd
+
+# Configuration strings - use tags
+redirect: !path ../index.html
+template: !str {{< special-syntax >}}
+
+# Regular strings - no tags needed
+author: Jane Doe
+date: 2024-01-15
+---
+```
+
+## Implementation Details
+
+### Tagged String Representation
+
+Tagged strings are converted to Pandoc's `MetaInlines` with a `Span` wrapper:
+
+```json
+{
+  "t": "MetaInlines",
+  "c": [{
+    "t": "Span",
+    "c": [
+      ["", ["yaml-tagged-string"], [["tag", "path"]]],
+      [{"t": "Str", "c": "images/neovim-*.png"}]
+    ]
+  }]
+}
+```
+
+The representation includes:
+
+- **Class**: `yaml-tagged-string` - Identifies this as a tagged value
+- **Attribute**: `tag` - Contains the tag name (`str`, `path`, or `glob`)
+- **Content**: The literal string value wrapped in a `Str` inline
+
+### Compatibility with Pandoc
+
+Tagged strings are compatible with Pandoc's Lua filter API:
+
+```lua
+-- Extract the string value
+local value = pandoc.utils.stringify(meta.listing.contents)
+-- value == "posts/*/index.qmd"
+
+-- Check if it's a tagged string
+if meta.listing.contents[1].classes[1] == "yaml-tagged-string" then
+  local tag = meta.listing.contents[1].attributes.tag
+  -- tag == "glob"
+end
+```
+
+The `pandoc.utils.stringify()` function correctly extracts the string content, so most filters will work without modification.
+
+## Migration Guide
+
+If you have existing documents that are failing to parse due to file paths or glob patterns:
+
+1. **Identify problematic values**: Look for metadata with `*`, `_`, or other markdown special characters
+2. **Add tags**: Prefix those values with `!path`, `!glob`, or `!str`
+3. **Test**: Verify the document parses without errors
+
+Example migration:
+
+```yaml
+# Before (may crash or parse incorrectly)
+---
+listing: posts/*/index.qmd
+resources: [images/*.png, _helper.py]
+---
+
+# After (explicit and reliable)
+---
+listing: !glob posts/*/index.qmd
+resources:
+  - !path images/*.png
+  - !path _helper.py
+---
+```
