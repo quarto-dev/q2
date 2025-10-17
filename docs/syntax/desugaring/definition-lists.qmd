@@ -1,0 +1,79 @@
+---
+title: "Definition Lists"
+---
+
+## Overview
+
+Quarto Markdown supports definition lists through a special div syntax with the `definition-list` class. During post-processing, divs meeting the structural requirements are transformed into Pandoc's native `DefinitionList` blocks.
+
+## Transformation
+
+A div with class `definition-list` containing a specific bullet list structure is converted to a `DefinitionList` block.
+
+### Required Structure
+
+```markdown
+::: {.definition-list}
+- Term 1
+  - Definition 1a
+  - Definition 1b
+- Term 2
+  - Definition 2
+:::
+```
+
+The structure must follow these rules:
+
+1. Div must have `definition-list` class
+2. Div contains exactly one bullet list
+3. Each list item has exactly two blocks:
+   - First: Plain or Paragraph (the term)
+   - Second: BulletList (the definitions)
+
+## Example
+
+### Input QMD
+
+```markdown
+::: {.definition-list}
+- **Markdown**
+  - A lightweight markup language
+  - Easy to read and write
+- **Pandoc**
+  - A universal document converter
+:::
+```
+
+### Output Structure
+
+Transforms to a `DefinitionList` block:
+
+```json
+{
+  "t": "DefinitionList",
+  "c": [
+    [
+      [{"t": "Strong", "c": [{"t": "Str", "c": "Markdown"}]}],
+      [
+        [[{"t": "Plain", "c": [{"t": "Str", "c": "A lightweight markup language"}]}]],
+        [[{"t": "Plain", "c": [{"t": "Str", "c": "Easy to read and write"}]}]]
+      ]
+    ],
+    [
+      [{"t": "Strong", "c": [{"t": "Str", "c": "Pandoc"}]}],
+      [
+        [[{"t": "Plain", "c": [{"t": "Str", "c": "A universal document converter"}]}]]
+      ]
+    ]
+  ]
+}
+```
+
+## Validation
+
+Invalid structures are left as regular divs. Common validation failures:
+
+- Div contains more than one bullet list
+- List items don't have exactly two blocks
+- First block is not Plain or Paragraph
+- Second block is not a BulletList

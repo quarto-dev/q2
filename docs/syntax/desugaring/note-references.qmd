@@ -1,0 +1,73 @@
+---
+title: "Note References"
+---
+
+## Overview
+
+Note references in Quarto Markdown use a custom `NoteReference` inline node type. During post-processing, these are desugared into standard `Span` nodes with a special class and metadata storing the reference ID.
+
+## Transformation
+
+Each `NoteReference` node is transformed to:
+
+```default
+Span {
+  attr: {
+    id: "",
+    classes: ["quarto-note-reference"],
+    attributes: {"reference-id": <note ID>}
+  },
+  content: []
+}
+```
+
+The resulting span has empty content - the reference ID is stored in the attributes.
+
+## Example
+
+### Input QMD
+
+```markdown
+Here is some text[^note-1] with a footnote.
+
+[^note-1]: This is the footnote content.
+```
+
+### Output Structure
+
+The `[^note-1]` becomes:
+
+```json
+{
+  "t": "Span",
+  "c": [
+    ["", ["quarto-note-reference"], [["reference-id", "note-1"]]],
+    []
+  ]
+}
+```
+
+## Recognition
+
+Downstream tools can identify note references by checking for the special class and extracting the ID:
+
+```lua
+if span.classes:includes("quarto-note-reference") then
+  local note_id = span.attributes["reference-id"]
+  -- Process the note reference...
+end
+```
+
+## Use Cases
+
+### Footnotes
+
+Standard footnote references that will be rendered as superscript numbers linking to the footnote content.
+
+### Endnotes
+
+References to notes collected at the end of the document or section.
+
+### Cross-references
+
+References to note definitions elsewhere in the document for documentation or citation purposes.

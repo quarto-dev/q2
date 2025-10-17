@@ -1,0 +1,22 @@
+---
+title: "AST Desugaring"
+---
+
+Desugaring is the process of transforming extended syntax constructs into simpler, equivalent representations in the AST. Quarto Markdown includes several syntax features that don't have direct equivalents in Pandoc's standard AST. During the parsing and post-processing phases, `quarto-markdown-pandoc` transforms these extended constructs into standard Pandoc AST nodes with special attributes or classes, allowing downstream tools to recognize and process them appropriately.
+
+## Desugaring Transformations
+
+The following transformations are applied during AST post-processing:
+
+- [**Math with Attributes**](math-attributes.qmd) - Math expressions followed by attributes are wrapped in Span nodes with a special class
+- [**Editorial Marks**](editorial-marks.qmd) - Insert, Delete, Highlight, and EditComment nodes are converted to Span nodes with identifying classes
+- [**Table Caption Attributes**](table-captions.qmd) - Attributes in table captions are extracted and merged with the table's attribute field
+- [**Definition Lists**](definition-lists.qmd) - Divs with `definition-list` class are transformed into DefinitionList blocks
+- [**Note References**](note-references.qmd) - NoteReference nodes are converted to Span nodes with reference metadata
+- **Figures** - Single-image paragraphs are automatically promoted to Figure blocks with captions
+- **Shortcodes** - Shortcode nodes are transformed into Span nodes
+- **Citation Suffixes** - Citation followed by space and span are merged into citation with suffix
+
+## Implementation
+
+All desugaring transformations are implemented in `src/pandoc/treesitter_utils/postprocess.rs`. The transformations are applied using a filter-based traversal system that walks the AST and applies pattern-matching transformations.

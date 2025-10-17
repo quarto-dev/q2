@@ -1,0 +1,81 @@
+---
+title: "Math with Attributes"
+---
+
+## Overview
+
+In Quarto Markdown, mathematical expressions (both inline and display) can be followed by attribute blocks to assign identifiers, classes, and key-value pairs. Since Pandoc's `Math` inline node doesn't support attributes directly, `quarto-markdown-pandoc` desugars these constructs into `Span` nodes containing the math expression, with a special class to indicate the transformation.
+
+## Syntax
+
+Math expressions with attributes follow this pattern:
+
+``` markdown
+Inline math: $E = mc^2$ {#eq-einstein}
+
+Display math:
+$$
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+$$ {#eq-gaussian}
+```
+
+The attribute block may include:
+
+- **Identifiers**: `{#eq-name}` - typically used for cross-referencing equations
+- **Classes**: `{.myclass}` - additional styling or semantic classes
+- **Key-value pairs**: `{key="value"}` - arbitrary metadata
+
+## Transformation
+
+### Pattern Matching
+
+The desugaring process looks for this pattern in the inline node sequence:
+
+1. A `Math` node (inline or display)
+2. Optionally, a `Space` node
+3. An `Attr` node containing the attributes
+
+### Example
+
+**Input QMD:**
+
+``` markdown
+The famous equation $E = mc^2$ {#eq-einstein} shows the relationship.
+```
+
+**Output AST (JSON):**
+
+``` json
+{
+  "t": "Para",
+  "c": [
+    {"t": "Str", "c": "The"},
+    {"t": "Space"},
+    {"t": "Str", "c": "famous"},
+    {"t": "Space"},
+    {"t": "Str", "c": "equation"},
+    {"t": "Space"},
+    {
+      "t": "Span",
+      "c": [
+        ["eq-einstein", ["quarto-math-with-attribute"], []],
+        [
+          {
+            "t": "Math",
+            "c": [
+              {"t": "InlineMath"},
+              "E = mc^2"
+            ]
+          }
+        ]
+      ]
+    },
+    {"t": "Space"},
+    {"t": "Str", "c": "shows"},
+    {"t": "Space"},
+    {"t": "Str", "c": "the"},
+    {"t": "Space"},
+    {"t": "Str", "c": "relationship."}
+  ]
+}
+```

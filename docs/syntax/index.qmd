@@ -14,3 +14,7 @@ The features documented here are currently under development. The syntax and beh
 - [Editorial Marks](editorial-marks.qmd) - Annotate text with highlights, insertions, deletions, and comments
 - [Footnotes](footnotes.qmd) - Add footnotes with inline or fenced block syntax
 - [YAML Metadata](yaml-metadata.qmd) - Control markdown parsing in metadata with YAML tags
+
+## Advanced Topics
+
+- [AST Desugaring](desugaring/index.qmd) - How extended syntax constructs are transformed into standard Pandoc AST nodes

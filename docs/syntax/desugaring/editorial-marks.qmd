@@ -1,0 +1,72 @@
+---
+title: "Editorial Marks"
+---
+
+## Overview
+
+Quarto Markdown's editorial marks (`[!! highlight]`, `[++ insert]`, `[-- delete]`, `[>> comment]`) are custom inline node types that don't exist in Pandoc's AST. During post-processing, these nodes are desugared into standard `Span` nodes with special classes.
+
+## Transformation
+
+All four editorial mark types follow the same desugaring pattern:
+
+| Original Node | Special Class | Example |
+|---------------|---------------|---------|
+| `Insert` | `quarto-insert` | `[++ text]` |
+| `Delete` | `quarto-delete` | `[-- text]` |
+| `Highlight` | `quarto-highlight` | `[!! text]` |
+| `EditComment` | `quarto-edit-comment` | `[>> text]` |
+
+The content is trimmed (leading/trailing spaces removed) before being placed in the Span.
+
+## Example
+
+### Input QMD
+
+```markdown
+This has [++ added text]{#my-add .important} and [!! highlighted]{.warn}.
+```
+
+### Output AST (simplified)
+
+```json
+[
+  {"t": "Str", "c": "This"},
+  {"t": "Space"},
+  {"t": "Str", "c": "has"},
+  {"t": "Space"},
+  {
+    "t": "Span",
+    "c": [
+      ["my-add", ["quarto-insert", "important"], []],
+      [{"t": "Str", "c": "added"}, {"t": "Space"}, {"t": "Str", "c": "text"}]
+    ]
+  },
+  {"t": "Space"},
+  {"t": "Str", "c": "and"},
+  {"t": "Space"},
+  {
+    "t": "Span",
+    "c": [
+      ["", ["quarto-highlight", "warn"], []],
+      [{"t": "Str", "c": "highlighted"}]
+    ]
+  }
+]
+```
+
+## Recognition
+
+Downstream tools can identify desugared editorial marks by checking for the special classes:
+
+```lua
+if span.classes:includes("quarto-insert") then
+  -- Handle insertion suggestion
+elseif span.classes:includes("quarto-delete") then
+  -- Handle deletion suggestion
+elseif span.classes:includes("quarto-highlight") then
+  -- Handle highlight
+elseif span.classes:includes("quarto-edit-comment") then
+  -- Handle editorial comment
+end
+```

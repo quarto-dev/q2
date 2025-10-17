@@ -1,0 +1,70 @@
+---
+title: "Table Caption Attributes"
+---
+
+## Overview
+
+Table captions in Quarto Markdown can include attributes after the caption text. Since Pandoc's `Table` node stores caption content separately from table attributes, these caption attributes are extracted and merged into the table's attribute field during post-processing.
+
+## Transformation
+
+When a table caption ends with an `Attr` node:
+
+1. Extract the `Attr` from the end of caption content
+2. Merge its key-value pairs into the table's attributes
+3. Merge its classes into the table's class list
+4. Use its ID if the table doesn't already have one
+
+## Example
+
+### Input QMD
+
+```markdown
+| Col 1 | Col 2 |
+|-------|-------|
+| A     | B     |
+
+: Table caption {#tbl-mytable .special tbl-colwidths="[30,70]"}
+```
+
+### Output Structure
+
+The table's `attr` field becomes:
+
+```json
+{
+  "id": "tbl-mytable",
+  "classes": ["special"],
+  "attributes": {
+    "tbl-colwidths": "[30,70]"
+  }
+}
+```
+
+The caption content no longer includes the `Attr` node - only the text "Table caption" remains.
+
+## Use Cases
+
+### Cross-referencing Tables
+
+```markdown
+See @tbl-results for the data.
+
+: Results {#tbl-results}
+```
+
+### Column Width Specifications
+
+The `tbl-colwidths` attribute is commonly used to control column widths:
+
+```markdown
+: Wide second column {tbl-colwidths="[30,70]"}
+```
+
+### Custom Styling
+
+Classes can be used for custom table styling:
+
+```markdown
+: Summary table {.striped .bordered}
+```

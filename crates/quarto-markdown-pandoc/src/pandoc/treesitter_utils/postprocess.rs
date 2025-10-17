@@ -450,6 +450,45 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                 )
             })
             .with_inlines(|inlines| {
+                // Combined filter: Handle Math + Attr pattern, then citation suffix pattern
+
+                // Step 1: Handle Math nodes followed by Attr
+                // Pattern: Math, Space (optional), Attr -> Span with "quarto-math-with-attribute" class
+                let mut math_processed = vec![];
+                let mut i = 0;
+
+                while i < inlines.len() {
+                    if let Inline::Math(math) = &inlines[i] {
+                        // Check if followed by Space then Attr, or just Attr
+                        let has_space = i + 1 < inlines.len() && matches!(inlines[i + 1], Inline::Space(_));
+                        let attr_idx = if has_space { i + 2 } else { i + 1 };
+
+                        if attr_idx < inlines.len() {
+                            if let Inline::Attr(attr) = &inlines[attr_idx] {
+                                // Found Math + (Space?) + Attr pattern
+                                // Wrap Math in a Span with the attribute
+                                let mut classes = vec!["quarto-math-with-attribute".to_string()];
+                                classes.extend(attr.1.clone());
+
+                                math_processed.push(Inline::Span(Span {
+                                    attr: (attr.0.clone(), classes, attr.2.clone()),
+                                    content: vec![Inline::Math(math.clone())],
+                                    source_info: empty_source_info(),
+                                }));
+
+                                // Skip the Math, optional Space, and Attr
+                                i = attr_idx + 1;
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Not a Math + Attr pattern, add as is
+                    math_processed.push(inlines[i].clone());
+                    i += 1;
+                }
+
+                // Step 2: Handle citation suffix pattern on the math-processed result
                 let mut result = vec![];
                 // states in this state machine:
                 // 0. normal state, where we just collect inlines
@@ -461,7 +500,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                 let mut state = 0;
                 let mut pending_cite: Option<crate::pandoc::inline::Cite> = None;
 
-                for inline in inlines {
+                for inline in math_processed {
                     match state {
                         0 => {
                             // Normal state - check if we see a valid cite
@@ -629,11 +668,40 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                     if let Block::CaptionBlock(caption_block) = block {
                         // Look for a preceding Table
                         if let Some(Block::Table(table)) = result.last_mut() {
-                            // Attach caption to the table
+                            // Extract any trailing Inline::Attr from caption content
+                            let mut caption_content = caption_block.content.clone();
+                            let mut caption_attr: Option<Attr> = None;
+
+                            if let Some(Inline::Attr(attr)) = caption_content.last() {
+                                caption_attr = Some(attr.clone());
+                                caption_content.pop(); // Remove the Attr from caption content
+                            }
+
+                            // If we found attributes in the caption, merge them with the table's attr
+                            if let Some(caption_attr_value) = caption_attr {
+                                // Merge: caption attributes override table attributes
+                                // table.attr is (id, classes, key_values)
+                                // Merge key-value pairs from caption into table
+                                for (key, value) in caption_attr_value.2 {
+                                    table.attr.2.insert(key, value);
+                                }
+                                // Merge classes from caption into table
+                                for class in caption_attr_value.1 {
+                                    if !table.attr.1.contains(&class) {
+                                        table.attr.1.push(class);
+                                    }
+                                }
+                                // Use caption id if table doesn't have one
+                                if table.attr.0.is_empty() && !caption_attr_value.0.is_empty() {
+                                    table.attr.0 = caption_attr_value.0;
+                                }
+                            }
+
+                            // Attach caption to the table (with Attr removed from content)
                             table.caption = Caption {
                                 short: None,
                                 long: Some(vec![Block::Plain(Plain {
-                                    content: caption_block.content.clone(),
+                                    content: caption_content,
                                     source_info: caption_block.source_info.clone(),
                                 })]),
                             };
