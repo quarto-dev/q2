@@ -434,7 +434,7 @@ pub fn make_cite_inline(
     // first we split the content along semicolons
     let citations: Vec<Citation> = content
         .split(is_semicolon)
-        .map(|slice| {
+        .flat_map(|slice| {
             let inlines = slice.to_vec();
             let mut cite: Option<Cite> = None;
             let mut prefix: Inlines = vec![];
@@ -455,21 +455,43 @@ pub fn make_cite_inline(
             let Some(mut c) = cite else {
                 panic!("Cite inline should have at least one citation, found none")
             };
-            if c.citations.len() != 1 {
-                panic!(
-                    "Cite inline should have exactly one citation, found: {:?}",
-                    c.citations
-                );
+
+            // Handle the case where a Cite already has multiple citations
+            // This can happen when citation syntax appears in contexts like tables
+            // where the parser creates a Cite with multiple citations
+            if c.citations.len() == 1 {
+                // Simple case: one citation, apply prefix and suffix directly
+                let mut citation = c.citations.pop().unwrap();
+                if citation.mode == CitationMode::AuthorInText {
+                    // if the mode is AuthorInText, it becomes NormalCitation inside
+                    // a compound cite
+                    citation.mode = CitationMode::NormalCitation;
+                }
+                citation.prefix = prefix;
+                citation.suffix = suffix;
+                vec![citation]
+            } else {
+                // Complex case: multiple citations already present
+                // Apply prefix to the first citation and suffix to the last
+                let num_citations = c.citations.len();
+                for (i, citation) in c.citations.iter_mut().enumerate() {
+                    if citation.mode == CitationMode::AuthorInText {
+                        citation.mode = CitationMode::NormalCitation;
+                    }
+                    if i == 0 {
+                        // Prepend prefix to the first citation's prefix
+                        let mut new_prefix = prefix.clone();
+                        new_prefix.extend(citation.prefix.clone());
+                        citation.prefix = new_prefix;
+                    }
+                    if i == num_citations - 1 {
+                        // Append suffix to the last citation's suffix
+                        citation.suffix.extend(suffix.clone());
+                    }
+                }
+                // Return all citations from this slice
+                c.citations
             }
-            let mut citation = c.citations.pop().unwrap();
-            if citation.mode == CitationMode::AuthorInText {
-                // if the mode is AuthorInText, it becomes NormalCitation inside
-                // a compound cite
-                citation.mode = CitationMode::NormalCitation;
-            }
-            citation.prefix = prefix;
-            citation.suffix = suffix;
-            citation
         })
         .collect();
     return Inline::Cite(Cite {
@@ -486,4 +508,147 @@ fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline 
         text,
         source_info: node_source_info(node),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pandoc::location::Location;
+
+    fn dummy_source_info() -> SourceInfo {
+        SourceInfo {
+            filename_index: None,
+            range: Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+            },
+        }
+    }
+
+    fn make_str(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: dummy_source_info(),
+        })
+    }
+
+    fn make_space() -> Inline {
+        Inline::Space(Space {
+            source_info: dummy_source_info(),
+        })
+    }
+
+    fn make_citation(id: &str, prefix: Inlines, suffix: Inlines) -> Citation {
+        Citation {
+            id: id.to_string(),
+            prefix,
+            suffix,
+            mode: CitationMode::NormalCitation,
+            note_num: 0,
+            hash: 0,
+        }
+    }
+
+    #[test]
+    fn test_make_cite_inline_with_multiple_citations() {
+        // Test case: a Cite inline that already contains multiple citations
+        // This simulates what happens when the parser encounters citation syntax
+        // in unsupported contexts (e.g., grid tables)
+
+        // Create a Cite with two citations already in it
+        let multi_cite = Inline::Cite(Cite {
+            citations: vec![
+                make_citation(
+                    "knuth1984",
+                    vec![],
+                    vec![make_str(","), make_space(), make_str("pp. 33-35")],
+                ),
+                make_citation(
+                    "wickham2015",
+                    vec![make_space(), make_str("also"), make_space()],
+                    vec![make_str(","), make_space(), make_str("chap. 1")],
+                ),
+            ],
+            content: vec![],
+            source_info: dummy_source_info(),
+        });
+
+        // Now call make_cite_inline with content that includes this multi-citation Cite
+        // along with a prefix "see"
+        let content = vec![make_str("see"), make_space(), multi_cite];
+
+        let result = make_cite_inline(
+            ("".to_string(), vec![], std::collections::HashMap::new()),
+            ("".to_string(), "".to_string()),
+            content,
+            dummy_source_info(),
+        );
+
+        // Verify the result is a Cite
+        match result {
+            Inline::Cite(cite) => {
+                // Should have 2 citations
+                assert_eq!(cite.citations.len(), 2);
+
+                // First citation should have the prefix "see " prepended
+                assert_eq!(cite.citations[0].id, "knuth1984");
+                assert_eq!(cite.citations[0].prefix.len(), 2);
+                match &cite.citations[0].prefix[0] {
+                    Inline::Str(s) => assert_eq!(s.text, "see"),
+                    _ => panic!("Expected Str"),
+                }
+
+                // Second citation should have its original prefix intact
+                assert_eq!(cite.citations[1].id, "wickham2015");
+                assert_eq!(cite.citations[1].prefix.len(), 3);
+            }
+            _ => panic!("Expected Cite inline, got: {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_make_cite_inline_with_single_citation_still_works() {
+        // Test that the normal case (single citation) still works
+        let single_cite = Inline::Cite(Cite {
+            citations: vec![make_citation("knuth1984", vec![], vec![])],
+            content: vec![],
+            source_info: dummy_source_info(),
+        });
+
+        let content = vec![
+            make_str("see"),
+            make_space(),
+            single_cite,
+            make_str(","),
+            make_space(),
+            make_str("pp. 33"),
+        ];
+
+        let result = make_cite_inline(
+            ("".to_string(), vec![], std::collections::HashMap::new()),
+            ("".to_string(), "".to_string()),
+            content,
+            dummy_source_info(),
+        );
+
+        match result {
+            Inline::Cite(cite) => {
+                assert_eq!(cite.citations.len(), 1);
+                assert_eq!(cite.citations[0].id, "knuth1984");
+                // Prefix should be "see "
+                assert_eq!(cite.citations[0].prefix.len(), 2);
+                // Suffix should be ", pp. 33"
+                assert_eq!(cite.citations[0].suffix.len(), 3);
+            }
+            _ => panic!("Expected Cite inline"),
+        }
+    }
 }

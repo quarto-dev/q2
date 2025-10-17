@@ -14,6 +14,8 @@ use crate::pandoc::location::{Range, SourceInfo, empty_range, empty_source_info}
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
+use crate::utils::error_collector::ErrorCollector;
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// Trim leading and trailing spaces from inlines
@@ -260,9 +262,11 @@ fn transform_definition_list_div(div: Div) -> Block {
 }
 
 /// Apply post-processing transformations to the Pandoc AST
-pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
-    let mut errors = Vec::new();
+pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> Result<Pandoc, ()> {
     let result = {
+        // Wrap error_collector in RefCell for interior mutability across multiple closures
+        let error_collector_ref = RefCell::new(error_collector);
+
         // Track seen header IDs to avoid duplicates
         let mut seen_ids: HashMap<String, usize> = HashMap::new();
         // Track citation count for numbering
@@ -606,11 +610,14 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                 FilterResult(result, true)
             })
             .with_attr(|attr| {
-                // TODO in order to do good error messages here, attr will need source mapping
-                errors.push(format!(
-                    "Found attr in postprocess: {:?} - this should have been removed",
-                    attr
-                ));
+                // TODO: Add source location when attr has it
+                error_collector_ref.borrow_mut().error(
+                    format!(
+                        "Found attr in postprocess: {:?} - this should have been removed",
+                        attr
+                    ),
+                    None,
+                );
                 FilterResult(vec![], false)
             })
             .with_blocks(|blocks| {
@@ -632,12 +639,13 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
                             };
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
-                            // TODO: Issue a warning/error when proper error infrastructure is ready
-                            // For now, print a warning to stderr
-                            eprintln!(
-                                "Warning: Caption found without a preceding table at {}:{}",
-                                caption_block.source_info.range.start.row + 1,
-                                caption_block.source_info.range.start.column + 1
+                            // Issue a warning when caption has no preceding table
+                            error_collector_ref.borrow_mut().warn(
+                                "Caption found without a preceding table".to_string(),
+                                Some(&crate::utils::error_collector::SourceInfo::new(
+                                    caption_block.source_info.range.start.row + 1,
+                                    caption_block.source_info.range.start.column + 1,
+                                )),
                             );
                             // Remove the caption from the output (don't add to result)
                         }
@@ -649,13 +657,16 @@ pub fn postprocess(doc: Pandoc) -> Result<Pandoc, Vec<String>> {
 
                 FilterResult(result, true)
             });
-        topdown_traverse(doc, &mut filter)
+        let pandoc_result = topdown_traverse(doc, &mut filter);
+
+        // Check if any errors were collected (before moving out of RefCell)
+        let has_errors = error_collector_ref.borrow().has_errors();
+
+        (pandoc_result, has_errors)
     };
-    if !errors.is_empty() {
-        Err(errors)
-    } else {
-        Ok(result)
-    }
+
+    // Return based on whether errors were found
+    if result.1 { Err(()) } else { Ok(result.0) }
 }
 
 /// Convert smart typography strings

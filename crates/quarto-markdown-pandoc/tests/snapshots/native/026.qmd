@@ -1,0 +1,13 @@
+```powershell
+$ENV:QUARTO_PRINT_STACK="true"
+```
+
+```bash
+export FOO=$BAR
+echo $HOME
+```
+
+```r
+# Dollar signs in comments
+x <- "$variable"
+```

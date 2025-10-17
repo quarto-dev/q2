@@ -1,0 +1,115 @@
+use anyhow::{Result, anyhow};
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
+/// Location information for a violation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceLocation {
+    pub row: usize,
+    pub column: usize,
+}
+
+/// Result of checking a file for a specific rule
+/// Each CheckResult represents a single violation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckResult {
+    pub rule_name: String,
+    pub file_path: String,
+    pub has_issue: bool,
+    pub issue_count: usize, // Kept for backwards compatibility, always 1 when has_issue=true
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<SourceLocation>,
+}
+
+/// Result of converting/fixing a file
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConvertResult {
+    pub rule_name: String,
+    pub file_path: String,
+    pub fixes_applied: usize,
+    pub message: Option<String>,
+}
+
+/// A rule that can check for and fix issues in Quarto Markdown files
+pub trait Rule {
+    /// The name of this rule (e.g., "grid-tables", "div-whitespace")
+    fn name(&self) -> &str;
+
+    /// A short description of what this rule checks/fixes
+    fn description(&self) -> &str;
+
+    /// Check if a file violates this rule
+    /// Returns a vector of CheckResults, one per violation found
+    fn check(&self, file_path: &Path, verbose: bool) -> Result<Vec<CheckResult>>;
+
+    /// Convert/fix rule violations in a file
+    /// If in_place is false, returns the converted content as a string in the message field
+    fn convert(
+        &self,
+        file_path: &Path,
+        in_place: bool,
+        check_mode: bool,
+        verbose: bool,
+    ) -> Result<ConvertResult>;
+}
+
+/// Registry of all available rules
+pub struct RuleRegistry {
+    rules: HashMap<String, Arc<dyn Rule + Send + Sync>>,
+}
+
+impl RuleRegistry {
+    /// Create a new registry and register all known rules
+    pub fn new() -> Result<Self> {
+        let mut registry = Self {
+            rules: HashMap::new(),
+        };
+
+        // Register diagnostic rules first (parse check should run before conversion rules)
+        registry.register(Arc::new(
+            crate::diagnostics::parse_check::ParseChecker::new()?,
+        ));
+
+        // Register conversion rules
+        registry.register(Arc::new(
+            crate::conversions::grid_tables::GridTableConverter::new()?,
+        ));
+        registry.register(Arc::new(
+            crate::conversions::div_whitespace::DivWhitespaceConverter::new()?,
+        ));
+        registry.register(Arc::new(
+            crate::conversions::definition_lists::DefinitionListConverter::new()?,
+        ));
+
+        Ok(registry)
+    }
+
+    /// Register a rule
+    fn register(&mut self, rule: Arc<dyn Rule + Send + Sync>) {
+        self.rules.insert(rule.name().to_string(), rule);
+    }
+
+    /// Get a rule by name, or return an error if not found
+    pub fn get(&self, name: &str) -> Result<Arc<dyn Rule + Send + Sync>> {
+        self.rules
+            .get(name)
+            .cloned()
+            .ok_or_else(|| anyhow!("Unknown rule: {}", name))
+    }
+
+    /// Get all registered rules
+    pub fn all(&self) -> Vec<Arc<dyn Rule + Send + Sync>> {
+        self.rules.values().cloned().collect()
+    }
+
+    /// List all rule names
+    pub fn list_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.rules.keys().cloned().collect();
+        names.sort();
+        names
+    }
+}

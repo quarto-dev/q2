@@ -6,6 +6,7 @@
 use glob::glob;
 use quarto_markdown_pandoc::errors::parse_is_good;
 use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
+use quarto_markdown_pandoc::utils::error_collector::TextErrorCollector;
 use quarto_markdown_pandoc::utils::output::VerboseOutput;
 use quarto_markdown_pandoc::{readers, writers};
 use std::io::{self, Write};
@@ -22,12 +23,14 @@ fn unit_test_simple_qmd_parses() {
             .parse(input_bytes, None)
             .expect("Failed to parse input");
         let mut buf = Vec::new();
+        let mut error_collector = TextErrorCollector::new();
         writers::native::write(
             &treesitter_to_pandoc(
                 &mut std::io::sink(),
                 &tree,
                 &input_bytes,
                 &ASTContext::anonymous(),
+                &mut error_collector,
             )
             .unwrap(),
             &mut buf,
@@ -126,6 +129,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     }
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
+    let mut error_collector1 = TextErrorCollector::new();
     writers::native::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -134,6 +138,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .unwrap(),
             input.as_bytes(),
             &ASTContext::anonymous(),
+            &mut error_collector1,
         )
         .unwrap(),
         &mut buf1,
@@ -141,6 +146,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     .unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
     let context_for_json = ASTContext::anonymous();
+    let mut error_collector2 = TextErrorCollector::new();
     writers::json::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -149,6 +155,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
                 .unwrap(),
             input.as_bytes(),
             &context_for_json,
+            &mut error_collector2,
         )
         .unwrap(),
         &context_for_json,
@@ -353,9 +360,15 @@ fn test_json_writer() {
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
                 let test_context = ASTContext::anonymous();
-                let pandoc =
-                    treesitter_to_pandoc(&mut std::io::sink(), &tree, input_bytes, &test_context)
-                        .unwrap();
+                let mut error_collector = TextErrorCollector::new();
+                let pandoc = treesitter_to_pandoc(
+                    &mut std::io::sink(),
+                    &tree,
+                    input_bytes,
+                    &test_context,
+                    &mut error_collector,
+                )
+                .unwrap();
                 let mut buf = Vec::new();
                 writers::json::write(&pandoc, &test_context, &mut buf).unwrap();
                 let our_json = String::from_utf8(buf).expect("Invalid UTF-8 in our JSON output");
@@ -435,11 +448,13 @@ fn test_html_writer() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
+                let mut error_collector = TextErrorCollector::new();
                 let pandoc = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
                     input_bytes,
                     &ASTContext::anonymous(),
+                    &mut error_collector,
                 )
                 .unwrap();
                 let mut buf = Vec::new();
@@ -541,11 +556,13 @@ fn test_do_not_smoke() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
+                let mut error_collector = TextErrorCollector::new();
                 let _ = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
                     input_bytes,
                     &ASTContext::anonymous(),
+                    &mut error_collector,
                 );
                 file_count += 1;
             }

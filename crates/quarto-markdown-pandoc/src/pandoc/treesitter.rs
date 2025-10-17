@@ -732,11 +732,12 @@ fn native_visitor<T: Write>(
     result
 }
 
-pub fn treesitter_to_pandoc<T: Write>(
+pub fn treesitter_to_pandoc<T: Write, E: crate::utils::error_collector::ErrorCollector>(
     buf: &mut T,
     tree: &tree_sitter_qmd::MarkdownTree,
     input_bytes: &[u8],
     context: &ASTContext,
+    error_collector: &mut E,
 ) -> Result<Pandoc, Vec<String>> {
     let result = bottomup_traverse_concrete_tree(
         &mut tree.walk(),
@@ -749,7 +750,13 @@ pub fn treesitter_to_pandoc<T: Write>(
     let (_, PandocNativeIntermediate::IntermediatePandoc(pandoc)) = result else {
         panic!("Expected Pandoc, got {:?}", result)
     };
-    let result = postprocess(pandoc)?;
+    let result = match postprocess(pandoc, error_collector) {
+        Ok(doc) => doc,
+        Err(()) => {
+            // Postprocess found errors, return the error messages from the collector
+            return Err(error_collector.messages());
+        }
+    };
     let result = merge_strs(result);
     Ok(result)
 }

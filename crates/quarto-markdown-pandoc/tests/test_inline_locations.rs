@@ -4,6 +4,7 @@
  */
 
 use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
+use quarto_markdown_pandoc::utils::error_collector::TextErrorCollector;
 use quarto_markdown_pandoc::writers;
 use tree_sitter_qmd::MarkdownParser;
 
@@ -17,8 +18,15 @@ fn test_inline_source_locations() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes, &context)
-        .expect("Failed to convert to Pandoc AST");
+    let mut error_collector = TextErrorCollector::new();
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &context,
+        &mut error_collector,
+    )
+    .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &context, &mut buf).unwrap();
@@ -94,8 +102,15 @@ fn test_merged_strings_preserve_location() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes, &context)
-        .expect("Failed to convert to Pandoc AST");
+    let mut error_collector = TextErrorCollector::new();
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &context,
+        &mut error_collector,
+    )
+    .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &context, &mut buf).unwrap();
@@ -149,8 +164,15 @@ fn test_separate_strings_keep_separate_locations() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let pandoc = treesitter_to_pandoc(&mut std::io::sink(), &tree, &input_bytes, &context)
-        .expect("Failed to convert to Pandoc AST");
+    let mut error_collector = TextErrorCollector::new();
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &context,
+        &mut error_collector,
+    )
+    .expect("Failed to convert to Pandoc AST");
 
     let mut buf = Vec::new();
     writers::json::write(&pandoc, &context, &mut buf).unwrap();

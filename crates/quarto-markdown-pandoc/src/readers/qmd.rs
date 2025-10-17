@@ -16,6 +16,7 @@ use crate::pandoc::{self, Block, Meta};
 use crate::pandoc::{MetaValue, rawblock_to_meta};
 use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
 use crate::traversals;
+use crate::utils::error_collector::{JsonErrorCollector, TextErrorCollector};
 use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
@@ -137,8 +138,29 @@ where
     }
 
     let context = ASTContext::with_filename(filename.to_string());
-    let mut result =
-        pandoc::treesitter_to_pandoc(&mut output_stream, &tree, &input_bytes, &context)?;
+
+    // Create appropriate error collector based on whether JSON errors are requested
+    let mut result = if error_formatter.is_some() {
+        // JSON error format requested
+        let mut error_collector = JsonErrorCollector::new();
+        pandoc::treesitter_to_pandoc(
+            &mut output_stream,
+            &tree,
+            &input_bytes,
+            &context,
+            &mut error_collector,
+        )?
+    } else {
+        // Text error format (default)
+        let mut error_collector = TextErrorCollector::new();
+        pandoc::treesitter_to_pandoc(
+            &mut output_stream,
+            &tree,
+            &input_bytes,
+            &context,
+            &mut error_collector,
+        )?
+    };
     let mut meta_from_parses = Meta::default();
 
     result = {

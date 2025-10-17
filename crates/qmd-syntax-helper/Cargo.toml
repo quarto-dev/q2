@@ -1,0 +1,32 @@
+[package]
+name = "qmd-syntax-helper"
+version = "0.1.0"
+authors.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+
+[lib]
+name = "qmd_syntax_helper"
+path = "src/lib.rs"
+
+[[bin]]
+name = "qmd-syntax-helper"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+regex = "1.10"
+colored = "2.1"
+quarto-markdown-pandoc.workspace = true
+include_dir = "0.7"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+glob = "0.3"
+
+[lints]
+workspace = true

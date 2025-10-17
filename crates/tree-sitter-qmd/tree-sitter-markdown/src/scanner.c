@@ -1464,7 +1464,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // and go on. But we can only serialize state if we successfully return an external
     // token.
     //
-    if (!s->simulate && lexer->lookahead == '$' && valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
+    // Don't track math state when inside a fenced code block - dollar signs should be literal
+    bool inside_fenced_code = s->open_blocks.size > 0 &&
+                              s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
+
+    if (!s->simulate && lexer->lookahead == '$' &&
+        !inside_fenced_code &&
+        valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
         advance(s, lexer);
         if (lexer->lookahead == '$') {
             advance(s, lexer);
