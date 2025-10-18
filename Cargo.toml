@@ -67,13 +67,16 @@ path = "./private-crates/quarto-core"
 path = "./private-crates/quarto-util"
 
 [workspace.dependencies.quarto-yaml]
-path = "./private-crates/quarto-yaml"
+path = "./crates/quarto-yaml"
 
 [workspace.dependencies.quarto-yaml-validation]
 path = "./private-crates/quarto-yaml-validation"
 
 [workspace.dependencies.quarto-error-reporting]
-path = "./private-crates/quarto-error-reporting"
+path = "./crates/quarto-error-reporting"
+
+[workspace.dependencies.quarto-source-map]
+path = "./crates/quarto-source-map"
 
 
 [workspace.lints.clippy]
