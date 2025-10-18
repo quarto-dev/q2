@@ -624,6 +624,70 @@ project:
     }
 
     #[test]
+    fn test_hash_key_and_value_locations() {
+        // Test that we can track both key and value locations in YAML hashes
+        let yaml_content = "hello: world\nfoo: bar\ncount: 42";
+        let yaml = parse(yaml_content).unwrap();
+
+        assert!(yaml.is_hash());
+        let entries = yaml.as_hash().expect("Should be a hash");
+
+        // Test 1: Verify "hello" key and "world" value locations
+        let hello_entry = entries.iter()
+            .find(|e| e.key.yaml.as_str() == Some("hello"))
+            .expect("Should have 'hello' key");
+
+        // Verify key location
+        assert_eq!(hello_entry.key.yaml.as_str(), Some("hello"));
+        let key_offset = hello_entry.key_span.range.start.offset;
+        let key_str = &yaml_content[key_offset..key_offset + 5];
+        assert_eq!(key_str, "hello", "Key location should point to 'hello'");
+
+        // Verify value location
+        assert_eq!(hello_entry.value.yaml.as_str(), Some("world"));
+        let value_offset = hello_entry.value_span.range.start.offset;
+        let value_str = &yaml_content[value_offset..value_offset + 5];
+        assert_eq!(value_str, "world", "Value location should point to 'world'");
+
+        // Verify they are different locations
+        assert_ne!(key_offset, value_offset, "Key and value should have different offsets");
+
+        // Test 2: Verify "foo" key and "bar" value locations
+        let foo_entry = entries.iter()
+            .find(|e| e.key.yaml.as_str() == Some("foo"))
+            .expect("Should have 'foo' key");
+
+        let foo_key_offset = foo_entry.key_span.range.start.offset;
+        let foo_key_str = &yaml_content[foo_key_offset..foo_key_offset + 3];
+        assert_eq!(foo_key_str, "foo", "Key location should point to 'foo'");
+
+        let bar_value_offset = foo_entry.value_span.range.start.offset;
+        let bar_value_str = &yaml_content[bar_value_offset..bar_value_offset + 3];
+        assert_eq!(bar_value_str, "bar", "Value location should point to 'bar'");
+
+        // Test 3: Verify "count" key and "42" value locations
+        let count_entry = entries.iter()
+            .find(|e| e.key.yaml.as_str() == Some("count"))
+            .expect("Should have 'count' key");
+
+        let count_key_offset = count_entry.key_span.range.start.offset;
+        let count_key_str = &yaml_content[count_key_offset..count_key_offset + 5];
+        assert_eq!(count_key_str, "count", "Key location should point to 'count'");
+
+        assert_eq!(count_entry.value.yaml.as_i64(), Some(42));
+        let count_value_offset = count_entry.value_span.range.start.offset;
+        let count_value_str = &yaml_content[count_value_offset..count_value_offset + 2];
+        assert_eq!(count_value_str, "42", "Value location should point to '42'");
+
+        // Test 4: Verify entry spans include both key and value
+        // The entry span should start at the key and end after the value
+        assert!(hello_entry.entry_span.range.start.offset <= key_offset,
+            "Entry span should start at or before the key");
+        assert!(hello_entry.entry_span.range.end.offset >= value_offset + 5,
+            "Entry span should end at or after the value");
+    }
+
+    #[test]
     fn test_qmd_frontmatter_extraction() {
         use quarto_source_map::{FileId, Location, Range};
 
