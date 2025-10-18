@@ -1,0 +1,151 @@
+digraph QuartoSubsystems {
+    // Graph attributes
+    rankdir=TB;
+    compound=true;
+    newrank=true;
+    splines=ortho;
+    nodesep=0.8;
+    ranksep=1.0;
+
+    // Node defaults
+    node [shape=box, style="rounded,filled", fontname="Arial", fontsize=11];
+    edge [fontname="Arial", fontsize=9];
+
+    // External Dependencies (Layer 0)
+    subgraph cluster_external {
+        label="External Dependencies";
+        style=filled;
+        color=lightgrey;
+
+        Pandoc [label="Pandoc\n(external tool)", fillcolor="#f9f9f9"];
+        Browser [label="Chrome/Chromium\n(headless browser)", fillcolor="#f9f9f9"];
+        NodeJS [label="Node.js\n(OJS parser)", fillcolor="#f9f9f9"];
+    }
+
+    // Foundation Layer (Layer 1)
+    subgraph cluster_foundation {
+        label="Foundation Layer";
+        style=filled;
+        color="#b3e5fc";
+
+        MappedString [label="MappedString/SourceInfo\n(source location tracking)", fillcolor="#e1f5fe"];
+        QuartoMD [label="quarto-markdown\n(Rust parser → Pandoc AST)", fillcolor="#e1f5fe"];
+        ErrorReporting [label="Error Reporting\n(ariadne + Markdown/Pandoc AST)", fillcolor="#e1f5fe"];
+    }
+
+    // Core Infrastructure (Layer 2)
+    subgraph cluster_core {
+        label="Core Infrastructure";
+        style=filled;
+        color="#ffcc80";
+
+        YAMLSystem [label="YAML System\n(parser + validator + schemas)", fillcolor="#fff3e0"];
+        ConfigSystem [label="Configuration System\n(merging + source tracking)", fillcolor="#fff3e0"];
+    }
+
+    // Processing Systems (Layer 3)
+    subgraph cluster_processing {
+        label="Processing Systems";
+        style=filled;
+        color="#ce93d8";
+
+        Workflow [label="Workflow/Pipeline System\n(explicit DAG dependencies)", fillcolor="#f3e5f5"];
+        Engines [label="Engines\n(Jupyter, Knitr, Julia)", fillcolor="#f3e5f5"];
+        Formats [label="Format System\n(HTML, PDF, DOCX, etc.)", fillcolor="#f3e5f5"];
+    }
+
+    // Rendering Systems (Layer 4)
+    subgraph cluster_rendering {
+        label="Rendering Systems";
+        style=filled;
+        color="#a5d6a7";
+
+        SingleDoc [label="Single Document Rendering\n(10-stage pipeline)", fillcolor="#e8f5e9"];
+        Website [label="Website Projects\n(navigation, search, sitemap)", fillcolor="#e8f5e9"];
+        Book [label="Book Projects\n(dual modes: HTML/PDF)", fillcolor="#e8f5e9"];
+    }
+
+    // Postprocessing (Layer 5)
+    subgraph cluster_postproc {
+        label="Postprocessing";
+        style=filled;
+        color="#f48fb1";
+
+        HTMLPost [label="HTML Postprocessing\n(html5ever + scraper)", fillcolor="#fce4ec"];
+        Templates [label="Templating\n(tera/EJS)", fillcolor="#fce4ec"];
+    }
+
+    // Tools & Services (Layer 6)
+    subgraph cluster_tools {
+        label="Tools & Services";
+        style=filled;
+        color="#b39ddb";
+
+        LSP [label="Language Server (LSP)\n(tower-lsp framework)", fillcolor="#ede7f6"];
+        MCP [label="MCP Server\n(Model Context Protocol)", fillcolor="#ede7f6"];
+        CLI [label="CLI\n(commands + orchestration)", fillcolor="#ede7f6"];
+    }
+
+    // Dependencies - Foundation (reversed: dependency -> dependent)
+    MappedString -> YAMLSystem;
+    ErrorReporting -> YAMLSystem;
+    YAMLSystem -> ConfigSystem;
+    MappedString -> ConfigSystem;
+    QuartoMD -> ErrorReporting;
+    QuartoMD -> LSP;
+    MappedString -> LSP;
+    YAMLSystem -> LSP;
+    ErrorReporting -> LSP;
+
+    // Dependencies - Processing (reversed: dependency -> dependent)
+    ConfigSystem -> Workflow;
+    ErrorReporting -> Workflow;
+    Workflow -> Engines;
+    Workflow -> Formats;
+    NodeJS -> Engines [style=dashed, label="used by"];
+
+    // Dependencies - Rendering (reversed: dependency -> dependent)
+    Workflow -> SingleDoc;
+    Engines -> SingleDoc;
+    Formats -> SingleDoc;
+    QuartoMD -> SingleDoc;
+    Pandoc -> SingleDoc [style=dashed, label="used by"];
+    SingleDoc -> Website;
+    HTMLPost -> Website;
+    Templates -> Website;
+    Website -> Book;
+
+    // Dependencies - Postprocessing (reversed: dependency -> dependent)
+    ErrorReporting -> HTMLPost;
+    ErrorReporting -> Templates;
+    HTMLPost -> SingleDoc;
+    Templates -> SingleDoc;
+    Browser -> HTMLPost [style=dashed, label="used by"];
+
+    // Dependencies - Tools (reversed: dependency -> dependent)
+    Workflow -> CLI;
+    SingleDoc -> CLI;
+    Website -> CLI;
+    Book -> CLI;
+    LSP -> CLI;
+    CLI -> MCP;
+
+    // // Ranking hints to enforce layering
+    // {rank=same; Pandoc; Browser; NodeJS;}
+    // {rank=same; MappedString; QuartoMD; ErrorReporting;}
+    // {rank=same; YAMLSystem; ConfigSystem;}
+    // {rank=same; Workflow; Engines; Formats;}
+    // {rank=same; SingleDoc; Website; Book;}
+    // {rank=same; HTMLPost; Templates;}
+    // {rank=same; LSP; MCP; CLI;}
+
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        style=filled;
+        color=white;
+
+        leg1 [label="Arrows: dependency → dependent (used by)", shape=plaintext];
+        leg2 [label="Dashed arrows: external tools", shape=plaintext];
+    }
+}
