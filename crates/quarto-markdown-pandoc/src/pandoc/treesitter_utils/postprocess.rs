@@ -14,7 +14,7 @@ use crate::pandoc::location::{Range, SourceInfo, empty_range, empty_source_info}
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
-use crate::utils::error_collector::ErrorCollector;
+use crate::utils::diagnostic_collector::DiagnosticCollector;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -262,7 +262,7 @@ fn transform_definition_list_div(div: Div) -> Block {
 }
 
 /// Apply post-processing transformations to the Pandoc AST
-pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> Result<Pandoc, ()> {
+pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Result<Pandoc, ()> {
     let result = {
         // Wrap error_collector in RefCell for interior mutability across multiple closures
         let error_collector_ref = RefCell::new(error_collector);
@@ -656,7 +656,6 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                         "Found attr in postprocess: {:?} - this should have been removed",
                         attr
                     ),
-                    None,
                 );
                 FilterResult(vec![], false)
             })
@@ -711,10 +710,6 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                             // Issue a warning when caption has no preceding table
                             error_collector_ref.borrow_mut().warn(
                                 "Caption found without a preceding table".to_string(),
-                                Some(&crate::utils::error_collector::SourceInfo::new(
-                                    caption_block.source_info.range.start.row + 1,
-                                    caption_block.source_info.range.start.column + 1,
-                                )),
                             );
                             // Remove the caption from the output (don't add to result)
                         }

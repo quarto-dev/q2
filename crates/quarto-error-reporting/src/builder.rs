@@ -86,6 +86,55 @@ impl DiagnosticMessageBuilder {
         Self::new(DiagnosticKind::Error, title)
     }
 
+    /// Create a generic error for migration purposes.
+    ///
+    /// This is a convenience method for the migration from ErrorCollector to DiagnosticMessage.
+    /// It creates an error with code Q-0-99 and includes file/line information for tracking
+    /// where the error originated in the code.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_error_reporting::DiagnosticMessageBuilder;
+    ///
+    /// let error = DiagnosticMessageBuilder::generic_error(
+    ///     "Found unexpected attribute",
+    ///     file!(),
+    ///     line!()
+    /// );
+    /// assert_eq!(error.code, Some("Q-0-99".to_string()));
+    /// assert!(error.title.contains("Found unexpected attribute"));
+    /// ```
+    pub fn generic_error(message: impl Into<String>, file: &str, line: u32) -> DiagnosticMessage {
+        let title = format!("{} (at {}:{})", message.into(), file, line);
+        Self::error(title)
+            .with_code("Q-0-99")
+            .build()
+    }
+
+    /// Create a generic warning for migration purposes.
+    ///
+    /// Similar to `generic_error()` but for warnings.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_error_reporting::DiagnosticMessageBuilder;
+    ///
+    /// let warning = DiagnosticMessageBuilder::generic_warning(
+    ///     "Caption found without table",
+    ///     file!(),
+    ///     line!()
+    /// );
+    /// assert_eq!(warning.code, Some("Q-0-99".to_string()));
+    /// ```
+    pub fn generic_warning(message: impl Into<String>, file: &str, line: u32) -> DiagnosticMessage {
+        let title = format!("{} (at {}:{})", message.into(), file, line);
+        Self::warning(title)
+            .with_code("Q-0-99")
+            .build()
+    }
+
     /// Create a warning diagnostic builder.
     ///
     /// # Example

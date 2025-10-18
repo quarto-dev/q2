@@ -16,7 +16,7 @@ use crate::pandoc::{self, Block, Meta};
 use crate::pandoc::{MetaValue, rawblock_to_meta};
 use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
 use crate::traversals;
-use crate::utils::error_collector::{ErrorCollector, JsonErrorCollector, TextErrorCollector};
+use crate::utils::diagnostic_collector::DiagnosticCollector;
 use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
@@ -139,45 +139,40 @@ where
 
     let context = ASTContext::with_filename(filename.to_string());
 
-    // Create appropriate error collector based on whether JSON errors are requested
-    // and collect warnings after conversion
-    let mut result = if error_formatter.is_some() {
-        // JSON error format requested
-        let mut error_collector = JsonErrorCollector::new();
-        let pandoc_result = pandoc::treesitter_to_pandoc(
-            &mut output_stream,
-            &tree,
-            &input_bytes,
-            &context,
-            &mut error_collector,
-        )?;
-
-        // Output warnings to stderr as JSON
-        let warnings = error_collector.messages();
-        for warning in warnings {
-            eprintln!("{}", warning);
+    // Create diagnostic collector and convert to Pandoc AST
+    let mut error_collector = DiagnosticCollector::new();
+    let mut result = match pandoc::treesitter_to_pandoc(
+        &mut output_stream,
+        &tree,
+        &input_bytes,
+        &context,
+        &mut error_collector,
+    ) {
+        Ok(pandoc) => pandoc,
+        Err(diagnostics) => {
+            // Convert diagnostics to strings based on format
+            if error_formatter.is_some() {
+                return Err(diagnostics.iter().map(|d| d.to_json().to_string()).collect());
+            } else {
+                return Err(diagnostics.iter().map(|d| d.to_text()).collect());
+            }
         }
-
-        pandoc_result
-    } else {
-        // Text error format (default)
-        let mut error_collector = TextErrorCollector::new();
-        let pandoc_result = pandoc::treesitter_to_pandoc(
-            &mut output_stream,
-            &tree,
-            &input_bytes,
-            &context,
-            &mut error_collector,
-        )?;
-
-        // Output warnings to stderr as formatted text
-        let warnings = error_collector.messages();
-        for warning in warnings {
-            eprintln!("{}", warning);
-        }
-
-        pandoc_result
     };
+
+    // Output warnings to stderr in appropriate format
+    if error_formatter.is_some() {
+        // JSON format
+        let warnings = error_collector.to_json();
+        for warning in warnings {
+            eprintln!("{}", warning);
+        }
+    } else {
+        // Text format (default)
+        let warnings = error_collector.to_text();
+        for warning in warnings {
+            eprintln!("{}", warning);
+        }
+    }
     let mut meta_from_parses = Meta::default();
 
     result = {

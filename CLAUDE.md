@@ -1,11 +1,9 @@
-# Quarto Markdown
-
-The main documentation for this repository is located at:
-[crates/quarto-markdown-pandoc/CLAUDE.md](crates/quarto-markdown-pandoc/CLAUDE.md)
+# Quarto Rust monorepo
 
 ## **WORK TRACKING**
 
 We use bd (beads) for issue tracking instead of Markdown TODOs or external tools.
+We use plans for additional context and bookkeeping. Write plans to `claude-notes/plans/YYYY-MM-DD-<description>.md`, and reference the plan file in the issues.
 
 ### Quick Reference
 
@@ -101,7 +99,26 @@ When fixing ANY bug:
 3. **THIRD**: Implement the fix
 4. **FOURTH**: Run the test and verify it passes
 
-**This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior.**
+**This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior. Only deviate if writing new features.**
+
+## Workspace structure
+
+### `crates` - corresponds to the crates in the public quarto-markdown repo
+
+- `crates/qmd-syntax-helper`: a binary to help users convert qmd files to the new syntax
+- `crates/quarto-error-reporting`: a library to help create uniform, helpful, beautiful error messages
+- `crates/quarto-markdown-pandoc`: a binary to parse qmd text and produce Pandoc AST and other formats
+- `crates/quarto-source-map`: a library to help maintain information about the source location of data structures in text files
+- `crates/quarto-yaml`: a YAML parser that produces YAML objects and accurate fine-grained source location of elements
+- `crates/tree-sitter-qmd`: tree-sitter grammars for block and inline parsers
+- `crates/wasm-qmd-parser`: A WASM module with some entry points from `crates/quarto-markdown-pandoc`
+
+### `private-crates` - private crates we are not going to release yet
+
+- `private-crates/quarto-yaml-validation`: A library to validate YAML objects using schemas
+- `private-crates/validate-yaml`: A binary to exercise `quarto-yaml-validation`
+- `private-crates/quarto`: The future main entry point for the `quarto` command line binary.
+- `private-crates/quarto-core`: supporting library for `quarto`
 
 ## General Instructions
 

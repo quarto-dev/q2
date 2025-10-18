@@ -6,7 +6,7 @@
 use glob::glob;
 use quarto_markdown_pandoc::errors::parse_is_good;
 use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
-use quarto_markdown_pandoc::utils::error_collector::TextErrorCollector;
+use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_markdown_pandoc::utils::output::VerboseOutput;
 use quarto_markdown_pandoc::{readers, writers};
 use std::io::{self, Write};
@@ -23,7 +23,7 @@ fn unit_test_simple_qmd_parses() {
             .parse(input_bytes, None)
             .expect("Failed to parse input");
         let mut buf = Vec::new();
-        let mut error_collector = TextErrorCollector::new();
+        let mut error_collector = DiagnosticCollector::new();
         writers::native::write(
             &treesitter_to_pandoc(
                 &mut std::io::sink(),
@@ -129,7 +129,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     }
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
-    let mut error_collector1 = TextErrorCollector::new();
+    let mut error_collector1 = DiagnosticCollector::new();
     writers::native::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -146,7 +146,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     .unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
     let context_for_json = ASTContext::anonymous();
-    let mut error_collector2 = TextErrorCollector::new();
+    let mut error_collector2 = DiagnosticCollector::new();
     writers::json::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -360,7 +360,7 @@ fn test_json_writer() {
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
                 let test_context = ASTContext::anonymous();
-                let mut error_collector = TextErrorCollector::new();
+                let mut error_collector = DiagnosticCollector::new();
                 let pandoc = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
@@ -448,7 +448,7 @@ fn test_html_writer() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
-                let mut error_collector = TextErrorCollector::new();
+                let mut error_collector = DiagnosticCollector::new();
                 let pandoc = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
@@ -556,7 +556,7 @@ fn test_do_not_smoke() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
-                let mut error_collector = TextErrorCollector::new();
+                let mut error_collector = DiagnosticCollector::new();
                 let _ = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,

@@ -499,6 +499,7 @@ dependencies = [
  "hashlink 0.10.0",
  "once_cell",
  "paste",
+ "quarto-error-reporting",
  "regex",
  "serde_json",
  "tree-sitter",

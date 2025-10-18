@@ -4,7 +4,7 @@
  */
 
 use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
-use quarto_markdown_pandoc::utils::error_collector::TextErrorCollector;
+use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_markdown_pandoc::writers;
 use tree_sitter_qmd::MarkdownParser;
 
@@ -18,7 +18,7 @@ fn test_inline_source_locations() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let mut error_collector = TextErrorCollector::new();
+    let mut error_collector = DiagnosticCollector::new();
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
@@ -102,7 +102,7 @@ fn test_merged_strings_preserve_location() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let mut error_collector = TextErrorCollector::new();
+    let mut error_collector = DiagnosticCollector::new();
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
@@ -164,7 +164,7 @@ fn test_separate_strings_keep_separate_locations() {
         .expect("Failed to parse input");
 
     let context = ASTContext::anonymous();
-    let mut error_collector = TextErrorCollector::new();
+    let mut error_collector = DiagnosticCollector::new();
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,

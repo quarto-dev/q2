@@ -5,7 +5,7 @@
 
 pub mod autoid;
 pub mod concrete_tree_depth;
-pub mod error_collector;
+pub mod diagnostic_collector;
 pub mod output;
 pub mod string_write_adapter;
 pub mod text;

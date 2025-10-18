@@ -50,6 +50,21 @@ impl MessageContent {
             MessageContent::Markdown(s) => s,
         }
     }
+
+    /// Convert to JSON value with type information
+    pub fn to_json(&self) -> serde_json::Value {
+        use serde_json::json;
+        match self {
+            MessageContent::Plain(s) => json!({
+                "type": "plain",
+                "content": s
+            }),
+            MessageContent::Markdown(s) => json!({
+                "type": "markdown",
+                "content": s
+            }),
+        }
+    }
 }
 
 impl From<String> for MessageContent {
@@ -235,6 +250,149 @@ impl DiagnosticMessage {
             .as_ref()
             .and_then(|code| crate::catalog::get_docs_url(code))
     }
+
+    /// Render this diagnostic message as text following tidyverse style.
+    ///
+    /// Format:
+    /// ```text
+    /// Error: title
+    /// Problem statement here
+    /// ✖ Error detail 1
+    /// ✖ Error detail 2
+    /// ℹ Info detail
+    /// • Note detail
+    /// ? Hint 1
+    /// ? Hint 2
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_error_reporting::DiagnosticMessageBuilder;
+    ///
+    /// let msg = DiagnosticMessageBuilder::error("Invalid input")
+    ///     .problem("Values must be numeric")
+    ///     .add_detail("Found text in column 3")
+    ///     .add_hint("Convert to numbers first?")
+    ///     .build();
+    /// let text = msg.to_text();
+    /// assert!(text.contains("Error: Invalid input"));
+    /// assert!(text.contains("Values must be numeric"));
+    /// ```
+    pub fn to_text(&self) -> String {
+        use std::fmt::Write;
+
+        let mut result = String::new();
+
+        // Title line with kind
+        let kind_str = match self.kind {
+            DiagnosticKind::Error => "Error",
+            DiagnosticKind::Warning => "Warning",
+            DiagnosticKind::Info => "Info",
+            DiagnosticKind::Note => "Note",
+        };
+
+        if let Some(code) = &self.code {
+            write!(result, "{} [{}]: {}", kind_str, code, self.title).unwrap();
+        } else {
+            write!(result, "{}: {}", kind_str, self.title).unwrap();
+        }
+
+        // Problem statement
+        if let Some(problem) = &self.problem {
+            write!(result, "\n{}", problem.as_str()).unwrap();
+        }
+
+        // Details with appropriate bullets
+        for detail in &self.details {
+            let bullet = match detail.kind {
+                DetailKind::Error => "✖",
+                DetailKind::Info => "ℹ",
+                DetailKind::Note => "•",
+            };
+            write!(result, "\n{} {}", bullet, detail.content.as_str()).unwrap();
+        }
+
+        // Hints
+        for hint in &self.hints {
+            write!(result, "\n? {}", hint.as_str()).unwrap();
+        }
+
+        result
+    }
+
+    /// Render this diagnostic message as a JSON value.
+    ///
+    /// Returns a structured JSON object with all fields:
+    /// ```json
+    /// {
+    ///   "kind": "error",
+    ///   "title": "Invalid input",
+    ///   "code": "Q-1-2",
+    ///   "problem": "Values must be numeric",
+    ///   "details": [{"kind": "error", "content": "Found text in column 3"}],
+    ///   "hints": ["Convert to numbers first?"]
+    /// }
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_error_reporting::DiagnosticMessage;
+    ///
+    /// let msg = DiagnosticMessage::error("Something went wrong");
+    /// let json = msg.to_json();
+    /// assert_eq!(json["kind"], "error");
+    /// assert_eq!(json["title"], "Something went wrong");
+    /// ```
+    pub fn to_json(&self) -> serde_json::Value {
+        use serde_json::json;
+
+        let kind_str = match self.kind {
+            DiagnosticKind::Error => "error",
+            DiagnosticKind::Warning => "warning",
+            DiagnosticKind::Info => "info",
+            DiagnosticKind::Note => "note",
+        };
+
+        let mut obj = json!({
+            "kind": kind_str,
+            "title": self.title,
+        });
+
+        // Add optional fields
+        if let Some(code) = &self.code {
+            obj["code"] = json!(code);
+        }
+
+        if let Some(problem) = &self.problem {
+            obj["problem"] = problem.to_json();
+        }
+
+        if !self.details.is_empty() {
+            let details: Vec<_> = self.details.iter().map(|d| {
+                let detail_kind = match d.kind {
+                    DetailKind::Error => "error",
+                    DetailKind::Info => "info",
+                    DetailKind::Note => "note",
+                };
+                json!({
+                    "kind": detail_kind,
+                    "content": d.content.to_json()
+                })
+            }).collect();
+            obj["details"] = json!(details);
+        }
+
+        if !self.hints.is_empty() {
+            let hints: Vec<_> = self.hints.iter()
+                .map(|h| h.to_json())
+                .collect();
+            obj["hints"] = json!(hints);
+        }
+
+        obj
+    }
 }
 
 #[cfg(test)]
@@ -300,5 +458,96 @@ mod tests {
     fn test_docs_url_invalid_code() {
         let msg = DiagnosticMessage::error("Test error").with_code("Q-999-999");
         assert!(msg.docs_url().is_none());
+    }
+
+    #[test]
+    fn test_to_text_simple_error() {
+        let msg = DiagnosticMessage::error("Something went wrong");
+        assert_eq!(msg.to_text(), "Error: Something went wrong");
+    }
+
+    #[test]
+    fn test_to_text_with_code() {
+        let msg = DiagnosticMessage::error("Something went wrong")
+            .with_code("Q-1-1");
+        assert_eq!(msg.to_text(), "Error [Q-1-1]: Something went wrong");
+    }
+
+    #[test]
+    fn test_to_text_full_message() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        let msg = DiagnosticMessageBuilder::error("Invalid input")
+            .problem("Values must be numeric")
+            .add_detail("Found text in column 3")
+            .add_info("Columns should contain only numbers")
+            .add_hint("Convert to numbers first?")
+            .build();
+
+        let text = msg.to_text();
+        assert!(text.contains("Error: Invalid input"));
+        assert!(text.contains("Values must be numeric"));
+        assert!(text.contains("✖ Found text in column 3"));
+        assert!(text.contains("ℹ Columns should contain only numbers"));
+        assert!(text.contains("? Convert to numbers first?"));
+    }
+
+    #[test]
+    fn test_to_json_simple() {
+        let msg = DiagnosticMessage::error("Something went wrong");
+        let json = msg.to_json();
+
+        assert_eq!(json["kind"], "error");
+        assert_eq!(json["title"], "Something went wrong");
+        assert!(json.get("code").is_none());
+        assert!(json.get("problem").is_none());
+    }
+
+    #[test]
+    fn test_to_json_with_code() {
+        let msg = DiagnosticMessage::error("Something went wrong")
+            .with_code("Q-1-1");
+        let json = msg.to_json();
+
+        assert_eq!(json["kind"], "error");
+        assert_eq!(json["title"], "Something went wrong");
+        assert_eq!(json["code"], "Q-1-1");
+    }
+
+    #[test]
+    fn test_to_json_full_message() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        let msg = DiagnosticMessageBuilder::error("Invalid input")
+            .with_code("Q-1-2")
+            .problem("Values must be numeric")
+            .add_detail("Found text in column 3")
+            .add_info("Expected numbers")
+            .add_hint("Convert to numbers first?")
+            .build();
+
+        let json = msg.to_json();
+        assert_eq!(json["kind"], "error");
+        assert_eq!(json["title"], "Invalid input");
+        assert_eq!(json["code"], "Q-1-2");
+        assert_eq!(json["problem"]["type"], "markdown");
+        assert_eq!(json["problem"]["content"], "Values must be numeric");
+        assert_eq!(json["details"][0]["kind"], "error");
+        assert_eq!(json["details"][0]["content"]["type"], "markdown");
+        assert_eq!(json["details"][0]["content"]["content"], "Found text in column 3");
+        assert_eq!(json["details"][1]["kind"], "info");
+        assert_eq!(json["details"][1]["content"]["type"], "markdown");
+        assert_eq!(json["details"][1]["content"]["content"], "Expected numbers");
+        assert_eq!(json["hints"][0]["type"], "markdown");
+        assert_eq!(json["hints"][0]["content"], "Convert to numbers first?");
+    }
+
+    #[test]
+    fn test_to_json_warning() {
+        let msg = DiagnosticMessage::warning("Be careful");
+        let json = msg.to_json();
+
+        assert_eq!(json["kind"], "warning");
+        assert_eq!(json["title"], "Be careful");
     }
 }

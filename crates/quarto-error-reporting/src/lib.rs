@@ -58,6 +58,9 @@ pub mod catalog;
 // Phase 4: Builder API
 pub mod builder;
 
+// Macros for convenient error creation
+pub mod macros;
+
 // Re-export main types for convenience
 pub use diagnostic::{DetailItem, DetailKind, DiagnosticKind, DiagnosticMessage, MessageContent};
 pub use catalog::{get_docs_url, get_error_info, get_subsystem, ErrorCodeInfo, ERROR_CATALOG};

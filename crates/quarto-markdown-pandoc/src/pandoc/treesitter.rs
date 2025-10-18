@@ -732,13 +732,13 @@ fn native_visitor<T: Write>(
     result
 }
 
-pub fn treesitter_to_pandoc<T: Write, E: crate::utils::error_collector::ErrorCollector>(
+pub fn treesitter_to_pandoc<T: Write>(
     buf: &mut T,
     tree: &tree_sitter_qmd::MarkdownTree,
     input_bytes: &[u8],
     context: &ASTContext,
-    error_collector: &mut E,
-) -> Result<Pandoc, Vec<String>> {
+    error_collector: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
+) -> Result<Pandoc, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let result = bottomup_traverse_concrete_tree(
         &mut tree.walk(),
         &mut |node, children, input_bytes, context| {
@@ -753,8 +753,12 @@ pub fn treesitter_to_pandoc<T: Write, E: crate::utils::error_collector::ErrorCol
     let result = match postprocess(pandoc, error_collector) {
         Ok(doc) => doc,
         Err(()) => {
-            // Postprocess found errors, return the error messages from the collector
-            return Err(error_collector.messages());
+            // Postprocess found errors, return the diagnostics from the collector
+            // We need to get the diagnostics out - let's use a temporary collector
+            // Actually, we can't consume the collector here because it's borrowed
+            // We need to get a copy of the diagnostics
+            let diagnostics = error_collector.diagnostics().to_vec();
+            return Err(diagnostics);
         }
     };
     let result = merge_strs(result);
