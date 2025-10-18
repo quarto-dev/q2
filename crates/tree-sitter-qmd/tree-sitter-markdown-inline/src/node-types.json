@@ -1722,6 +1722,10 @@
           "named": true
         },
         {
+          "type": "shortcode_key_name_and_equals",
+          "named": true
+        },
+        {
           "type": "shortcode_naked_string",
           "named": true
         },
@@ -2490,6 +2494,10 @@
   },
   {
     "type": "shortcode_delimiter",
+    "named": true
+  },
+  {
+    "type": "shortcode_key_name_and_equals",
     "named": true
   },
   {

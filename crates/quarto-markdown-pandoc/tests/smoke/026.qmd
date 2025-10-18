@@ -1,0 +1,1 @@
+{{< video src="url" width=500 >}}

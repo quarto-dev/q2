@@ -460,7 +460,8 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                 while i < inlines.len() {
                     if let Inline::Math(math) = &inlines[i] {
                         // Check if followed by Space then Attr, or just Attr
-                        let has_space = i + 1 < inlines.len() && matches!(inlines[i + 1], Inline::Space(_));
+                        let has_space =
+                            i + 1 < inlines.len() && matches!(inlines[i + 1], Inline::Space(_));
                         let attr_idx = if has_space { i + 2 } else { i + 1 };
 
                         if attr_idx < inlines.len() {

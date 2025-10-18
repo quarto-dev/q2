@@ -41,6 +41,7 @@ typedef enum {
     SHORTCODE_CLOSE_ESCAPED,
     SHORTCODE_OPEN,
     SHORTCODE_CLOSE,
+    KEY_NAME_AND_EQUALS,
     UNCLOSED_SPAN,
     STRONG_EMPHASIS_OPEN_STAR,
     STRONG_EMPHASIS_CLOSE_STAR,
@@ -475,6 +476,48 @@ static bool parse_shortcode_close(Scanner *s, TSLexer *lexer,
     return false;
 }
 
+// Helper: check if character is valid for start of identifier [a-zA-Z_]
+static inline bool is_identifier_start(int32_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+// Helper: check if character is valid for identifier continuation [a-zA-Z0-9_-]
+static inline bool is_identifier_char(int32_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+           (c >= '0' && c <= '9') || c == '_' || c == '-';
+}
+
+// Parse key_name_and_equals token: identifier [whitespace] =
+// This eliminates ambiguity between positional args and keyword params
+// Only attempts to parse when valid_symbols[KEY_NAME_AND_EQUALS] is true
+static bool parse_key_name_and_equals(UNUSED Scanner *s, TSLexer *lexer,
+                                      const bool *valid_symbols) {
+    if (!valid_symbols[KEY_NAME_AND_EQUALS]) return false;
+
+    // Must start with identifier start char
+    if (!is_identifier_start(lexer->lookahead)) return false;
+
+    // Consume identifier: [a-zA-Z_][a-zA-Z0-9_-]*
+    lexer->advance(lexer, false);
+    while (is_identifier_char(lexer->lookahead)) {
+        lexer->advance(lexer, false);
+    }
+
+    // Skip optional whitespace
+    while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+        lexer->advance(lexer, false);
+    }
+
+    // Must be followed by '='
+    if (lexer->lookahead != '=') return false;
+
+    // Consume the '='
+    lexer->advance(lexer, false);
+    lexer->mark_end(lexer);
+    lexer->result_symbol = KEY_NAME_AND_EQUALS;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
@@ -526,6 +569,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (!s->inside_shortcode && (valid_symbols[LAST_TOKEN_WHITESPACE] || s->inside_double_quote) && lexer->lookahead == '"') {
         return parse_double_quote(s, lexer, valid_symbols);
     }
+
+    // Try to parse key_name_and_equals when inside shortcode and lookahead is identifier start
+    // This must be checked only when the grammar can accept this token (valid_symbols guard)
+    if (s->inside_shortcode && is_identifier_start(lexer->lookahead)) {
+        return parse_key_name_and_equals(s, lexer, valid_symbols);
+    }
+
     return false;
 }
 

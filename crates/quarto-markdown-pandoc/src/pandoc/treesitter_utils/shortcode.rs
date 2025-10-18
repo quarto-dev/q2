@@ -56,7 +56,24 @@ pub fn process_shortcode_keyword_param<T: Write>(
     let mut name = String::new();
     for (node, child) in children {
         match node.as_str() {
+            "shortcode_key_name_and_equals" => {
+                // This is the new external token that includes "identifier = "
+                // We need to extract just the identifier part
+                let PandocNativeIntermediate::IntermediateShortcodeArg(
+                    ShortcodeArg::String(text),
+                    _,
+                ) = child
+                else {
+                    panic!(
+                        "Expected ShortcodeArg::String in shortcode_key_name_and_equals, got {:?}",
+                        child
+                    )
+                };
+                // Remove the trailing '=' and any whitespace before it
+                name = text.trim_end_matches('=').trim_end().to_string();
+            }
             "shortcode_name" => {
+                // This handles legacy case or value side of key-value
                 let PandocNativeIntermediate::IntermediateShortcodeArg(
                     ShortcodeArg::String(text),
                     _,

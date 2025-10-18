@@ -138,7 +138,11 @@ impl DivWhitespaceConverter {
     }
 
     /// Convert byte offset to row/column (1-indexed)
-    fn byte_offset_to_location(&self, content: &str, byte_offset: usize) -> crate::rule::SourceLocation {
+    fn byte_offset_to_location(
+        &self,
+        content: &str,
+        byte_offset: usize,
+    ) -> crate::rule::SourceLocation {
         let mut row = 1;
         let mut column = 1;
         let mut current_offset = 0;

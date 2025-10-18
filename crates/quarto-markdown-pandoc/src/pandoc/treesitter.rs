@@ -540,7 +540,7 @@ fn native_visitor<T: Write>(
         "attribute" => process_attribute(children, context),
         "commonmark_attribute" => process_commonmark_attribute(children, context),
         "class_specifier" | "id_specifier" => create_specifier_base_text(node, input_bytes),
-        "shortcode_naked_string" | "shortcode_name" => {
+        "shortcode_naked_string" | "shortcode_name" | "shortcode_key_name_and_equals" => {
             process_shortcode_string_arg(node, input_bytes, context)
         }
         "shortcode_string" => process_shortcode_string(&string_as_base_text, node, context),

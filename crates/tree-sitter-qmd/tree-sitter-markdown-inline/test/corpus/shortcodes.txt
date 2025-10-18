@@ -46,7 +46,7 @@ Key-value
     (shortcode_delimiter)
     (shortcode_name)
     (shortcode_keyword_param
-      (shortcode_name)
+      (shortcode_key_name_and_equals)
       (shortcode_name))
     (shortcode_delimiter)))
 ================================================================================
@@ -102,4 +102,73 @@ naked URL strings as positional parameters
     (shortcode_delimiter)
     (shortcode_name)
     (shortcode_naked_string)
+    (shortcode_delimiter)))
+================================================================================
+unquoted identifier as positional parameter
+================================================================================
+{{< meta my-key >}}
+--------------------------------------------------------------------------------
+(inline
+  (shortcode
+    (shortcode_delimiter)
+    (shortcode_name)
+    (shortcode_name)
+    (shortcode_delimiter)))
+================================================================================
+multiple unquoted identifiers as positional parameters
+================================================================================
+{{< include file.qmd section >}}
+--------------------------------------------------------------------------------
+(inline
+  (shortcode
+    (shortcode_delimiter)
+    (shortcode_name)
+    (shortcode_naked_string)
+    (shortcode_name)
+    (shortcode_delimiter)))
+================================================================================
+key-value with whitespace before equals
+================================================================================
+{{< video src ="url" >}}
+--------------------------------------------------------------------------------
+(inline
+  (shortcode
+    (shortcode_delimiter)
+    (shortcode_name)
+    (shortcode_keyword_param
+      (shortcode_key_name_and_equals)
+      (shortcode_string))
+    (shortcode_delimiter)))
+================================================================================
+multiple key-value parameters
+================================================================================
+{{< video src="url" width=500 >}}
+--------------------------------------------------------------------------------
+(inline
+  (shortcode
+    (shortcode_delimiter)
+    (shortcode_name)
+    (shortcode_keyword_param
+      (shortcode_key_name_and_equals)
+      (shortcode_string))
+    (shortcode_keyword_param
+      (shortcode_key_name_and_equals)
+      (shortcode_number))
+    (shortcode_delimiter)))
+================================================================================
+mixed positional and keyword parameters
+================================================================================
+{{< video "url" width=500 autoplay=true >}}
+--------------------------------------------------------------------------------
+(inline
+  (shortcode
+    (shortcode_delimiter)
+    (shortcode_name)
+    (shortcode_string)
+    (shortcode_keyword_param
+      (shortcode_key_name_and_equals)
+      (shortcode_number))
+    (shortcode_keyword_param
+      (shortcode_key_name_and_equals)
+      (shortcode_boolean))
     (shortcode_delimiter)))

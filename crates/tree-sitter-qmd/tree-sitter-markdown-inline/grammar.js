@@ -79,6 +79,10 @@ module.exports = grammar(add_inline_rules({
         $._shortcode_open,
         $._shortcode_close,
 
+        // External token for keyword parameter keys with equals sign (e.g. "key=" or "key =")
+        // This disambiguates positional args from keyword params at lexical level
+        $._key_name_and_equals,
+
         // Token emitted when encountering opening delimiters for a leaf span
         // e.g. a code span, that does not have a matching closing span
         $._unclosed_span,
@@ -102,7 +106,8 @@ module.exports = grammar(add_inline_rules({
         [$._link_text, $._inline_element_no_tilde],
         [$.link_destination, $.link_title],
         [$._link_destination_parenthesis, $.link_title],
-        [$._shortcode_value, $.shortcode_keyword_param],
+        // Removed: [$._shortcode_value, $.shortcode_keyword_param]
+        // No longer needed - external token _key_name_and_equals eliminates ambiguity
     ],
     extras: $ => [],
 
@@ -285,7 +290,14 @@ module.exports = grammar(add_inline_rules({
         // // shortcode booleans are true or false
         shortcode_boolean: $ => choice(token(prec(2, "true")), token(prec(2, "false"))),
 
-        shortcode_keyword_param: $ => prec.left(prec(2, seq($.shortcode_name, optional($._whitespace), "=", optional($._whitespace), $._shortcode_value))),
+        // Key-value parameter using external token that includes the "=" to eliminate ambiguity
+        // The key_name_and_equals token matches: identifier [whitespace] =
+        // Example: "key=", "key =", "my-key="
+        shortcode_keyword_param: $ => prec.left(prec(2, seq(
+            alias($._key_name_and_equals, $.shortcode_key_name_and_equals),
+            optional($._whitespace),
+            $._shortcode_value
+        ))),
 
         note_reference: $ => seq(
             alias('[^', $.note_reference_delimiter),

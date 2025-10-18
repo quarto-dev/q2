@@ -24,7 +24,10 @@ Some content
     );
 
     // Parsing should succeed (warnings are not errors)
-    assert!(result.is_ok(), "Document should parse successfully despite warning");
+    assert!(
+        result.is_ok(),
+        "Document should parse successfully despite warning"
+    );
 
     // TODO: Once the fix is implemented, we need to verify that the warning
     // "Caption found without a preceding table" was actually output.
@@ -56,13 +59,19 @@ fn test_caption_with_table_no_warning() {
     );
 
     // Parsing should succeed and no warnings should be emitted
-    assert!(result.is_ok(), "Document with valid table caption should parse successfully");
+    assert!(
+        result.is_ok(),
+        "Document with valid table caption should parse successfully"
+    );
 
     let (pandoc, _context) = result.unwrap();
 
     // Verify we have a table in the output
     assert!(
-        pandoc.blocks.iter().any(|b| matches!(b, quarto_markdown_pandoc::pandoc::Block::Table(_))),
+        pandoc
+            .blocks
+            .iter()
+            .any(|b| matches!(b, quarto_markdown_pandoc::pandoc::Block::Table(_))),
         "Should have a table in the output"
     );
 }

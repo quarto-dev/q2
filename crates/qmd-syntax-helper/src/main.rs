@@ -100,7 +100,11 @@ fn main() -> Result<()> {
                             for result in results {
                                 all_results.push(result.clone());
                                 if !json && result.has_issue {
-                                    println!("  {} {}", "✗".red(), result.message.unwrap_or_default());
+                                    println!(
+                                        "  {} {}",
+                                        "✗".red(),
+                                        result.message.unwrap_or_default()
+                                    );
                                 }
                             }
                         }

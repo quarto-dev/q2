@@ -1,0 +1,1 @@
+{{< video "url" width=500 autoplay=true >}}
