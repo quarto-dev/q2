@@ -1,0 +1,19 @@
+object:
+  properties:
+    title:
+      string:
+        description: "Document title"
+    author:
+      string:
+        description: "Document author"
+    year:
+      number:
+        description: "Publication year"
+        minimum: 1900
+        maximum: 2100
+    published:
+      boolean:
+        description: "Whether the document is published"
+  required:
+    - title
+    - author

@@ -1,0 +1,19 @@
+[package]
+name = "validate-yaml"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Workspace crates
+quarto-yaml.workspace = true
+quarto-yaml-validation.workspace = true
+quarto-error-reporting.workspace = true
+
+# Error handling
+anyhow.workspace = true
+
+# CLI argument parsing
+clap.workspace = true

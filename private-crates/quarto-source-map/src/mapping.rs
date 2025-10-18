@@ -1,0 +1,281 @@
+//! Position mapping through transformation chains
+
+use crate::types::{FileId, Location};
+use crate::{SourceContext, SourceInfo};
+
+/// Result of mapping a position back to an original file
+#[derive(Debug, Clone, PartialEq)]
+pub struct MappedLocation {
+    /// The original file
+    pub file_id: FileId,
+    /// Location in the original file
+    pub location: Location,
+}
+
+impl SourceInfo {
+    /// Map an offset in the current text back to original source
+    pub fn map_offset(&self, offset: usize, ctx: &SourceContext) -> Option<MappedLocation> {
+        use crate::source_info::SourceMapping;
+
+        match &self.mapping {
+            SourceMapping::Original { file_id } => {
+                // Direct mapping to original file
+                let file = ctx.get_file(*file_id)?;
+                let content = file.content.as_ref()?;
+
+                // Convert offset to Location with row/column
+                let location = crate::utils::offset_to_location(content, offset)?;
+
+                Some(MappedLocation {
+                    file_id: *file_id,
+                    location,
+                })
+            }
+            SourceMapping::Substring { parent, offset: parent_offset } => {
+                // Map to parent coordinates and recurse
+                let parent_offset_mapped = parent_offset + offset;
+                parent.map_offset(parent_offset_mapped, ctx)
+            }
+            SourceMapping::Concat { pieces } => {
+                // Find which piece contains this offset
+                for piece in pieces {
+                    let piece_start = piece.offset_in_concat;
+                    let piece_end = piece_start + piece.length;
+
+                    if offset >= piece_start && offset < piece_end {
+                        // Offset is within this piece
+                        let offset_in_piece = offset - piece_start;
+                        return piece.source_info.map_offset(offset_in_piece, ctx);
+                    }
+                }
+                None // Offset not found in any piece
+            }
+            SourceMapping::Transformed { parent, mapping } => {
+                // Find the mapping that contains this offset
+                for range_mapping in mapping {
+                    if offset >= range_mapping.from_start && offset < range_mapping.from_end {
+                        // Map to parent coordinates
+                        let offset_in_range = offset - range_mapping.from_start;
+                        let parent_offset = range_mapping.to_start + offset_in_range;
+                        return parent.map_offset(parent_offset, ctx);
+                    }
+                }
+                None // Offset not found in any mapping
+            }
+        }
+    }
+
+    /// Map a range in the current text back to original source
+    pub fn map_range(
+        &self,
+        start: usize,
+        end: usize,
+        ctx: &SourceContext,
+    ) -> Option<(MappedLocation, MappedLocation)> {
+        let start_mapped = self.map_offset(start, ctx)?;
+        let end_mapped = self.map_offset(end, ctx)?;
+        Some((start_mapped, end_mapped))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::types::{Location, Range};
+    use crate::{SourceContext, SourceInfo};
+
+    #[test]
+    fn test_map_offset_original() {
+        let mut ctx = SourceContext::new();
+        let file_id = ctx.add_file("test.qmd".to_string(), Some("hello\nworld".to_string()));
+
+        let info = SourceInfo::original(
+            file_id,
+            Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 11,
+                    row: 1,
+                    column: 5,
+                },
+            },
+        );
+
+        // Test mapping offset 0 (start of first line)
+        let mapped = info.map_offset(0, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id);
+        assert_eq!(mapped.location.offset, 0);
+        assert_eq!(mapped.location.row, 0);
+        assert_eq!(mapped.location.column, 0);
+
+        // Test mapping offset 6 (start of second line)
+        let mapped = info.map_offset(6, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id);
+        assert_eq!(mapped.location.offset, 6);
+        assert_eq!(mapped.location.row, 1);
+        assert_eq!(mapped.location.column, 0);
+    }
+
+    #[test]
+    fn test_map_offset_substring() {
+        let mut ctx = SourceContext::new();
+        let file_id = ctx.add_file("test.qmd".to_string(), Some("0123456789".to_string()));
+
+        let original = SourceInfo::original(
+            file_id,
+            Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 10,
+                    row: 0,
+                    column: 10,
+                },
+            },
+        );
+
+        // Extract substring from offset 3 to 7 ("3456")
+        let substring = SourceInfo::substring(original, 3, 7);
+
+        // Map offset 0 in substring (should be '3' at offset 3 in original)
+        let mapped = substring.map_offset(0, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id);
+        assert_eq!(mapped.location.offset, 3);
+
+        // Map offset 2 in substring (should be '5' at offset 5 in original)
+        let mapped = substring.map_offset(2, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id);
+        assert_eq!(mapped.location.offset, 5);
+    }
+
+    #[test]
+    fn test_map_offset_concat() {
+        let mut ctx = SourceContext::new();
+        let file_id1 = ctx.add_file("first.qmd".to_string(), Some("AAA".to_string()));
+        let file_id2 = ctx.add_file("second.qmd".to_string(), Some("BBB".to_string()));
+
+        let info1 = SourceInfo::original(
+            file_id1,
+            Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 3,
+                    row: 0,
+                    column: 3,
+                },
+            },
+        );
+
+        let info2 = SourceInfo::original(
+            file_id2,
+            Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 3,
+                    row: 0,
+                    column: 3,
+                },
+            },
+        );
+
+        // Concatenate: "AAABBB"
+        let concat = SourceInfo::concat(vec![(info1, 3), (info2, 3)]);
+
+        // Map offset 1 (should be in first piece, second 'A')
+        let mapped = concat.map_offset(1, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id1);
+        assert_eq!(mapped.location.offset, 1);
+
+        // Map offset 4 (should be in second piece, second 'B')
+        let mapped = concat.map_offset(4, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id2);
+        assert_eq!(mapped.location.offset, 1);
+    }
+
+    #[test]
+    fn test_map_offset_transformed() {
+        let mut ctx = SourceContext::new();
+        let file_id = ctx.add_file("test.qmd".to_string(), Some("0123456789".to_string()));
+
+        let original = SourceInfo::original(
+            file_id,
+            Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 10,
+                    row: 0,
+                    column: 10,
+                },
+            },
+        );
+
+        // Transform: map [0,3) to [5,8), skip everything else
+        use crate::source_info::RangeMapping;
+        let transformed = SourceInfo::transformed(
+            original,
+            vec![RangeMapping {
+                from_start: 0,
+                from_end: 3,
+                to_start: 5,
+                to_end: 8,
+            }],
+        );
+
+        // Map offset 0 (should map to original offset 5, which is '5')
+        let mapped = transformed.map_offset(0, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id);
+        assert_eq!(mapped.location.offset, 5);
+
+        // Map offset 2 (should map to original offset 7, which is '7')
+        let mapped = transformed.map_offset(2, &ctx).unwrap();
+        assert_eq!(mapped.file_id, file_id);
+        assert_eq!(mapped.location.offset, 7);
+    }
+
+    #[test]
+    fn test_map_range() {
+        let mut ctx = SourceContext::new();
+        let file_id = ctx.add_file("test.qmd".to_string(), Some("hello\nworld".to_string()));
+
+        let info = SourceInfo::original(
+            file_id,
+            Range {
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 11,
+                    row: 1,
+                    column: 5,
+                },
+            },
+        );
+
+        // Map range [0, 5) which is "hello"
+        let (start, end) = info.map_range(0, 5, &ctx).unwrap();
+        assert_eq!(start.file_id, file_id);
+        assert_eq!(start.location.offset, 0);
+        assert_eq!(end.file_id, file_id);
+        assert_eq!(end.location.offset, 5);
+    }
+}

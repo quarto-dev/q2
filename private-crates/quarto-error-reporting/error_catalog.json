@@ -1,0 +1,86 @@
+{
+  "Q-0-1": {
+    "subsystem": "internal",
+    "title": "Internal Error",
+    "message_template": "An internal error occurred. This is a bug in Quarto.",
+    "docs_url": "https://quarto.org/docs/errors/Q-0-1",
+    "since_version": "99.9.9"
+  },
+  "Q-1-10": {
+    "subsystem": "yaml",
+    "title": "Missing Required Property",
+    "message_template": "A required property is missing from the YAML document.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-10",
+    "since_version": "99.9.9"
+  },
+  "Q-1-11": {
+    "subsystem": "yaml",
+    "title": "Type Mismatch",
+    "message_template": "The value has an incorrect type (expected one type, got another).",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-11",
+    "since_version": "99.9.9"
+  },
+  "Q-1-12": {
+    "subsystem": "yaml",
+    "title": "Invalid Enum Value",
+    "message_template": "The value is not one of the allowed enumeration values.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-12",
+    "since_version": "99.9.9"
+  },
+  "Q-1-13": {
+    "subsystem": "yaml",
+    "title": "Array Length Constraint Violation",
+    "message_template": "The array length does not meet the minimum or maximum item constraints.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-13",
+    "since_version": "99.9.9"
+  },
+  "Q-1-14": {
+    "subsystem": "yaml",
+    "title": "String Pattern Mismatch",
+    "message_template": "The string value does not match the required pattern.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-14",
+    "since_version": "99.9.9"
+  },
+  "Q-1-15": {
+    "subsystem": "yaml",
+    "title": "Number Range Violation",
+    "message_template": "The numeric value is outside the allowed range or not a valid multiple.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-15",
+    "since_version": "99.9.9"
+  },
+  "Q-1-16": {
+    "subsystem": "yaml",
+    "title": "Object Property Count Violation",
+    "message_template": "The object has too many or too few properties.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-16",
+    "since_version": "99.9.9"
+  },
+  "Q-1-17": {
+    "subsystem": "yaml",
+    "title": "Unresolved Schema Reference",
+    "message_template": "A $ref reference in the schema could not be resolved.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-17",
+    "since_version": "99.9.9"
+  },
+  "Q-1-18": {
+    "subsystem": "yaml",
+    "title": "Unknown Property",
+    "message_template": "An unknown property was found in a closed object schema.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-18",
+    "since_version": "99.9.9"
+  },
+  "Q-1-19": {
+    "subsystem": "yaml",
+    "title": "Array Uniqueness Violation",
+    "message_template": "Array items must be unique but duplicates were found.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-19",
+    "since_version": "99.9.9"
+  },
+  "Q-1-99": {
+    "subsystem": "yaml",
+    "title": "Generic Validation Error",
+    "message_template": "A validation error occurred.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-99",
+    "since_version": "99.9.9"
+  }
+}

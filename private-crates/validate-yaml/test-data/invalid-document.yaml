@@ -1,0 +1,4 @@
+title: "My Research Paper"
+# Missing required 'author' field
+year: "not a number"
+published: "not a boolean"

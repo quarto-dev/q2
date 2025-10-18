@@ -1,0 +1,21 @@
+[package]
+name = "quarto-error-reporting"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Error reporting and diagnostic messages for Quarto"
+
+[dependencies]
+# Error reporting
+ariadne = { workspace = true }
+thiserror = { workspace = true }
+once_cell = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+# No dev dependencies yet

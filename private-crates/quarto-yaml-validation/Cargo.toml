@@ -1,0 +1,27 @@
+[package]
+name = "quarto-yaml-validation"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Error handling
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Serialization (serde_json for enum values in schemas)
+serde.workspace = true
+serde_json.workspace = true
+# Note: We don't use serde_yaml because it only supports YAML 1.1.
+# See YAML-1.2-REQUIREMENT.md for details.
+
+# YAML parsing
+yaml-rust2.workspace = true
+
+# Workspace dependencies
+quarto-yaml.workspace = true
+
+# Additional dependencies for validation
+regex = "1.10"

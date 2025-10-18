@@ -1,0 +1,20 @@
+[package]
+name = "quarto-yaml"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+yaml-rust2 = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[[bench]]
+name = "memory_overhead"
+harness = false
+
+[[bench]]
+name = "scaling_overhead"
+harness = false

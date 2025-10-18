@@ -1,0 +1,12 @@
+[package]
+name = "quarto-util"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Shared utilities for Quarto"
+
+[dependencies]
+thiserror.workspace = true
+serde.workspace = true
