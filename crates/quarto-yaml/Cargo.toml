@@ -10,6 +10,7 @@ repository.workspace = true
 yaml-rust2 = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+quarto-source-map = { path = "../quarto-source-map" }
 
 [[bench]]
 name = "memory_overhead"

@@ -7,7 +7,7 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Errors that can occur during YAML parsing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Error {
     /// YAML syntax error
     ParseError {
@@ -33,10 +33,10 @@ impl fmt::Display for Error {
             Error::ParseError { message, location } => {
                 write!(f, "Parse error: {}", message)?;
                 if let Some(loc) = location {
-                    write!(f, " at {}:{}:{}",
-                        loc.file.as_deref().unwrap_or("<input>"),
-                        loc.line,
-                        loc.col
+                    // Display with 1-indexed row/column
+                    write!(f, " at {}:{}",
+                        loc.range.start.row + 1,
+                        loc.range.start.column + 1
                     )?;
                 }
                 Ok(())
@@ -44,10 +44,9 @@ impl fmt::Display for Error {
             Error::UnexpectedEof { location } => {
                 write!(f, "Unexpected end of input")?;
                 if let Some(loc) = location {
-                    write!(f, " at {}:{}:{}",
-                        loc.file.as_deref().unwrap_or("<input>"),
-                        loc.line,
-                        loc.col
+                    write!(f, " at {}:{}",
+                        loc.range.start.row + 1,
+                        loc.range.start.column + 1
                     )?;
                 }
                 Ok(())
@@ -55,10 +54,9 @@ impl fmt::Display for Error {
             Error::InvalidStructure { message, location } => {
                 write!(f, "Invalid YAML structure: {}", message)?;
                 if let Some(loc) = location {
-                    write!(f, " at {}:{}:{}",
-                        loc.file.as_deref().unwrap_or("<input>"),
-                        loc.line,
-                        loc.col
+                    write!(f, " at {}:{}",
+                        loc.range.start.row + 1,
+                        loc.range.start.column + 1
                     )?;
                 }
                 Ok(())

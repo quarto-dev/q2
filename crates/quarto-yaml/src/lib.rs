@@ -28,16 +28,15 @@
 //! let yaml = parse(content).unwrap();
 //! // Access with source location tracking
 //! if let Some(title) = yaml.get_hash_value("title") {
-//!     println!("Title at {}:{}", title.source_info.line, title.source_info.col);
+//!     println!("Title at offset {}", title.source_info.range.start.offset);
 //! }
 //! ```
 
 mod error;
-mod source_info;
 mod yaml_with_source_info;
 mod parser;
 
 pub use error::{Error, Result};
-pub use source_info::SourceInfo;
+pub use quarto_source_map::SourceInfo;  // Re-export from quarto-source-map
 pub use yaml_with_source_info::{YamlWithSourceInfo, YamlHashEntry};
 pub use parser::{parse, parse_file};

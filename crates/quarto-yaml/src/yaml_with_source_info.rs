@@ -28,7 +28,7 @@ use yaml_rust2::Yaml;
 /// let yaml = parse("title: My Document").unwrap();
 /// if let Some(title) = yaml.get_hash_value("title") {
 ///     println!("Title: {:?}", title.yaml);
-///     println!("Location: {}:{}", title.source_info.line, title.source_info.col);
+///     println!("Location: offset {}", title.source_info.range.start.offset);
 /// }
 /// ```
 #[derive(Debug, Clone)]

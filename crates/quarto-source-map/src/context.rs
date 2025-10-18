@@ -1,5 +1,6 @@
 //! Source context for managing files
 
+use crate::file_info::FileInformation;
 use crate::types::FileId;
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +15,9 @@ pub struct SourceContext {
 pub struct SourceFile {
     /// File path or identifier
     pub path: String,
-    /// File content (optional for serialization)
+    /// File information for efficient location lookups (optional for serialization)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
+    pub file_info: Option<FileInformation>,
     /// File metadata
     pub metadata: FileMetadata,
 }
@@ -37,9 +38,10 @@ impl SourceContext {
     /// Add a file to the context and return its ID
     pub fn add_file(&mut self, path: String, content: Option<String>) -> FileId {
         let id = FileId(self.files.len());
+        let file_info = content.as_ref().map(|c| FileInformation::new(c));
         self.files.push(SourceFile {
             path,
-            content,
+            file_info,
             metadata: FileMetadata { file_type: None },
         });
         id
@@ -50,12 +52,12 @@ impl SourceContext {
         self.files.get(id.0)
     }
 
-    /// Create a copy without file content (for serialization)
+    /// Create a copy without file information (for serialization)
     pub fn without_content(&self) -> Self {
         SourceContext {
             files: self.files.iter().map(|f| SourceFile {
                 path: f.path.clone(),
-                content: None,
+                file_info: None,
                 metadata: f.metadata.clone(),
             }).collect(),
         }
@@ -86,7 +88,11 @@ mod tests {
         assert_eq!(id, FileId(0));
         let file = ctx.get_file(id).unwrap();
         assert_eq!(file.path, "test.qmd");
-        assert_eq!(file.content, Some("# Hello".to_string()));
+        assert!(file.file_info.is_some());
+
+        // Verify the file info was built correctly
+        let info = file.file_info.as_ref().unwrap();
+        assert_eq!(info.total_length(), 7);
     }
 
     #[test]
@@ -103,8 +109,10 @@ mod tests {
 
         assert_eq!(file1.path, "first.qmd");
         assert_eq!(file2.path, "second.qmd");
-        assert_eq!(file1.content, Some("First".to_string()));
-        assert_eq!(file2.content, Some("Second".to_string()));
+        assert!(file1.file_info.is_some());
+        assert!(file2.file_info.is_some());
+        assert_eq!(file1.file_info.as_ref().unwrap().total_length(), 5);
+        assert_eq!(file2.file_info.as_ref().unwrap().total_length(), 6);
     }
 
     #[test]
@@ -114,7 +122,7 @@ mod tests {
 
         let file = ctx.get_file(id).unwrap();
         assert_eq!(file.path, "no-content.qmd");
-        assert_eq!(file.content, None);
+        assert!(file.file_info.is_none());
     }
 
     #[test]
@@ -130,8 +138,8 @@ mod tests {
 
         assert_eq!(file1.path, "test1.qmd");
         assert_eq!(file2.path, "test2.qmd");
-        assert_eq!(file1.content, None);
-        assert_eq!(file2.content, None);
+        assert!(file1.file_info.is_none());
+        assert!(file2.file_info.is_none());
     }
 
     #[test]
@@ -144,7 +152,8 @@ mod tests {
 
         let file = deserialized.get_file(FileId(0)).unwrap();
         assert_eq!(file.path, "test.qmd");
-        assert_eq!(file.content, Some("# Test".to_string()));
+        assert!(file.file_info.is_some());
+        assert_eq!(file.file_info.as_ref().unwrap().total_length(), 6);
     }
 
     #[test]
@@ -155,7 +164,7 @@ mod tests {
         let ctx_no_content = ctx.without_content();
         let json = serde_json::to_string(&ctx_no_content).unwrap();
 
-        // Verify that None content is skipped in serialization
-        assert!(!json.contains("\"content\""));
+        // Verify that None file_info is skipped in serialization
+        assert!(!json.contains("\"file_info\""));
     }
 }

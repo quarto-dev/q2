@@ -45,10 +45,8 @@ fn estimate_yaml_with_source_memory(yaml: &quarto_yaml::YamlWithSourceInfo) -> u
     size += estimate_yaml_memory(&yaml.yaml);
 
     // Add SourceInfo
-    size += mem::size_of::<quarto_yaml::SourceInfo>();
-    if let Some(ref file) = yaml.source_info.file {
-        size += file.capacity();
-    }
+    // Note: SourceInfo size is already included in sizeof(YamlWithSourceInfo)
+    // For basic parsing, SourceInfo uses Original variant with FileId (just a usize)
 
     // Add children
     if let Some(children) = yaml.as_array() {

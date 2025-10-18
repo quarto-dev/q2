@@ -135,6 +135,6 @@ When fixing ANY bug:
 - Always create a plan. Always work on the plan one item at a time.
 - In the tree-sitter-markdown and tree-sitter-markdown-inline directories, you rebuild the parsers using "tree-sitter generate; tree-sitter build". Make sure the shell is in the correct directory before running those. Every time you change the tree-sitter parsers, rebuild them and run "tree-sitter test". If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
 - When attempting to find binary differences between files, always use `xxd` instead of other tools.
-- .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use docs/for-claude in this directory)
+- .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use claude-notes in this directory)
 - Sometimes you get confused by macOS's weird renaming of /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
 - The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.

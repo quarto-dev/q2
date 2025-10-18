@@ -87,5 +87,5 @@ The `quarto-markdown-pandoc` binary accepts the following options:
 - **When fixing roundtripping bugs**: FIRST add the failing test to `tests/roundtrip_tests/qmd-json-qmd`, run it to verify it fails with the expected output, THEN implement the fix, THEN verify the test passes.
 - When I say "@doit", I mean "create a plan, and work on it item by item."
 - When you're done editing a Rust file, run `cargo fmt` on it.
-- If I ask you to write notes to yourself, do it in markdown and write the output in the `docs/for-claude` directory.
+- If I ask you to write notes to yourself, do it in markdown and write the output in the `claude-notes` directory.
 - If you need more information on the syntax differences, you are allowed to read the [syntax notes](../../docs/syntax-notes.md) file.

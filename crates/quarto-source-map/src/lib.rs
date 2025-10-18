@@ -37,6 +37,7 @@ pub mod source_info;
 pub mod context;
 pub mod mapping;
 pub mod utils;
+pub mod file_info;
 
 // Re-export main types
 pub use types::{FileId, Location, Range};
@@ -44,3 +45,4 @@ pub use source_info::{SourceInfo, SourceMapping, SourcePiece, RangeMapping};
 pub use context::{SourceContext, SourceFile, FileMetadata};
 pub use mapping::MappedLocation;
 pub use utils::{offset_to_location, line_col_to_offset, range_from_offsets};
+pub use file_info::FileInformation;

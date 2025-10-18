@@ -12,14 +12,14 @@ pub enum SchemaError {
     InvalidType(String),
 
     /// Invalid schema structure
-    #[error("Invalid schema structure: {message} (at line {}, col {})", .location.line, .location.col)]
+    #[error("Invalid schema structure: {message} (at line {}, col {})", .location.range.start.row + 1, .location.range.start.column + 1)]
     InvalidStructure {
         message: String,
         location: SourceInfo,
     },
 
     /// Missing required field
-    #[error("Missing required field '{field}' (at line {}, col {})", .location.line, .location.col)]
+    #[error("Missing required field '{field}' (at line {}, col {})", .location.range.start.row + 1, .location.range.start.column + 1)]
     MissingField {
         field: String,
         location: SourceInfo,
@@ -95,13 +95,9 @@ impl ValidationError {
     pub fn with_yaml_node(mut self, node: YamlWithSourceInfo) -> Self {
         // Extract location from the node
         self.location = Some(SourceLocation {
-            file: node
-                .source_info
-                .file
-                .clone()
-                .unwrap_or_else(|| "<unknown>".to_string()),
-            line: node.source_info.line,
-            column: node.source_info.col,
+            file: "<unknown>".to_string(), // File tracking will be added in k-31
+            line: node.source_info.range.start.row + 1,  // 1-indexed for display
+            column: node.source_info.range.start.column + 1,  // 1-indexed for display
         });
         self.yaml_node = Some(node);
         self

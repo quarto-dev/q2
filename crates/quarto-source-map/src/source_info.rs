@@ -59,6 +59,18 @@ pub struct RangeMapping {
     pub to_end: usize,
 }
 
+impl Default for SourceInfo {
+    fn default() -> Self {
+        SourceInfo::original(
+            FileId(0),
+            Range {
+                start: Location { offset: 0, row: 0, column: 0 },
+                end: Location { offset: 0, row: 0, column: 0 },
+            },
+        )
+    }
+}
+
 impl SourceInfo {
     /// Create source info for a position in an original file
     pub fn original(file_id: FileId, range: Range) -> Self {

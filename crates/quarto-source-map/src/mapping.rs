@@ -21,10 +21,10 @@ impl SourceInfo {
             SourceMapping::Original { file_id } => {
                 // Direct mapping to original file
                 let file = ctx.get_file(*file_id)?;
-                let content = file.content.as_ref()?;
+                let file_info = file.file_info.as_ref()?;
 
-                // Convert offset to Location with row/column
-                let location = crate::utils::offset_to_location(content, offset)?;
+                // Convert offset to Location with row/column using efficient binary search
+                let location = file_info.offset_to_location(offset)?;
 
                 Some(MappedLocation {
                     file_id: *file_id,
