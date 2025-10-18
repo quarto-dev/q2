@@ -708,8 +708,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
                             // Issue a warning when caption has no preceding table
-                            error_collector_ref.borrow_mut().warn(
+                            error_collector_ref.borrow_mut().warn_at(
                                 "Caption found without a preceding table".to_string(),
+                                caption_block.source_info.to_source_map_info(),
                             );
                             // Remove the caption from the output (don't add to result)
                         }

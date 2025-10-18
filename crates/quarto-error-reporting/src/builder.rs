@@ -52,8 +52,8 @@ pub struct DiagnosticMessageBuilder {
     /// Optional hints for fixing
     hints: Vec<MessageContent>,
 
-    // Future: Source spans for pointing to specific code locations
-    // source_spans: Vec<SourceSpan>,
+    /// Source location for this diagnostic
+    location: Option<quarto_source_map::SourceInfo>,
 }
 
 impl DiagnosticMessageBuilder {
@@ -69,6 +69,7 @@ impl DiagnosticMessageBuilder {
             problem: None,
             details: Vec::new(),
             hints: Vec::new(),
+            location: None,
         }
     }
 
@@ -180,6 +181,35 @@ impl DiagnosticMessageBuilder {
     /// ```
     pub fn with_code(mut self, code: impl Into<String>) -> Self {
         self.code = Some(code.into());
+        self
+    }
+
+    /// Attach a source location to this diagnostic.
+    ///
+    /// The location identifies where in the source code the issue occurred.
+    /// The location may track transformation history, allowing the error to be
+    /// mapped back through multiple processing steps to the original source file.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use quarto_error_reporting::DiagnosticMessageBuilder;
+    /// use quarto_source_map::{SourceInfo, SourceContext, FileId, Range, Location};
+    ///
+    /// let mut ctx = SourceContext::new();
+    /// let file_id = ctx.add_file("test.qmd".into(), Some("content".into()));
+    /// let range = Range {
+    ///     start: Location { offset: 0, row: 0, column: 0 },
+    ///     end: Location { offset: 7, row: 0, column: 7 },
+    /// };
+    /// let source_info = SourceInfo::original(file_id, range);
+    ///
+    /// let error = DiagnosticMessageBuilder::error("Parse error")
+    ///     .with_location(source_info)
+    ///     .build();
+    /// ```
+    pub fn with_location(mut self, location: quarto_source_map::SourceInfo) -> Self {
+        self.location = Some(location);
         self
     }
 
@@ -320,6 +350,7 @@ impl DiagnosticMessageBuilder {
             problem: self.problem,
             details: self.details,
             hints: self.hints,
+            location: self.location,
         }
     }
 

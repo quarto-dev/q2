@@ -35,6 +35,32 @@ impl DiagnosticCollector {
         self.add(quarto_error_reporting::generic_warning!(message.into()));
     }
 
+    /// Add an error message with source location
+    ///
+    /// Use this when you have source location information available.
+    pub fn error_at(
+        &mut self,
+        message: impl Into<String>,
+        location: quarto_source_map::SourceInfo,
+    ) {
+        let mut diagnostic = quarto_error_reporting::generic_error!(message.into());
+        diagnostic.location = Some(location);
+        self.add(diagnostic);
+    }
+
+    /// Add a warning message with source location
+    ///
+    /// Use this when you have source location information available.
+    pub fn warn_at(
+        &mut self,
+        message: impl Into<String>,
+        location: quarto_source_map::SourceInfo,
+    ) {
+        let mut diagnostic = quarto_error_reporting::generic_warning!(message.into());
+        diagnostic.location = Some(location);
+        self.add(diagnostic);
+    }
+
     /// Check if any errors were collected (warnings don't count)
     pub fn has_errors(&self) -> bool {
         self.diagnostics
@@ -51,7 +77,7 @@ impl DiagnosticCollector {
     pub fn to_text(&self) -> Vec<String> {
         self.diagnostics
             .iter()
-            .map(|d| d.to_text())
+            .map(|d| d.to_text(None))
             .collect()
     }
 

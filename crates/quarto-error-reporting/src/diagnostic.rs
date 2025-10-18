@@ -125,7 +125,7 @@ pub struct DetailItem {
 ///     source_spans: vec![],
 /// };
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiagnosticMessage {
     /// Optional error code (e.g., "Q-1-1")
     ///
@@ -151,8 +151,13 @@ pub struct DiagnosticMessage {
     /// Optional hints for fixing (ends with ?)
     pub hints: Vec<MessageContent>,
 
-    // Future: Source spans for pointing to specific code locations
-    // pub source_spans: Vec<SourceSpan>,
+    /// Source location for this diagnostic
+    ///
+    /// When present, this identifies where in the source code the issue occurred.
+    /// The location may track transformation history, allowing the error to be
+    /// mapped back through multiple processing steps to the original source file.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<quarto_source_map::SourceInfo>,
 }
 
 impl DiagnosticMessage {
@@ -192,6 +197,7 @@ impl DiagnosticMessage {
             problem: None,
             details: Vec::new(),
             hints: Vec::new(),
+            location: None,
         }
     }
 
@@ -275,11 +281,11 @@ impl DiagnosticMessage {
     ///     .add_detail("Found text in column 3")
     ///     .add_hint("Convert to numbers first?")
     ///     .build();
-    /// let text = msg.to_text();
+    /// let text = msg.to_text(None);
     /// assert!(text.contains("Error: Invalid input"));
     /// assert!(text.contains("Values must be numeric"));
     /// ```
-    pub fn to_text(&self) -> String {
+    pub fn to_text(&self, ctx: Option<&quarto_source_map::SourceContext>) -> String {
         use std::fmt::Write;
 
         let mut result = String::new();
@@ -296,6 +302,32 @@ impl DiagnosticMessage {
             write!(result, "{} [{}]: {}", kind_str, code, self.title).unwrap();
         } else {
             write!(result, "{}: {}", kind_str, self.title).unwrap();
+        }
+
+        // Add location if present
+        if let Some(loc) = &self.location {
+            if let Some(ctx) = ctx {
+                // Try to map to original source
+                if let Some(mapped) = loc.map_offset(loc.range.start.offset, ctx) {
+                    if let Some(file) = ctx.get_file(mapped.file_id) {
+                        write!(
+                            result,
+                            " at {}:{}:{}",
+                            file.path,
+                            mapped.location.row + 1,  // Display as 1-based
+                            mapped.location.column + 1
+                        ).unwrap();
+                    }
+                }
+            } else {
+                // No context, show immediate location
+                write!(
+                    result,
+                    " at {}:{}",
+                    loc.range.start.row + 1,
+                    loc.range.start.column + 1
+                ).unwrap();
+            }
         }
 
         // Problem statement
@@ -391,6 +423,10 @@ impl DiagnosticMessage {
             obj["hints"] = json!(hints);
         }
 
+        if let Some(location) = &self.location {
+            obj["location"] = json!(location);  // quarto-source-map::SourceInfo is Serialize
+        }
+
         obj
     }
 }
@@ -463,14 +499,14 @@ mod tests {
     #[test]
     fn test_to_text_simple_error() {
         let msg = DiagnosticMessage::error("Something went wrong");
-        assert_eq!(msg.to_text(), "Error: Something went wrong");
+        assert_eq!(msg.to_text(None), "Error: Something went wrong");
     }
 
     #[test]
     fn test_to_text_with_code() {
         let msg = DiagnosticMessage::error("Something went wrong")
             .with_code("Q-1-1");
-        assert_eq!(msg.to_text(), "Error [Q-1-1]: Something went wrong");
+        assert_eq!(msg.to_text(None), "Error [Q-1-1]: Something went wrong");
     }
 
     #[test]
@@ -484,7 +520,7 @@ mod tests {
             .add_hint("Convert to numbers first?")
             .build();
 
-        let text = msg.to_text();
+        let text = msg.to_text(None);
         assert!(text.contains("Error: Invalid input"));
         assert!(text.contains("Values must be numeric"));
         assert!(text.contains("✖ Found text in column 3"));
@@ -549,5 +585,127 @@ mod tests {
 
         assert_eq!(json["kind"], "warning");
         assert_eq!(json["title"], "Be careful");
+    }
+
+    #[test]
+    fn test_location_in_to_text_without_context() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        // Create a location at row 10, column 5
+        let location = quarto_source_map::SourceInfo::original(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 100,
+                    row: 10,
+                    column: 5,
+                },
+                end: quarto_source_map::Location {
+                    offset: 110,
+                    row: 10,
+                    column: 15,
+                },
+            },
+        );
+
+        let msg = DiagnosticMessageBuilder::error("Invalid syntax")
+            .with_location(location)
+            .build();
+
+        let text = msg.to_text(None);
+
+        // Without context, should show immediate location (1-indexed)
+        assert!(text.contains("Invalid syntax"));
+        assert!(text.contains("at 11:6"));  // row 10 + 1, column 5 + 1
+    }
+
+    #[test]
+    fn test_location_in_to_text_with_context() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        // Create a source context with a file
+        let mut ctx = quarto_source_map::SourceContext::new();
+        let file_id = ctx.add_file(
+            "test.qmd".to_string(),
+            Some("line 1\nline 2\nline 3\nline 4".to_string())
+        );
+
+        // Create a location in that file
+        let location = quarto_source_map::SourceInfo::original(
+            file_id,
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 7,  // Start of "line 2"
+                    row: 1,
+                    column: 0,
+                },
+                end: quarto_source_map::Location {
+                    offset: 13,
+                    row: 1,
+                    column: 6,
+                },
+            },
+        );
+
+        let msg = DiagnosticMessageBuilder::error("Invalid syntax")
+            .with_location(location)
+            .build();
+
+        let text = msg.to_text(Some(&ctx));
+
+        // With context, should show file path and 1-indexed location
+        assert!(text.contains("Invalid syntax"));
+        assert!(text.contains("test.qmd"));
+        assert!(text.contains("2:1"));  // row 1 + 1, column 0 + 1
+    }
+
+    #[test]
+    fn test_location_in_to_json() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        let location = quarto_source_map::SourceInfo::original(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 100,
+                    row: 10,
+                    column: 5,
+                },
+                end: quarto_source_map::Location {
+                    offset: 110,
+                    row: 10,
+                    column: 15,
+                },
+            },
+        );
+
+        let msg = DiagnosticMessageBuilder::error("Invalid syntax")
+            .with_location(location)
+            .build();
+
+        let json = msg.to_json();
+
+        // Should have location field with range info
+        assert!(json.get("location").is_some());
+        let loc = &json["location"];
+        assert!(loc.get("range").is_some());
+
+        // Verify the range is serialized correctly
+        let range = &loc["range"];
+        assert_eq!(range["start"]["row"], 10);
+        assert_eq!(range["start"]["column"], 5);
+        assert_eq!(range["start"]["offset"], 100);
+        assert_eq!(range["end"]["row"], 10);
+        assert_eq!(range["end"]["column"], 15);
+        assert_eq!(range["end"]["offset"], 110);
+    }
+
+    #[test]
+    fn test_location_optional_in_to_json() {
+        let msg = DiagnosticMessage::error("No location");
+        let json = msg.to_json();
+
+        // Should not have location field when not provided
+        assert!(json.get("location").is_none());
     }
 }

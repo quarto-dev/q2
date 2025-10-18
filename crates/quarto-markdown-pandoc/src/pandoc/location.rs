@@ -61,6 +61,56 @@ impl SourceInfo {
             },
         }
     }
+
+    /// Convert to quarto-source-map::SourceInfo (temporary conversion helper)
+    ///
+    /// This helper bridges between pandoc::location types and quarto-source-map types.
+    /// Long-term, code should use quarto-source-map types directly.
+    ///
+    /// Creates an Original mapping with a dummy FileId(0).
+    /// For proper filename support, use to_source_map_info_with_mapping with a real FileId.
+    pub fn to_source_map_info(&self) -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: self.range.start.offset,
+                    row: self.range.start.row,
+                    column: self.range.start.column,
+                },
+                end: quarto_source_map::Location {
+                    offset: self.range.end.offset,
+                    row: self.range.end.row,
+                    column: self.range.end.column,
+                },
+            },
+        )
+    }
+
+    /// Convert to quarto-source-map::SourceInfo with proper FileId (temporary conversion helper)
+    ///
+    /// This helper bridges between pandoc::location types and quarto-source-map types.
+    /// Use this when you have a proper FileId mapping from your context.
+    pub fn to_source_map_info_with_mapping(
+        &self,
+        file_id: quarto_source_map::FileId,
+    ) -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(
+            file_id,
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: self.range.start.offset,
+                    row: self.range.start.row,
+                    column: self.range.start.column,
+                },
+                end: quarto_source_map::Location {
+                    offset: self.range.end.offset,
+                    row: self.range.end.row,
+                    column: self.range.end.column,
+                },
+            },
+        )
+    }
 }
 
 pub trait SourceLocation {

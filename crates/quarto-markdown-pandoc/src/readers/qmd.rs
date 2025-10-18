@@ -154,7 +154,7 @@ where
             if error_formatter.is_some() {
                 return Err(diagnostics.iter().map(|d| d.to_json().to_string()).collect());
             } else {
-                return Err(diagnostics.iter().map(|d| d.to_text()).collect());
+                return Err(diagnostics.iter().map(|d| d.to_text(None)).collect());
             }
         }
     };

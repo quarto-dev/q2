@@ -483,6 +483,7 @@ version = "0.1.0"
 dependencies = [
  "ariadne",
  "once_cell",
+ "quarto-source-map",
  "serde",
  "serde_json",
  "thiserror",
@@ -500,6 +501,7 @@ dependencies = [
  "once_cell",
  "paste",
  "quarto-error-reporting",
+ "quarto-source-map",
  "regex",
  "serde_json",
  "tree-sitter",
