@@ -39,4 +39,4 @@ mod parser;
 pub use error::{Error, Result};
 pub use quarto_source_map::SourceInfo;  // Re-export from quarto-source-map
 pub use yaml_with_source_info::{YamlWithSourceInfo, YamlHashEntry};
-pub use parser::{parse, parse_file};
+pub use parser::{parse, parse_file, parse_with_parent};

@@ -12,6 +12,9 @@ serde = { workspace = true }
 thiserror = { workspace = true }
 quarto-source-map = { path = "../quarto-source-map" }
 
+[dev-dependencies]
+regex = "1"
+
 [[bench]]
 name = "memory_overhead"
 harness = false

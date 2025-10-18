@@ -539,6 +539,7 @@ name = "quarto-yaml"
 version = "0.1.0"
 dependencies = [
  "quarto-source-map",
+ "regex",
  "serde",
  "thiserror",
  "yaml-rust2 0.9.0",
