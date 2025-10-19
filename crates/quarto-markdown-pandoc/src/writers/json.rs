@@ -441,7 +441,11 @@ fn write_meta_value_with_source_info(value: &crate::pandoc::MetaValueWithSourceI
             source_info,
         } => json!({
             "t": "MetaMap",
-            "c": entries.iter().map(|entry| json!([entry.key, write_meta_value_with_source_info(&entry.value)])).collect::<Vec<_>>(),
+            "c": entries.iter().map(|entry| json!({
+                "key": entry.key,
+                "key_source": entry.key_source,
+                "value": write_meta_value_with_source_info(&entry.value)
+            })).collect::<Vec<_>>(),
             "s": source_info
         }),
     }
@@ -449,6 +453,7 @@ fn write_meta_value_with_source_info(value: &crate::pandoc::MetaValueWithSourceI
 
 fn write_meta(meta: &crate::pandoc::MetaValueWithSourceInfo) -> Value {
     // meta should be a MetaMap variant
+    // Write as Pandoc-compatible object format
     match meta {
         crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
             let map: serde_json::Map<String, Value> = entries
@@ -471,13 +476,32 @@ fn write_blocks(blocks: &[Block]) -> Value {
 }
 
 fn write_pandoc(pandoc: &Pandoc, context: &ASTContext) -> Value {
+    // Extract top-level key sources from metadata
+    let meta_top_level_key_sources: serde_json::Map<String, Value> =
+        if let crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } = &pandoc.meta {
+            entries
+                .iter()
+                .map(|entry| (entry.key.clone(), json!(entry.key_source)))
+                .collect()
+        } else {
+            serde_json::Map::new()
+        };
+
+    // Build astContext, only including metaTopLevelKeySources if non-empty
+    let mut ast_context_obj = serde_json::Map::new();
+    ast_context_obj.insert("filenames".to_string(), json!(context.filenames));
+    if !meta_top_level_key_sources.is_empty() {
+        ast_context_obj.insert(
+            "metaTopLevelKeySources".to_string(),
+            Value::Object(meta_top_level_key_sources),
+        );
+    }
+
     json!({
         "pandoc-api-version": [1, 23, 1],
         "meta": write_meta(&pandoc.meta),
         "blocks": write_blocks(&pandoc.blocks),
-        "astContext": {
-            "filenames": context.filenames,
-        },
+        "astContext": ast_context_obj,
     })
 }
 

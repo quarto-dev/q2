@@ -340,10 +340,12 @@ impl Schema {
 
     /// Parse object form: {boolean: {...}}, {string: {...}}, etc.
     fn parse_object_form(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
-        let entries = yaml.as_hash().ok_or_else(|| SchemaError::InvalidStructure {
-            message: "Expected hash for object form schema".to_string(),
-            location: yaml.source_info.clone(),
-        })?;
+        let entries = yaml
+            .as_hash()
+            .ok_or_else(|| SchemaError::InvalidStructure {
+                message: "Expected hash for object form schema".to_string(),
+                location: yaml.source_info.clone(),
+            })?;
 
         if entries.is_empty() {
             return Err(SchemaError::InvalidStructure {
@@ -354,12 +356,14 @@ impl Schema {
 
         // Peek at first key to determine schema type
         let first_entry = &entries[0];
-        let key = first_entry.key.yaml.as_str().ok_or_else(|| {
-            SchemaError::InvalidStructure {
+        let key = first_entry
+            .key
+            .yaml
+            .as_str()
+            .ok_or_else(|| SchemaError::InvalidStructure {
                 message: "Schema type key must be a string".to_string(),
                 location: first_entry.key.source_info.clone(),
-            }
-        })?;
+            })?;
 
         match key {
             "boolean" => Self::parse_boolean_schema(&first_entry.value),
@@ -379,10 +383,12 @@ impl Schema {
 
     /// Parse inline enum array: [val1, val2, val3]
     fn parse_inline_enum(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
-        let items = yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-            message: "Expected array for inline enum".to_string(),
-            location: yaml.source_info.clone(),
-        })?;
+        let items = yaml
+            .as_array()
+            .ok_or_else(|| SchemaError::InvalidStructure {
+                message: "Expected array for inline enum".to_string(),
+                location: yaml.source_info.clone(),
+            })?;
 
         // Convert YamlWithSourceInfo items to serde_json::Value for enum values
         let values: SchemaResult<Vec<_>> = items
@@ -451,10 +457,12 @@ impl Schema {
         // Handle both inline array and explicit object form
         let values = if let Some(values_yaml) = yaml.get_hash_value("values") {
             // Explicit form: enum: { values: [...] }
-            let items = values_yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "enum values must be an array".to_string(),
-                location: values_yaml.source_info.clone(),
-            })?;
+            let items = values_yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "enum values must be an array".to_string(),
+                    location: values_yaml.source_info.clone(),
+                })?;
 
             let result: SchemaResult<Vec<_>> = items
                 .iter()
@@ -463,10 +471,12 @@ impl Schema {
             result?
         } else {
             // Inline form: enum: [val1, val2, val3]
-            let items = yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "Expected array for inline enum".to_string(),
-                location: yaml.source_info.clone(),
-            })?;
+            let items = yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "Expected array for inline enum".to_string(),
+                    location: yaml.source_info.clone(),
+                })?;
 
             let result: SchemaResult<Vec<_>> = items
                 .iter()
@@ -487,27 +497,27 @@ impl Schema {
         // Handle both array form and object form with schemas: field
         let schemas = if let Some(schemas_yaml) = yaml.get_hash_value("schemas") {
             // Explicit form: anyOf: { schemas: [...] }
-            let items = schemas_yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "anyOf schemas must be an array".to_string(),
-                location: schemas_yaml.source_info.clone(),
-            })?;
+            let items = schemas_yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "anyOf schemas must be an array".to_string(),
+                    location: schemas_yaml.source_info.clone(),
+                })?;
 
-            let result: SchemaResult<Vec<_>> = items
-                .iter()
-                .map(|item| Schema::from_yaml(item))
-                .collect();
+            let result: SchemaResult<Vec<_>> =
+                items.iter().map(|item| Schema::from_yaml(item)).collect();
             result?
         } else {
             // Inline form: anyOf: [schema1, schema2, ...]
-            let items = yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "Expected array for anyOf".to_string(),
-                location: yaml.source_info.clone(),
-            })?;
+            let items = yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "Expected array for anyOf".to_string(),
+                    location: yaml.source_info.clone(),
+                })?;
 
-            let result: SchemaResult<Vec<_>> = items
-                .iter()
-                .map(|item| Schema::from_yaml(item))
-                .collect();
+            let result: SchemaResult<Vec<_>> =
+                items.iter().map(|item| Schema::from_yaml(item)).collect();
             result?
         };
 
@@ -522,26 +532,26 @@ impl Schema {
 
         // Similar to anyOf
         let schemas = if let Some(schemas_yaml) = yaml.get_hash_value("schemas") {
-            let items = schemas_yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "allOf schemas must be an array".to_string(),
-                location: schemas_yaml.source_info.clone(),
-            })?;
+            let items = schemas_yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "allOf schemas must be an array".to_string(),
+                    location: schemas_yaml.source_info.clone(),
+                })?;
 
-            let result: SchemaResult<Vec<_>> = items
-                .iter()
-                .map(|item| Schema::from_yaml(item))
-                .collect();
+            let result: SchemaResult<Vec<_>> =
+                items.iter().map(|item| Schema::from_yaml(item)).collect();
             result?
         } else {
-            let items = yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "Expected array for allOf".to_string(),
-                location: yaml.source_info.clone(),
-            })?;
+            let items = yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "Expected array for allOf".to_string(),
+                    location: yaml.source_info.clone(),
+                })?;
 
-            let result: SchemaResult<Vec<_>> = items
-                .iter()
-                .map(|item| Schema::from_yaml(item))
-                .collect();
+            let result: SchemaResult<Vec<_>> =
+                items.iter().map(|item| Schema::from_yaml(item)).collect();
             result?
         };
 
@@ -576,17 +586,23 @@ impl Schema {
 
         // Parse properties
         let properties = if let Some(props_yaml) = yaml.get_hash_value("properties") {
-            let entries = props_yaml.as_hash().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "properties must be an object".to_string(),
-                location: props_yaml.source_info.clone(),
-            })?;
+            let entries = props_yaml
+                .as_hash()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "properties must be an object".to_string(),
+                    location: props_yaml.source_info.clone(),
+                })?;
 
             let mut props = HashMap::new();
             for entry in entries {
-                let key = entry.key.yaml.as_str().ok_or_else(|| SchemaError::InvalidStructure {
-                    message: "property key must be a string".to_string(),
-                    location: entry.key.source_info.clone(),
-                })?;
+                let key = entry
+                    .key
+                    .yaml
+                    .as_str()
+                    .ok_or_else(|| SchemaError::InvalidStructure {
+                        message: "property key must be a string".to_string(),
+                        location: entry.key.source_info.clone(),
+                    })?;
                 let schema = Schema::from_yaml(&entry.value)?;
                 props.insert(key.to_string(), schema);
             }
@@ -596,18 +612,27 @@ impl Schema {
         };
 
         // Parse patternProperties
-        let pattern_properties = if let Some(pattern_props_yaml) = yaml.get_hash_value("patternProperties") {
-            let entries = pattern_props_yaml.as_hash().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "patternProperties must be an object".to_string(),
-                location: pattern_props_yaml.source_info.clone(),
-            })?;
+        let pattern_properties = if let Some(pattern_props_yaml) =
+            yaml.get_hash_value("patternProperties")
+        {
+            let entries =
+                pattern_props_yaml
+                    .as_hash()
+                    .ok_or_else(|| SchemaError::InvalidStructure {
+                        message: "patternProperties must be an object".to_string(),
+                        location: pattern_props_yaml.source_info.clone(),
+                    })?;
 
             let mut props = HashMap::new();
             for entry in entries {
-                let key = entry.key.yaml.as_str().ok_or_else(|| SchemaError::InvalidStructure {
-                    message: "patternProperty key must be a string".to_string(),
-                    location: entry.key.source_info.clone(),
-                })?;
+                let key = entry
+                    .key
+                    .yaml
+                    .as_str()
+                    .ok_or_else(|| SchemaError::InvalidStructure {
+                        message: "patternProperty key must be a string".to_string(),
+                        location: entry.key.source_info.clone(),
+                    })?;
                 let schema = Schema::from_yaml(&entry.value)?;
                 props.insert(key.to_string(), schema);
             }
@@ -617,28 +642,31 @@ impl Schema {
         };
 
         // Parse additionalProperties
-        let additional_properties = if let Some(additional_yaml) = yaml.get_hash_value("additionalProperties") {
-            Some(Box::new(Schema::from_yaml(additional_yaml)?))
-        } else {
-            None
-        };
+        let additional_properties =
+            if let Some(additional_yaml) = yaml.get_hash_value("additionalProperties") {
+                Some(Box::new(Schema::from_yaml(additional_yaml)?))
+            } else {
+                None
+            };
 
         // Parse required
         let required = if let Some(required_yaml) = yaml.get_hash_value("required") {
-            let items = required_yaml.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "required must be an array".to_string(),
-                location: required_yaml.source_info.clone(),
-            })?;
+            let items = required_yaml
+                .as_array()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "required must be an array".to_string(),
+                    location: required_yaml.source_info.clone(),
+                })?;
 
             let result: SchemaResult<Vec<_>> = items
                 .iter()
                 .map(|item| {
-                    item.yaml.as_str()
-                        .map(|s| s.to_string())
-                        .ok_or_else(|| SchemaError::InvalidStructure {
+                    item.yaml.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                        SchemaError::InvalidStructure {
                             message: "required items must be strings".to_string(),
                             location: item.source_info.clone(),
-                        })
+                        }
+                    })
                 })
                 .collect();
             result?
@@ -663,12 +691,12 @@ impl Schema {
     }
 
     fn parse_ref_schema(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
-        let reference = yaml.yaml.as_str()
-            .map(|s| s.to_string())
-            .ok_or_else(|| SchemaError::InvalidStructure {
+        let reference = yaml.yaml.as_str().map(|s| s.to_string()).ok_or_else(|| {
+            SchemaError::InvalidStructure {
                 message: "ref must be a string".to_string(),
                 location: yaml.source_info.clone(),
-            })?;
+            }
+        })?;
 
         Ok(Schema::Ref(RefSchema {
             annotations: Default::default(),
@@ -752,22 +780,27 @@ fn get_hash_bool(yaml: &YamlWithSourceInfo, key: &str) -> SchemaResult<Option<bo
     Ok(None)
 }
 
-fn get_hash_string_array(yaml: &YamlWithSourceInfo, key: &str) -> SchemaResult<Option<Vec<String>>> {
+fn get_hash_string_array(
+    yaml: &YamlWithSourceInfo,
+    key: &str,
+) -> SchemaResult<Option<Vec<String>>> {
     if let Some(value) = yaml.get_hash_value(key) {
-        let items = value.as_array().ok_or_else(|| SchemaError::InvalidStructure {
-            message: format!("Field '{}' must be an array", key),
-            location: value.source_info.clone(),
-        })?;
+        let items = value
+            .as_array()
+            .ok_or_else(|| SchemaError::InvalidStructure {
+                message: format!("Field '{}' must be an array", key),
+                location: value.source_info.clone(),
+            })?;
 
         let result: SchemaResult<Vec<_>> = items
             .iter()
             .map(|item| {
-                item.yaml.as_str()
-                    .map(|s| s.to_string())
-                    .ok_or_else(|| SchemaError::InvalidStructure {
+                item.yaml.as_str().map(|s| s.to_string()).ok_or_else(|| {
+                    SchemaError::InvalidStructure {
                         message: format!("Field '{}' items must be strings", key),
                         location: item.source_info.clone(),
-                    })
+                    }
+                })
             })
             .collect();
         return Ok(Some(result?));
@@ -775,19 +808,27 @@ fn get_hash_string_array(yaml: &YamlWithSourceInfo, key: &str) -> SchemaResult<O
     Ok(None)
 }
 
-fn get_hash_tags(yaml: &YamlWithSourceInfo) -> SchemaResult<Option<HashMap<String, serde_json::Value>>> {
+fn get_hash_tags(
+    yaml: &YamlWithSourceInfo,
+) -> SchemaResult<Option<HashMap<String, serde_json::Value>>> {
     if let Some(value) = yaml.get_hash_value("tags") {
-        let entries = value.as_hash().ok_or_else(|| SchemaError::InvalidStructure {
-            message: "tags must be an object".to_string(),
-            location: value.source_info.clone(),
-        })?;
+        let entries = value
+            .as_hash()
+            .ok_or_else(|| SchemaError::InvalidStructure {
+                message: "tags must be an object".to_string(),
+                location: value.source_info.clone(),
+            })?;
 
         let mut tags = HashMap::new();
         for entry in entries {
-            let key = entry.key.yaml.as_str().ok_or_else(|| SchemaError::InvalidStructure {
-                message: "tag key must be a string".to_string(),
-                location: entry.key.source_info.clone(),
-            })?;
+            let key = entry
+                .key
+                .yaml
+                .as_str()
+                .ok_or_else(|| SchemaError::InvalidStructure {
+                    message: "tag key must be a string".to_string(),
+                    location: entry.key.source_info.clone(),
+                })?;
             let value = yaml_to_json_value(&entry.value.yaml, &entry.value.source_info)?;
             tags.insert(key.to_string(), value);
         }
@@ -867,10 +908,13 @@ mod tests {
 
     #[test]
     fn test_from_yaml_boolean_long() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 boolean:
   description: "A boolean value"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Boolean(s) = schema {
             assert_eq!(
@@ -891,12 +935,15 @@ boolean:
 
     #[test]
     fn test_from_yaml_number_long() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 number:
   minimum: 0
   maximum: 100
   description: "A percentage"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Number(s) = schema {
             assert_eq!(s.minimum, Some(0.0));
@@ -923,12 +970,15 @@ number:
 
     #[test]
     fn test_from_yaml_string_long() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 string:
   pattern: "^[a-z]+$"
   minLength: 1
   maxLength: 50
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::String(s) = schema {
             assert_eq!(s.pattern, Some("^[a-z]+$".to_string()));
@@ -955,9 +1005,12 @@ string:
 
     #[test]
     fn test_from_yaml_enum_inline() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 enum: [foo, bar, baz]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Enum(s) = schema {
             assert_eq!(s.values.len(), 3);
@@ -979,11 +1032,14 @@ enum: [foo, bar, baz]
 
     #[test]
     fn test_from_yaml_enum_explicit() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 enum:
   values: [red, green, blue]
   description: "Primary colors"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Enum(s) = schema {
             assert_eq!(s.values.len(), 3);
@@ -998,12 +1054,15 @@ enum:
 
     #[test]
     fn test_from_yaml_anyof_array() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 anyOf:
   - boolean
   - string
   - number
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::AnyOf(s) = schema {
             assert_eq!(s.schemas.len(), 3);
@@ -1014,13 +1073,16 @@ anyOf:
 
     #[test]
     fn test_from_yaml_anyof_object() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 anyOf:
   schemas:
     - boolean
     - string
   description: "Either boolean or string"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::AnyOf(s) = schema {
             assert_eq!(s.schemas.len(), 2);
@@ -1035,11 +1097,14 @@ anyOf:
 
     #[test]
     fn test_from_yaml_allof() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 allOf:
   - string
   - enum: [foo, bar]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::AllOf(s) = schema {
             assert_eq!(s.schemas.len(), 2);
@@ -1050,12 +1115,15 @@ allOf:
 
     #[test]
     fn test_from_yaml_array() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 array:
   items: string
   minItems: 1
   maxItems: 10
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Array(s) = schema {
             assert!(s.items.is_some());
@@ -1068,13 +1136,16 @@ array:
 
     #[test]
     fn test_from_yaml_object_simple() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 object:
   properties:
     name: string
     age: number
   required: [name]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Object(s) = schema {
             assert_eq!(s.properties.len(), 2);
@@ -1089,7 +1160,8 @@ object:
 
     #[test]
     fn test_from_yaml_object_complex() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 object:
   properties:
     foo: string
@@ -1102,7 +1174,9 @@ object:
   minProperties: 1
   maxProperties: 10
   description: "A complex object"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Object(s) = schema {
             assert_eq!(s.properties.len(), 2);
@@ -1123,9 +1197,12 @@ object:
 
     #[test]
     fn test_from_yaml_ref() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 ref: schema/base
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Ref(s) = schema {
             assert_eq!(s.reference, "schema/base");
@@ -1136,7 +1213,8 @@ ref: schema/base
 
     #[test]
     fn test_from_yaml_nested() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 object:
   properties:
     status:
@@ -1147,7 +1225,9 @@ object:
       object:
         properties:
           enabled: boolean
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Object(s) = schema {
             assert_eq!(s.properties.len(), 2);
@@ -1189,19 +1269,28 @@ object:
 
     #[test]
     fn test_from_yaml_with_annotations() {
-        let yaml = quarto_yaml::parse(r#"
+        let yaml = quarto_yaml::parse(
+            r#"
 string:
   description: "A string field"
   hidden: true
   completions: [foo, bar]
   tags:
     category: input
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::String(s) = schema {
-            assert_eq!(s.annotations.description, Some("A string field".to_string()));
+            assert_eq!(
+                s.annotations.description,
+                Some("A string field".to_string())
+            );
             assert_eq!(s.annotations.hidden, Some(true));
-            assert_eq!(s.annotations.completions, Some(vec!["foo".to_string(), "bar".to_string()]));
+            assert_eq!(
+                s.annotations.completions,
+                Some(vec!["foo".to_string(), "bar".to_string()])
+            );
             assert!(s.annotations.tags.is_some());
         } else {
             panic!("Expected String schema");

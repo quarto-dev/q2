@@ -82,7 +82,7 @@ impl FileInformation {
         let line_start = if row == 0 {
             0
         } else {
-            self.line_breaks[row - 1] + 1  // +1 to skip past the '\n'
+            self.line_breaks[row - 1] + 1 // +1 to skip past the '\n'
         };
 
         let column = offset - line_start;
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn test_unicode_content() {
         // "café" - 'é' is 2 bytes in UTF-8
-        let content = "café\nwörld";  // 4 chars + 1 newline + 5 chars = but more bytes
+        let content = "café\nwörld"; // 4 chars + 1 newline + 5 chars = but more bytes
         let info = FileInformation::new(content);
 
         // Verify we're working with byte offsets, not character offsets
@@ -207,7 +207,7 @@ mod tests {
     fn test_file_ending_with_newline() {
         let content = "line 1\nline 2\n";
         let info = FileInformation::new(content);
-        assert_eq!(info.line_count(), 3);  // Empty third line
+        assert_eq!(info.line_count(), 3); // Empty third line
 
         // The final newline
         let loc = info.offset_to_location(13).unwrap();

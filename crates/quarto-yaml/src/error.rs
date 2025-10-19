@@ -16,9 +16,7 @@ pub enum Error {
     },
 
     /// Unexpected end of input
-    UnexpectedEof {
-        location: Option<SourceInfo>,
-    },
+    UnexpectedEof { location: Option<SourceInfo> },
 
     /// Invalid YAML structure
     InvalidStructure {
@@ -34,7 +32,9 @@ impl fmt::Display for Error {
                 write!(f, "Parse error: {}", message)?;
                 if let Some(loc) = location {
                     // Display with 1-indexed row/column
-                    write!(f, " at {}:{}",
+                    write!(
+                        f,
+                        " at {}:{}",
                         loc.range.start.row + 1,
                         loc.range.start.column + 1
                     )?;
@@ -44,7 +44,9 @@ impl fmt::Display for Error {
             Error::UnexpectedEof { location } => {
                 write!(f, "Unexpected end of input")?;
                 if let Some(loc) = location {
-                    write!(f, " at {}:{}",
+                    write!(
+                        f,
+                        " at {}:{}",
                         loc.range.start.row + 1,
                         loc.range.start.column + 1
                     )?;
@@ -54,7 +56,9 @@ impl fmt::Display for Error {
             Error::InvalidStructure { message, location } => {
                 write!(f, "Invalid YAML structure: {}", message)?;
                 if let Some(loc) = location {
-                    write!(f, " at {}:{}",
+                    write!(
+                        f,
+                        " at {}:{}",
                         loc.range.start.row + 1,
                         loc.range.start.column + 1
                     )?;

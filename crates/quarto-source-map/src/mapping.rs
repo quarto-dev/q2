@@ -31,7 +31,10 @@ impl SourceInfo {
                     location,
                 })
             }
-            SourceMapping::Substring { parent, offset: parent_offset } => {
+            SourceMapping::Substring {
+                parent,
+                offset: parent_offset,
+            } => {
                 // Map to parent coordinates and recurse
                 let parent_offset_mapped = parent_offset + offset;
                 parent.map_offset(parent_offset_mapped, ctx)

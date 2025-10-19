@@ -93,7 +93,12 @@ fn generate_flat_hash(n: usize) -> String {
 /// Generate a nested structure with depth D and breadth B
 /// (D levels deep, B children at each level)
 fn generate_nested_structure(depth: usize, breadth: usize) -> String {
-    fn generate_level(current_depth: usize, max_depth: usize, breadth: usize, indent: usize) -> String {
+    fn generate_level(
+        current_depth: usize,
+        max_depth: usize,
+        breadth: usize,
+        indent: usize,
+    ) -> String {
         let ind = "  ".repeat(indent);
 
         if current_depth >= max_depth {
@@ -103,7 +108,12 @@ fn generate_nested_structure(depth: usize, breadth: usize) -> String {
         let mut yaml = String::new();
         for i in 0..breadth {
             yaml.push_str(&format!("{}child_{}:\n", ind, i));
-            yaml.push_str(&generate_level(current_depth + 1, max_depth, breadth, indent + 1));
+            yaml.push_str(&generate_level(
+                current_depth + 1,
+                max_depth,
+                breadth,
+                indent + 1,
+            ));
         }
         yaml
     }
@@ -127,7 +137,10 @@ fn test_scaling(name: &str, generator: impl Fn(usize) -> String, sizes: &[usize]
     println!("\n{}", "=".repeat(70));
     println!("Scaling Test: {}", name);
     println!("{}", "=".repeat(70));
-    println!("{:>6} {:>12} {:>12} {:>12} {:>8}", "Size", "Raw (bytes)", "Tracked", "Overhead", "Ratio");
+    println!(
+        "{:>6} {:>12} {:>12} {:>12} {:>8}",
+        "Size", "Raw (bytes)", "Tracked", "Overhead", "Ratio"
+    );
     println!("{}", "-".repeat(70));
 
     let mut results = Vec::new();
@@ -136,21 +149,21 @@ fn test_scaling(name: &str, generator: impl Fn(usize) -> String, sizes: &[usize]
         let yaml_content = generator(size);
 
         // Parse with yaml-rust2
-        let raw_docs = YamlLoader::load_from_str(&yaml_content)
-            .expect("Failed to parse YAML");
+        let raw_docs = YamlLoader::load_from_str(&yaml_content).expect("Failed to parse YAML");
         let raw_yaml = &raw_docs[0];
         let raw_bytes = estimate_yaml_memory(raw_yaml);
 
         // Parse with YamlWithSourceInfo
-        let tracked_yaml = parse(&yaml_content)
-            .expect("Failed to parse YAML with source tracking");
+        let tracked_yaml = parse(&yaml_content).expect("Failed to parse YAML with source tracking");
         let tracked_bytes = estimate_yaml_with_source_memory(&tracked_yaml);
 
         let overhead = tracked_bytes - raw_bytes;
         let ratio = tracked_bytes as f64 / raw_bytes as f64;
 
-        println!("{:>6} {:>12} {:>12} {:>12} {:>8.2}x",
-            size, raw_bytes, tracked_bytes, overhead, ratio);
+        println!(
+            "{:>6} {:>12} {:>12} {:>12} {:>8.2}x",
+            size, raw_bytes, tracked_bytes, overhead, ratio
+        );
 
         results.push(ScalingResult {
             size,
@@ -179,8 +192,10 @@ fn test_scaling(name: &str, generator: impl Fn(usize) -> String, sizes: &[usize]
         let ratio_change = (last.overhead_ratio - first.overhead_ratio).abs();
         let ratio_change_pct = (ratio_change / first.overhead_ratio) * 100.0;
 
-        println!("\n  Overhead ratio change: {:.2}x → {:.2}x (Δ{:.1}%)",
-            first.overhead_ratio, last.overhead_ratio, ratio_change_pct);
+        println!(
+            "\n  Overhead ratio change: {:.2}x → {:.2}x (Δ{:.1}%)",
+            first.overhead_ratio, last.overhead_ratio, ratio_change_pct
+        );
 
         if ratio_change_pct < 10.0 {
             println!("  ✅ Overhead is STABLE - scales linearly!");
@@ -197,7 +212,10 @@ fn test_scaling(name: &str, generator: impl Fn(usize) -> String, sizes: &[usize]
         println!("\n  At largest size:");
         println!("    Raw bytes per item:     {:.1} bytes", raw_per_item);
         println!("    Tracked bytes per item: {:.1} bytes", tracked_per_item);
-        println!("    Overhead per item:      {:.1} bytes", tracked_per_item - raw_per_item);
+        println!(
+            "    Overhead per item:      {:.1} bytes",
+            tracked_per_item - raw_per_item
+        );
     }
 }
 
@@ -223,7 +241,10 @@ fn main() {
     println!("\n{}", "=".repeat(70));
     println!("Nested Structure Scaling (depth=5, varying breadth)");
     println!("{}", "=".repeat(70));
-    println!("{:>8} {:>12} {:>12} {:>12} {:>8}", "Breadth", "Raw (bytes)", "Tracked", "Overhead", "Ratio");
+    println!(
+        "{:>8} {:>12} {:>12} {:>12} {:>8}",
+        "Breadth", "Raw (bytes)", "Tracked", "Overhead", "Ratio"
+    );
     println!("{}", "-".repeat(70));
 
     let breadths = vec![2, 3, 4, 5];
@@ -232,20 +253,20 @@ fn main() {
     for breadth in &breadths {
         let yaml_content = generate_nested_structure(5, *breadth);
 
-        let raw_docs = YamlLoader::load_from_str(&yaml_content)
-            .expect("Failed to parse YAML");
+        let raw_docs = YamlLoader::load_from_str(&yaml_content).expect("Failed to parse YAML");
         let raw_yaml = &raw_docs[0];
         let raw_bytes = estimate_yaml_memory(raw_yaml);
 
-        let tracked_yaml = parse(&yaml_content)
-            .expect("Failed to parse YAML with source tracking");
+        let tracked_yaml = parse(&yaml_content).expect("Failed to parse YAML with source tracking");
         let tracked_bytes = estimate_yaml_with_source_memory(&tracked_yaml);
 
         let overhead = tracked_bytes - raw_bytes;
         let ratio = tracked_bytes as f64 / raw_bytes as f64;
 
-        println!("{:>8} {:>12} {:>12} {:>12} {:>8.2}x",
-            breadth, raw_bytes, tracked_bytes, overhead, ratio);
+        println!(
+            "{:>8} {:>12} {:>12} {:>12} {:>8.2}x",
+            breadth, raw_bytes, tracked_bytes, overhead, ratio
+        );
 
         nested_results.push((breadth, raw_bytes, tracked_bytes, ratio));
     }
@@ -258,7 +279,10 @@ fn main() {
         let total_nodes_first = first.0.pow(5); // breadth^depth
         let total_nodes_last = last.0.pow(5);
 
-        println!("  Total nodes: {} → {}", total_nodes_first, total_nodes_last);
+        println!(
+            "  Total nodes: {} → {}",
+            total_nodes_first, total_nodes_last
+        );
         println!("  Overhead ratio: {:.2}x → {:.2}x", first.3, last.3);
 
         let ratio_change_pct = ((last.3 - first.3) / first.3) * 100.0;

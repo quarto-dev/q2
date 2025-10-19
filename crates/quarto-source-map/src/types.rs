@@ -42,9 +42,21 @@ mod tests {
 
     #[test]
     fn test_location_ordering() {
-        let loc1 = Location { offset: 0, row: 0, column: 0 };
-        let loc2 = Location { offset: 5, row: 0, column: 5 };
-        let loc3 = Location { offset: 10, row: 1, column: 0 };
+        let loc1 = Location {
+            offset: 0,
+            row: 0,
+            column: 0,
+        };
+        let loc2 = Location {
+            offset: 5,
+            row: 0,
+            column: 5,
+        };
+        let loc3 = Location {
+            offset: 10,
+            row: 1,
+            column: 0,
+        };
 
         assert!(loc1 < loc2);
         assert!(loc2 < loc3);
@@ -53,9 +65,21 @@ mod tests {
 
     #[test]
     fn test_location_equality() {
-        let loc1 = Location { offset: 5, row: 0, column: 5 };
-        let loc2 = Location { offset: 5, row: 0, column: 5 };
-        let loc3 = Location { offset: 6, row: 0, column: 6 };
+        let loc1 = Location {
+            offset: 5,
+            row: 0,
+            column: 5,
+        };
+        let loc2 = Location {
+            offset: 5,
+            row: 0,
+            column: 5,
+        };
+        let loc3 = Location {
+            offset: 6,
+            row: 0,
+            column: 6,
+        };
 
         assert_eq!(loc1, loc2);
         assert_ne!(loc1, loc3);
@@ -64,16 +88,40 @@ mod tests {
     #[test]
     fn test_range_equality() {
         let range1 = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 5, row: 0, column: 5 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 5,
+                row: 0,
+                column: 5,
+            },
         };
         let range2 = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 5, row: 0, column: 5 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 5,
+                row: 0,
+                column: 5,
+            },
         };
         let range3 = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 10, row: 0, column: 10 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 10,
+                row: 0,
+                column: 10,
+            },
         };
 
         assert_eq!(range1, range2);
@@ -90,7 +138,11 @@ mod tests {
 
     #[test]
     fn test_serialization_location() {
-        let loc = Location { offset: 100, row: 5, column: 10 };
+        let loc = Location {
+            offset: 100,
+            row: 5,
+            column: 10,
+        };
         let json = serde_json::to_string(&loc).unwrap();
         let deserialized: Location = serde_json::from_str(&json).unwrap();
         assert_eq!(loc, deserialized);
@@ -99,8 +151,16 @@ mod tests {
     #[test]
     fn test_serialization_range() {
         let range = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 50, row: 2, column: 10 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 50,
+                row: 2,
+                column: 10,
+            },
         };
         let json = serde_json::to_string(&range).unwrap();
         let deserialized: Range = serde_json::from_str(&json).unwrap();

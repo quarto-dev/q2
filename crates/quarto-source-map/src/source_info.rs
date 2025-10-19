@@ -17,18 +17,14 @@ pub struct SourceInfo {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SourceMapping {
     /// Direct position in an original file
-    Original {
-        file_id: FileId,
-    },
+    Original { file_id: FileId },
     /// Substring extraction from a parent source
     Substring {
         parent: Rc<SourceInfo>,
         offset: usize,
     },
     /// Concatenation of multiple sources
-    Concat {
-        pieces: Vec<SourcePiece>,
-    },
+    Concat { pieces: Vec<SourcePiece> },
     /// Transformed text with piecewise mapping
     Transformed {
         parent: Rc<SourceInfo>,
@@ -65,8 +61,16 @@ impl Default for SourceInfo {
         SourceInfo::original(
             FileId(0),
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 0, row: 0, column: 0 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
             },
         )
     }
@@ -150,11 +154,7 @@ impl SourceInfo {
     /// Create source info for transformed text
     pub fn transformed(parent: SourceInfo, mapping: Vec<RangeMapping>) -> Self {
         // Find the max end offset in the transformed text
-        let total_length = mapping
-            .iter()
-            .map(|m| m.from_end)
-            .max()
-            .unwrap_or(0);
+        let total_length = mapping.iter().map(|m| m.from_end).max().unwrap_or(0);
 
         SourceInfo {
             range: Range {
@@ -186,8 +186,16 @@ mod tests {
     fn test_original_source_info() {
         let file_id = FileId(0);
         let range = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 10, row: 0, column: 10 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 10,
+                row: 0,
+                column: 10,
+            },
         };
 
         let info = SourceInfo::original(file_id, range.clone());
@@ -205,8 +213,16 @@ mod tests {
     fn test_source_info_serialization() {
         let file_id = FileId(0);
         let range = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 10, row: 0, column: 10 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 10,
+                row: 0,
+                column: 10,
+            },
         };
 
         let info = SourceInfo::original(file_id, range);
@@ -220,8 +236,16 @@ mod tests {
     fn test_substring_source_info() {
         let file_id = FileId(0);
         let parent_range = Range {
-            start: Location { offset: 0, row: 0, column: 0 },
-            end: Location { offset: 100, row: 0, column: 100 },
+            start: Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: Location {
+                offset: 100,
+                row: 0,
+                column: 100,
+            },
         };
         let parent = SourceInfo::original(file_id, parent_range);
 
@@ -246,16 +270,32 @@ mod tests {
         let info1 = SourceInfo::original(
             file_id1,
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 10, row: 0, column: 10 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 10,
+                    row: 0,
+                    column: 10,
+                },
             },
         );
 
         let info2 = SourceInfo::original(
             file_id2,
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 15, row: 0, column: 15 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 15,
+                    row: 0,
+                    column: 15,
+                },
             },
         );
 
@@ -282,8 +322,16 @@ mod tests {
         let parent = SourceInfo::original(
             file_id,
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 50, row: 0, column: 50 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 50,
+                    row: 0,
+                    column: 50,
+                },
             },
         );
 
@@ -321,8 +369,16 @@ mod tests {
         let original = SourceInfo::original(
             file_id,
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 100, row: 0, column: 100 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 100,
+                    row: 0,
+                    column: 100,
+                },
             },
         );
 
@@ -343,7 +399,10 @@ mod tests {
         // Verify the chain: Original -> Substring -> Transformed
         match &transformed.mapping {
             SourceMapping::Transformed { parent, .. } => match &parent.mapping {
-                SourceMapping::Substring { parent: grandparent, offset } => {
+                SourceMapping::Substring {
+                    parent: grandparent,
+                    offset,
+                } => {
                     assert_eq!(*offset, 10);
                     match &grandparent.mapping {
                         SourceMapping::Original { file_id: id } => {

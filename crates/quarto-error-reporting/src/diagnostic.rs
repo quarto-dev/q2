@@ -314,9 +314,10 @@ impl DiagnosticMessage {
                             result,
                             " at {}:{}:{}",
                             file.path,
-                            mapped.location.row + 1,  // Display as 1-based
+                            mapped.location.row + 1, // Display as 1-based
                             mapped.location.column + 1
-                        ).unwrap();
+                        )
+                        .unwrap();
                     }
                 }
             } else {
@@ -326,7 +327,8 @@ impl DiagnosticMessage {
                     " at {}:{}",
                     loc.range.start.row + 1,
                     loc.range.start.column + 1
-                ).unwrap();
+                )
+                .unwrap();
             }
         }
 
@@ -402,29 +404,31 @@ impl DiagnosticMessage {
         }
 
         if !self.details.is_empty() {
-            let details: Vec<_> = self.details.iter().map(|d| {
-                let detail_kind = match d.kind {
-                    DetailKind::Error => "error",
-                    DetailKind::Info => "info",
-                    DetailKind::Note => "note",
-                };
-                json!({
-                    "kind": detail_kind,
-                    "content": d.content.to_json()
+            let details: Vec<_> = self
+                .details
+                .iter()
+                .map(|d| {
+                    let detail_kind = match d.kind {
+                        DetailKind::Error => "error",
+                        DetailKind::Info => "info",
+                        DetailKind::Note => "note",
+                    };
+                    json!({
+                        "kind": detail_kind,
+                        "content": d.content.to_json()
+                    })
                 })
-            }).collect();
+                .collect();
             obj["details"] = json!(details);
         }
 
         if !self.hints.is_empty() {
-            let hints: Vec<_> = self.hints.iter()
-                .map(|h| h.to_json())
-                .collect();
+            let hints: Vec<_> = self.hints.iter().map(|h| h.to_json()).collect();
             obj["hints"] = json!(hints);
         }
 
         if let Some(location) = &self.location {
-            obj["location"] = json!(location);  // quarto-source-map::SourceInfo is Serialize
+            obj["location"] = json!(location); // quarto-source-map::SourceInfo is Serialize
         }
 
         obj
@@ -504,8 +508,7 @@ mod tests {
 
     #[test]
     fn test_to_text_with_code() {
-        let msg = DiagnosticMessage::error("Something went wrong")
-            .with_code("Q-1-1");
+        let msg = DiagnosticMessage::error("Something went wrong").with_code("Q-1-1");
         assert_eq!(msg.to_text(None), "Error [Q-1-1]: Something went wrong");
     }
 
@@ -541,8 +544,7 @@ mod tests {
 
     #[test]
     fn test_to_json_with_code() {
-        let msg = DiagnosticMessage::error("Something went wrong")
-            .with_code("Q-1-1");
+        let msg = DiagnosticMessage::error("Something went wrong").with_code("Q-1-1");
         let json = msg.to_json();
 
         assert_eq!(json["kind"], "error");
@@ -570,7 +572,10 @@ mod tests {
         assert_eq!(json["problem"]["content"], "Values must be numeric");
         assert_eq!(json["details"][0]["kind"], "error");
         assert_eq!(json["details"][0]["content"]["type"], "markdown");
-        assert_eq!(json["details"][0]["content"]["content"], "Found text in column 3");
+        assert_eq!(
+            json["details"][0]["content"]["content"],
+            "Found text in column 3"
+        );
         assert_eq!(json["details"][1]["kind"], "info");
         assert_eq!(json["details"][1]["content"]["type"], "markdown");
         assert_eq!(json["details"][1]["content"]["content"], "Expected numbers");
@@ -616,7 +621,7 @@ mod tests {
 
         // Without context, should show immediate location (1-indexed)
         assert!(text.contains("Invalid syntax"));
-        assert!(text.contains("at 11:6"));  // row 10 + 1, column 5 + 1
+        assert!(text.contains("at 11:6")); // row 10 + 1, column 5 + 1
     }
 
     #[test]
@@ -627,7 +632,7 @@ mod tests {
         let mut ctx = quarto_source_map::SourceContext::new();
         let file_id = ctx.add_file(
             "test.qmd".to_string(),
-            Some("line 1\nline 2\nline 3\nline 4".to_string())
+            Some("line 1\nline 2\nline 3\nline 4".to_string()),
         );
 
         // Create a location in that file
@@ -635,7 +640,7 @@ mod tests {
             file_id,
             quarto_source_map::Range {
                 start: quarto_source_map::Location {
-                    offset: 7,  // Start of "line 2"
+                    offset: 7, // Start of "line 2"
                     row: 1,
                     column: 0,
                 },
@@ -656,7 +661,7 @@ mod tests {
         // With context, should show file path and 1-indexed location
         assert!(text.contains("Invalid syntax"));
         assert!(text.contains("test.qmd"));
-        assert!(text.contains("2:1"));  // row 1 + 1, column 0 + 1
+        assert!(text.contains("2:1")); // row 1 + 1, column 0 + 1
     }
 
     #[test]

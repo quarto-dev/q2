@@ -113,11 +113,7 @@ impl YamlWithSourceInfo {
     }
 
     /// Create a new YamlWithSourceInfo for a hash/mapping.
-    pub fn new_hash(
-        yaml: Yaml,
-        source_info: SourceInfo,
-        entries: Vec<YamlHashEntry>,
-    ) -> Self {
+    pub fn new_hash(yaml: Yaml, source_info: SourceInfo, entries: Vec<YamlHashEntry>) -> Self {
         Self {
             yaml,
             source_info,
@@ -162,15 +158,13 @@ impl YamlWithSourceInfo {
     /// Returns None if this is not a hash or the key is not found.
     pub fn get_hash_value(&self, key: &str) -> Option<&YamlWithSourceInfo> {
         match &self.children {
-            Children::Hash(entries) => {
-                entries.iter().find_map(|entry| {
-                    if entry.key.yaml.as_str() == Some(key) {
-                        Some(&entry.value)
-                    } else {
-                        None
-                    }
-                })
-            }
+            Children::Hash(entries) => entries.iter().find_map(|entry| {
+                if entry.key.yaml.as_str() == Some(key) {
+                    Some(&entry.value)
+                } else {
+                    None
+                }
+            }),
             _ => None,
         }
     }
@@ -261,24 +255,13 @@ mod tests {
 
     #[test]
     fn test_array_creation() {
-        let child1 = YamlWithSourceInfo::new_scalar(
-            Yaml::String("a".into()),
-            SourceInfo::default(),
-        );
-        let child2 = YamlWithSourceInfo::new_scalar(
-            Yaml::String("b".into()),
-            SourceInfo::default(),
-        );
+        let child1 =
+            YamlWithSourceInfo::new_scalar(Yaml::String("a".into()), SourceInfo::default());
+        let child2 =
+            YamlWithSourceInfo::new_scalar(Yaml::String("b".into()), SourceInfo::default());
 
-        let yaml = Yaml::Array(vec![
-            Yaml::String("a".into()),
-            Yaml::String("b".into()),
-        ]);
-        let node = YamlWithSourceInfo::new_array(
-            yaml,
-            SourceInfo::default(),
-            vec![child1, child2],
-        );
+        let yaml = Yaml::Array(vec![Yaml::String("a".into()), Yaml::String("b".into())]);
+        let node = YamlWithSourceInfo::new_array(yaml, SourceInfo::default(), vec![child1, child2]);
 
         assert!(node.is_array());
         assert_eq!(node.len(), 2);
@@ -288,24 +271,13 @@ mod tests {
 
     #[test]
     fn test_get_array_item() {
-        let child1 = YamlWithSourceInfo::new_scalar(
-            Yaml::String("a".into()),
-            SourceInfo::default(),
-        );
-        let child2 = YamlWithSourceInfo::new_scalar(
-            Yaml::String("b".into()),
-            SourceInfo::default(),
-        );
+        let child1 =
+            YamlWithSourceInfo::new_scalar(Yaml::String("a".into()), SourceInfo::default());
+        let child2 =
+            YamlWithSourceInfo::new_scalar(Yaml::String("b".into()), SourceInfo::default());
 
-        let yaml = Yaml::Array(vec![
-            Yaml::String("a".into()),
-            Yaml::String("b".into()),
-        ]);
-        let node = YamlWithSourceInfo::new_array(
-            yaml,
-            SourceInfo::default(),
-            vec![child1, child2],
-        );
+        let yaml = Yaml::Array(vec![Yaml::String("a".into()), Yaml::String("b".into())]);
+        let node = YamlWithSourceInfo::new_array(yaml, SourceInfo::default(), vec![child1, child2]);
 
         assert_eq!(node.get_array_item(0).unwrap().yaml.as_str(), Some("a"));
         assert_eq!(node.get_array_item(1).unwrap().yaml.as_str(), Some("b"));

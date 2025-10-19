@@ -24,7 +24,9 @@ pub fn infer_error_code(error: &ValidationError) -> &'static str {
     }
 
     // Array length constraints
-    if msg.contains("Array length") && (msg.contains("less than minimum") || msg.contains("greater than maximum")) {
+    if msg.contains("Array length")
+        && (msg.contains("less than minimum") || msg.contains("greater than maximum"))
+    {
         return "Q-1-13";
     }
 
@@ -34,7 +36,10 @@ pub fn infer_error_code(error: &ValidationError) -> &'static str {
     }
 
     // Number range violations
-    if msg.contains("less than minimum") || msg.contains("greater than maximum") || msg.contains("not a multiple of") {
+    if msg.contains("less than minimum")
+        || msg.contains("greater than maximum")
+        || msg.contains("not a multiple of")
+    {
         return "Q-1-15";
     }
 
@@ -74,7 +79,10 @@ pub fn suggest_fix(error: &ValidationError) -> Option<String> {
         if let Some(start) = msg.find('\'') {
             if let Some(end) = msg[start + 1..].find('\'') {
                 let prop = &msg[start + 1..start + 1 + end];
-                return Some(format!("Add the `{}` property to your YAML document?", prop));
+                return Some(format!(
+                    "Add the `{}` property to your YAML document?",
+                    prop
+                ));
             }
         }
         return Some("Add the required property to your YAML document?".to_string());
@@ -92,7 +100,9 @@ pub fn suggest_fix(error: &ValidationError) -> Option<String> {
 
     // Type mismatches - string
     if msg.contains("Expected string") {
-        return Some("Ensure the value is a string (quoted if it contains special characters)?".to_string());
+        return Some(
+            "Ensure the value is a string (quoted if it contains special characters)?".to_string(),
+        );
     }
 
     // Type mismatches - array
@@ -122,7 +132,9 @@ pub fn suggest_fix(error: &ValidationError) -> Option<String> {
 
     // Unknown property
     if msg.contains("Unknown property") {
-        return Some("Check for typos in property names or remove unrecognized properties?".to_string());
+        return Some(
+            "Check for typos in property names or remove unrecognized properties?".to_string(),
+        );
     }
 
     // Array uniqueness

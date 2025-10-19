@@ -666,21 +666,38 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
     // We could validate the API version here if needed
     // let _api_version = obj.get("pandoc-api-version");
 
-    let meta = read_meta(
-        obj.get("meta")
-            .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
-    )?;
-    let blocks = read_blocks(
-        obj.get("blocks")
-            .ok_or_else(|| JsonReadError::MissingField("blocks".to_string()))?,
-    )?;
-
+    // Read astContext first (we need it for key sources)
     let context = if let Some(ast_context_val) = obj.get("astContext") {
         read_ast_context(ast_context_val)?
     } else {
         // If no astContext is present, create an empty one for backward compatibility
         ASTContext::new()
     };
+
+    // Extract metaTopLevelKeySources if present
+    let key_sources = if let Some(ast_context_val) = obj.get("astContext") {
+        if let Some(ast_context_obj) = ast_context_val.as_object() {
+            if let Some(key_sources_val) = ast_context_obj.get("metaTopLevelKeySources") {
+                Some(key_sources_val)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let meta = read_meta_with_key_sources(
+        obj.get("meta")
+            .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
+        key_sources,
+    )?;
+    let blocks = read_blocks(
+        obj.get("blocks")
+            .ok_or_else(|| JsonReadError::MissingField("blocks".to_string()))?,
+    )?;
 
     Ok((Pandoc { meta, blocks }, context))
 }
@@ -1264,7 +1281,8 @@ fn read_block(value: &Value) -> Result<Block> {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let meta = read_meta(c)?;
+            // BlockMetadata uses MetaValueWithSourceInfo format (not top-level meta)
+            let meta = read_meta_value_with_source_info(c)?;
             Ok(Block::BlockMetadata(MetaBlock {
                 meta,
                 source_info: SourceInfo::new(filename_index, range),
@@ -1332,16 +1350,36 @@ fn read_block(value: &Value) -> Result<Block> {
     }
 }
 
-fn read_meta(value: &Value) -> Result<MetaValueWithSourceInfo> {
+fn read_meta_with_key_sources(
+    value: &Value,
+    key_sources: Option<&Value>,
+) -> Result<MetaValueWithSourceInfo> {
+    // meta is an object with key-value pairs (Pandoc-compatible format)
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Meta".to_string()))?;
 
     let mut entries = Vec::new();
     for (key, val) in obj {
+        // Look up key_source from the provided map
+        let key_source = if let Some(sources) = key_sources {
+            if let Some(sources_obj) = sources.as_object() {
+                if let Some(source_val) = sources_obj.get(key) {
+                    serde_json::from_value(source_val.clone())
+                        .map_err(|e| JsonReadError::InvalidJson(e))?
+                } else {
+                    quarto_source_map::SourceInfo::default()
+                }
+            } else {
+                quarto_source_map::SourceInfo::default()
+            }
+        } else {
+            quarto_source_map::SourceInfo::default()
+        };
+
         entries.push(MetaMapEntry {
             key: key.clone(),
-            key_source: quarto_source_map::SourceInfo::default(), // TODO: serialize/deserialize key_source
+            key_source,
             value: read_meta_value_with_source_info(val)?,
         });
     }
@@ -1433,24 +1471,51 @@ fn read_meta_value_with_source_info(value: &Value) -> Result<MetaValueWithSource
             })?;
             let mut entries = Vec::new();
             for item in arr {
-                let kv_arr = item.as_array().ok_or_else(|| {
-                    JsonReadError::InvalidType("MetaMap item must be array".to_string())
-                })?;
-                if kv_arr.len() != 2 {
+                // Handle both old format (array) and new format (object)
+                let (key, key_source, value) = if let Some(obj) = item.as_object() {
+                    // New format: {"key": "...", "key_source": {...}, "value": {...}}
+                    let key = obj
+                        .get("key")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            JsonReadError::MissingField("MetaMap entry missing 'key'".to_string())
+                        })?
+                        .to_string();
+                    let key_source = if let Some(ks) = obj.get("key_source") {
+                        serde_json::from_value(ks.clone())
+                            .map_err(|e| JsonReadError::InvalidJson(e))?
+                    } else {
+                        quarto_source_map::SourceInfo::default()
+                    };
+                    let value =
+                        read_meta_value_with_source_info(obj.get("value").ok_or_else(|| {
+                            JsonReadError::MissingField("MetaMap entry missing 'value'".to_string())
+                        })?)?;
+                    (key, key_source, value)
+                } else if let Some(kv_arr) = item.as_array() {
+                    // Old format: ["key", {...}]
+                    if kv_arr.len() != 2 {
+                        return Err(JsonReadError::InvalidType(
+                            "MetaMap item must have 2 elements".to_string(),
+                        ));
+                    }
+                    let key = kv_arr[0]
+                        .as_str()
+                        .ok_or_else(|| {
+                            JsonReadError::InvalidType("MetaMap key must be string".to_string())
+                        })?
+                        .to_string();
+                    let value = read_meta_value_with_source_info(&kv_arr[1])?;
+                    (key, quarto_source_map::SourceInfo::default(), value)
+                } else {
                     return Err(JsonReadError::InvalidType(
-                        "MetaMap item must have 2 elements".to_string(),
+                        "MetaMap item must be array or object".to_string(),
                     ));
-                }
-                let key = kv_arr[0]
-                    .as_str()
-                    .ok_or_else(|| {
-                        JsonReadError::InvalidType("MetaMap key must be string".to_string())
-                    })?
-                    .to_string();
-                let value = read_meta_value_with_source_info(&kv_arr[1])?;
+                };
+
                 entries.push(MetaMapEntry {
                     key,
-                    key_source: quarto_source_map::SourceInfo::default(), // TODO
+                    key_source,
                     value,
                 });
             }

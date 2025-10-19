@@ -32,17 +32,17 @@
 //! assert_eq!(info.range, range);
 //! ```
 
-pub mod types;
-pub mod source_info;
 pub mod context;
-pub mod mapping;
-pub mod utils;
 pub mod file_info;
+pub mod mapping;
+pub mod source_info;
+pub mod types;
+pub mod utils;
 
 // Re-export main types
-pub use types::{FileId, Location, Range};
-pub use source_info::{SourceInfo, SourceMapping, SourcePiece, RangeMapping};
-pub use context::{SourceContext, SourceFile, FileMetadata};
-pub use mapping::MappedLocation;
-pub use utils::{offset_to_location, line_col_to_offset, range_from_offsets};
+pub use context::{FileMetadata, SourceContext, SourceFile};
 pub use file_info::FileInformation;
+pub use mapping::MappedLocation;
+pub use source_info::{RangeMapping, SourceInfo, SourceMapping, SourcePiece};
+pub use types::{FileId, Location, Range};
+pub use utils::{line_col_to_offset, offset_to_location, range_from_offsets};

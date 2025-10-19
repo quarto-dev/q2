@@ -19,20 +19,14 @@ pub fn validation_error_to_diagnostic(error: &ValidationError) -> DiagnosticMess
 
     // Add instance path as detail (where in the document the error occurred)
     if !error.instance_path.is_empty() {
-        builder = builder.add_detail(format!(
-            "At document path: `{}`",
-            error.instance_path
-        ));
+        builder = builder.add_detail(format!("At document path: `{}`", error.instance_path));
     } else {
         builder = builder.add_detail("At document root");
     }
 
     // Add schema path as info (which schema constraint failed)
     if !error.schema_path.is_empty() {
-        builder = builder.add_info(format!(
-            "Schema constraint: {}",
-            error.schema_path
-        ));
+        builder = builder.add_info(format!("Schema constraint: {}", error.schema_path));
     }
 
     // Add location as detail (file, line, column)

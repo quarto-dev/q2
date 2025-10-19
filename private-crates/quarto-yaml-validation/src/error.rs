@@ -20,10 +20,7 @@ pub enum SchemaError {
 
     /// Missing required field
     #[error("Missing required field '{field}' (at line {}, col {})", .location.range.start.row + 1, .location.range.start.column + 1)]
-    MissingField {
-        field: String,
-        location: SourceInfo,
-    },
+    MissingField { field: String, location: SourceInfo },
 
     /// Unresolved schema reference
     #[error("Unresolved schema reference: {0}")]
@@ -96,8 +93,8 @@ impl ValidationError {
         // Extract location from the node
         self.location = Some(SourceLocation {
             file: "<unknown>".to_string(), // File tracking will be added in k-31
-            line: node.source_info.range.start.row + 1,  // 1-indexed for display
-            column: node.source_info.range.start.column + 1,  // 1-indexed for display
+            line: node.source_info.range.start.row + 1, // 1-indexed for display
+            column: node.source_info.range.start.column + 1, // 1-indexed for display
         });
         self.yaml_node = Some(node);
         self

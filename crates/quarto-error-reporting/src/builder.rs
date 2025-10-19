@@ -3,7 +3,9 @@
 //! This module provides a builder pattern that encodes tidyverse-style error message
 //! guidelines directly in the API, making it easy to construct well-structured error messages.
 
-use crate::diagnostic::{DetailItem, DetailKind, DiagnosticKind, DiagnosticMessage, MessageContent};
+use crate::diagnostic::{
+    DetailItem, DetailKind, DiagnosticKind, DiagnosticMessage, MessageContent,
+};
 
 /// Builder for creating diagnostic messages following tidyverse guidelines.
 ///
@@ -108,9 +110,7 @@ impl DiagnosticMessageBuilder {
     /// ```
     pub fn generic_error(message: impl Into<String>, file: &str, line: u32) -> DiagnosticMessage {
         let title = format!("{} (at {}:{})", message.into(), file, line);
-        Self::error(title)
-            .with_code("Q-0-99")
-            .build()
+        Self::error(title).with_code("Q-0-99").build()
     }
 
     /// Create a generic warning for migration purposes.
@@ -131,9 +131,7 @@ impl DiagnosticMessageBuilder {
     /// ```
     pub fn generic_warning(message: impl Into<String>, file: &str, line: u32) -> DiagnosticMessage {
         let title = format!("{} (at {}:{})", message.into(), file, line);
-        Self::warning(title)
-            .with_code("Q-0-99")
-            .build()
+        Self::warning(title).with_code("Q-0-99").build()
     }
 
     /// Create a warning diagnostic builder.

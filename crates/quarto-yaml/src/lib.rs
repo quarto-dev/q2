@@ -33,10 +33,10 @@
 //! ```
 
 mod error;
-mod yaml_with_source_info;
 mod parser;
+mod yaml_with_source_info;
 
 pub use error::{Error, Result};
-pub use quarto_source_map::SourceInfo;  // Re-export from quarto-source-map
-pub use yaml_with_source_info::{YamlWithSourceInfo, YamlHashEntry};
 pub use parser::{parse, parse_file, parse_with_parent};
+pub use quarto_source_map::SourceInfo; // Re-export from quarto-source-map
+pub use yaml_with_source_info::{YamlHashEntry, YamlWithSourceInfo};

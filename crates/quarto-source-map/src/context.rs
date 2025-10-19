@@ -55,11 +55,15 @@ impl SourceContext {
     /// Create a copy without file information (for serialization)
     pub fn without_content(&self) -> Self {
         SourceContext {
-            files: self.files.iter().map(|f| SourceFile {
-                path: f.path.clone(),
-                file_info: None,
-                metadata: f.metadata.clone(),
-            }).collect(),
+            files: self
+                .files
+                .iter()
+                .map(|f| SourceFile {
+                    path: f.path.clone(),
+                    file_info: None,
+                    metadata: f.metadata.clone(),
+                })
+                .collect(),
         }
     }
 }

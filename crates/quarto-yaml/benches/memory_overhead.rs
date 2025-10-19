@@ -189,10 +189,22 @@ fn main() {
     println!("==========================================================\n");
 
     println!("Size of base types:");
-    println!("  yaml_rust2::Yaml:           {} bytes", mem::size_of::<yaml_rust2::Yaml>());
-    println!("  YamlWithSourceInfo:         {} bytes", mem::size_of::<quarto_yaml::YamlWithSourceInfo>());
-    println!("  SourceInfo:                 {} bytes", mem::size_of::<quarto_yaml::SourceInfo>());
-    println!("  YamlHashEntry:              {} bytes", mem::size_of::<quarto_yaml::YamlHashEntry>());
+    println!(
+        "  yaml_rust2::Yaml:           {} bytes",
+        mem::size_of::<yaml_rust2::Yaml>()
+    );
+    println!(
+        "  YamlWithSourceInfo:         {} bytes",
+        mem::size_of::<quarto_yaml::YamlWithSourceInfo>()
+    );
+    println!(
+        "  SourceInfo:                 {} bytes",
+        mem::size_of::<quarto_yaml::SourceInfo>()
+    );
+    println!(
+        "  YamlHashEntry:              {} bytes",
+        mem::size_of::<quarto_yaml::YamlHashEntry>()
+    );
     println!();
 
     let mut total_raw = 0usize;
@@ -203,14 +215,12 @@ fn main() {
         println!("{}", "-".repeat(60));
 
         // Parse with yaml-rust2
-        let raw_docs = YamlLoader::load_from_str(test.yaml)
-            .expect("Failed to parse YAML");
+        let raw_docs = YamlLoader::load_from_str(test.yaml).expect("Failed to parse YAML");
         let raw_yaml = &raw_docs[0];
         let raw_size = estimate_yaml_memory(raw_yaml);
 
         // Parse with YamlWithSourceInfo
-        let tracked_yaml = parse(test.yaml)
-            .expect("Failed to parse YAML with source tracking");
+        let tracked_yaml = parse(test.yaml).expect("Failed to parse YAML with source tracking");
         let tracked_size = estimate_yaml_with_source_memory(&tracked_yaml);
 
         let overhead = tracked_size as f64 / raw_size as f64;
@@ -218,7 +228,10 @@ fn main() {
 
         println!("  Raw Yaml size:              {:>8} bytes", raw_size);
         println!("  YamlWithSourceInfo size:    {:>8} bytes", tracked_size);
-        println!("  Overhead:                   {:>8} bytes ({:.2}x)", diff, overhead);
+        println!(
+            "  Overhead:                   {:>8} bytes ({:.2}x)",
+            diff, overhead
+        );
         println!();
 
         total_raw += raw_size;

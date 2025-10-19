@@ -330,7 +330,7 @@ fn remove_location_fields(json: &mut serde_json::Value) {
     if let Some(obj) = json.as_object_mut() {
         obj.remove("l"); // Remove the "l" field (old SourceInfo)
         obj.remove("s"); // Remove the "s" field (new quarto_source_map::SourceInfo)
-        obj.remove("astContext"); // Remove the astContext field
+        obj.remove("astContext"); // Remove the astContext field (includes metaTopLevelKeySources)
         for value in obj.values_mut() {
             remove_location_fields(value);
         }

@@ -177,7 +177,8 @@ where
             eprintln!("{}", warning);
         }
     }
-    let mut meta_from_parses = LinkedHashMap::new();
+    // Store complete MetaMapEntry objects to preserve key_source information
+    let mut meta_from_parses: Vec<crate::pandoc::meta::MetaMapEntry> = Vec::new();
 
     result = {
         let mut filter = Filter::new().with_raw_block(|rb| {
@@ -242,15 +243,24 @@ where
                 );
             } else {
                 // Document-level metadata - parse strings and merge into meta_from_parses
-                let parsed_meta = parse_metadata_strings_with_source_info(
-                    meta_with_source,
-                    &mut meta_from_parses,
-                );
+                // Note: we pass a temporary LinkedHashMap for inner metadata parsing
+                let mut inner_meta = LinkedHashMap::new();
+                let parsed_meta =
+                    parse_metadata_strings_with_source_info(meta_with_source, &mut inner_meta);
 
+                // Extract MetaMapEntry objects (preserving key_source) and store them
                 if let MetaValueWithSourceInfo::MetaMap { entries, .. } = parsed_meta {
                     for entry in entries {
-                        meta_from_parses.insert(entry.key, entry.value);
+                        meta_from_parses.push(entry);
                     }
+                }
+                // Also add any inner metadata entries
+                for (k, v) in inner_meta {
+                    meta_from_parses.push(crate::pandoc::meta::MetaMapEntry {
+                        key: k,
+                        key_source: quarto_source_map::SourceInfo::default(),
+                        value: v,
+                    });
                 }
                 return FilterReturn::FilterResult(vec![], false);
             }
@@ -260,13 +270,10 @@ where
 
     // Merge meta_from_parses into result.meta
     // result.meta is MetaValueWithSourceInfo::MetaMap, so we need to append entries
+    // Now meta_from_parses contains complete MetaMapEntry objects with key_source preserved
     if let MetaValueWithSourceInfo::MetaMap { entries, .. } = &mut result.meta {
-        for (k, v) in meta_from_parses.into_iter() {
-            entries.push(crate::pandoc::meta::MetaMapEntry {
-                key: k,
-                key_source: quarto_source_map::SourceInfo::default(),
-                value: v,
-            });
+        for entry in meta_from_parses.into_iter() {
+            entries.push(entry);
         }
     }
     Ok((result, context))

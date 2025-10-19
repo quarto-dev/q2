@@ -84,16 +84,10 @@ fn test_metadata_source_tracking_002_qmd() {
             .expect("Should have 'title' in metadata");
 
         // Verify key source: "title"
-        // NOTE: Currently quarto-yaml returns key_span as an Original SourceInfo,
-        // not as a Substring. This will be improved in the future.
         let key_offset = resolve_source_offset(&title_entry.key_source);
-        // TODO: Once quarto-yaml properly tracks key_span as Substring,
-        // this should be 4 (file offset where "title" appears)
-        assert!(
-            key_offset == 0 || key_offset == 4,
-            "Key source should be tracked (got offset {})",
-            key_offset
-        );
+        // "title" starts at position 0 in the YAML string "title: metadata1\n"
+        // Absolute offset should be 4 (start of YAML frontmatter content)
+        assert_eq!(key_offset, 4, "Key 'title' should start at file offset 4");
 
         // Verify value source: "metadata1"
         match &title_entry.value {
@@ -135,11 +129,10 @@ fn test_metadata_source_tracking_002_qmd() {
             .expect("Should have 'title' in metadata after JSON roundtrip");
 
         let key_offset = resolve_source_offset(&title_entry.key_source);
-        // Key tracking through JSON roundtrip (same TODO as above)
-        assert!(
-            key_offset == 0 || key_offset == 4,
-            "After JSON roundtrip: Key source should be preserved (got offset {})",
-            key_offset
+        // Key tracking through JSON roundtrip
+        assert_eq!(
+            key_offset, 4,
+            "After JSON roundtrip: Key 'title' should still start at file offset 4"
         );
 
         if let MetaValueWithSourceInfo::MetaInlines { source_info, .. } = &title_entry.value {

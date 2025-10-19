@@ -3,22 +3,22 @@
 //! Each command module handles the CLI interface and delegates to
 //! quarto-core for actual implementation.
 
-pub mod render;
-pub mod preview;
-pub mod serve;
-pub mod create;
-pub mod use_cmd;
 pub mod add;
-pub mod update;
-pub mod remove;
-pub mod convert;
-pub mod pandoc;
-pub mod typst;
-pub mod run;
-pub mod list;
-pub mod install;
-pub mod uninstall;
-pub mod tools;
-pub mod publish;
-pub mod check;
 pub mod call;
+pub mod check;
+pub mod convert;
+pub mod create;
+pub mod install;
+pub mod list;
+pub mod pandoc;
+pub mod preview;
+pub mod publish;
+pub mod remove;
+pub mod render;
+pub mod run;
+pub mod serve;
+pub mod tools;
+pub mod typst;
+pub mod uninstall;
+pub mod update;
+pub mod use_cmd;

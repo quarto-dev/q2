@@ -1,5 +1,3 @@
-
-
 //! Macros for creating diagnostic messages.
 
 /// Create a generic error with automatic file and line information.
