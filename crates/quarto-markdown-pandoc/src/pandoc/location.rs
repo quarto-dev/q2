@@ -4,18 +4,19 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
+use serde::{Deserialize, Serialize};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Source location tracking
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Location {
     pub offset: usize,
     pub row: usize,
     pub column: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Range {
     pub start: Location,
     pub end: Location,
@@ -23,7 +24,7 @@ pub struct Range {
 
 /// Encapsulates source location information for AST nodes
 /// The filename field now holds an index into the ASTContext.filenames vector
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceInfo {
     pub filename_index: Option<usize>,
     pub range: Range,

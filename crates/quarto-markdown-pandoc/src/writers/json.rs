@@ -382,7 +382,7 @@ fn write_block(block: &Block) -> Value {
         }),
         Block::BlockMetadata(meta) => json!({
             "t": "BlockMetadata",
-            "c": write_meta(&meta.meta),
+            "c": write_meta_value_with_source_info(&meta.meta),
             "l": write_location(meta),
         }),
         Block::NoteDefinitionPara(refdef) => json!({
@@ -403,41 +403,67 @@ fn write_block(block: &Block) -> Value {
     }
 }
 
-fn write_meta_value(value: &crate::pandoc::MetaValue) -> Value {
+fn write_meta_value_with_source_info(value: &crate::pandoc::MetaValueWithSourceInfo) -> Value {
     match value {
-        crate::pandoc::MetaValue::MetaString(s) => json!({
+        crate::pandoc::MetaValueWithSourceInfo::MetaString { value, source_info } => json!({
             "t": "MetaString",
-            "c": s
+            "c": value,
+            "s": source_info
         }),
-        crate::pandoc::MetaValue::MetaInlines(inlines) => json!({
-            "t": "MetaInlines",
-            "c": write_inlines(inlines)
-        }),
-        crate::pandoc::MetaValue::MetaBlocks(blocks) => json!({
-            "t": "MetaBlocks",
-            "c": write_blocks(blocks)
-        }),
-        crate::pandoc::MetaValue::MetaList(list) => json!({
-            "t": "MetaList",
-            "c": list.iter().map(write_meta_value).collect::<Vec<_>>()
-        }),
-        crate::pandoc::MetaValue::MetaMap(map) => json!({
-            "t": "MetaMap",
-            "c": map.iter().map(|(k, v)| json!([k, write_meta_value(v)])).collect::<Vec<_>>()
-        }),
-        crate::pandoc::MetaValue::MetaBool(b) => json!({
+        crate::pandoc::MetaValueWithSourceInfo::MetaBool { value, source_info } => json!({
             "t": "MetaBool",
-            "c": b
+            "c": value,
+            "s": source_info
+        }),
+        crate::pandoc::MetaValueWithSourceInfo::MetaInlines {
+            content,
+            source_info,
+        } => json!({
+            "t": "MetaInlines",
+            "c": write_inlines(content),
+            "s": source_info
+        }),
+        crate::pandoc::MetaValueWithSourceInfo::MetaBlocks {
+            content,
+            source_info,
+        } => json!({
+            "t": "MetaBlocks",
+            "c": write_blocks(content),
+            "s": source_info
+        }),
+        crate::pandoc::MetaValueWithSourceInfo::MetaList { items, source_info } => json!({
+            "t": "MetaList",
+            "c": items.iter().map(write_meta_value_with_source_info).collect::<Vec<_>>(),
+            "s": source_info
+        }),
+        crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+            entries,
+            source_info,
+        } => json!({
+            "t": "MetaMap",
+            "c": entries.iter().map(|entry| json!([entry.key, write_meta_value_with_source_info(&entry.value)])).collect::<Vec<_>>(),
+            "s": source_info
         }),
     }
 }
 
-fn write_meta(meta: &crate::pandoc::Meta) -> Value {
-    let map: serde_json::Map<String, Value> = meta
-        .iter()
-        .map(|(k, v)| (k.clone(), write_meta_value(v)))
-        .collect();
-    Value::Object(map)
+fn write_meta(meta: &crate::pandoc::MetaValueWithSourceInfo) -> Value {
+    // meta should be a MetaMap variant
+    match meta {
+        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+            let map: serde_json::Map<String, Value> = entries
+                .iter()
+                .map(|entry| {
+                    (
+                        entry.key.clone(),
+                        write_meta_value_with_source_info(&entry.value),
+                    )
+                })
+                .collect();
+            Value::Object(map)
+        }
+        _ => panic!("Expected MetaMap for Pandoc.meta"),
+    }
 }
 
 fn write_blocks(blocks: &[Block]) -> Value {

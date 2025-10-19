@@ -1,6 +1,5 @@
 ///! DiagnosticCollector - collects DiagnosticMessage objects and renders them to text or JSON
-
-use quarto_error_reporting::{DiagnosticMessage, DiagnosticKind};
+use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 
 /// Collector for diagnostic messages
 #[derive(Debug)]
@@ -51,11 +50,7 @@ impl DiagnosticCollector {
     /// Add a warning message with source location
     ///
     /// Use this when you have source location information available.
-    pub fn warn_at(
-        &mut self,
-        message: impl Into<String>,
-        location: quarto_source_map::SourceInfo,
-    ) {
+    pub fn warn_at(&mut self, message: impl Into<String>, location: quarto_source_map::SourceInfo) {
         let mut diagnostic = quarto_error_reporting::generic_warning!(message.into());
         diagnostic.location = Some(location);
         self.add(diagnostic);
@@ -75,10 +70,7 @@ impl DiagnosticCollector {
 
     /// Render all diagnostics to text strings
     pub fn to_text(&self) -> Vec<String> {
-        self.diagnostics
-            .iter()
-            .map(|d| d.to_text(None))
-            .collect()
+        self.diagnostics.iter().map(|d| d.to_text(None)).collect()
     }
 
     /// Render all diagnostics to JSON strings

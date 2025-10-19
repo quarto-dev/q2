@@ -47,10 +47,10 @@ fn run() -> Result<()> {
 
     // Parse the schema file
     let schema_yaml = quarto_yaml::parse_file(&schema_content, schema_filename)
-        .with_context(|| format!("Failed to parse schema file: {}", args.schema.display()))?;
+        .map_err(|e| anyhow::anyhow!("Failed to parse schema file {}: {}", args.schema.display(), e))?;
 
     let schema = Schema::from_yaml(&schema_yaml)
-        .with_context(|| format!("Failed to load schema from: {}", args.schema.display()))?;
+        .map_err(|e| anyhow::anyhow!("Failed to load schema from {}: {}", args.schema.display(), e))?;
 
     // Read the input document
     let input_content = fs::read_to_string(&args.input)
@@ -64,7 +64,7 @@ fn run() -> Result<()> {
 
     // Parse the input document
     let input_yaml = quarto_yaml::parse_file(&input_content, input_filename)
-        .with_context(|| format!("Failed to parse input file: {}", args.input.display()))?;
+        .map_err(|e| anyhow::anyhow!("Failed to parse input file {}: {}", args.input.display(), e))?;
 
     // Create a schema registry (empty for now, but needed for $ref resolution)
     let registry = SchemaRegistry::new();

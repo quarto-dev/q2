@@ -196,6 +196,30 @@ impl YamlWithSourceInfo {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Consume self and return array children if this is an array.
+    ///
+    /// Returns a tuple of (items, source_info) where items are the owned
+    /// YamlWithSourceInfo elements and source_info is the SourceInfo for
+    /// the whole array.
+    pub fn into_array(self) -> Option<(Vec<YamlWithSourceInfo>, SourceInfo)> {
+        match self.children {
+            Children::Array(items) => Some((items, self.source_info)),
+            _ => None,
+        }
+    }
+
+    /// Consume self and return hash entries if this is a hash.
+    ///
+    /// Returns a tuple of (entries, source_info) where entries are the owned
+    /// YamlHashEntry elements and source_info is the SourceInfo for
+    /// the whole hash.
+    pub fn into_hash(self) -> Option<(Vec<YamlHashEntry>, SourceInfo)> {
+        match self.children {
+            Children::Hash(entries) => Some((entries, self.source_info)),
+            _ => None,
+        }
+    }
 }
 
 impl YamlHashEntry {

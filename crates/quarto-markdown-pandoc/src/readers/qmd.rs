@@ -11,12 +11,13 @@ use crate::filters::{Filter, FilterReturn};
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::SourceInfo;
-use crate::pandoc::meta::parse_metadata_strings;
-use crate::pandoc::{self, Block, Meta};
-use crate::pandoc::{MetaValue, rawblock_to_meta};
+use crate::pandoc::meta::parse_metadata_strings_with_source_info;
+use crate::pandoc::rawblock_to_meta_with_source_info;
+use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
 use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
+use hashlink::LinkedHashMap;
 use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
@@ -152,7 +153,10 @@ where
         Err(diagnostics) => {
             // Convert diagnostics to strings based on format
             if error_formatter.is_some() {
-                return Err(diagnostics.iter().map(|d| d.to_json().to_string()).collect());
+                return Err(diagnostics
+                    .iter()
+                    .map(|d| d.to_json().to_string())
+                    .collect());
             } else {
                 return Err(diagnostics.iter().map(|d| d.to_text(None)).collect());
             }
@@ -173,7 +177,7 @@ where
             eprintln!("{}", warning);
         }
     }
-    let mut meta_from_parses = Meta::default();
+    let mut meta_from_parses = LinkedHashMap::new();
 
     result = {
         let mut filter = Filter::new().with_raw_block(|rb| {
@@ -182,48 +186,88 @@ where
             }
             let filename_index = rb.source_info.filename_index;
             let range = rb.source_info.range.clone();
-            let result = rawblock_to_meta(rb);
-            let is_lexical = {
-                let val = result.get("_scope");
-                matches!(val, Some(MetaValue::MetaString(s)) if s == "lexical")
-            };
+
+            // Use new rawblock_to_meta_with_source_info - preserves source info!
+            let meta_with_source = rawblock_to_meta_with_source_info(&rb, &context);
+
+            // Check if this is lexical metadata
+            let is_lexical =
+                if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_with_source {
+                    entries.iter().any(|e| {
+                    e.key == "_scope"
+                        && matches!(
+                            &e.value,
+                            MetaValueWithSourceInfo::MetaString { value, .. } if value == "lexical"
+                        )
+                })
+                } else {
+                    false
+                };
 
             if is_lexical {
-                let mut inner_meta_from_parses = Meta::default();
-                let mut meta_map = match parse_metadata_strings(
-                    MetaValue::MetaMap(result),
+                // Lexical metadata - parse strings and return as BlockMetadata
+                let mut inner_meta_from_parses = LinkedHashMap::new();
+                let parsed_meta = parse_metadata_strings_with_source_info(
+                    meta_with_source,
                     &mut inner_meta_from_parses,
-                ) {
-                    MetaValue::MetaMap(m) => m,
-                    _ => panic!("Expected MetaMap from parse_metadata_strings"),
+                );
+
+                // Merge inner metadata if needed
+                let final_meta = if let MetaValueWithSourceInfo::MetaMap {
+                    mut entries,
+                    source_info,
+                } = parsed_meta
+                {
+                    for (k, v) in inner_meta_from_parses {
+                        entries.push(crate::pandoc::meta::MetaMapEntry {
+                            key: k,
+                            key_source: quarto_source_map::SourceInfo::default(),
+                            value: v,
+                        });
+                    }
+                    MetaValueWithSourceInfo::MetaMap {
+                        entries,
+                        source_info,
+                    }
+                } else {
+                    parsed_meta
                 };
-                for (k, v) in inner_meta_from_parses {
-                    meta_map.insert(k, v);
-                }
+
                 return FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
-                        meta: meta_map,
+                        meta: final_meta,
                         source_info: SourceInfo::new(filename_index, range),
                     })],
                     false,
                 );
             } else {
-                let meta_map =
-                    match parse_metadata_strings(MetaValue::MetaMap(result), &mut meta_from_parses)
-                    {
-                        MetaValue::MetaMap(m) => m,
-                        _ => panic!("Expected MetaMap from parse_metadata_strings"),
-                    };
-                for (k, v) in meta_map {
-                    meta_from_parses.insert(k, v);
+                // Document-level metadata - parse strings and merge into meta_from_parses
+                let parsed_meta = parse_metadata_strings_with_source_info(
+                    meta_with_source,
+                    &mut meta_from_parses,
+                );
+
+                if let MetaValueWithSourceInfo::MetaMap { entries, .. } = parsed_meta {
+                    for entry in entries {
+                        meta_from_parses.insert(entry.key, entry.value);
+                    }
                 }
                 return FilterReturn::FilterResult(vec![], false);
             }
         });
         topdown_traverse(result, &mut filter)
     };
-    for (k, v) in meta_from_parses.into_iter() {
-        result.meta.insert(k, v);
+
+    // Merge meta_from_parses into result.meta
+    // result.meta is MetaValueWithSourceInfo::MetaMap, so we need to append entries
+    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = &mut result.meta {
+        for (k, v) in meta_from_parses.into_iter() {
+            entries.push(crate::pandoc::meta::MetaMapEntry {
+                key: k,
+                key_source: quarto_source_map::SourceInfo::default(),
+                value: v,
+            });
+        }
     }
     Ok((result, context))
 }

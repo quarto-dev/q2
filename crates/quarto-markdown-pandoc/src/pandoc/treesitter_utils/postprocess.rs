@@ -653,12 +653,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
             })
             .with_attr(|attr| {
                 // TODO: Add source location when attr has it
-                error_collector_ref.borrow_mut().error(
-                    format!(
-                        "Found attr in postprocess: {:?} - this should have been removed",
-                        attr
-                    ),
-                );
+                error_collector_ref.borrow_mut().error(format!(
+                    "Found attr in postprocess: {:?} - this should have been removed",
+                    attr
+                ));
                 FilterResult(vec![], false)
             })
             .with_blocks(|blocks| {

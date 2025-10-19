@@ -6,17 +6,18 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::{Location, Range, SourceInfo};
+use crate::pandoc::meta::MetaMapEntry;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
 use crate::pandoc::{
     Attr, Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, Code, CodeBlock,
     DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, Inlines, LineBlock,
-    Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType, Meta, MetaValue, Note,
-    OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SmallCaps,
-    SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Underline,
+    Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType,
+    MetaValueWithSourceInfo, Note, OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted,
+    RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
+    Superscript, Underline,
 };
-use hashlink::LinkedHashMap;
 use serde_json::Value;
 
 #[derive(Debug)]
@@ -1331,20 +1332,27 @@ fn read_block(value: &Value) -> Result<Block> {
     }
 }
 
-fn read_meta(value: &Value) -> Result<Meta> {
+fn read_meta(value: &Value) -> Result<MetaValueWithSourceInfo> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Meta".to_string()))?;
 
-    let mut meta = LinkedHashMap::new();
+    let mut entries = Vec::new();
     for (key, val) in obj {
-        meta.insert(key.clone(), read_meta_value(val)?);
+        entries.push(MetaMapEntry {
+            key: key.clone(),
+            key_source: quarto_source_map::SourceInfo::default(), // TODO: serialize/deserialize key_source
+            value: read_meta_value_with_source_info(val)?,
+        });
     }
 
-    Ok(meta)
+    Ok(MetaValueWithSourceInfo::MetaMap {
+        entries,
+        source_info: quarto_source_map::SourceInfo::default(),
+    })
 }
 
-fn read_meta_value(value: &Value) -> Result<MetaValue> {
+fn read_meta_value_with_source_info(value: &Value) -> Result<MetaValueWithSourceInfo> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for MetaValue".to_string()))?;
@@ -1353,32 +1361,52 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
+    // Read source_info if present (new format), or use default (old format for backwards compatibility)
+    let source_info = if let Some(s) = obj.get("s") {
+        serde_json::from_value(s.clone())
+            .map_err(|e| JsonReadError::InvalidType(format!("Invalid source_info: {}", e)))?
+    } else {
+        quarto_source_map::SourceInfo::default()
+    };
+
     match t {
         "MetaString" => {
             let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
                 JsonReadError::InvalidType("MetaString content must be string".to_string())
             })?;
-            Ok(MetaValue::MetaString(c.to_string()))
+            Ok(MetaValueWithSourceInfo::MetaString {
+                value: c.to_string(),
+                source_info,
+            })
         }
         "MetaInlines" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let inlines = read_inlines(c)?;
-            Ok(MetaValue::MetaInlines(inlines))
+            Ok(MetaValueWithSourceInfo::MetaInlines {
+                content: inlines,
+                source_info,
+            })
         }
         "MetaBlocks" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let blocks = read_blocks(c)?;
-            Ok(MetaValue::MetaBlocks(blocks))
+            Ok(MetaValueWithSourceInfo::MetaBlocks {
+                content: blocks,
+                source_info,
+            })
         }
         "MetaBool" => {
             let c = obj.get("c").and_then(|v| v.as_bool()).ok_or_else(|| {
                 JsonReadError::InvalidType("MetaBool content must be boolean".to_string())
             })?;
-            Ok(MetaValue::MetaBool(c))
+            Ok(MetaValueWithSourceInfo::MetaBool {
+                value: c,
+                source_info,
+            })
         }
         "MetaList" => {
             let c = obj
@@ -1389,9 +1417,12 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
             })?;
             let list = arr
                 .iter()
-                .map(read_meta_value)
+                .map(read_meta_value_with_source_info)
                 .collect::<Result<Vec<_>>>()?;
-            Ok(MetaValue::MetaList(list))
+            Ok(MetaValueWithSourceInfo::MetaList {
+                items: list,
+                source_info,
+            })
         }
         "MetaMap" => {
             let c = obj
@@ -1400,7 +1431,7 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
             let arr = c.as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("MetaMap content must be array".to_string())
             })?;
-            let mut map = LinkedHashMap::new();
+            let mut entries = Vec::new();
             for item in arr {
                 let kv_arr = item.as_array().ok_or_else(|| {
                     JsonReadError::InvalidType("MetaMap item must be array".to_string())
@@ -1416,10 +1447,17 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
                         JsonReadError::InvalidType("MetaMap key must be string".to_string())
                     })?
                     .to_string();
-                let value = read_meta_value(&kv_arr[1])?;
-                map.insert(key, value);
+                let value = read_meta_value_with_source_info(&kv_arr[1])?;
+                entries.push(MetaMapEntry {
+                    key,
+                    key_source: quarto_source_map::SourceInfo::default(), // TODO
+                    value,
+                });
             }
-            Ok(MetaValue::MetaMap(map))
+            Ok(MetaValueWithSourceInfo::MetaMap {
+                entries,
+                source_info,
+            })
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!(
             "MetaValue: {}",

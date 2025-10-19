@@ -2,6 +2,7 @@
 
 use crate::types::{FileId, Location, Range};
 use serde::{Deserialize, Serialize};
+use std::rc::Rc;
 
 /// Source information tracking a location and its transformation history
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -21,7 +22,7 @@ pub enum SourceMapping {
     },
     /// Substring extraction from a parent source
     Substring {
-        parent: Box<SourceInfo>,
+        parent: Rc<SourceInfo>,
         offset: usize,
     },
     /// Concatenation of multiple sources
@@ -30,7 +31,7 @@ pub enum SourceMapping {
     },
     /// Transformed text with piecewise mapping
     Transformed {
-        parent: Box<SourceInfo>,
+        parent: Rc<SourceInfo>,
         mapping: Vec<RangeMapping>,
     },
 }
@@ -97,7 +98,7 @@ impl SourceInfo {
                 },
             },
             mapping: SourceMapping::Substring {
-                parent: Box::new(parent),
+                parent: Rc::new(parent),
                 offset: start,
             },
         }
@@ -169,7 +170,7 @@ impl SourceInfo {
                 },
             },
             mapping: SourceMapping::Transformed {
-                parent: Box::new(parent),
+                parent: Rc::new(parent),
                 mapping,
             },
         }
@@ -340,13 +341,13 @@ mod tests {
         );
 
         // Verify the chain: Original -> Substring -> Transformed
-        match transformed.mapping {
-            SourceMapping::Transformed { parent, .. } => match parent.mapping {
+        match &transformed.mapping {
+            SourceMapping::Transformed { parent, .. } => match &parent.mapping {
                 SourceMapping::Substring { parent: grandparent, offset } => {
-                    assert_eq!(offset, 10);
-                    match grandparent.mapping {
+                    assert_eq!(*offset, 10);
+                    match &grandparent.mapping {
                         SourceMapping::Original { file_id: id } => {
-                            assert_eq!(id, file_id);
+                            assert_eq!(*id, file_id);
                         }
                         _ => panic!("Expected Original at root"),
                     }

@@ -11,8 +11,9 @@ use crate::pandoc::location::SourceInfo;
 use crate::pandoc::location::SourceLocation;
 use crate::pandoc::location::node_source_info;
 use crate::pandoc::shortcode::Shortcode;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Inline {
     Str(Str),
     Emph(Emph),
@@ -52,7 +53,7 @@ pub enum Inline {
 
 pub type Inlines = Vec<Inline>;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum QuoteType {
     SingleQuote,
     DoubleQuote,
@@ -60,13 +61,13 @@ pub enum QuoteType {
 
 pub type Target = (String, String);
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum MathType {
     InlineMath,
     DisplayMath,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Str {
     pub text: String,
     pub source_info: SourceInfo,
@@ -74,84 +75,84 @@ pub struct Str {
     pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emph {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Underline {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Strong {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Strikeout {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Superscript {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Subscript {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SmallCaps {
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Quoted {
     pub quote_type: QuoteType,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cite {
     pub citations: Vec<Citation>,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Code {
     pub attr: Attr,
     pub text: String,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Math {
     pub math_type: MathType,
     pub text: String,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RawInline {
     pub format: String,
     pub text: String,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     pub attr: Attr,
     pub content: Inlines,
@@ -159,7 +160,7 @@ pub struct Link {
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     pub attr: Attr,
     pub content: Inlines,
@@ -167,41 +168,41 @@ pub struct Image {
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub content: Blocks,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Span {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Space {
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LineBreak {
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SoftBreak {
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteReference {
     pub id: String,
     pub range: Range,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Citation {
     pub id: String,
     pub prefix: Inlines,
@@ -211,35 +212,35 @@ pub struct Citation {
     pub hash: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CitationMode {
     AuthorInText,
     SuppressAuthor,
     NormalCitation,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Insert {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Delete {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Highlight {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditComment {
     pub attr: Attr,
     pub content: Inlines,

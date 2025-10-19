@@ -15,7 +15,7 @@ use std::collections::HashMap;
 fn test_json_roundtrip_simple_paragraph() {
     // Create a simple Pandoc document
     let original = Pandoc {
-        meta: LinkedHashMap::new(),
+        meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "Hello, world!".to_string(),
@@ -88,13 +88,16 @@ fn test_json_roundtrip_simple_paragraph() {
 fn test_json_roundtrip_complex_document() {
     // Create a more complex document with multiple block types
     let original = Pandoc {
-        meta: {
-            let mut meta = LinkedHashMap::new();
-            meta.insert(
-                "title".to_string(),
-                quarto_markdown_pandoc::pandoc::MetaValue::MetaString("Test Document".to_string()),
-            );
-            meta
+        meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaMap {
+            entries: vec![quarto_markdown_pandoc::pandoc::meta::MetaMapEntry {
+                key: "title".to_string(),
+                key_source: quarto_source_map::SourceInfo::default(),
+                value: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaString {
+                    value: "Test Document".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                },
+            }],
+            source_info: quarto_source_map::SourceInfo::default(),
         },
         blocks: vec![
             Block::Paragraph(Paragraph {
@@ -227,8 +230,10 @@ fn test_json_roundtrip_complex_document() {
     assert!(parsed.meta.contains_key("title"));
 
     match parsed.meta.get("title") {
-        Some(quarto_markdown_pandoc::pandoc::MetaValue::MetaString(title)) => {
-            assert_eq!(title, "Test Document");
+        Some(quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaString {
+            value, ..
+        }) => {
+            assert_eq!(value, "Test Document");
         }
         _ => panic!("Expected MetaString for title"),
     }
@@ -256,7 +261,7 @@ fn test_json_write_then_read_matches_original_structure() {
     // with the same basic structure, even if exact equality is not possible
 
     let original = Pandoc {
-        meta: LinkedHashMap::new(),
+        meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::default(),
         blocks: vec![
             Block::Plain(quarto_markdown_pandoc::pandoc::Plain {
                 content: vec![Inline::Str(Str {

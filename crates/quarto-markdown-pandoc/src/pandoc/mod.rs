@@ -39,7 +39,9 @@ pub use crate::pandoc::table::{
 
 pub use crate::pandoc::ast_context::ASTContext;
 
+pub use crate::pandoc::meta::{
+    Meta, MetaValue, MetaValueWithSourceInfo, rawblock_to_meta, rawblock_to_meta_with_source_info,
+};
 #[allow(unused_imports)]
-pub use crate::pandoc::meta::parse_metadata_strings;
-pub use crate::pandoc::meta::{Meta, MetaValue, rawblock_to_meta};
+pub use crate::pandoc::meta::{parse_metadata_strings, parse_metadata_strings_with_source_info};
 pub use crate::pandoc::treesitter::treesitter_to_pandoc;

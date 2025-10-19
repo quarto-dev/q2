@@ -63,6 +63,51 @@ pub fn node_to_source_info_with_context(node: &Node, ctx: &ASTContext) -> Source
     node_to_source_info(node, file_id)
 }
 
+/// Convert old pandoc::location::SourceInfo to new quarto-source-map::SourceInfo.
+///
+/// This is a bridge function for gradual migration. It converts the old SourceInfo
+/// (with filename_index) to the new SourceInfo (with FileId) using ASTContext.
+///
+/// # Arguments
+/// * `old_info` - The old SourceInfo from pandoc::location
+/// * `ctx` - The ASTContext to resolve filename_index to FileId
+///
+/// # Returns
+/// A new SourceInfo with Original mapping to the appropriate file
+pub fn old_to_new_source_info(
+    old_info: &crate::pandoc::location::SourceInfo,
+    ctx: &ASTContext,
+) -> SourceInfo {
+    // Convert filename_index to FileId
+    // If the old info has a filename_index, try to get the corresponding FileId
+    // Otherwise, use the primary file or FileId(0) as fallback
+    let file_id = if let Some(filename_idx) = old_info.filename_index {
+        // Try to map filename_index to FileId
+        // For now, we'll use the primary file as a reasonable default
+        // TODO: In Phase 3, we'll have proper mapping from filename_index to FileId
+        ctx.primary_file_id().unwrap_or(FileId(filename_idx))
+    } else {
+        ctx.primary_file_id().unwrap_or(FileId(0))
+    };
+
+    // Convert the Range (both use the same Location structure)
+    SourceInfo::original(
+        file_id,
+        Range {
+            start: Location {
+                offset: old_info.range.start.offset,
+                row: old_info.range.start.row,
+                column: old_info.range.start.column,
+            },
+            end: Location {
+                offset: old_info.range.end.offset,
+                row: old_info.range.end.row,
+                column: old_info.range.end.column,
+            },
+        },
+    )
+}
+
 // Note: Tests for these functions will be validated through integration tests
 // when they're used in actual parsing modules. The tree-sitter-qmd parser
 // setup is too complex to mock in unit tests here.

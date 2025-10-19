@@ -10,7 +10,7 @@ use crate::pandoc::meta::MetaValue;
 use crate::pandoc::table::{Alignment, Cell, Table};
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
-    LineBlock, Meta, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
+    LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
 use crate::utils::string_write_adapter::StringWriteAdapter;
 use hashlink::LinkedHashMap;
@@ -220,37 +220,50 @@ fn meta_value_to_yaml(value: &MetaValue) -> std::io::Result<Yaml> {
     }
 }
 
-fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, buf: &mut T) -> std::io::Result<bool> {
-    if meta.is_empty() {
-        Ok(false)
-    } else {
-        // Convert Meta to YAML
-        // LinkedHashMap preserves insertion order
-        let mut yaml_map = LinkedHashMap::new();
-        for (key, value) in meta {
-            yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(value)?);
+fn write_meta<T: std::io::Write + ?Sized>(
+    meta: &crate::pandoc::MetaValueWithSourceInfo,
+    buf: &mut T,
+) -> std::io::Result<bool> {
+    // meta should be a MetaMap variant
+    match meta {
+        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+            if entries.is_empty() {
+                Ok(false)
+            } else {
+                // Convert Meta to YAML
+                // LinkedHashMap preserves insertion order
+                let mut yaml_map = LinkedHashMap::new();
+                for entry in entries {
+                    let old_value = entry.value.to_meta_value();
+                    yaml_map.insert(
+                        Yaml::String(entry.key.clone()),
+                        meta_value_to_yaml(&old_value)?,
+                    );
+                }
+                let yaml = Yaml::Hash(yaml_map);
+
+                // Emit YAML to string
+                let mut yaml_str = String::new();
+                let mut emitter = YamlEmitter::new(&mut yaml_str);
+                emitter
+                    .dump(&yaml)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+                // The YamlEmitter adds "---\n" at the start and includes the content
+                // We need to add the closing "---\n"
+                // First, ensure yaml_str ends with a newline
+                if !yaml_str.ends_with('\n') {
+                    yaml_str.push('\n');
+                }
+
+                // Write the YAML metadata block
+                write!(buf, "{}", yaml_str)?;
+                writeln!(buf, "---")?;
+
+                Ok(true)
+            }
         }
-        let yaml = Yaml::Hash(yaml_map);
-
-        // Emit YAML to string
-        let mut yaml_str = String::new();
-        let mut emitter = YamlEmitter::new(&mut yaml_str);
-        emitter
-            .dump(&yaml)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-        // The YamlEmitter adds "---\n" at the start and includes the content
-        // We need to add the closing "---\n"
-        // First, ensure yaml_str ends with a newline
-        if !yaml_str.ends_with('\n') {
-            yaml_str.push('\n');
-        }
-
-        // Write the YAML metadata block
-        write!(buf, "{}", yaml_str)?;
-        writeln!(buf, "---")?;
-
-        Ok(true)
+        _ => panic!("Expected MetaMap for metadata"),
     }
 }
 

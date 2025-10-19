@@ -3,10 +3,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::MetaValue;
+use crate::pandoc::MetaValueWithSourceInfo;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::inline::AsInline;
-use crate::pandoc::meta::Meta;
+use crate::pandoc::meta::MetaMapEntry;
 use crate::pandoc::{self, Block, Blocks, Inline, Inlines};
 
 // filters are destructive and take ownership of the input
@@ -18,7 +18,12 @@ pub enum FilterReturn<T, U> {
 
 type InlineFilterFn<'a, T> = Box<dyn FnMut(T) -> FilterReturn<T, Inlines> + 'a>;
 type BlockFilterFn<'a, T> = Box<dyn FnMut(T) -> FilterReturn<T, Blocks> + 'a>;
-type MetaFilterFn<'a> = Box<dyn FnMut(Meta) -> FilterReturn<Meta, Meta> + 'a>;
+type MetaFilterFn<'a> = Box<
+    dyn FnMut(
+            MetaValueWithSourceInfo,
+        ) -> FilterReturn<MetaValueWithSourceInfo, MetaValueWithSourceInfo>
+        + 'a,
+>;
 type InlineFilterField<'a, T> = Option<InlineFilterFn<'a, T>>;
 type BlockFilterField<'a, T> = Option<BlockFilterFn<'a, T>>;
 type MetaFilterField<'a> = Option<MetaFilterFn<'a>>;
@@ -158,7 +163,10 @@ impl<'a> Filter<'a> {
 
     pub fn with_meta<F>(mut self, f: F) -> Filter<'a>
     where
-        F: FnMut(Meta) -> FilterReturn<Meta, Meta> + 'a,
+        F: FnMut(
+                MetaValueWithSourceInfo,
+            ) -> FilterReturn<MetaValueWithSourceInfo, MetaValueWithSourceInfo>
+            + 'a,
     {
         self.meta = Some(Box::new(f));
         self
@@ -1022,25 +1030,60 @@ pub fn topdown_traverse_blocks(vec: Blocks, filter: &mut Filter) -> Blocks {
     }
 }
 
-pub fn topdown_traverse_meta_value(value: MetaValue, filter: &mut Filter) -> MetaValue {
+pub fn topdown_traverse_meta_value_with_source_info(
+    value: MetaValueWithSourceInfo,
+    filter: &mut Filter,
+) -> MetaValueWithSourceInfo {
     match value {
-        MetaValue::MetaMap(m) => MetaValue::MetaMap(
-            m.into_iter()
-                .map(|(k, v)| (k, topdown_traverse_meta_value(v, filter)))
-                .collect(),
-        ),
-        MetaValue::MetaList(l) => MetaValue::MetaList(
-            l.into_iter()
-                .map(|mv| topdown_traverse_meta_value(mv, filter))
-                .collect(),
-        ),
-        MetaValue::MetaBlocks(b) => MetaValue::MetaBlocks(topdown_traverse_blocks(b, filter)),
-        MetaValue::MetaInlines(i) => MetaValue::MetaInlines(topdown_traverse_inlines(i, filter)),
+        MetaValueWithSourceInfo::MetaMap {
+            entries,
+            source_info,
+        } => {
+            let new_entries = entries
+                .into_iter()
+                .map(|entry| MetaMapEntry {
+                    key: entry.key,
+                    key_source: entry.key_source,
+                    value: topdown_traverse_meta_value_with_source_info(entry.value, filter),
+                })
+                .collect();
+            MetaValueWithSourceInfo::MetaMap {
+                entries: new_entries,
+                source_info,
+            }
+        }
+        MetaValueWithSourceInfo::MetaList { items, source_info } => {
+            let new_items = items
+                .into_iter()
+                .map(|item| topdown_traverse_meta_value_with_source_info(item, filter))
+                .collect();
+            MetaValueWithSourceInfo::MetaList {
+                items: new_items,
+                source_info,
+            }
+        }
+        MetaValueWithSourceInfo::MetaBlocks {
+            content,
+            source_info,
+        } => MetaValueWithSourceInfo::MetaBlocks {
+            content: topdown_traverse_blocks(content, filter),
+            source_info,
+        },
+        MetaValueWithSourceInfo::MetaInlines {
+            content,
+            source_info,
+        } => MetaValueWithSourceInfo::MetaInlines {
+            content: topdown_traverse_inlines(content, filter),
+            source_info,
+        },
         value => value,
     }
 }
 
-pub fn topdown_traverse_meta(meta: Meta, filter: &mut Filter) -> Meta {
+pub fn topdown_traverse_meta(
+    meta: MetaValueWithSourceInfo,
+    filter: &mut Filter,
+) -> MetaValueWithSourceInfo {
     if let Some(f) = &mut filter.meta {
         return match f(meta) {
             FilterReturn::FilterResult(new_meta, recurse) => {
@@ -1049,19 +1092,10 @@ pub fn topdown_traverse_meta(meta: Meta, filter: &mut Filter) -> Meta {
                 }
                 topdown_traverse_meta(new_meta, filter)
             }
-            FilterReturn::Unchanged(m) => {
-                let meta_value = MetaValue::MetaMap(m);
-                match topdown_traverse_meta_value(meta_value, filter) {
-                    MetaValue::MetaMap(m) => m,
-                    _ => panic!("Expected MetaMap after filtering meta"),
-                }
-            }
+            FilterReturn::Unchanged(m) => topdown_traverse_meta_value_with_source_info(m, filter),
         };
     } else {
-        return meta
-            .into_iter()
-            .map(|(k, v)| (k, topdown_traverse_meta_value(v, filter)))
-            .collect();
+        return topdown_traverse_meta_value_with_source_info(meta, filter);
     }
 }
 

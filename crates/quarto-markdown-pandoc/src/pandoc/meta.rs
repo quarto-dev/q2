@@ -15,7 +15,7 @@ use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser};
 
 // Pandoc's MetaValue notably does not support numbers or nulls, so we don't either
 // https://pandoc.org/lua-filters.html#type-metavalue
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum MetaValue {
     MetaString(String),
     MetaBool(bool),
@@ -32,6 +32,289 @@ impl Default for MetaValue {
 }
 
 pub type Meta = LinkedHashMap<String, MetaValue>;
+
+// Phase 4: MetaValueWithSourceInfo - Meta with full source tracking
+// This replaces Meta for use in PandocAST, preserving source info through
+// the YAML->Meta transformation where strings are parsed as Markdown.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum MetaValueWithSourceInfo {
+    MetaString {
+        value: String,
+        source_info: quarto_source_map::SourceInfo,
+    },
+    MetaBool {
+        value: bool,
+        source_info: quarto_source_map::SourceInfo,
+    },
+    MetaInlines {
+        content: Inlines,
+        source_info: quarto_source_map::SourceInfo,
+    },
+    MetaBlocks {
+        content: Blocks,
+        source_info: quarto_source_map::SourceInfo,
+    },
+    MetaList {
+        items: Vec<MetaValueWithSourceInfo>,
+        source_info: quarto_source_map::SourceInfo,
+    },
+    MetaMap {
+        entries: Vec<MetaMapEntry>,
+        source_info: quarto_source_map::SourceInfo,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MetaMapEntry {
+    pub key: String,
+    pub key_source: quarto_source_map::SourceInfo,
+    pub value: MetaValueWithSourceInfo,
+}
+
+impl Default for MetaValueWithSourceInfo {
+    fn default() -> Self {
+        MetaValueWithSourceInfo::MetaMap {
+            entries: Vec::new(),
+            source_info: quarto_source_map::SourceInfo::default(),
+        }
+    }
+}
+
+impl MetaValueWithSourceInfo {
+    /// Get a value by key if this is a MetaMap
+    pub fn get(&self, key: &str) -> Option<&MetaValueWithSourceInfo> {
+        match self {
+            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+                entries.iter().find(|e| e.key == key).map(|e| &e.value)
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if a key exists if this is a MetaMap
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// Check if this MetaMap is empty
+    pub fn is_empty(&self) -> bool {
+        match self {
+            MetaValueWithSourceInfo::MetaMap { entries, .. } => entries.is_empty(),
+            _ => false,
+        }
+    }
+
+    /// Convert to old Meta format (loses source info)
+    pub fn to_meta_value(&self) -> MetaValue {
+        match self {
+            MetaValueWithSourceInfo::MetaString { value, .. } => {
+                MetaValue::MetaString(value.clone())
+            }
+            MetaValueWithSourceInfo::MetaBool { value, .. } => MetaValue::MetaBool(*value),
+            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                MetaValue::MetaInlines(content.clone())
+            }
+            MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
+                MetaValue::MetaBlocks(content.clone())
+            }
+            MetaValueWithSourceInfo::MetaList { items, .. } => {
+                MetaValue::MetaList(items.iter().map(|item| item.to_meta_value()).collect())
+            }
+            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+                let mut map = LinkedHashMap::new();
+                for entry in entries {
+                    map.insert(entry.key.clone(), entry.value.to_meta_value());
+                }
+                MetaValue::MetaMap(map)
+            }
+        }
+    }
+
+    /// Convert to old Meta format when self is a MetaMap (loses source info)
+    /// Panics if self is not a MetaMap
+    pub fn to_meta(&self) -> Meta {
+        match self {
+            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+                let mut map = LinkedHashMap::new();
+                for entry in entries {
+                    map.insert(entry.key.clone(), entry.value.to_meta_value());
+                }
+                map
+            }
+            _ => panic!("to_meta() called on non-MetaMap variant"),
+        }
+    }
+}
+
+/// Convert old Meta to new format (with dummy source info)
+pub fn meta_from_legacy(meta: Meta) -> MetaValueWithSourceInfo {
+    let entries = meta
+        .into_iter()
+        .map(|(k, v)| MetaMapEntry {
+            key: k,
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: meta_value_from_legacy(v),
+        })
+        .collect();
+
+    MetaValueWithSourceInfo::MetaMap {
+        entries,
+        source_info: quarto_source_map::SourceInfo::default(),
+    }
+}
+
+/// Convert old MetaValue to new format (with dummy source info)
+pub fn meta_value_from_legacy(value: MetaValue) -> MetaValueWithSourceInfo {
+    match value {
+        MetaValue::MetaString(s) => MetaValueWithSourceInfo::MetaString {
+            value: s,
+            source_info: quarto_source_map::SourceInfo::default(),
+        },
+        MetaValue::MetaBool(b) => MetaValueWithSourceInfo::MetaBool {
+            value: b,
+            source_info: quarto_source_map::SourceInfo::default(),
+        },
+        MetaValue::MetaInlines(inlines) => MetaValueWithSourceInfo::MetaInlines {
+            content: inlines,
+            source_info: quarto_source_map::SourceInfo::default(),
+        },
+        MetaValue::MetaBlocks(blocks) => MetaValueWithSourceInfo::MetaBlocks {
+            content: blocks,
+            source_info: quarto_source_map::SourceInfo::default(),
+        },
+        MetaValue::MetaList(list) => MetaValueWithSourceInfo::MetaList {
+            items: list.into_iter().map(meta_value_from_legacy).collect(),
+            source_info: quarto_source_map::SourceInfo::default(),
+        },
+        MetaValue::MetaMap(map) => {
+            let entries = map
+                .into_iter()
+                .map(|(k, v)| MetaMapEntry {
+                    key: k,
+                    key_source: quarto_source_map::SourceInfo::default(),
+                    value: meta_value_from_legacy(v),
+                })
+                .collect();
+            MetaValueWithSourceInfo::MetaMap {
+                entries,
+                source_info: quarto_source_map::SourceInfo::default(),
+            }
+        }
+    }
+}
+
+/// Transform YamlWithSourceInfo to MetaValueWithSourceInfo
+///
+/// This is the core transformation that:
+/// 1. Parses YAML strings as Markdown (creating Substring SourceInfos)
+/// 2. Preserves source tracking through nested structures
+/// 3. Handles special YAML tags (bypassing markdown parsing)
+/// 4. Converts YAML types to Pandoc Meta types
+///
+/// Takes ownership of the YamlWithSourceInfo to avoid unnecessary clones.
+pub fn yaml_to_meta_with_source_info(
+    yaml: quarto_yaml::YamlWithSourceInfo,
+    _context: &crate::pandoc::ast_context::ASTContext,
+) -> MetaValueWithSourceInfo {
+    use yaml_rust2::Yaml;
+
+    // Check if this is an array or hash first, since we need to consume
+    // the value before matching on yaml.yaml
+    if yaml.is_array() {
+        let (items, source_info) = yaml.into_array().unwrap();
+        let meta_items = items
+            .into_iter()
+            .map(|item| yaml_to_meta_with_source_info(item, _context))
+            .collect();
+
+        return MetaValueWithSourceInfo::MetaList {
+            items: meta_items,
+            source_info,
+        };
+    }
+
+    if yaml.is_hash() {
+        let (entries, source_info) = yaml.into_hash().unwrap();
+        let meta_entries = entries
+            .into_iter()
+            .filter_map(|entry| {
+                // Keys must be strings in Pandoc metadata
+                entry.key.yaml.as_str().map(|key_str| MetaMapEntry {
+                    key: key_str.to_string(),
+                    key_source: entry.key_span,
+                    value: yaml_to_meta_with_source_info(entry.value, _context),
+                })
+            })
+            .collect();
+
+        return MetaValueWithSourceInfo::MetaMap {
+            entries: meta_entries,
+            source_info,
+        };
+    }
+
+    // For scalars, destructure to get owned values
+    let quarto_yaml::YamlWithSourceInfo {
+        yaml: yaml_value,
+        source_info,
+        ..
+    } = yaml;
+
+    match yaml_value {
+        Yaml::String(s) => {
+            // TODO: Check for special YAML tags (e.g., !path, !glob, !str)
+            // For now, parse all strings as markdown
+
+            // TODO: Parse s as Markdown, creating Substring SourceInfo
+            // For now, just wrap as MetaString
+            MetaValueWithSourceInfo::MetaString {
+                value: s,
+                source_info,
+            }
+        }
+
+        Yaml::Boolean(b) => MetaValueWithSourceInfo::MetaBool {
+            value: b,
+            source_info,
+        },
+
+        // Pandoc doesn't support null, numbers, etc. in metadata
+        // For now, convert them to strings
+        Yaml::Null => MetaValueWithSourceInfo::MetaString {
+            value: String::new(),
+            source_info,
+        },
+
+        Yaml::Integer(i) => MetaValueWithSourceInfo::MetaString {
+            value: i.to_string(),
+            source_info,
+        },
+
+        Yaml::Real(r) => MetaValueWithSourceInfo::MetaString {
+            value: r,
+            source_info,
+        },
+
+        Yaml::BadValue => MetaValueWithSourceInfo::MetaString {
+            value: String::new(),
+            source_info,
+        },
+
+        Yaml::Alias(_) => {
+            // YAML aliases are resolved by yaml-rust2, so this shouldn't happen
+            // But if it does, treat as empty string
+            MetaValueWithSourceInfo::MetaString {
+                value: String::new(),
+                source_info,
+            }
+        }
+
+        // Array and Hash should have been handled above
+        Yaml::Array(_) | Yaml::Hash(_) => {
+            unreachable!("Array/Hash should be handled by into_array/into_hash")
+        }
+    }
+}
 
 fn extract_between_delimiters(input: &str) -> Option<&str> {
     let parts: Vec<&str> = input.split("---").collect();
@@ -157,6 +440,54 @@ impl MarkedEventReceiver for YamlEventHandler {
     }
 }
 
+/// Convert RawBlock to MetaValueWithSourceInfo using quarto-yaml (Phase 4)
+///
+/// This is the new implementation that preserves source location information
+/// throughout the YAML -> Meta transformation.
+pub fn rawblock_to_meta_with_source_info(
+    block: &RawBlock,
+    context: &crate::pandoc::ast_context::ASTContext,
+) -> MetaValueWithSourceInfo {
+    if block.format != "quarto_minus_metadata" {
+        panic!(
+            "Expected RawBlock with format 'quarto_minus_metadata', got {}",
+            block.format
+        );
+    }
+
+    // Extract YAML content between --- delimiters
+    let content = extract_between_delimiters(&block.text).unwrap();
+
+    // Calculate offsets within RawBlock.text
+    // The text is "---\n<content>\n---", so content starts at index 4
+    let yaml_start = block.text.find("---\n").unwrap() + 4;
+
+    // Convert old SourceInfo to new SourceInfo
+    let parent =
+        crate::pandoc::source_map_compat::old_to_new_source_info(&block.source_info, context);
+
+    // Create Substring SourceInfo for the YAML content within the RawBlock
+    let yaml_parent =
+        quarto_source_map::SourceInfo::substring(parent, yaml_start, yaml_start + content.len());
+
+    // Parse YAML with source tracking
+    let yaml = match quarto_yaml::parse_with_parent(content, yaml_parent) {
+        Ok(y) => y,
+        Err(e) => panic!(
+            "(unimplemented syntax error - this is a bug!) Failed to parse metadata block as YAML: {}",
+            e
+        ),
+    };
+
+    // Transform YamlWithSourceInfo to MetaValueWithSourceInfo
+    // Pass by value since yaml is no longer needed
+    yaml_to_meta_with_source_info(yaml, context)
+}
+
+/// Legacy version: Convert RawBlock to Meta (old implementation)
+///
+/// This version uses yaml-rust2 directly and doesn't preserve source information.
+/// Kept for backward compatibility during Phase 4.
 pub fn rawblock_to_meta(block: RawBlock) -> Meta {
     if block.format != "quarto_minus_metadata" {
         panic!(
@@ -175,6 +506,102 @@ pub fn rawblock_to_meta(block: RawBlock) -> Meta {
         );
     }
     handler.result.unwrap()
+}
+
+/// Parse metadata strings as markdown, preserving source information
+pub fn parse_metadata_strings_with_source_info(
+    meta: MetaValueWithSourceInfo,
+    outer_metadata: &mut LinkedHashMap<String, MetaValueWithSourceInfo>,
+) -> MetaValueWithSourceInfo {
+    match meta {
+        MetaValueWithSourceInfo::MetaString { value, source_info } => {
+            let mut output_stream = VerboseOutput::Sink(io::sink());
+            let result = readers::qmd::read(
+                value.as_bytes(),
+                false,
+                "<metadata>",
+                &mut output_stream,
+                None::<
+                    fn(
+                        &[u8],
+                        &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
+                        &str,
+                    ) -> Vec<String>,
+                >,
+            );
+            match result {
+                Ok((mut pandoc, _context)) => {
+                    // Merge parsed metadata
+                    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
+                        for entry in entries {
+                            outer_metadata.insert(entry.key, entry.value);
+                        }
+                    }
+                    // Check if it's a single paragraph - if so, return MetaInlines with original source_info
+                    if pandoc.blocks.len() == 1 {
+                        if let crate::pandoc::Block::Paragraph(p) = &mut pandoc.blocks[0] {
+                            return MetaValueWithSourceInfo::MetaInlines {
+                                content: mem::take(&mut p.content),
+                                source_info, // Preserve the original source_info from YAML
+                            };
+                        }
+                    }
+                    MetaValueWithSourceInfo::MetaBlocks {
+                        content: pandoc.blocks,
+                        source_info,
+                    }
+                }
+                Err(_) => {
+                    // Markdown parse failed - wrap in Span with class "yaml-markdown-syntax-error"
+                    let span = Span {
+                        attr: (
+                            String::new(),
+                            vec!["yaml-markdown-syntax-error".to_string()],
+                            HashMap::new(),
+                        ),
+                        content: vec![Inline::Str(Str {
+                            text: value.clone(),
+                            source_info: empty_source_info(),
+                            source_info_qsm: None,
+                        })],
+                        source_info: empty_source_info(),
+                    };
+                    MetaValueWithSourceInfo::MetaInlines {
+                        content: vec![Inline::Span(span)],
+                        source_info,
+                    }
+                }
+            }
+        }
+        MetaValueWithSourceInfo::MetaList { items, source_info } => {
+            let parsed_items = items
+                .into_iter()
+                .map(|item| parse_metadata_strings_with_source_info(item, outer_metadata))
+                .collect();
+            MetaValueWithSourceInfo::MetaList {
+                items: parsed_items,
+                source_info,
+            }
+        }
+        MetaValueWithSourceInfo::MetaMap {
+            entries,
+            source_info,
+        } => {
+            let parsed_entries = entries
+                .into_iter()
+                .map(|entry| MetaMapEntry {
+                    key: entry.key,
+                    key_source: entry.key_source,
+                    value: parse_metadata_strings_with_source_info(entry.value, outer_metadata),
+                })
+                .collect();
+            MetaValueWithSourceInfo::MetaMap {
+                entries: parsed_entries,
+                source_info,
+            }
+        }
+        other => other,
+    }
 }
 
 pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> MetaValue {
@@ -196,8 +623,11 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
             );
             match result {
                 Ok((mut pandoc, _context)) => {
-                    for (k, v) in pandoc.meta.into_iter() {
-                        outer_metadata.insert(k, v);
+                    // pandoc.meta is now MetaValueWithSourceInfo, convert it to Meta
+                    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
+                        for entry in entries {
+                            outer_metadata.insert(entry.key, entry.value.to_meta_value());
+                        }
                     }
                     // we need to examine pandoc.blocks to see if it's a single paragraph or multiple blocks
                     // if it's a single paragraph, we can return MetaInlines

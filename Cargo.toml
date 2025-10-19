@@ -31,7 +31,7 @@ serde_yaml = "0.9"
 thiserror = "1.0"
 toml = "0.8.19"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-yaml-rust2 = "0.9"
+yaml-rust2 = "0.10"
 
 [workspace.dependencies.proc-macro-error2]
 version = "2.0.1"
