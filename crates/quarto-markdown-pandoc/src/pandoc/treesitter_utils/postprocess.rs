@@ -157,6 +157,7 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             result.push(Inline::Str(Str {
                 text: current_text,
                 source_info,
+                source_info_qsm: None,
             }));
             i = j;
         } else {
@@ -579,6 +580,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                                         bracketed_content.push(Inline::Str(Str {
                                                             text: word.to_string(),
                                                             source_info: s.source_info.clone(),
+                                                            source_info_qsm: None,
                                                         }));
                                                     }
                                                 }
@@ -778,6 +780,7 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                                 source_info: current_source_info
                                     .take()
                                     .unwrap_or_else(empty_source_info),
+                                source_info_qsm: None,
                             }));
                         }
                         result.push(inline);
@@ -788,6 +791,7 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                 result.push(Inline::Str(Str {
                     text: current,
                     source_info: current_source_info.unwrap_or_else(empty_source_info),
+                    source_info_qsm: None,
                 }));
             }
 

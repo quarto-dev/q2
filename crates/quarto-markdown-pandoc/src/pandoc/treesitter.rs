@@ -383,6 +383,7 @@ fn process_native_inline<T: Write>(
                         },
                         range,
                     ),
+                    source_info_qsm: None, // TODO: Populate in later migration phase
                 })
             }
         }
@@ -461,6 +462,7 @@ fn process_native_inlines<T: Write>(
                             },
                             range,
                         ),
+                        source_info_qsm: None, // TODO: Populate in later migration phase
                     }))
                 }
             }

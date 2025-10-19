@@ -108,6 +108,8 @@ pub struct Header {
 #[derive(Debug, Clone, PartialEq)]
 pub struct HorizontalRule {
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

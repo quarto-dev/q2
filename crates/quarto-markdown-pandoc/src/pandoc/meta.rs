@@ -100,6 +100,7 @@ impl YamlEventHandler {
                 content: vec![Inline::Str(Str {
                     text: s.to_string(),
                     source_info: empty_source_info(),
+                    source_info_qsm: None,
                 })],
                 source_info: empty_source_info(),
             };
@@ -222,6 +223,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                         content: vec![Inline::Str(Str {
                             text: s.clone(),
                             source_info: empty_source_info(),
+                            source_info_qsm: None,
                         })],
                         source_info: empty_source_info(),
                     };

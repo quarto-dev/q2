@@ -183,6 +183,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             Ok(Inline::Str(Str {
                 text,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Space" => {
@@ -643,6 +644,7 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
     Ok(ASTContext {
         filenames,
         example_list_counter: std::cell::Cell::new(1),
+        source_context: quarto_source_map::SourceContext::new(),
     })
 }
 
@@ -1173,6 +1175,7 @@ fn read_block(value: &Value) -> Result<Block> {
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule {
             source_info: SourceInfo::new(filename_index, range),
+            source_info_qsm: None,
         })),
         "Figure" => {
             let c = obj

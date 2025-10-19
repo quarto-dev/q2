@@ -9,6 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, Link, Str};
 use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::source_map_compat;
 use std::collections::HashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -32,6 +33,9 @@ pub fn process_uri_autolink(
         content: vec![Inline::Str(Str {
             text: content.to_string(),
             source_info: node_source_info_with_context(node, context),
+            source_info_qsm: Some(source_map_compat::node_to_source_info_with_context(
+                node, context,
+            )),
         })],
         attr,
         target: (content.to_string(), "".to_string()),

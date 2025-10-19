@@ -64,6 +64,7 @@ macro_rules! process_editorial_mark {
                                         },
                                         range,
                                     ),
+                                    source_info_qsm: None, // TODO: Populate in later migration phase
                                 }))
                             }
                         }

@@ -13,6 +13,7 @@ pub mod location;
 pub mod meta;
 pub mod pandoc;
 pub mod shortcode;
+pub mod source_map_compat;
 pub mod table;
 pub mod treesitter;
 pub mod treesitter_utils;
