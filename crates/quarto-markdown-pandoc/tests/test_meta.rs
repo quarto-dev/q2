@@ -6,8 +6,9 @@
 use hashlink::LinkedHashMap;
 use quarto_markdown_pandoc::pandoc::location::{Location, Range, SourceInfo};
 use quarto_markdown_pandoc::pandoc::{
-    Inline, MetaValue, RawBlock, parse_metadata_strings, rawblock_to_meta,
+    Inline, RawBlock, parse_metadata_strings,
 };
+use quarto_markdown_pandoc::pandoc::meta::{MetaValue, rawblock_to_meta};
 use std::fs;
 
 #[test]
