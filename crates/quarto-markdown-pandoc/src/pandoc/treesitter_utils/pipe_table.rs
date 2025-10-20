@@ -138,6 +138,7 @@ pub fn process_pipe_table_cell(
     table_cell.content.push(Block::Plain(Plain {
         content: plain_content,
         source_info: node_source_info_with_context(node, context),
+        source_info_qsm: None,
     }));
     PandocNativeIntermediate::IntermediateCell(table_cell)
 }
@@ -218,6 +219,7 @@ pub fn process_pipe_table(
             long: Some(vec![Block::Plain(Plain {
                 content: inlines,
                 source_info: node_source_info_with_context(node, context),
+                source_info_qsm: None,
             })]),
         }
     } else {
@@ -246,5 +248,6 @@ pub fn process_pipe_table(
             rows: vec![],
         },
         source_info: node_source_info_with_context(node, context),
+        source_info_qsm: None,
     }))
 }

@@ -120,10 +120,12 @@ pub fn create_line_break_inline(
     let inline = if is_hard {
         Inline::LineBreak(LineBreak {
             source_info: SourceInfo::with_range(range),
+            source_info_qsm: None,
         })
     } else {
         Inline::SoftBreak(SoftBreak {
             source_info: SourceInfo::with_range(range),
+            source_info_qsm: None,
         })
     };
     PandocNativeIntermediate::IntermediateInline(inline)
