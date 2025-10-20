@@ -38,7 +38,7 @@ regular: This has *emphasis*
                 row: 0,
                 column: 0,
             },
-        }),
+        }).to_source_map_info(),
     };
 
     let context = ASTContext::default();

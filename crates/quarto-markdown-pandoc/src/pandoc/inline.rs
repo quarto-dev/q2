@@ -512,24 +512,23 @@ fn make_inline_leftover(_node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pandoc::location::Location;
 
-    fn dummy_source_info() -> SourceInfo {
-        SourceInfo {
-            filename_index: None,
-            range: Range {
-                start: Location {
+    fn dummy_source_info() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
                     offset: 0,
                     row: 0,
                     column: 0,
                 },
-                end: Location {
+                end: quarto_source_map::Location {
                     offset: 0,
                     row: 0,
                     column: 0,
                 },
             },
-        }
+        )
     }
 
     fn make_str(text: &str) -> Inline {

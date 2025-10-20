@@ -33,7 +33,7 @@ fn test_json_roundtrip_simple_paragraph() {
                             column: 13,
                         },
                     },
-                ),
+                ).to_source_map_info(),
             })],
             source_info: SourceInfo::new(
                 None,
@@ -49,7 +49,7 @@ fn test_json_roundtrip_simple_paragraph() {
                         column: 13,
                         },
                 },
-            ),
+            ).to_source_map_info(),
         })],
     };
 
@@ -117,7 +117,7 @@ fn test_json_roundtrip_complex_document() {
                                     column: 8,
                                 },
                             },
-                        ),
+                        ).to_source_map_info(),
                     }),
                     Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
                         content: vec![Inline::Str(Str {
@@ -136,7 +136,7 @@ fn test_json_roundtrip_complex_document() {
                                         column: 17,
                                     },
                                 },
-                            ),
+                            ).to_source_map_info(),
                         })],
                         source_info: SourceInfo::new(
                             None,
@@ -152,7 +152,7 @@ fn test_json_roundtrip_complex_document() {
                                     column: 17,
                                 },
                             },
-                        ),
+                        ).to_source_map_info(),
                     }),
                     Inline::Str(Str {
                         text: ".".to_string(),
@@ -170,7 +170,7 @@ fn test_json_roundtrip_complex_document() {
                                     column: 18,
                                 },
                             },
-                        ),
+                        ).to_source_map_info(),
                     }),
                 ],
                 source_info: SourceInfo::new(
@@ -187,7 +187,7 @@ fn test_json_roundtrip_complex_document() {
                             column: 20,
                         },
                     },
-                ),
+                ).to_source_map_info(),
             }),
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
                 attr: ("".to_string(), vec![], HashMap::new()),
@@ -206,7 +206,7 @@ fn test_json_roundtrip_complex_document() {
                             column: 22,
                         },
                     },
-                ),
+                ).to_source_map_info(),
             }),
         ],
     };
@@ -276,7 +276,7 @@ fn test_json_write_then_read_matches_original_structure() {
                                 column: 10,
                             },
                         },
-                    ),
+                    ).to_source_map_info(),
                 })],
                 source_info: SourceInfo::new(
                     Some(0),
@@ -292,7 +292,7 @@ fn test_json_write_then_read_matches_original_structure() {
                             column: 10,
                         },
                     },
-                ),
+                ).to_source_map_info(),
             }),
             Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
                 format: "html".to_string(),
@@ -311,7 +311,7 @@ fn test_json_write_then_read_matches_original_structure() {
                             column: 19,
                         },
                     },
-                ),
+                ).to_source_map_info(),
             }),
         ],
     };
