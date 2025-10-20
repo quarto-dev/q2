@@ -78,14 +78,14 @@ impl SourceInfoSerializer {
     /// returns the existing ID. Otherwise, recursively interns parents and
     /// adds this SourceInfo to the pool with a new ID.
     fn intern(&mut self, source_info: &SourceInfo) -> usize {
+        // For Rc-shared SourceInfo objects, we need to detect if they point to the same
+        // underlying data. We use the data pointer address for this.
         let ptr = source_info as *const SourceInfo;
 
         // Check if already interned
         if let Some(&id) = self.id_map.get(&ptr) {
             return id;
         }
-
-        let id = self.pool.len();
 
         // Recursively intern parents and build the serializable mapping
         let mapping = match &source_info.mapping {
@@ -121,6 +121,9 @@ impl SourceInfoSerializer {
             }
         };
 
+        // Calculate ID after recursion completes
+        let id = self.pool.len();
+
         // Add to pool
         self.pool.push(SerializableSourceInfo {
             id,
@@ -128,7 +131,9 @@ impl SourceInfoSerializer {
             mapping,
         });
 
+        // Record this pointer's ID for future lookups
         self.id_map.insert(ptr, id);
+
         id
     }
 
