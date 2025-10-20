@@ -9,7 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::{Block, Div, RawBlock};
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -67,7 +67,10 @@ pub fn process_fenced_div_block<T: Write>(
                 content.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: SourceInfo::with_range(range),
+                    source_info: quarto_source_map::SourceInfo::original(
+                        quarto_source_map::FileId(0),
+                        range,
+                    ),
                 }));
             }
             _ => {

@@ -56,10 +56,7 @@ use crate::pandoc::inline::{
     Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{
-    Range, SourceInfo, empty_source_info, node_location, node_source_info,
-    node_source_info_with_context,
-};
+use crate::pandoc::location::{node_location, node_source_info, node_source_info_with_context};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -70,7 +67,7 @@ use crate::traversals::bottomup_traverse_concrete_tree;
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
-fn get_block_source_info(block: &Block) -> &SourceInfo {
+fn get_block_source_info(block: &Block) -> &quarto_source_map::SourceInfo {
     match block {
         Block::Plain(b) => &b.source_info,
         Block::Paragraph(b) => &b.source_info,
@@ -106,7 +103,7 @@ fn process_list(
     //     but the next item might not itself be a paragraph.
 
     let mut has_loose_item = false;
-    let mut last_para_range: Option<Range> = None;
+    let mut last_para_range: Option<quarto_source_map::Range> = None;
     let mut last_item_end_row: Option<usize> = None;
     let mut list_items: Vec<Blocks> = Vec::new();
     let mut is_ordered_list: Option<ListAttributes> = None;
@@ -356,6 +353,7 @@ fn process_native_inline<T: Write>(
     whitespace_re: &Regex,
     inline_buf: &mut T,
     node_text_fn: impl Fn() -> String,
+    node_source_info_fn: impl Fn() -> quarto_source_map::SourceInfo,
     context: &ASTContext,
 ) -> Inline {
     match child {
@@ -363,24 +361,16 @@ fn process_native_inline<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: SourceInfo::new(
-                        if context.filenames.is_empty() {
-                            None
-                        } else {
-                            Some(0)
-                        },
+                    source_info: quarto_source_map::SourceInfo::original(
+                        context.current_file_id(),
                         range,
                     ),
                 })
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: SourceInfo::new(
-                        if context.filenames.is_empty() {
-                            None
-                        } else {
-                            Some(0)
-                        },
+                    source_info: quarto_source_map::SourceInfo::original(
+                        context.current_file_id(),
                         range,
                     ),
                 })
@@ -405,7 +395,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
-                source_info: empty_source_info(),
+                source_info: node_source_info_fn(),
             })
         }
         other => {
@@ -418,7 +408,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
-                source_info: empty_source_info(),
+                source_info: node_source_info_fn(),
             })
         }
     }
@@ -441,24 +431,16 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: SourceInfo::new(
-                            if context.filenames.is_empty() {
-                                None
-                            } else {
-                                Some(0)
-                            },
+                        source_info: quarto_source_map::SourceInfo::original(
+                            context.current_file_id(),
                             range,
                         ),
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
                         text: apply_smart_quotes(text),
-                        source_info: SourceInfo::new(
-                            if context.filenames.is_empty() {
-                                None
-                            } else {
-                                Some(0)
-                            },
+                        source_info: quarto_source_map::SourceInfo::original(
+                            context.current_file_id(),
                             range,
                         ),
                     }))
@@ -501,6 +483,7 @@ fn native_visitor<T: Write>(
         let value = node_text();
         PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
     };
+    let node_source_info_fn = || node_source_info_with_context(node, context);
     let native_inline = |(node_name, child)| {
         process_native_inline(
             node_name,
@@ -508,6 +491,7 @@ fn native_visitor<T: Write>(
             &whitespace_re,
             &mut inline_buf,
             &node_text,
+            &node_source_info_fn,
             context,
         )
     };
@@ -647,7 +631,7 @@ fn native_visitor<T: Write>(
                 Inline::Note(Note {
                     content: vec![Block::Paragraph(Paragraph {
                         content: inlines,
-                        source_info: SourceInfo::with_range(node_location(node)),
+                        source_info: node_source_info(node),
                     })],
                     source_info: node_source_info(node),
                 })
@@ -732,13 +716,13 @@ fn native_visitor<T: Write>(
     result
 }
 
-pub fn treesitter_to_pandoc<T: Write, E: crate::utils::error_collector::ErrorCollector>(
+pub fn treesitter_to_pandoc<T: Write>(
     buf: &mut T,
     tree: &tree_sitter_qmd::MarkdownTree,
     input_bytes: &[u8],
     context: &ASTContext,
-    error_collector: &mut E,
-) -> Result<Pandoc, Vec<String>> {
+    error_collector: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
+) -> Result<Pandoc, Vec<quarto_error_reporting::DiagnosticMessage>> {
     let result = bottomup_traverse_concrete_tree(
         &mut tree.walk(),
         &mut |node, children, input_bytes, context| {
@@ -753,8 +737,12 @@ pub fn treesitter_to_pandoc<T: Write, E: crate::utils::error_collector::ErrorCol
     let result = match postprocess(pandoc, error_collector) {
         Ok(doc) => doc,
         Err(()) => {
-            // Postprocess found errors, return the error messages from the collector
-            return Err(error_collector.messages());
+            // Postprocess found errors, return the diagnostics from the collector
+            // We need to get the diagnostics out - let's use a temporary collector
+            // Actually, we can't consume the collector here because it's borrowed
+            // We need to get a copy of the diagnostics
+            let diagnostics = error_collector.diagnostics().to_vec();
+            return Err(diagnostics);
         }
     };
     let result = merge_strs(result);

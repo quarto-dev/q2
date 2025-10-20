@@ -5,19 +5,22 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
-use crate::pandoc::location::{Location, Range, SourceInfo};
+use crate::pandoc::location::{Location, Range};
+use crate::pandoc::meta::MetaMapEntry;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
 use crate::pandoc::{
     Attr, Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, Code, CodeBlock,
     DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, Inlines, LineBlock,
-    Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType, Meta, MetaValue, Note,
-    OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SmallCaps,
-    SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Underline,
+    Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType,
+    MetaValueWithSourceInfo, Note, OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted,
+    RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
+    Superscript, Underline,
 };
-use hashlink::LinkedHashMap;
+use quarto_source_map::{FileId, RangeMapping, SourceMapping};
 use serde_json::Value;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum JsonReadError {
@@ -25,6 +28,9 @@ pub enum JsonReadError {
     MissingField(String),
     InvalidType(String),
     UnsupportedVariant(String),
+    InvalidSourceInfoRef(usize),
+    ExpectedSourceInfoRef,
+    MalformedSourceInfoPool,
 }
 
 impl std::fmt::Display for JsonReadError {
@@ -36,6 +42,15 @@ impl std::fmt::Display for JsonReadError {
             JsonReadError::UnsupportedVariant(variant) => {
                 write!(f, "Unsupported variant: {}", variant)
             }
+            JsonReadError::InvalidSourceInfoRef(id) => {
+                write!(f, "Invalid SourceInfo reference ID: {}", id)
+            }
+            JsonReadError::ExpectedSourceInfoRef => {
+                write!(f, "Expected SourceInfo $ref, got inline SourceInfo")
+            }
+            JsonReadError::MalformedSourceInfoPool => {
+                write!(f, "Malformed sourceInfoPool in astContext")
+            }
         }
     }
 }
@@ -43,6 +58,270 @@ impl std::fmt::Display for JsonReadError {
 impl std::error::Error for JsonReadError {}
 
 type Result<T> = std::result::Result<T, JsonReadError>;
+
+/// Deserializer that reconstructs SourceInfo objects from a pool.
+///
+/// During JSON deserialization, the sourceInfoPool from astContext is parsed
+/// into a Vec<SourceInfo>. References in the AST ({"$ref": id}) are resolved
+/// by looking up the ID in this pool.
+///
+/// The pool must be built in topological order (parents before children) so
+/// that when we reconstruct a SourceInfo with a parent_id, the parent already
+/// exists in the pool.
+struct SourceInfoDeserializer {
+    pool: Vec<quarto_source_map::SourceInfo>,
+}
+
+impl SourceInfoDeserializer {
+    /// Create a new empty deserializer (for documents without SourceInfo)
+    fn empty() -> Self {
+        SourceInfoDeserializer { pool: Vec::new() }
+    }
+
+    /// Build the pool from the sourceInfoPool JSON array (compact format)
+    ///
+    /// Compact format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
+    /// ID is implicit from array index
+    fn new(pool_json: &Value) -> Result<Self> {
+        let pool_array = pool_json
+            .as_array()
+            .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+
+        let mut pool: Vec<quarto_source_map::SourceInfo> = Vec::with_capacity(pool_array.len());
+
+        // Build pool in order - parents must come before children
+        for item in pool_array {
+            // Parse range from "r" array: [start_offset, start_row, start_col, end_offset, end_row, end_col]
+            let range_array = item
+                .get("r")
+                .and_then(|v| v.as_array())
+                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+
+            if range_array.len() != 6 {
+                return Err(JsonReadError::MalformedSourceInfoPool);
+            }
+
+            let range = quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: range_array[0]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize,
+                    row: range_array[1]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize,
+                    column: range_array[2]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize,
+                },
+                end: quarto_source_map::Location {
+                    offset: range_array[3]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize,
+                    row: range_array[4]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize,
+                    column: range_array[5]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize,
+                },
+            };
+
+            // Parse type code from "t"
+            let type_code =
+                item.get("t")
+                    .and_then(|v| v.as_u64())
+                    .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+
+            // Parse data from "d"
+            let data = item
+                .get("d")
+                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+
+            let mapping = match type_code {
+                0 => {
+                    // Original: data is file_id (number)
+                    let file_id = data
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
+                    SourceMapping::Original {
+                        file_id: FileId(file_id),
+                    }
+                }
+                1 => {
+                    // Substring: data is [parent_id, offset]
+                    let data_array = data
+                        .as_array()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                    if data_array.len() != 2 {
+                        return Err(JsonReadError::MalformedSourceInfoPool);
+                    }
+                    let parent_id = data_array[0]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
+                    let offset = data_array[1]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
+
+                    let parent = pool
+                        .get(parent_id)
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        .clone();
+
+                    SourceMapping::Substring {
+                        parent: Rc::new(parent),
+                        offset,
+                    }
+                }
+                2 => {
+                    // Concat: data is [[source_info_id, offset_in_concat, length], ...]
+                    let pieces_array = data
+                        .as_array()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+
+                    let pieces: Result<Vec<quarto_source_map::SourcePiece>> = pieces_array
+                        .iter()
+                        .map(|piece_array| {
+                            let piece = piece_array
+                                .as_array()
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                            if piece.len() != 3 {
+                                return Err(JsonReadError::MalformedSourceInfoPool);
+                            }
+                            let source_info_id = piece[0]
+                                .as_u64()
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
+                            let offset_in_concat = piece[1]
+                                .as_u64()
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
+                            let length = piece[2]
+                                .as_u64()
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
+
+                            let source_info = pool
+                                .get(source_info_id)
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                .clone();
+
+                            Ok(quarto_source_map::SourcePiece {
+                                source_info,
+                                offset_in_concat,
+                                length,
+                            })
+                        })
+                        .collect();
+
+                    SourceMapping::Concat { pieces: pieces? }
+                }
+                3 => {
+                    // Transformed: data is [parent_id, [[from_start, from_end, to_start, to_end], ...]]
+                    let data_array = data
+                        .as_array()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                    if data_array.len() != 2 {
+                        return Err(JsonReadError::MalformedSourceInfoPool);
+                    }
+                    let parent_id = data_array[0]
+                        .as_u64()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
+                    let mapping_array = data_array[1]
+                        .as_array()
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+
+                    let range_mappings: Result<Vec<RangeMapping>> = mapping_array
+                        .iter()
+                        .map(|rm_array| {
+                            let rm = rm_array
+                                .as_array()
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
+                            if rm.len() != 4 {
+                                return Err(JsonReadError::MalformedSourceInfoPool);
+                            }
+                            Ok(RangeMapping {
+                                from_start: rm[0]
+                                    .as_u64()
+                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                    as usize,
+                                from_end: rm[1]
+                                    .as_u64()
+                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                    as usize,
+                                to_start: rm[2]
+                                    .as_u64()
+                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                    as usize,
+                                to_end: rm[3]
+                                    .as_u64()
+                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                    as usize,
+                            })
+                        })
+                        .collect();
+
+                    let parent = pool
+                        .get(parent_id)
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        .clone();
+
+                    SourceMapping::Transformed {
+                        parent: Rc::new(parent),
+                        mapping: range_mappings?,
+                    }
+                }
+                _ => {
+                    return Err(JsonReadError::MalformedSourceInfoPool);
+                }
+            };
+
+            pool.push(quarto_source_map::SourceInfo { range, mapping });
+        }
+
+        Ok(SourceInfoDeserializer { pool })
+    }
+
+    /// Resolve a numeric reference to a SourceInfo
+    fn from_json_ref(&self, value: &Value) -> Result<quarto_source_map::SourceInfo> {
+        if let Some(ref_id) = value.as_u64() {
+            let id = ref_id as usize;
+            self.pool
+                .get(id)
+                .cloned()
+                .ok_or(JsonReadError::InvalidSourceInfoRef(id))
+        } else {
+            Err(JsonReadError::ExpectedSourceInfoRef)
+        }
+    }
+}
+
+/// Convert from old JSON format (filename_index, range) to new SourceInfo
+fn make_source_info(filename_index: Option<usize>, range: Range) -> quarto_source_map::SourceInfo {
+    let file_id = FileId(filename_index.unwrap_or(0));
+    let qsm_range = quarto_source_map::Range {
+        start: quarto_source_map::Location {
+            offset: range.start.offset,
+            row: range.start.row,
+            column: range.start.column,
+        },
+        end: quarto_source_map::Location {
+            offset: range.end.offset,
+            row: range.end.row,
+            column: range.end.column,
+        },
+    };
+    quarto_source_map::SourceInfo::original(file_id, qsm_range)
+}
 
 fn empty_range() -> Range {
     Range {
@@ -160,7 +439,7 @@ fn read_citation_mode(value: &Value) -> Result<CitationMode> {
     }
 }
 
-fn read_inline(value: &Value) -> Result<Inline> {
+fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Inline> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Inline".to_string()))?;
@@ -182,7 +461,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .to_string();
             Ok(Inline::Str(Str {
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Space" => {
@@ -191,7 +470,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::Space(Space {
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "LineBreak" => {
@@ -200,7 +479,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "SoftBreak" => {
@@ -209,27 +488,27 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Emph" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::Emph(Emph {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Strong" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::Strong(Strong {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Code" => {
@@ -252,7 +531,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             Ok(Inline::Code(Code {
                 attr,
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Math" => {
@@ -293,57 +572,57 @@ fn read_inline(value: &Value) -> Result<Inline> {
             Ok(Inline::Math(Math {
                 math_type,
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Underline" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::Underline(Underline {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Strikeout" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::Strikeout(Strikeout {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Superscript" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::Superscript(Superscript {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Subscript" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::Subscript(Subscript {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "SmallCaps" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Inline::SmallCaps(SmallCaps {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Quoted" => {
@@ -377,11 +656,11 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 }
             };
 
-            let content = read_inlines(&arr[1])?;
+            let content = read_inlines(&arr[1], deserializer)?;
             Ok(Inline::Quoted(Quoted {
                 quote_type,
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Link" => {
@@ -398,7 +677,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }
 
             let attr = read_attr(&arr[0])?;
-            let content = read_inlines(&arr[1])?;
+            let content = read_inlines(&arr[1], deserializer)?;
 
             let target_arr = arr[2].as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("Link target must be array".to_string())
@@ -422,7 +701,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 attr,
                 content,
                 target,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "RawInline" => {
@@ -452,7 +731,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             Ok(Inline::RawInline(RawInline {
                 format,
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Image" => {
@@ -469,7 +748,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }
 
             let attr = read_attr(&arr[0])?;
-            let content = read_inlines(&arr[1])?;
+            let content = read_inlines(&arr[1], deserializer)?;
 
             let target_arr = arr[2].as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("Image target must be array".to_string())
@@ -495,7 +774,7 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 attr,
                 content,
                 target,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Span" => {
@@ -512,21 +791,21 @@ fn read_inline(value: &Value) -> Result<Inline> {
             }
 
             let attr = read_attr(&arr[0])?;
-            let content = read_inlines(&arr[1])?;
+            let content = read_inlines(&arr[1], deserializer)?;
             Ok(Inline::Span(Span {
                 attr,
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Note" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_blocks(c)?;
+            let content = read_blocks(c, deserializer)?;
             Ok(Inline::Note(Note {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Cite" => {
@@ -561,14 +840,18 @@ fn read_inline(value: &Value) -> Result<Inline> {
                         .ok_or_else(|| JsonReadError::MissingField("citationId".to_string()))?
                         .to_string();
 
-                    let prefix =
-                        read_inlines(citation_obj.get("citationPrefix").ok_or_else(|| {
+                    let prefix = read_inlines(
+                        citation_obj.get("citationPrefix").ok_or_else(|| {
                             JsonReadError::MissingField("citationPrefix".to_string())
-                        })?)?;
-                    let suffix =
-                        read_inlines(citation_obj.get("citationSuffix").ok_or_else(|| {
+                        })?,
+                        deserializer,
+                    )?;
+                    let suffix = read_inlines(
+                        citation_obj.get("citationSuffix").ok_or_else(|| {
                             JsonReadError::MissingField("citationSuffix".to_string())
-                        })?)?;
+                        })?,
+                        deserializer,
+                    )?;
 
                     let mode =
                         read_citation_mode(citation_obj.get("citationMode").ok_or_else(|| {
@@ -599,23 +882,23 @@ fn read_inline(value: &Value) -> Result<Inline> {
                 .collect::<Result<Vec<_>>>()?;
 
             // Second element is the content inlines
-            let content = read_inlines(&c_arr[1])?;
+            let content = read_inlines(&c_arr[1], deserializer)?;
 
             Ok(Inline::Cite(Cite {
                 citations,
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
     }
 }
 
-fn read_inlines(value: &Value) -> Result<Inlines> {
+fn read_inlines(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Inlines> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Inlines".to_string()))?;
-    arr.iter().map(read_inline).collect()
+    arr.iter().map(|v| read_inline(v, deserializer)).collect()
 }
 
 fn read_ast_context(value: &Value) -> Result<ASTContext> {
@@ -643,6 +926,7 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
     Ok(ASTContext {
         filenames,
         example_list_counter: std::cell::Cell::new(1),
+        source_context: quarto_source_map::SourceContext::new(),
     })
 }
 
@@ -663,15 +947,7 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
     // We could validate the API version here if needed
     // let _api_version = obj.get("pandoc-api-version");
 
-    let meta = read_meta(
-        obj.get("meta")
-            .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
-    )?;
-    let blocks = read_blocks(
-        obj.get("blocks")
-            .ok_or_else(|| JsonReadError::MissingField("blocks".to_string()))?,
-    )?;
-
+    // Read astContext first (we need it for key sources and source info pool)
     let context = if let Some(ast_context_val) = obj.get("astContext") {
         read_ast_context(ast_context_val)?
     } else {
@@ -679,15 +955,57 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         ASTContext::new()
     };
 
+    // Extract sourceInfoPool and create deserializer
+    let deserializer = if let Some(ast_context_val) = obj.get("astContext") {
+        if let Some(ast_context_obj) = ast_context_val.as_object() {
+            if let Some(pool_json) = ast_context_obj.get("sourceInfoPool") {
+                SourceInfoDeserializer::new(pool_json)?
+            } else {
+                SourceInfoDeserializer::empty()
+            }
+        } else {
+            SourceInfoDeserializer::empty()
+        }
+    } else {
+        SourceInfoDeserializer::empty()
+    };
+
+    // Extract metaTopLevelKeySources if present
+    let key_sources = if let Some(ast_context_val) = obj.get("astContext") {
+        if let Some(ast_context_obj) = ast_context_val.as_object() {
+            if let Some(key_sources_val) = ast_context_obj.get("metaTopLevelKeySources") {
+                Some(key_sources_val)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let meta = read_meta_with_key_sources(
+        obj.get("meta")
+            .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
+        key_sources,
+        &deserializer,
+    )?;
+    let blocks = read_blocks(
+        obj.get("blocks")
+            .ok_or_else(|| JsonReadError::MissingField("blocks".to_string()))?,
+        &deserializer,
+    )?;
+
     Ok((Pandoc { meta, blocks }, context))
 }
 
-fn read_blockss(value: &Value) -> Result<Vec<Vec<Block>>> {
+fn read_blockss(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Vec<Vec<Block>>> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for blockss".to_string()))?;
     arr.iter()
-        .map(|blocks_val| read_blocks(blocks_val))
+        .map(|blocks_val| read_blocks(blocks_val, deserializer))
         .collect()
 }
 
@@ -751,7 +1069,7 @@ fn read_list_attributes(value: &Value) -> Result<ListAttributes> {
     Ok((start_num, number_style, number_delimiter))
 }
 
-fn read_caption(value: &Value) -> Result<Caption> {
+fn read_caption(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Caption> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Caption".to_string()))?;
@@ -765,23 +1083,23 @@ fn read_caption(value: &Value) -> Result<Caption> {
     let short = if arr[0].is_null() {
         None
     } else {
-        Some(read_inlines(&arr[0])?)
+        Some(read_inlines(&arr[0], deserializer)?)
     };
 
     let long = if arr[1].is_null() {
         None
     } else {
-        Some(read_blocks(&arr[1])?)
+        Some(read_blocks(&arr[1], deserializer)?)
     };
 
     Ok(Caption { short, long })
 }
 
-fn read_blocks(value: &Value) -> Result<Vec<Block>> {
+fn read_blocks(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Vec<Block>> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for blocks".to_string()))?;
-    arr.iter().map(read_block).collect()
+    arr.iter().map(|v| read_block(v, deserializer)).collect()
 }
 
 fn read_alignment(value: &Value) -> Result<Alignment> {
@@ -848,7 +1166,7 @@ fn read_colspec(value: &Value) -> Result<ColSpec> {
     Ok((alignment, colwidth))
 }
 
-fn read_cell(value: &Value) -> Result<Cell> {
+fn read_cell(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Cell> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Cell".to_string()))?;
@@ -869,7 +1187,7 @@ fn read_cell(value: &Value) -> Result<Cell> {
         .as_u64()
         .ok_or_else(|| JsonReadError::InvalidType("Cell col_span must be number".to_string()))?
         as usize;
-    let content = read_blocks(&arr[4])?;
+    let content = read_blocks(&arr[4], deserializer)?;
 
     Ok(Cell {
         attr,
@@ -880,7 +1198,7 @@ fn read_cell(value: &Value) -> Result<Cell> {
     })
 }
 
-fn read_row(value: &Value) -> Result<Row> {
+fn read_row(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Row> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Row".to_string()))?;
@@ -897,13 +1215,13 @@ fn read_row(value: &Value) -> Result<Row> {
         .ok_or_else(|| JsonReadError::InvalidType("Row cells must be array".to_string()))?;
     let cells = cells_arr
         .iter()
-        .map(read_cell)
+        .map(|v| read_cell(v, deserializer))
         .collect::<Result<Vec<_>>>()?;
 
     Ok(Row { attr, cells })
 }
 
-fn read_table_head(value: &Value) -> Result<TableHead> {
+fn read_table_head(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableHead> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableHead".to_string()))?;
@@ -918,12 +1236,15 @@ fn read_table_head(value: &Value) -> Result<TableHead> {
     let rows_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableHead rows must be array".to_string()))?;
-    let rows = rows_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+    let rows = rows_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(TableHead { attr, rows })
 }
 
-fn read_table_body(value: &Value) -> Result<TableBody> {
+fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableBody> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableBody".to_string()))?;
@@ -941,11 +1262,17 @@ fn read_table_body(value: &Value) -> Result<TableBody> {
     let head_arr = arr[2]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody head must be array".to_string()))?;
-    let head = head_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+    let head = head_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
     let body_arr = arr[3]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody body must be array".to_string()))?;
-    let body = body_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+    let body = body_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(TableBody {
         attr,
@@ -955,7 +1282,7 @@ fn read_table_body(value: &Value) -> Result<TableBody> {
     })
 }
 
-fn read_table_foot(value: &Value) -> Result<TableFoot> {
+fn read_table_foot(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableFoot> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableFoot".to_string()))?;
@@ -970,12 +1297,15 @@ fn read_table_foot(value: &Value) -> Result<TableFoot> {
     let rows_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableFoot rows must be array".to_string()))?;
-    let rows = rows_arr.iter().map(read_row).collect::<Result<Vec<_>>>()?;
+    let rows = rows_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(TableFoot { attr, rows })
 }
 
-fn read_block(value: &Value) -> Result<Block> {
+fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Block> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Block".to_string()))?;
@@ -995,20 +1325,20 @@ fn read_block(value: &Value) -> Result<Block> {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Block::Paragraph(Paragraph {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Plain" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_inlines(c)?;
+            let content = read_inlines(c, deserializer)?;
             Ok(Block::Plain(Plain {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "LineBlock" => {
@@ -1018,10 +1348,13 @@ fn read_block(value: &Value) -> Result<Block> {
             let arr = c.as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("LineBlock content must be array".to_string())
             })?;
-            let content = arr.iter().map(read_inlines).collect::<Result<Vec<_>>>()?;
+            let content = arr
+                .iter()
+                .map(|v| read_inlines(v, deserializer))
+                .collect::<Result<Vec<_>>>()?;
             Ok(Block::LineBlock(LineBlock {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "CodeBlock" => {
@@ -1046,7 +1379,7 @@ fn read_block(value: &Value) -> Result<Block> {
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "RawBlock" => {
@@ -1076,17 +1409,17 @@ fn read_block(value: &Value) -> Result<Block> {
             Ok(Block::RawBlock(RawBlock {
                 format,
                 text,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "BlockQuote" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_blocks(c)?;
+            let content = read_blocks(c, deserializer)?;
             Ok(Block::BlockQuote(BlockQuote {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "OrderedList" => {
@@ -1102,21 +1435,21 @@ fn read_block(value: &Value) -> Result<Block> {
                 ));
             }
             let attr = read_list_attributes(&arr[0])?;
-            let content = read_blockss(&arr[1])?;
+            let content = read_blockss(&arr[1], deserializer)?;
             Ok(Block::OrderedList(OrderedList {
                 attr,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "BulletList" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let content = read_blockss(c)?;
+            let content = read_blockss(c, deserializer)?;
             Ok(Block::BulletList(BulletList {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "DefinitionList" => {
@@ -1137,14 +1470,14 @@ fn read_block(value: &Value) -> Result<Block> {
                             "DefinitionList item must have 2 elements".to_string(),
                         ));
                     }
-                    let term = read_inlines(&item_arr[0])?;
-                    let definition = read_blockss(&item_arr[1])?;
+                    let term = read_inlines(&item_arr[0], deserializer)?;
+                    let definition = read_blockss(&item_arr[1], deserializer)?;
                     Ok((term, definition))
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Block::DefinitionList(DefinitionList {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Header" => {
@@ -1163,16 +1496,16 @@ fn read_block(value: &Value) -> Result<Block> {
                 JsonReadError::InvalidType("Header level must be number".to_string())
             })? as usize;
             let attr = read_attr(&arr[1])?;
-            let content = read_inlines(&arr[2])?;
+            let content = read_inlines(&arr[2], deserializer)?;
             Ok(Block::Header(Header {
                 level,
                 attr,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule {
-            source_info: SourceInfo::new(filename_index, range),
+            source_info: make_source_info(filename_index, range),
         })),
         "Figure" => {
             let c = obj
@@ -1187,13 +1520,13 @@ fn read_block(value: &Value) -> Result<Block> {
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            let caption = read_caption(&arr[1])?;
-            let content = read_blocks(&arr[2])?;
+            let caption = read_caption(&arr[1], deserializer)?;
+            let content = read_blocks(&arr[2], deserializer)?;
             Ok(Block::Figure(Figure {
                 attr,
                 caption,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Table" => {
@@ -1209,7 +1542,7 @@ fn read_block(value: &Value) -> Result<Block> {
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            let caption = read_caption(&arr[1])?;
+            let caption = read_caption(&arr[1], deserializer)?;
             let colspec_arr = arr[2].as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("Table colspec must be array".to_string())
             })?;
@@ -1217,15 +1550,15 @@ fn read_block(value: &Value) -> Result<Block> {
                 .iter()
                 .map(read_colspec)
                 .collect::<Result<Vec<_>>>()?;
-            let head = read_table_head(&arr[3])?;
+            let head = read_table_head(&arr[3], deserializer)?;
             let bodies_arr = arr[4].as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("Table bodies must be array".to_string())
             })?;
             let bodies = bodies_arr
                 .iter()
-                .map(read_table_body)
+                .map(|v| read_table_body(v, deserializer))
                 .collect::<Result<Vec<_>>>()?;
-            let foot = read_table_foot(&arr[5])?;
+            let foot = read_table_foot(&arr[5], deserializer)?;
             Ok(Block::Table(Table {
                 attr,
                 caption,
@@ -1233,7 +1566,7 @@ fn read_block(value: &Value) -> Result<Block> {
                 head,
                 bodies,
                 foot,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Div" => {
@@ -1249,21 +1582,22 @@ fn read_block(value: &Value) -> Result<Block> {
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            let content = read_blocks(&arr[1])?;
+            let content = read_blocks(&arr[1], deserializer)?;
             Ok(Block::Div(Div {
                 attr,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "BlockMetadata" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let meta = read_meta(c)?;
+            // BlockMetadata uses MetaValueWithSourceInfo format (not top-level meta)
+            let meta = read_meta_value_with_source_info(c, deserializer)?;
             Ok(Block::BlockMetadata(MetaBlock {
                 meta,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "NoteDefinitionPara" => {
@@ -1284,12 +1618,12 @@ fn read_block(value: &Value) -> Result<Block> {
                     JsonReadError::InvalidType("NoteDefinitionPara id must be string".to_string())
                 })?
                 .to_string();
-            let content = read_inlines(&arr[1])?;
+            let content = read_inlines(&arr[1], deserializer)?;
             Ok(Block::NoteDefinitionPara(
                 crate::pandoc::block::NoteDefinitionPara {
                     id,
                     content,
-                    source_info: SourceInfo::new(filename_index, range),
+                    source_info: make_source_info(filename_index, range),
                 },
             ))
         }
@@ -1315,12 +1649,12 @@ fn read_block(value: &Value) -> Result<Block> {
                     )
                 })?
                 .to_string();
-            let content = read_blocks(&arr[1])?;
+            let content = read_blocks(&arr[1], deserializer)?;
             Ok(Block::NoteDefinitionFencedBlock(
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id,
                     content,
-                    source_info: SourceInfo::new(filename_index, range),
+                    source_info: make_source_info(filename_index, range),
                 },
             ))
         }
@@ -1328,20 +1662,54 @@ fn read_block(value: &Value) -> Result<Block> {
     }
 }
 
-fn read_meta(value: &Value) -> Result<Meta> {
+fn read_meta_with_key_sources(
+    value: &Value,
+    key_sources: Option<&Value>,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<MetaValueWithSourceInfo> {
+    // meta is an object with key-value pairs (Pandoc-compatible format)
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for Meta".to_string()))?;
 
-    let mut meta = LinkedHashMap::new();
+    let mut entries = Vec::new();
     for (key, val) in obj {
-        meta.insert(key.clone(), read_meta_value(val)?);
+        // Look up key_source from the provided map using deserializer
+        let key_source = if let Some(sources) = key_sources {
+            if let Some(sources_obj) = sources.as_object() {
+                if let Some(source_val) = sources_obj.get(key) {
+                    deserializer.from_json_ref(source_val)?
+                } else {
+                    // Legitimate default: JSON doesn't have source info for this key (backward compat)
+                    quarto_source_map::SourceInfo::default()
+                }
+            } else {
+                // Legitimate default: JSON key_sources is not an object
+                quarto_source_map::SourceInfo::default()
+            }
+        } else {
+            // Legitimate default: No key_sources in JSON (backward compatibility)
+            quarto_source_map::SourceInfo::default()
+        };
+
+        entries.push(MetaMapEntry {
+            key: key.clone(),
+            key_source,
+            value: read_meta_value_with_source_info(val, deserializer)?,
+        });
     }
 
-    Ok(meta)
+    Ok(MetaValueWithSourceInfo::MetaMap {
+        entries,
+        // Legitimate default: MetaMap itself doesn't have source tracking in JSON (only entries do)
+        source_info: quarto_source_map::SourceInfo::default(),
+    })
 }
 
-fn read_meta_value(value: &Value) -> Result<MetaValue> {
+fn read_meta_value_with_source_info(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<MetaValueWithSourceInfo> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for MetaValue".to_string()))?;
@@ -1350,32 +1718,52 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
+    // Read source_info using deserializer (new format), or use default (old format for backwards compatibility)
+    let source_info = if let Some(s) = obj.get("s") {
+        deserializer.from_json_ref(s)?
+    } else {
+        // Legitimate default: Old JSON format doesn't have "s" field (backward compatibility)
+        quarto_source_map::SourceInfo::default()
+    };
+
     match t {
         "MetaString" => {
             let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
                 JsonReadError::InvalidType("MetaString content must be string".to_string())
             })?;
-            Ok(MetaValue::MetaString(c.to_string()))
+            Ok(MetaValueWithSourceInfo::MetaString {
+                value: c.to_string(),
+                source_info,
+            })
         }
         "MetaInlines" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let inlines = read_inlines(c)?;
-            Ok(MetaValue::MetaInlines(inlines))
+            let inlines = read_inlines(c, deserializer)?;
+            Ok(MetaValueWithSourceInfo::MetaInlines {
+                content: inlines,
+                source_info,
+            })
         }
         "MetaBlocks" => {
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            let blocks = read_blocks(c)?;
-            Ok(MetaValue::MetaBlocks(blocks))
+            let blocks = read_blocks(c, deserializer)?;
+            Ok(MetaValueWithSourceInfo::MetaBlocks {
+                content: blocks,
+                source_info,
+            })
         }
         "MetaBool" => {
             let c = obj.get("c").and_then(|v| v.as_bool()).ok_or_else(|| {
                 JsonReadError::InvalidType("MetaBool content must be boolean".to_string())
             })?;
-            Ok(MetaValue::MetaBool(c))
+            Ok(MetaValueWithSourceInfo::MetaBool {
+                value: c,
+                source_info,
+            })
         }
         "MetaList" => {
             let c = obj
@@ -1386,9 +1774,12 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
             })?;
             let list = arr
                 .iter()
-                .map(read_meta_value)
+                .map(|v| read_meta_value_with_source_info(v, deserializer))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(MetaValue::MetaList(list))
+            Ok(MetaValueWithSourceInfo::MetaList {
+                items: list,
+                source_info,
+            })
         }
         "MetaMap" => {
             let c = obj
@@ -1397,26 +1788,63 @@ fn read_meta_value(value: &Value) -> Result<MetaValue> {
             let arr = c.as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("MetaMap content must be array".to_string())
             })?;
-            let mut map = LinkedHashMap::new();
+            let mut entries = Vec::new();
             for item in arr {
-                let kv_arr = item.as_array().ok_or_else(|| {
-                    JsonReadError::InvalidType("MetaMap item must be array".to_string())
-                })?;
-                if kv_arr.len() != 2 {
+                // Handle both old format (array) and new format (object)
+                let (key, key_source, value) = if let Some(obj) = item.as_object() {
+                    // New format: {"key": "...", "key_source": {...}, "value": {...}}
+                    let key = obj
+                        .get("key")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            JsonReadError::MissingField("MetaMap entry missing 'key'".to_string())
+                        })?
+                        .to_string();
+                    let key_source = if let Some(ks) = obj.get("key_source") {
+                        deserializer.from_json_ref(ks)?
+                    } else {
+                        // Legitimate default: JSON entry doesn't have key_source (backward compat)
+                        quarto_source_map::SourceInfo::default()
+                    };
+                    let value = read_meta_value_with_source_info(
+                        obj.get("value").ok_or_else(|| {
+                            JsonReadError::MissingField("MetaMap entry missing 'value'".to_string())
+                        })?,
+                        deserializer,
+                    )?;
+                    (key, key_source, value)
+                } else if let Some(kv_arr) = item.as_array() {
+                    // Old format: ["key", {...}]
+                    if kv_arr.len() != 2 {
+                        return Err(JsonReadError::InvalidType(
+                            "MetaMap item must have 2 elements".to_string(),
+                        ));
+                    }
+                    let key = kv_arr[0]
+                        .as_str()
+                        .ok_or_else(|| {
+                            JsonReadError::InvalidType("MetaMap key must be string".to_string())
+                        })?
+                        .to_string();
+                    let value = read_meta_value_with_source_info(&kv_arr[1], deserializer)?;
+                    // Legitimate default: Old JSON format [key, value] doesn't have key_source
+                    (key, quarto_source_map::SourceInfo::default(), value)
+                } else {
                     return Err(JsonReadError::InvalidType(
-                        "MetaMap item must have 2 elements".to_string(),
+                        "MetaMap item must be array or object".to_string(),
                     ));
-                }
-                let key = kv_arr[0]
-                    .as_str()
-                    .ok_or_else(|| {
-                        JsonReadError::InvalidType("MetaMap key must be string".to_string())
-                    })?
-                    .to_string();
-                let value = read_meta_value(&kv_arr[1])?;
-                map.insert(key, value);
+                };
+
+                entries.push(MetaMapEntry {
+                    key,
+                    key_source,
+                    value,
+                });
             }
-            Ok(MetaValue::MetaMap(map))
+            Ok(MetaValueWithSourceInfo::MetaMap {
+                entries,
+                source_info,
+            })
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!(
             "MetaValue: {}",

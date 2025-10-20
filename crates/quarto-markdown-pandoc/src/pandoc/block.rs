@@ -3,19 +3,15 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::impl_source_location;
-use crate::pandoc::Meta;
+use crate::pandoc::MetaValueWithSourceInfo;
 use crate::pandoc::attr::Attr;
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
 use crate::pandoc::list::ListAttributes;
-use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceInfo;
-use crate::pandoc::location::SourceLocation;
-use crate::pandoc::location::node_source_info;
 use crate::pandoc::table::Table;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Block {
     Plain(Plain),
     Paragraph(Paragraph),
@@ -40,145 +36,122 @@ pub enum Block {
 
 pub type Blocks = Vec<Block>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Plain {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Paragraph {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LineBlock {
     pub content: Vec<Inlines>,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CodeBlock {
     pub attr: Attr,
     pub text: String,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RawBlock {
     pub format: String,
     pub text: String,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockQuote {
     pub content: Blocks,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OrderedList {
     pub attr: ListAttributes,
     pub content: Vec<Blocks>,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BulletList {
     pub content: Vec<Blocks>,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DefinitionList {
     pub content: Vec<(Inlines, Vec<Blocks>)>,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Header {
     pub level: usize,
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HorizontalRule {
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Figure {
     pub attr: Attr,
     pub caption: Caption,
     pub content: Blocks,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Div {
     pub attr: Attr,
     pub content: Blocks,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetaBlock {
-    pub meta: Meta,
-    pub source_info: SourceInfo,
+    pub meta: MetaValueWithSourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteDefinitionPara {
     pub id: String,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteDefinitionFencedBlock {
     pub id: String,
     pub content: Blocks,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CaptionBlock {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
-
-impl_source_location!(
-    // blocks
-    Plain,
-    Paragraph,
-    LineBlock,
-    CodeBlock,
-    RawBlock,
-    BlockQuote,
-    OrderedList,
-    BulletList,
-    DefinitionList,
-    Header,
-    HorizontalRule,
-    Table,
-    Figure,
-    Div,
-    // quarto extensions
-    MetaBlock,
-    NoteDefinitionPara,
-    NoteDefinitionFencedBlock,
-    CaptionBlock
-);
 
 fn make_block_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
     let text = node.utf8_text(input_bytes).unwrap().to_string();
     Block::RawBlock(RawBlock {
         format: "quarto-internal-leftover".to_string(),
         text,
-        source_info: node_source_info(node),
+        source_info: crate::pandoc::location::node_source_info(node),
     })
 }

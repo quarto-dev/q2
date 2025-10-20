@@ -4,18 +4,19 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
+use serde::{Deserialize, Serialize};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Source location tracking
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Location {
     pub offset: usize,
     pub row: usize,
     pub column: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Range {
     pub start: Location,
     pub end: Location,
@@ -23,7 +24,7 @@ pub struct Range {
 
 /// Encapsulates source location information for AST nodes
 /// The filename field now holds an index into the ASTContext.filenames vector
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceInfo {
     pub filename_index: Option<usize>,
     pub range: Range,
@@ -61,29 +62,68 @@ impl SourceInfo {
             },
         }
     }
-}
 
-pub trait SourceLocation {
-    fn filename_index(&self) -> Option<usize>;
-    fn range(&self) -> Range;
+    /// Convert to quarto-source-map::SourceInfo (temporary conversion helper)
+    ///
+    /// This helper bridges between pandoc::location types and quarto-source-map types.
+    /// Long-term, code should use quarto-source-map types directly.
+    ///
+    /// Creates an Original mapping with a dummy FileId(0).
+    /// For proper filename support, use to_source_map_info_with_mapping with a real FileId.
+    pub fn to_source_map_info(&self) -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: self.range.start.offset,
+                    row: self.range.start.row,
+                    column: self.range.start.column,
+                },
+                end: quarto_source_map::Location {
+                    offset: self.range.end.offset,
+                    row: self.range.end.row,
+                    column: self.range.end.column,
+                },
+            },
+        )
+    }
 
-    /// Resolve the filename from the ASTContext using the stored index
-    fn filename<'a>(&self, context: &'a ASTContext) -> Option<&'a String> {
-        self.filename_index()
-            .and_then(|idx| context.filenames.get(idx))
+    /// Convert to quarto-source-map::SourceInfo with proper FileId (temporary conversion helper)
+    ///
+    /// This helper bridges between pandoc::location types and quarto-source-map types.
+    /// Use this when you have a proper FileId mapping from your context.
+    pub fn to_source_map_info_with_mapping(
+        &self,
+        file_id: quarto_source_map::FileId,
+    ) -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(
+            file_id,
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: self.range.start.offset,
+                    row: self.range.start.row,
+                    column: self.range.start.column,
+                },
+                end: quarto_source_map::Location {
+                    offset: self.range.end.offset,
+                    row: self.range.end.row,
+                    column: self.range.end.column,
+                },
+            },
+        )
     }
 }
 
-pub fn node_location(node: &tree_sitter::Node) -> Range {
+pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
     let start = node.start_position();
     let end = node.end_position();
-    Range {
-        start: Location {
+    quarto_source_map::Range {
+        start: quarto_source_map::Location {
             offset: node.start_byte(),
             row: start.row,
             column: start.column,
         },
-        end: Location {
+        end: quarto_source_map::Location {
             offset: node.end_byte(),
             row: end.row,
             column: end.column,
@@ -91,18 +131,15 @@ pub fn node_location(node: &tree_sitter::Node) -> Range {
     }
 }
 
-pub fn node_source_info(node: &tree_sitter::Node) -> SourceInfo {
-    SourceInfo::with_range(node_location(node))
+pub fn node_source_info(node: &tree_sitter::Node) -> quarto_source_map::SourceInfo {
+    quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), node_location(node))
 }
 
-pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> SourceInfo {
-    // If the context has at least one filename, use index 0
-    let filename_index = if context.filenames.is_empty() {
-        None
-    } else {
-        Some(0)
-    };
-    SourceInfo::new(filename_index, node_location(node))
+pub fn node_source_info_with_context(
+    node: &tree_sitter::Node,
+    context: &ASTContext,
+) -> quarto_source_map::SourceInfo {
+    quarto_source_map::SourceInfo::original(context.current_file_id(), node_location(node))
 }
 
 pub fn empty_range() -> Range {
@@ -120,23 +157,39 @@ pub fn empty_range() -> Range {
     }
 }
 
-pub fn empty_source_info() -> SourceInfo {
-    SourceInfo::with_range(empty_range())
+pub fn empty_source_info() -> quarto_source_map::SourceInfo {
+    quarto_source_map::SourceInfo::original(
+        quarto_source_map::FileId(0),
+        quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: quarto_source_map::Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+        },
+    )
 }
 
-#[macro_export]
-macro_rules! impl_source_location {
-    ($($type:ty),*) => {
-        $(
-            impl SourceLocation for $type {
-                fn filename_index(&self) -> Option<usize> {
-                    self.source_info.filename_index
-                }
-
-                fn range(&self) -> Range {
-                    self.source_info.range.clone()
-                }
-            }
-        )*
-    };
+/// Extract filename index from quarto_source_map::SourceInfo by walking to Original mapping
+pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<usize> {
+    match &info.mapping {
+        quarto_source_map::SourceMapping::Original { file_id } => Some(file_id.0),
+        quarto_source_map::SourceMapping::Substring { parent, .. } => {
+            extract_filename_index(parent)
+        }
+        quarto_source_map::SourceMapping::Transformed { parent, .. } => {
+            extract_filename_index(parent)
+        }
+        quarto_source_map::SourceMapping::Concat { pieces } => {
+            // Return first non-None filename_index from pieces
+            pieces
+                .iter()
+                .find_map(|p| extract_filename_index(&p.source_info))
+        }
+    }
 }

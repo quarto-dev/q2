@@ -5,9 +5,10 @@
 
 use crate::pandoc::inline::{Inline, Inlines, Span};
 use crate::pandoc::location::empty_source_info;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ShortcodeArg {
     String(String),
     Number(f64),
@@ -16,7 +17,7 @@ pub enum ShortcodeArg {
     KeyValue(HashMap<String, ShortcodeArg>),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Shortcode {
     pub is_escaped: bool,
     pub name: String,

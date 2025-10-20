@@ -6,13 +6,11 @@
 use crate::pandoc::attr::is_empty_attr;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
-use crate::pandoc::meta::MetaValue;
 use crate::pandoc::table::{Alignment, Cell, Table};
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
-    LineBlock, Meta, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
+    LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
-use crate::utils::string_write_adapter::StringWriteAdapter;
 use hashlink::LinkedHashMap;
 use std::io::{self, Write};
 use yaml_rust2::{Yaml, YamlEmitter};
@@ -173,84 +171,105 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
     }
 }
 
-/// Convert a MetaValue to a yaml_rust2::Yaml value
+/// Convert a MetaValueWithSourceInfo to a yaml_rust2::Yaml value
 /// MetaInlines and MetaBlocks are rendered using the qmd writer
-fn meta_value_to_yaml(value: &MetaValue) -> std::io::Result<Yaml> {
+fn meta_value_with_source_info_to_yaml(
+    value: &crate::pandoc::MetaValueWithSourceInfo,
+) -> std::io::Result<Yaml> {
     match value {
-        MetaValue::MetaString(s) => Ok(Yaml::String(s.clone())),
-        MetaValue::MetaBool(b) => Ok(Yaml::Boolean(*b)),
-        MetaValue::MetaInlines(inlines) => {
-            // Render inlines using the qmd writer
-            let mut buffer = String::new();
-            let mut adapter = StringWriteAdapter::new(&mut buffer);
-            for inline in inlines {
-                write_inline(inline, &mut adapter)?;
-            }
-            Ok(Yaml::String(buffer))
+        crate::pandoc::MetaValueWithSourceInfo::MetaString { value, .. } => {
+            Ok(Yaml::String(value.clone()))
         }
-        MetaValue::MetaBlocks(blocks) => {
-            // Render blocks using the qmd writer
-            let mut buffer = String::new();
-            let mut adapter = StringWriteAdapter::new(&mut buffer);
-            for (i, block) in blocks.iter().enumerate() {
-                if i > 0 {
-                    writeln!(&mut adapter)?;
-                }
-                write_block(block, &mut adapter)?;
+        crate::pandoc::MetaValueWithSourceInfo::MetaBool { value, .. } => Ok(Yaml::Boolean(*value)),
+        crate::pandoc::MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+            // Render inlines using the qmd writer
+            let mut buffer = Vec::<u8>::new();
+            for inline in content {
+                write_inline(inline, &mut buffer)?;
             }
+            let result = String::from_utf8(buffer)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+            Ok(Yaml::String(result))
+        }
+        crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
+            // Render blocks using the qmd writer
+            let mut buffer = Vec::<u8>::new();
+            for (i, block) in content.iter().enumerate() {
+                if i > 0 {
+                    writeln!(&mut buffer)?;
+                }
+                write_block(block, &mut buffer)?;
+            }
+            let result = String::from_utf8(buffer)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             // Trim trailing newline to avoid extra spacing in YAML
-            let trimmed = buffer.trim_end();
+            let trimmed = result.trim_end();
             Ok(Yaml::String(trimmed.to_string()))
         }
-        MetaValue::MetaList(list) => {
+        crate::pandoc::MetaValueWithSourceInfo::MetaList { items, .. } => {
             let mut yaml_list = Vec::new();
-            for item in list {
-                yaml_list.push(meta_value_to_yaml(item)?);
+            for item in items {
+                yaml_list.push(meta_value_with_source_info_to_yaml(item)?);
             }
             Ok(Yaml::Array(yaml_list))
         }
-        MetaValue::MetaMap(map) => {
+        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
             // LinkedHashMap preserves insertion order
             let mut yaml_map = LinkedHashMap::new();
-            for (key, val) in map {
-                yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(val)?);
+            for entry in entries {
+                yaml_map.insert(
+                    Yaml::String(entry.key.clone()),
+                    meta_value_with_source_info_to_yaml(&entry.value)?,
+                );
             }
             Ok(Yaml::Hash(yaml_map))
         }
     }
 }
 
-fn write_meta<T: std::io::Write + ?Sized>(meta: &Meta, buf: &mut T) -> std::io::Result<bool> {
-    if meta.is_empty() {
-        Ok(false)
-    } else {
-        // Convert Meta to YAML
-        // LinkedHashMap preserves insertion order
-        let mut yaml_map = LinkedHashMap::new();
-        for (key, value) in meta {
-            yaml_map.insert(Yaml::String(key.clone()), meta_value_to_yaml(value)?);
+fn write_meta<T: std::io::Write + ?Sized>(
+    meta: &crate::pandoc::MetaValueWithSourceInfo,
+    buf: &mut T,
+) -> std::io::Result<bool> {
+    // meta should be a MetaMap variant
+    match meta {
+        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+            if entries.is_empty() {
+                Ok(false)
+            } else {
+                // Convert Meta to YAML
+                // LinkedHashMap preserves insertion order
+                let mut yaml_map = LinkedHashMap::new();
+                for entry in entries {
+                    yaml_map.insert(
+                        Yaml::String(entry.key.clone()),
+                        meta_value_with_source_info_to_yaml(&entry.value)?,
+                    );
+                }
+                let yaml = Yaml::Hash(yaml_map);
+
+                // Emit YAML to string
+                let mut yaml_str = String::new();
+                let mut emitter = YamlEmitter::new(&mut yaml_str);
+                emitter
+                    .dump(&yaml)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+                // The YamlEmitter adds "---\n" at the start and includes the content
+                // We need to add the closing "---\n"
+                // First, ensure yaml_str ends with a newline
+                if !yaml_str.ends_with('\n') {
+                    yaml_str.push('\n');
+                }
+
+                // Write the YAML metadata block
+                write!(buf, "{}", yaml_str)?;
+                writeln!(buf, "---")?;
+
+                Ok(true)
+            }
         }
-        let yaml = Yaml::Hash(yaml_map);
-
-        // Emit YAML to string
-        let mut yaml_str = String::new();
-        let mut emitter = YamlEmitter::new(&mut yaml_str);
-        emitter
-            .dump(&yaml)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-        // The YamlEmitter adds "---\n" at the start and includes the content
-        // We need to add the closing "---\n"
-        // First, ensure yaml_str ends with a newline
-        if !yaml_str.ends_with('\n') {
-            yaml_str.push('\n');
-        }
-
-        // Write the YAML metadata block
-        write!(buf, "{}", yaml_str)?;
-        writeln!(buf, "---")?;
-
-        Ok(true)
+        _ => panic!("Expected MetaMap for metadata"),
     }
 }
 
@@ -624,9 +643,10 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
     for row in &all_rows {
         let mut cell_strings = Vec::new();
         for (i, cell) in row.cells.iter().take(num_cols).enumerate() {
-            let mut content = String::new();
-            let mut adapter = StringWriteAdapter::new(&mut content);
-            write_cell_content(cell, &mut adapter)?;
+            let mut buffer = Vec::<u8>::new();
+            write_cell_content(cell, &mut buffer)?;
+            let content = String::from_utf8(buffer)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             let content = content.trim().to_string();
 
             if content.len() > max_widths[i] {

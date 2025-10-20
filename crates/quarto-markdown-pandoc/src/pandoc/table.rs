@@ -6,9 +6,9 @@
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::Blocks;
 use crate::pandoc::caption::Caption;
-use crate::pandoc::location::SourceInfo;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Alignment {
     Left,
     Center,
@@ -16,7 +16,7 @@ pub enum Alignment {
     Default,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum ColWidth {
     Default,
     Percentage(f64),
@@ -24,19 +24,19 @@ pub enum ColWidth {
 
 pub type ColSpec = (Alignment, ColWidth);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Row {
     pub attr: Attr,
     pub cells: Vec<Cell>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableHead {
     pub attr: Attr,
     pub rows: Vec<Row>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableBody {
     pub attr: Attr,
     pub rowhead_columns: usize,
@@ -44,13 +44,13 @@ pub struct TableBody {
     pub body: Vec<Row>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableFoot {
     pub attr: Attr,
     pub rows: Vec<Row>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cell {
     pub attr: Attr,
     pub alignment: Alignment,
@@ -59,7 +59,7 @@ pub struct Cell {
     pub content: Blocks,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Table {
     pub attr: Attr,
     pub caption: Caption,
@@ -67,5 +67,5 @@ pub struct Table {
     pub head: TableHead,
     pub bodies: Vec<TableBody>,
     pub foot: TableFoot,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }

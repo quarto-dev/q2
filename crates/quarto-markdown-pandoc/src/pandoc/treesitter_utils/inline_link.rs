@@ -9,7 +9,6 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::inline::{Inline, is_empty_target, make_cite_inline, make_span_inline};
-use crate::pandoc::location::node_source_info_with_context;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -75,14 +74,14 @@ where
             attr,
             target,
             content,
-            node_source_info_with_context(node, context),
+            crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
         )
     } else {
         make_span_inline(
             attr,
             target,
             content,
-            node_source_info_with_context(node, context),
+            crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
         )
     })
 }

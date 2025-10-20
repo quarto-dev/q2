@@ -10,11 +10,11 @@ use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::{Block, Blocks, DefinitionList, Div, Figure, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{Inline, Inlines, Space, Span, Str, Superscript};
-use crate::pandoc::location::{Range, SourceInfo, empty_range, empty_source_info};
+use crate::pandoc::location::empty_source_info;
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
-use crate::utils::error_collector::ErrorCollector;
+use crate::utils::diagnostic_collector::DiagnosticCollector;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -145,11 +145,8 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             }
 
             // Create the Str node (possibly coalesced)
-            let source_info = if j > i + 1 {
-                SourceInfo::with_range(Range {
-                    start: start_info.range.start.clone(),
-                    end: end_info.range.end.clone(),
-                })
+            let source_info = if did_coalesce {
+                start_info.combine(&end_info)
             } else {
                 start_info
             };
@@ -262,7 +259,7 @@ fn transform_definition_list_div(div: Div) -> Block {
 }
 
 /// Apply post-processing transformations to the Pandoc AST
-pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> Result<Pandoc, ()> {
+pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Result<Pandoc, ()> {
     let result = {
         // Wrap error_collector in RefCell for interior mutability across multiple closures
         let error_collector_ref = RefCell::new(error_collector);
@@ -351,6 +348,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                 let mut new_image = image.clone();
                 new_image.attr = image_attr;
                 // FIXME all source location is broken here
+                // TODO: Should propagate from image.source_info and para.source_info
                 FilterResult(
                     vec![Block::Figure(Figure {
                         attr: figure_attr,
@@ -358,14 +356,17 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                             short: None,
                             long: Some(vec![Block::Plain(Plain {
                                 content: image.content.clone(),
-                                source_info: SourceInfo::with_range(empty_range()),
+                                // TODO: Should derive from image.content inlines
+                                source_info: quarto_source_map::SourceInfo::default(),
                             })]),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
-                            source_info: SourceInfo::with_range(empty_range()),
+                            // TODO: Should use image.source_info
+                            source_info: quarto_source_map::SourceInfo::default(),
                         })],
-                        source_info: SourceInfo::with_range(empty_range()),
+                        // TODO: Should use para.source_info
+                        source_info: quarto_source_map::SourceInfo::default(),
                     })],
                     true,
                 )
@@ -383,7 +384,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
             })
             .with_note_reference(|note_ref| {
                 let mut kv = HashMap::new();
-                kv.insert("reference-id".to_string(), note_ref.id);
+                kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
                     vec![Inline::Span(Span {
                         attr: (
@@ -392,7 +393,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                             kv,
                         ),
                         content: vec![],
-                        source_info: empty_source_info(),
+                        source_info: note_ref.source_info,
                     })],
                     false,
                 )
@@ -405,7 +406,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                     vec![Inline::Span(Span {
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
-                        source_info: empty_source_info(),
+                        source_info: insert.source_info,
                     })],
                     true,
                 )
@@ -418,7 +419,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                     vec![Inline::Span(Span {
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
-                        source_info: empty_source_info(),
+                        source_info: delete.source_info,
                     })],
                     true,
                 )
@@ -431,7 +432,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                     vec![Inline::Span(Span {
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
-                        source_info: empty_source_info(),
+                        source_info: highlight.source_info,
                     })],
                     true,
                 )
@@ -444,7 +445,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                     vec![Inline::Span(Span {
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
-                        source_info: empty_source_info(),
+                        source_info: edit_comment.source_info,
                     })],
                     true,
                 )
@@ -474,7 +475,8 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                                 math_processed.push(Inline::Span(Span {
                                     attr: (attr.0.clone(), classes, attr.2.clone()),
                                     content: vec![Inline::Math(math.clone())],
-                                    source_info: empty_source_info(),
+                                    // TODO: Should combine() source info from math and attr (see k-82)
+                                    source_info: quarto_source_map::SourceInfo::default(),
                                 }));
 
                                 // Skip the Math, optional Space, and Attr
@@ -555,7 +557,8 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                                         // bracket attached to the first word and closing bracket to the last word
                                         // e.g., "@knuth [p. 33]" becomes: Str("@knuth"), Space, Str("[p."), Space, Str("33]")
                                         cite.content.push(Inline::Space(Space {
-                                            source_info: SourceInfo::with_range(empty_range()),
+                                            // Synthetic Space: inserted to separate citation from suffix
+                                            source_info: quarto_source_map::SourceInfo::default(),
                                         }));
 
                                         // The span content may have been merged into a single string, so we need to
@@ -569,9 +572,7 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                                                     if i > 0 {
                                                         bracketed_content.push(Inline::Space(
                                                             Space {
-                                                                source_info: SourceInfo::with_range(
-                                                                    empty_range(),
-                                                                ),
+                                                                source_info: empty_source_info(),
                                                             },
                                                         ));
                                                     }
@@ -616,7 +617,8 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                                         result.push(Inline::Cite(cite));
                                     }
                                     result.push(Inline::Space(Space {
-                                        source_info: SourceInfo::with_range(empty_range()),
+                                        // Synthetic Space: restore space between cite and invalid span
+                                        source_info: quarto_source_map::SourceInfo::default(),
                                     }));
                                     result.push(inline);
                                     state = 0;
@@ -627,7 +629,8 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                                     result.push(Inline::Cite(cite));
                                 }
                                 result.push(Inline::Space(Space {
-                                    source_info: SourceInfo::with_range(empty_range()),
+                                    // Synthetic Space: restore space between cite and non-span element
+                                    source_info: quarto_source_map::SourceInfo::default(),
                                 }));
                                 result.push(inline);
                                 state = 0;
@@ -642,7 +645,8 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                     result.push(Inline::Cite(cite));
                     if state == 2 {
                         result.push(Inline::Space(Space {
-                            source_info: SourceInfo::with_range(empty_range()),
+                            // Synthetic Space: restore trailing space after incomplete citation pattern
+                            source_info: quarto_source_map::SourceInfo::default(),
                         }));
                     }
                 }
@@ -651,13 +655,10 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
             })
             .with_attr(|attr| {
                 // TODO: Add source location when attr has it
-                error_collector_ref.borrow_mut().error(
-                    format!(
-                        "Found attr in postprocess: {:?} - this should have been removed",
-                        attr
-                    ),
-                    None,
-                );
+                error_collector_ref.borrow_mut().error(format!(
+                    "Found attr in postprocess: {:?} - this should have been removed",
+                    attr
+                ));
                 FilterResult(vec![], false)
             })
             .with_blocks(|blocks| {
@@ -709,12 +710,9 @@ pub fn postprocess<E: ErrorCollector>(doc: Pandoc, error_collector: &mut E) -> R
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
                             // Issue a warning when caption has no preceding table
-                            error_collector_ref.borrow_mut().warn(
+                            error_collector_ref.borrow_mut().warn_at(
                                 "Caption found without a preceding table".to_string(),
-                                Some(&crate::utils::error_collector::SourceInfo::new(
-                                    caption_block.source_info.range.start.row + 1,
-                                    caption_block.source_info.range.start.column + 1,
-                                )),
+                                caption_block.source_info.clone(),
                             );
                             // Remove the caption from the output (don't add to result)
                         }
@@ -757,7 +755,7 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
         pandoc,
         &mut Filter::new().with_inlines(|inlines| {
             let mut current_str: Option<String> = None;
-            let mut current_source_info: Option<SourceInfo> = None;
+            let mut current_source_info: Option<quarto_source_map::SourceInfo> = None;
             let mut result: Inlines = Vec::new();
             let mut did_merge = false;
             for inline in inlines {

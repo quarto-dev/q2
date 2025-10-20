@@ -1,0 +1,177 @@
+---
+title: "JSON Output Format"
+---
+
+The `quarto-markdown-pandoc` binary can output AST in JSON format using `-t json`. This format is designed to be compatible with Pandoc's JSON AST while adding source tracking information.
+
+## Basic Structure
+
+The JSON output contains three main sections:
+
+```json
+{
+  "pandoc-api-version": [1, 23, 1],
+  "meta": { /* metadata */ },
+  "blocks": [ /* block elements */ ],
+  "astContext": {
+    "filenames": [ /* array of source files */ ],
+    "sourceInfoPool": [ /* source location data */ ]
+  }
+}
+```
+
+## Source Information Tracking
+
+Unlike Pandoc, `quarto-markdown-pandoc` tracks the exact source location of every AST node. This information is encoded compactly using a pool-and-reference system.
+
+### How It Works
+
+1. **Pool**: All unique source location information is stored once in `astContext.sourceInfoPool`
+2. **References**: Each AST node has an `"s"` field containing a numeric index into the pool
+3. **Deduplication**: Shared source information (e.g., siblings in YAML) reuses the same pool entry
+
+### Example
+
+```json
+{
+  "astContext": {
+    "filenames": ["example.qmd"],
+    "sourceInfoPool": [
+      {"r": [0, 0, 0, 4, 0, 4], "t": 0, "d": 0}
+    ]
+  },
+  "blocks": [
+    {
+      "t": "Para",
+      "s": 0,
+      "c": [
+        {"t": "Str", "c": "Hello", "s": 0}
+      ]
+    }
+  ]
+}
+```
+
+The `"s": 0` field means "look up source info at index 0 in the pool".
+
+## SourceInfoPool Encoding
+
+Each entry in the `sourceInfoPool` array has this compact format:
+
+```json
+{"r": [start_offset, start_row, start_col, end_offset, end_row, end_col], "t": type, "d": data}
+```
+
+### Fields
+
+- **`r`** (range): 6-element array `[start_offset, start_row, start_col, end_offset, end_row, end_col]`
+  - All positions are 0-indexed
+  - `offset` is byte offset from start of source
+  - `row` and `col` are line and column numbers
+
+- **`t`** (type): Integer indicating the source mapping type
+  - `0` = Original (direct position in source file)
+  - `1` = Substring (extracted from a parent source)
+  - `2` = Concat (multiple sources joined together)
+  - `3` = Transformed (source that was modified with explicit mapping)
+
+- **`d`** (data): Type-specific data (see below)
+
+### Type 0: Original
+
+Represents text directly from a source file.
+
+```json
+{"r": [0, 0, 0, 10, 0, 10], "t": 0, "d": 0}
+```
+
+- **`d`**: The file ID (index into `astContext.filenames`)
+
+**Example**: The word "Hello" at bytes 0-5 in the first file (file_id=0).
+
+### Type 1: Substring
+
+Represents a substring extracted from another source.
+
+```json
+{"r": [0, 0, 0, 5, 0, 5], "t": 1, "d": [3, 10]}
+```
+
+- **`d`**: `[parent_id, offset]`
+  - `parent_id`: Index of the parent source in the pool
+  - `offset`: Byte offset within the parent where this substring starts
+
+**Example**: A 5-byte substring starting at byte 10 of source #3 (e.g., extracting YAML value from frontmatter).
+
+### Type 2: Concat
+
+Represents multiple sources concatenated together.
+
+```json
+{"r": [0, 0, 0, 10, 0, 10], "t": 2, "d": [[1, 0, 5], [2, 5, 5]]}
+```
+
+- **`d`**: Array of pieces, where each piece is `[source_info_id, offset_in_concat, length]`
+  - `source_info_id`: Index of this piece's source in the pool
+  - `offset_in_concat`: Where this piece starts in the concatenated result
+  - `length`: Length of this piece in bytes
+
+**Example**: Joining sources #1 (5 bytes) and #2 (5 bytes) to create a 10-byte result.
+
+### Type 3: Transformed
+
+Represents source text that was transformed (e.g., entity decoding, shortcode expansion) with explicit range mappings.
+
+```json
+{"r": [0, 0, 0, 8, 0, 8], "t": 3, "d": [4, [[0, 4, 0, 4], [4, 8, 6, 10]]]}
+```
+
+- **`d`**: `[parent_id, range_mappings]`
+  - `parent_id`: Index of the parent source in the pool
+  - `range_mappings`: Array of `[from_start, from_end, to_start, to_end]`
+    - `from_start`, `from_end`: Range in the transformed text (this source)
+    - `to_start`, `to_end`: Corresponding range in the parent text
+
+**Example**: 8 bytes of transformed text derived from bytes 0-4 and 6-10 of source #4.
+
+## Complete Example
+
+```json
+{
+  "pandoc-api-version": [1, 23, 1],
+  "meta": {},
+  "blocks": [
+    {
+      "t": "Para",
+      "s": 3,
+      "c": [
+        {"t": "Str", "c": "Hello", "s": 0},
+        {"t": "Space", "s": 1},
+        {"t": "Str", "c": "world", "s": 2}
+      ]
+    }
+  ],
+  "astContext": {
+    "filenames": ["example.qmd"],
+    "sourceInfoPool": [
+      {"r": [0, 0, 0, 5, 0, 5], "t": 0, "d": 0},
+      {"r": [5, 0, 5, 6, 0, 6], "t": 0, "d": 0},
+      {"r": [6, 0, 6, 11, 0, 11], "t": 0, "d": 0},
+      {"r": [0, 0, 0, 11, 0, 11], "t": 2, "d": [[0, 0, 5], [1, 5, 1], [2, 6, 5]]}
+    ]
+  }
+}
+```
+
+### Explanation
+
+- Pool entry 0: "Hello" at bytes 0-5
+- Pool entry 1: Space at byte 5-6
+- Pool entry 2: "world" at bytes 6-11
+- Pool entry 3: Concatenation of all three pieces
+- The Para block references entry 3 (the full concatenated range)
+- Each inline element references its individual piece
+
+## Pandoc compatibility
+
+For compatibility with tools expecting Pandoc JSON, either ignore the `"s"` fields and `astContext` section (that's what Pandoc will do) or remove them from the JSON object ahead of time.

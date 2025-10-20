@@ -8,7 +8,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Delete, EditComment, Highlight, Inline, Inlines, Insert, Space, Str};
-use crate::pandoc::location::{SourceInfo, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
@@ -44,26 +44,12 @@ macro_rules! process_editorial_mark {
                         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                             if let Some(_) = whitespace_re.find(&text) {
                                 content.push(Inline::Space(Space {
-                                    source_info: SourceInfo::new(
-                                        if context.filenames.is_empty() {
-                                            None
-                                        } else {
-                                            Some(0)
-                                        },
-                                        range,
-                                    ),
+                                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
                                 }))
                             } else {
                                 content.push(Inline::Str(Str {
                                     text: apply_smart_quotes(text),
-                                    source_info: SourceInfo::new(
-                                        if context.filenames.is_empty() {
-                                            None
-                                        } else {
-                                            Some(0)
-                                        },
-                                        range,
-                                    ),
+                                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
                                 }))
                             }
                         }

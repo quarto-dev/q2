@@ -33,7 +33,7 @@ pub fn process_code_span<T: Write>(
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range.range),
+                        PandocNativeIntermediate::IntermediateUnknown(range.range.clone()),
                     )
                 }
                 PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
@@ -41,7 +41,7 @@ pub fn process_code_span<T: Write>(
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range.range),
+                        PandocNativeIntermediate::IntermediateUnknown(range.range.clone()),
                     )
                 }
                 PandocNativeIntermediate::IntermediateBaseText(text, range) => {

@@ -3,7 +3,8 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+use serde::{Deserialize, Serialize};
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ListNumberStyle {
     Default,
     Example,
@@ -14,7 +15,7 @@ pub enum ListNumberStyle {
     UpperAlpha,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ListNumberDelim {
     Default,
     Period,

@@ -8,10 +8,10 @@ use crate::pandoc::block::{Block, Blocks};
 use crate::pandoc::inline::{Inline, Inlines};
 
 use crate::pandoc::list::ListAttributes;
-use crate::pandoc::location::Range;
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::ShortcodeArg;
 use crate::pandoc::table::{Alignment, Cell, Row};
+use quarto_source_map::Range;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]

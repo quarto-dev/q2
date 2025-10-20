@@ -5,29 +5,29 @@
 
 use hashlink::LinkedHashMap;
 use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
-use quarto_markdown_pandoc::pandoc::location::SourceInfo;
 use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
 use quarto_markdown_pandoc::readers;
 use quarto_markdown_pandoc::writers::json;
+use quarto_source_map::{FileId, Location, Range, SourceInfo};
 use std::collections::HashMap;
 
 #[test]
 fn test_json_roundtrip_simple_paragraph() {
     // Create a simple Pandoc document
     let original = Pandoc {
-        meta: LinkedHashMap::new(),
+        meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "Hello, world!".to_string(),
-                source_info: SourceInfo::new(
-                    None,
-                    quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                source_info: SourceInfo::original(
+                    FileId(0),
+                    Range {
+                        start: Location {
                             offset: 0,
                             row: 0,
                             column: 0,
                         },
-                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                        end: Location {
                             offset: 13,
                             row: 0,
                             column: 13,
@@ -35,15 +35,15 @@ fn test_json_roundtrip_simple_paragraph() {
                     },
                 ),
             })],
-            source_info: SourceInfo::new(
-                None,
-                quarto_markdown_pandoc::pandoc::location::Range {
-                    start: quarto_markdown_pandoc::pandoc::location::Location {
+            source_info: SourceInfo::original(
+                FileId(0),
+                Range {
+                    start: Location {
                         offset: 0,
                         row: 0,
                         column: 0,
                     },
-                    end: quarto_markdown_pandoc::pandoc::location::Location {
+                    end: Location {
                         offset: 13,
                         row: 0,
                         column: 13,
@@ -87,28 +87,31 @@ fn test_json_roundtrip_simple_paragraph() {
 fn test_json_roundtrip_complex_document() {
     // Create a more complex document with multiple block types
     let original = Pandoc {
-        meta: {
-            let mut meta = LinkedHashMap::new();
-            meta.insert(
-                "title".to_string(),
-                quarto_markdown_pandoc::pandoc::MetaValue::MetaString("Test Document".to_string()),
-            );
-            meta
+        meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaMap {
+            entries: vec![quarto_markdown_pandoc::pandoc::meta::MetaMapEntry {
+                key: "title".to_string(),
+                key_source: quarto_source_map::SourceInfo::default(),
+                value: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaString {
+                    value: "Test Document".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                },
+            }],
+            source_info: quarto_source_map::SourceInfo::default(),
         },
         blocks: vec![
             Block::Paragraph(Paragraph {
                 content: vec![
                     Inline::Str(Str {
                         text: "This is ".to_string(),
-                        source_info: SourceInfo::new(
-                            None,
-                            quarto_markdown_pandoc::pandoc::location::Range {
-                                start: quarto_markdown_pandoc::pandoc::location::Location {
+                        source_info: SourceInfo::original(
+                            FileId(0),
+                            Range {
+                                start: Location {
                                     offset: 0,
                                     row: 0,
                                     column: 0,
                                 },
-                                end: quarto_markdown_pandoc::pandoc::location::Location {
+                                end: Location {
                                     offset: 8,
                                     row: 0,
                                     column: 8,
@@ -119,15 +122,15 @@ fn test_json_roundtrip_complex_document() {
                     Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
                         content: vec![Inline::Str(Str {
                             text: "bold text".to_string(),
-                            source_info: SourceInfo::new(
-                                None,
-                                quarto_markdown_pandoc::pandoc::location::Range {
-                                    start: quarto_markdown_pandoc::pandoc::location::Location {
+                            source_info: SourceInfo::original(
+                                FileId(0),
+                                Range {
+                                    start: Location {
                                         offset: 8,
                                         row: 0,
                                         column: 8,
                                     },
-                                    end: quarto_markdown_pandoc::pandoc::location::Location {
+                                    end: Location {
                                         offset: 17,
                                         row: 0,
                                         column: 17,
@@ -135,15 +138,15 @@ fn test_json_roundtrip_complex_document() {
                                 },
                             ),
                         })],
-                        source_info: SourceInfo::new(
-                            None,
-                            quarto_markdown_pandoc::pandoc::location::Range {
-                                start: quarto_markdown_pandoc::pandoc::location::Location {
+                        source_info: SourceInfo::original(
+                            FileId(0),
+                            Range {
+                                start: Location {
                                     offset: 8,
                                     row: 0,
                                     column: 8,
                                 },
-                                end: quarto_markdown_pandoc::pandoc::location::Location {
+                                end: Location {
                                     offset: 17,
                                     row: 0,
                                     column: 17,
@@ -153,15 +156,15 @@ fn test_json_roundtrip_complex_document() {
                     }),
                     Inline::Str(Str {
                         text: ".".to_string(),
-                        source_info: SourceInfo::new(
-                            None,
-                            quarto_markdown_pandoc::pandoc::location::Range {
-                                start: quarto_markdown_pandoc::pandoc::location::Location {
+                        source_info: SourceInfo::original(
+                            FileId(0),
+                            Range {
+                                start: Location {
                                     offset: 17,
                                     row: 0,
                                     column: 17,
                                 },
-                                end: quarto_markdown_pandoc::pandoc::location::Location {
+                                end: Location {
                                     offset: 18,
                                     row: 0,
                                     column: 18,
@@ -170,15 +173,15 @@ fn test_json_roundtrip_complex_document() {
                         ),
                     }),
                 ],
-                source_info: SourceInfo::new(
-                    None,
-                    quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                source_info: SourceInfo::original(
+                    FileId(0),
+                    Range {
+                        start: Location {
                             offset: 0,
                             row: 0,
                             column: 0,
                         },
-                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                        end: Location {
                             offset: 20,
                             row: 0,
                             column: 20,
@@ -189,15 +192,15 @@ fn test_json_roundtrip_complex_document() {
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
                 attr: ("".to_string(), vec![], HashMap::new()),
                 text: "print('Hello, world!')".to_string(),
-                source_info: SourceInfo::new(
-                    None,
-                    quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                source_info: SourceInfo::original(
+                    FileId(0),
+                    Range {
+                        start: Location {
                             offset: 21,
                             row: 1,
                             column: 0,
                         },
-                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                        end: Location {
                             offset: 43,
                             row: 1,
                             column: 22,
@@ -223,8 +226,10 @@ fn test_json_roundtrip_complex_document() {
     assert!(parsed.meta.contains_key("title"));
 
     match parsed.meta.get("title") {
-        Some(quarto_markdown_pandoc::pandoc::MetaValue::MetaString(title)) => {
-            assert_eq!(title, "Test Document");
+        Some(quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaString {
+            value, ..
+        }) => {
+            assert_eq!(value, "Test Document");
         }
         _ => panic!("Expected MetaString for title"),
     }
@@ -252,20 +257,20 @@ fn test_json_write_then_read_matches_original_structure() {
     // with the same basic structure, even if exact equality is not possible
 
     let original = Pandoc {
-        meta: LinkedHashMap::new(),
+        meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::default(),
         blocks: vec![
             Block::Plain(quarto_markdown_pandoc::pandoc::Plain {
                 content: vec![Inline::Str(Str {
                     text: "Plain text".to_string(),
-                    source_info: SourceInfo::new(
-                        Some(0), // Index 0 will point to "test.md" in the context
-                        quarto_markdown_pandoc::pandoc::location::Range {
-                            start: quarto_markdown_pandoc::pandoc::location::Location {
+                    source_info: SourceInfo::original(
+                        FileId(0),
+                        Range {
+                            start: Location {
                                 offset: 0,
                                 row: 0,
                                 column: 0,
                             },
-                            end: quarto_markdown_pandoc::pandoc::location::Location {
+                            end: Location {
                                 offset: 10,
                                 row: 0,
                                 column: 10,
@@ -273,15 +278,15 @@ fn test_json_write_then_read_matches_original_structure() {
                         },
                     ),
                 })],
-                source_info: SourceInfo::new(
-                    Some(0),
-                    quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                source_info: SourceInfo::original(
+                    FileId(0),
+                    Range {
+                        start: Location {
                             offset: 0,
                             row: 0,
                             column: 0,
                         },
-                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                        end: Location {
                             offset: 10,
                             row: 0,
                             column: 10,
@@ -292,15 +297,15 @@ fn test_json_write_then_read_matches_original_structure() {
             Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
                 format: "html".to_string(),
                 text: "<div>Raw HTML</div>".to_string(),
-                source_info: SourceInfo::new(
-                    Some(0),
-                    quarto_markdown_pandoc::pandoc::location::Range {
-                        start: quarto_markdown_pandoc::pandoc::location::Location {
+                source_info: SourceInfo::original(
+                    FileId(0),
+                    Range {
+                        start: Location {
                             offset: 11,
                             row: 1,
                             column: 0,
                         },
-                        end: quarto_markdown_pandoc::pandoc::location::Location {
+                        end: Location {
                             offset: 30,
                             row: 1,
                             column: 19,

@@ -6,7 +6,7 @@
 use glob::glob;
 use quarto_markdown_pandoc::errors::parse_is_good;
 use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
-use quarto_markdown_pandoc::utils::error_collector::TextErrorCollector;
+use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_markdown_pandoc::utils::output::VerboseOutput;
 use quarto_markdown_pandoc::{readers, writers};
 use std::io::{self, Write};
@@ -23,7 +23,7 @@ fn unit_test_simple_qmd_parses() {
             .parse(input_bytes, None)
             .expect("Failed to parse input");
         let mut buf = Vec::new();
-        let mut error_collector = TextErrorCollector::new();
+        let mut error_collector = DiagnosticCollector::new();
         writers::native::write(
             &treesitter_to_pandoc(
                 &mut std::io::sink(),
@@ -129,7 +129,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     }
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
-    let mut error_collector1 = TextErrorCollector::new();
+    let mut error_collector1 = DiagnosticCollector::new();
     writers::native::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -146,7 +146,7 @@ fn matches_pandoc_commonmark_reader(input: &str) -> bool {
     .unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
     let context_for_json = ASTContext::anonymous();
-    let mut error_collector2 = TextErrorCollector::new();
+    let mut error_collector2 = DiagnosticCollector::new();
     writers::json::write(
         &treesitter_to_pandoc(
             &mut std::io::sink(),
@@ -268,6 +268,12 @@ where
     let pattern = format!("tests/snapshots/{}/*.qmd", format);
     let mut file_count = 0;
     let mut failures = Vec::new();
+    let mut updated_count = 0;
+
+    // Check if we should update snapshots instead of comparing
+    let update_snapshots = std::env::var("UPDATE_SNAPSHOTS")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
 
     for entry in glob(&pattern).expect("Failed to read glob pattern") {
         match entry {
@@ -290,19 +296,30 @@ where
 
                 writer(&pandoc, &context, &mut buffer).unwrap();
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
-                let snapshot = std::fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
-                    panic!(
-                        "Snapshot file {} does not exist, please create it",
-                        snapshot_path.display()
-                    )
-                });
 
-                if output.trim() != snapshot.trim() {
-                    failures.push(format!(
-                        "Snapshot mismatch for file: {}\n  Snapshot path: {}",
-                        path.display(),
-                        snapshot_path.display()
-                    ));
+                if update_snapshots {
+                    // Update mode: write the output to the snapshot file
+                    std::fs::write(&snapshot_path, &output).unwrap_or_else(|_| {
+                        panic!("Failed to write snapshot file {}", snapshot_path.display())
+                    });
+                    eprintln!("  Updated snapshot: {}", snapshot_path.display());
+                    updated_count += 1;
+                } else {
+                    // Normal mode: compare output with snapshot
+                    let snapshot = std::fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
+                        panic!(
+                            "Snapshot file {} does not exist, please create it",
+                            snapshot_path.display()
+                        )
+                    });
+
+                    if output.trim() != snapshot.trim() {
+                        failures.push(format!(
+                            "Snapshot mismatch for file: {}\n  Snapshot path: {}",
+                            path.display(),
+                            snapshot_path.display()
+                        ));
+                    }
                 }
                 file_count += 1;
             }
@@ -316,7 +333,12 @@ where
         format
     );
 
-    if !failures.is_empty() {
+    if update_snapshots {
+        eprintln!(
+            "\n✓ Updated {} snapshot(s) for format '{}'",
+            updated_count, format
+        );
+    } else if !failures.is_empty() {
         panic!(
             "\n\n{} snapshot(s) failed for format '{}':\n\n{}\n",
             failures.len(),
@@ -328,8 +350,9 @@ where
 
 fn remove_location_fields(json: &mut serde_json::Value) {
     if let Some(obj) = json.as_object_mut() {
-        obj.remove("l"); // Remove the "l" field
-        obj.remove("astContext"); // Remove the astContext field
+        obj.remove("l"); // Remove the "l" field (old SourceInfo)
+        obj.remove("s"); // Remove the "s" field (new quarto_source_map::SourceInfo)
+        obj.remove("astContext"); // Remove the astContext field (includes metaTopLevelKeySources)
         for value in obj.values_mut() {
             remove_location_fields(value);
         }
@@ -360,7 +383,7 @@ fn test_json_writer() {
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
                 let test_context = ASTContext::anonymous();
-                let mut error_collector = TextErrorCollector::new();
+                let mut error_collector = DiagnosticCollector::new();
                 let pandoc = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
@@ -448,7 +471,7 @@ fn test_html_writer() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
-                let mut error_collector = TextErrorCollector::new();
+                let mut error_collector = DiagnosticCollector::new();
                 let pandoc = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,
@@ -556,7 +579,7 @@ fn test_do_not_smoke() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
-                let mut error_collector = TextErrorCollector::new();
+                let mut error_collector = DiagnosticCollector::new();
                 let _ = treesitter_to_pandoc(
                     &mut std::io::sink(),
                     &tree,

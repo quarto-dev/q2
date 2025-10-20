@@ -5,9 +5,8 @@
 
 use hashlink::LinkedHashMap;
 use quarto_markdown_pandoc::pandoc::location::{Location, Range, SourceInfo};
-use quarto_markdown_pandoc::pandoc::{
-    Inline, MetaValue, RawBlock, parse_metadata_strings, rawblock_to_meta,
-};
+use quarto_markdown_pandoc::pandoc::meta::{MetaValue, rawblock_to_meta};
+use quarto_markdown_pandoc::pandoc::{Inline, RawBlock, parse_metadata_strings};
 use std::fs;
 
 #[test]
@@ -28,7 +27,8 @@ fn test_metadata_parsing() {
                 row: 0,
                 column: 0,
             },
-        }),
+        })
+        .to_source_map_info(),
     };
 
     let meta = rawblock_to_meta(block);
@@ -77,7 +77,8 @@ fn test_yaml_tagged_strings() {
                 row: 0,
                 column: 0,
             },
-        }),
+        })
+        .to_source_map_info(),
     };
 
     let mut meta = rawblock_to_meta(block);
@@ -172,7 +173,8 @@ fn test_yaml_markdown_parse_failure() {
                 row: 0,
                 column: 0,
             },
-        }),
+        })
+        .to_source_map_info(),
     };
 
     let mut meta = rawblock_to_meta(block);

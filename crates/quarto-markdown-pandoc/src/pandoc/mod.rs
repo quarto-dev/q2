@@ -13,6 +13,7 @@ pub mod location;
 pub mod meta;
 pub mod pandoc;
 pub mod shortcode;
+pub mod source_map_compat;
 pub mod table;
 pub mod treesitter;
 pub mod treesitter_utils;
@@ -37,5 +38,8 @@ pub use crate::pandoc::table::{
 };
 
 pub use crate::pandoc::ast_context::ASTContext;
-pub use crate::pandoc::meta::{Meta, MetaValue, parse_metadata_strings, rawblock_to_meta};
+
+pub use crate::pandoc::meta::{MetaValueWithSourceInfo, rawblock_to_meta_with_source_info};
+#[allow(unused_imports)]
+pub use crate::pandoc::meta::{parse_metadata_strings, parse_metadata_strings_with_source_info};
 pub use crate::pandoc::treesitter::treesitter_to_pandoc;

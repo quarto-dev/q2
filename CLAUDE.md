@@ -1,11 +1,9 @@
-# Quarto Markdown
-
-The main documentation for this repository is located at:
-[crates/quarto-markdown-pandoc/CLAUDE.md](crates/quarto-markdown-pandoc/CLAUDE.md)
+# Quarto Rust monorepo
 
 ## **WORK TRACKING**
 
 We use bd (beads) for issue tracking instead of Markdown TODOs or external tools.
+We use plans for additional context and bookkeeping. Write plans to `claude-notes/plans/YYYY-MM-DD-<description>.md`, and reference the plan file in the issues.
 
 ### Quick Reference
 
@@ -101,7 +99,19 @@ When fixing ANY bug:
 3. **THIRD**: Implement the fix
 4. **FOURTH**: Run the test and verify it passes
 
-**This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior.**
+**This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior. Only deviate if writing new features.**
+
+## Workspace structure
+
+### `crates` - corresponds to the crates in the public quarto-markdown repo
+
+- `crates/qmd-syntax-helper`: a binary to help users convert qmd files to the new syntax
+- `crates/quarto-error-reporting`: a library to help create uniform, helpful, beautiful error messages
+- `crates/quarto-markdown-pandoc`: a binary to parse qmd text and produce Pandoc AST and other formats
+- `crates/quarto-source-map`: a library to help maintain information about the source location of data structures in text files
+- `crates/quarto-yaml`: a YAML parser that produces YAML objects and accurate fine-grained source location of elements
+- `crates/tree-sitter-qmd`: tree-sitter grammars for block and inline parsers
+- `crates/wasm-qmd-parser`: A WASM module with some entry points from `crates/quarto-markdown-pandoc`
 
 ## General Instructions
 
@@ -118,6 +128,6 @@ When fixing ANY bug:
 - Always create a plan. Always work on the plan one item at a time.
 - In the tree-sitter-markdown and tree-sitter-markdown-inline directories, you rebuild the parsers using "tree-sitter generate; tree-sitter build". Make sure the shell is in the correct directory before running those. Every time you change the tree-sitter parsers, rebuild them and run "tree-sitter test". If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
 - When attempting to find binary differences between files, always use `xxd` instead of other tools.
-- .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use docs/for-claude in this directory)
+- .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use claude-notes in this directory)
 - Sometimes you get confused by macOS's weird renaming of /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
 - The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.

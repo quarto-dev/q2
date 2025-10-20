@@ -6,6 +6,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
+version = "0.1.0"
 authors = ["Posit Software, PBC"]
 homepage = "https://github.com/posit-dev/quarto-markdown-syntax"
 keywords = ["parser"]
@@ -16,20 +17,24 @@ edition = "2024"
 
 [workspace.dependencies]
 anyhow = "1.0.89"
+ariadne = "0.4"
+clap = { version = "4.5", features = ["derive", "cargo"] }
 insta = "1.40.0"
 memchr = "2.7.4"
+once_cell = "1.19"
 proc-macro2 = "1.0.94"
 schemars = "0.8.21"
-serde = "1.0.215"
+serde = { version = "1.0.215", features = ["derive"] }
 serde_json = "1.0.132"
+serde_yaml = "0.9"
+thiserror = "1.0"
 toml = "0.8.19"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+yaml-rust2 = "0.10"
 
 [workspace.dependencies.proc-macro-error2]
 version = "2.0.1"
 default-features = false
-
-[workspace.dependencies.tests_macros]
-path = "./crates/tests_macros"
 
 [workspace.dependencies.tracing]
 version = "0.1.40"
@@ -42,14 +47,20 @@ version = "0.25.8"
 [workspace.dependencies.tree-sitter-qmd]
 path = "./crates/tree-sitter-qmd"
 
-[workspace.dependencies.tree-sitter-sexpr]
-path = "./crates/tree-sitter-sexpr"
-
 [workspace.dependencies.wasm-qmd-parser]
 path = "./crates/wasm-qmd-parser"
 
 [workspace.dependencies.quarto-markdown-pandoc]
 path = "./crates/quarto-markdown-pandoc"
+
+[workspace.dependencies.quarto-yaml]
+path = "./crates/quarto-yaml"
+
+[workspace.dependencies.quarto-error-reporting]
+path = "./crates/quarto-error-reporting"
+
+[workspace.dependencies.quarto-source-map]
+path = "./crates/quarto-source-map"
 
 
 [workspace.lints.clippy]

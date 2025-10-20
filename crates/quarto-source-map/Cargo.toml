@@ -1,0 +1,13 @@
+[package]
+name = "quarto-source-map"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive", "rc"] }
+
+[dev-dependencies]
+serde_json.workspace = true

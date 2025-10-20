@@ -3,16 +3,12 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::impl_source_location;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
-use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceInfo;
-use crate::pandoc::location::SourceLocation;
-use crate::pandoc::location::node_source_info;
 use crate::pandoc::shortcode::Shortcode;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Inline {
     Str(Str),
     Emph(Emph),
@@ -52,7 +48,7 @@ pub enum Inline {
 
 pub type Inlines = Vec<Inline>;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum QuoteType {
     SingleQuote,
     DoubleQuote,
@@ -60,146 +56,146 @@ pub enum QuoteType {
 
 pub type Target = (String, String);
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum MathType {
     InlineMath,
     DisplayMath,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Str {
     pub text: String,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emph {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Underline {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Strong {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Strikeout {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Superscript {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Subscript {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SmallCaps {
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Quoted {
     pub quote_type: QuoteType,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cite {
     pub citations: Vec<Citation>,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Code {
     pub attr: Attr,
     pub text: String,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Math {
     pub math_type: MathType,
     pub text: String,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RawInline {
     pub format: String,
     pub text: String,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Link {
     pub attr: Attr,
     pub content: Inlines,
     pub target: Target,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Image {
     pub attr: Attr,
     pub content: Inlines,
     pub target: Target,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub content: Blocks,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Span {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Space {
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LineBreak {
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SoftBreak {
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteReference {
     pub id: String,
-    pub range: Range,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Citation {
     pub id: String,
     pub prefix: Inlines,
@@ -209,67 +205,40 @@ pub struct Citation {
     pub hash: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CitationMode {
     AuthorInText,
     SuppressAuthor,
     NormalCitation,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Insert {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Delete {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Highlight {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditComment {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
+    pub source_info: quarto_source_map::SourceInfo,
 }
-
-impl_source_location!(
-    Str,
-    Emph,
-    Underline,
-    Strong,
-    Strikeout,
-    Superscript,
-    Subscript,
-    SmallCaps,
-    Quoted,
-    Cite,
-    Code,
-    Math,
-    RawInline,
-    Link,
-    Image,
-    Note,
-    Span,
-    Space,
-    LineBreak,
-    SoftBreak,
-    Insert,
-    Delete,
-    Highlight,
-    EditComment
-);
 
 pub trait AsInline {
     fn as_inline(self) -> Inline;
@@ -331,7 +300,7 @@ pub fn make_span_inline(
     attr: Attr,
     target: Target,
     content: Inlines,
-    source_info: SourceInfo,
+    source_info: quarto_source_map::SourceInfo,
 ) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
@@ -339,7 +308,7 @@ pub fn make_span_inline(
             attr,
             content,
             target,
-            source_info: source_info.clone(),
+            source_info,
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -352,13 +321,13 @@ pub fn make_span_inline(
         if is_empty_attr(&new_attr) {
             return Inline::SmallCaps(SmallCaps {
                 content,
-                source_info: source_info.clone(),
+                source_info,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
-            source_info: source_info.clone(),
+            source_info,
         });
     } else if attr.1.contains(&"ul".to_string()) {
         let mut new_attr = attr.clone();
@@ -366,13 +335,13 @@ pub fn make_span_inline(
         if is_empty_attr(&new_attr) {
             return Inline::Underline(Underline {
                 content,
-                source_info: source_info.clone(),
+                source_info,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
-            source_info: source_info.clone(),
+            source_info,
         });
     } else if attr.1.contains(&"underline".to_string()) {
         let mut new_attr = attr.clone();
@@ -384,13 +353,13 @@ pub fn make_span_inline(
         if is_empty_attr(&new_attr) {
             return Inline::Underline(Underline {
                 content,
-                source_info: source_info.clone(),
+                source_info,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
-            source_info: source_info.clone(),
+            source_info,
         });
     }
 
@@ -405,7 +374,7 @@ pub fn make_cite_inline(
     attr: Attr,
     target: Target,
     content: Inlines,
-    source_info: SourceInfo,
+    source_info: quarto_source_map::SourceInfo,
 ) -> Inline {
     // the traversal here is slightly inefficient because we need
     // to non-destructively check for the goodness of the content
@@ -506,31 +475,30 @@ fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline 
     Inline::RawInline(RawInline {
         format: "quarto-internal-leftover".to_string(),
         text,
-        source_info: node_source_info(node),
+        source_info: crate::pandoc::location::node_source_info(node),
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pandoc::location::Location;
 
-    fn dummy_source_info() -> SourceInfo {
-        SourceInfo {
-            filename_index: None,
-            range: Range {
-                start: Location {
+    fn dummy_source_info() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::original(
+            quarto_source_map::FileId(0),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
                     offset: 0,
                     row: 0,
                     column: 0,
                 },
-                end: Location {
+                end: quarto_source_map::Location {
                     offset: 0,
                     row: 0,
                     column: 0,
                 },
             },
-        }
+        )
     }
 
     fn make_str(text: &str) -> Inline {
