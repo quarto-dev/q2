@@ -3,11 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::impl_source_location;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceLocation;
 use crate::pandoc::shortcode::Shortcode;
 use serde::{Deserialize, Serialize};
 
@@ -242,33 +240,6 @@ pub struct EditComment {
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
 }
-
-impl_source_location!(
-    Str,
-    Emph,
-    Underline,
-    Strong,
-    Strikeout,
-    Superscript,
-    Subscript,
-    SmallCaps,
-    Quoted,
-    Cite,
-    Code,
-    Math,
-    RawInline,
-    Link,
-    Image,
-    Note,
-    Span,
-    Space,
-    LineBreak,
-    SoftBreak,
-    Insert,
-    Delete,
-    Highlight,
-    EditComment
-);
 
 pub trait AsInline {
     fn as_inline(self) -> Inline;

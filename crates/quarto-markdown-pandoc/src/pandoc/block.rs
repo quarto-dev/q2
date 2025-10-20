@@ -3,14 +3,12 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::impl_source_location;
 use crate::pandoc::MetaValueWithSourceInfo;
 use crate::pandoc::attr::Attr;
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
 use crate::pandoc::list::ListAttributes;
 use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceLocation;
 use crate::pandoc::table::Table;
 use serde::{Deserialize, Serialize};
 
@@ -149,29 +147,6 @@ pub struct CaptionBlock {
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
 }
-
-impl_source_location!(
-    // blocks
-    Plain,
-    Paragraph,
-    LineBlock,
-    CodeBlock,
-    RawBlock,
-    BlockQuote,
-    OrderedList,
-    BulletList,
-    DefinitionList,
-    Header,
-    HorizontalRule,
-    Table,
-    Figure,
-    Div,
-    // quarto extensions
-    MetaBlock,
-    NoteDefinitionPara,
-    NoteDefinitionFencedBlock,
-    CaptionBlock
-);
 
 fn make_block_leftover(_node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
     let text = _node.utf8_text(input_bytes).unwrap().to_string();
