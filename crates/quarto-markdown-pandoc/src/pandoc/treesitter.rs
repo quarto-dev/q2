@@ -247,6 +247,7 @@ fn process_list(
                 let mut result = vec![Block::Plain(Plain {
                     content: content,
                     source_info: source_info,
+                    source_info_qsm: None,
                 })];
                 result.extend(blocks);
                 result
@@ -267,11 +268,13 @@ fn process_list(
                 attr,
                 content,
                 source_info: node_source_info_with_context(node, context),
+                source_info_qsm: None,
             }))
         }
         None => PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
             content,
             source_info: node_source_info_with_context(node, context),
+            source_info_qsm: None,
         })),
     }
 }
@@ -318,6 +321,7 @@ fn process_list_item(
                         format: "quarto_minus_metadata".to_string(),
                         text,
                         source_info: node_source_info_with_context(list_item_node, context),
+                        source_info_qsm: None,
                     }))
                 }
                 _ => None,
@@ -343,6 +347,7 @@ macro_rules! emphasis_inline {
                 Inline::$inline_type($inline_type {
                     content: inlines,
                     source_info: node_source_info_with_context(node, $context),
+                    source_info_qsm: None,
                 })
             },
         )
@@ -371,6 +376,7 @@ fn process_native_inline<T: Write>(
                         },
                         range,
                     ),
+                    source_info_qsm: None,
                 })
             } else {
                 Inline::Str(Str {
@@ -407,6 +413,7 @@ fn process_native_inline<T: Write>(
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: empty_source_info(),
+                source_info_qsm: None,
             })
         }
         other => {
@@ -420,6 +427,7 @@ fn process_native_inline<T: Write>(
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: empty_source_info(),
+                source_info_qsm: None,
             })
         }
     }
@@ -450,6 +458,7 @@ fn process_native_inlines<T: Write>(
                             },
                             range,
                         ),
+                        source_info_qsm: None,
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
@@ -650,8 +659,10 @@ fn native_visitor<T: Write>(
                     content: vec![Block::Paragraph(Paragraph {
                         content: inlines,
                         source_info: SourceInfo::with_range(node_location(node)),
+                        source_info_qsm: None,
                     })],
                     source_info: node_source_info(node),
+                    source_info_qsm: None,
                 })
             },
         ),
