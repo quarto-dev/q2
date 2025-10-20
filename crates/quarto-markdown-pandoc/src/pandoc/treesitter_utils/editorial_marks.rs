@@ -52,6 +52,7 @@ macro_rules! process_editorial_mark {
                                         },
                                         range,
                                     ),
+                                    source_info_qsm: None,
                                 }))
                             } else {
                                 content.push(Inline::Str(Str {
@@ -87,6 +88,7 @@ macro_rules! process_editorial_mark {
                     attr,
                     content,
                     source_info: node_source_info_with_context(node, context),
+                    source_info_qsm: None,
                 }))
             }
         }
