@@ -17,7 +17,6 @@ use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
 use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
-use hashlink::LinkedHashMap;
 use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
@@ -207,7 +206,7 @@ where
 
             if is_lexical {
                 // Lexical metadata - parse strings and return as BlockMetadata
-                let mut inner_meta_from_parses = LinkedHashMap::new();
+                let mut inner_meta_from_parses = Vec::new();
                 let parsed_meta = parse_metadata_strings_with_source_info(
                     meta_with_source,
                     &mut inner_meta_from_parses,
@@ -219,12 +218,9 @@ where
                     source_info,
                 } = parsed_meta
                 {
-                    for (k, v) in inner_meta_from_parses {
-                        entries.push(crate::pandoc::meta::MetaMapEntry {
-                            key: k,
-                            key_source: quarto_source_map::SourceInfo::default(),
-                            value: v,
-                        });
+                    // Now inner_meta_from_parses preserves full MetaMapEntry with key_source
+                    for entry in inner_meta_from_parses {
+                        entries.push(entry);
                     }
                     MetaValueWithSourceInfo::MetaMap {
                         entries,
@@ -243,8 +239,7 @@ where
                 );
             } else {
                 // Document-level metadata - parse strings and merge into meta_from_parses
-                // Note: we pass a temporary LinkedHashMap for inner metadata parsing
-                let mut inner_meta = LinkedHashMap::new();
+                let mut inner_meta = Vec::new();
                 let parsed_meta =
                     parse_metadata_strings_with_source_info(meta_with_source, &mut inner_meta);
 
@@ -254,13 +249,9 @@ where
                         meta_from_parses.push(entry);
                     }
                 }
-                // Also add any inner metadata entries
-                for (k, v) in inner_meta {
-                    meta_from_parses.push(crate::pandoc::meta::MetaMapEntry {
-                        key: k,
-                        key_source: quarto_source_map::SourceInfo::default(),
-                        value: v,
-                    });
+                // Also add any inner metadata entries (now preserves key_source)
+                for entry in inner_meta {
+                    meta_from_parses.push(entry);
                 }
                 return FilterReturn::FilterResult(vec![], false);
             }

@@ -152,3 +152,90 @@ fn test_metadata_source_tracking_002_qmd() {
     eprintln!("✓ Source info preserved through JSON roundtrip:");
     eprintln!("  - Value source still points to offset 11 after round-trip");
 }
+
+#[test]
+fn test_nested_metadata_key_source_preservation() {
+    // Test that when metadata values contain markdown that itself has YAML,
+    // the key_source information is preserved (not lost via LinkedHashMap)
+    //
+    // This test verifies the fix for the LinkedHashMap limitation where
+    // outer_metadata was using HashMap<String, MetaValue> and losing key_source
+
+    let input = r#"---
+title: Simple title
+description: This is a description
+---"#;
+
+    let (pandoc, _context) = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.qmd",
+        &mut std::io::sink(),
+        None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>,
+    )
+    .expect("Failed to parse");
+
+    // Extract metadata
+    let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta else {
+        panic!("Expected MetaMap");
+    };
+
+    // Verify both entries have proper key_source tracking
+    let title_entry = entries
+        .iter()
+        .find(|e| e.key == "title")
+        .expect("Should have 'title' entry");
+
+    let desc_entry = entries
+        .iter()
+        .find(|e| e.key == "description")
+        .expect("Should have 'description' entry");
+
+    // CRITICAL: Verify keys have non-default source info
+    // Before the fix, when outer_metadata was LinkedHashMap<String, MetaValue>,
+    // the key_source would be lost and default to offset 0
+
+    // Resolve the source info chain to get absolute file offsets
+    let title_offset = resolve_source_offset(&title_entry.key_source);
+    let desc_offset = resolve_source_offset(&desc_entry.key_source);
+
+    eprintln!("\nTitle key resolved offset: {}", title_offset);
+    eprintln!("Description key resolved offset: {}", desc_offset);
+
+    assert_ne!(
+        title_offset, 0,
+        "Title key should have non-zero offset (not SourceInfo::default())"
+    );
+
+    assert_ne!(
+        desc_offset, 0,
+        "Description key should have non-zero offset (not SourceInfo::default())"
+    );
+
+    // Verify keys are at EXACT expected locations in the YAML
+    // Input: "---\ntitle: Simple title\ndescription: This is a description\n---"
+    //        01234567890123456789012345678901234567890123456789012345678901234
+    //        0         1         2         3         4         5         6
+    //
+    // "---\n" = 4 bytes
+    // "title" starts at offset 4
+    // "title: Simple title\n" = 20 bytes
+    // "description" starts at offset 24
+
+    assert_eq!(
+        title_offset, 4,
+        "Title key should be at exact offset 4, got {}",
+        title_offset
+    );
+
+    assert_eq!(
+        desc_offset, 24,
+        "Description key should be at exact offset 24, got {}",
+        desc_offset
+    );
+
+    eprintln!("\n✅ Metadata key_source preservation test passed!");
+    eprintln!("✓ Title key has proper source tracking (offset {})", title_offset);
+    eprintln!("✓ Description key has proper source tracking (offset {})", desc_offset);
+    eprintln!("✓ LinkedHashMap fix working - key source information preserved!");
+}

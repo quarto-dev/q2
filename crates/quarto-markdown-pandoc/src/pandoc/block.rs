@@ -8,7 +8,6 @@ use crate::pandoc::attr::Attr;
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
 use crate::pandoc::list::ListAttributes;
-use crate::pandoc::location::Range;
 use crate::pandoc::table::Table;
 use serde::{Deserialize, Serialize};
 
@@ -148,11 +147,11 @@ pub struct CaptionBlock {
     pub source_info: quarto_source_map::SourceInfo,
 }
 
-fn make_block_leftover(_node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
-    let text = _node.utf8_text(input_bytes).unwrap().to_string();
+fn make_block_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
+    let text = node.utf8_text(input_bytes).unwrap().to_string();
     Block::RawBlock(RawBlock {
         format: "quarto-internal-leftover".to_string(),
         text,
-        source_info: quarto_source_map::SourceInfo::default(), // TODO: Convert from tree-sitter node
+        source_info: crate::pandoc::location::node_source_info(node),
     })
 }

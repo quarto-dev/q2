@@ -5,7 +5,6 @@
  * Tests for k-62: YAML tag information lost in new API
  */
 
-use hashlink::LinkedHashMap;
 use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
 use quarto_markdown_pandoc::pandoc::location::{Location, Range, SourceInfo};
 use quarto_markdown_pandoc::pandoc::meta::{
@@ -44,7 +43,7 @@ regular: This has *emphasis*
     let context = ASTContext::default();
     let meta = rawblock_to_meta_with_source_info(&block, &context);
 
-    let mut outer_meta = LinkedHashMap::new();
+    let mut outer_meta = Vec::new();
     let parsed_meta = parse_metadata_strings_with_source_info(meta, &mut outer_meta);
 
     // Extract entries

@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::location::{convert_range, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a list marker, extracting the marker number
@@ -28,7 +28,7 @@ pub fn process_list_marker(
         // The actual numbering will be handled in postprocessing
         return PandocNativeIntermediate::IntermediateOrderedListMarker(
             1,
-            convert_range(&node_source_info_with_context(node, context).range),
+            node_source_info_with_context(node, context).range,
         );
     }
 
@@ -41,6 +41,6 @@ pub fn process_list_marker(
         .unwrap_or_else(|_| panic!("Invalid list marker number: {}", marker_text));
     PandocNativeIntermediate::IntermediateOrderedListMarker(
         marker_number,
-        convert_range(&node_source_info_with_context(node, context).range),
+        node_source_info_with_context(node, context).range,
     )
 }

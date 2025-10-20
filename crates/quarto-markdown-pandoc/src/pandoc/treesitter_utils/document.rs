@@ -37,6 +37,7 @@ pub fn process_document(
         }
     });
     PandocNativeIntermediate::IntermediatePandoc(Pandoc {
+        // Legitimate default: Initial document creation - metadata populated later from YAML
         meta: MetaValueWithSourceInfo::default(),
         blocks,
     })

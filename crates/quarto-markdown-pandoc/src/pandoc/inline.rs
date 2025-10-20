@@ -5,8 +5,8 @@
 
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
-use crate::pandoc::location::Range;
 use crate::pandoc::shortcode::Shortcode;
+use quarto_source_map::Range;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -471,12 +471,12 @@ pub fn make_cite_inline(
     });
 }
 
-fn make_inline_leftover(_node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline {
-    let text = _node.utf8_text(input_bytes).unwrap().to_string();
+fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline {
+    let text = node.utf8_text(input_bytes).unwrap().to_string();
     Inline::RawInline(RawInline {
         format: "quarto-internal-leftover".to_string(),
         text,
-        source_info: quarto_source_map::SourceInfo::default(), // TODO: Convert from tree-sitter node
+        source_info: crate::pandoc::location::node_source_info(node),
     })
 }
 

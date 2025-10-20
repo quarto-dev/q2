@@ -125,16 +125,16 @@ pub trait SourceLocation {
     }
 }
 
-pub fn node_location(node: &tree_sitter::Node) -> Range {
+pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
     let start = node.start_position();
     let end = node.end_position();
-    Range {
-        start: Location {
+    quarto_source_map::Range {
+        start: quarto_source_map::Location {
             offset: node.start_byte(),
             row: start.row,
             column: start.column,
         },
-        end: Location {
+        end: quarto_source_map::Location {
             offset: node.end_byte(),
             row: end.row,
             column: end.column,
@@ -143,17 +143,14 @@ pub fn node_location(node: &tree_sitter::Node) -> Range {
 }
 
 pub fn node_source_info(node: &tree_sitter::Node) -> quarto_source_map::SourceInfo {
-    SourceInfo::with_range(node_location(node)).to_source_map_info()
+    quarto_source_map::SourceInfo::original(
+        quarto_source_map::FileId(0),
+        node_location(node),
+    )
 }
 
 pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> quarto_source_map::SourceInfo {
-    // If the context has at least one filename, use index 0
-    let filename_index = if context.filenames.is_empty() {
-        None
-    } else {
-        Some(0)
-    };
-    SourceInfo::new(filename_index, node_location(node)).to_source_map_info()
+    quarto_source_map::SourceInfo::original(context.current_file_id(), node_location(node))
 }
 
 pub fn empty_range() -> Range {
@@ -172,7 +169,21 @@ pub fn empty_range() -> Range {
 }
 
 pub fn empty_source_info() -> quarto_source_map::SourceInfo {
-    SourceInfo::with_range(empty_range()).to_source_map_info()
+    quarto_source_map::SourceInfo::original(
+        quarto_source_map::FileId(0),
+        quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+            end: quarto_source_map::Location {
+                offset: 0,
+                row: 0,
+                column: 0,
+            },
+        },
+    )
 }
 
 /// Extract filename index from quarto_source_map::SourceInfo by walking to Original mapping

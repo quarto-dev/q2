@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::inline::{Inline, LineBreak, SoftBreak};
-use crate::pandoc::location::{SourceInfo, node_location};
+use crate::pandoc::location::node_location;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -119,11 +119,17 @@ pub fn create_line_break_inline(
     let range = node_location(node);
     let inline = if is_hard {
         Inline::LineBreak(LineBreak {
-            source_info: SourceInfo::with_range(range).to_source_map_info(),
+            source_info: quarto_source_map::SourceInfo::original(
+                quarto_source_map::FileId(0),
+                range,
+            ),
         })
     } else {
         Inline::SoftBreak(SoftBreak {
-            source_info: SourceInfo::with_range(range).to_source_map_info(),
+            source_info: quarto_source_map::SourceInfo::original(
+                quarto_source_map::FileId(0),
+                range,
+            ),
         })
     };
     PandocNativeIntermediate::IntermediateInline(inline)

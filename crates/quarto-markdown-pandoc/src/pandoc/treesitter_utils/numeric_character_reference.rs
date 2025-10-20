@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::location::{convert_range, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process numeric character references to their corresponding characters
@@ -34,6 +34,6 @@ pub fn process_numeric_character_reference(
 
     PandocNativeIntermediate::IntermediateBaseText(
         result_text,
-        convert_range(&node_source_info_with_context(node, context).range),
+        node_source_info_with_context(node, context).range,
     )
 }

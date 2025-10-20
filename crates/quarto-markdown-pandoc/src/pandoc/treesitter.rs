@@ -3,7 +3,6 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::source_map_compat;
 use crate::pandoc::treesitter_utils;
 use crate::pandoc::treesitter_utils::attribute::process_attribute;
 use crate::pandoc::treesitter_utils::atx_heading::process_atx_heading;
@@ -57,7 +56,7 @@ use crate::pandoc::inline::{
     Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{Range, SourceInfo, convert_range, node_location, node_source_info, node_source_info_with_context};
+use crate::pandoc::location::{Range, convert_range, node_location, node_source_info, node_source_info_with_context};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -354,6 +353,7 @@ fn process_native_inline<T: Write>(
     whitespace_re: &Regex,
     inline_buf: &mut T,
     node_text_fn: impl Fn() -> String,
+    node_source_info_fn: impl Fn() -> quarto_source_map::SourceInfo,
     context: &ASTContext,
 ) -> Inline {
     match child {
@@ -361,27 +361,12 @@ fn process_native_inline<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: SourceInfo::new(
-                        if context.filenames.is_empty() {
-                            None
-                        } else {
-                            Some(0)
-                        },
-                        range,
-                    ).to_source_map_info(),
+                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
                 })
             } else {
-                let old_info = SourceInfo::new(
-                    if context.filenames.is_empty() {
-                        None
-                    } else {
-                        Some(0)
-                    },
-                    range,
-                );
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: source_map_compat::old_to_new_source_info(&old_info, context),
+                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
                 })
             }
         }
@@ -404,7 +389,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: node_source_info_fn(),
             })
         }
         other => {
@@ -417,7 +402,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: node_source_info_fn(),
             })
         }
     }
@@ -440,27 +425,12 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: SourceInfo::new(
-                            if context.filenames.is_empty() {
-                                None
-                            } else {
-                                Some(0)
-                            },
-                            range,
-                        ).to_source_map_info(),
+                        source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
                     }))
                 } else {
-                    let old_info = SourceInfo::new(
-                        if context.filenames.is_empty() {
-                            None
-                        } else {
-                            Some(0)
-                        },
-                        range,
-                    );
                     inlines.push(Inline::Str(Str {
                         text: apply_smart_quotes(text),
-                        source_info: source_map_compat::old_to_new_source_info(&old_info, context),
+                        source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
                     }))
                 }
             }
@@ -501,6 +471,7 @@ fn native_visitor<T: Write>(
         let value = node_text();
         PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
     };
+    let node_source_info_fn = || node_source_info_with_context(node, context);
     let native_inline = |(node_name, child)| {
         process_native_inline(
             node_name,
@@ -508,6 +479,7 @@ fn native_visitor<T: Write>(
             &whitespace_re,
             &mut inline_buf,
             &node_text,
+            &node_source_info_fn,
             context,
         )
     };
@@ -647,7 +619,7 @@ fn native_visitor<T: Write>(
                 Inline::Note(Note {
                     content: vec![Block::Paragraph(Paragraph {
                         content: inlines,
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: node_source_info(node),
                     })],
                     source_info: node_source_info(node),
                 })

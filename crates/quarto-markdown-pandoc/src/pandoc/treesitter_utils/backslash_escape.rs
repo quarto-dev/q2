@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::location::{convert_range, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a backslash escape by removing the leading backslash
@@ -22,6 +22,6 @@ pub fn process_backslash_escape(
     let content = &text[1..]; // remove the leading backslash
     PandocNativeIntermediate::IntermediateBaseText(
         content.to_string(),
-        convert_range(&node_source_info_with_context(node, context).range),
+        node_source_info_with_context(node, context).range,
     )
 }

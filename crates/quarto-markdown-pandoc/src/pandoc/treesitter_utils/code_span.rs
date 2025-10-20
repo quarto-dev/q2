@@ -8,7 +8,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Code, Inline, RawInline};
-use crate::pandoc::location::{convert_range, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use std::collections::HashMap;
 use std::io::Write;
 
@@ -33,7 +33,7 @@ pub fn process_code_span<T: Write>(
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(convert_range(&range.range)),
+                        PandocNativeIntermediate::IntermediateUnknown(range.range.clone()),
                     )
                 }
                 PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
@@ -41,7 +41,7 @@ pub fn process_code_span<T: Write>(
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(convert_range(&range.range)),
+                        PandocNativeIntermediate::IntermediateUnknown(range.range.clone()),
                     )
                 }
                 PandocNativeIntermediate::IntermediateBaseText(text, range) => {

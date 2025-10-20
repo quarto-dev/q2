@@ -345,6 +345,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let mut new_image = image.clone();
                 new_image.attr = image_attr;
                 // FIXME all source location is broken here
+                // TODO: Should propagate from image.source_info and para.source_info
                 FilterResult(
                     vec![Block::Figure(Figure {
                         attr: figure_attr,
@@ -352,13 +353,16 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             short: None,
                             long: Some(vec![Block::Plain(Plain {
                                 content: image.content.clone(),
+                                // TODO: Should derive from image.content inlines
                                 source_info: quarto_source_map::SourceInfo::default(),
                             })]),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
+                            // TODO: Should use image.source_info
                             source_info: quarto_source_map::SourceInfo::default(),
                         })],
+                        // TODO: Should use para.source_info
                         source_info: quarto_source_map::SourceInfo::default(),
                     })],
                     true,
@@ -399,7 +403,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     vec![Inline::Span(Span {
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: insert.source_info,
                     })],
                     true,
                 )
@@ -412,7 +416,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     vec![Inline::Span(Span {
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: delete.source_info,
                     })],
                     true,
                 )
@@ -425,7 +429,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     vec![Inline::Span(Span {
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: highlight.source_info,
                     })],
                     true,
                 )
@@ -438,7 +442,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     vec![Inline::Span(Span {
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: edit_comment.source_info,
                     })],
                     true,
                 )
@@ -468,6 +472,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 math_processed.push(Inline::Span(Span {
                                     attr: (attr.0.clone(), classes, attr.2.clone()),
                                     content: vec![Inline::Math(math.clone())],
+                                    // TODO: Should combine() source info from math and attr (see k-82)
                                     source_info: quarto_source_map::SourceInfo::default(),
                                 }));
 
@@ -549,6 +554,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         // bracket attached to the first word and closing bracket to the last word
                                         // e.g., "@knuth [p. 33]" becomes: Str("@knuth"), Space, Str("[p."), Space, Str("33]")
                                         cite.content.push(Inline::Space(Space {
+                                            // Synthetic Space: inserted to separate citation from suffix
                                             source_info: quarto_source_map::SourceInfo::default(),
                                         }));
 
@@ -608,6 +614,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         result.push(Inline::Cite(cite));
                                     }
                                     result.push(Inline::Space(Space {
+                                        // Synthetic Space: restore space between cite and invalid span
                                         source_info: quarto_source_map::SourceInfo::default(),
                                     }));
                                     result.push(inline);
@@ -619,6 +626,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     result.push(Inline::Cite(cite));
                                 }
                                 result.push(Inline::Space(Space {
+                                    // Synthetic Space: restore space between cite and non-span element
                                     source_info: quarto_source_map::SourceInfo::default(),
                                 }));
                                 result.push(inline);
@@ -634,6 +642,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     result.push(Inline::Cite(cite));
                     if state == 2 {
                         result.push(Inline::Space(Space {
+                            // Synthetic Space: restore trailing space after incomplete citation pattern
                             source_info: quarto_source_map::SourceInfo::default(),
                         }));
                     }

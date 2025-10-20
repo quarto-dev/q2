@@ -1618,12 +1618,15 @@ fn read_meta_with_key_sources(
                 if let Some(source_val) = sources_obj.get(key) {
                     deserializer.from_json_ref(source_val)?
                 } else {
+                    // Legitimate default: JSON doesn't have source info for this key (backward compat)
                     quarto_source_map::SourceInfo::default()
                 }
             } else {
+                // Legitimate default: JSON key_sources is not an object
                 quarto_source_map::SourceInfo::default()
             }
         } else {
+            // Legitimate default: No key_sources in JSON (backward compatibility)
             quarto_source_map::SourceInfo::default()
         };
 
@@ -1636,6 +1639,7 @@ fn read_meta_with_key_sources(
 
     Ok(MetaValueWithSourceInfo::MetaMap {
         entries,
+        // Legitimate default: MetaMap itself doesn't have source tracking in JSON (only entries do)
         source_info: quarto_source_map::SourceInfo::default(),
     })
 }
@@ -1656,6 +1660,7 @@ fn read_meta_value_with_source_info(
     let source_info = if let Some(s) = obj.get("s") {
         deserializer.from_json_ref(s)?
     } else {
+        // Legitimate default: Old JSON format doesn't have "s" field (backward compatibility)
         quarto_source_map::SourceInfo::default()
     };
 
@@ -1736,6 +1741,7 @@ fn read_meta_value_with_source_info(
                     let key_source = if let Some(ks) = obj.get("key_source") {
                         deserializer.from_json_ref(ks)?
                     } else {
+                        // Legitimate default: JSON entry doesn't have key_source (backward compat)
                         quarto_source_map::SourceInfo::default()
                     };
                     let value = read_meta_value_with_source_info(
@@ -1759,6 +1765,7 @@ fn read_meta_value_with_source_info(
                         })?
                         .to_string();
                     let value = read_meta_value_with_source_info(&kv_arr[1], deserializer)?;
+                    // Legitimate default: Old JSON format [key, value] doesn't have key_source
                     (key, quarto_source_map::SourceInfo::default(), value)
                 } else {
                     return Err(JsonReadError::InvalidType(

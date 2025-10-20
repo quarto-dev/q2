@@ -8,7 +8,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::Inline;
-use crate::pandoc::location::{convert_range, node_source_info_with_context};
+use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::shortcode::{Shortcode, ShortcodeArg};
 use std::collections::HashMap;
 use std::io::Write;
@@ -24,7 +24,7 @@ pub fn process_shortcode_string_arg(
     let id = node.utf8_text(input_bytes).unwrap().to_string();
     PandocNativeIntermediate::IntermediateShortcodeArg(
         ShortcodeArg::String(id),
-        convert_range(&node_source_info_with_context(node, context).range),
+        node_source_info_with_context(node, context).range,
     )
 }
 
@@ -42,7 +42,7 @@ pub fn process_shortcode_string(
     };
     PandocNativeIntermediate::IntermediateShortcodeArg(
         ShortcodeArg::String(id),
-        convert_range(&node_source_info_with_context(node, context).range),
+        node_source_info_with_context(node, context).range,
     )
 }
 
@@ -104,7 +104,7 @@ pub fn process_shortcode_keyword_param<T: Write>(
             }
         }
     }
-    let range = convert_range(&node_source_info_with_context(node, context).range);
+    let range = node_source_info_with_context(node, context).range;
     PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(result), range)
 }
 
@@ -182,7 +182,7 @@ pub fn process_shortcode_boolean(
         "false" => ShortcodeArg::Boolean(false),
         _ => panic!("Unexpected shortcode_boolean value: {}", value),
     };
-    let range = convert_range(&node_source_info_with_context(node, context).range);
+    let range = node_source_info_with_context(node, context).range;
     PandocNativeIntermediate::IntermediateShortcodeArg(value, range)
 }
 
@@ -192,7 +192,7 @@ pub fn process_shortcode_number(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let value = node.utf8_text(input_bytes).unwrap();
-    let range = convert_range(&node_source_info_with_context(node, context).range);
+    let range = node_source_info_with_context(node, context).range;
     let Ok(num) = value.parse::<f64>() else {
         panic!("Invalid shortcode_number: {}", value)
     };

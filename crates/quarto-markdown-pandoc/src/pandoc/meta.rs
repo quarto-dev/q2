@@ -531,7 +531,7 @@ pub fn rawblock_to_meta(block: RawBlock) -> Meta {
 /// Parse metadata strings as markdown, preserving source information
 pub fn parse_metadata_strings_with_source_info(
     meta: MetaValueWithSourceInfo,
-    outer_metadata: &mut LinkedHashMap<String, MetaValueWithSourceInfo>,
+    outer_metadata: &mut Vec<MetaMapEntry>,
 ) -> MetaValueWithSourceInfo {
     match meta {
         MetaValueWithSourceInfo::MetaString { value, source_info } => {
@@ -551,10 +551,10 @@ pub fn parse_metadata_strings_with_source_info(
             );
             match result {
                 Ok((mut pandoc, _context)) => {
-                    // Merge parsed metadata
+                    // Merge parsed metadata, preserving full MetaMapEntry with key_source
                     if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
                         for entry in entries {
-                            outer_metadata.insert(entry.key, entry.value);
+                            outer_metadata.push(entry);
                         }
                     }
                     // Check if it's a single paragraph - if so, return MetaInlines with original source_info

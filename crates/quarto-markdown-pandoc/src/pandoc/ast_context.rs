@@ -22,10 +22,14 @@ pub struct ASTContext {
 
 impl ASTContext {
     pub fn new() -> Self {
+        let mut source_context = SourceContext::new();
+        // Always add an anonymous file so FileId(0) is valid
+        source_context.add_file("<unknown>".to_string(), None);
+
         ASTContext {
-            filenames: Vec::new(),
+            filenames: vec!["<unknown>".to_string()],
             example_list_counter: Cell::new(1),
-            source_context: SourceContext::new(),
+            source_context,
         }
     }
 
@@ -43,10 +47,14 @@ impl ASTContext {
     }
 
     pub fn anonymous() -> Self {
+        let mut source_context = SourceContext::new();
+        // Always add an anonymous file so FileId(0) is valid
+        source_context.add_file("<anonymous>".to_string(), None);
+
         ASTContext {
-            filenames: Vec::new(),
+            filenames: vec!["<anonymous>".to_string()],
             example_list_counter: Cell::new(1),
-            source_context: SourceContext::new(),
+            source_context,
         }
     }
 
@@ -68,6 +76,17 @@ impl ASTContext {
         } else {
             None
         }
+    }
+
+    /// Get the FileId to use for new SourceInfo instances.
+    /// Since ASTContext constructors now ensure FileId(0) always exists,
+    /// this always returns FileId(0).
+    ///
+    /// This method exists for:
+    /// 1. Code clarity - makes it obvious we're getting a file ID from context
+    /// 2. Future flexibility - if we need to track current file differently
+    pub fn current_file_id(&self) -> FileId {
+        FileId(0)
     }
 }
 
