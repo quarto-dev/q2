@@ -282,6 +282,7 @@ pub fn yaml_to_meta_with_source_info(
                         source_info_qsm: Some(source_info.clone()),
                     })],
                     source_info: empty_source_info(), // TODO: convert from quarto_source_map::SourceInfo when available
+                    source_info_qsm: None,
                 };
                 MetaValueWithSourceInfo::MetaInlines {
                     content: vec![Inline::Span(span)],
@@ -409,6 +410,7 @@ impl YamlEventHandler {
                     source_info_qsm: None,
                 })],
                 source_info: empty_source_info(),
+                source_info_qsm: None,
             };
             return MetaValue::MetaInlines(vec![Inline::Span(span)]);
         }
@@ -588,6 +590,7 @@ pub fn parse_metadata_strings_with_source_info(
                             source_info_qsm: None,
                         })],
                         source_info: empty_source_info(),
+                        source_info_qsm: None,
                     };
                     MetaValueWithSourceInfo::MetaInlines {
                         content: vec![Inline::Span(span)],
@@ -679,6 +682,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                             source_info_qsm: None,
                         })],
                         source_info: empty_source_info(),
+                        source_info_qsm: None,
                     };
                     MetaValue::MetaInlines(vec![Inline::Span(span)])
                 }
