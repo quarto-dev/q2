@@ -1,6 +1,6 @@
 # Phase 3 Migration - Current Status
 
-**Last Updated**: 2025-10-20 (Session 2)
+**Last Updated**: 2025-10-20 (Session 3)
 
 ## Completed Work
 - ✅ k-62: Fixed YAML tag preservation bug
@@ -12,48 +12,39 @@
 - ✅ Fixed pandoc/ core files (inline.rs, block.rs, treesitter.rs)
 - ✅ Fixed treesitter_utils/postprocess.rs
 - ✅ Fixed writers/native.rs pattern matching
+- ✅ **Step 2 COMPLETE**: Fixed all remaining struct construction sites
 
 ## Current State
 **Branch**: `kyoto-source-map-migration`
-**Last Commit**: f2de9e3 "Phase 3 Step 2: Fix pandoc/ and treesitter_utils/ struct constructions"
+**Last Commit**: ac0fa0a "Phase 3 Step 2: Fix readers/ struct constructions (36→0 errors)"
 
-**Compilation Status**: 36 missing field errors (started session at 63, fixed 27)
-**Files Fixed**: pandoc/inline.rs, pandoc/block.rs, pandoc/treesitter.rs, postprocess.rs, writers/native.rs
-**Files Remaining**: readers/json.rs (~33 errors), readers/qmd.rs (1 error), plus 2 others
+**Compilation Status**: ✅ **0 errors** - Step 2 complete!
+**Session 3 Progress**: Fixed all 36 remaining errors in readers/json.rs and readers/qmd.rs
+**Total Fixed in Session 3**: 36 errors (19 Inline types + 16 Block types + 1 MetaBlock)
 
-## Next Steps - Sub-tasks Created
+## Session 3 Summary
 
-### Step 2: Fix Struct Construction Sites
-Work through these in order:
+Fixed all 36 remaining missing field errors:
 
-1. **k-72**: Fix filters.rs (Priority: HIGH)
-   - ~20-30 struct constructions
-   - Pattern: `source_info: self.source_info`
+### readers/json.rs (35 errors fixed)
+**Inline types (19)**: Space, LineBreak, SoftBreak, Emph, Strong, Code, Math,
+Underline, Strikeout, Superscript, Subscript, SmallCaps, Quoted, Link,
+RawInline, Image, Span, Note, Cite
 
-2. **k-73**: Fix pandoc/treesitter.rs  
-   - ~10-15 Str, Space, LineBreak, SoftBreak constructions
-   - Pattern: `source_info: node_source_info(node)`
+**Block types (16)**: Paragraph, Plain, LineBlock, CodeBlock, RawBlock,
+BlockQuote, OrderedList, BulletList, DefinitionList, Header, Figure, Table,
+Div, MetaBlock, NoteDefinitionPara, NoteDefinitionFencedBlock
 
-3. **k-74**: Fix treesitter_utils/ Priority 1 files
-   - 10 files: atx_heading, setext_heading, code_span, fenced_code_block, etc.
-   - ~30-40 constructions total
+### readers/qmd.rs (1 error fixed)
+**MetaBlock**: Block-level metadata construction
 
-4. **k-75**: Fix treesitter_utils/ Priority 2 files
-   - 8 files: note definitions, editorial marks, etc.
-   - ~30-40 constructions total
+## Next Steps - Step 3
 
-5. **k-76**: Fix pandoc/meta.rs and other pandoc/ files
-   - MetaBlock, helper functions
-   - ~20-30 constructions
+**Step 2 is now COMPLETE** ✅ - All construction sites updated, 0 compilation errors
 
-6. **k-77**: Fix readers/ and writers/
-   - JSON deserialization
-   - ~20-30 constructions
-   - **After this**: cargo check should show 0 errors
-
-### After Step 2 Completes
-- **k-68**: Run tests (all should pass)
-- **k-69**: Final switchover (remove old fields, rename)
+Next up:
+- **k-68**: Run full test suite (all tests should pass with dual-field approach)
+- **k-69**: Final switchover (remove old fields, rename source_info_qsm → source_info)
 - **k-70**: Remove pandoc::location module
 - **k-71**: Final validation
 
@@ -63,41 +54,35 @@ Work through these in order:
 ```bash
 cd /Users/cscheid/repos/github/cscheid/kyoto
 git checkout kyoto-source-map-migration
-bd ready --json  # Check available work
+cargo check  # Should show 0 errors
+cargo test --package quarto-markdown-pandoc  # Run test suite
 ```
 
-**Begin work on k-72** (filters.rs):
-```bash
-bd update k-72 --status in_progress
-```
+**Step 2 Complete Status**:
+- ✅ All struct definitions have source_info_qsm field
+- ✅ All struct construction sites updated with `source_info_qsm: None`
+- ✅ Code compiles successfully with 0 errors
+- ⏭️ Ready for Step 3: Run tests and verify dual-field approach works
 
-**Pattern to apply**:
-```rust
-// BEFORE:
-SomeStruct {
-    field: value,
-    source_info: some_value,
-}
+**Next task**: Run full test suite to ensure all tests pass before proceeding
+with final switchover (Steps 4-5)
 
-// AFTER:
-SomeStruct {
-    field: value,
-    source_info: some_value,
-    source_info_qsm: None,
-}
-```
+## Files Modified - Step 2 Complete
 
-**Validation**:
-```bash
-cargo check --package quarto-markdown-pandoc 2>&1 | grep "error\[E0063\]" | wc -l
-# Watch this number decrease
-```
+**Struct Definitions** (Step 1):
+- ✅ src/pandoc/inline.rs (20 Inline types)
+- ✅ src/pandoc/block.rs (21 Block types)
+- ✅ src/pandoc/table.rs (1 Table type)
 
-## Files Already Modified
-- ✅ src/pandoc/inline.rs (struct definitions)
-- ✅ src/pandoc/block.rs (struct definitions)
-- ✅ src/pandoc/table.rs (struct definitions)
-- ✅ src/pandoc/treesitter_utils/paragraph.rs (1 construction fixed)
+**Construction Sites** (Step 2):
+- ✅ src/pandoc/inline.rs
+- ✅ src/pandoc/block.rs
+- ✅ src/pandoc/treesitter.rs
+- ✅ src/pandoc/treesitter_utils/*.rs (all files)
+- ✅ src/pandoc/meta.rs
+- ✅ src/writers/native.rs
+- ✅ src/readers/json.rs (35 constructions)
+- ✅ src/readers/qmd.rs (1 construction)
 
 ## Key Files
 - **Migration Guide**: `claude-notes/phase3-sourceinfo-migration-guide.md`
