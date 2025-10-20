@@ -33,6 +33,7 @@ pub fn process_section(
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     source_info: node_source_info_with_context(section_node, context),
+                    source_info_qsm: None,
                 }));
             }
             _ => panic!("Expected Block or Section, got {:?}", child),

@@ -62,5 +62,6 @@ pub fn process_atx_heading<T: Write>(
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
+        source_info_qsm: None,
     }))
 }

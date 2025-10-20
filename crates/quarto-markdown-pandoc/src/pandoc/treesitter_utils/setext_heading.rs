@@ -48,5 +48,6 @@ pub fn process_setext_heading<T: Write>(
         attr: empty_attr(),
         content,
         source_info: node_source_info_with_context(node, context),
+        source_info_qsm: None,
     }))
 }

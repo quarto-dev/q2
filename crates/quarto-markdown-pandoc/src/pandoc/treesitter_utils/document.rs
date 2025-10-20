@@ -31,6 +31,7 @@ pub fn process_document(
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     source_info: node_source_info_with_context(node, context),
+                    source_info_qsm: None,
                 }));
             }
             _ => panic!("Expected Block or Section, got {:?}", child),
