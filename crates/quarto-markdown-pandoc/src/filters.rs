@@ -709,18 +709,18 @@ pub fn topdown_traverse_block(block: Block, filter: &mut Filter) -> Blocks {
                 return match f(meta.meta) {
                     FilterReturn::Unchanged(m) => vec![Block::BlockMetadata(MetaBlock {
                         meta: m,
-                        source_info: meta.source_info.clone(),
+                        source_info: meta.source_info,
                     })],
                     FilterReturn::FilterResult(new_meta, recurse) => {
                         if !recurse {
                             vec![Block::BlockMetadata(MetaBlock {
                                 meta: new_meta,
-                                source_info: meta.source_info.clone(),
+                                source_info: meta.source_info,
                             })]
                         } else {
                             vec![Block::BlockMetadata(MetaBlock {
                                 meta: topdown_traverse_meta(new_meta, filter),
-                                source_info: meta.source_info.clone(),
+                                source_info: meta.source_info,
                             })]
                         }
                     }

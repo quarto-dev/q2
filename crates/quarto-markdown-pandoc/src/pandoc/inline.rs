@@ -342,7 +342,7 @@ pub fn make_span_inline(
             attr,
             content,
             target,
-            source_info: source_info.clone(),
+            source_info,
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -355,13 +355,13 @@ pub fn make_span_inline(
         if is_empty_attr(&new_attr) {
             return Inline::SmallCaps(SmallCaps {
                 content,
-                source_info: source_info.clone(),
+                source_info,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
-            source_info: source_info.clone(),
+            source_info,
         });
     } else if attr.1.contains(&"ul".to_string()) {
         let mut new_attr = attr.clone();
@@ -369,13 +369,13 @@ pub fn make_span_inline(
         if is_empty_attr(&new_attr) {
             return Inline::Underline(Underline {
                 content,
-                source_info: source_info.clone(),
+                source_info,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
-            source_info: source_info.clone(),
+            source_info,
         });
     } else if attr.1.contains(&"underline".to_string()) {
         let mut new_attr = attr.clone();
@@ -387,13 +387,13 @@ pub fn make_span_inline(
         if is_empty_attr(&new_attr) {
             return Inline::Underline(Underline {
                 content,
-                source_info: source_info.clone(),
+                source_info,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
-            source_info: source_info.clone(),
+            source_info,
         });
     }
 

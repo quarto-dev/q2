@@ -135,11 +135,13 @@ impl SourceInfoDeserializer {
                     let parent_id = content
                         .get("parent_id")
                         .and_then(|v| v.as_u64())
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
                     let offset = content
                         .get("offset")
                         .and_then(|v| v.as_u64())
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
 
                     // Parent must already be in pool
                     let parent = pool
@@ -156,7 +158,8 @@ impl SourceInfoDeserializer {
                     let parent_id = content
                         .get("parent_id")
                         .and_then(|v| v.as_u64())
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        as usize;
                     let mapping_array: Vec<RangeMapping> = serde_json::from_value(
                         content
                             .get("mapping")
@@ -187,15 +190,18 @@ impl SourceInfoDeserializer {
                             let source_info_id = piece
                                 .get("source_info_id")
                                 .and_then(|v| v.as_u64())
-                                .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
                             let offset_in_concat = piece
                                 .get("offset_in_concat")
                                 .and_then(|v| v.as_u64())
-                                .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
                             let length = piece
                                 .get("length")
                                 .and_then(|v| v.as_u64())
-                                .ok_or(JsonReadError::MalformedSourceInfoPool)? as usize;
+                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                as usize;
 
                             let source_info = pool
                                 .get(source_info_id)
@@ -210,9 +216,7 @@ impl SourceInfoDeserializer {
                         })
                         .collect();
 
-                    SourceMapping::Concat {
-                        pieces: pieces?,
-                    }
+                    SourceMapping::Concat { pieces: pieces? }
                 }
                 _ => {
                     return Err(JsonReadError::MalformedSourceInfoPool);
@@ -757,14 +761,18 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                         .ok_or_else(|| JsonReadError::MissingField("citationId".to_string()))?
                         .to_string();
 
-                    let prefix =
-                        read_inlines(citation_obj.get("citationPrefix").ok_or_else(|| {
+                    let prefix = read_inlines(
+                        citation_obj.get("citationPrefix").ok_or_else(|| {
                             JsonReadError::MissingField("citationPrefix".to_string())
-                        })?, deserializer)?;
-                    let suffix =
-                        read_inlines(citation_obj.get("citationSuffix").ok_or_else(|| {
+                        })?,
+                        deserializer,
+                    )?;
+                    let suffix = read_inlines(
+                        citation_obj.get("citationSuffix").ok_or_else(|| {
                             JsonReadError::MissingField("citationSuffix".to_string())
-                        })?, deserializer)?;
+                        })?,
+                        deserializer,
+                    )?;
 
                     let mode =
                         read_citation_mode(citation_obj.get("citationMode").ok_or_else(|| {
@@ -1149,7 +1157,10 @@ fn read_table_head(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
     let rows_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableHead rows must be array".to_string()))?;
-    let rows = rows_arr.iter().map(|v| read_row(v, deserializer)).collect::<Result<Vec<_>>>()?;
+    let rows = rows_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(TableHead { attr, rows })
 }
@@ -1172,11 +1183,17 @@ fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
     let head_arr = arr[2]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody head must be array".to_string()))?;
-    let head = head_arr.iter().map(|v| read_row(v, deserializer)).collect::<Result<Vec<_>>>()?;
+    let head = head_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
     let body_arr = arr[3]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody body must be array".to_string()))?;
-    let body = body_arr.iter().map(|v| read_row(v, deserializer)).collect::<Result<Vec<_>>>()?;
+    let body = body_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(TableBody {
         attr,
@@ -1201,7 +1218,10 @@ fn read_table_foot(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
     let rows_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableFoot rows must be array".to_string()))?;
-    let rows = rows_arr.iter().map(|v| read_row(v, deserializer)).collect::<Result<Vec<_>>>()?;
+    let rows = rows_arr
+        .iter()
+        .map(|v| read_row(v, deserializer))
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(TableFoot { attr, rows })
 }
@@ -1249,7 +1269,10 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let arr = c.as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("LineBlock content must be array".to_string())
             })?;
-            let content = arr.iter().map(|v| read_inlines(v, deserializer)).collect::<Result<Vec<_>>>()?;
+            let content = arr
+                .iter()
+                .map(|v| read_inlines(v, deserializer))
+                .collect::<Result<Vec<_>>>()?;
             Ok(Block::LineBlock(LineBlock {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
@@ -1699,10 +1722,12 @@ fn read_meta_value_with_source_info(
                     } else {
                         quarto_source_map::SourceInfo::default()
                     };
-                    let value =
-                        read_meta_value_with_source_info(obj.get("value").ok_or_else(|| {
+                    let value = read_meta_value_with_source_info(
+                        obj.get("value").ok_or_else(|| {
                             JsonReadError::MissingField("MetaMap entry missing 'value'".to_string())
-                        })?, deserializer)?;
+                        })?,
+                        deserializer,
+                    )?;
                     (key, key_source, value)
                 } else if let Some(kv_arr) = item.as_array() {
                     // Old format: ["key", {...}]

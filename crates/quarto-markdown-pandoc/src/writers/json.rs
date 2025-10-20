@@ -8,7 +8,7 @@ use crate::pandoc::{
 };
 use quarto_source_map::{FileId, Range, RangeMapping, SourceInfo, SourceMapping};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// Serializable version of SourceInfo that uses ID references instead of Rc pointers.
@@ -89,9 +89,9 @@ impl SourceInfoSerializer {
 
         // Recursively intern parents and build the serializable mapping
         let mapping = match &source_info.mapping {
-            SourceMapping::Original { file_id } => SerializableSourceMapping::Original {
-                file_id: *file_id,
-            },
+            SourceMapping::Original { file_id } => {
+                SerializableSourceMapping::Original { file_id: *file_id }
+            }
             SourceMapping::Substring { parent, offset } => {
                 let parent_id = self.intern(parent);
                 SerializableSourceMapping::Substring {
@@ -318,7 +318,12 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
 }
 
 fn write_inlines(inlines: &Inlines, serializer: &mut SourceInfoSerializer) -> Value {
-    json!(inlines.iter().map(|inline| write_inline(inline, serializer)).collect::<Vec<_>>())
+    json!(
+        inlines
+            .iter()
+            .map(|inline| write_inline(inline, serializer))
+            .collect::<Vec<_>>()
+    )
 }
 
 fn write_list_attributes(attr: &ListAttributes) -> Value {
@@ -344,14 +349,20 @@ fn write_blockss(blockss: &[Vec<Block>], serializer: &mut SourceInfoSerializer) 
     json!(
         blockss
             .iter()
-            .map(|blocks| blocks.iter().map(|block| write_block(block, serializer)).collect::<Vec<_>>())
+            .map(|blocks| blocks
+                .iter()
+                .map(|block| write_block(block, serializer))
+                .collect::<Vec<_>>())
             .collect::<Vec<_>>()
     )
 }
 
 fn write_caption(caption: &Caption, serializer: &mut SourceInfoSerializer) -> Value {
     json!([
-        &caption.short.as_ref().map(|s| write_inlines(&s, serializer)),
+        &caption
+            .short
+            .as_ref()
+            .map(|s| write_inlines(&s, serializer)),
         &caption
             .long
             .as_ref()
@@ -393,30 +404,54 @@ fn write_cell(cell: &crate::pandoc::table::Cell, serializer: &mut SourceInfoSeri
 fn write_row(row: &crate::pandoc::table::Row, serializer: &mut SourceInfoSerializer) -> Value {
     json!([
         write_attr(&row.attr),
-        row.cells.iter().map(|cell| write_cell(cell, serializer)).collect::<Vec<_>>()
+        row.cells
+            .iter()
+            .map(|cell| write_cell(cell, serializer))
+            .collect::<Vec<_>>()
     ])
 }
 
-fn write_table_head(head: &crate::pandoc::table::TableHead, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_table_head(
+    head: &crate::pandoc::table::TableHead,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
     json!([
         write_attr(&head.attr),
-        head.rows.iter().map(|row| write_row(row, serializer)).collect::<Vec<_>>()
+        head.rows
+            .iter()
+            .map(|row| write_row(row, serializer))
+            .collect::<Vec<_>>()
     ])
 }
 
-fn write_table_body(body: &crate::pandoc::table::TableBody, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_table_body(
+    body: &crate::pandoc::table::TableBody,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
     json!([
         write_attr(&body.attr),
         body.rowhead_columns,
-        body.head.iter().map(|row| write_row(row, serializer)).collect::<Vec<_>>(),
-        body.body.iter().map(|row| write_row(row, serializer)).collect::<Vec<_>>()
+        body.head
+            .iter()
+            .map(|row| write_row(row, serializer))
+            .collect::<Vec<_>>(),
+        body.body
+            .iter()
+            .map(|row| write_row(row, serializer))
+            .collect::<Vec<_>>()
     ])
 }
 
-fn write_table_foot(foot: &crate::pandoc::table::TableFoot, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_table_foot(
+    foot: &crate::pandoc::table::TableFoot,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
     json!([
         write_attr(&foot.attr),
-        foot.rows.iter().map(|row| write_row(row, serializer)).collect::<Vec<_>>()
+        foot.rows
+            .iter()
+            .map(|row| write_row(row, serializer))
+            .collect::<Vec<_>>()
     ])
 }
 
@@ -614,10 +649,12 @@ fn write_meta(
 }
 
 fn write_blocks(blocks: &[Block], serializer: &mut SourceInfoSerializer) -> Value {
-    json!(blocks
-        .iter()
-        .map(|block| write_block(block, serializer))
-        .collect::<Vec<_>>())
+    json!(
+        blocks
+            .iter()
+            .map(|block| write_block(block, serializer))
+            .collect::<Vec<_>>()
+    )
 }
 
 fn write_pandoc(pandoc: &Pandoc, context: &ASTContext) -> Value {
