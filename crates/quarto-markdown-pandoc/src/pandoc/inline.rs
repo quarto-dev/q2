@@ -603,6 +603,7 @@ mod tests {
     fn make_space() -> Inline {
         Inline::Space(Space {
             source_info: dummy_source_info(),
+            source_info_qsm: None,
         })
     }
 
@@ -639,6 +640,7 @@ mod tests {
             ],
             content: vec![],
             source_info: dummy_source_info(),
+            source_info_qsm: None,
         });
 
         // Now call make_cite_inline with content that includes this multi-citation Cite
@@ -681,6 +683,7 @@ mod tests {
             citations: vec![make_citation("knuth1984", vec![], vec![])],
             content: vec![],
             source_info: dummy_source_info(),
+            source_info_qsm: None,
         });
 
         let content = vec![
