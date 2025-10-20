@@ -257,19 +257,42 @@ pub fn yaml_to_meta_with_source_info(
     let quarto_yaml::YamlWithSourceInfo {
         yaml: yaml_value,
         source_info,
+        tag,
         ..
     } = yaml;
 
     match yaml_value {
         Yaml::String(s) => {
-            // TODO: Check for special YAML tags (e.g., !path, !glob, !str)
-            // For now, parse all strings as markdown
+            // Check for YAML tags (e.g., !path, !glob, !str)
+            if let Some((tag_suffix, _tag_source_info)) = tag {
+                // Tagged string - bypass markdown parsing
+                // Wrap in Span with class "yaml-tagged-string" and tag attribute
+                let mut attributes = HashMap::new();
+                attributes.insert("tag".to_string(), tag_suffix.clone());
 
-            // TODO: Parse s as Markdown, creating Substring SourceInfo
-            // For now, just wrap as MetaString
-            MetaValueWithSourceInfo::MetaString {
-                value: s,
-                source_info,
+                let span = Span {
+                    attr: (
+                        String::new(),
+                        vec!["yaml-tagged-string".to_string()],
+                        attributes,
+                    ),
+                    content: vec![Inline::Str(Str {
+                        text: s.clone(),
+                        source_info: empty_source_info(),
+                        source_info_qsm: Some(source_info.clone()),
+                    })],
+                    source_info: empty_source_info(), // TODO: convert from quarto_source_map::SourceInfo when available
+                };
+                MetaValueWithSourceInfo::MetaInlines {
+                    content: vec![Inline::Span(span)],
+                    source_info, // Overall node source
+                }
+            } else {
+                // Untagged string - return as MetaString for later markdown parsing
+                MetaValueWithSourceInfo::MetaString {
+                    value: s,
+                    source_info,
+                }
             }
         }
 

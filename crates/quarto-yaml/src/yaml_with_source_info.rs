@@ -42,6 +42,13 @@ pub struct YamlWithSourceInfo {
     /// Source location for this node.
     pub source_info: SourceInfo,
 
+    /// YAML tag information (e.g., !path, !glob, !str).
+    ///
+    /// If present, contains the tag suffix (e.g., "path" for !path) and
+    /// the source location of the tag itself. Used to bypass markdown parsing
+    /// for tagged strings and enable error reporting on tags.
+    pub tag: Option<(String, SourceInfo)>,
+
     /// Source-tracked children (parallel structure).
     ///
     /// This mirrors the structure of `yaml` but includes source location
@@ -95,6 +102,21 @@ impl YamlWithSourceInfo {
         Self {
             yaml,
             source_info,
+            tag: None,
+            children: Children::None,
+        }
+    }
+
+    /// Create a new YamlWithSourceInfo for a scalar with tag information.
+    pub fn new_scalar_with_tag(
+        yaml: Yaml,
+        source_info: SourceInfo,
+        tag: Option<(String, SourceInfo)>,
+    ) -> Self {
+        Self {
+            yaml,
+            source_info,
+            tag,
             children: Children::None,
         }
     }
@@ -108,6 +130,7 @@ impl YamlWithSourceInfo {
         Self {
             yaml,
             source_info,
+            tag: None,
             children: Children::Array(children),
         }
     }
@@ -117,6 +140,7 @@ impl YamlWithSourceInfo {
         Self {
             yaml,
             source_info,
+            tag: None,
             children: Children::Hash(entries),
         }
     }

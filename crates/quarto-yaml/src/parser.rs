@@ -261,13 +261,25 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
             Event::DocumentStart => {}
             Event::DocumentEnd => {}
 
-            Event::Scalar(value, _style, _anchor_id, _tag) => {
+            Event::Scalar(value, _style, _anchor_id, tag) => {
+                // Capture tag information if present
+                let tag_info = tag.as_ref().map(|t| {
+                    // Tag appears at marker position
+                    // Format: !<suffix> where suffix is what we care about
+                    let tag_len = 1 + t.suffix.len(); // ! + suffix
+                    let tag_source_info = self.make_source_info(&marker, tag_len);
+                    (t.suffix.clone(), tag_source_info)
+                });
+
+                // Compute source info for the value itself
+                // For now, use the existing logic (marker + value length)
+                // TODO: This should account for tag length + whitespace for more accuracy
                 let len = self.compute_scalar_len(&marker, &value);
                 let source_info = self.make_source_info(&marker, len);
 
                 // Create the Yaml value
                 let yaml = parse_scalar_value(&value);
-                let node = YamlWithSourceInfo::new_scalar(yaml, source_info);
+                let node = YamlWithSourceInfo::new_scalar_with_tag(yaml, source_info, tag_info);
 
                 self.push_complete(node);
             }
