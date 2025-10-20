@@ -57,9 +57,7 @@ where
         }],
         content: vec![Inline::Str(Str {
             text: node_text(),
-            source_info: source_map_compat::node_to_source_info_with_context(
-                node, context,
-            ),
+            source_info: source_map_compat::node_to_source_info_with_context(node, context),
         })],
         source_info: source_map_compat::node_to_source_info_with_context(node, context),
     }))

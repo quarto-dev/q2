@@ -27,7 +27,8 @@ fn test_metadata_parsing() {
                 row: 0,
                 column: 0,
             },
-        }).to_source_map_info(),
+        })
+        .to_source_map_info(),
     };
 
     let meta = rawblock_to_meta(block);
@@ -76,7 +77,8 @@ fn test_yaml_tagged_strings() {
                 row: 0,
                 column: 0,
             },
-        }).to_source_map_info(),
+        })
+        .to_source_map_info(),
     };
 
     let mut meta = rawblock_to_meta(block);
@@ -171,7 +173,8 @@ fn test_yaml_markdown_parse_failure() {
                 row: 0,
                 column: 0,
             },
-        }).to_source_map_info(),
+        })
+        .to_source_map_info(),
     };
 
     let mut meta = rawblock_to_meta(block);

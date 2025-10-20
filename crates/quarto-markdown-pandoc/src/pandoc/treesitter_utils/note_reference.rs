@@ -33,6 +33,6 @@ pub fn process_note_reference(
     }
     PandocNativeIntermediate::IntermediateInline(Inline::NoteReference(NoteReference {
         id,
-        range: node_source_info_with_context(node, context).range,
+        source_info: node_source_info_with_context(node, context),
     }))
 }

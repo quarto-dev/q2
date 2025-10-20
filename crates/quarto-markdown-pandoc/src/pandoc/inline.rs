@@ -6,7 +6,6 @@
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::shortcode::Shortcode;
-use quarto_source_map::Range;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -193,7 +192,7 @@ pub struct SoftBreak {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NoteReference {
     pub id: String,
-    pub range: Range,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

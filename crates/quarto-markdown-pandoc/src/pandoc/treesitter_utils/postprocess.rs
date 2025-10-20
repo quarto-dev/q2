@@ -145,8 +145,11 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             }
 
             // Create the Str node (possibly coalesced)
-            // TODO: Properly merge SourceInfo ranges for coalesced text
-            let source_info = start_info;
+            let source_info = if did_coalesce {
+                start_info.combine(&end_info)
+            } else {
+                start_info
+            };
 
             result.push(Inline::Str(Str {
                 text: current_text,
@@ -381,7 +384,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
             })
             .with_note_reference(|note_ref| {
                 let mut kv = HashMap::new();
-                kv.insert("reference-id".to_string(), note_ref.id);
+                kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
                     vec![Inline::Span(Span {
                         attr: (
@@ -390,7 +393,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             kv,
                         ),
                         content: vec![],
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: note_ref.source_info,
                     })],
                     false,
                 )
@@ -761,10 +764,9 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                         let str_text = as_smart_str(s.text.clone());
                         if let Some(ref mut current) = current_str {
                             current.push_str(&str_text);
-                            // TODO k-69: Implement combine for quarto_source_map::SourceInfo
-                            // if let Some(ref mut info) = current_source_info {
-                            //     *info = info.combine(&s.source_info);
-                            // }
+                            if let Some(ref mut info) = current_source_info {
+                                *info = info.combine(&s.source_info);
+                            }
                             did_merge = true;
                         } else {
                             current_str = Some(str_text);

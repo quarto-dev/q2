@@ -31,9 +31,7 @@ pub fn process_uri_autolink(
     PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
         content: vec![Inline::Str(Str {
             text: content.to_string(),
-            source_info: source_map_compat::node_to_source_info_with_context(
-                node, context,
-            ),
+            source_info: source_map_compat::node_to_source_info_with_context(node, context),
         })],
         attr,
         target: (content.to_string(), "".to_string()),

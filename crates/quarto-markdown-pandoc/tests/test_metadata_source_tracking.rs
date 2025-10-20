@@ -171,7 +171,13 @@ description: This is a description
         false,
         "test.qmd",
         &mut std::io::sink(),
-        None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>,
+        None::<
+            fn(
+                &[u8],
+                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
+                &str,
+            ) -> Vec<String>,
+        >,
     )
     .expect("Failed to parse");
 
@@ -235,7 +241,13 @@ description: This is a description
     );
 
     eprintln!("\n✅ Metadata key_source preservation test passed!");
-    eprintln!("✓ Title key has proper source tracking (offset {})", title_offset);
-    eprintln!("✓ Description key has proper source tracking (offset {})", desc_offset);
+    eprintln!(
+        "✓ Title key has proper source tracking (offset {})",
+        title_offset
+    );
+    eprintln!(
+        "✓ Description key has proper source tracking (offset {})",
+        desc_offset
+    );
     eprintln!("✓ LinkedHashMap fix working - key source information preserved!");
 }

@@ -114,17 +114,6 @@ impl SourceInfo {
     }
 }
 
-pub trait SourceLocation {
-    fn filename_index(&self) -> Option<usize>;
-    fn range(&self) -> Range;
-
-    /// Resolve the filename from the ASTContext using the stored index
-    fn filename<'a>(&self, context: &'a ASTContext) -> Option<&'a String> {
-        self.filename_index()
-            .and_then(|idx| context.filenames.get(idx))
-    }
-}
-
 pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
     let start = node.start_position();
     let end = node.end_position();
@@ -143,13 +132,13 @@ pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
 }
 
 pub fn node_source_info(node: &tree_sitter::Node) -> quarto_source_map::SourceInfo {
-    quarto_source_map::SourceInfo::original(
-        quarto_source_map::FileId(0),
-        node_location(node),
-    )
+    quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), node_location(node))
 }
 
-pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> quarto_source_map::SourceInfo {
+pub fn node_source_info_with_context(
+    node: &tree_sitter::Node,
+    context: &ASTContext,
+) -> quarto_source_map::SourceInfo {
     quarto_source_map::SourceInfo::original(context.current_file_id(), node_location(node))
 }
 
@@ -198,40 +187,9 @@ pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<us
         }
         quarto_source_map::SourceMapping::Concat { pieces } => {
             // Return first non-None filename_index from pieces
-            pieces.iter().find_map(|p| extract_filename_index(&p.source_info))
+            pieces
+                .iter()
+                .find_map(|p| extract_filename_index(&p.source_info))
         }
     }
-}
-
-/// Convert quarto_source_map::Range to old location::Range
-pub fn convert_range(range: &quarto_source_map::Range) -> Range {
-    Range {
-        start: Location {
-            offset: range.start.offset,
-            row: range.start.row,
-            column: range.start.column,
-        },
-        end: Location {
-            offset: range.end.offset,
-            row: range.end.row,
-            column: range.end.column,
-        },
-    }
-}
-
-#[macro_export]
-macro_rules! impl_source_location {
-    ($($type:ty),*) => {
-        $(
-            impl SourceLocation for $type {
-                fn filename_index(&self) -> Option<usize> {
-                    crate::pandoc::location::extract_filename_index(&self.source_info)
-                }
-
-                fn range(&self) -> Range {
-                    crate::pandoc::location::convert_range(&self.source_info.range)
-                }
-            }
-        )*
-    };
 }

@@ -16,16 +16,67 @@ use std::collections::HashMap;
 /// This structure is used during JSON serialization to avoid duplicating parent chains.
 /// Each unique SourceInfo is assigned an ID and stored in a pool. References to parent
 /// SourceInfo objects are replaced with parent_id integers.
-#[derive(Serialize)]
+///
+/// Serializes in compact format: {"r": [6 range values], "t": type_code, "d": type_data}
+/// The ID is implicit from the array index in the pool.
 struct SerializableSourceInfo {
     id: usize,
     range: Range,
     mapping: SerializableSourceMapping,
 }
 
+impl Serialize for SerializableSourceInfo {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(3))?;
+
+        // Serialize range as array [start_offset, start_row, start_col, end_offset, end_row, end_col]
+        let range_array = [
+            self.range.start.offset,
+            self.range.start.row,
+            self.range.start.column,
+            self.range.end.offset,
+            self.range.end.row,
+            self.range.end.column,
+        ];
+        map.serialize_entry("r", &range_array)?;
+
+        // Serialize type code and data based on mapping variant
+        match &self.mapping {
+            SerializableSourceMapping::Original { file_id } => {
+                map.serialize_entry("t", &0)?;
+                map.serialize_entry("d", &file_id.0)?;
+            }
+            SerializableSourceMapping::Substring { parent_id, offset } => {
+                map.serialize_entry("t", &1)?;
+                map.serialize_entry("d", &[parent_id, offset])?;
+            }
+            SerializableSourceMapping::Concat { pieces } => {
+                map.serialize_entry("t", &2)?;
+                let piece_arrays: Vec<[usize; 3]> = pieces
+                    .iter()
+                    .map(|p| [p.source_info_id, p.offset_in_concat, p.length])
+                    .collect();
+                map.serialize_entry("d", &piece_arrays)?;
+            }
+            SerializableSourceMapping::Transformed { parent_id, mapping } => {
+                map.serialize_entry("t", &3)?;
+                let mapping_arrays: Vec<[usize; 4]> = mapping
+                    .iter()
+                    .map(|m| [m.from_start, m.from_end, m.to_start, m.to_end])
+                    .collect();
+                map.serialize_entry("d", &[json!(*parent_id), json!(mapping_arrays)])?;
+            }
+        }
+
+        map.end()
+    }
+}
+
 /// Serializable version of SourceMapping that uses parent_id instead of Rc<SourceInfo>.
-#[derive(Serialize)]
-#[serde(tag = "t", content = "c")]
 enum SerializableSourceMapping {
     Original {
         file_id: FileId,
@@ -44,7 +95,6 @@ enum SerializableSourceMapping {
 }
 
 /// Serializable version of SourcePiece that uses source_info_id instead of SourceInfo.
-#[derive(Serialize)]
 struct SerializableSourcePiece {
     source_info_id: usize,
     offset_in_concat: usize,
@@ -137,16 +187,16 @@ impl SourceInfoSerializer {
         id
     }
 
-    /// Serialize a SourceInfo as a JSON reference: {"$ref": id}
+    /// Serialize a SourceInfo as a JSON reference: just the id number
     fn to_json_ref(&mut self, source_info: &SourceInfo) -> Value {
         let id = self.intern(source_info);
-        json!({"$ref": id})
+        json!(id)
     }
 }
 
 fn write_location(source_info: &quarto_source_map::SourceInfo) -> Value {
     // Extract filename index by walking to the Original mapping
-    let filename_index = extract_filename_index_from_source_info(source_info);
+    let filename_index = crate::pandoc::location::extract_filename_index(source_info);
 
     json!({
         "start": {
@@ -161,22 +211,6 @@ fn write_location(source_info: &quarto_source_map::SourceInfo) -> Value {
         },
         "filenameIndex": filename_index,
     })
-}
-
-fn extract_filename_index_from_source_info(info: &quarto_source_map::SourceInfo) -> Option<usize> {
-    match &info.mapping {
-        quarto_source_map::SourceMapping::Original { file_id } => Some(file_id.0),
-        quarto_source_map::SourceMapping::Substring { parent, .. } => {
-            extract_filename_index_from_source_info(parent)
-        }
-        quarto_source_map::SourceMapping::Concat { pieces } => {
-            // Get filename from first piece
-            pieces.first().and_then(|piece| extract_filename_index_from_source_info(&piece.source_info))
-        }
-        quarto_source_map::SourceMapping::Transformed { parent, .. } => {
-            extract_filename_index_from_source_info(parent)
-        }
-    }
 }
 
 fn write_attr(attr: &Attr) -> Value {
@@ -203,34 +237,34 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
         Inline::Str(s) => json!({
             "t": "Str",
             "c": s.text,
-            "l": write_location(&s.source_info)
+            "s": serializer.to_json_ref(&s.source_info)
         }),
         Inline::Space(space) => json!({
             "t": "Space",
-            "l": write_location(&space.source_info)
+            "s": serializer.to_json_ref(&space.source_info)
         }),
         Inline::LineBreak(lb) => json!({
             "t": "LineBreak",
-            "l": write_location(&lb.source_info)
+            "s": serializer.to_json_ref(&lb.source_info)
         }),
         Inline::SoftBreak(sb) => json!({
             "t": "SoftBreak",
-            "l": write_location(&sb.source_info)
+            "s": serializer.to_json_ref(&sb.source_info)
         }),
         Inline::Emph(e) => json!({
             "t": "Emph",
             "c": write_inlines(&e.content, serializer),
-            "l": write_location(&e.source_info)
+            "s": serializer.to_json_ref(&e.source_info)
         }),
         Inline::Strong(s) => json!({
             "t": "Strong",
             "c": write_inlines(&s.content, serializer),
-            "l": write_location(&s.source_info)
+            "s": serializer.to_json_ref(&s.source_info)
         }),
         Inline::Code(c) => json!({
             "t": "Code",
             "c": [write_attr(&c.attr), c.text],
-            "l": write_location(&c.source_info)
+            "s": serializer.to_json_ref(&c.source_info)
         }),
         Inline::Math(m) => {
             let math_type = match m.math_type {
@@ -240,33 +274,33 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             json!({
                 "t": "Math",
                 "c": [math_type, m.text],
-                "l": write_location(&m.source_info)
+                "s": serializer.to_json_ref(&m.source_info)
             })
         }
         Inline::Underline(u) => json!({
             "t": "Underline",
             "c": write_inlines(&u.content, serializer),
-            "l": write_location(&u.source_info)
+            "s": serializer.to_json_ref(&u.source_info)
         }),
         Inline::Strikeout(s) => json!({
             "t": "Strikeout",
             "c": write_inlines(&s.content, serializer),
-            "l": write_location(&s.source_info)
+            "s": serializer.to_json_ref(&s.source_info)
         }),
         Inline::Superscript(s) => json!({
             "t": "Superscript",
             "c": write_inlines(&s.content, serializer),
-            "l": write_location(&s.source_info)
+            "s": serializer.to_json_ref(&s.source_info)
         }),
         Inline::Subscript(s) => json!({
             "t": "Subscript",
             "c": write_inlines(&s.content, serializer),
-            "l": write_location(&s.source_info)
+            "s": serializer.to_json_ref(&s.source_info)
         }),
         Inline::SmallCaps(s) => json!({
             "t": "SmallCaps",
             "c": write_inlines(&s.content, serializer),
-            "l": write_location(&s.source_info)
+            "s": serializer.to_json_ref(&s.source_info)
         }),
         Inline::Quoted(q) => {
             let quote_type = match q.quote_type {
@@ -276,33 +310,33 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             json!({
                 "t": "Quoted",
                 "c": [quote_type, write_inlines(&q.content, serializer)],
-                "l": write_location(&q.source_info)
+                "s": serializer.to_json_ref(&q.source_info)
             })
         }
         Inline::Link(link) => json!({
             "t": "Link",
             "c": [write_attr(&link.attr), write_inlines(&link.content, serializer), [link.target.0, link.target.1]],
-            "l": write_location(&link.source_info)
+            "s": serializer.to_json_ref(&link.source_info)
         }),
         Inline::RawInline(raw) => json!({
             "t": "RawInline",
             "c": [raw.format.clone(), raw.text.clone()],
-            "l": write_location(&raw.source_info)
+            "s": serializer.to_json_ref(&raw.source_info)
         }),
         Inline::Image(image) => json!({
             "t": "Image",
             "c": [write_attr(&image.attr), write_inlines(&image.content, serializer), [image.target.0, image.target.1]],
-            "l": write_location(&image.source_info)
+            "s": serializer.to_json_ref(&image.source_info)
         }),
         Inline::Span(span) => json!({
             "t": "Span",
             "c": [write_attr(&span.attr), write_inlines(&span.content, serializer)],
-            "l": write_location(&span.source_info)
+            "s": serializer.to_json_ref(&span.source_info)
         }),
         Inline::Note(note) => json!({
             "t": "Note",
             "c": write_blocks(&note.content, serializer),
-            "l": write_location(&note.source_info)
+            "s": serializer.to_json_ref(&note.source_info)
         }),
         // we can't test this just yet because
         // our citationNoteNum counter doesn't match Pandoc's
@@ -321,7 +355,7 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
                 }).collect::<Vec<_>>(),
                 write_inlines(&cite.content, serializer)
             ],
-            "l": write_location(&cite.source_info)
+            "s": serializer.to_json_ref(&cite.source_info)
         }),
         Inline::Shortcode(_)
         | Inline::NoteReference(_)
@@ -482,7 +516,7 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 write_caption(&figure.caption, serializer),
                 write_blocks(&figure.content, serializer)
             ],
-            "l": write_location(&figure.source_info)
+            "s": serializer.to_json_ref(&figure.source_info)
         }),
         Block::DefinitionList(deflist) => json!({
             "t": "DefinitionList",
@@ -495,7 +529,7 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                     ])
                 })
                 .collect::<Vec<_>>(),
-            "l": write_location(&deflist.source_info),
+            "s": serializer.to_json_ref(&deflist.source_info),
         }),
         Block::OrderedList(orderedlist) => json!({
             "t": "OrderedList",
@@ -503,16 +537,16 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 write_list_attributes(&orderedlist.attr),
                 write_blockss(&orderedlist.content, serializer),
             ],
-            "l": write_location(&orderedlist.source_info),
+            "s": serializer.to_json_ref(&orderedlist.source_info),
         }),
         Block::RawBlock(raw) => json!({
             "t": "RawBlock",
             "c": [raw.format.clone(), raw.text.clone()],
-            "l": write_location(&raw.source_info),
+            "s": serializer.to_json_ref(&raw.source_info),
         }),
         Block::HorizontalRule(block) => json!({
             "t": "HorizontalRule",
-            "l": write_location(&block.source_info),
+            "s": serializer.to_json_ref(&block.source_info),
         }),
         Block::Table(table) => json!({
             "t": "Table",
@@ -524,65 +558,65 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 table.bodies.iter().map(|body| write_table_body(body, serializer)).collect::<Vec<_>>(),
                 write_table_foot(&table.foot, serializer)
             ],
-            "l": write_location(&table.source_info),
+            "s": serializer.to_json_ref(&table.source_info),
         }),
 
         Block::Div(div) => json!({
             "t": "Div",
             "c": [write_attr(&div.attr), write_blocks(&div.content, serializer)],
-            "l": write_location(&div.source_info),
+            "s": serializer.to_json_ref(&div.source_info),
         }),
         Block::BlockQuote(quote) => json!({
             "t": "BlockQuote",
             "c": write_blocks(&quote.content, serializer),
-            "l": write_location(&quote.source_info),
+            "s": serializer.to_json_ref(&quote.source_info),
         }),
         Block::LineBlock(lineblock) => json!({
             "t": "LineBlock",
             "c": lineblock.content.iter().map(|inlines| write_inlines(inlines, serializer)).collect::<Vec<_>>(),
-            "l": write_location(&lineblock.source_info),
+            "s": serializer.to_json_ref(&lineblock.source_info),
         }),
         Block::Paragraph(para) => json!({
             "t": "Para",
             "c": write_inlines(&para.content, serializer),
-            "l": write_location(&para.source_info),
+            "s": serializer.to_json_ref(&para.source_info),
         }),
         Block::Header(header) => {
             json!({
                 "t": "Header",
                 "c": [header.level, write_attr(&header.attr), write_inlines(&header.content, serializer)],
-                "l": write_location(&header.source_info),
+                "s": serializer.to_json_ref(&header.source_info),
             })
         }
         Block::CodeBlock(codeblock) => json!({
             "t": "CodeBlock",
             "c": [write_attr(&codeblock.attr), codeblock.text],
-            "l": write_location(&codeblock.source_info),
+            "s": serializer.to_json_ref(&codeblock.source_info),
         }),
         Block::Plain(plain) => json!({
             "t": "Plain",
             "c": write_inlines(&plain.content, serializer),
-            "l": write_location(&plain.source_info),
+            "s": serializer.to_json_ref(&plain.source_info),
         }),
         Block::BulletList(bulletlist) => json!({
             "t": "BulletList",
             "c": bulletlist.content.iter().map(|blocks| blocks.iter().map(|block| write_block(block, serializer)).collect::<Vec<_>>()).collect::<Vec<_>>(),
-            "l": write_location(&bulletlist.source_info),
+            "s": serializer.to_json_ref(&bulletlist.source_info),
         }),
         Block::BlockMetadata(meta) => json!({
             "t": "BlockMetadata",
             "c": write_meta_value_with_source_info(&meta.meta, serializer),
-            "l": write_location(&meta.source_info),
+            "s": serializer.to_json_ref(&meta.source_info),
         }),
         Block::NoteDefinitionPara(refdef) => json!({
             "t": "NoteDefinitionPara",
             "c": [refdef.id, write_inlines(&refdef.content, serializer)],
-            "l": write_location(&refdef.source_info),
+            "s": serializer.to_json_ref(&refdef.source_info),
         }),
         Block::NoteDefinitionFencedBlock(refdef) => json!({
             "t": "NoteDefinitionFencedBlock",
             "c": [refdef.id, write_blocks(&refdef.content, serializer)],
-            "l": write_location(&refdef.source_info),
+            "s": serializer.to_json_ref(&refdef.source_info),
         }),
         Block::CaptionBlock(_) => {
             panic!(

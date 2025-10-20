@@ -268,6 +268,12 @@ where
     let pattern = format!("tests/snapshots/{}/*.qmd", format);
     let mut file_count = 0;
     let mut failures = Vec::new();
+    let mut updated_count = 0;
+
+    // Check if we should update snapshots instead of comparing
+    let update_snapshots = std::env::var("UPDATE_SNAPSHOTS")
+        .map(|v| v == "1" || v.to_lowercase() == "true")
+        .unwrap_or(false);
 
     for entry in glob(&pattern).expect("Failed to read glob pattern") {
         match entry {
@@ -290,19 +296,30 @@ where
 
                 writer(&pandoc, &context, &mut buffer).unwrap();
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
-                let snapshot = std::fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
-                    panic!(
-                        "Snapshot file {} does not exist, please create it",
-                        snapshot_path.display()
-                    )
-                });
 
-                if output.trim() != snapshot.trim() {
-                    failures.push(format!(
-                        "Snapshot mismatch for file: {}\n  Snapshot path: {}",
-                        path.display(),
-                        snapshot_path.display()
-                    ));
+                if update_snapshots {
+                    // Update mode: write the output to the snapshot file
+                    std::fs::write(&snapshot_path, &output).unwrap_or_else(|_| {
+                        panic!("Failed to write snapshot file {}", snapshot_path.display())
+                    });
+                    eprintln!("  Updated snapshot: {}", snapshot_path.display());
+                    updated_count += 1;
+                } else {
+                    // Normal mode: compare output with snapshot
+                    let snapshot = std::fs::read_to_string(&snapshot_path).unwrap_or_else(|_| {
+                        panic!(
+                            "Snapshot file {} does not exist, please create it",
+                            snapshot_path.display()
+                        )
+                    });
+
+                    if output.trim() != snapshot.trim() {
+                        failures.push(format!(
+                            "Snapshot mismatch for file: {}\n  Snapshot path: {}",
+                            path.display(),
+                            snapshot_path.display()
+                        ));
+                    }
                 }
                 file_count += 1;
             }
@@ -316,7 +333,12 @@ where
         format
     );
 
-    if !failures.is_empty() {
+    if update_snapshots {
+        eprintln!(
+            "\n✓ Updated {} snapshot(s) for format '{}'",
+            updated_count, format
+        );
+    } else if !failures.is_empty() {
         panic!(
             "\n\n{} snapshot(s) failed for format '{}':\n\n{}\n",
             failures.len(),

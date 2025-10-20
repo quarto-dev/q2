@@ -56,7 +56,7 @@ use crate::pandoc::inline::{
     Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{Range, convert_range, node_location, node_source_info, node_source_info_with_context};
+use crate::pandoc::location::{node_location, node_source_info, node_source_info_with_context};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -103,7 +103,7 @@ fn process_list(
     //     but the next item might not itself be a paragraph.
 
     let mut has_loose_item = false;
-    let mut last_para_range: Option<Range> = None;
+    let mut last_para_range: Option<quarto_source_map::Range> = None;
     let mut last_item_end_row: Option<usize> = None;
     let mut list_items: Vec<Blocks> = Vec::new();
     let mut is_ordered_list: Option<ListAttributes> = None;
@@ -201,7 +201,7 @@ fn process_list(
             if let Some(Block::Paragraph(para)) = blocks.first() {
                 // yes, so store the range and wait to finish the check on
                 // next item
-                last_para_range = Some(convert_range(&para.source_info.range));
+                last_para_range = Some(para.source_info.range.clone());
             } else {
                 // if the first block is not a paragraph, it's not loose
                 last_para_range = None;
@@ -361,12 +361,18 @@ fn process_native_inline<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
+                    source_info: quarto_source_map::SourceInfo::original(
+                        context.current_file_id(),
+                        range,
+                    ),
                 })
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
+                    source_info: quarto_source_map::SourceInfo::original(
+                        context.current_file_id(),
+                        range,
+                    ),
                 })
             }
         }
@@ -425,12 +431,18 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
+                        source_info: quarto_source_map::SourceInfo::original(
+                            context.current_file_id(),
+                            range,
+                        ),
                     }))
                 } else {
                     inlines.push(Inline::Str(Str {
                         text: apply_smart_quotes(text),
-                        source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
+                        source_info: quarto_source_map::SourceInfo::original(
+                            context.current_file_id(),
+                            range,
+                        ),
                     }))
                 }
             }
