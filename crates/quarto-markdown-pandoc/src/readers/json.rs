@@ -5,7 +5,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
-use crate::pandoc::location::{Location, Range, SourceInfo};
+use crate::pandoc::location::{Location, Range};
 use crate::pandoc::meta::MetaMapEntry;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
@@ -243,6 +243,24 @@ impl SourceInfoDeserializer {
     }
 }
 
+/// Convert from old JSON format (filename_index, range) to new SourceInfo
+fn make_source_info(filename_index: Option<usize>, range: Range) -> quarto_source_map::SourceInfo {
+    let file_id = FileId(filename_index.unwrap_or(0));
+    let qsm_range = quarto_source_map::Range {
+        start: quarto_source_map::Location {
+            offset: range.start.offset,
+            row: range.start.row,
+            column: range.start.column,
+        },
+        end: quarto_source_map::Location {
+            offset: range.end.offset,
+            row: range.end.row,
+            column: range.end.column,
+        },
+    };
+    quarto_source_map::SourceInfo::original(file_id, qsm_range)
+}
+
 fn empty_range() -> Range {
     Range {
         start: Location {
@@ -381,7 +399,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .to_string();
             Ok(Inline::Str(Str {
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Space" => {
@@ -390,7 +408,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::Space(Space {
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "LineBreak" => {
@@ -399,7 +417,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "SoftBreak" => {
@@ -408,7 +426,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .and_then(read_location)
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::SoftBreak(SoftBreak {
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Emph" => {
@@ -418,7 +436,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Emph(Emph {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Strong" => {
@@ -428,7 +446,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Strong(Strong {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Code" => {
@@ -451,7 +469,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Code(Code {
                 attr,
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Math" => {
@@ -492,7 +510,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Math(Math {
                 math_type,
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Underline" => {
@@ -502,7 +520,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Underline(Underline {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Strikeout" => {
@@ -512,7 +530,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Strikeout(Strikeout {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Superscript" => {
@@ -522,7 +540,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Superscript(Superscript {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Subscript" => {
@@ -532,7 +550,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Subscript(Subscript {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "SmallCaps" => {
@@ -542,7 +560,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::SmallCaps(SmallCaps {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Quoted" => {
@@ -580,7 +598,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Quoted(Quoted {
                 quote_type,
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Link" => {
@@ -621,7 +639,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 content,
                 target,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "RawInline" => {
@@ -651,7 +669,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::RawInline(RawInline {
                 format,
                 text,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Image" => {
@@ -694,7 +712,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 content,
                 target,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Span" => {
@@ -715,7 +733,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Span(Span {
                 attr,
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Note" => {
@@ -725,7 +743,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_blocks(c, deserializer)?;
             Ok(Inline::Note(Note {
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         "Cite" => {
@@ -807,7 +825,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Cite(Cite {
                 citations,
                 content,
-                source_info: SourceInfo::new(None, empty_range()),
+                source_info: make_source_info(None, empty_range()),
             }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
@@ -1248,7 +1266,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_inlines(c, deserializer)?;
             Ok(Block::Paragraph(Paragraph {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Plain" => {
@@ -1258,7 +1276,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_inlines(c, deserializer)?;
             Ok(Block::Plain(Plain {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "LineBlock" => {
@@ -1274,7 +1292,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .collect::<Result<Vec<_>>>()?;
             Ok(Block::LineBlock(LineBlock {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "CodeBlock" => {
@@ -1299,7 +1317,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "RawBlock" => {
@@ -1329,7 +1347,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::RawBlock(RawBlock {
                 format,
                 text,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "BlockQuote" => {
@@ -1339,7 +1357,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_blocks(c, deserializer)?;
             Ok(Block::BlockQuote(BlockQuote {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "OrderedList" => {
@@ -1359,7 +1377,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::OrderedList(OrderedList {
                 attr,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "BulletList" => {
@@ -1369,7 +1387,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_blockss(c, deserializer)?;
             Ok(Block::BulletList(BulletList {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "DefinitionList" => {
@@ -1397,7 +1415,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .collect::<Result<Vec<_>>>()?;
             Ok(Block::DefinitionList(DefinitionList {
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Header" => {
@@ -1421,11 +1439,11 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 level,
                 attr,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule {
-            source_info: SourceInfo::new(filename_index, range),
+            source_info: make_source_info(filename_index, range),
         })),
         "Figure" => {
             let c = obj
@@ -1446,7 +1464,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 caption,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Table" => {
@@ -1486,7 +1504,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 head,
                 bodies,
                 foot,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "Div" => {
@@ -1506,7 +1524,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::Div(Div {
                 attr,
                 content,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "BlockMetadata" => {
@@ -1517,7 +1535,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let meta = read_meta_value_with_source_info(c, deserializer)?;
             Ok(Block::BlockMetadata(MetaBlock {
                 meta,
-                source_info: SourceInfo::new(filename_index, range),
+                source_info: make_source_info(filename_index, range),
             }))
         }
         "NoteDefinitionPara" => {
@@ -1543,7 +1561,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 crate::pandoc::block::NoteDefinitionPara {
                     id,
                     content,
-                    source_info: SourceInfo::new(filename_index, range),
+                    source_info: make_source_info(filename_index, range),
                 },
             ))
         }
@@ -1574,7 +1592,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id,
                     content,
-                    source_info: SourceInfo::new(filename_index, range),
+                    source_info: make_source_info(filename_index, range),
                 },
             ))
         }
