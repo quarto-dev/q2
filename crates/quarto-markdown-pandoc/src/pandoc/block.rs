@@ -45,18 +45,24 @@ pub type Blocks = Vec<Block>;
 pub struct Plain {
     pub content: Inlines,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Paragraph {
     pub content: Inlines,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LineBlock {
     pub content: Vec<Inlines>,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,6 +70,8 @@ pub struct CodeBlock {
     pub attr: Attr,
     pub text: String,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -71,12 +79,16 @@ pub struct RawBlock {
     pub format: String,
     pub text: String,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BlockQuote {
     pub content: Blocks,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -84,18 +96,24 @@ pub struct OrderedList {
     pub attr: ListAttributes,
     pub content: Vec<Blocks>,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BulletList {
     pub content: Vec<Blocks>,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DefinitionList {
     pub content: Vec<(Inlines, Vec<Blocks>)>,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -104,6 +122,8 @@ pub struct Header {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -119,6 +139,8 @@ pub struct Figure {
     pub caption: Caption,
     pub content: Blocks,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -126,12 +148,16 @@ pub struct Div {
     pub attr: Attr,
     pub content: Blocks,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetaBlock {
     pub meta: MetaValueWithSourceInfo,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -139,6 +165,8 @@ pub struct NoteDefinitionPara {
     pub id: String,
     pub content: Inlines,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -146,12 +174,16 @@ pub struct NoteDefinitionFencedBlock {
     pub id: String,
     pub content: Blocks,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CaptionBlock {
     pub content: Inlines,
     pub source_info: SourceInfo,
+    /// New quarto-source-map SourceInfo for gradual migration
+    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
 }
 
 impl_source_location!(
