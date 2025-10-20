@@ -10,7 +10,7 @@ use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::{Block, Blocks, DefinitionList, Div, Figure, Plain};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::{Inline, Inlines, Space, Span, Str, Superscript};
-use crate::pandoc::location::{Range, empty_range};
+use crate::pandoc::location::empty_source_info;
 use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
@@ -563,9 +563,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                                     if i > 0 {
                                                         bracketed_content.push(Inline::Space(
                                                             Space {
-                                                                source_info: SourceInfo::with_range(
-                                                                    empty_range(),
-                                                                ),
+                                                                source_info: empty_source_info(),
                                                             },
                                                         ));
                                                     }
@@ -702,7 +700,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             // Issue a warning when caption has no preceding table
                             error_collector_ref.borrow_mut().warn_at(
                                 "Caption found without a preceding table".to_string(),
-                                caption_block.source_info.to_source_map_info(),
+                                caption_block.source_info.clone(),
                             );
                             // Remove the caption from the output (don't add to result)
                         }
@@ -745,7 +743,7 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
         pandoc,
         &mut Filter::new().with_inlines(|inlines| {
             let mut current_str: Option<String> = None;
-            let mut current_source_info: Option<SourceInfo> = None;
+            let mut current_source_info: Option<quarto_source_map::SourceInfo> = None;
             let mut result: Inlines = Vec::new();
             let mut did_merge = false;
             for inline in inlines {
@@ -754,9 +752,10 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                         let str_text = as_smart_str(s.text.clone());
                         if let Some(ref mut current) = current_str {
                             current.push_str(&str_text);
-                            if let Some(ref mut info) = current_source_info {
-                                *info = info.combine(&s.source_info);
-                            }
+                            // TODO k-69: Implement combine for quarto_source_map::SourceInfo
+                            // if let Some(ref mut info) = current_source_info {
+                            //     *info = info.combine(&s.source_info);
+                            // }
                             did_merge = true;
                         } else {
                             current_str = Some(str_text);

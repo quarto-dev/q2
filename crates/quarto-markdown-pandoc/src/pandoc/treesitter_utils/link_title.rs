@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{convert_range, node_source_info_with_context};
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a link title by removing surrounding quotes
@@ -17,6 +17,6 @@ pub fn process_link_title(
     let title = title[1..title.len() - 1].to_string();
     PandocNativeIntermediate::IntermediateBaseText(
         title,
-        node_source_info_with_context(node, context).range,
+        convert_range(&node_source_info_with_context(node, context).range),
     )
 }

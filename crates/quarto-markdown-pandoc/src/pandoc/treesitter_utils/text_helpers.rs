@@ -119,11 +119,11 @@ pub fn create_line_break_inline(
     let range = node_location(node);
     let inline = if is_hard {
         Inline::LineBreak(LineBreak {
-            source_info: SourceInfo::with_range(range),
+            source_info: SourceInfo::with_range(range).to_source_map_info(),
         })
     } else {
         Inline::SoftBreak(SoftBreak {
-            source_info: SourceInfo::with_range(range),
+            source_info: SourceInfo::with_range(range).to_source_map_info(),
         })
     };
     PandocNativeIntermediate::IntermediateInline(inline)

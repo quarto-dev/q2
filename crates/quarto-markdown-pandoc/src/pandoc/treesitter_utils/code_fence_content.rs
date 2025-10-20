@@ -7,7 +7,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{convert_range, node_source_info_with_context};
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -46,6 +46,6 @@ pub fn process_code_fence_content(
     }
     PandocNativeIntermediate::IntermediateBaseText(
         content,
-        node_source_info_with_context(node, context).range,
+        convert_range(&node_source_info_with_context(node, context).range),
     )
 }

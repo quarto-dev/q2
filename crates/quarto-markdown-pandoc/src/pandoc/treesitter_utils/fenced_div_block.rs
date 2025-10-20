@@ -67,7 +67,7 @@ pub fn process_fenced_div_block<T: Write>(
                 content.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: SourceInfo::with_range(range),
+                    source_info: SourceInfo::with_range(range).to_source_map_info(),
                 }));
             }
             _ => {

@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::location::node_source_info_with_context;
+use crate::pandoc::location::{convert_range, node_source_info_with_context};
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
 /// Process a raw format specifier, handling pandoc-reader format
@@ -18,12 +18,12 @@ pub fn process_raw_specifier(
     if raw.chars().nth(0) == Some('<') {
         PandocNativeIntermediate::IntermediateBaseText(
             "pandoc-reader:".to_string() + &raw[1..],
-            node_source_info_with_context(node, context).range,
+            convert_range(&node_source_info_with_context(node, context).range),
         )
     } else {
         PandocNativeIntermediate::IntermediateBaseText(
             raw[1..].to_string(),
-            node_source_info_with_context(node, context).range,
+            convert_range(&node_source_info_with_context(node, context).range),
         )
     }
 }

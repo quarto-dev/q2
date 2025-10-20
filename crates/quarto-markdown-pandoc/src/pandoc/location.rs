@@ -142,18 +142,18 @@ pub fn node_location(node: &tree_sitter::Node) -> Range {
     }
 }
 
-pub fn node_source_info(node: &tree_sitter::Node) -> SourceInfo {
-    SourceInfo::with_range(node_location(node))
+pub fn node_source_info(node: &tree_sitter::Node) -> quarto_source_map::SourceInfo {
+    SourceInfo::with_range(node_location(node)).to_source_map_info()
 }
 
-pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> SourceInfo {
+pub fn node_source_info_with_context(node: &tree_sitter::Node, context: &ASTContext) -> quarto_source_map::SourceInfo {
     // If the context has at least one filename, use index 0
     let filename_index = if context.filenames.is_empty() {
         None
     } else {
         Some(0)
     };
-    SourceInfo::new(filename_index, node_location(node))
+    SourceInfo::new(filename_index, node_location(node)).to_source_map_info()
 }
 
 pub fn empty_range() -> Range {
@@ -171,8 +171,8 @@ pub fn empty_range() -> Range {
     }
 }
 
-pub fn empty_source_info() -> SourceInfo {
-    SourceInfo::with_range(empty_range())
+pub fn empty_source_info() -> quarto_source_map::SourceInfo {
+    SourceInfo::with_range(empty_range()).to_source_map_info()
 }
 
 /// Extract filename index from quarto_source_map::SourceInfo by walking to Original mapping

@@ -483,9 +483,8 @@ pub fn rawblock_to_meta_with_source_info(
     // The text is "---\n<content>\n---", so content starts at index 4
     let yaml_start = block.text.find("---\n").unwrap() + 4;
 
-    // Convert old SourceInfo to new SourceInfo
-    let parent =
-        crate::pandoc::source_map_compat::old_to_new_source_info(&block.source_info, context);
+    // block.source_info is already quarto_source_map::SourceInfo
+    let parent = block.source_info.clone();
 
     // Create Substring SourceInfo for the YAML content within the RawBlock
     let yaml_parent =

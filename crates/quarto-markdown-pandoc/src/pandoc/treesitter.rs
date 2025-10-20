@@ -57,7 +57,7 @@ use crate::pandoc::inline::{
     Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{Range, empty_range, node_location};
+use crate::pandoc::location::{Range, SourceInfo, convert_range, node_location, node_source_info, node_source_info_with_context};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -68,7 +68,7 @@ use crate::traversals::bottomup_traverse_concrete_tree;
 
 use treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
-fn get_block_source_info(block: &Block) -> &SourceInfo {
+fn get_block_source_info(block: &Block) -> &quarto_source_map::SourceInfo {
     match block {
         Block::Plain(b) => &b.source_info,
         Block::Paragraph(b) => &b.source_info,
@@ -202,7 +202,7 @@ fn process_list(
             if let Some(Block::Paragraph(para)) = blocks.first() {
                 // yes, so store the range and wait to finish the check on
                 // next item
-                last_para_range = Some(para.source_info.range.clone());
+                last_para_range = Some(convert_range(&para.source_info.range));
             } else {
                 // if the first block is not a paragraph, it's not loose
                 last_para_range = None;
@@ -368,7 +368,7 @@ fn process_native_inline<T: Write>(
                             Some(0)
                         },
                         range,
-                    ),
+                    ).to_source_map_info(),
                 })
             } else {
                 let old_info = SourceInfo::new(
@@ -447,7 +447,7 @@ fn process_native_inlines<T: Write>(
                                 Some(0)
                             },
                             range,
-                        ),
+                        ).to_source_map_info(),
                     }))
                 } else {
                     let old_info = SourceInfo::new(

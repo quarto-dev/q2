@@ -10,7 +10,7 @@ use crate::filters::topdown_traverse;
 use crate::filters::{Filter, FilterReturn};
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
-use crate::pandoc::location::SourceInfo;
+use crate::pandoc::location::{SourceInfo, extract_filename_index, convert_range};
 use crate::pandoc::meta::parse_metadata_strings_with_source_info;
 use crate::pandoc::rawblock_to_meta_with_source_info;
 use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
@@ -185,8 +185,8 @@ where
             if rb.format != "quarto_minus_metadata" {
                 return Unchanged(rb);
             }
-            let filename_index = rb.source_info.filename_index;
-            let range = rb.source_info.range.clone();
+            let filename_index = extract_filename_index(&rb.source_info);
+            let range = convert_range(&rb.source_info.range);
 
             // Use new rawblock_to_meta_with_source_info - preserves source info!
             let meta_with_source = rawblock_to_meta_with_source_info(&rb, &context);
@@ -237,7 +237,7 @@ where
                 return FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
                         meta: final_meta,
-                        source_info: SourceInfo::new(filename_index, range),
+                        source_info: SourceInfo::new(filename_index, range).to_source_map_info(),
                     })],
                     false,
                 );
