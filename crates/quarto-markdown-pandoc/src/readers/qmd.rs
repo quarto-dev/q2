@@ -238,6 +238,7 @@ where
                     vec![Block::BlockMetadata(MetaBlock {
                         meta: final_meta,
                         source_info: SourceInfo::new(filename_index, range),
+                        source_info_qsm: None,
                     })],
                     false,
                 );

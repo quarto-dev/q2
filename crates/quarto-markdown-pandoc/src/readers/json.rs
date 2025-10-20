@@ -392,6 +392,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::Space(Space {
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "LineBreak" => {
@@ -401,6 +402,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "SoftBreak" => {
@@ -410,6 +412,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 .unwrap_or_else(|| (None, empty_range()));
             Ok(Inline::SoftBreak(SoftBreak {
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "Emph" => {
@@ -420,6 +423,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Emph(Emph {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Strong" => {
@@ -430,6 +434,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Strong(Strong {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Code" => {
@@ -453,6 +458,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 text,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Math" => {
@@ -494,6 +500,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 math_type,
                 text,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Underline" => {
@@ -504,6 +511,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Underline(Underline {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Strikeout" => {
@@ -514,6 +522,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Strikeout(Strikeout {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Superscript" => {
@@ -524,6 +533,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Superscript(Superscript {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Subscript" => {
@@ -534,6 +544,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Subscript(Subscript {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "SmallCaps" => {
@@ -544,6 +555,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::SmallCaps(SmallCaps {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Quoted" => {
@@ -582,6 +594,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 quote_type,
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Link" => {
@@ -623,6 +636,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 content,
                 target,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "RawInline" => {
@@ -653,6 +667,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 format,
                 text,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Image" => {
@@ -696,6 +711,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 content,
                 target,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Span" => {
@@ -717,6 +733,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Note" => {
@@ -727,6 +744,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Note(Note {
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         "Cite" => {
@@ -809,6 +827,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 citations,
                 content,
                 source_info: SourceInfo::new(None, empty_range()),
+                source_info_qsm: None,
             }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
@@ -1250,6 +1269,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::Paragraph(Paragraph {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "Plain" => {
@@ -1260,6 +1280,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::Plain(Plain {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "LineBlock" => {
@@ -1276,6 +1297,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::LineBlock(LineBlock {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "CodeBlock" => {
@@ -1301,6 +1323,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 text,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "RawBlock" => {
@@ -1331,6 +1354,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 format,
                 text,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "BlockQuote" => {
@@ -1341,6 +1365,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::BlockQuote(BlockQuote {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "OrderedList" => {
@@ -1361,6 +1386,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "BulletList" => {
@@ -1371,6 +1397,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::BulletList(BulletList {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "DefinitionList" => {
@@ -1399,6 +1426,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::DefinitionList(DefinitionList {
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "Header" => {
@@ -1423,6 +1451,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule {
@@ -1449,6 +1478,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 caption,
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "Table" => {
@@ -1489,6 +1519,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 bodies,
                 foot,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "Div" => {
@@ -1509,6 +1540,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 content,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "BlockMetadata" => {
@@ -1520,6 +1552,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::BlockMetadata(MetaBlock {
                 meta,
                 source_info: SourceInfo::new(filename_index, range),
+                source_info_qsm: None,
             }))
         }
         "NoteDefinitionPara" => {
@@ -1546,6 +1579,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                     id,
                     content,
                     source_info: SourceInfo::new(filename_index, range),
+                    source_info_qsm: None,
                 },
             ))
         }
@@ -1577,6 +1611,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                     id,
                     content,
                     source_info: SourceInfo::new(filename_index, range),
+                    source_info_qsm: None,
                 },
             ))
         }
