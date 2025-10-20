@@ -6,7 +6,6 @@
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::Blocks;
 use crate::pandoc::caption::Caption;
-use crate::pandoc::location::SourceInfo;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -68,7 +67,5 @@ pub struct Table {
     pub head: TableHead,
     pub bodies: Vec<TableBody>,
     pub foot: TableFoot,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }

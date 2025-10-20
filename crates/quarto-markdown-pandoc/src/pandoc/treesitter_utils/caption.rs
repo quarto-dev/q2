@@ -35,6 +35,5 @@ pub fn process_caption(
     PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(CaptionBlock {
         content: caption_inlines,
         source_info: node_source_info_with_context(node, context),
-        source_info_qsm: None,
     }))
 }

@@ -157,7 +157,6 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
             result.push(Inline::Str(Str {
                 text: current_text,
                 source_info,
-                source_info_qsm: None,
             }));
             i = j;
         } else {
@@ -259,7 +258,6 @@ fn transform_definition_list_div(div: Div) -> Block {
     Block::DefinitionList(DefinitionList {
         content: definition_items,
         source_info: div.source_info,
-        source_info_qsm: None,
     })
 }
 
@@ -361,16 +359,13 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             long: Some(vec![Block::Plain(Plain {
                                 content: image.content.clone(),
                                 source_info: SourceInfo::with_range(empty_range()),
-                                source_info_qsm: None,
                             })]),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
                             source_info: SourceInfo::with_range(empty_range()),
-                            source_info_qsm: None,
                         })],
                         source_info: SourceInfo::with_range(empty_range()),
-                        source_info_qsm: None,
                     })],
                     true,
                 )
@@ -398,7 +393,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         ),
                         content: vec![],
                         source_info: empty_source_info(),
-                        source_info_qsm: None,
                     })],
                     false,
                 )
@@ -412,7 +406,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
                         source_info: empty_source_info(),
-                        source_info_qsm: None,
                     })],
                     true,
                 )
@@ -426,7 +419,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
                         source_info: empty_source_info(),
-                        source_info_qsm: None,
                     })],
                     true,
                 )
@@ -440,7 +432,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
                         source_info: empty_source_info(),
-                        source_info_qsm: None,
                     })],
                     true,
                 )
@@ -454,7 +445,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
                         source_info: empty_source_info(),
-                        source_info_qsm: None,
                     })],
                     true,
                 )
@@ -485,7 +475,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     attr: (attr.0.clone(), classes, attr.2.clone()),
                                     content: vec![Inline::Math(math.clone())],
                                     source_info: empty_source_info(),
-                                    source_info_qsm: None,
                                 }));
 
                                 // Skip the Math, optional Space, and Attr
@@ -567,7 +556,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                         // e.g., "@knuth [p. 33]" becomes: Str("@knuth"), Space, Str("[p."), Space, Str("33]")
                                         cite.content.push(Inline::Space(Space {
                                             source_info: SourceInfo::with_range(empty_range()),
-                                            source_info_qsm: None,
                                         }));
 
                                         // The span content may have been merged into a single string, so we need to
@@ -584,7 +572,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                                                 source_info: SourceInfo::with_range(
                                                                     empty_range(),
                                                                 ),
-                                                                source_info_qsm: None,
                                                             },
                                                         ));
                                                     }
@@ -592,7 +579,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                                         bracketed_content.push(Inline::Str(Str {
                                                             text: word.to_string(),
                                                             source_info: s.source_info.clone(),
-                                                            source_info_qsm: None,
                                                         }));
                                                     }
                                                 }
@@ -631,7 +617,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     }
                                     result.push(Inline::Space(Space {
                                         source_info: SourceInfo::with_range(empty_range()),
-                                        source_info_qsm: None,
                                     }));
                                     result.push(inline);
                                     state = 0;
@@ -643,7 +628,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 }
                                 result.push(Inline::Space(Space {
                                     source_info: SourceInfo::with_range(empty_range()),
-                                    source_info_qsm: None,
                                 }));
                                 result.push(inline);
                                 state = 0;
@@ -659,7 +643,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     if state == 2 {
                         result.push(Inline::Space(Space {
                             source_info: SourceInfo::with_range(empty_range()),
-                            source_info_qsm: None,
                         }));
                     }
                 }
@@ -718,7 +701,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 long: Some(vec![Block::Plain(Plain {
                                     content: caption_content,
                                     source_info: caption_block.source_info.clone(),
-                                    source_info_qsm: None,
                                 })]),
                             };
                             // Don't add the CaptionBlock to the result (it's now attached)
@@ -794,7 +776,6 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                                 source_info: current_source_info
                                     .take()
                                     .unwrap_or_else(empty_source_info),
-                                source_info_qsm: None,
                             }));
                         }
                         result.push(inline);
@@ -805,7 +786,6 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                 result.push(Inline::Str(Str {
                     text: current,
                     source_info: current_source_info.unwrap_or_else(empty_source_info),
-                    source_info_qsm: None,
                 }));
             }
 

@@ -50,7 +50,6 @@ pub fn process_note_definition_fenced_block(
             id,
             content,
             source_info: node_source_info_with_context(node, context),
-            source_info_qsm: None,
         },
     ))
 }

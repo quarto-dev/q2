@@ -79,7 +79,6 @@ pub fn process_code_span<T: Write>(
             attr,
             text: "".to_string(),
             source_info: node_source_info_with_context(node, context),
-            source_info_qsm: None,
         }));
     }
     let (_, child) = inlines.remove(0);
@@ -108,7 +107,6 @@ pub fn process_code_span<T: Write>(
             format: raw,
             text,
             source_info: node_source_info_with_context(node, context),
-            source_info_qsm: None,
         }))
     } else {
         match language_attribute {
@@ -116,13 +114,11 @@ pub fn process_code_span<T: Write>(
                 attr,
                 text: lang + &" " + &text,
                 source_info: node_source_info_with_context(node, context),
-                source_info_qsm: None,
             })),
             None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
                 text,
                 source_info: node_source_info_with_context(node, context),
-                source_info_qsm: None,
             })),
         }
     }

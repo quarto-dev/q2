@@ -70,110 +70,84 @@ pub enum MathType {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Str {
     pub text: String,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Emph {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Underline {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Strong {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Strikeout {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Superscript {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Subscript {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SmallCaps {
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Quoted {
     pub quote_type: QuoteType,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Cite {
     pub citations: Vec<Citation>,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Code {
     pub attr: Attr,
     pub text: String,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Math {
     pub math_type: MathType,
     pub text: String,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RawInline {
     pub format: String,
     pub text: String,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -181,9 +155,7 @@ pub struct Link {
     pub attr: Attr,
     pub content: Inlines,
     pub target: Target,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -191,47 +163,35 @@ pub struct Image {
     pub attr: Attr,
     pub content: Inlines,
     pub target: Target,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Note {
     pub content: Blocks,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Span {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Space {
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LineBreak {
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SoftBreak {
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -261,36 +221,28 @@ pub enum CitationMode {
 pub struct Insert {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Delete {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Highlight {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EditComment {
     pub attr: Attr,
     pub content: Inlines,
-    pub source_info: SourceInfo,
-    /// New quarto-source-map SourceInfo for gradual migration
-    pub source_info_qsm: Option<quarto_source_map::SourceInfo>,
+    pub source_info: quarto_source_map::SourceInfo,
 }
 
 impl_source_location!(
@@ -389,7 +341,6 @@ pub fn make_span_inline(
             content,
             target,
             source_info,
-            source_info_qsm: None,
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -403,14 +354,12 @@ pub fn make_span_inline(
             return Inline::SmallCaps(SmallCaps {
                 content,
                 source_info,
-                source_info_qsm: None,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
             source_info,
-            source_info_qsm: None,
         });
     } else if attr.1.contains(&"ul".to_string()) {
         let mut new_attr = attr.clone();
@@ -419,14 +368,12 @@ pub fn make_span_inline(
             return Inline::Underline(Underline {
                 content,
                 source_info,
-                source_info_qsm: None,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
             source_info,
-            source_info_qsm: None,
         });
     } else if attr.1.contains(&"underline".to_string()) {
         let mut new_attr = attr.clone();
@@ -439,14 +386,12 @@ pub fn make_span_inline(
             return Inline::Underline(Underline {
                 content,
                 source_info,
-                source_info_qsm: None,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
             source_info,
-            source_info_qsm: None,
         });
     }
 
@@ -454,7 +399,6 @@ pub fn make_span_inline(
         attr,
         content,
         source_info,
-        source_info_qsm: None,
     });
 }
 
@@ -555,7 +499,6 @@ pub fn make_cite_inline(
         citations,
         content: vec![],
         source_info,
-        source_info_qsm: None,
     });
 }
 
@@ -565,7 +508,6 @@ fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline 
         format: "quarto-internal-leftover".to_string(),
         text,
         source_info: node_source_info(node),
-        source_info_qsm: None,
     })
 }
 
@@ -596,14 +538,12 @@ mod tests {
         Inline::Str(Str {
             text: text.to_string(),
             source_info: dummy_source_info(),
-            source_info_qsm: None,
         })
     }
 
     fn make_space() -> Inline {
         Inline::Space(Space {
             source_info: dummy_source_info(),
-            source_info_qsm: None,
         })
     }
 
@@ -640,7 +580,6 @@ mod tests {
             ],
             content: vec![],
             source_info: dummy_source_info(),
-            source_info_qsm: None,
         });
 
         // Now call make_cite_inline with content that includes this multi-citation Cite
@@ -683,7 +622,6 @@ mod tests {
             citations: vec![make_citation("knuth1984", vec![], vec![])],
             content: vec![],
             source_info: dummy_source_info(),
-            source_info_qsm: None,
         });
 
         let content = vec![

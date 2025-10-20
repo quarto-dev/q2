@@ -39,7 +39,6 @@ regular: This has *emphasis*
                 column: 0,
             },
         }),
-        source_info_qsm: None,
     };
 
     let context = ASTContext::default();

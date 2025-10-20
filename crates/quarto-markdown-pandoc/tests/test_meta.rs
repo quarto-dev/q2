@@ -28,7 +28,6 @@ fn test_metadata_parsing() {
                 column: 0,
             },
         }),
-        source_info_qsm: None,
     };
 
     let meta = rawblock_to_meta(block);
@@ -78,7 +77,6 @@ fn test_yaml_tagged_strings() {
                 column: 0,
             },
         }),
-        source_info_qsm: None,
     };
 
     let mut meta = rawblock_to_meta(block);
@@ -174,7 +172,6 @@ fn test_yaml_markdown_parse_failure() {
                 column: 0,
             },
         }),
-        source_info_qsm: None,
     };
 
     let mut meta = rawblock_to_meta(block);

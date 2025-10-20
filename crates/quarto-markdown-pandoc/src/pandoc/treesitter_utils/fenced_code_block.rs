@@ -65,14 +65,12 @@ pub fn process_fenced_code_block(
             format,
             text: content,
             source_info: location,
-            source_info_qsm: None,
         }))
     } else {
         PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(CodeBlock {
             attr,
             text: content,
             source_info: location,
-            source_info_qsm: None,
         }))
     }
 }

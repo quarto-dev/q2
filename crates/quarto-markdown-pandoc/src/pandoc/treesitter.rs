@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::source_map_compat;
 use crate::pandoc::treesitter_utils;
 use crate::pandoc::treesitter_utils::attribute::process_attribute;
 use crate::pandoc::treesitter_utils::atx_heading::process_atx_heading;
@@ -239,7 +240,6 @@ fn process_list(
                 let Block::Paragraph(Paragraph {
                     content,
                     source_info,
-                    source_info_qsm: _,
                 }) = first
                 else {
                     blocks.insert(0, first);
@@ -248,7 +248,6 @@ fn process_list(
                 let mut result = vec![Block::Plain(Plain {
                     content: content,
                     source_info: source_info,
-                    source_info_qsm: None,
                 })];
                 result.extend(blocks);
                 result
@@ -269,13 +268,11 @@ fn process_list(
                 attr,
                 content,
                 source_info: node_source_info_with_context(node, context),
-                source_info_qsm: None,
             }))
         }
         None => PandocNativeIntermediate::IntermediateBlock(Block::BulletList(BulletList {
             content,
             source_info: node_source_info_with_context(node, context),
-            source_info_qsm: None,
         })),
     }
 }
@@ -322,7 +319,6 @@ fn process_list_item(
                         format: "quarto_minus_metadata".to_string(),
                         text,
                         source_info: node_source_info_with_context(list_item_node, context),
-                        source_info_qsm: None,
                     }))
                 }
                 _ => None,
@@ -348,7 +344,6 @@ macro_rules! emphasis_inline {
                 Inline::$inline_type($inline_type {
                     content: inlines,
                     source_info: node_source_info_with_context(node, $context),
-                    source_info_qsm: None,
                 })
             },
         )
@@ -377,20 +372,19 @@ fn process_native_inline<T: Write>(
                         },
                         range,
                     ),
-                    source_info_qsm: None,
                 })
             } else {
+                let old_info = SourceInfo::new(
+                    if context.filenames.is_empty() {
+                        None
+                    } else {
+                        Some(0)
+                    },
+                    range,
+                );
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: SourceInfo::new(
-                        if context.filenames.is_empty() {
-                            None
-                        } else {
-                            Some(0)
-                        },
-                        range,
-                    ),
-                    source_info_qsm: None, // TODO: Populate in later migration phase
+                    source_info: source_map_compat::old_to_new_source_info(&old_info, context),
                 })
             }
         }
@@ -414,7 +408,6 @@ fn process_native_inline<T: Write>(
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: empty_source_info(),
-                source_info_qsm: None,
             })
         }
         other => {
@@ -428,7 +421,6 @@ fn process_native_inline<T: Write>(
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
                 source_info: empty_source_info(),
-                source_info_qsm: None,
             })
         }
     }
@@ -459,20 +451,19 @@ fn process_native_inlines<T: Write>(
                             },
                             range,
                         ),
-                        source_info_qsm: None,
                     }))
                 } else {
+                    let old_info = SourceInfo::new(
+                        if context.filenames.is_empty() {
+                            None
+                        } else {
+                            Some(0)
+                        },
+                        range,
+                    );
                     inlines.push(Inline::Str(Str {
                         text: apply_smart_quotes(text),
-                        source_info: SourceInfo::new(
-                            if context.filenames.is_empty() {
-                                None
-                            } else {
-                                Some(0)
-                            },
-                            range,
-                        ),
-                        source_info_qsm: None, // TODO: Populate in later migration phase
+                        source_info: source_map_compat::old_to_new_source_info(&old_info, context),
                     }))
                 }
             }
@@ -660,10 +651,8 @@ fn native_visitor<T: Write>(
                     content: vec![Block::Paragraph(Paragraph {
                         content: inlines,
                         source_info: SourceInfo::with_range(node_location(node)),
-                        source_info_qsm: None,
                     })],
                     source_info: node_source_info(node),
-                    source_info_qsm: None,
                 })
             },
         ),

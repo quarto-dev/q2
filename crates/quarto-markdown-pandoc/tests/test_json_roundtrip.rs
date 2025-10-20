@@ -34,7 +34,6 @@ fn test_json_roundtrip_simple_paragraph() {
                         },
                     },
                 ),
-                source_info_qsm: None,
             })],
             source_info: SourceInfo::new(
                 None,
@@ -51,7 +50,6 @@ fn test_json_roundtrip_simple_paragraph() {
                         },
                 },
             ),
-            source_info_qsm: None,
         })],
     };
 
@@ -120,7 +118,6 @@ fn test_json_roundtrip_complex_document() {
                                 },
                             },
                         ),
-                        source_info_qsm: None,
                     }),
                     Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
                         content: vec![Inline::Str(Str {
@@ -140,7 +137,6 @@ fn test_json_roundtrip_complex_document() {
                                     },
                                 },
                             ),
-                            source_info_qsm: None,
                         })],
                         source_info: SourceInfo::new(
                             None,
@@ -157,7 +153,6 @@ fn test_json_roundtrip_complex_document() {
                                 },
                             },
                         ),
-                        source_info_qsm: None,
                     }),
                     Inline::Str(Str {
                         text: ".".to_string(),
@@ -176,7 +171,6 @@ fn test_json_roundtrip_complex_document() {
                                 },
                             },
                         ),
-                        source_info_qsm: None,
                     }),
                 ],
                 source_info: SourceInfo::new(
@@ -194,7 +188,6 @@ fn test_json_roundtrip_complex_document() {
                         },
                     },
                 ),
-                source_info_qsm: None,
             }),
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
                 attr: ("".to_string(), vec![], HashMap::new()),
@@ -214,7 +207,6 @@ fn test_json_roundtrip_complex_document() {
                         },
                     },
                 ),
-                source_info_qsm: None,
             }),
         ],
     };
@@ -285,7 +277,6 @@ fn test_json_write_then_read_matches_original_structure() {
                             },
                         },
                     ),
-                    source_info_qsm: None,
                 })],
                 source_info: SourceInfo::new(
                     Some(0),
@@ -302,7 +293,6 @@ fn test_json_write_then_read_matches_original_structure() {
                         },
                     },
                 ),
-                source_info_qsm: None,
             }),
             Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
                 format: "html".to_string(),
@@ -322,7 +312,6 @@ fn test_json_write_then_read_matches_original_structure() {
                         },
                     },
                 ),
-                source_info_qsm: None,
             }),
         ],
     };

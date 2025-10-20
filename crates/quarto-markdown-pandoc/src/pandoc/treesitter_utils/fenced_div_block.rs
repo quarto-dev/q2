@@ -68,7 +68,6 @@ pub fn process_fenced_div_block<T: Write>(
                     format: "quarto_minus_metadata".to_string(),
                     text,
                     source_info: SourceInfo::with_range(range),
-                    source_info_qsm: None,
                 }));
             }
             _ => {
@@ -85,6 +84,5 @@ pub fn process_fenced_div_block<T: Write>(
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
-        source_info_qsm: None,
     }))
 }

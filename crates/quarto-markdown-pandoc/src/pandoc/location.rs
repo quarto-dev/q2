@@ -175,17 +175,50 @@ pub fn empty_source_info() -> SourceInfo {
     SourceInfo::with_range(empty_range())
 }
 
+/// Extract filename index from quarto_source_map::SourceInfo by walking to Original mapping
+pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<usize> {
+    match &info.mapping {
+        quarto_source_map::SourceMapping::Original { file_id } => Some(file_id.0),
+        quarto_source_map::SourceMapping::Substring { parent, .. } => {
+            extract_filename_index(parent)
+        }
+        quarto_source_map::SourceMapping::Transformed { parent, .. } => {
+            extract_filename_index(parent)
+        }
+        quarto_source_map::SourceMapping::Concat { pieces } => {
+            // Return first non-None filename_index from pieces
+            pieces.iter().find_map(|p| extract_filename_index(&p.source_info))
+        }
+    }
+}
+
+/// Convert quarto_source_map::Range to old location::Range
+pub fn convert_range(range: &quarto_source_map::Range) -> Range {
+    Range {
+        start: Location {
+            offset: range.start.offset,
+            row: range.start.row,
+            column: range.start.column,
+        },
+        end: Location {
+            offset: range.end.offset,
+            row: range.end.row,
+            column: range.end.column,
+        },
+    }
+}
+
 #[macro_export]
 macro_rules! impl_source_location {
     ($($type:ty),*) => {
         $(
             impl SourceLocation for $type {
                 fn filename_index(&self) -> Option<usize> {
-                    self.source_info.filename_index
+                    crate::pandoc::location::extract_filename_index(&self.source_info)
                 }
 
                 fn range(&self) -> Range {
-                    self.source_info.range.clone()
+                    crate::pandoc::location::convert_range(&self.source_info.range)
                 }
             }
         )*

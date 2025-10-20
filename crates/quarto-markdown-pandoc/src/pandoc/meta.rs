@@ -278,11 +278,9 @@ pub fn yaml_to_meta_with_source_info(
                     ),
                     content: vec![Inline::Str(Str {
                         text: s.clone(),
-                        source_info: empty_source_info(),
-                        source_info_qsm: Some(source_info.clone()),
+                        source_info: source_info.clone(),
                     })],
-                    source_info: empty_source_info(), // TODO: convert from quarto_source_map::SourceInfo when available
-                    source_info_qsm: None,
+                    source_info: quarto_source_map::SourceInfo::default(),
                 };
                 MetaValueWithSourceInfo::MetaInlines {
                     content: vec![Inline::Span(span)],
@@ -406,11 +404,9 @@ impl YamlEventHandler {
                 ),
                 content: vec![Inline::Str(Str {
                     text: s.to_string(),
-                    source_info: empty_source_info(),
-                    source_info_qsm: None,
+                    source_info: quarto_source_map::SourceInfo::default(),
                 })],
-                source_info: empty_source_info(),
-                source_info_qsm: None,
+                source_info: quarto_source_map::SourceInfo::default(),
             };
             return MetaValue::MetaInlines(vec![Inline::Span(span)]);
         }
@@ -586,11 +582,9 @@ pub fn parse_metadata_strings_with_source_info(
                         ),
                         content: vec![Inline::Str(Str {
                             text: value.clone(),
-                            source_info: empty_source_info(),
-                            source_info_qsm: None,
+                            source_info: quarto_source_map::SourceInfo::default(),
                         })],
-                        source_info: empty_source_info(),
-                        source_info_qsm: None,
+                        source_info: quarto_source_map::SourceInfo::default(),
                     };
                     MetaValueWithSourceInfo::MetaInlines {
                         content: vec![Inline::Span(span)],
@@ -679,10 +673,8 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                         content: vec![Inline::Str(Str {
                             text: s.clone(),
                             source_info: empty_source_info(),
-                            source_info_qsm: None,
                         })],
                         source_info: empty_source_info(),
-                        source_info_qsm: None,
                     };
                     MetaValue::MetaInlines(vec![Inline::Span(span)])
                 }

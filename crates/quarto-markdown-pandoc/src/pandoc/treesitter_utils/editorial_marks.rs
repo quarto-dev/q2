@@ -43,29 +43,29 @@ macro_rules! process_editorial_mark {
                         }
                         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                             if let Some(_) = whitespace_re.find(&text) {
+                                let old_info = SourceInfo::new(
+                                    if context.filenames.is_empty() {
+                                        None
+                                    } else {
+                                        Some(0)
+                                    },
+                                    range,
+                                );
                                 content.push(Inline::Space(Space {
-                                    source_info: SourceInfo::new(
-                                        if context.filenames.is_empty() {
-                                            None
-                                        } else {
-                                            Some(0)
-                                        },
-                                        range,
-                                    ),
-                                    source_info_qsm: None,
+                                    source_info: crate::pandoc::source_map_compat::old_to_new_source_info(&old_info, context),
                                 }))
                             } else {
+                                let old_info = SourceInfo::new(
+                                    if context.filenames.is_empty() {
+                                        None
+                                    } else {
+                                        Some(0)
+                                    },
+                                    range,
+                                );
                                 content.push(Inline::Str(Str {
                                     text: apply_smart_quotes(text),
-                                    source_info: SourceInfo::new(
-                                        if context.filenames.is_empty() {
-                                            None
-                                        } else {
-                                            Some(0)
-                                        },
-                                        range,
-                                    ),
-                                    source_info_qsm: None, // TODO: Populate in later migration phase
+                                    source_info: crate::pandoc::source_map_compat::old_to_new_source_info(&old_info, context),
                                 }))
                             }
                         }
@@ -88,7 +88,6 @@ macro_rules! process_editorial_mark {
                     attr,
                     content,
                     source_info: node_source_info_with_context(node, context),
-                    source_info_qsm: None,
                 }))
             }
         }

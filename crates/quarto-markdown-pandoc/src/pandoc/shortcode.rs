@@ -39,7 +39,6 @@ fn shortcode_value_span(str: String) -> Inline {
         ),
         content: vec![],
         source_info: empty_source_info(),
-        source_info_qsm: None,
     })
 }
 
@@ -63,7 +62,6 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
         ),
         content: vec![],
         source_info: empty_source_info(),
-        source_info_qsm: None,
     })
 }
 
@@ -128,6 +126,5 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
         ),
         content,
         source_info: empty_source_info(),
-        source_info_qsm: None,
     }
 }
