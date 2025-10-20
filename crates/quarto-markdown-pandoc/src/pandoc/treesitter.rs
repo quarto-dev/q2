@@ -57,10 +57,7 @@ use crate::pandoc::inline::{
     Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{
-    Range, SourceInfo, empty_source_info, node_location, node_source_info,
-    node_source_info_with_context,
-};
+use crate::pandoc::location::{Range, empty_range, node_location};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -407,7 +404,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
-                source_info: empty_source_info(),
+                source_info: quarto_source_map::SourceInfo::default(),
             })
         }
         other => {
@@ -420,7 +417,7 @@ fn process_native_inline<T: Write>(
             Inline::RawInline(RawInline {
                 format: "quarto-internal-leftover".to_string(),
                 text: node_text_fn(),
-                source_info: empty_source_info(),
+                source_info: quarto_source_map::SourceInfo::default(),
             })
         }
     }
@@ -650,7 +647,7 @@ fn native_visitor<T: Write>(
                 Inline::Note(Note {
                     content: vec![Block::Paragraph(Paragraph {
                         content: inlines,
-                        source_info: SourceInfo::with_range(node_location(node)),
+                        source_info: quarto_source_map::SourceInfo::default(),
                     })],
                     source_info: node_source_info(node),
                 })

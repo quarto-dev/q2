@@ -117,3 +117,21 @@ Start with k-79 (update function signatures). Key files to tackle:
 - The `SourceMapping` enum encodes transformation history
 - JSON serialization still works (derives handle it)
 - The `SourceLocation` trait is used by JSON writer (writers/json.rs)
+
+## Session Update - Continuing k-79
+
+**Current Status:** 63 errors remaining (down from 126)
+
+**Commits Made:**
+1. `3fe7a7e` - Part 1: Struct definitions complete (37 files)
+2. `ce0354e` - Part 1.5: inline.rs function signatures (126→116 errors)
+3. `8a766d9` - Part 1.6: readers/json.rs (116→79 errors)
+4. `2be14c9` - Part 1.7: postprocess.rs (79→63 errors)
+
+**Strategy Working Well:**
+- Remove old `location::SourceInfo` imports first
+- Add helper functions for conversion where needed
+- Use sed for bulk replacements of simple patterns
+- Commit frequently to track progress
+
+**Next:** Fix remaining 63 errors across various files
