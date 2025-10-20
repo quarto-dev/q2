@@ -215,5 +215,6 @@ fn make_block_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
         format: "quarto-internal-leftover".to_string(),
         text,
         source_info: node_source_info(node),
+        source_info_qsm: None,
     })
 }

@@ -389,6 +389,7 @@ pub fn make_span_inline(
             content,
             target,
             source_info,
+            source_info_qsm: None,
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -402,12 +403,14 @@ pub fn make_span_inline(
             return Inline::SmallCaps(SmallCaps {
                 content,
                 source_info,
+                source_info_qsm: None,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
             source_info,
+            source_info_qsm: None,
         });
     } else if attr.1.contains(&"ul".to_string()) {
         let mut new_attr = attr.clone();
@@ -416,12 +419,14 @@ pub fn make_span_inline(
             return Inline::Underline(Underline {
                 content,
                 source_info,
+                source_info_qsm: None,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
             source_info,
+            source_info_qsm: None,
         });
     } else if attr.1.contains(&"underline".to_string()) {
         let mut new_attr = attr.clone();
@@ -434,12 +439,14 @@ pub fn make_span_inline(
             return Inline::Underline(Underline {
                 content,
                 source_info,
+                source_info_qsm: None,
             });
         }
         let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
         return Inline::Underline(Underline {
             content: vec![inner_inline],
             source_info,
+            source_info_qsm: None,
         });
     }
 
@@ -447,6 +454,7 @@ pub fn make_span_inline(
         attr,
         content,
         source_info,
+        source_info_qsm: None,
     });
 }
 
@@ -547,6 +555,7 @@ pub fn make_cite_inline(
         citations,
         content: vec![],
         source_info,
+        source_info_qsm: None,
     });
 }
 
@@ -556,6 +565,7 @@ fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline 
         format: "quarto-internal-leftover".to_string(),
         text,
         source_info: node_source_info(node),
+        source_info_qsm: None,
     })
 }
 

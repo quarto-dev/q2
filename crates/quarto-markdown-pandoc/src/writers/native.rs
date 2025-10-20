@@ -419,6 +419,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             attr,
             text,
             source_info: _,
+            source_info_qsm: _,
         }) => {
             write!(buf, "CodeBlock ")?;
             write_native_attr(attr, buf)?;

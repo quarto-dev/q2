@@ -239,6 +239,7 @@ fn process_list(
                 let Block::Paragraph(Paragraph {
                     content,
                     source_info,
+                    source_info_qsm: _,
                 }) = first
                 else {
                     blocks.insert(0, first);
