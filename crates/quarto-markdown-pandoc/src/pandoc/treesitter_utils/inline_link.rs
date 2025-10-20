@@ -75,14 +75,14 @@ where
             attr,
             target,
             content,
-            node_source_info_with_context(node, context),
+            crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
         )
     } else {
         make_span_inline(
             attr,
             target,
             content,
-            node_source_info_with_context(node, context),
+            crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
         )
     })
 }

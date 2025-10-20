@@ -7,9 +7,7 @@ use crate::impl_source_location;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::location::Range;
-use crate::pandoc::location::SourceInfo;
 use crate::pandoc::location::SourceLocation;
-use crate::pandoc::location::node_source_info;
 use crate::pandoc::shortcode::Shortcode;
 use serde::{Deserialize, Serialize};
 
@@ -332,7 +330,7 @@ pub fn make_span_inline(
     attr: Attr,
     target: Target,
     content: Inlines,
-    source_info: SourceInfo,
+    source_info: quarto_source_map::SourceInfo,
 ) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
@@ -406,7 +404,7 @@ pub fn make_cite_inline(
     attr: Attr,
     target: Target,
     content: Inlines,
-    source_info: SourceInfo,
+    source_info: quarto_source_map::SourceInfo,
 ) -> Inline {
     // the traversal here is slightly inefficient because we need
     // to non-destructively check for the goodness of the content
@@ -502,12 +500,12 @@ pub fn make_cite_inline(
     });
 }
 
-fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline {
-    let text = node.utf8_text(input_bytes).unwrap().to_string();
+fn make_inline_leftover(_node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline {
+    let text = _node.utf8_text(input_bytes).unwrap().to_string();
     Inline::RawInline(RawInline {
         format: "quarto-internal-leftover".to_string(),
         text,
-        source_info: node_source_info(node),
+        source_info: quarto_source_map::SourceInfo::default(), // TODO: Convert from tree-sitter node
     })
 }
 
