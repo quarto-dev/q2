@@ -1,6 +1,6 @@
 # Phase 3 Migration - Current Status
 
-**Last Updated**: 2025-10-20
+**Last Updated**: 2025-10-20 (Session 2)
 
 ## Completed Work
 - ✅ k-62: Fixed YAML tag preservation bug
@@ -9,14 +9,17 @@
 - ✅ k-66: Added source_info_qsm to all 21 Block + 1 Table types
 - ✅ Created comprehensive migration guide
 - ✅ Committed Step 1: All struct definitions now have source_info_qsm field
+- ✅ Fixed pandoc/ core files (inline.rs, block.rs, treesitter.rs)
+- ✅ Fixed treesitter_utils/postprocess.rs
+- ✅ Fixed writers/native.rs pattern matching
 
 ## Current State
 **Branch**: `kyoto-source-map-migration`
-**Last Commit**: e03a520 "Phase 3 Step 2 (partial): Start fixing struct construction sites"
+**Last Commit**: f2de9e3 "Phase 3 Step 2: Fix pandoc/ and treesitter_utils/ struct constructions"
 
-**Compilation Status**: 141 missing field errors
-**Files Fixed**: 1 (paragraph.rs)
-**Files Remaining**: ~20
+**Compilation Status**: 36 missing field errors (started session at 63, fixed 27)
+**Files Fixed**: pandoc/inline.rs, pandoc/block.rs, pandoc/treesitter.rs, postprocess.rs, writers/native.rs
+**Files Remaining**: readers/json.rs (~33 errors), readers/qmd.rs (1 error), plus 2 others
 
 ## Next Steps - Sub-tasks Created
 
