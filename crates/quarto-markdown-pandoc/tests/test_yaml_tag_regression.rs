@@ -65,27 +65,11 @@ regular: This has *emphasis*
     } = &tagged_path_entry.value
     {
         assert_eq!(inlines.len(), 1, "Expected exactly one inline");
-        if let Inline::Span(span) = &inlines[0] {
-            // Should have yaml-tagged-string class
-            assert!(
-                span.attr.1.contains(&"yaml-tagged-string".to_string()),
-                "Expected yaml-tagged-string class, found: {:?}",
-                span.attr.1
-            );
-            // Should have tag attribute
-            assert_eq!(
-                span.attr.2.get("tag"),
-                Some(&"path".to_string()),
-                "Expected tag=path attribute"
-            );
-            // Extract the string content
-            if let Inline::Str(s) = &span.content[0] {
-                assert_eq!(s.text, "images/*.png");
-            } else {
-                panic!("Expected Str inline inside Span");
-            }
+        // !path tag should produce plain Str (no Span wrapper)
+        if let Inline::Str(s) = &inlines[0] {
+            assert_eq!(s.text, "images/*.png");
         } else {
-            panic!("Expected Span inline, got: {:?}", inlines[0]);
+            panic!("Expected plain Str inline for !path tag, got: {:?}", inlines[0]);
         }
     } else {
         panic!(

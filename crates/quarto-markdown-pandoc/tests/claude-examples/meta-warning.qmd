@@ -1,0 +1,7 @@
+---
+title: hello
+resources:
+  - images/*.png
+#   - !str "images/*.png"
+#   - !md images/*.png
+---

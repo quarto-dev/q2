@@ -203,6 +203,119 @@ pub fn meta_value_from_legacy(value: MetaValue) -> MetaValueWithSourceInfo {
     }
 }
 
+/// Parse a YAML string value as markdown
+///
+/// - If tag_source_info is Some: This is a !md tagged value, ERROR on parse failure
+/// - If tag_source_info is None: This is an untagged value, WARN on parse failure
+///
+/// On success: Returns MetaInlines or MetaBlocks
+/// On failure with !md: Returns error (will need to panic or collect diagnostic)
+/// On failure untagged: Returns MetaInlines with yaml-markdown-syntax-error Span + warning
+fn parse_yaml_string_as_markdown(
+    value: &str,
+    source_info: &quarto_source_map::SourceInfo,
+    context: &crate::pandoc::ast_context::ASTContext,
+    tag_source_info: Option<quarto_source_map::SourceInfo>,
+) -> MetaValueWithSourceInfo {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    let mut output_stream = VerboseOutput::Sink(io::sink());
+    let result = readers::qmd::read(
+        value.as_bytes(),
+        false,
+        "<metadata>",
+        &mut output_stream,
+        None::<
+            fn(
+                &[u8],
+                &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
+                &str,
+            ) -> Vec<String>,
+        >,
+    );
+
+    match result {
+        Ok((mut pandoc, _)) => {
+            // Parse succeeded - return as MetaInlines or MetaBlocks
+            if pandoc.blocks.len() == 1 {
+                if let crate::pandoc::Block::Paragraph(p) = &mut pandoc.blocks[0] {
+                    return MetaValueWithSourceInfo::MetaInlines {
+                        content: mem::take(&mut p.content),
+                        source_info: source_info.clone(),
+                    };
+                }
+            }
+            MetaValueWithSourceInfo::MetaBlocks {
+                content: pandoc.blocks,
+                source_info: source_info.clone(),
+            }
+        }
+        Err(_parse_errors) => {
+            if let Some(_tag_loc) = tag_source_info {
+                // !md tag: ERROR on parse failure
+                let diagnostic = DiagnosticMessageBuilder::error("Failed to parse !md tagged value")
+                    .with_code("Q-1-100")
+                    .with_location(source_info.clone())
+                    .problem("The `!md` tag requires valid markdown syntax")
+                    .add_detail(format!("Could not parse: {}", value))
+                    .add_hint("Remove the `!md` tag or fix the markdown syntax")
+                    .build();
+
+                // Print error to stderr
+                eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+
+                // For now, also return the error span so we can continue
+                // In the future, we might want to actually fail the parse
+                let span = Span {
+                    attr: (
+                        String::new(),
+                        vec!["yaml-markdown-syntax-error".to_string()],
+                        HashMap::new(),
+                    ),
+                    content: vec![Inline::Str(Str {
+                        text: value.to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                };
+                MetaValueWithSourceInfo::MetaInlines {
+                    content: vec![Inline::Span(span)],
+                    source_info: source_info.clone(),
+                }
+            } else {
+                // Untagged: WARN on parse failure
+                let diagnostic = DiagnosticMessageBuilder::warning("Failed to parse metadata value as markdown")
+                    .with_code("Q-1-101")
+                    .with_location(source_info.clone())
+                    .problem(format!("Could not parse '{}' as markdown", value))
+                    .add_hint("Add the `!str` tag to treat this as a plain string, or fix the markdown syntax")
+                    .build();
+
+                // Print warning to stderr
+                eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+
+                // Return span with yaml-markdown-syntax-error class
+                let span = Span {
+                    attr: (
+                        String::new(),
+                        vec!["yaml-markdown-syntax-error".to_string()],
+                        HashMap::new(),
+                    ),
+                    content: vec![Inline::Str(Str {
+                        text: value.to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                };
+                MetaValueWithSourceInfo::MetaInlines {
+                    content: vec![Inline::Span(span)],
+                    source_info: source_info.clone(),
+                }
+            }
+        }
+    }
+}
+
 /// Transform YamlWithSourceInfo to MetaValueWithSourceInfo
 ///
 /// This is the core transformation that:
@@ -263,35 +376,51 @@ pub fn yaml_to_meta_with_source_info(
 
     match yaml_value {
         Yaml::String(s) => {
-            // Check for YAML tags (e.g., !path, !glob, !str)
-            if let Some((tag_suffix, _tag_source_info)) = tag {
-                // Tagged string - bypass markdown parsing
-                // Wrap in Span with class "yaml-tagged-string" and tag attribute
-                let mut attributes = HashMap::new();
-                attributes.insert("tag".to_string(), tag_suffix.clone());
+            // Check for YAML tags (e.g., !path, !glob, !str, !md)
+            if let Some((tag_suffix, tag_source_info)) = tag {
+                match tag_suffix.as_str() {
+                    "str" | "path" => {
+                        // !str and !path: Emit plain Str without markdown parsing
+                        // No wrapper span, just a plain Str node
+                        MetaValueWithSourceInfo::MetaInlines {
+                            content: vec![Inline::Str(Str {
+                                text: s.clone(),
+                                source_info: source_info.clone(),
+                            })],
+                            source_info,
+                        }
+                    }
+                    "md" => {
+                        // !md: Parse as markdown immediately, ERROR if fails
+                        parse_yaml_string_as_markdown(&s, &source_info, _context, Some(tag_source_info))
+                    }
+                    _ => {
+                        // Other tags (!glob, !expr, etc.): Keep current behavior
+                        // Wrap in Span with class "yaml-tagged-string" and tag attribute
+                        let mut attributes = HashMap::new();
+                        attributes.insert("tag".to_string(), tag_suffix.clone());
 
-                let span = Span {
-                    attr: (
-                        String::new(),
-                        vec!["yaml-tagged-string".to_string()],
-                        attributes,
-                    ),
-                    content: vec![Inline::Str(Str {
-                        text: s.clone(),
-                        source_info: source_info.clone(),
-                    })],
-                    source_info: quarto_source_map::SourceInfo::default(),
-                };
-                MetaValueWithSourceInfo::MetaInlines {
-                    content: vec![Inline::Span(span)],
-                    source_info, // Overall node source
+                        let span = Span {
+                            attr: (
+                                String::new(),
+                                vec!["yaml-tagged-string".to_string()],
+                                attributes,
+                            ),
+                            content: vec![Inline::Str(Str {
+                                text: s.clone(),
+                                source_info: source_info.clone(),
+                            })],
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        };
+                        MetaValueWithSourceInfo::MetaInlines {
+                            content: vec![Inline::Span(span)],
+                            source_info, // Overall node source
+                        }
+                    }
                 }
             } else {
-                // Untagged string - return as MetaString for later markdown parsing
-                MetaValueWithSourceInfo::MetaString {
-                    value: s,
-                    source_info,
-                }
+                // Untagged string: Parse as markdown immediately, WARN if fails
+                parse_yaml_string_as_markdown(&s, &source_info, _context, None)
             }
         }
 
