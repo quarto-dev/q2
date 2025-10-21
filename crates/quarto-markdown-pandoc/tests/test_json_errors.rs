@@ -7,12 +7,7 @@ fn test_json_error_format() {
     let input = "```{python\n";
 
     // Test with new API
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     assert!(result.is_err());
     let diagnostics = result.unwrap_err();
@@ -32,12 +27,7 @@ fn test_regular_error_format() {
     let input = "```{python\n";
 
     // Test with new API
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     assert!(result.is_err());
     let diagnostics = result.unwrap_err();
@@ -55,12 +45,7 @@ fn test_newline_warning() {
     // Test file without trailing newline
     let input = "# Hello World";
 
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     // Should succeed (the newline is added automatically)
     assert!(result.is_ok());

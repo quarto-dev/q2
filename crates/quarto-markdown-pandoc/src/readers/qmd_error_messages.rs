@@ -368,7 +368,7 @@ fn find_matching_token<'a>(
 fn error_diagnostic_from_parse_state(
     input_bytes: &[u8],
     parse_state: &crate::utils::tree_sitter_log_observer::ProcessMessage,
-    _consumed_tokens: &[ConsumedToken],
+    consumed_tokens: &[ConsumedToken],
     _filename: &str,
     _source_context: &quarto_source_map::SourceContext,
 ) -> quarto_error_reporting::DiagnosticMessage {
@@ -414,14 +414,71 @@ fn error_diagnostic_from_parse_state(
             .with_location(source_info.clone())
             .problem(entry.error_info.message);
 
-        // Add notes as hints
+        // Add notes with their corresponding source locations
         for note in entry.error_info.notes {
             match note.note_type {
                 "simple" => {
-                    builder = builder.add_hint(note.message);
+                    // Find the capture that this note refers to
+                    if let Some(capture) =
+                        entry.error_info.captures.iter().find(|c| match note.label {
+                            None => false,
+                            Some(l) => c.label == l,
+                        })
+                    {
+                        // Find the consumed token that matches this capture
+                        if let Some(token) = find_matching_token(consumed_tokens, capture) {
+                            // Calculate the byte offset for this token
+                            let token_byte_offset =
+                                calculate_byte_offset(&input_str, token.row, token.column);
+                            let token_span_end = token_byte_offset + token.size.max(1);
+
+                            // Use SourceInfo::substring to create a SourceInfo for this token
+                            // This properly uses the quarto-source-map infrastructure
+                            let token_source_info = quarto_source_map::SourceInfo::substring(
+                                source_info.clone(),
+                                token_byte_offset,
+                                token_span_end,
+                            );
+
+                            // Add as info detail with location (will show as blue label in Ariadne)
+                            builder = builder.add_info_at(note.message, token_source_info);
+                        }
+                    }
                 }
                 "label-range" => {
-                    builder = builder.add_hint(note.message);
+                    // Find the begin and end captures
+                    let begin_capture = note.label_begin.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+                    let end_capture = note.label_end.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+
+                    if let (Some(begin_cap), Some(end_cap)) = (begin_capture, end_capture) {
+                        // Find the consumed tokens that match these captures
+                        let begin_token = find_matching_token(consumed_tokens, begin_cap);
+                        let end_token = find_matching_token(consumed_tokens, end_cap);
+
+                        if let (Some(begin_tok), Some(end_tok)) = (begin_token, end_token) {
+                            // Calculate the span from the beginning of begin_token to the end of end_token
+                            let begin_byte_offset =
+                                calculate_byte_offset(&input_str, begin_tok.row, begin_tok.column);
+                            let end_byte_offset =
+                                calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
+                            let range_span_end = end_byte_offset + end_tok.size.max(1);
+
+                            // Use SourceInfo::substring to create a SourceInfo for this range
+                            // This properly uses the quarto-source-map infrastructure
+                            let range_source_info = quarto_source_map::SourceInfo::substring(
+                                source_info.clone(),
+                                begin_byte_offset,
+                                range_span_end,
+                            );
+
+                            // Add as info detail with location
+                            builder = builder.add_info_at(note.message, range_source_info);
+                        }
+                    }
                 }
                 _ => {}
             }

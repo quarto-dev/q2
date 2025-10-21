@@ -94,13 +94,9 @@ fn test_yaml_serialization_with_siblings() {
         // Parse and serialize
         let mut output_stream =
             quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-        let (pandoc, context, _warnings) = readers::qmd::read(
-            yaml.as_bytes(),
-            false,
-            "test.qmd",
-            &mut output_stream,
-        )
-        .expect("Failed to parse QMD");
+        let (pandoc, context, _warnings) =
+            readers::qmd::read(yaml.as_bytes(), false, "test.qmd", &mut output_stream)
+                .expect("Failed to parse QMD");
 
         let mut json_output = Vec::new();
         writers::json::write(&pandoc, &context, &mut json_output).expect("Failed to write JSON");
@@ -134,13 +130,9 @@ Some content.
 
     let mut output_stream =
         quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-    let (pandoc, context, _warnings) = readers::qmd::read(
-        yaml.as_bytes(),
-        false,
-        "test.qmd",
-        &mut output_stream,
-    )
-    .expect("Failed to parse QMD");
+    let (pandoc, context, _warnings) =
+        readers::qmd::read(yaml.as_bytes(), false, "test.qmd", &mut output_stream)
+            .expect("Failed to parse QMD");
 
     let mut json_output = Vec::new();
     writers::json::write(&pandoc, &context, &mut json_output).expect("Failed to write JSON");

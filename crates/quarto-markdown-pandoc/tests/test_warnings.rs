@@ -13,12 +13,7 @@ Some content
 "#;
 
     // Parse the document
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     // Parsing should succeed (warnings are not errors)
     assert!(
@@ -45,12 +40,7 @@ fn test_caption_with_table_no_warning() {
 "#;
 
     // Parse the document
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     // Parsing should succeed and no warnings should be emitted
     assert!(

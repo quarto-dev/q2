@@ -95,13 +95,8 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
 
-    let (doc, context, _warnings) = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "<input>",
-        &mut std::io::sink(),
-    )
-    .unwrap();
+    let (doc, context, _warnings) =
+        readers::qmd::read(input.as_bytes(), false, "<input>", &mut std::io::sink()).unwrap();
     writers::native::write(&doc, &mut buf1).unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
     writers::json::write(&doc, &context, &mut buf2).unwrap();
@@ -284,7 +279,8 @@ where
                     false,
                     &path.to_string_lossy(),
                     &mut output_stream,
-                ).unwrap();
+                )
+                .unwrap();
 
                 writer(&pandoc, &context, &mut buffer).unwrap();
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
@@ -653,7 +649,8 @@ fn test_qmd_roundtrip_consistency() {
                     false,
                     path.to_str().unwrap(),
                     &mut std::io::sink(),
-                ).expect("Failed to parse original QMD");
+                )
+                .expect("Failed to parse original QMD");
 
                 let mut json_buf = Vec::new();
                 writers::json::write(&doc1, &context1, &mut json_buf)
@@ -674,7 +671,8 @@ fn test_qmd_roundtrip_consistency() {
                     false,
                     "<generated>",
                     &mut std::io::sink(),
-                ).expect("Failed to parse regenerated QMD");
+                )
+                .expect("Failed to parse regenerated QMD");
 
                 // Compare JSON representations (without location fields)
                 let mut json1_buf = Vec::new();

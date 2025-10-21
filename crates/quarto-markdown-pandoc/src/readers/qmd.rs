@@ -92,7 +92,9 @@ pub fn read<T: Write>(
     // Add the input content to the SourceContext for proper error rendering
     let input_str = String::from_utf8_lossy(input_bytes).to_string();
     context.source_context = quarto_source_map::SourceContext::new();
-    context.source_context.add_file(filename.to_string(), Some(input_str));
+    context
+        .source_context
+        .add_file(filename.to_string(), Some(input_str));
 
     log_observer.parses.iter().for_each(|parse| {
         writeln!(output_stream, "tree-sitter parse:").unwrap();
