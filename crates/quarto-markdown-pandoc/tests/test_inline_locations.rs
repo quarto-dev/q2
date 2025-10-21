@@ -78,7 +78,7 @@ fn test_inline_source_locations() {
     let hello_str = &inlines[0];
     assert_eq!(hello_str["t"], "Str");
     assert_eq!(hello_str["c"], "hello");
-    let (start_off, start_row, start_col, end_off, end_row, end_col, _type) =
+    let (start_off, _start_row, start_col, end_off, _end_row, end_col, _type) =
         resolve_source_ref(&hello_str["s"], pool);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);

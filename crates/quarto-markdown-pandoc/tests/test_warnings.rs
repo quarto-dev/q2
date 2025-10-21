@@ -1,5 +1,4 @@
 use quarto_markdown_pandoc::readers;
-use quarto_markdown_pandoc::utils;
 
 #[test]
 fn test_caption_without_table_warning() {
