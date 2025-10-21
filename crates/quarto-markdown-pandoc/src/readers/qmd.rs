@@ -13,7 +13,7 @@ use crate::pandoc::block::MetaBlock;
 use crate::pandoc::meta::parse_metadata_strings_with_source_info;
 use crate::pandoc::rawblock_to_meta_with_source_info;
 use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
-use crate::readers::qmd_error_messages::{produce_error_message, produce_error_message_json};
+use crate::readers::qmd_error_messages::{produce_diagnostic_messages, produce_error_message_json};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
 use std::io::Write;
@@ -86,6 +86,14 @@ pub fn read<T: Write>(
     let tree = parser
         .parse(&input_bytes, None)
         .expect("Failed to parse input");
+
+    // Create ASTContext early so we can use it for error diagnostics
+    let mut context = ASTContext::with_filename(filename.to_string());
+    // Add the input content to the SourceContext for proper error rendering
+    let input_str = String::from_utf8_lossy(input_bytes).to_string();
+    context.source_context = quarto_source_map::SourceContext::new();
+    context.source_context.add_file(filename.to_string(), Some(input_str));
+
     log_observer.parses.iter().for_each(|parse| {
         writeln!(output_stream, "tree-sitter parse:").unwrap();
         parse
@@ -95,12 +103,13 @@ pub fn read<T: Write>(
         writeln!(output_stream, "---").unwrap();
     });
     if log_observer.had_errors() {
-        // Use the default ariadne formatter and convert to DiagnosticMessage
-        let error_strings = produce_error_message(input_bytes, &log_observer, filename);
-        let diagnostics: Vec<quarto_error_reporting::DiagnosticMessage> = error_strings
-            .into_iter()
-            .map(|msg| quarto_error_reporting::generic_error!(msg))
-            .collect();
+        // Produce structured DiagnosticMessage objects with proper source locations
+        let diagnostics = produce_diagnostic_messages(
+            input_bytes,
+            &log_observer,
+            filename,
+            &context.source_context,
+        );
         return Err(diagnostics);
     }
 
@@ -127,8 +136,6 @@ pub fn read<T: Write>(
         }
         return Err(diagnostics);
     }
-
-    let context = ASTContext::with_filename(filename.to_string());
 
     // Create diagnostic collector and convert to Pandoc AST
     let mut error_collector = DiagnosticCollector::new();
