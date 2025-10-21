@@ -18,9 +18,6 @@ Some content
         false,
         "test.md",
         &mut std::io::sink(),
-        None::<
-            fn(&[u8], &utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>,
-        >,
     );
 
     // Parsing should succeed (warnings are not errors)
@@ -53,9 +50,6 @@ fn test_caption_with_table_no_warning() {
         false,
         "test.md",
         &mut std::io::sink(),
-        None::<
-            fn(&[u8], &utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>,
-        >,
     );
 
     // Parsing should succeed and no warnings should be emitted
@@ -64,7 +58,7 @@ fn test_caption_with_table_no_warning() {
         "Document with valid table caption should parse successfully"
     );
 
-    let (pandoc, _context) = result.unwrap();
+    let (pandoc, _context, _warnings) = result.unwrap();
 
     // Verify we have a table in the output
     assert!(

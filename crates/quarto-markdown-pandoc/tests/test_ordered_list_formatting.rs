@@ -21,18 +21,11 @@ fn test_ordered_list_10plus_formatting() {
 11. Eleventh item"#;
 
     // Parse the markdown
-    let (doc, _context) = readers::qmd::read(
+    let (doc, _context, _warnings) = readers::qmd::read(
         input.as_bytes(),
         false,
         "<test>",
         &mut std::io::sink(),
-        None::<
-            fn(
-                &[u8],
-                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
     )
     .unwrap();
 
@@ -87,18 +80,11 @@ fn test_ordered_list_continuation_indentation() {
     with continuation"#;
 
     // Parse the markdown
-    let (doc, _context) = readers::qmd::read(
+    let (doc, _context, _warnings) = readers::qmd::read(
         input.as_bytes(),
         false,
         "<test>",
         &mut std::io::sink(),
-        None::<
-            fn(
-                &[u8],
-                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
     )
     .unwrap();
 

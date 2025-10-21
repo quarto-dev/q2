@@ -38,13 +38,21 @@ pub fn qmd_to_pandoc(
     Vec<String>,
 > {
     let mut output = VerboseOutput::Sink(io::sink());
-    readers::qmd::read(
+    match readers::qmd::read(
         input,
         false,
         "<input>",
         &mut output,
-        None::<fn(&[u8], &TreeSitterLogObserver, &str) -> Vec<String>>,
-    )
+    ) {
+        Ok((pandoc, context, _warnings)) => {
+            // TODO: Decide how to handle warnings in WASM context
+            Ok((pandoc, context))
+        }
+        Err(diagnostics) => {
+            // Convert diagnostics to strings for backward compatibility
+            Err(diagnostics.iter().map(|d| d.to_text(None)).collect())
+        }
+    }
 }
 
 pub fn parse_qmd(input: &[u8]) -> String {

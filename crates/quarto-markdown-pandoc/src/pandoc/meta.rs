@@ -216,26 +216,17 @@ fn parse_yaml_string_as_markdown(
     source_info: &quarto_source_map::SourceInfo,
     context: &crate::pandoc::ast_context::ASTContext,
     tag_source_info: Option<quarto_source_map::SourceInfo>,
+    diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> MetaValueWithSourceInfo {
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
     let mut output_stream = VerboseOutput::Sink(io::sink());
-    let result = readers::qmd::read(
-        value.as_bytes(),
-        false,
-        "<metadata>",
-        &mut output_stream,
-        None::<
-            fn(
-                &[u8],
-                &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
-    );
+    let result = readers::qmd::read(value.as_bytes(), false, "<metadata>", &mut output_stream);
 
     match result {
-        Ok((mut pandoc, _)) => {
+        Ok((mut pandoc, _, _warnings)) => {
+            // TODO: Handle warnings from recursive parse
+            // For now we ignore them since they'll be rare in metadata
             // Parse succeeded - return as MetaInlines or MetaBlocks
             if pandoc.blocks.len() == 1 {
                 if let crate::pandoc::Block::Paragraph(p) = &mut pandoc.blocks[0] {
@@ -253,16 +244,17 @@ fn parse_yaml_string_as_markdown(
         Err(_parse_errors) => {
             if let Some(_tag_loc) = tag_source_info {
                 // !md tag: ERROR on parse failure
-                let diagnostic = DiagnosticMessageBuilder::error("Failed to parse !md tagged value")
-                    .with_code("Q-1-100")
-                    .with_location(source_info.clone())
-                    .problem("The `!md` tag requires valid markdown syntax")
-                    .add_detail(format!("Could not parse: {}", value))
-                    .add_hint("Remove the `!md` tag or fix the markdown syntax")
-                    .build();
+                let diagnostic =
+                    DiagnosticMessageBuilder::error("Failed to parse !md tagged value")
+                        .with_code("Q-1-100")
+                        .with_location(source_info.clone())
+                        .problem("The `!md` tag requires valid markdown syntax")
+                        .add_detail(format!("Could not parse: {}", value))
+                        .add_hint("Remove the `!md` tag or fix the markdown syntax")
+                        .build();
 
-                // Print error to stderr
-                eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                // Collect diagnostic instead of printing
+                diagnostics.add(diagnostic);
 
                 // For now, also return the error span so we can continue
                 // In the future, we might want to actually fail the parse
@@ -291,8 +283,8 @@ fn parse_yaml_string_as_markdown(
                     .add_hint("Add the `!str` tag to treat this as a plain string, or fix the markdown syntax")
                     .build();
 
-                // Print warning to stderr
-                eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                // Collect diagnostic instead of printing
+                diagnostics.add(diagnostic);
 
                 // Return span with yaml-markdown-syntax-error class
                 let span = Span {
@@ -328,6 +320,7 @@ fn parse_yaml_string_as_markdown(
 pub fn yaml_to_meta_with_source_info(
     yaml: quarto_yaml::YamlWithSourceInfo,
     _context: &crate::pandoc::ast_context::ASTContext,
+    diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> MetaValueWithSourceInfo {
     use yaml_rust2::Yaml;
 
@@ -337,7 +330,7 @@ pub fn yaml_to_meta_with_source_info(
         let (items, source_info) = yaml.into_array().unwrap();
         let meta_items = items
             .into_iter()
-            .map(|item| yaml_to_meta_with_source_info(item, _context))
+            .map(|item| yaml_to_meta_with_source_info(item, _context, diagnostics))
             .collect();
 
         return MetaValueWithSourceInfo::MetaList {
@@ -355,7 +348,7 @@ pub fn yaml_to_meta_with_source_info(
                 entry.key.yaml.as_str().map(|key_str| MetaMapEntry {
                     key: key_str.to_string(),
                     key_source: entry.key_span,
-                    value: yaml_to_meta_with_source_info(entry.value, _context),
+                    value: yaml_to_meta_with_source_info(entry.value, _context, diagnostics),
                 })
             })
             .collect();
@@ -392,7 +385,13 @@ pub fn yaml_to_meta_with_source_info(
                     }
                     "md" => {
                         // !md: Parse as markdown immediately, ERROR if fails
-                        parse_yaml_string_as_markdown(&s, &source_info, _context, Some(tag_source_info))
+                        parse_yaml_string_as_markdown(
+                            &s,
+                            &source_info,
+                            _context,
+                            Some(tag_source_info),
+                            diagnostics,
+                        )
                     }
                     _ => {
                         // Other tags (!glob, !expr, etc.): Keep current behavior
@@ -420,7 +419,7 @@ pub fn yaml_to_meta_with_source_info(
                 }
             } else {
                 // Untagged string: Parse as markdown immediately, WARN if fails
-                parse_yaml_string_as_markdown(&s, &source_info, _context, None)
+                parse_yaml_string_as_markdown(&s, &source_info, _context, None, diagnostics)
             }
         }
 
@@ -597,6 +596,7 @@ impl MarkedEventReceiver for YamlEventHandler {
 pub fn rawblock_to_meta_with_source_info(
     block: &RawBlock,
     context: &crate::pandoc::ast_context::ASTContext,
+    diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> MetaValueWithSourceInfo {
     if block.format != "quarto_minus_metadata" {
         panic!(
@@ -630,7 +630,7 @@ pub fn rawblock_to_meta_with_source_info(
 
     // Transform YamlWithSourceInfo to MetaValueWithSourceInfo
     // Pass by value since yaml is no longer needed
-    yaml_to_meta_with_source_info(yaml, context)
+    yaml_to_meta_with_source_info(yaml, context, diagnostics)
 }
 
 /// Legacy version: Convert RawBlock to Meta (old implementation)
@@ -661,25 +661,16 @@ pub fn rawblock_to_meta(block: RawBlock) -> Meta {
 pub fn parse_metadata_strings_with_source_info(
     meta: MetaValueWithSourceInfo,
     outer_metadata: &mut Vec<MetaMapEntry>,
+    diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> MetaValueWithSourceInfo {
     match meta {
         MetaValueWithSourceInfo::MetaString { value, source_info } => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
-            let result = readers::qmd::read(
-                value.as_bytes(),
-                false,
-                "<metadata>",
-                &mut output_stream,
-                None::<
-                    fn(
-                        &[u8],
-                        &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                        &str,
-                    ) -> Vec<String>,
-                >,
-            );
+            let result =
+                readers::qmd::read(value.as_bytes(), false, "<metadata>", &mut output_stream);
             match result {
-                Ok((mut pandoc, _context)) => {
+                Ok((mut pandoc, _context, _warnings)) => {
+                    // TODO: Handle warnings from recursive parse
                     // Merge parsed metadata, preserving full MetaMapEntry with key_source
                     if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
                         for entry in entries {
@@ -724,7 +715,9 @@ pub fn parse_metadata_strings_with_source_info(
         MetaValueWithSourceInfo::MetaList { items, source_info } => {
             let parsed_items = items
                 .into_iter()
-                .map(|item| parse_metadata_strings_with_source_info(item, outer_metadata))
+                .map(|item| {
+                    parse_metadata_strings_with_source_info(item, outer_metadata, diagnostics)
+                })
                 .collect();
             MetaValueWithSourceInfo::MetaList {
                 items: parsed_items,
@@ -740,7 +733,11 @@ pub fn parse_metadata_strings_with_source_info(
                 .map(|entry| MetaMapEntry {
                     key: entry.key,
                     key_source: entry.key_source,
-                    value: parse_metadata_strings_with_source_info(entry.value, outer_metadata),
+                    value: parse_metadata_strings_with_source_info(
+                        entry.value,
+                        outer_metadata,
+                        diagnostics,
+                    ),
                 })
                 .collect();
             MetaValueWithSourceInfo::MetaMap {
@@ -761,16 +758,10 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                 false,
                 "<metadata>",
                 &mut output_stream,
-                None::<
-                    fn(
-                        &[u8],
-                        &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                        &str,
-                    ) -> Vec<String>,
-                >,
             );
             match result {
-                Ok((mut pandoc, _context)) => {
+                Ok((mut pandoc, _context, _warnings)) => {
+                    // TODO: Handle warnings from recursive parse
                     // pandoc.meta is now MetaValueWithSourceInfo, convert it to Meta
                     if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
                         for entry in entries {
