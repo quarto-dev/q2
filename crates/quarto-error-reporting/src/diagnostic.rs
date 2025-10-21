@@ -325,14 +325,46 @@ impl DiagnosticMessage {
         if !has_ariadne {
             // No ariadne - show everything in tidyverse style
 
-            // Title with kind prefix (e.g., "Error: Invalid input")
+            // Title with kind prefix and error code (e.g., "Error [Q-1-1]: Invalid input")
             let kind_str = match self.kind {
                 DiagnosticKind::Error => "Error",
                 DiagnosticKind::Warning => "Warning",
                 DiagnosticKind::Info => "Info",
                 DiagnosticKind::Note => "Note",
             };
-            write!(result, "{}: {}\n", kind_str, self.title).unwrap();
+            if let Some(code) = &self.code {
+                write!(result, "{} [{}]: {}\n", kind_str, code, self.title).unwrap();
+            } else {
+                write!(result, "{}: {}\n", kind_str, self.title).unwrap();
+            }
+
+            // Show location info if available (but no ariadne rendering)
+            if let Some(loc) = &self.location {
+                // Try to map with context if available
+                if let Some(ctx) = ctx {
+                    if let Some(mapped) = loc.map_offset(loc.range.start.offset, ctx) {
+                        if let Some(file) = ctx.get_file(mapped.file_id) {
+                            write!(
+                                result,
+                                "  at {}:{}:{}\n",
+                                file.path,
+                                mapped.location.row + 1,
+                                mapped.location.column + 1
+                            )
+                            .unwrap();
+                        }
+                    }
+                } else {
+                    // No context: show immediate location (1-indexed for display)
+                    write!(
+                        result,
+                        "  at {}:{}\n",
+                        loc.range.start.row + 1,
+                        loc.range.start.column + 1
+                    )
+                    .unwrap();
+                }
+            }
 
             // Problem statement (optional additional context)
             if let Some(problem) = &self.problem {
@@ -651,13 +683,13 @@ mod tests {
     #[test]
     fn test_to_text_simple_error() {
         let msg = DiagnosticMessage::error("Something went wrong");
-        assert_eq!(msg.to_text(None), "Error: Something went wrong");
+        assert_eq!(msg.to_text(None), "Error: Something went wrong\n");
     }
 
     #[test]
     fn test_to_text_with_code() {
         let msg = DiagnosticMessage::error("Something went wrong").with_code("Q-1-1");
-        assert_eq!(msg.to_text(None), "Error [Q-1-1]: Something went wrong");
+        assert_eq!(msg.to_text(None), "Error [Q-1-1]: Something went wrong\n");
     }
 
     #[test]
