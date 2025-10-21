@@ -7,7 +7,6 @@
 #[macro_use]
 extern crate libfuzzer_sys;
 use quarto_markdown_pandoc::readers;
-use quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {
@@ -16,7 +15,6 @@ fuzz_target!(|data: &[u8]| {
             false,
             "<input>",
             &mut std::io::sink(),
-            None::<fn(&[u8], &TreeSitterLogObserver, &str) -> Vec<String>>,
         );
     }
 });

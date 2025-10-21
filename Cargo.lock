@@ -418,6 +418,7 @@ dependencies = [
  "colored",
  "glob",
  "include_dir",
+ "quarto-error-reporting",
  "quarto-markdown-pandoc",
  "regex",
  "serde",
