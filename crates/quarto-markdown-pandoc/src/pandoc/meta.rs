@@ -214,7 +214,7 @@ pub fn meta_value_from_legacy(value: MetaValue) -> MetaValueWithSourceInfo {
 fn parse_yaml_string_as_markdown(
     value: &str,
     source_info: &quarto_source_map::SourceInfo,
-    context: &crate::pandoc::ast_context::ASTContext,
+    _context: &crate::pandoc::ast_context::ASTContext,
     tag_source_info: Option<quarto_source_map::SourceInfo>,
     diagnostics: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> MetaValueWithSourceInfo {
@@ -224,9 +224,11 @@ fn parse_yaml_string_as_markdown(
     let result = readers::qmd::read(value.as_bytes(), false, "<metadata>", &mut output_stream);
 
     match result {
-        Ok((mut pandoc, _, _warnings)) => {
-            // TODO: Handle warnings from recursive parse
-            // For now we ignore them since they'll be rare in metadata
+        Ok((mut pandoc, _, warnings)) => {
+            // Propagate warnings from recursive parse
+            for warning in warnings {
+                diagnostics.add(warning);
+            }
             // Parse succeeded - return as MetaInlines or MetaBlocks
             if pandoc.blocks.len() == 1 {
                 if let crate::pandoc::Block::Paragraph(p) = &mut pandoc.blocks[0] {
@@ -669,8 +671,11 @@ pub fn parse_metadata_strings_with_source_info(
             let result =
                 readers::qmd::read(value.as_bytes(), false, "<metadata>", &mut output_stream);
             match result {
-                Ok((mut pandoc, _context, _warnings)) => {
-                    // TODO: Handle warnings from recursive parse
+                Ok((mut pandoc, _context, warnings)) => {
+                    // Propagate warnings from recursive parse
+                    for warning in warnings {
+                        diagnostics.add(warning);
+                    }
                     // Merge parsed metadata, preserving full MetaMapEntry with key_source
                     if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
                         for entry in entries {

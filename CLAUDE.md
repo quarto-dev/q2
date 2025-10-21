@@ -138,3 +138,4 @@ When fixing ANY bug:
 - .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use claude-notes in this directory)
 - Sometimes you get confused by macOS's weird renaming of /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
 - The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.
+- Do NOT add "TODO, for now, ignore.." or other things to your code without asking me about it or reporting back.

@@ -128,9 +128,9 @@ fn main() {
                             eprintln!("{}", warning.to_json());
                         }
                     } else {
-                        // Text format (default)
+                        // Text format (default) - pass source_context for Ariadne rendering
                         for warning in warnings {
-                            eprintln!("{}", warning.to_text(None));
+                            eprintln!("{}", warning.to_text(Some(&context.source_context)));
                         }
                     }
                     (pandoc, context)
@@ -143,8 +143,12 @@ fn main() {
                             println!("{}", diagnostic.to_json());
                         }
                     } else {
+                        // Build a minimal source context for Ariadne rendering
+                        let mut source_context = quarto_source_map::SourceContext::new();
+                        source_context.add_file(input_filename.to_string(), Some(input.clone()));
+
                         for diagnostic in diagnostics {
-                            eprintln!("{}", diagnostic.to_text(None));
+                            eprintln!("{}", diagnostic.to_text(Some(&source_context)));
                         }
                     }
                     std::process::exit(1);

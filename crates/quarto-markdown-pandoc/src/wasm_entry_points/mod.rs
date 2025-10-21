@@ -5,7 +5,6 @@
 
 use crate::readers;
 use crate::utils::output::VerboseOutput;
-use crate::utils::tree_sitter_log_observer::TreeSitterLogObserver;
 use std::io;
 
 fn pandoc_to_json(
