@@ -139,3 +139,4 @@ When fixing ANY bug:
 - Sometimes you get confused by macOS's weird renaming of /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
 - The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.
 - Do NOT add "TODO, for now, ignore.." or other things to your code without asking me about it or reporting back.
+- **CRITICALLY IMPORTANT**. IF YOU EVER FIND YOURSELF WANTING TO WRITE A HACKY SOLUTION (OR A "TODO" THAT UNDOES EXISTING WORK), STOP AND ASK THE USER. THAT MEANS YOUR PLAN IS NOT GOOD ENOUGH
