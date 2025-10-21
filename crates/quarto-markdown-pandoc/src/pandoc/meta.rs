@@ -104,6 +104,30 @@ impl MetaValueWithSourceInfo {
         }
     }
 
+    /// Check if this MetaValue represents a string with a specific value
+    ///
+    /// This handles both:
+    /// - MetaString { value, .. } where value == expected
+    /// - MetaInlines { content, .. } where content is a single Str with text == expected
+    ///
+    /// This is needed because after k-90/k-95, YAML strings are parsed as markdown
+    /// and become MetaInlines containing a single Str node.
+    pub fn is_string_value(&self, expected: &str) -> bool {
+        match self {
+            MetaValueWithSourceInfo::MetaString { value, .. } => value == expected,
+            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                // Check if it's a single Str inline with the expected text
+                if content.len() == 1 {
+                    if let crate::pandoc::Inline::Str(str_node) = &content[0] {
+                        return str_node.text == expected;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
     /// Convert to old Meta format (loses source info)
     pub fn to_meta_value(&self) -> MetaValue {
         match self {

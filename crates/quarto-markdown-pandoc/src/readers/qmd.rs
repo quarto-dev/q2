@@ -171,13 +171,9 @@ pub fn read<T: Write>(
             // Check if this is lexical metadata
             let is_lexical =
                 if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_with_source {
-                    entries.iter().any(|e| {
-                    e.key == "_scope"
-                        && matches!(
-                            &e.value,
-                            MetaValueWithSourceInfo::MetaString { value, .. } if value == "lexical"
-                        )
-                })
+                    entries
+                        .iter()
+                        .any(|e| e.key == "_scope" && e.value.is_string_value("lexical"))
                 } else {
                     false
                 };
