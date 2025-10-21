@@ -15,6 +15,11 @@ pub struct SourceContext {
 pub struct SourceFile {
     /// File path or identifier
     pub path: String,
+    /// File content (for ephemeral/in-memory files)
+    /// When Some, content is stored in memory (e.g., for <anonymous> or test files)
+    /// When None, content should be read from disk using the path
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
     /// File information for efficient location lookups (optional for serialization)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_info: Option<FileInformation>,
@@ -36,11 +41,32 @@ impl SourceContext {
     }
 
     /// Add a file to the context and return its ID
+    ///
+    /// - If content is Some: Creates an ephemeral (in-memory) file. Content is stored and used for ariadne rendering.
+    /// - If content is None: Creates a disk-backed file. Content will be read from disk when needed (path must exist).
+    ///
+    /// For ephemeral files, FileInformation is created immediately from the provided content.
+    /// For disk-backed files, FileInformation is created by reading from disk if the path exists.
     pub fn add_file(&mut self, path: String, content: Option<String>) -> FileId {
         let id = FileId(self.files.len());
-        let file_info = content.as_ref().map(|c| FileInformation::new(c));
+
+        // For ephemeral files (content provided), store it and create FileInformation
+        // For disk-backed files (no content), try to read from disk for FileInformation only
+        let (stored_content, content_for_info) = match content {
+            Some(c) => {
+                // Ephemeral file: store content and use it for FileInformation
+                (Some(c.clone()), Some(c))
+            }
+            None => {
+                // Disk-backed file: don't store content, but try to read for FileInformation
+                (None, std::fs::read_to_string(&path).ok())
+            }
+        };
+
+        let file_info = content_for_info.as_ref().map(|c| FileInformation::new(c));
         self.files.push(SourceFile {
             path,
+            content: stored_content,
             file_info,
             metadata: FileMetadata { file_type: None },
         });
@@ -52,7 +78,11 @@ impl SourceContext {
         self.files.get(id.0)
     }
 
-    /// Create a copy without file information (for serialization)
+    /// Create a copy without FileInformation (for serialization)
+    ///
+    /// Note: This preserves the content field for ephemeral files, as they need
+    /// content to be serialized for proper deserialization. Only FileInformation
+    /// is removed since it can be reconstructed from content.
     pub fn without_content(&self) -> Self {
         SourceContext {
             files: self
@@ -60,6 +90,7 @@ impl SourceContext {
                 .iter()
                 .map(|f| SourceFile {
                     path: f.path.clone(),
+                    content: f.content.clone(), // Preserve content for ephemeral files
                     file_info: None,
                     metadata: f.metadata.clone(),
                 })

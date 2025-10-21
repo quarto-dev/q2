@@ -256,6 +256,35 @@ impl DiagnosticMessageBuilder {
         self.details.push(DetailItem {
             kind: DetailKind::Error,
             content: detail.into(),
+            location: None,
+        });
+        self
+    }
+
+    /// Add an error detail with a source location.
+    ///
+    /// This allows adding contextual information that points to specific locations
+    /// in the source code, creating rich multi-location error messages.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use quarto_error_reporting::DiagnosticMessageBuilder;
+    ///
+    /// let error = DiagnosticMessageBuilder::error("Mismatched brackets")
+    ///     .add_detail_at("Opening bracket here", opening_location)
+    ///     .add_detail_at("But no closing bracket found", end_location)
+    ///     .build();
+    /// ```
+    pub fn add_detail_at(
+        mut self,
+        detail: impl Into<MessageContent>,
+        location: quarto_source_map::SourceInfo,
+    ) -> Self {
+        self.details.push(DetailItem {
+            kind: DetailKind::Error,
+            content: detail.into(),
+            location: Some(location),
         });
         self
     }
@@ -278,6 +307,21 @@ impl DiagnosticMessageBuilder {
         self.details.push(DetailItem {
             kind: DetailKind::Info,
             content: info.into(),
+            location: None,
+        });
+        self
+    }
+
+    /// Add an info detail with a source location.
+    pub fn add_info_at(
+        mut self,
+        info: impl Into<MessageContent>,
+        location: quarto_source_map::SourceInfo,
+    ) -> Self {
+        self.details.push(DetailItem {
+            kind: DetailKind::Info,
+            content: info.into(),
+            location: Some(location),
         });
         self
     }
@@ -297,6 +341,21 @@ impl DiagnosticMessageBuilder {
         self.details.push(DetailItem {
             kind: DetailKind::Note,
             content: note.into(),
+            location: None,
+        });
+        self
+    }
+
+    /// Add a note detail with a source location.
+    pub fn add_note_at(
+        mut self,
+        note: impl Into<MessageContent>,
+        location: quarto_source_map::SourceInfo,
+    ) -> Self {
+        self.details.push(DetailItem {
+            kind: DetailKind::Note,
+            content: note.into(),
+            location: Some(location),
         });
         self
     }

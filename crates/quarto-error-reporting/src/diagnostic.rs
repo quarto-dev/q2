@@ -83,14 +83,18 @@ impl From<&str> for MessageContent {
 ///
 /// Following tidyverse guidelines, details provide specific information about
 /// the error (what went wrong, where, with what values).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DetailItem {
     /// The kind of detail (error, info, note)
     pub kind: DetailKind,
     /// The content of the detail
     pub content: MessageContent,
-    // Future: Optional source span for details that point to specific code locations
-    // pub span: Option<SourceSpan>,
+    /// Optional source location for this detail
+    ///
+    /// When present, this identifies where in the source code this detail applies.
+    /// This allows error messages to highlight multiple related locations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<quarto_source_map::SourceInfo>,
 }
 
 /// A diagnostic message following tidyverse-style structure.
@@ -290,66 +294,85 @@ impl DiagnosticMessage {
 
         let mut result = String::new();
 
-        // Title line with kind
-        let kind_str = match self.kind {
-            DiagnosticKind::Error => "Error",
-            DiagnosticKind::Warning => "Warning",
-            DiagnosticKind::Info => "Info",
-            DiagnosticKind::Note => "Note",
-        };
+        // Check if we have any location info that could be displayed with ariadne
+        // This includes the main diagnostic location OR any detail with a location
+        let has_any_location = self.location.is_some()
+            || self.details.iter().any(|d| d.location.is_some());
 
-        if let Some(code) = &self.code {
-            write!(result, "{} [{}]: {}", kind_str, code, self.title).unwrap();
-        } else {
-            write!(result, "{}: {}", kind_str, self.title).unwrap();
-        }
+        // If we have location info and source context, render ariadne source display
+        let has_ariadne = if has_any_location && ctx.is_some() {
+            // Use main location if available, otherwise use first detail location
+            let location = self.location.as_ref()
+                .or_else(|| self.details.iter().find_map(|d| d.location.as_ref()));
 
-        // Add location if present
-        if let Some(loc) = &self.location {
-            if let Some(ctx) = ctx {
-                // Try to map to original source
-                if let Some(mapped) = loc.map_offset(loc.range.start.offset, ctx) {
-                    if let Some(file) = ctx.get_file(mapped.file_id) {
-                        write!(
-                            result,
-                            " at {}:{}:{}",
-                            file.path,
-                            mapped.location.row + 1, // Display as 1-based
-                            mapped.location.column + 1
-                        )
-                        .unwrap();
-                    }
+            if let Some(loc) = location {
+                if let Some(ariadne_output) = self.render_ariadne_source_context(loc, ctx.unwrap()) {
+                    result.push_str(&ariadne_output);
+                    true
+                } else {
+                    false
                 }
             } else {
-                // No context, show immediate location
-                write!(
-                    result,
-                    " at {}:{}",
-                    loc.range.start.row + 1,
-                    loc.range.start.column + 1
-                )
-                .unwrap();
+                false
             }
-        }
+        } else {
+            false
+        };
 
-        // Problem statement
-        if let Some(problem) = &self.problem {
-            write!(result, "\n{}", problem.as_str()).unwrap();
-        }
+        // If we don't have ariadne output, show full tidyverse-style content
+        // If we do have ariadne, only show details without locations and hints
+        // (ariadne already shows: title, code, problem, and details with locations)
+        if !has_ariadne {
+            // No ariadne - show everything in tidyverse style
 
-        // Details with appropriate bullets
-        for detail in &self.details {
-            let bullet = match detail.kind {
-                DetailKind::Error => "✖",
-                DetailKind::Info => "ℹ",
-                DetailKind::Note => "•",
+            // Title with kind prefix (e.g., "Error: Invalid input")
+            let kind_str = match self.kind {
+                DiagnosticKind::Error => "Error",
+                DiagnosticKind::Warning => "Warning",
+                DiagnosticKind::Info => "Info",
+                DiagnosticKind::Note => "Note",
             };
-            write!(result, "\n{} {}", bullet, detail.content.as_str()).unwrap();
-        }
+            write!(result, "{}: {}\n", kind_str, self.title).unwrap();
 
-        // Hints
-        for hint in &self.hints {
-            write!(result, "\n? {}", hint.as_str()).unwrap();
+            // Problem statement (optional additional context)
+            if let Some(problem) = &self.problem {
+                write!(result, "{}\n", problem.as_str()).unwrap();
+            }
+
+            // All details with appropriate bullets
+            for detail in &self.details {
+                let bullet = match detail.kind {
+                    DetailKind::Error => "✖",
+                    DetailKind::Info => "ℹ",
+                    DetailKind::Note => "•",
+                };
+                write!(result, "{} {}\n", bullet, detail.content.as_str()).unwrap();
+            }
+
+            // All hints
+            for hint in &self.hints {
+                write!(result, "? {}\n", hint.as_str()).unwrap();
+            }
+        } else {
+            // Have ariadne - only show details without locations and hints
+            // (ariadne shows title, code, problem, and located details)
+
+            // Details without locations (ariadne can't show these)
+            for detail in &self.details {
+                if detail.location.is_none() {
+                    let bullet = match detail.kind {
+                        DetailKind::Error => "✖",
+                        DetailKind::Info => "ℹ",
+                        DetailKind::Note => "•",
+                    };
+                    write!(result, "{} {}\n", bullet, detail.content.as_str()).unwrap();
+                }
+            }
+
+            // All hints (ariadne doesn't show hints)
+            for hint in &self.hints {
+                write!(result, "? {}\n", hint.as_str()).unwrap();
+            }
         }
 
         result
@@ -413,10 +436,14 @@ impl DiagnosticMessage {
                         DetailKind::Info => "info",
                         DetailKind::Note => "note",
                     };
-                    json!({
+                    let mut detail_obj = json!({
                         "kind": detail_kind,
                         "content": d.content.to_json()
-                    })
+                    });
+                    if let Some(location) = &d.location {
+                        detail_obj["location"] = json!(location);
+                    }
+                    detail_obj
                 })
                 .collect();
             obj["details"] = json!(details);
@@ -432,6 +459,127 @@ impl DiagnosticMessage {
         }
 
         obj
+    }
+
+    /// Extract the original file_id from a SourceInfo by traversing the mapping chain
+    fn extract_file_id(source_info: &quarto_source_map::SourceInfo) -> Option<quarto_source_map::FileId> {
+        match &source_info.mapping {
+            quarto_source_map::SourceMapping::Original { file_id } => Some(*file_id),
+            quarto_source_map::SourceMapping::Substring { parent, .. } => Self::extract_file_id(parent),
+            quarto_source_map::SourceMapping::Transformed { parent, .. } => Self::extract_file_id(parent),
+            quarto_source_map::SourceMapping::Concat { pieces } => {
+                // For concatenated sources, use the first piece's file_id
+                pieces.first().and_then(|p| Self::extract_file_id(&p.source_info))
+            }
+        }
+    }
+
+    /// Render source context using ariadne (private helper for to_text).
+    ///
+    /// This produces the visual source code snippet with highlighting.
+    /// The tidyverse-style problem/details/hints are added separately by to_text().
+    fn render_ariadne_source_context(
+        &self,
+        main_location: &quarto_source_map::SourceInfo,
+        ctx: &quarto_source_map::SourceContext,
+    ) -> Option<String> {
+        use ariadne::{Color, Label, Report, ReportKind, Source};
+
+        // Extract file_id from the source mapping by traversing the chain
+        let file_id = Self::extract_file_id(main_location)?;
+
+        let file = ctx.get_file(file_id)?;
+
+        // Get file content: use stored content for ephemeral files, or read from disk
+        let content = match &file.content {
+            Some(c) => c.clone(), // Ephemeral file: use stored content
+            None => {
+                // Disk-backed file: read from disk
+                std::fs::read_to_string(&file.path)
+                    .unwrap_or_else(|e| panic!("Failed to read file '{}': {}", file.path, e))
+            }
+        };
+
+        // Map the location offsets back to original file positions
+        let start_mapped = main_location.map_offset(main_location.range.start.offset, ctx)?;
+        let end_mapped = main_location.map_offset(main_location.range.end.offset, ctx)?;
+
+        // Determine report kind and color
+        let (report_kind, main_color) = match self.kind {
+            DiagnosticKind::Error => (ReportKind::Error, Color::Red),
+            DiagnosticKind::Warning => (ReportKind::Warning, Color::Yellow),
+            DiagnosticKind::Info => (ReportKind::Advice, Color::Cyan),
+            DiagnosticKind::Note => (ReportKind::Advice, Color::Blue),
+        };
+
+        // Build the report using the mapped offset for proper line:column display
+        let mut report = Report::build(
+            report_kind,
+            file.path.clone(),
+            start_mapped.location.offset,
+        );
+
+        // Add title with error code
+        if let Some(code) = &self.code {
+            report = report.with_message(format!("[{}] {}", code, self.title));
+        } else {
+            report = report.with_message(&self.title);
+        }
+
+        // Add main location label using mapped offsets
+        let main_span = start_mapped.location.offset..end_mapped.location.offset;
+        let main_message = if let Some(problem) = &self.problem {
+            problem.as_str()
+        } else {
+            &self.title
+        };
+
+        report = report.with_label(
+            Label::new((file.path.clone(), main_span))
+                .with_message(main_message)
+                .with_color(main_color),
+        );
+
+        // Add detail locations as additional labels (only those with locations)
+        for detail in &self.details {
+            if let Some(detail_loc) = &detail.location {
+                // Extract file_id from detail location
+                let detail_file_id = match Self::extract_file_id(detail_loc) {
+                    Some(fid) => fid,
+                    None => continue, // Skip if we can't extract file_id
+                };
+
+                if detail_file_id == file_id {
+                    // Map detail offsets to original file positions
+                    if let (Some(detail_start), Some(detail_end)) = (
+                        detail_loc.map_offset(detail_loc.range.start.offset, ctx),
+                        detail_loc.map_offset(detail_loc.range.end.offset, ctx),
+                    ) {
+                        let detail_span = detail_start.location.offset..detail_end.location.offset;
+                        let detail_color = match detail.kind {
+                            DetailKind::Error => Color::Red,
+                            DetailKind::Info => Color::Cyan,
+                            DetailKind::Note => Color::Blue,
+                        };
+
+                        report = report.with_label(
+                            Label::new((file.path.clone(), detail_span))
+                                .with_message(detail.content.as_str())
+                                .with_color(detail_color),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Render to string
+        let report = report.finish();
+        let mut output = Vec::new();
+        report
+            .write((file.path.clone(), Source::from(content.as_str())), &mut output)
+            .ok()?;
+
+        String::from_utf8(output).ok()
     }
 }
 
