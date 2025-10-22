@@ -497,7 +497,6 @@ fn error_diagnostic_from_parse_state(
 fn calculate_byte_offset(input: &str, row: usize, column: usize) -> usize {
     let mut current_row = 0;
     let mut current_col = 0;
-    let mut byte_offset = 0;
 
     for (i, ch) in input.char_indices() {
         if current_row == row && current_col == column {
@@ -505,16 +504,25 @@ fn calculate_byte_offset(input: &str, row: usize, column: usize) -> usize {
         }
 
         if ch == '\n' {
+            current_col += 1;
+            // Check if the target is at the newline position (end of line)
+            if current_row == row && current_col == column {
+                return i;
+            }
             current_row += 1;
             current_col = 0;
         } else {
             current_col += 1;
         }
-        byte_offset = i;
     }
 
-    // Return the position even if we're past the end
-    byte_offset + 1
+    // If we're looking for EOF position, return the length
+    if current_row == row && current_col == column {
+        return input.len();
+    }
+
+    // If we couldn't find the position, clamp to EOF
+    input.len()
 }
 
 // Helper function to produce JSON-formatted error messages for use as a closure
