@@ -43,6 +43,14 @@ impl DivWhitespaceConverter {
         let mut fix_positions = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
 
+        // Pre-compute line start offsets for O(1) lookup instead of O(N) per error
+        let mut line_starts = Vec::with_capacity(lines.len());
+        let mut offset = 0;
+        for line in &lines {
+            line_starts.push(offset);
+            offset += line.len() + 1; // +1 for newline
+        }
+
         for error in errors {
             // Skip errors that are not about div fences
             // We're looking for "Missing Space After Div Fence" or errors on lines with :::
@@ -79,11 +87,8 @@ impl DivWhitespaceConverter {
                     if after_colon.starts_with('{') {
                         // Calculate the position right after :::
                         // We need byte offset, not char offset
-                        let line_start = content
-                            .lines()
-                            .take(line_idx)
-                            .map(|l| l.len() + 1) // +1 for newline
-                            .sum::<usize>();
+                        // Use pre-computed offset for O(1) lookup
+                        let line_start = line_starts[line_idx];
 
                         let indent_bytes = line.len() - trimmed.len();
                         let fix_pos = line_start + indent_bytes + 3; // +3 for ":::"
