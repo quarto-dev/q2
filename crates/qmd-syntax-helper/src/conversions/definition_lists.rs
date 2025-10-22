@@ -61,8 +61,8 @@ impl DefinitionListConverter {
                 // Grid table borders start with + and contain multiple + characters
                 // This helps distinguish table captions from definition lists
                 let has_pipes = lines[start_idx].matches('|').count() >= 2;
-                let is_grid_border = lines[start_idx].starts_with('+')
-                    && lines[start_idx].matches('+').count() >= 2;
+                let is_grid_border =
+                    lines[start_idx].starts_with('+') && lines[start_idx].matches('+').count() >= 2;
 
                 if has_pipes || is_grid_border {
                     // This is likely a table caption, not a definition list
