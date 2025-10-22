@@ -56,10 +56,15 @@ impl DefinitionListConverter {
                     start_idx -= 1;
                 }
 
-                // Check if the "term" is actually a table row
+                // Check if the "term" is actually a table row or grid table border
                 // Table rows contain multiple pipe characters (e.g., | cell | cell |)
+                // Grid table borders start with + and contain multiple + characters
                 // This helps distinguish table captions from definition lists
-                if lines[start_idx].matches('|').count() >= 2 {
+                let has_pipes = lines[start_idx].matches('|').count() >= 2;
+                let is_grid_border = lines[start_idx].starts_with('+')
+                    && lines[start_idx].matches('+').count() >= 2;
+
+                if has_pipes || is_grid_border {
                     // This is likely a table caption, not a definition list
                     i += 1;
                     continue;

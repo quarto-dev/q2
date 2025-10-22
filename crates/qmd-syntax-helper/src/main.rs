@@ -91,31 +91,65 @@ fn main() -> Result<()> {
             let mut all_results = Vec::new();
 
             for file_path in file_paths {
+                // Print filename first in verbose mode
                 if verbose && !json {
                     println!("Checking: {}", file_path.display());
                 }
 
+                // Collect results for this file
+                let mut file_results = Vec::new();
+
                 for rule in &rules {
                     match rule.check(&file_path, verbose && !json) {
                         Ok(results) => {
-                            for result in results {
-                                all_results.push(result.clone());
-                                if !json && result.has_issue {
-                                    println!(
-                                        "  {} {}",
-                                        "✗".red(),
-                                        result.message.unwrap_or_default()
-                                    );
-                                }
-                            }
+                            file_results.extend(results);
                         }
                         Err(e) => {
                             if !json {
+                                // For errors, print filename first if not verbose
+                                if !verbose {
+                                    println!("{}", file_path.display());
+                                }
                                 eprintln!("  {} Error checking {}: {}", "✗".red(), rule.name(), e);
                             }
                         }
                     }
                 }
+
+                // Print results based on mode
+                if !json {
+                    if verbose {
+                        // Verbose: filename already printed, just print issues
+                        for result in &file_results {
+                            if result.has_issue {
+                                println!(
+                                    "  {} {}",
+                                    "✗".red(),
+                                    result.message.as_ref().unwrap_or(&String::new())
+                                );
+                            }
+                        }
+                    } else {
+                        // Non-verbose: only print filename if there are issues
+                        let has_issues = file_results.iter().any(|r| r.has_issue);
+                        if has_issues {
+                            println!("{}", file_path.display());
+                            for result in &file_results {
+                                if result.has_issue {
+                                    println!(
+                                        "  {} {}",
+                                        "✗".red(),
+                                        result.message.as_ref().unwrap_or(&String::new())
+                                    );
+                                }
+                            }
+                            println!(); // Blank line between files
+                        }
+                    }
+                }
+
+                // Add to overall results
+                all_results.extend(file_results);
             }
 
             // Print summary if not in JSON mode
