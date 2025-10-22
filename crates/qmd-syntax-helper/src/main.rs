@@ -85,6 +85,7 @@ fn main() -> Result<()> {
             output,
         } => {
             let file_paths = expand_globs(&files)?;
+            let total_files_checked = file_paths.len();
             let rules = resolve_rules(&registry, &rule_names)?;
 
             let mut all_results = Vec::new();
@@ -118,8 +119,8 @@ fn main() -> Result<()> {
             }
 
             // Print summary if not in JSON mode
-            if !json && !all_results.is_empty() {
-                print_check_summary(&all_results);
+            if !json {
+                print_check_summary(&all_results, total_files_checked);
             }
 
             // Output handling
@@ -214,12 +215,8 @@ fn resolve_rules(
     }
 }
 
-fn print_check_summary(results: &[rule::CheckResult]) {
+fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {
     use std::collections::{HashMap, HashSet};
-
-    // Get unique files checked
-    let unique_files: HashSet<&str> = results.iter().map(|r| r.file_path.as_str()).collect();
-    let total_files = unique_files.len();
 
     // Count files with issues (at least one result with has_issue=true)
     let mut files_with_issues = HashSet::new();

@@ -56,6 +56,15 @@ impl DefinitionListConverter {
                     start_idx -= 1;
                 }
 
+                // Check if the "term" is actually a table row
+                // Table rows contain multiple pipe characters (e.g., | cell | cell |)
+                // This helps distinguish table captions from definition lists
+                if lines[start_idx].matches('|').count() >= 2 {
+                    // This is likely a table caption, not a definition list
+                    i += 1;
+                    continue;
+                }
+
                 // Now scan forward to collect all terms and definitions in this list
                 let mut end_idx = i;
                 i += 1;
