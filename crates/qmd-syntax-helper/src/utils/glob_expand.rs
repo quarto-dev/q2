@@ -66,8 +66,14 @@ mod tests {
         // Create temporary test files
         let test_file_a = "test-a-glob-expand.qmd";
         let test_file_b = "test-b-glob-expand.qmd";
-        File::create(test_file_a).unwrap().write_all(b"test").unwrap();
-        File::create(test_file_b).unwrap().write_all(b"test").unwrap();
+        File::create(test_file_a)
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
+        File::create(test_file_b)
+            .unwrap()
+            .write_all(b"test")
+            .unwrap();
 
         let patterns = vec![test_file_a.to_string(), test_file_b.to_string()];
         let result = expand_globs(&patterns).unwrap();
