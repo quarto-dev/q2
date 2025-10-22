@@ -14,7 +14,10 @@ impl DivWhitespaceConverter {
     }
 
     /// Parse a file and get diagnostic messages
-    fn get_parse_errors(&self, file_path: &Path) -> Result<Vec<quarto_error_reporting::DiagnosticMessage>> {
+    fn get_parse_errors(
+        &self,
+        file_path: &Path,
+    ) -> Result<Vec<quarto_error_reporting::DiagnosticMessage>> {
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
@@ -39,9 +42,21 @@ impl DivWhitespaceConverter {
     }
 
     /// Find div fence errors that need whitespace fixes
-    fn find_div_whitespace_errors(&self, content: &str, errors: &[quarto_error_reporting::DiagnosticMessage]) -> Vec<usize> {
+    fn find_div_whitespace_errors(
+        &self,
+        content: &str,
+        errors: &[quarto_error_reporting::DiagnosticMessage],
+    ) -> Vec<usize> {
         let mut fix_positions = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
+
+        // Pre-compute line start offsets for O(1) lookup instead of O(N) per error
+        let mut line_starts = Vec::with_capacity(lines.len());
+        let mut offset = 0;
+        for line in &lines {
+            line_starts.push(offset);
+            offset += line.len() + 1; // +1 for newline
+        }
 
         for error in errors {
             // Skip errors that are not about div fences
@@ -54,7 +69,9 @@ impl DivWhitespaceConverter {
 
             // Extract row from location (if available)
             // SourceInfo uses 0-indexed rows, div_whitespace uses them too
-            let error_row = error.location.as_ref()
+            let error_row = error
+                .location
+                .as_ref()
                 .map(|loc| loc.range.start.row)
                 .unwrap_or(0);
 
@@ -79,11 +96,8 @@ impl DivWhitespaceConverter {
                     if after_colon.starts_with('{') {
                         // Calculate the position right after :::
                         // We need byte offset, not char offset
-                        let line_start = content
-                            .lines()
-                            .take(line_idx)
-                            .map(|l| l.len() + 1) // +1 for newline
-                            .sum::<usize>();
+                        // Use pre-computed offset for O(1) lookup
+                        let line_start = line_starts[line_idx];
 
                         let indent_bytes = line.len() - trimmed.len();
                         let fix_pos = line_start + indent_bytes + 3; // +3 for ":::"

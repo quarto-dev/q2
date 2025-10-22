@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use std::collections::HashMap;
+use std::collections::HashMap; // Still needed for TreeSitterParseLog::processes
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TreeSitterLogState {
@@ -82,24 +82,39 @@ impl TreeSitterLogObserver {
     }
     pub fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
         // Implement your logging logic here
-        let str = message.to_string();
-
-        let words: Vec<&str> = str.split_whitespace().collect();
-        if words.len() == 0 {
+        let words: Vec<&str> = message.split_whitespace().collect();
+        if words.is_empty() {
             eprintln!("Empty log message from tree-sitter");
             return;
         }
-        let params: HashMap<String, String> = words[1..]
-            .iter()
-            .filter_map(|pair| {
-                let pair = pair.trim_suffix(",");
-                let mut split = pair.splitn(2, ':');
-                if let (Some(key), Some(value_str)) = (split.next(), split.next()) {
-                    return Some((key.to_string(), value_str.to_string()));
+
+        // Extract parameters directly into typed variables instead of creating a HashMap.
+        // This eliminates expensive allocations: each HashMap creation costs ~608 bytes
+        // (HashMap allocation + String allocations for keys and values + hash computations).
+        // With only 6 possible parameters that are always parsed to the same types,
+        // we can use simple Option variables on the stack (48 bytes total).
+        let mut version: Option<usize> = None;
+        let mut state: Option<usize> = None;
+        let mut row: Option<usize> = None;
+        let mut col: Option<usize> = None;
+        let mut sym: Option<&str> = None;
+        let mut size: Option<usize> = None;
+
+        // Single pass through parameters
+        for pair in &words[1..] {
+            let pair = pair.trim_end_matches(',');
+            if let Some((key, value)) = pair.split_once(':') {
+                match key {
+                    "version" => version = value.parse().ok(),
+                    "state" => state = value.parse().ok(),
+                    "row" => row = value.parse().ok(),
+                    "col" => col = value.parse().ok(),
+                    "sym" => sym = Some(value),
+                    "size" => size = value.parse().ok(),
+                    _ => {} // Ignore unknown parameters
                 }
-                None
-            })
-            .collect();
+            }
+        }
         match words[0] {
             "new_parse" => {
                 if self.state != TreeSitterLogState::Idle {
@@ -121,11 +136,7 @@ impl TreeSitterLogObserver {
                 self.state = TreeSitterLogState::Idle;
             }
             "resume" => {
-                let version = params
-                    .get("version")
-                    .expect("Missing 'version' in process log")
-                    .parse::<usize>()
-                    .expect("Failed to parse 'version' as usize");
+                let version = version.expect("Missing 'version' in process log");
                 let current_parse = self
                     .parses
                     .last_mut()
@@ -133,26 +144,10 @@ impl TreeSitterLogObserver {
                 current_parse.current_process = Some(version);
             }
             "process" => {
-                let version = params
-                    .get("version")
-                    .expect("Missing 'version' in process log")
-                    .parse::<usize>()
-                    .expect("Failed to parse 'version' as usize");
-                let state = params
-                    .get("state")
-                    .expect("Missing 'state' in process log")
-                    .parse::<usize>()
-                    .expect("Failed to parse 'state' as usize");
-                let row = params
-                    .get("row")
-                    .expect("Missing 'row' in process log")
-                    .parse::<usize>()
-                    .expect("Failed to parse 'row' as usize");
-                let column = params
-                    .get("col")
-                    .expect("Missing 'col' in process log")
-                    .parse::<usize>()
-                    .expect("Failed to parse 'col' as usize");
+                let version = version.expect("Missing 'version' in process log");
+                let state = state.expect("Missing 'state' in process log");
+                let row = row.expect("Missing 'row' in process log");
+                let column = col.expect("Missing 'col' in process log");
 
                 let current_parse = self
                     .parses
@@ -196,6 +191,9 @@ impl TreeSitterLogObserver {
                     .push(current_process_message.clone());
             }
             "lexed_lookahead" => {
+                let sym_str = sym.expect("Missing 'sym' in lexed_lookahead log");
+                let size_val = size.expect("Missing 'size' in lexed_lookahead log");
+
                 let current_parse = self
                     .parses
                     .last_mut()
@@ -208,15 +206,13 @@ impl TreeSitterLogObserver {
                     .current_message
                     .as_mut()
                     .expect("No current process message");
-                current_parse.current_lookahead = Some((
-                    params.get("sym").unwrap().to_string(),
-                    params.get("size").unwrap().parse::<usize>().unwrap(),
-                ));
-                current_process_message.sym = params.get("sym").unwrap().to_string();
-                current_process_message.size =
-                    params.get("size").unwrap().parse::<usize>().unwrap();
+                current_parse.current_lookahead = Some((sym_str.to_string(), size_val));
+                current_process_message.sym = sym_str.to_string();
+                current_process_message.size = size_val;
             }
             "shift" => {
+                let state_val = state.expect("Missing 'state' in shift log");
+
                 let current_parse = self
                     .parses
                     .last_mut()
@@ -229,18 +225,13 @@ impl TreeSitterLogObserver {
                     .current_message
                     .as_mut()
                     .expect("No current process message");
-                let state = params
-                    .get("state")
-                    .expect("Missing 'state' in shift log")
-                    .parse::<usize>()
-                    .expect("Failed to parse 'state' as usize");
                 let size = current_parse
                     .current_lookahead
                     .as_ref()
                     .map(|(_, s)| *s)
                     .unwrap_or(0);
                 current_parse.consumed_tokens.push(ConsumedToken {
-                    lr_state: state,
+                    lr_state: state_val,
                     row: current_process_message.row,
                     column: current_process_message.column,
                     size,
@@ -278,11 +269,8 @@ impl TreeSitterLogObserver {
                 }
             }
         }
-        match self.parses.last_mut() {
-            Some(current_parse) => {
-                current_parse.messages.push(str);
-            }
-            _ => {}
+        if let Some(current_parse) = self.parses.last_mut() {
+            current_parse.messages.push(message.to_string());
         }
     }
 }
