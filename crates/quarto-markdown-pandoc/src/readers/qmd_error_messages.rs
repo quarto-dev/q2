@@ -45,6 +45,43 @@ pub fn produce_error_message(
     return result;
 }
 
+/// Produce structured DiagnosticMessage objects from parse errors
+/// Uses the SourceContext to properly calculate source locations
+pub fn produce_diagnostic_messages(
+    input_bytes: &[u8],
+    tree_sitter_log: &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
+    filename: &str,
+    source_context: &quarto_source_map::SourceContext,
+) -> Vec<quarto_error_reporting::DiagnosticMessage> {
+    assert!(tree_sitter_log.had_errors());
+    assert!(tree_sitter_log.parses.len() > 0);
+
+    let mut result: Vec<quarto_error_reporting::DiagnosticMessage> = vec![];
+    let mut seen_errors: std::collections::HashSet<(usize, usize)> =
+        std::collections::HashSet::new();
+
+    for parse in &tree_sitter_log.parses {
+        for (_, process_log) in &parse.processes {
+            for state in process_log.error_states.iter() {
+                if seen_errors.contains(&(state.row, state.column)) {
+                    continue;
+                }
+                seen_errors.insert((state.row, state.column));
+                let diagnostic = error_diagnostic_from_parse_state(
+                    input_bytes,
+                    state,
+                    &parse.consumed_tokens,
+                    filename,
+                    source_context,
+                );
+                result.push(diagnostic);
+            }
+        }
+    }
+
+    return result;
+}
+
 fn error_message_from_parse_state(
     input_bytes: &[u8],
     parse_state: &crate::utils::tree_sitter_log_observer::ProcessMessage,
@@ -325,6 +362,136 @@ fn find_matching_token<'a>(
     consumed_tokens
         .iter()
         .find(|token| token.lr_state == capture.lr_state && token.sym == capture.sym)
+}
+
+/// Convert a parse state error into a structured DiagnosticMessage
+fn error_diagnostic_from_parse_state(
+    input_bytes: &[u8],
+    parse_state: &crate::utils::tree_sitter_log_observer::ProcessMessage,
+    consumed_tokens: &[ConsumedToken],
+    _filename: &str,
+    _source_context: &quarto_source_map::SourceContext,
+) -> quarto_error_reporting::DiagnosticMessage {
+    use quarto_error_reporting::DiagnosticMessageBuilder;
+
+    // Look up the error entry from the table
+    let error_entry = crate::readers::qmd_error_message_table::lookup_error_entry(parse_state);
+
+    // Convert input to string for offset calculation
+    let input_str = String::from_utf8_lossy(input_bytes);
+
+    // Calculate byte offset and create proper locations using quarto-source-map utilities
+    let byte_offset = calculate_byte_offset(&input_str, parse_state.row, parse_state.column);
+    let span_end = byte_offset + parse_state.size.max(1);
+
+    // Use quarto_source_map::utils::offset_to_location to properly calculate locations
+    let start_location = quarto_source_map::utils::offset_to_location(&input_str, byte_offset)
+        .unwrap_or(quarto_source_map::Location {
+            offset: byte_offset,
+            row: parse_state.row,
+            column: parse_state.column,
+        });
+    let end_location = quarto_source_map::utils::offset_to_location(&input_str, span_end)
+        .unwrap_or(quarto_source_map::Location {
+            offset: span_end,
+            row: parse_state.row,
+            column: parse_state.column + parse_state.size.max(1),
+        });
+
+    // Create SourceInfo for the error location
+    let range = quarto_source_map::Range {
+        start: start_location,
+        end: end_location,
+    };
+    let source_info = quarto_source_map::SourceInfo::original(
+        quarto_source_map::FileId(0), // File ID 0 (set up in ASTContext)
+        range,
+    );
+
+    if let Some(entry) = error_entry {
+        // Build diagnostic from error table entry
+        let mut builder = DiagnosticMessageBuilder::error(entry.error_info.title)
+            .with_location(source_info.clone())
+            .problem(entry.error_info.message);
+
+        // Add notes with their corresponding source locations
+        for note in entry.error_info.notes {
+            match note.note_type {
+                "simple" => {
+                    // Find the capture that this note refers to
+                    if let Some(capture) =
+                        entry.error_info.captures.iter().find(|c| match note.label {
+                            None => false,
+                            Some(l) => c.label == l,
+                        })
+                    {
+                        // Find the consumed token that matches this capture
+                        if let Some(token) = find_matching_token(consumed_tokens, capture) {
+                            // Calculate the byte offset for this token
+                            let token_byte_offset =
+                                calculate_byte_offset(&input_str, token.row, token.column);
+                            let token_span_end = token_byte_offset + token.size.max(1);
+
+                            // Use SourceInfo::substring to create a SourceInfo for this token
+                            // This properly uses the quarto-source-map infrastructure
+                            let token_source_info = quarto_source_map::SourceInfo::substring(
+                                source_info.clone(),
+                                token_byte_offset,
+                                token_span_end,
+                            );
+
+                            // Add as info detail with location (will show as blue label in Ariadne)
+                            builder = builder.add_info_at(note.message, token_source_info);
+                        }
+                    }
+                }
+                "label-range" => {
+                    // Find the begin and end captures
+                    let begin_capture = note.label_begin.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+                    let end_capture = note.label_end.and_then(|label| {
+                        entry.error_info.captures.iter().find(|c| c.label == label)
+                    });
+
+                    if let (Some(begin_cap), Some(end_cap)) = (begin_capture, end_capture) {
+                        // Find the consumed tokens that match these captures
+                        let begin_token = find_matching_token(consumed_tokens, begin_cap);
+                        let end_token = find_matching_token(consumed_tokens, end_cap);
+
+                        if let (Some(begin_tok), Some(end_tok)) = (begin_token, end_token) {
+                            // Calculate the span from the beginning of begin_token to the end of end_token
+                            let begin_byte_offset =
+                                calculate_byte_offset(&input_str, begin_tok.row, begin_tok.column);
+                            let end_byte_offset =
+                                calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
+                            let range_span_end = end_byte_offset + end_tok.size.max(1);
+
+                            // Use SourceInfo::substring to create a SourceInfo for this range
+                            // This properly uses the quarto-source-map infrastructure
+                            let range_source_info = quarto_source_map::SourceInfo::substring(
+                                source_info.clone(),
+                                begin_byte_offset,
+                                range_span_end,
+                            );
+
+                            // Add as info detail with location
+                            builder = builder.add_info_at(note.message, range_source_info);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        builder.build()
+    } else {
+        // Fallback for errors not in the table
+        DiagnosticMessageBuilder::error("Parse error")
+            .with_location(source_info)
+            .problem("unexpected character or token here")
+            .build()
+    }
 }
 
 fn calculate_byte_offset(input: &str, row: usize, column: usize) -> usize {

@@ -1,5 +1,4 @@
 use quarto_markdown_pandoc::readers;
-use quarto_markdown_pandoc::utils;
 
 #[test]
 fn test_caption_without_table_warning() {
@@ -13,15 +12,7 @@ Some content
 "#;
 
     // Parse the document
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-        None::<
-            fn(&[u8], &utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>,
-        >,
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     // Parsing should succeed (warnings are not errors)
     assert!(
@@ -48,15 +39,7 @@ fn test_caption_with_table_no_warning() {
 "#;
 
     // Parse the document
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-        None::<
-            fn(&[u8], &utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>,
-        >,
-    );
+    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
 
     // Parsing should succeed and no warnings should be emitted
     assert!(
@@ -64,7 +47,7 @@ fn test_caption_with_table_no_warning() {
         "Document with valid table caption should parse successfully"
     );
 
-    let (pandoc, _context) = result.unwrap();
+    let (pandoc, _context, _warnings) = result.unwrap();
 
     // Verify we have a table in the output
     assert!(

@@ -3,7 +3,6 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use hashlink::LinkedHashMap;
 use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
 use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
 use quarto_markdown_pandoc::readers;

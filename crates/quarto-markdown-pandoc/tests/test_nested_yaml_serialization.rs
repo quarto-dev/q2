@@ -38,18 +38,11 @@ fn test_yaml_serialization_size_scaling() {
         // Parse QMD to PandocAST
         let mut output_stream =
             quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-        let (pandoc, context) = readers::qmd::read(
+        let (pandoc, context, _warnings) = readers::qmd::read(
             qmd_content.as_bytes(),
             false,
             "test.qmd",
             &mut output_stream,
-            None::<
-                fn(
-                    &[u8],
-                    &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                    &str,
-                ) -> Vec<String>,
-            >,
         )
         .expect("Failed to parse QMD");
 
@@ -101,20 +94,9 @@ fn test_yaml_serialization_with_siblings() {
         // Parse and serialize
         let mut output_stream =
             quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-        let (pandoc, context) = readers::qmd::read(
-            yaml.as_bytes(),
-            false,
-            "test.qmd",
-            &mut output_stream,
-            None::<
-                fn(
-                    &[u8],
-                    &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                    &str,
-                ) -> Vec<String>,
-            >,
-        )
-        .expect("Failed to parse QMD");
+        let (pandoc, context, _warnings) =
+            readers::qmd::read(yaml.as_bytes(), false, "test.qmd", &mut output_stream)
+                .expect("Failed to parse QMD");
 
         let mut json_output = Vec::new();
         writers::json::write(&pandoc, &context, &mut json_output).expect("Failed to write JSON");
@@ -148,20 +130,9 @@ Some content.
 
     let mut output_stream =
         quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-    let (pandoc, context) = readers::qmd::read(
-        yaml.as_bytes(),
-        false,
-        "test.qmd",
-        &mut output_stream,
-        None::<
-            fn(
-                &[u8],
-                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
-    )
-    .expect("Failed to parse QMD");
+    let (pandoc, context, _warnings) =
+        readers::qmd::read(yaml.as_bytes(), false, "test.qmd", &mut output_stream)
+            .expect("Failed to parse QMD");
 
     let mut json_output = Vec::new();
     writers::json::write(&pandoc, &context, &mut json_output).expect("Failed to write JSON");
@@ -236,18 +207,11 @@ fn test_binary_tree_serialization() {
         // Parse QMD to PandocAST
         let mut output_stream =
             quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-        let (pandoc, context) = readers::qmd::read(
+        let (pandoc, context, _warnings) = readers::qmd::read(
             qmd_content.as_bytes(),
             false,
             "test.qmd",
             &mut output_stream,
-            None::<
-                fn(
-                    &[u8],
-                    &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                    &str,
-                ) -> Vec<String>,
-            >,
         )
         .expect("Failed to parse QMD");
 

@@ -113,35 +113,42 @@ fn main() {
 
     let (pandoc, context) = match args.from.as_str() {
         "markdown" | "qmd" => {
-            let error_formatter = if args.json_errors {
-                Some(
-                    readers::qmd_error_messages::produce_json_error_messages
-                        as fn(
-                            &[u8],
-                            &utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                            &str,
-                        ) -> Vec<String>,
-                )
-            } else {
-                None
-            };
-
             let result = readers::qmd::read(
                 input.as_bytes(),
                 args.loose,
                 input_filename,
                 &mut output_stream,
-                error_formatter,
             );
             match result {
-                Ok(p) => p,
-                Err(error_messages) => {
+                Ok((pandoc, context, warnings)) => {
+                    // Output warnings to stderr
+                    if args.json_errors {
+                        // JSON format
+                        for warning in warnings {
+                            eprintln!("{}", warning.to_json());
+                        }
+                    } else {
+                        // Text format (default) - pass source_context for Ariadne rendering
+                        for warning in warnings {
+                            eprintln!("{}", warning.to_text(Some(&context.source_context)));
+                        }
+                    }
+                    (pandoc, context)
+                }
+                Err(diagnostics) => {
+                    // Output errors
                     if args.json_errors {
                         // For JSON errors, print to stdout as a JSON array
-                        println!("{}", error_messages.join(""));
+                        for diagnostic in diagnostics {
+                            println!("{}", diagnostic.to_json());
+                        }
                     } else {
-                        for msg in error_messages {
-                            eprintln!("{}", msg);
+                        // Build a minimal source context for Ariadne rendering
+                        let mut source_context = quarto_source_map::SourceContext::new();
+                        source_context.add_file(input_filename.to_string(), Some(input.clone()));
+
+                        for diagnostic in diagnostics {
+                            eprintln!("{}", diagnostic.to_text(Some(&source_context)));
                         }
                     }
                     std::process::exit(1);

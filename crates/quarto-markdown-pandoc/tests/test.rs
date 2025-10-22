@@ -95,20 +95,8 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
     let mut buf1 = Vec::new();
     let mut buf2 = Vec::new();
 
-    let (doc, context) = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "<input>",
-        &mut std::io::sink(),
-        None::<
-            fn(
-                &[u8],
-                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
-    )
-    .unwrap();
+    let (doc, context, _warnings) =
+        readers::qmd::read(input.as_bytes(), false, "<input>", &mut std::io::sink()).unwrap();
     writers::native::write(&doc, &mut buf1).unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
     writers::json::write(&doc, &context, &mut buf2).unwrap();
@@ -286,13 +274,13 @@ where
                     input.push('\n'); // ensure the input ends with a newline
                 }
                 let mut output_stream = VerboseOutput::Sink(io::sink());
-                let (pandoc, context) = readers::qmd::read(
+                let (pandoc, context, _warnings) = readers::qmd::read(
                     input.as_bytes(),
                     false,
                     &path.to_string_lossy(),
                     &mut output_stream,
-                    None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>,
-                ).unwrap();
+                )
+                .unwrap();
 
                 writer(&pandoc, &context, &mut buffer).unwrap();
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
@@ -613,11 +601,10 @@ fn test_markdown_writer_smoke() {
                         false,
                         path.to_str().unwrap(),
                         &mut std::io::sink(),
-                        None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>
                     );
 
                     match doc_result {
-                        Ok((doc, _context)) => {
+                        Ok((doc, _context, _warnings)) => {
                             // Write it back out using the markdown writer
                             let mut buf = Vec::new();
                             writers::qmd::write(&doc, &mut buf).expect("Failed to write markdown");
@@ -657,13 +644,13 @@ fn test_qmd_roundtrip_consistency() {
                 let original_qmd = std::fs::read_to_string(&path).expect("Failed to read file");
 
                 // Step 1: QMD -> JSON
-                let (doc1, context1) = readers::qmd::read(
+                let (doc1, context1, _warnings) = readers::qmd::read(
                     original_qmd.as_bytes(),
                     false,
                     path.to_str().unwrap(),
                     &mut std::io::sink(),
-                    None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>
-                ).expect("Failed to parse original QMD");
+                )
+                .expect("Failed to parse original QMD");
 
                 let mut json_buf = Vec::new();
                 writers::json::write(&doc1, &context1, &mut json_buf)
@@ -679,13 +666,13 @@ fn test_qmd_roundtrip_consistency() {
                 let regenerated_qmd = String::from_utf8(qmd_buf).expect("Invalid UTF-8 in QMD");
 
                 // Step 3: QMD -> JSON again
-                let (doc3, context3) = readers::qmd::read(
+                let (doc3, context3, _warnings) = readers::qmd::read(
                     regenerated_qmd.as_bytes(),
                     false,
                     "<generated>",
                     &mut std::io::sink(),
-                    None::<fn(&[u8], &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver, &str) -> Vec<String>>
-                ).expect("Failed to parse regenerated QMD");
+                )
+                .expect("Failed to parse regenerated QMD");
 
                 // Compare JSON representations (without location fields)
                 let mut json1_buf = Vec::new();
@@ -737,18 +724,11 @@ fn test_empty_blockquote_roundtrip() {
     let original_qmd = std::fs::read_to_string(test_file).expect("Failed to read file");
 
     // Step 1: QMD -> JSON
-    let (doc1, context1) = readers::qmd::read(
+    let (doc1, context1, _warnings) = readers::qmd::read(
         original_qmd.as_bytes(),
         false,
         test_file,
         &mut std::io::sink(),
-        None::<
-            fn(
-                &[u8],
-                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
     )
     .expect("Failed to parse original QMD");
 
@@ -765,18 +745,11 @@ fn test_empty_blockquote_roundtrip() {
     let regenerated_qmd = String::from_utf8(qmd_buf).expect("Invalid UTF-8 in QMD");
 
     // Step 3: QMD -> JSON again
-    let (doc3, context3) = readers::qmd::read(
+    let (doc3, context3, _warnings) = readers::qmd::read(
         regenerated_qmd.as_bytes(),
         false,
         "<generated>",
         &mut std::io::sink(),
-        None::<
-            fn(
-                &[u8],
-                &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
-                &str,
-            ) -> Vec<String>,
-        >,
     )
     .expect("Failed to parse regenerated QMD");
 

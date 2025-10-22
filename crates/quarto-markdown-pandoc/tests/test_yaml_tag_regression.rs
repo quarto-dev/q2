@@ -12,6 +12,7 @@ use quarto_markdown_pandoc::pandoc::meta::{
     rawblock_to_meta_with_source_info,
 };
 use quarto_markdown_pandoc::pandoc::{Inline, RawBlock};
+use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
 
 #[test]
 fn test_yaml_tags_preserved_in_new_api() {
@@ -42,10 +43,12 @@ regular: This has *emphasis*
     };
 
     let context = ASTContext::default();
-    let meta = rawblock_to_meta_with_source_info(&block, &context);
+    let mut diagnostics = DiagnosticCollector::new();
+    let meta = rawblock_to_meta_with_source_info(&block, &context, &mut diagnostics);
 
     let mut outer_meta = Vec::new();
-    let parsed_meta = parse_metadata_strings_with_source_info(meta, &mut outer_meta);
+    let parsed_meta =
+        parse_metadata_strings_with_source_info(meta, &mut outer_meta, &mut diagnostics);
 
     // Extract entries
     let entries = if let MetaValueWithSourceInfo::MetaMap { entries, .. } = parsed_meta {
@@ -65,27 +68,14 @@ regular: This has *emphasis*
     } = &tagged_path_entry.value
     {
         assert_eq!(inlines.len(), 1, "Expected exactly one inline");
-        if let Inline::Span(span) = &inlines[0] {
-            // Should have yaml-tagged-string class
-            assert!(
-                span.attr.1.contains(&"yaml-tagged-string".to_string()),
-                "Expected yaml-tagged-string class, found: {:?}",
-                span.attr.1
-            );
-            // Should have tag attribute
-            assert_eq!(
-                span.attr.2.get("tag"),
-                Some(&"path".to_string()),
-                "Expected tag=path attribute"
-            );
-            // Extract the string content
-            if let Inline::Str(s) = &span.content[0] {
-                assert_eq!(s.text, "images/*.png");
-            } else {
-                panic!("Expected Str inline inside Span");
-            }
+        // !path tag should produce plain Str (no Span wrapper)
+        if let Inline::Str(s) = &inlines[0] {
+            assert_eq!(s.text, "images/*.png");
         } else {
-            panic!("Expected Span inline, got: {:?}", inlines[0]);
+            panic!(
+                "Expected plain Str inline for !path tag, got: {:?}",
+                inlines[0]
+            );
         }
     } else {
         panic!(
