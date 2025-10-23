@@ -140,14 +140,35 @@ fn parse_impl(
 fn create_contiguous_span(start_info: &SourceInfo, end_info: &SourceInfo) -> SourceInfo {
     // Extract the actual start and end offsets, handling the different SourceInfo variants
     match (start_info, end_info) {
-        (SourceInfo::Original { file_id: start_file, start_offset: start, .. },
-         SourceInfo::Original { file_id: end_file, end_offset: end, .. }) => {
+        (
+            SourceInfo::Original {
+                file_id: start_file,
+                start_offset: start,
+                ..
+            },
+            SourceInfo::Original {
+                file_id: end_file,
+                end_offset: end,
+                ..
+            },
+        ) => {
             // Both are Original from the same file - create a single Original span
-            assert_eq!(start_file, end_file, "Key and value must be from the same file");
+            assert_eq!(
+                start_file, end_file,
+                "Key and value must be from the same file"
+            );
             SourceInfo::original(*start_file, *start, *end)
         }
-        (SourceInfo::Substring { parent: start_parent, start_offset: start, .. },
-         SourceInfo::Substring { end_offset: end, .. }) => {
+        (
+            SourceInfo::Substring {
+                parent: start_parent,
+                start_offset: start,
+                ..
+            },
+            SourceInfo::Substring {
+                end_offset: end, ..
+            },
+        ) => {
             // Both are Substrings - they should have the same parent
             // Use the first parent (they should be equivalent even if not the same Rc)
             SourceInfo::substring((**start_parent).clone(), *start, *end)
@@ -563,10 +584,7 @@ project:
 
         // Verify root has Substring mapping
         match &yaml.source_info {
-            SourceInfo::Substring {
-                parent: p,
-                ..
-            } => {
+            SourceInfo::Substring { parent: p, .. } => {
                 // Parent should point to our original parent
                 match p.as_ref() {
                     SourceInfo::Original { file_id, .. } => {
@@ -621,30 +639,15 @@ project:
             .expect("authors key not found");
 
         // All should have Substring mappings
-        assert!(matches!(
-            project.source_info,
-            SourceInfo::Substring { .. }
-        ));
-        assert!(matches!(
-            title.source_info,
-            SourceInfo::Substring { .. }
-        ));
-        assert!(matches!(
-            authors.source_info,
-            SourceInfo::Substring { .. }
-        ));
+        assert!(matches!(project.source_info, SourceInfo::Substring { .. }));
+        assert!(matches!(title.source_info, SourceInfo::Substring { .. }));
+        assert!(matches!(authors.source_info, SourceInfo::Substring { .. }));
 
         // Array elements should also have Substring mappings
         if let Some(items) = authors.as_array() {
             assert_eq!(items.len(), 2);
-            assert!(matches!(
-                items[0].source_info,
-                SourceInfo::Substring { .. }
-            ));
-            assert!(matches!(
-                items[1].source_info,
-                SourceInfo::Substring { .. }
-            ));
+            assert!(matches!(items[0].source_info, SourceInfo::Substring { .. }));
+            assert!(matches!(items[1].source_info, SourceInfo::Substring { .. }));
         } else {
             panic!("Expected array for authors");
         }
@@ -709,10 +712,16 @@ project:
     /// the absolute offset in the original file.
     fn resolve_to_original_offset(info: &SourceInfo) -> (usize, quarto_source_map::FileId) {
         match info {
-            SourceInfo::Original { file_id, start_offset, .. } => {
-                (*start_offset, *file_id)
-            }
-            SourceInfo::Substring { parent, start_offset, .. } => {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                ..
+            } => (*start_offset, *file_id),
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                ..
+            } => {
                 let (parent_offset, file_id) = resolve_to_original_offset(parent);
                 (parent_offset + start_offset, file_id)
             }
@@ -864,7 +873,11 @@ We used the following approach...
 
         // Verify that the title's location maps back through the substring chain
         match &title.source_info {
-            SourceInfo::Substring { parent: p, start_offset, .. } => {
+            SourceInfo::Substring {
+                parent: p,
+                start_offset,
+                ..
+            } => {
                 // The offset should be within the YAML content
                 assert!(*start_offset < yaml_content.len());
 

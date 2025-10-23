@@ -189,9 +189,7 @@ pub fn empty_source_info() -> quarto_source_map::SourceInfo {
 pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<usize> {
     match info {
         quarto_source_map::SourceInfo::Original { file_id, .. } => Some(file_id.0),
-        quarto_source_map::SourceInfo::Substring { parent, .. } => {
-            extract_filename_index(parent)
-        }
+        quarto_source_map::SourceInfo::Substring { parent, .. } => extract_filename_index(parent),
         quarto_source_map::SourceInfo::Concat { pieces } => {
             // Return first non-None filename_index from pieces
             pieces

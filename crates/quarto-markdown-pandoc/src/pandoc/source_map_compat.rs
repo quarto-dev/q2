@@ -108,62 +108,6 @@ pub fn old_to_new_source_info(
     )
 }
 
-/// Convert quarto-source-map::SourceInfo to a pandoc::location::Range with row/column information.
-///
-/// This maps the start and end offsets to get row/column information from the SourceContext.
-/// Returns None if the mapping fails (e.g., if the file is not in the context).
-///
-/// # Arguments
-/// * `source_info` - The SourceInfo to convert
-/// * `ctx` - The ASTContext containing the source context
-///
-/// # Returns
-/// A pandoc::location::Range with row/column information, or None if mapping fails
-pub fn source_info_to_range(source_info: &SourceInfo, ctx: &ASTContext) -> Option<crate::pandoc::location::Range> {
-    let start_mapped = source_info.map_offset(0, &ctx.source_context)?;
-    let end_mapped = source_info.map_offset(source_info.length(), &ctx.source_context)?;
-
-    Some(crate::pandoc::location::Range {
-        start: crate::pandoc::location::Location {
-            offset: start_mapped.location.offset,
-            row: start_mapped.location.row,
-            column: start_mapped.location.column,
-        },
-        end: crate::pandoc::location::Location {
-            offset: end_mapped.location.offset,
-            row: end_mapped.location.row,
-            column: end_mapped.location.column,
-        },
-    })
-}
-
-/// Convert quarto-source-map::SourceInfo to a pandoc::location::Range, with a fallback if mapping fails.
-///
-/// This is a convenience wrapper around source_info_to_range that provides a fallback
-/// Range with zero row/column values if the mapping fails. Use this when you need
-/// a Range but can tolerate approximate row/column information.
-///
-/// # Arguments
-/// * `source_info` - The SourceInfo to convert
-/// * `ctx` - The ASTContext containing the source context
-///
-/// # Returns
-/// A pandoc::location::Range with row/column information if available, or a Range with offsets only
-pub fn source_info_to_range_or_fallback(source_info: &SourceInfo, ctx: &ASTContext) -> crate::pandoc::location::Range {
-    source_info_to_range(source_info, ctx).unwrap_or_else(|| crate::pandoc::location::Range {
-        start: crate::pandoc::location::Location {
-            offset: source_info.start_offset(),
-            row: 0,
-            column: 0,
-        },
-        end: crate::pandoc::location::Location {
-            offset: source_info.end_offset(),
-            row: 0,
-            column: 0,
-        },
-    })
-}
-
 /// Convert quarto-source-map::SourceInfo to a quarto_source_map::Range, with a fallback if mapping fails.
 ///
 /// This is for use with PandocNativeIntermediate which uses quarto_source_map::Range.
@@ -175,7 +119,10 @@ pub fn source_info_to_range_or_fallback(source_info: &SourceInfo, ctx: &ASTConte
 ///
 /// # Returns
 /// A quarto_source_map::Range with row/column information if available, or a Range with offsets only
-pub fn source_info_to_qsm_range_or_fallback(source_info: &SourceInfo, ctx: &ASTContext) -> quarto_source_map::Range {
+pub fn source_info_to_qsm_range_or_fallback(
+    source_info: &SourceInfo,
+    ctx: &ASTContext,
+) -> quarto_source_map::Range {
     let start_mapped = source_info.map_offset(0, &ctx.source_context);
     let end_mapped = source_info.map_offset(source_info.length(), &ctx.source_context);
 

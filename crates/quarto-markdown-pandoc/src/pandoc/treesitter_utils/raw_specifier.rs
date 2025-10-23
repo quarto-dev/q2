@@ -16,9 +16,15 @@ pub fn process_raw_specifier(
     // like code_content but skipping first character
     let raw = node.utf8_text(input_bytes).unwrap().to_string();
     let source_info = node_source_info_with_context(node, context);
-    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+        &source_info,
+        context,
+    );
     if raw.chars().nth(0) == Some('<') {
-        PandocNativeIntermediate::IntermediateBaseText("pandoc-reader:".to_string() + &raw[1..], range.clone())
+        PandocNativeIntermediate::IntermediateBaseText(
+            "pandoc-reader:".to_string() + &raw[1..],
+            range.clone(),
+        )
     } else {
         PandocNativeIntermediate::IntermediateBaseText(raw[1..].to_string(), range)
     }

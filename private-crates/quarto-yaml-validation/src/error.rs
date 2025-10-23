@@ -31,10 +31,20 @@ impl fmt::Display for SchemaError {
         match self {
             SchemaError::InvalidType(s) => write!(f, "Invalid schema type: {}", s),
             SchemaError::InvalidStructure { message, location } => {
-                write!(f, "Invalid schema structure: {} (at offset {})", message, location.start_offset())
+                write!(
+                    f,
+                    "Invalid schema structure: {} (at offset {})",
+                    message,
+                    location.start_offset()
+                )
             }
             SchemaError::MissingField { field, location } => {
-                write!(f, "Missing required field '{}' (at offset {})", field, location.start_offset())
+                write!(
+                    f,
+                    "Missing required field '{}' (at offset {})",
+                    field,
+                    location.start_offset()
+                )
             }
             SchemaError::UnresolvedRef(s) => write!(f, "Unresolved schema reference: {}", s),
             SchemaError::YamlError(e) => write!(f, "YAML parsing error: {}", e),
@@ -122,7 +132,7 @@ impl ValidationError {
         // TODO: Pass SourceContext to get proper line/column info
         self.location = Some(SourceLocation {
             file: "<unknown>".to_string(), // File tracking will be added in k-31
-            line: 0, // Would need SourceContext to compute this from offset
+            line: 0,                       // Would need SourceContext to compute this from offset
             column: node.source_info.start_offset(), // Using offset as a proxy
         });
         self.yaml_node = Some(node);

@@ -27,7 +27,10 @@ pub fn process_code_span<T: Write>(
         .into_iter()
         .map(|(node_name, child)| {
             let source_info = node_source_info_with_context(node, context);
-            let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
+            let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                &source_info,
+                context,
+            );
             match child {
                 PandocNativeIntermediate::IntermediateAttr(a) => {
                     attr = a;

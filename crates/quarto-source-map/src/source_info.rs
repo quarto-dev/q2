@@ -205,7 +205,9 @@ mod tests {
         assert_eq!(info.end_offset(), 10);
         assert_eq!(info.length(), 10);
         match info {
-            SourceInfo::Original { file_id: mapped_id, .. } => {
+            SourceInfo::Original {
+                file_id: mapped_id, ..
+            } => {
                 assert_eq!(mapped_id, file_id);
             }
             _ => panic!("Expected Original mapping"),
@@ -259,7 +261,11 @@ mod tests {
         assert_eq!(substring.length(), 10);
 
         match substring {
-            SourceInfo::Substring { start_offset, end_offset, .. } => {
+            SourceInfo::Substring {
+                start_offset,
+                end_offset,
+                ..
+            } => {
                 assert_eq!(start_offset, 10);
                 assert_eq!(end_offset, 20);
             }
@@ -497,10 +503,7 @@ mod tests {
 
         // Verify parent is serialized (with Rc, it's a full copy in JSON)
         assert!(json["Substring"]["parent"].is_object());
-        assert_eq!(
-            json["Substring"]["parent"]["Original"]["file_id"],
-            0
-        );
+        assert_eq!(json["Substring"]["parent"]["Original"]["file_id"], 0);
 
         // Verify round-trip
         let deserialized: SourceInfo = serde_json::from_value(json).unwrap();
@@ -538,10 +541,7 @@ mod tests {
         // Verify nested structure
         assert_eq!(json["Substring"]["start_offset"], 20);
         assert_eq!(json["Substring"]["end_offset"], 35);
-        assert_eq!(
-            json["Substring"]["parent"]["Substring"]["start_offset"],
-            4
-        );
+        assert_eq!(json["Substring"]["parent"]["Substring"]["start_offset"], 4);
         assert_eq!(
             json["Substring"]["parent"]["Substring"]["parent"]["Original"]["file_id"],
             0
@@ -601,18 +601,12 @@ mod tests {
         // First piece
         assert_eq!(pieces[0]["offset_in_concat"], 0);
         assert_eq!(pieces[0]["length"], 10);
-        assert_eq!(
-            pieces[0]["source_info"]["Original"]["file_id"],
-            0
-        );
+        assert_eq!(pieces[0]["source_info"]["Original"]["file_id"], 0);
 
         // Second piece
         assert_eq!(pieces[1]["offset_in_concat"], 10);
         assert_eq!(pieces[1]["length"], 10);
-        assert_eq!(
-            pieces[1]["source_info"]["Original"]["file_id"],
-            1
-        );
+        assert_eq!(pieces[1]["source_info"]["Original"]["file_id"], 1);
 
         // Verify round-trip
         let deserialized: SourceInfo = serde_json::from_value(json).unwrap();

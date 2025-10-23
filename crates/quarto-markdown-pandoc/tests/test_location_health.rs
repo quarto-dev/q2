@@ -58,14 +58,23 @@ impl LocationHealthValidator {
         }
     }
 
-    pub fn add_violation(&mut self, category: ViolationCategory, message: String, range: Option<&Range>) {
+    pub fn add_violation(
+        &mut self,
+        category: ViolationCategory,
+        message: String,
+        range: Option<&Range>,
+    ) {
         let location_info = range.map(|r| {
             format!(
                 "offset {}:{} (row:{},col:{}) to {}:{} (row:{},col:{})",
-                r.start.offset, r.start.offset,
-                r.start.row, r.start.column,
-                r.end.offset, r.end.offset,
-                r.end.row, r.end.column
+                r.start.offset,
+                r.start.offset,
+                r.start.row,
+                r.start.column,
+                r.end.offset,
+                r.end.offset,
+                r.end.row,
+                r.end.column
             )
         });
 
@@ -229,10 +238,10 @@ fn collect_source_info_from_block(block: &Block, source_infos: &mut Vec<SourceIn
                 }
             }
         }
-        Block::BlockMetadata(_) |
-        Block::NoteDefinitionPara(_) |
-        Block::NoteDefinitionFencedBlock(_) |
-        Block::CaptionBlock(_) => {
+        Block::BlockMetadata(_)
+        | Block::NoteDefinitionPara(_)
+        | Block::NoteDefinitionFencedBlock(_)
+        | Block::CaptionBlock(_) => {
             // TODO: handle these special block types if they have source info
         }
     }
@@ -427,7 +436,9 @@ fn validate_offset_row_col_consistency(
     validator: &mut LocationHealthValidator,
 ) {
     // Check: offset_to_location(offset) should give us the same row/col
-    if let Some(computed_loc) = quarto_source_map::utils::offset_to_location(source, location.offset) {
+    if let Some(computed_loc) =
+        quarto_source_map::utils::offset_to_location(source, location.offset)
+    {
         if computed_loc.row != location.row || computed_loc.column != location.column {
             validator.add_violation(
                 ViolationCategory::OffsetRowColConsistency,
@@ -455,17 +466,15 @@ fn validate_offset_row_col_consistency(
     }
 
     // Check: line_col_to_offset(row, col) should give us the same offset
-    if let Some(computed_offset) = quarto_source_map::utils::line_col_to_offset(source, location.row, location.column) {
+    if let Some(computed_offset) =
+        quarto_source_map::utils::line_col_to_offset(source, location.row, location.column)
+    {
         if computed_offset != location.offset {
             validator.add_violation(
                 ViolationCategory::OffsetRowColConsistency,
                 format!(
                     "{}: line_col_to_offset(row:{}, col:{}) returned offset {} but expected {}",
-                    context,
-                    location.row,
-                    location.column,
-                    computed_offset,
-                    location.offset
+                    context, location.row, location.column, computed_offset, location.offset
                 ),
                 None,
             );
@@ -552,12 +561,13 @@ fn validate_source_info_core_properties(
             column: 0,
         });
 
-    let end_location = quarto_source_map::utils::offset_to_location(source, end_offset)
-        .unwrap_or(quarto_source_map::Location {
+    let end_location = quarto_source_map::utils::offset_to_location(source, end_offset).unwrap_or(
+        quarto_source_map::Location {
             offset: end_offset,
             row: 0,
             column: 0,
-        });
+        },
+    );
 
     let range = Range {
         start: start_location,
@@ -568,13 +578,23 @@ fn validate_source_info_core_properties(
     validate_well_formed_range(&range, validator);
 
     // 2. Offset/row/column consistency for start
-    validate_offset_row_col_consistency(&range.start, source, &format!("{} start", context), validator);
+    validate_offset_row_col_consistency(
+        &range.start,
+        source,
+        &format!("{} start", context),
+        validator,
+    );
 
     // 3. Offset/row/column consistency for end
     validate_offset_row_col_consistency(&range.end, source, &format!("{} end", context), validator);
 
     // 4. Bounds checking for start
-    validate_location_bounds(&range.start, source, &format!("{} start", context), validator);
+    validate_location_bounds(
+        &range.start,
+        source,
+        &format!("{} start", context),
+        validator,
+    );
 
     // 5. Bounds checking for end
     validate_location_bounds(&range.end, source, &format!("{} end", context), validator);
@@ -627,7 +647,11 @@ mod tests {
         let source_infos = extract_all_source_info(&doc);
 
         // Should have at least: Paragraph, Str "Hello", Space, Str "world"
-        assert!(source_infos.len() >= 4, "Expected at least 4 source infos, got {}", source_infos.len());
+        assert!(
+            source_infos.len() >= 4,
+            "Expected at least 4 source infos, got {}",
+            source_infos.len()
+        );
     }
 
     #[test]
@@ -638,7 +662,11 @@ mod tests {
         let source_infos = extract_all_source_info(&doc);
 
         // Should have: Paragraph, multiple Str, Emph, Strong, etc.
-        assert!(source_infos.len() > 5, "Expected many source infos for nested structure, got {}", source_infos.len());
+        assert!(
+            source_infos.len() > 5,
+            "Expected many source infos for nested structure, got {}",
+            source_infos.len()
+        );
     }
 
     #[test]
@@ -655,7 +683,10 @@ mod tests {
             }
         }
 
-        assert!(violations.is_empty(), "Expected no violations for simple document");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for simple document"
+        );
     }
 
     #[test]
@@ -672,7 +703,10 @@ mod tests {
             }
         }
 
-        assert!(violations.is_empty(), "Expected no violations for nested document");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for nested document"
+        );
     }
 
     #[test]
@@ -689,7 +723,10 @@ mod tests {
             }
         }
 
-        assert!(violations.is_empty(), "Expected no violations for multiline document");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for multiline document"
+        );
     }
 
     #[test]
@@ -706,7 +743,10 @@ mod tests {
             }
         }
 
-        assert!(violations.is_empty(), "Expected no violations for empty document");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for empty document"
+        );
     }
 
     #[test]
@@ -723,7 +763,10 @@ mod tests {
             }
         }
 
-        assert!(violations.is_empty(), "Expected no violations for document without trailing newline");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for document without trailing newline"
+        );
     }
 
     #[test]
@@ -740,7 +783,10 @@ mod tests {
             }
         }
 
-        assert!(violations.is_empty(), "Expected no violations for document with trailing newline");
+        assert!(
+            violations.is_empty(),
+            "Expected no violations for document with trailing newline"
+        );
     }
 
     #[test]
@@ -773,7 +819,10 @@ mod tests {
                 let tree = match parser.parse(input_bytes, None) {
                     Some(tree) => tree,
                     None => {
-                        eprintln!("Skipping {:?}: parse returned None", path.file_name().unwrap());
+                        eprintln!(
+                            "Skipping {:?}: parse returned None",
+                            path.file_name().unwrap()
+                        );
                         continue;
                     }
                 };
@@ -789,7 +838,11 @@ mod tests {
                 ) {
                     Ok(doc) => doc,
                     Err(e) => {
-                        eprintln!("Skipping {:?}: conversion failed: {:?}", path.file_name().unwrap(), e);
+                        eprintln!(
+                            "Skipping {:?}: conversion failed: {:?}",
+                            path.file_name().unwrap(),
+                            e
+                        );
                         continue;
                     }
                 };
@@ -797,7 +850,11 @@ mod tests {
                 let violations = validate_core_properties(&doc, &source);
 
                 if !violations.is_empty() {
-                    eprintln!("\n{:?} has {} violations:", path.file_name().unwrap(), violations.len());
+                    eprintln!(
+                        "\n{:?} has {} violations:",
+                        path.file_name().unwrap(),
+                        violations.len()
+                    );
                     for v in &violations {
                         eprintln!("  {}", v);
                     }

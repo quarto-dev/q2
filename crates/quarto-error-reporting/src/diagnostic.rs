@@ -296,17 +296,20 @@ impl DiagnosticMessage {
 
         // Check if we have any location info that could be displayed with ariadne
         // This includes the main diagnostic location OR any detail with a location
-        let has_any_location = self.location.is_some()
-            || self.details.iter().any(|d| d.location.is_some());
+        let has_any_location =
+            self.location.is_some() || self.details.iter().any(|d| d.location.is_some());
 
         // If we have location info and source context, render ariadne source display
         let has_ariadne = if has_any_location && ctx.is_some() {
             // Use main location if available, otherwise use first detail location
-            let location = self.location.as_ref()
+            let location = self
+                .location
+                .as_ref()
                 .or_else(|| self.details.iter().find_map(|d| d.location.as_ref()));
 
             if let Some(loc) = location {
-                if let Some(ariadne_output) = self.render_ariadne_source_context(loc, ctx.unwrap()) {
+                if let Some(ariadne_output) = self.render_ariadne_source_context(loc, ctx.unwrap())
+                {
                     result.push_str(&ariadne_output);
                     true
                 } else {
@@ -358,12 +361,7 @@ impl DiagnosticMessage {
                     // No context: show immediate location (1-indexed for display)
                     // Note: Without context, we can't get row/column from offsets
                     // We could map_offset with ctx to get Location, but ctx is None here
-                    write!(
-                        result,
-                        "  at offset {}\n",
-                        loc.start_offset()
-                    )
-                    .unwrap();
+                    write!(result, "  at offset {}\n", loc.start_offset()).unwrap();
                 }
             }
 
@@ -495,13 +493,19 @@ impl DiagnosticMessage {
     }
 
     /// Extract the original file_id from a SourceInfo by traversing the mapping chain
-    fn extract_file_id(source_info: &quarto_source_map::SourceInfo) -> Option<quarto_source_map::FileId> {
+    fn extract_file_id(
+        source_info: &quarto_source_map::SourceInfo,
+    ) -> Option<quarto_source_map::FileId> {
         match source_info {
             quarto_source_map::SourceInfo::Original { file_id, .. } => Some(*file_id),
-            quarto_source_map::SourceInfo::Substring { parent, .. } => Self::extract_file_id(parent),
+            quarto_source_map::SourceInfo::Substring { parent, .. } => {
+                Self::extract_file_id(parent)
+            }
             quarto_source_map::SourceInfo::Concat { pieces } => {
                 // For concatenated sources, use the first piece's file_id
-                pieces.first().and_then(|p| Self::extract_file_id(&p.source_info))
+                pieces
+                    .first()
+                    .and_then(|p| Self::extract_file_id(&p.source_info))
             }
         }
     }
@@ -545,11 +549,8 @@ impl DiagnosticMessage {
         };
 
         // Build the report using the mapped offset for proper line:column display
-        let mut report = Report::build(
-            report_kind,
-            file.path.clone(),
-            start_mapped.location.offset,
-        );
+        let mut report =
+            Report::build(report_kind, file.path.clone(), start_mapped.location.offset);
 
         // Add title with error code
         if let Some(code) = &self.code {
@@ -608,7 +609,10 @@ impl DiagnosticMessage {
         let report = report.finish();
         let mut output = Vec::new();
         report
-            .write((file.path.clone(), Source::from(content.as_str())), &mut output)
+            .write(
+                (file.path.clone(), Source::from(content.as_str())),
+                &mut output,
+            )
             .ok()?;
 
         String::from_utf8(output).ok()
@@ -777,11 +781,8 @@ mod tests {
         use crate::builder::DiagnosticMessageBuilder;
 
         // Create a location at offsets 100-110
-        let location = quarto_source_map::SourceInfo::original(
-            quarto_source_map::FileId(0),
-            100,
-            110,
-        );
+        let location =
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), 100, 110);
 
         let msg = DiagnosticMessageBuilder::error("Invalid syntax")
             .with_location(location)
@@ -807,8 +808,7 @@ mod tests {
 
         // Create a location in that file (offset 7 is start of "line 2")
         let location = quarto_source_map::SourceInfo::original(
-            file_id,
-            7,  // Start of "line 2"
+            file_id, 7,  // Start of "line 2"
             13, // End of "line 2"
         );
 
@@ -828,11 +828,8 @@ mod tests {
     fn test_location_in_to_json() {
         use crate::builder::DiagnosticMessageBuilder;
 
-        let location = quarto_source_map::SourceInfo::original(
-            quarto_source_map::FileId(0),
-            100,
-            110,
-        );
+        let location =
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), 100, 110);
 
         let msg = DiagnosticMessageBuilder::error("Invalid syntax")
             .with_location(location)

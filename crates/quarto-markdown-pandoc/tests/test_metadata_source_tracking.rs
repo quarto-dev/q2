@@ -11,9 +11,11 @@ use quarto_markdown_pandoc::writers;
 fn resolve_source_offset(source: &quarto_source_map::SourceInfo) -> usize {
     match source {
         quarto_source_map::SourceInfo::Original { start_offset, .. } => *start_offset,
-        quarto_source_map::SourceInfo::Substring { parent, start_offset, .. } => {
-            start_offset + resolve_source_offset(parent)
-        }
+        quarto_source_map::SourceInfo::Substring {
+            parent,
+            start_offset,
+            ..
+        } => start_offset + resolve_source_offset(parent),
         quarto_source_map::SourceInfo::Concat { pieces } => {
             // For concat, use the start offset of the first piece
             pieces.first().map(|p| p.offset_in_concat).unwrap_or(0)

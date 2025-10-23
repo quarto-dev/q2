@@ -37,10 +37,8 @@ pub fn process_indented_code_block(
                         .start
                         .offset
                         .saturating_sub(outer_range.start_offset());
-                    let continuation_end = range
-                        .end
-                        .offset
-                        .saturating_sub(outer_range.start_offset());
+                    let continuation_end =
+                        range.end.offset.saturating_sub(outer_range.start_offset());
 
                     // Append content before this continuation
                     if continuation_start > start_offset && continuation_start <= outer_string.len()
