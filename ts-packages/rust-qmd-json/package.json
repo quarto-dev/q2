@@ -1,0 +1,36 @@
+{
+  "name": "@quarto/rust-qmd-json",
+  "version": "0.1.0",
+  "description": "Convert quarto-markdown-pandoc JSON output to AnnotatedParse structures",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/quarto-dev/quarto.git",
+    "directory": "ts-packages/rust-qmd-json"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --import tsx --test test/*.test.ts",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build && npm test"
+  },
+  "dependencies": {
+    "@quarto/mapped-string": "^0.1.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.2",
+    "tsx": "^4.7.1",
+    "@types/node": "^20.0.0"
+  }
+}
