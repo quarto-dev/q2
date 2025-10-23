@@ -537,8 +537,9 @@ impl DiagnosticMessage {
         };
 
         // Map the location offsets back to original file positions
-        let start_mapped = main_location.map_offset(main_location.start_offset(), ctx)?;
-        let end_mapped = main_location.map_offset(main_location.end_offset(), ctx)?;
+        // map_offset expects relative offsets (0 = start of this SourceInfo's range)
+        let start_mapped = main_location.map_offset(0, ctx)?;
+        let end_mapped = main_location.map_offset(main_location.length(), ctx)?;
 
         // Determine report kind and color
         let (report_kind, main_color) = match self.kind {
@@ -584,9 +585,10 @@ impl DiagnosticMessage {
 
                 if detail_file_id == file_id {
                     // Map detail offsets to original file positions
+                    // map_offset expects relative offsets (0 = start of SourceInfo's range)
                     if let (Some(detail_start), Some(detail_end)) = (
-                        detail_loc.map_offset(detail_loc.start_offset(), ctx),
-                        detail_loc.map_offset(detail_loc.end_offset(), ctx),
+                        detail_loc.map_offset(0, ctx),
+                        detail_loc.map_offset(detail_loc.length(), ctx),
                     ) {
                         let detail_span = detail_start.location.offset..detail_end.location.offset;
                         let detail_color = match detail.kind {

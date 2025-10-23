@@ -432,12 +432,36 @@ fn error_diagnostic_from_parse_state(
                                 calculate_byte_offset(&input_str, token.row, token.column);
                             let token_span_end = token_byte_offset + token.size.max(1);
 
-                            // Use SourceInfo::substring to create a SourceInfo for this token
-                            // This properly uses the quarto-source-map infrastructure
-                            let token_source_info = quarto_source_map::SourceInfo::substring(
-                                source_info.clone(),
-                                token_byte_offset,
+                            // Create SourceInfo for this token location
+                            // Use from_range to create an Original SourceInfo since the token
+                            // is in the same file as the main error, not a substring of it
+                            let token_location_start =
+                                quarto_source_map::utils::offset_to_location(
+                                    &input_str,
+                                    token_byte_offset,
+                                )
+                                .unwrap_or(
+                                    quarto_source_map::Location {
+                                        offset: token_byte_offset,
+                                        row: token.row,
+                                        column: token.column,
+                                    },
+                                );
+                            let token_location_end = quarto_source_map::utils::offset_to_location(
+                                &input_str,
                                 token_span_end,
+                            )
+                            .unwrap_or(quarto_source_map::Location {
+                                offset: token_span_end,
+                                row: token.row,
+                                column: token.column + token.size.max(1),
+                            });
+                            let token_source_info = quarto_source_map::SourceInfo::from_range(
+                                quarto_source_map::FileId(0),
+                                quarto_source_map::Range {
+                                    start: token_location_start,
+                                    end: token_location_end,
+                                },
                             );
 
                             // Add as info detail with location (will show as blue label in Ariadne)
@@ -467,12 +491,36 @@ fn error_diagnostic_from_parse_state(
                                 calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
                             let range_span_end = end_byte_offset + end_tok.size.max(1);
 
-                            // Use SourceInfo::substring to create a SourceInfo for this range
-                            // This properly uses the quarto-source-map infrastructure
-                            let range_source_info = quarto_source_map::SourceInfo::substring(
-                                source_info.clone(),
-                                begin_byte_offset,
+                            // Create SourceInfo for this range location
+                            // Use from_range to create an Original SourceInfo since the range
+                            // is in the same file as the main error, not a substring of it
+                            let range_location_start =
+                                quarto_source_map::utils::offset_to_location(
+                                    &input_str,
+                                    begin_byte_offset,
+                                )
+                                .unwrap_or(
+                                    quarto_source_map::Location {
+                                        offset: begin_byte_offset,
+                                        row: begin_tok.row,
+                                        column: begin_tok.column,
+                                    },
+                                );
+                            let range_location_end = quarto_source_map::utils::offset_to_location(
+                                &input_str,
                                 range_span_end,
+                            )
+                            .unwrap_or(quarto_source_map::Location {
+                                offset: range_span_end,
+                                row: end_tok.row,
+                                column: end_tok.column + end_tok.size.max(1),
+                            });
+                            let range_source_info = quarto_source_map::SourceInfo::from_range(
+                                quarto_source_map::FileId(0),
+                                quarto_source_map::Range {
+                                    start: range_location_start,
+                                    end: range_location_end,
+                                },
                             );
 
                             // Add as info detail with location

@@ -42,6 +42,25 @@ impl FileInformation {
         }
     }
 
+    /// Create file information from pre-computed parts
+    ///
+    /// This is useful when deserializing from formats that store
+    /// line break information directly (like JSON).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_source_map::FileInformation;
+    ///
+    /// let info = FileInformation::from_parts(vec![6, 13], 20);
+    /// ```
+    pub fn from_parts(line_breaks: Vec<usize>, total_length: usize) -> Self {
+        FileInformation {
+            line_breaks,
+            total_length,
+        }
+    }
+
     /// Convert a byte offset to a Location with row and column
     ///
     /// Uses binary search to find which line contains the offset.
@@ -97,6 +116,11 @@ impl FileInformation {
     /// Get the total length of the file in bytes
     pub fn total_length(&self) -> usize {
         self.total_length
+    }
+
+    /// Get the line breaks array (byte offsets of newline characters)
+    pub fn line_breaks(&self) -> &[usize] {
+        &self.line_breaks
     }
 
     /// Get the number of lines in the file

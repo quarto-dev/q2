@@ -14,7 +14,7 @@ The JSON output contains three main sections:
   "meta": { /* metadata */ },
   "blocks": [ /* block elements */ ],
   "astContext": {
-    "filenames": [ /* array of source files */ ],
+    "files": [ /* array of source file information */ ],
     "sourceInfoPool": [ /* source location data */ ]
   }
 }
@@ -35,9 +35,15 @@ Unlike Pandoc, `quarto-markdown-pandoc` tracks the exact source location of ever
 ```json
 {
   "astContext": {
-    "filenames": ["example.qmd"],
+    "files": [
+      {
+        "name": "example.qmd",
+        "line_breaks": [11],
+        "total_length": 11
+      }
+    ],
     "sourceInfoPool": [
-      {"r": [0, 0, 0, 4, 0, 4], "t": 0, "d": 0}
+      {"r": [0, 5], "t": 0, "d": 0}
     ]
   },
   "blocks": [
@@ -59,21 +65,21 @@ The `"s": 0` field means "look up source info at index 0 in the pool".
 Each entry in the `sourceInfoPool` array has this compact format:
 
 ```json
-{"r": [start_offset, start_row, start_col, end_offset, end_row, end_col], "t": type, "d": data}
+{"r": [start_offset, end_offset], "t": type, "d": data}
 ```
 
 ### Fields
 
-- **`r`** (range): 6-element array `[start_offset, start_row, start_col, end_offset, end_row, end_col]`
-  - All positions are 0-indexed
-  - `offset` is byte offset from start of source
-  - `row` and `col` are line and column numbers
+- **`r`** (range): 2-element array `[start_offset, end_offset]`
+  - Byte offsets from the start of the relevant source
+  - For Original: absolute offsets in the source file
+  - For Substring: relative offsets within the parent source
+  - Row and column information is computed on-demand from the file's line break index
 
 - **`t`** (type): Integer indicating the source mapping type
   - `0` = Original (direct position in source file)
   - `1` = Substring (extracted from a parent source)
   - `2` = Concat (multiple sources joined together)
-  - `3` = Transformed (source that was modified with explicit mapping)
 
 - **`d`** (data): Type-specific data (see below)
 
@@ -82,7 +88,7 @@ Each entry in the `sourceInfoPool` array has this compact format:
 Represents text directly from a source file.
 
 ```json
-{"r": [0, 0, 0, 10, 0, 10], "t": 0, "d": 0}
+{"r": [0, 5], "t": 0, "d": 0}
 ```
 
 - **`d`**: The file ID (index into `astContext.filenames`)
@@ -94,45 +100,29 @@ Represents text directly from a source file.
 Represents a substring extracted from another source.
 
 ```json
-{"r": [0, 0, 0, 5, 0, 5], "t": 1, "d": [3, 10]}
+{"r": [4, 17], "t": 1, "d": 3}
 ```
 
-- **`d`**: `[parent_id, offset]`
-  - `parent_id`: Index of the parent source in the pool
-  - `offset`: Byte offset within the parent where this substring starts
+- **`d`**: Index of the parent source in the pool
+- **`r`**: `[start_offset, end_offset]` within the parent source (relative offsets)
 
-**Example**: A 5-byte substring starting at byte 10 of source #3 (e.g., extracting YAML value from frontmatter).
+**Example**: A 13-byte substring from bytes 4-17 of source #3 (e.g., extracting YAML value from frontmatter).
 
 ### Type 2: Concat
 
 Represents multiple sources concatenated together.
 
 ```json
-{"r": [0, 0, 0, 10, 0, 10], "t": 2, "d": [[1, 0, 5], [2, 5, 5]]}
+{"r": [0, 10], "t": 2, "d": [[1, 0, 5], [2, 5, 5]]}
 ```
 
 - **`d`**: Array of pieces, where each piece is `[source_info_id, offset_in_concat, length]`
   - `source_info_id`: Index of this piece's source in the pool
-  - `offset_in_concat`: Where this piece starts in the concatenated result
+  - `offset_in_concat`: Where this piece starts in the concatenated result (0-based)
   - `length`: Length of this piece in bytes
+- **`r`**: `[0, total_length]` - the concatenated result spans from 0 to the sum of all piece lengths
 
 **Example**: Joining sources #1 (5 bytes) and #2 (5 bytes) to create a 10-byte result.
-
-### Type 3: Transformed
-
-Represents source text that was transformed (e.g., entity decoding, shortcode expansion) with explicit range mappings.
-
-```json
-{"r": [0, 0, 0, 8, 0, 8], "t": 3, "d": [4, [[0, 4, 0, 4], [4, 8, 6, 10]]]}
-```
-
-- **`d`**: `[parent_id, range_mappings]`
-  - `parent_id`: Index of the parent source in the pool
-  - `range_mappings`: Array of `[from_start, from_end, to_start, to_end]`
-    - `from_start`, `from_end`: Range in the transformed text (this source)
-    - `to_start`, `to_end`: Corresponding range in the parent text
-
-**Example**: 8 bytes of transformed text derived from bytes 0-4 and 6-10 of source #4.
 
 ## Complete Example
 
@@ -152,12 +142,18 @@ Represents source text that was transformed (e.g., entity decoding, shortcode ex
     }
   ],
   "astContext": {
-    "filenames": ["example.qmd"],
+    "files": [
+      {
+        "name": "example.qmd",
+        "line_breaks": [],
+        "total_length": 11
+      }
+    ],
     "sourceInfoPool": [
-      {"r": [0, 0, 0, 5, 0, 5], "t": 0, "d": 0},
-      {"r": [5, 0, 5, 6, 0, 6], "t": 0, "d": 0},
-      {"r": [6, 0, 6, 11, 0, 11], "t": 0, "d": 0},
-      {"r": [0, 0, 0, 11, 0, 11], "t": 2, "d": [[0, 0, 5], [1, 5, 1], [2, 6, 5]]}
+      {"r": [0, 5], "t": 0, "d": 0},
+      {"r": [5, 6], "t": 0, "d": 0},
+      {"r": [6, 11], "t": 0, "d": 0},
+      {"r": [0, 11], "t": 2, "d": [[0, 0, 5], [1, 5, 1], [2, 6, 5]]}
     ]
   }
 }
@@ -165,12 +161,33 @@ Represents source text that was transformed (e.g., entity decoding, shortcode ex
 
 ### Explanation
 
-- Pool entry 0: "Hello" at bytes 0-5
-- Pool entry 1: Space at byte 5-6
-- Pool entry 2: "world" at bytes 6-11
-- Pool entry 3: Concatenation of all three pieces
+- Pool entry 0: "Hello" at bytes 0-5 (Original)
+- Pool entry 1: Space at bytes 5-6 (Original)
+- Pool entry 2: "world" at bytes 6-11 (Original)
+- Pool entry 3: Concatenation of all three pieces (Concat)
 - The Para block references entry 3 (the full concatenated range)
 - Each inline element references its individual piece
+
+## File Information
+
+The `files` array in `astContext` contains information about each source file. Each entry has:
+
+```json
+{
+  "name": "example.qmd",        // Source file path
+  "line_breaks": [6, 13, 20],   // Byte offsets of each newline character
+  "total_length": 25            // Total file size in bytes
+}
+```
+
+The `line_breaks` and `total_length` fields allow JSON consumers to convert byte offsets to row/column positions without needing access to the original source files.
+
+To convert a byte offset to (row, column):
+1. Use binary search on `line_breaks` to find which line contains the offset
+2. The row is the index where the offset would be inserted
+3. The column is the offset minus the start of that line
+
+This information is self-contained in the JSON, so consumers don't need to reopen source files
 
 ## Pandoc compatibility
 

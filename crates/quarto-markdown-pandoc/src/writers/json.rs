@@ -729,7 +729,34 @@ fn write_pandoc(pandoc: &Pandoc, context: &ASTContext) -> Value {
 
     // Build astContext with pool and metaTopLevelKeySources
     let mut ast_context_obj = serde_json::Map::new();
-    ast_context_obj.insert("filenames".to_string(), json!(context.filenames));
+
+    // Serialize files array combining filenames and FileInformation
+    // Each file entry has: "name", "line_breaks", "total_length"
+    let files_array: Vec<Value> = (0..context.filenames.len())
+        .map(|idx| {
+            let filename = &context.filenames[idx];
+            let file_info = context
+                .source_context
+                .get_file(quarto_source_map::FileId(idx))
+                .and_then(|file| file.file_info.as_ref());
+
+            if let Some(info) = file_info {
+                // File with FileInformation - serialize everything
+                json!({
+                    "name": filename,
+                    "line_breaks": info.line_breaks(),
+                    "total_length": info.total_length()
+                })
+            } else {
+                // File without FileInformation - just the name
+                json!({
+                    "name": filename
+                })
+            }
+        })
+        .collect();
+
+    ast_context_obj.insert("files".to_string(), json!(files_array));
 
     // Only include sourceInfoPool if non-empty
     if !serializer.pool.is_empty() {

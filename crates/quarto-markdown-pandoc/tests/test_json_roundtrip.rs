@@ -348,3 +348,117 @@ fn test_json_write_then_read_matches_original_structure() {
         _ => panic!("Block type mismatch for second block"),
     }
 }
+
+/// Test that JSON roundtrip preserves source mapping capability (map_offset should work)
+#[test]
+fn test_json_roundtrip_preserves_source_mapping() {
+    let qmd_content = r#"---
+title: "Test"
+---
+
+Hello world
+"#;
+
+    // Create a temporary file for testing
+    let temp_dir = std::env::temp_dir();
+    let test_file = temp_dir.join("test_json_roundtrip_mapping.qmd");
+    std::fs::write(&test_file, qmd_content).expect("Failed to write test file");
+
+    // Step 1: Parse QMD to create initial AST with source mapping
+    let result = readers::qmd::read(
+        qmd_content.as_bytes(),
+        false,
+        &test_file.to_string_lossy(),
+        &mut std::io::sink(),
+    );
+    let (pandoc1, context1, diagnostics) = result.expect("Failed to parse QMD");
+    assert!(diagnostics.is_empty(), "Expected no parse errors");
+
+    // Step 2: Serialize to JSON
+    let mut json_buf = Vec::new();
+    json::write(&pandoc1, &context1, &mut json_buf).expect("Failed to write JSON");
+
+    // Step 3: Verify that JSON contains files array with embedded FileInformation
+    let json_value: serde_json::Value =
+        serde_json::from_slice(&json_buf).expect("Failed to parse JSON");
+    let files_in_json = json_value["astContext"]["files"].as_array();
+    assert!(
+        files_in_json.is_some(),
+        "JSON should contain files array in astContext"
+    );
+    let files_array = files_in_json.unwrap();
+    assert_eq!(files_array.len(), 1, "Should have one file");
+
+    // Verify the file entry has name, line_breaks, and total_length
+    let file_obj = &files_array[0];
+    assert!(
+        file_obj["name"].is_string(),
+        "File entry should have name field"
+    );
+    assert!(
+        file_obj["line_breaks"].is_array(),
+        "File entry should have line_breaks array"
+    );
+    assert!(
+        file_obj["total_length"].is_number(),
+        "File entry should have total_length"
+    );
+
+    // Step 4: Deserialize from JSON
+    let (pandoc2, context2) =
+        readers::json::read(&mut json_buf.as_slice()).expect("Failed to read JSON");
+
+    // Step 5: Verify that the deserialized AST has working source mapping
+    // Get the first block (should be a Para with "Hello world")
+    if let Some(first_block) = pandoc2.blocks.first() {
+        if let Block::Paragraph(para) = first_block {
+            // Verify we have a SourceInfo (just check that it has non-zero length)
+            assert!(
+                para.source_info.length() > 0,
+                "Para block should have source info with non-zero length after JSON roundtrip"
+            );
+
+            // The key test: map_offset should work on the deserialized SourceInfo
+            let mapped_start = para.source_info.map_offset(0, &context2.source_context);
+            assert!(
+                mapped_start.is_some(),
+                "map_offset should work after JSON roundtrip (start position). \
+                 This means SourceContext should have been populated with file information from disk."
+            );
+
+            let mapped_end = para
+                .source_info
+                .map_offset(para.source_info.length(), &context2.source_context);
+            assert!(
+                mapped_end.is_some(),
+                "map_offset should work after JSON roundtrip (end position)"
+            );
+
+            // Verify the mapped locations are sensible
+            let start_loc = mapped_start.unwrap();
+            // Row 4 is where "Hello world" starts (after frontmatter and blank line)
+            assert_eq!(
+                start_loc.location.row, 4,
+                "After roundtrip, paragraph should still map to correct row"
+            );
+
+            // Also test inline elements have working source mapping
+            if let Some(Inline::Str(str_inline)) = para.content.first() {
+                let inline_mapped = str_inline
+                    .source_info
+                    .map_offset(0, &context2.source_context);
+                assert!(
+                    inline_mapped.is_some(),
+                    "map_offset should work on inline elements after roundtrip"
+                );
+            }
+        } else {
+            panic!("Expected Para block, got {:?}", first_block);
+        }
+    } else {
+        panic!("Expected at least one block in the document");
+    }
+
+    // Clean up
+    std::fs::remove_file(&test_file).ok();
+}

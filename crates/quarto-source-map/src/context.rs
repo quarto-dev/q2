@@ -73,6 +73,25 @@ impl SourceContext {
         id
     }
 
+    /// Add a file with pre-computed FileInformation
+    ///
+    /// This is useful when deserializing from formats (like JSON) that include
+    /// serialized FileInformation, avoiding the need to recompute line breaks
+    /// or read from disk.
+    ///
+    /// The file is created without content (content=None), so ariadne rendering
+    /// won't work, but map_offset() will work using the provided FileInformation.
+    pub fn add_file_with_info(&mut self, path: String, file_info: FileInformation) -> FileId {
+        let id = FileId(self.files.len());
+        self.files.push(SourceFile {
+            path,
+            content: None,
+            file_info: Some(file_info),
+            metadata: FileMetadata { file_type: None },
+        });
+        id
+    }
+
     /// Get a file by ID
     pub fn get_file(&self, id: FileId) -> Option<&SourceFile> {
         self.files.get(id.0)
