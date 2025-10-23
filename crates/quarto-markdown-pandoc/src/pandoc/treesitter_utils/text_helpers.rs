@@ -119,14 +119,14 @@ pub fn create_line_break_inline(
     let range = node_location(node);
     let inline = if is_hard {
         Inline::LineBreak(LineBreak {
-            source_info: quarto_source_map::SourceInfo::original(
+            source_info: quarto_source_map::SourceInfo::from_range(
                 quarto_source_map::FileId(0),
                 range,
             ),
         })
     } else {
         Inline::SoftBreak(SoftBreak {
-            source_info: quarto_source_map::SourceInfo::original(
+            source_info: quarto_source_map::SourceInfo::from_range(
                 quarto_source_map::FileId(0),
                 range,
             ),

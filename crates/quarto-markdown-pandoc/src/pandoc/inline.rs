@@ -484,7 +484,7 @@ mod tests {
     use super::*;
 
     fn dummy_source_info() -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::original(
+        quarto_source_map::SourceInfo::from_range(
             quarto_source_map::FileId(0),
             quarto_source_map::Range {
                 start: quarto_source_map::Location {

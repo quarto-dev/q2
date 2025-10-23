@@ -9,18 +9,16 @@ use quarto_markdown_pandoc::writers;
 
 /// Helper to resolve a SourceInfo chain to absolute file offset
 fn resolve_source_offset(source: &quarto_source_map::SourceInfo) -> usize {
-    match &source.mapping {
-        quarto_source_map::SourceMapping::Original { .. } => source.range.start.offset,
-        quarto_source_map::SourceMapping::Substring { offset, parent } => {
-            offset + resolve_source_offset(parent)
-        }
-        quarto_source_map::SourceMapping::Concat { .. } => {
-            // For concat, just use the start offset
-            source.range.start.offset
-        }
-        quarto_source_map::SourceMapping::Transformed { .. } => {
-            // For transformed, just use the start offset
-            source.range.start.offset
+    match source {
+        quarto_source_map::SourceInfo::Original { start_offset, .. } => *start_offset,
+        quarto_source_map::SourceInfo::Substring {
+            parent,
+            start_offset,
+            ..
+        } => start_offset + resolve_source_offset(parent),
+        quarto_source_map::SourceInfo::Concat { pieces } => {
+            // For concat, use the start offset of the first piece
+            pieces.first().map(|p| p.offset_in_concat).unwrap_or(0)
         }
     }
 }

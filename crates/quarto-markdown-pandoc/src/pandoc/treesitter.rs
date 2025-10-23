@@ -103,7 +103,7 @@ fn process_list(
     //     but the next item might not itself be a paragraph.
 
     let mut has_loose_item = false;
-    let mut last_para_range: Option<quarto_source_map::Range> = None;
+    let mut last_para_end_row: Option<usize> = None;
     let mut last_item_end_row: Option<usize> = None;
     let mut list_items: Vec<Blocks> = Vec::new();
     let mut is_ordered_list: Option<ListAttributes> = None;
@@ -153,9 +153,9 @@ fn process_list(
             }
         }
 
-        // is the last item loose? Check the last paragraph range
-        if let Some(ref last_range) = last_para_range {
-            if last_range.end.row != child_range.start.row {
+        // is the last item loose? Check the last paragraph end row
+        if let Some(last_para_end) = last_para_end_row {
+            if last_para_end != child_range.start.row {
                 // if the last paragraph ends on a different line than the current item starts,
                 // then the last item was loose, mark it
                 has_loose_item = true;
@@ -186,12 +186,15 @@ fn process_list(
             has_loose_item = true;
 
             // technically, we don't need to worry about
-            // last paragraph range after setting has_loose_item,
+            // last paragraph end row after setting has_loose_item,
             // but we do it in case we want to use it later
-            last_para_range = None;
-            last_item_end_row = blocks
-                .last()
-                .map(|b| get_block_source_info(b).range.end.row);
+            last_para_end_row = None;
+            last_item_end_row = blocks.last().and_then(|b| {
+                let source_info = get_block_source_info(b);
+                source_info
+                    .map_offset(source_info.length(), &context.source_context)
+                    .map(|mapped| mapped.location.row)
+            });
             list_items.push(blocks);
             continue;
         }
@@ -199,22 +202,28 @@ fn process_list(
         // is this item possibly loose?
         if blocks.len() == 1 {
             if let Some(Block::Paragraph(para)) = blocks.first() {
-                // yes, so store the range and wait to finish the check on
+                // yes, so store the end row and wait to finish the check on
                 // next item
-                last_para_range = Some(para.source_info.range.clone());
+                last_para_end_row = para
+                    .source_info
+                    .map_offset(para.source_info.length(), &context.source_context)
+                    .map(|mapped| mapped.location.row);
             } else {
                 // if the first block is not a paragraph, it's not loose
-                last_para_range = None;
+                last_para_end_row = None;
             }
         } else {
             // if the item has multiple blocks (but not multiple paragraphs,
             // which would have been caught above), we need to reset the
-            // last_para_range since this item can't participate in loose detection
-            last_para_range = None;
+            // last_para_end_row since this item can't participate in loose detection
+            last_para_end_row = None;
         }
-        last_item_end_row = blocks
-            .last()
-            .map(|b| get_block_source_info(b).range.end.row);
+        last_item_end_row = blocks.last().and_then(|b| {
+            let source_info = get_block_source_info(b);
+            source_info
+                .map_offset(source_info.length(), &context.source_context)
+                .map(|mapped| mapped.location.row)
+        });
         list_items.push(blocks);
     }
 
@@ -361,7 +370,7 @@ fn process_native_inline<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: quarto_source_map::SourceInfo::original(
+                    source_info: quarto_source_map::SourceInfo::from_range(
                         context.current_file_id(),
                         range,
                     ),
@@ -369,7 +378,7 @@ fn process_native_inline<T: Write>(
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: quarto_source_map::SourceInfo::original(
+                    source_info: quarto_source_map::SourceInfo::from_range(
                         context.current_file_id(),
                         range,
                     ),
@@ -431,7 +440,7 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: quarto_source_map::SourceInfo::original(
+                        source_info: quarto_source_map::SourceInfo::from_range(
                             context.current_file_id(),
                             range,
                         ),
@@ -439,7 +448,7 @@ fn process_native_inlines<T: Write>(
                 } else {
                     inlines.push(Inline::Str(Str {
                         text: apply_smart_quotes(text),
-                        source_info: quarto_source_map::SourceInfo::original(
+                        source_info: quarto_source_map::SourceInfo::from_range(
                             context.current_file_id(),
                             range,
                         ),

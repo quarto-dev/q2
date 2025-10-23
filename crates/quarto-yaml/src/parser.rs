@@ -38,7 +38,7 @@ pub fn parse(content: &str) -> Result<YamlWithSourceInfo> {
 ///
 /// let yaml = parse_file("title: My Document", "config.yaml").unwrap();
 /// // Filename tracking will be added in a future update
-/// assert!(yaml.source_info.range.end.offset > 0);
+/// assert!(yaml.source_info.end_offset() > 0);
 /// ```
 ///
 /// # Errors
@@ -67,7 +67,7 @@ pub fn parse_file(content: &str, filename: &str) -> Result<YamlWithSourceInfo> {
 /// use quarto_source_map::{FileId, Location, Range};
 ///
 /// // Create parent source info for a .qmd file
-/// let parent = SourceInfo::original(
+/// let parent = SourceInfo::from_range(
 ///     FileId(1),
 ///     Range {
 ///         start: Location { offset: 0, row: 0, column: 0 },
@@ -107,7 +107,7 @@ fn parse_impl(
 
             // Create SourceInfo for the entire file content
             use quarto_source_map::{Location, Range};
-            SourceInfo::original(
+            SourceInfo::from_range(
                 file_id,
                 Range {
                     start: Location {
@@ -133,6 +133,52 @@ fn parse_impl(
         .map_err(Error::from)?;
 
     builder.result()
+}
+
+/// Helper function to create a contiguous span from start to end positions.
+/// This is used for entry_span which should cover from key start to value end.
+fn create_contiguous_span(start_info: &SourceInfo, end_info: &SourceInfo) -> SourceInfo {
+    // Extract the actual start and end offsets, handling the different SourceInfo variants
+    match (start_info, end_info) {
+        (
+            SourceInfo::Original {
+                file_id: start_file,
+                start_offset: start,
+                ..
+            },
+            SourceInfo::Original {
+                file_id: end_file,
+                end_offset: end,
+                ..
+            },
+        ) => {
+            // Both are Original from the same file - create a single Original span
+            assert_eq!(
+                start_file, end_file,
+                "Key and value must be from the same file"
+            );
+            SourceInfo::original(*start_file, *start, *end)
+        }
+        (
+            SourceInfo::Substring {
+                parent: start_parent,
+                start_offset: start,
+                ..
+            },
+            SourceInfo::Substring {
+                end_offset: end, ..
+            },
+        ) => {
+            // Both are Substrings - they should have the same parent
+            // Use the first parent (they should be equivalent even if not the same Rc)
+            SourceInfo::substring((**start_parent).clone(), *start, *end)
+        }
+        _ => {
+            // Mixed types or Concat - fall back to combine which creates a Concat
+            // This shouldn't happen in normal YAML parsing but handle it gracefully
+            start_info.combine(end_info)
+        }
+    }
 }
 
 /// Builder that implements MarkedEventReceiver to construct YamlWithSourceInfo.
@@ -224,7 +270,7 @@ impl<'a> YamlBuilder<'a> {
             let start_row = marker.line(); // yaml-rust2 uses 0-based
             let start_column = marker.col(); // yaml-rust2 uses 0-based
 
-            SourceInfo::original(
+            SourceInfo::from_range(
                 quarto_source_map::FileId(0), // Dummy FileId for now
                 Range {
                     start: Location {
@@ -345,14 +391,8 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
                         let value_span = value.source_info.clone();
 
                         // Entry span from key start to value end
-                        use quarto_source_map::Range;
-                        let entry_span = SourceInfo::original(
-                            quarto_source_map::FileId(0), // Dummy FileId
-                            Range {
-                                start: key_span.range.start.clone(),
-                                end: value_span.range.end.clone(),
-                            },
-                        );
+                        // Create a contiguous span (not a Concat) from key start to value end
+                        let entry_span = create_contiguous_span(&key_span, &value_span);
 
                         hash_entries.push(YamlHashEntry::new(
                             key.clone(),
@@ -497,21 +537,21 @@ project:
 
         // Check that source info is present
         // Note: row/column are 0-indexed in the new system
-        assert!(yaml.source_info.range.start.offset < yaml.source_info.range.end.offset);
+        assert!(yaml.source_info.start_offset() < yaml.source_info.end_offset());
 
         let title = yaml.get_hash_value("title").unwrap();
         // Verify the title value has a valid range
-        assert!(title.source_info.range.start.offset < title.source_info.range.end.offset);
+        assert!(title.source_info.start_offset() < title.source_info.end_offset());
     }
 
     #[test]
     fn test_parse_with_filename() {
         let yaml = parse_file("title: Test", "config.yaml").unwrap();
-        assert!(yaml.source_info.range.end.offset > 0);
+        assert!(yaml.source_info.end_offset() > 0);
 
         // Verify that we're now using Substring mapping for files
-        match &yaml.source_info.mapping {
-            quarto_source_map::SourceMapping::Substring { .. } => {
+        match &yaml.source_info {
+            SourceInfo::Substring { .. } => {
                 // Expected: Substring mapping to parent file
             }
             _ => panic!("Expected Substring mapping for file parsing"),
@@ -523,7 +563,7 @@ project:
         use quarto_source_map::{FileId, Location, Range};
 
         // Simulate extracting YAML from a .qmd file at offset 100-150
-        let parent = SourceInfo::original(
+        let parent = SourceInfo::from_range(
             FileId(42),
             Range {
                 start: Location {
@@ -543,14 +583,11 @@ project:
         let yaml = parse_with_parent(yaml_content, parent).unwrap();
 
         // Verify root has Substring mapping
-        match &yaml.source_info.mapping {
-            quarto_source_map::SourceMapping::Substring {
-                parent: p,
-                offset: _,
-            } => {
+        match &yaml.source_info {
+            SourceInfo::Substring { parent: p, .. } => {
                 // Parent should point to our original parent
-                match &p.mapping {
-                    quarto_source_map::SourceMapping::Original { file_id } => {
+                match p.as_ref() {
+                    SourceInfo::Original { file_id, .. } => {
                         assert_eq!(file_id.0, 42);
                     }
                     _ => panic!("Expected parent to have Original mapping"),
@@ -565,7 +602,7 @@ project:
         use quarto_source_map::{FileId, Location, Range};
 
         // Parent file
-        let parent = SourceInfo::original(
+        let parent = SourceInfo::from_range(
             FileId(1),
             Range {
                 start: Location {
@@ -602,30 +639,15 @@ project:
             .expect("authors key not found");
 
         // All should have Substring mappings
-        assert!(matches!(
-            project.source_info.mapping,
-            quarto_source_map::SourceMapping::Substring { .. }
-        ));
-        assert!(matches!(
-            title.source_info.mapping,
-            quarto_source_map::SourceMapping::Substring { .. }
-        ));
-        assert!(matches!(
-            authors.source_info.mapping,
-            quarto_source_map::SourceMapping::Substring { .. }
-        ));
+        assert!(matches!(project.source_info, SourceInfo::Substring { .. }));
+        assert!(matches!(title.source_info, SourceInfo::Substring { .. }));
+        assert!(matches!(authors.source_info, SourceInfo::Substring { .. }));
 
         // Array elements should also have Substring mappings
         if let Some(items) = authors.as_array() {
             assert_eq!(items.len(), 2);
-            assert!(matches!(
-                items[0].source_info.mapping,
-                quarto_source_map::SourceMapping::Substring { .. }
-            ));
-            assert!(matches!(
-                items[1].source_info.mapping,
-                quarto_source_map::SourceMapping::Substring { .. }
-            ));
+            assert!(matches!(items[0].source_info, SourceInfo::Substring { .. }));
+            assert!(matches!(items[1].source_info, SourceInfo::Substring { .. }));
         } else {
             panic!("Expected array for authors");
         }
@@ -637,7 +659,7 @@ project:
 
         // Parent document
         let parent_content = "---\ntitle: Test\nauthor: John\n---\n\nDocument content";
-        let parent = SourceInfo::original(
+        let parent = SourceInfo::from_range(
             FileId(1),
             Range {
                 start: Location {
@@ -661,16 +683,16 @@ project:
         let title = yaml.get_hash_value("title").expect("title not found");
 
         // Verify the title has a valid substring range
-        match &title.source_info.mapping {
-            quarto_source_map::SourceMapping::Substring { offset, .. } => {
+        match &title.source_info {
+            SourceInfo::Substring { start_offset, .. } => {
                 // Offset should be relative to the yaml_content string
-                assert!(*offset < yaml_content.len());
+                assert!(*start_offset < yaml_content.len());
             }
             _ => panic!("Expected Substring mapping for title"),
         }
 
         // Check that range makes sense
-        assert!(title.source_info.range.start.offset < title.source_info.range.end.offset);
+        assert!(title.source_info.start_offset() < title.source_info.end_offset());
     }
 
     #[test]
@@ -678,8 +700,8 @@ project:
         // Parse without filename or parent - should use Original mapping
         let yaml = parse("title: Test").unwrap();
 
-        match &yaml.source_info.mapping {
-            quarto_source_map::SourceMapping::Original { file_id } => {
+        match &yaml.source_info {
+            SourceInfo::Original { file_id, .. } => {
                 assert_eq!(file_id.0, 0); // Anonymous FileId
             }
             _ => panic!("Expected Original mapping for anonymous parse"),
@@ -689,13 +711,19 @@ project:
     /// Helper function to resolve a SourceInfo through the mapping chain to get
     /// the absolute offset in the original file.
     fn resolve_to_original_offset(info: &SourceInfo) -> (usize, quarto_source_map::FileId) {
-        match &info.mapping {
-            quarto_source_map::SourceMapping::Original { file_id } => {
-                (info.range.start.offset, *file_id)
-            }
-            quarto_source_map::SourceMapping::Substring { parent, offset } => {
+        match info {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                ..
+            } => (*start_offset, *file_id),
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                ..
+            } => {
                 let (parent_offset, file_id) = resolve_to_original_offset(parent);
-                (parent_offset + offset, file_id)
+                (parent_offset + start_offset, file_id)
             }
             _ => panic!("Unsupported mapping type for offset resolution"),
         }
@@ -718,13 +746,13 @@ project:
 
         // Verify key location
         assert_eq!(hello_entry.key.yaml.as_str(), Some("hello"));
-        let key_offset = hello_entry.key_span.range.start.offset;
+        let key_offset = hello_entry.key_span.start_offset();
         let key_str = &yaml_content[key_offset..key_offset + 5];
         assert_eq!(key_str, "hello", "Key location should point to 'hello'");
 
         // Verify value location
         assert_eq!(hello_entry.value.yaml.as_str(), Some("world"));
-        let value_offset = hello_entry.value_span.range.start.offset;
+        let value_offset = hello_entry.value_span.start_offset();
         let value_str = &yaml_content[value_offset..value_offset + 5];
         assert_eq!(value_str, "world", "Value location should point to 'world'");
 
@@ -740,11 +768,11 @@ project:
             .find(|e| e.key.yaml.as_str() == Some("foo"))
             .expect("Should have 'foo' key");
 
-        let foo_key_offset = foo_entry.key_span.range.start.offset;
+        let foo_key_offset = foo_entry.key_span.start_offset();
         let foo_key_str = &yaml_content[foo_key_offset..foo_key_offset + 3];
         assert_eq!(foo_key_str, "foo", "Key location should point to 'foo'");
 
-        let bar_value_offset = foo_entry.value_span.range.start.offset;
+        let bar_value_offset = foo_entry.value_span.start_offset();
         let bar_value_str = &yaml_content[bar_value_offset..bar_value_offset + 3];
         assert_eq!(bar_value_str, "bar", "Value location should point to 'bar'");
 
@@ -754,7 +782,7 @@ project:
             .find(|e| e.key.yaml.as_str() == Some("count"))
             .expect("Should have 'count' key");
 
-        let count_key_offset = count_entry.key_span.range.start.offset;
+        let count_key_offset = count_entry.key_span.start_offset();
         let count_key_str = &yaml_content[count_key_offset..count_key_offset + 5];
         assert_eq!(
             count_key_str, "count",
@@ -762,18 +790,18 @@ project:
         );
 
         assert_eq!(count_entry.value.yaml.as_i64(), Some(42));
-        let count_value_offset = count_entry.value_span.range.start.offset;
+        let count_value_offset = count_entry.value_span.start_offset();
         let count_value_str = &yaml_content[count_value_offset..count_value_offset + 2];
         assert_eq!(count_value_str, "42", "Value location should point to '42'");
 
         // Test 4: Verify entry spans include both key and value
         // The entry span should start at the key and end after the value
         assert!(
-            hello_entry.entry_span.range.start.offset <= key_offset,
+            hello_entry.entry_span.start_offset() <= key_offset,
             "Entry span should start at or before the key"
         );
         assert!(
-            hello_entry.entry_span.range.end.offset >= value_offset + 5,
+            hello_entry.entry_span.end_offset() >= value_offset + 5,
             "Entry span should end at or after the value"
         );
     }
@@ -816,7 +844,7 @@ We used the following approach...
         let yaml_content = yaml_match.as_str();
 
         // Create parent SourceInfo for the entire .qmd file
-        let parent = SourceInfo::original(
+        let parent = SourceInfo::from_range(
             FileId(123), // Simulated FileId for test.qmd
             Range {
                 start: Location {
@@ -844,23 +872,28 @@ We used the following approach...
         assert_eq!(title.yaml.as_str(), Some("My Research Paper"));
 
         // Verify that the title's location maps back through the substring chain
-        match &title.source_info.mapping {
-            quarto_source_map::SourceMapping::Substring { parent: p, offset } => {
+        match &title.source_info {
+            SourceInfo::Substring {
+                parent: p,
+                start_offset,
+                ..
+            } => {
                 // The offset should be within the YAML content
-                assert!(*offset < yaml_content.len());
+                assert!(*start_offset < yaml_content.len());
 
                 // The parent should be another Substring pointing to the .qmd file
-                match &p.mapping {
-                    quarto_source_map::SourceMapping::Substring {
+                match p.as_ref() {
+                    SourceInfo::Substring {
                         parent: grandparent,
-                        offset: yaml_offset,
+                        start_offset: yaml_offset,
+                        ..
                     } => {
                         // This should point to the original .qmd file
                         assert_eq!(*yaml_offset, yaml_start);
 
                         // Grandparent should be the Original .qmd file
-                        match &grandparent.mapping {
-                            quarto_source_map::SourceMapping::Original { file_id } => {
+                        match grandparent.as_ref() {
+                            SourceInfo::Original { file_id, .. } => {
                                 assert_eq!(file_id.0, 123);
                             }
                             _ => panic!("Expected Original mapping for .qmd file"),
@@ -883,8 +916,8 @@ We used the following approach...
         assert_eq!(theme.yaml.as_str(), Some("cosmo"));
 
         // The theme value should also have Substring mapping through the chain
-        match &theme.source_info.mapping {
-            quarto_source_map::SourceMapping::Substring { .. } => {
+        match &theme.source_info {
+            SourceInfo::Substring { .. } => {
                 // Good - it has substring mapping
             }
             _ => panic!("Expected Substring mapping for deeply nested theme value"),

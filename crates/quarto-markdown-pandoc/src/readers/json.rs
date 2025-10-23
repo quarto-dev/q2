@@ -18,7 +18,7 @@ use crate::pandoc::{
     RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
     Superscript, Underline,
 };
-use quarto_source_map::{FileId, RangeMapping, SourceMapping};
+use quarto_source_map::FileId;
 use serde_json::Value;
 use std::rc::Rc;
 
@@ -80,8 +80,11 @@ impl SourceInfoDeserializer {
 
     /// Build the pool from the sourceInfoPool JSON array (compact format)
     ///
-    /// Compact format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
+    /// New format: {"r": [start_offset, end_offset], "t": type_code, "d": data}
+    /// Old format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
     /// ID is implicit from array index
+    ///
+    /// Note: Row/column information from old format is ignored since SourceInfo now stores only offsets.
     fn new(pool_json: &Value) -> Result<Self> {
         let pool_array = pool_json
             .as_array()
@@ -91,45 +94,39 @@ impl SourceInfoDeserializer {
 
         // Build pool in order - parents must come before children
         for item in pool_array {
-            // Parse range from "r" array: [start_offset, start_row, start_col, end_offset, end_row, end_col]
+            // Parse offsets from "r" array
             let range_array = item
                 .get("r")
                 .and_then(|v| v.as_array())
                 .ok_or(JsonReadError::MalformedSourceInfoPool)?;
 
-            if range_array.len() != 6 {
-                return Err(JsonReadError::MalformedSourceInfoPool);
-            }
-
-            let range = quarto_source_map::Range {
-                start: quarto_source_map::Location {
-                    offset: range_array[0]
+            let (start_offset, end_offset) = match range_array.len() {
+                2 => {
+                    // New format: [start_offset, end_offset]
+                    let start = range_array[0]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    row: range_array[1]
+                        as usize;
+                    let end = range_array[1]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    column: range_array[2]
+                        as usize;
+                    (start, end)
+                }
+                6 => {
+                    // Old format: [start_offset, start_row, start_col, end_offset, end_row, end_col]
+                    // Extract only offsets, ignore row/column
+                    let start = range_array[0]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                },
-                end: quarto_source_map::Location {
-                    offset: range_array[3]
+                        as usize;
+                    let end = range_array[3]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    row: range_array[4]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    column: range_array[5]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                },
+                        as usize;
+                    (start, end)
+                }
+                _ => return Err(JsonReadError::MalformedSourceInfoPool),
             };
 
             // Parse type code from "t"
@@ -143,42 +140,47 @@ impl SourceInfoDeserializer {
                 .get("d")
                 .ok_or(JsonReadError::MalformedSourceInfoPool)?;
 
-            let mapping = match type_code {
+            let source_info = match type_code {
                 0 => {
                     // Original: data is file_id (number)
                     let file_id = data
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         as usize;
-                    SourceMapping::Original {
+                    quarto_source_map::SourceInfo::Original {
                         file_id: FileId(file_id),
+                        start_offset,
+                        end_offset,
                     }
                 }
                 1 => {
-                    // Substring: data is [parent_id, offset]
-                    let data_array = data
-                        .as_array()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-                    if data_array.len() != 2 {
+                    // Substring: data is parent_id (new format) or [parent_id, offset] (old format)
+                    // In new format, offsets are already in start_offset/end_offset above
+                    let parent_id = if let Some(id) = data.as_u64() {
+                        // New format: just parent_id
+                        id as usize
+                    } else if let Some(data_array) = data.as_array() {
+                        // Old format: [parent_id, offset] - ignore offset, use start_offset/end_offset
+                        if data_array.len() != 2 {
+                            return Err(JsonReadError::MalformedSourceInfoPool);
+                        }
+                        data_array[0]
+                            .as_u64()
+                            .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                            as usize
+                    } else {
                         return Err(JsonReadError::MalformedSourceInfoPool);
-                    }
-                    let parent_id = data_array[0]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize;
-                    let offset = data_array[1]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize;
+                    };
 
                     let parent = pool
                         .get(parent_id)
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         .clone();
 
-                    SourceMapping::Substring {
+                    quarto_source_map::SourceInfo::Substring {
                         parent: Rc::new(parent),
-                        offset,
+                        start_offset,
+                        end_offset,
                     }
                 }
                 2 => {
@@ -222,62 +224,33 @@ impl SourceInfoDeserializer {
                         })
                         .collect();
 
-                    SourceMapping::Concat { pieces: pieces? }
+                    quarto_source_map::SourceInfo::Concat { pieces: pieces? }
                 }
                 3 => {
-                    // Transformed: data is [parent_id, [[from_start, from_end, to_start, to_end], ...]]
+                    // Transformed variant no longer exists in SourceInfo
+                    // Convert to approximate Substring pointing to parent
+                    // This loses the transformation mapping but preserves the parent relationship
                     let data_array = data
                         .as_array()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-                    if data_array.len() != 2 {
+                    if data_array.is_empty() {
                         return Err(JsonReadError::MalformedSourceInfoPool);
                     }
                     let parent_id = data_array[0]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         as usize;
-                    let mapping_array = data_array[1]
-                        .as_array()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-
-                    let range_mappings: Result<Vec<RangeMapping>> = mapping_array
-                        .iter()
-                        .map(|rm_array| {
-                            let rm = rm_array
-                                .as_array()
-                                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-                            if rm.len() != 4 {
-                                return Err(JsonReadError::MalformedSourceInfoPool);
-                            }
-                            Ok(RangeMapping {
-                                from_start: rm[0]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                                from_end: rm[1]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                                to_start: rm[2]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                                to_end: rm[3]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                            })
-                        })
-                        .collect();
 
                     let parent = pool
                         .get(parent_id)
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         .clone();
 
-                    SourceMapping::Transformed {
+                    // Approximate with Substring
+                    quarto_source_map::SourceInfo::Substring {
                         parent: Rc::new(parent),
-                        mapping: range_mappings?,
+                        start_offset,
+                        end_offset,
                     }
                 }
                 _ => {
@@ -285,7 +258,7 @@ impl SourceInfoDeserializer {
                 }
             };
 
-            pool.push(quarto_source_map::SourceInfo { range, mapping });
+            pool.push(source_info);
         }
 
         Ok(SourceInfoDeserializer { pool })
@@ -320,7 +293,7 @@ fn make_source_info(filename_index: Option<usize>, range: Range) -> quarto_sourc
             column: range.end.column,
         },
     };
-    quarto_source_map::SourceInfo::original(file_id, qsm_range)
+    quarto_source_map::SourceInfo::from_range(file_id, qsm_range)
 }
 
 fn empty_range() -> Range {
@@ -448,6 +421,19 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
+    // Extract source information - try new format ("s" field) first, fall back to old format ("l" field)
+    let source_info = if let Some(s_val) = obj.get("s") {
+        // New format: source info reference to pool
+        deserializer.from_json_ref(s_val)?
+    } else {
+        // Old format: inline location
+        let (filename_index, range) = obj
+            .get("l")
+            .and_then(read_location)
+            .unwrap_or_else(|| (None, empty_range()));
+        make_source_info(filename_index, range)
+    };
+
     match t {
         "Str" => {
             let c = obj
@@ -459,38 +445,13 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                     JsonReadError::InvalidType("Str content must be string".to_string())
                 })?
                 .to_string();
-            Ok(Inline::Str(Str {
-                text,
-                source_info: make_source_info(None, empty_range()),
-            }))
+            Ok(Inline::Str(Str { text, source_info }))
         }
-        "Space" => {
-            let (filename_index, range) = obj
-                .get("l")
-                .and_then(read_location)
-                .unwrap_or_else(|| (None, empty_range()));
-            Ok(Inline::Space(Space {
-                source_info: make_source_info(filename_index, range),
-            }))
-        }
-        "LineBreak" => {
-            let (filename_index, range) = obj
-                .get("l")
-                .and_then(read_location)
-                .unwrap_or_else(|| (None, empty_range()));
-            Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
-                source_info: make_source_info(filename_index, range),
-            }))
-        }
-        "SoftBreak" => {
-            let (filename_index, range) = obj
-                .get("l")
-                .and_then(read_location)
-                .unwrap_or_else(|| (None, empty_range()));
-            Ok(Inline::SoftBreak(SoftBreak {
-                source_info: make_source_info(filename_index, range),
-            }))
-        }
+        "Space" => Ok(Inline::Space(Space { source_info })),
+        "LineBreak" => Ok(Inline::LineBreak(crate::pandoc::inline::LineBreak {
+            source_info,
+        })),
+        "SoftBreak" => Ok(Inline::SoftBreak(SoftBreak { source_info })),
         "Emph" => {
             let c = obj
                 .get("c")
@@ -498,7 +459,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Emph(Emph {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Strong" => {
@@ -508,7 +469,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Strong(Strong {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Code" => {
@@ -531,7 +492,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Code(Code {
                 attr,
                 text,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Math" => {
@@ -572,7 +533,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Math(Math {
                 math_type,
                 text,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Underline" => {
@@ -582,7 +543,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Underline(Underline {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Strikeout" => {
@@ -592,7 +553,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Strikeout(Strikeout {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Superscript" => {
@@ -602,7 +563,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Superscript(Superscript {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Subscript" => {
@@ -612,7 +573,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::Subscript(Subscript {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "SmallCaps" => {
@@ -622,7 +583,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_inlines(c, deserializer)?;
             Ok(Inline::SmallCaps(SmallCaps {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Quoted" => {
@@ -660,7 +621,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Quoted(Quoted {
                 quote_type,
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Link" => {
@@ -701,7 +662,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 content,
                 target,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "RawInline" => {
@@ -731,7 +692,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::RawInline(RawInline {
                 format,
                 text,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Image" => {
@@ -774,7 +735,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 content,
                 target,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Span" => {
@@ -795,7 +756,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Span(Span {
                 attr,
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Note" => {
@@ -805,7 +766,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             let content = read_blocks(c, deserializer)?;
             Ok(Inline::Note(Note {
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         "Cite" => {
@@ -887,7 +848,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             Ok(Inline::Cite(Cite {
                 citations,
                 content,
-                source_info: make_source_info(None, empty_range()),
+                source_info,
             }))
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!("Inline: {}", t))),
@@ -906,27 +867,63 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for ASTContext".to_string()))?;
 
-    let filenames_val = obj
-        .get("filenames")
-        .ok_or_else(|| JsonReadError::MissingField("filenames".to_string()))?;
+    // Read files array - each entry has "name" and optionally "line_breaks"/"total_length"
+    let files_val = obj
+        .get("files")
+        .ok_or_else(|| JsonReadError::MissingField("files".to_string()))?;
 
-    let filenames_arr = filenames_val
+    let files_arr = files_val
         .as_array()
-        .ok_or_else(|| JsonReadError::InvalidType("filenames must be array".to_string()))?;
+        .ok_or_else(|| JsonReadError::InvalidType("files must be array".to_string()))?;
 
-    let filenames = filenames_arr
-        .iter()
-        .map(|v| {
-            v.as_str()
-                .ok_or_else(|| JsonReadError::InvalidType("filename must be string".to_string()))
-                .map(|s| s.to_string())
-        })
-        .collect::<Result<Vec<_>>>()?;
+    let mut filenames = Vec::new();
+    let mut source_context = quarto_source_map::SourceContext::new();
+
+    for file_obj in files_arr {
+        let file_map = file_obj
+            .as_object()
+            .ok_or_else(|| JsonReadError::InvalidType("file entry must be object".to_string()))?;
+
+        // Extract filename
+        let filename = file_map
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| JsonReadError::MissingField("name in file entry".to_string()))?
+            .to_string();
+
+        filenames.push(filename.clone());
+
+        // Try to extract FileInformation fields
+        let has_line_breaks = file_map.get("line_breaks").is_some();
+        let has_total_length = file_map.get("total_length").is_some();
+
+        if has_line_breaks && has_total_length {
+            // Deserialize FileInformation from the fields
+            let line_breaks: Vec<usize> = serde_json::from_value(
+                file_map.get("line_breaks").unwrap().clone(),
+            )
+            .map_err(|_| {
+                JsonReadError::InvalidType("line_breaks must be array of numbers".to_string())
+            })?;
+
+            let total_length: usize = serde_json::from_value(
+                file_map.get("total_length").unwrap().clone(),
+            )
+            .map_err(|_| JsonReadError::InvalidType("total_length must be number".to_string()))?;
+
+            let file_info =
+                quarto_source_map::FileInformation::from_parts(line_breaks, total_length);
+            source_context.add_file_with_info(filename, file_info);
+        } else {
+            // No FileInformation - try to read from disk
+            source_context.add_file(filename, None);
+        }
+    }
 
     Ok(ASTContext {
         filenames,
         example_list_counter: std::cell::Cell::new(1),
-        source_context: quarto_source_map::SourceContext::new(),
+        source_context,
     })
 }
 
@@ -1314,11 +1311,18 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
         .and_then(|v| v.as_str())
         .ok_or_else(|| JsonReadError::MissingField("t".to_string()))?;
 
-    // Extract location information if present
-    let (filename_index, range) = obj
-        .get("l")
-        .and_then(read_location)
-        .unwrap_or_else(|| (None, empty_range()));
+    // Extract source information - try new format ("s" field) first, fall back to old format ("l" field)
+    let source_info = if let Some(s_val) = obj.get("s") {
+        // New format: source info reference to pool
+        deserializer.from_json_ref(s_val)?
+    } else {
+        // Old format: inline location
+        let (filename_index, range) = obj
+            .get("l")
+            .and_then(read_location)
+            .unwrap_or_else(|| (None, empty_range()));
+        make_source_info(filename_index, range)
+    };
 
     match t {
         "Para" => {
@@ -1328,7 +1332,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_inlines(c, deserializer)?;
             Ok(Block::Paragraph(Paragraph {
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "Plain" => {
@@ -1338,7 +1342,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_inlines(c, deserializer)?;
             Ok(Block::Plain(Plain {
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "LineBlock" => {
@@ -1354,7 +1358,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .collect::<Result<Vec<_>>>()?;
             Ok(Block::LineBlock(LineBlock {
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "CodeBlock" => {
@@ -1379,7 +1383,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::CodeBlock(CodeBlock {
                 attr,
                 text,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "RawBlock" => {
@@ -1409,7 +1413,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::RawBlock(RawBlock {
                 format,
                 text,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "BlockQuote" => {
@@ -1419,7 +1423,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_blocks(c, deserializer)?;
             Ok(Block::BlockQuote(BlockQuote {
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "OrderedList" => {
@@ -1439,7 +1443,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::OrderedList(OrderedList {
                 attr,
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "BulletList" => {
@@ -1449,7 +1453,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let content = read_blockss(c, deserializer)?;
             Ok(Block::BulletList(BulletList {
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "DefinitionList" => {
@@ -1477,7 +1481,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .collect::<Result<Vec<_>>>()?;
             Ok(Block::DefinitionList(DefinitionList {
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "Header" => {
@@ -1501,12 +1505,10 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 level,
                 attr,
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
-        "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule {
-            source_info: make_source_info(filename_index, range),
-        })),
+        "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule { source_info })),
         "Figure" => {
             let c = obj
                 .get("c")
@@ -1526,7 +1528,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 caption,
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "Table" => {
@@ -1566,7 +1568,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 head,
                 bodies,
                 foot,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "Div" => {
@@ -1586,7 +1588,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             Ok(Block::Div(Div {
                 attr,
                 content,
-                source_info: make_source_info(filename_index, range),
+                source_info,
             }))
         }
         "BlockMetadata" => {
@@ -1595,10 +1597,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             // BlockMetadata uses MetaValueWithSourceInfo format (not top-level meta)
             let meta = read_meta_value_with_source_info(c, deserializer)?;
-            Ok(Block::BlockMetadata(MetaBlock {
-                meta,
-                source_info: make_source_info(filename_index, range),
-            }))
+            Ok(Block::BlockMetadata(MetaBlock { meta, source_info }))
         }
         "NoteDefinitionPara" => {
             let c = obj
@@ -1623,7 +1622,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 crate::pandoc::block::NoteDefinitionPara {
                     id,
                     content,
-                    source_info: make_source_info(filename_index, range),
+                    source_info,
                 },
             ))
         }
@@ -1654,7 +1653,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 crate::pandoc::block::NoteDefinitionFencedBlock {
                     id,
                     content,
-                    source_info: make_source_info(filename_index, range),
+                    source_info,
                 },
             ))
         }

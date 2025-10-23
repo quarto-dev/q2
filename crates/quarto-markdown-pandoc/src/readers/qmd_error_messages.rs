@@ -403,7 +403,7 @@ fn error_diagnostic_from_parse_state(
         start: start_location,
         end: end_location,
     };
-    let source_info = quarto_source_map::SourceInfo::original(
+    let source_info = quarto_source_map::SourceInfo::from_range(
         quarto_source_map::FileId(0), // File ID 0 (set up in ASTContext)
         range,
     );
@@ -432,12 +432,36 @@ fn error_diagnostic_from_parse_state(
                                 calculate_byte_offset(&input_str, token.row, token.column);
                             let token_span_end = token_byte_offset + token.size.max(1);
 
-                            // Use SourceInfo::substring to create a SourceInfo for this token
-                            // This properly uses the quarto-source-map infrastructure
-                            let token_source_info = quarto_source_map::SourceInfo::substring(
-                                source_info.clone(),
-                                token_byte_offset,
+                            // Create SourceInfo for this token location
+                            // Use from_range to create an Original SourceInfo since the token
+                            // is in the same file as the main error, not a substring of it
+                            let token_location_start =
+                                quarto_source_map::utils::offset_to_location(
+                                    &input_str,
+                                    token_byte_offset,
+                                )
+                                .unwrap_or(
+                                    quarto_source_map::Location {
+                                        offset: token_byte_offset,
+                                        row: token.row,
+                                        column: token.column,
+                                    },
+                                );
+                            let token_location_end = quarto_source_map::utils::offset_to_location(
+                                &input_str,
                                 token_span_end,
+                            )
+                            .unwrap_or(quarto_source_map::Location {
+                                offset: token_span_end,
+                                row: token.row,
+                                column: token.column + token.size.max(1),
+                            });
+                            let token_source_info = quarto_source_map::SourceInfo::from_range(
+                                quarto_source_map::FileId(0),
+                                quarto_source_map::Range {
+                                    start: token_location_start,
+                                    end: token_location_end,
+                                },
                             );
 
                             // Add as info detail with location (will show as blue label in Ariadne)
@@ -467,12 +491,36 @@ fn error_diagnostic_from_parse_state(
                                 calculate_byte_offset(&input_str, end_tok.row, end_tok.column);
                             let range_span_end = end_byte_offset + end_tok.size.max(1);
 
-                            // Use SourceInfo::substring to create a SourceInfo for this range
-                            // This properly uses the quarto-source-map infrastructure
-                            let range_source_info = quarto_source_map::SourceInfo::substring(
-                                source_info.clone(),
-                                begin_byte_offset,
+                            // Create SourceInfo for this range location
+                            // Use from_range to create an Original SourceInfo since the range
+                            // is in the same file as the main error, not a substring of it
+                            let range_location_start =
+                                quarto_source_map::utils::offset_to_location(
+                                    &input_str,
+                                    begin_byte_offset,
+                                )
+                                .unwrap_or(
+                                    quarto_source_map::Location {
+                                        offset: begin_byte_offset,
+                                        row: begin_tok.row,
+                                        column: begin_tok.column,
+                                    },
+                                );
+                            let range_location_end = quarto_source_map::utils::offset_to_location(
+                                &input_str,
                                 range_span_end,
+                            )
+                            .unwrap_or(quarto_source_map::Location {
+                                offset: range_span_end,
+                                row: end_tok.row,
+                                column: end_tok.column + end_tok.size.max(1),
+                            });
+                            let range_source_info = quarto_source_map::SourceInfo::from_range(
+                                quarto_source_map::FileId(0),
+                                quarto_source_map::Range {
+                                    start: range_location_start,
+                                    end: range_location_end,
+                                },
                             );
 
                             // Add as info detail with location
@@ -497,7 +545,6 @@ fn error_diagnostic_from_parse_state(
 fn calculate_byte_offset(input: &str, row: usize, column: usize) -> usize {
     let mut current_row = 0;
     let mut current_col = 0;
-    let mut byte_offset = 0;
 
     for (i, ch) in input.char_indices() {
         if current_row == row && current_col == column {
@@ -505,16 +552,25 @@ fn calculate_byte_offset(input: &str, row: usize, column: usize) -> usize {
         }
 
         if ch == '\n' {
+            current_col += 1;
+            // Check if the target is at the newline position (end of line)
+            if current_row == row && current_col == column {
+                return i;
+            }
             current_row += 1;
             current_col = 0;
         } else {
             current_col += 1;
         }
-        byte_offset = i;
     }
 
-    // Return the position even if we're past the end
-    byte_offset + 1
+    // If we're looking for EOF position, return the length
+    if current_row == row && current_col == column {
+        return input.len();
+    }
+
+    // If we couldn't find the position, clamp to EOF
+    input.len()
 }
 
 // Helper function to produce JSON-formatted error messages for use as a closure

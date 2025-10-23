@@ -10,9 +10,13 @@ use tree_sitter_qmd::MarkdownParser;
 
 /// Helper to resolve a source info reference from the pool (compact format)
 /// Returns (start_offset, start_row, start_col, end_offset, end_row, end_col, type_code)
+///
+/// Note: The new JSON format only stores offsets, not row/column. This function computes
+/// row/column from the offsets using the FileInformation.
 fn resolve_source_ref(
     source_ref: &serde_json::Value,
     pool: &[serde_json::Value],
+    file_info: &quarto_source_map::FileInformation,
 ) -> (usize, usize, usize, usize, usize, usize, usize) {
     let ref_id = source_ref
         .as_u64()
@@ -26,13 +30,48 @@ fn resolve_source_ref(
         .as_u64()
         .expect("Expected t to be a number") as usize;
 
+    // New format: r is [start_offset, end_offset]
+    let start_offset = r[0].as_u64().unwrap() as usize;
+    let end_offset = r[1].as_u64().unwrap() as usize;
+
+    // For Substring type (t=1), we need to recursively resolve the offsets
+    // through the parent chain to get the file offsets
+    let (absolute_start, absolute_end) = match t {
+        0 => {
+            // Original: offsets are already absolute in the file
+            (start_offset, end_offset)
+        }
+        1 => {
+            // Substring: need to resolve through parent
+            let parent_id = source_info["d"].as_u64().unwrap() as usize;
+            let parent = &pool[parent_id];
+            let parent_r = parent["r"].as_array().unwrap();
+            let parent_start = parent_r[0].as_u64().unwrap() as usize;
+            // Substring offsets are relative to parent
+            (parent_start + start_offset, parent_start + end_offset)
+        }
+        2 => {
+            // Concat: use the range directly (should span all pieces)
+            (start_offset, end_offset)
+        }
+        _ => panic!("Unknown source info type: {}", t),
+    };
+
+    // Compute row/column from absolute offsets using FileInformation
+    let start_loc = file_info
+        .offset_to_location(absolute_start)
+        .expect("Failed to convert start offset to location");
+    let end_loc = file_info
+        .offset_to_location(absolute_end)
+        .expect("Failed to convert end offset to location");
+
     (
-        r[0].as_u64().unwrap() as usize, // start_offset
-        r[1].as_u64().unwrap() as usize, // start_row
-        r[2].as_u64().unwrap() as usize, // start_col
-        r[3].as_u64().unwrap() as usize, // end_offset
-        r[4].as_u64().unwrap() as usize, // end_row
-        r[5].as_u64().unwrap() as usize, // end_col
+        start_loc.offset,
+        start_loc.row,
+        start_loc.column,
+        end_loc.offset,
+        end_loc.row,
+        end_loc.column,
         t,
     )
 }
@@ -69,6 +108,9 @@ fn test_inline_source_locations() {
         .as_array()
         .expect("Expected sourceInfoPool to be an array");
 
+    // Create FileInformation for computing row/column from offsets
+    let file_info = quarto_source_map::FileInformation::new(input);
+
     // Check that the source locations are correct for the inline nodes
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];
@@ -79,7 +121,7 @@ fn test_inline_source_locations() {
     assert_eq!(hello_str["t"], "Str");
     assert_eq!(hello_str["c"], "hello");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _type) =
-        resolve_source_ref(&hello_str["s"], pool);
+        resolve_source_ref(&hello_str["s"], pool, &file_info);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);
     assert_eq!(end_col, 5);
@@ -89,7 +131,7 @@ fn test_inline_source_locations() {
     let space = &inlines[1];
     assert_eq!(space["t"], "Space");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&space["s"], pool);
+        resolve_source_ref(&space["s"], pool, &file_info);
     assert_eq!(start_col, 5);
     assert_eq!(start_off, 5);
     assert_eq!(end_col, 6);
@@ -99,7 +141,7 @@ fn test_inline_source_locations() {
     let emph = &inlines[2];
     assert_eq!(emph["t"], "Emph");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&emph["s"], pool);
+        resolve_source_ref(&emph["s"], pool, &file_info);
     assert_eq!(start_col, 6);
     assert_eq!(start_off, 6);
     assert_eq!(end_col, 13);
@@ -111,7 +153,7 @@ fn test_inline_source_locations() {
     assert_eq!(world_str["t"], "Str");
     assert_eq!(world_str["c"], "world");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&world_str["s"], pool);
+        resolve_source_ref(&world_str["s"], pool, &file_info);
     assert_eq!(start_col, 7);
     assert_eq!(start_off, 7);
     assert_eq!(end_col, 12);
@@ -122,7 +164,7 @@ fn test_inline_source_locations() {
     assert_eq!(period["t"], "Str");
     assert_eq!(period["c"], ".");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&period["s"], pool);
+        resolve_source_ref(&period["s"], pool, &file_info);
     assert_eq!(start_col, 13);
     assert_eq!(start_off, 13);
     assert_eq!(end_col, 14);
@@ -163,6 +205,9 @@ fn test_merged_strings_preserve_location() {
         .as_array()
         .expect("Expected sourceInfoPool to be an array");
 
+    // Create FileInformation for computing row/column from offsets
+    let file_info = quarto_source_map::FileInformation::new(input);
+
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];
     let inlines = para["c"].as_array().unwrap();
@@ -176,7 +221,7 @@ fn test_merged_strings_preserve_location() {
     assert_eq!(hello["t"], "Str");
     assert_eq!(hello["c"], "hello");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&hello["s"], pool);
+        resolve_source_ref(&hello["s"], pool, &file_info);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);
     assert_eq!(end_col, 5);
@@ -191,7 +236,7 @@ fn test_merged_strings_preserve_location() {
     assert_eq!(world["t"], "Str");
     assert_eq!(world["c"], "world");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&world["s"], pool);
+        resolve_source_ref(&world["s"], pool, &file_info);
     assert_eq!(start_col, 6);
     assert_eq!(start_off, 6);
     assert_eq!(end_col, 11);
@@ -232,6 +277,9 @@ fn test_separate_strings_keep_separate_locations() {
         .as_array()
         .expect("Expected sourceInfoPool to be an array");
 
+    // Create FileInformation for computing row/column from offsets
+    let file_info = quarto_source_map::FileInformation::new(input);
+
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];
     let inlines = para["c"].as_array().unwrap();
@@ -244,7 +292,7 @@ fn test_separate_strings_keep_separate_locations() {
     assert_eq!(a_str["t"], "Str");
     assert_eq!(a_str["c"], "a");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&a_str["s"], pool);
+        resolve_source_ref(&a_str["s"], pool, &file_info);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);
     assert_eq!(end_col, 1);
@@ -254,7 +302,7 @@ fn test_separate_strings_keep_separate_locations() {
     let strong = &inlines[1];
     assert_eq!(strong["t"], "Strong");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&strong["s"], pool);
+        resolve_source_ref(&strong["s"], pool, &file_info);
     assert_eq!(start_col, 1);
     assert_eq!(start_off, 1);
     assert_eq!(end_col, 6);
@@ -265,7 +313,7 @@ fn test_separate_strings_keep_separate_locations() {
     assert_eq!(c_str["t"], "Str");
     assert_eq!(c_str["c"], "c");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&c_str["s"], pool);
+        resolve_source_ref(&c_str["s"], pool, &file_info);
     assert_eq!(start_col, 6);
     assert_eq!(start_off, 6);
     assert_eq!(end_col, 7);
@@ -306,6 +354,9 @@ fn test_note_source_location() {
         .as_array()
         .expect("Expected sourceInfoPool to be an array");
 
+    // Create FileInformation for computing row/column from offsets
+    let file_info = quarto_source_map::FileInformation::new(input);
+
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];
     let inlines = para["c"].as_array().unwrap();
@@ -324,7 +375,7 @@ fn test_note_source_location() {
 
     // Check Note's source location spans the entire ^[note content]
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&note["s"], pool);
+        resolve_source_ref(&note["s"], pool, &file_info);
     assert_eq!(start_col, 4);
     assert_eq!(start_off, 4);
     assert_eq!(end_col, 19);
@@ -340,7 +391,7 @@ fn test_note_source_location() {
     // CRITICAL: The Paragraph wrapper should have proper source location
     // not SourceInfo::default() which would be FileId(0) with offset 0
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&note_para["s"], pool);
+        resolve_source_ref(&note_para["s"], pool, &file_info);
 
     // The paragraph wrapper should have the same source location as the Note itself
     // since it's a synthetic wrapper for the note's content
@@ -407,6 +458,9 @@ fn test_note_reference_source_location() {
         .as_array()
         .expect("Expected sourceInfoPool to be an array");
 
+    // Create FileInformation for computing row/column from offsets
+    let file_info = quarto_source_map::FileInformation::new(input);
+
     let blocks = json_value["blocks"].as_array().unwrap();
     let para = &blocks[0];
     let inlines = para["c"].as_array().unwrap();
@@ -432,7 +486,7 @@ fn test_note_reference_source_location() {
     // CRITICAL: The Span should have proper source location from the NoteReference
     // not SourceInfo::default() which would be FileId(0) with offset 0
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&span["s"], pool);
+        resolve_source_ref(&span["s"], pool, &file_info);
 
     // The [^note1] spans from column 10 to 18 (0-indexed)
     assert_eq!(start_col, 10);

@@ -26,14 +26,18 @@ pub fn process_code_span<T: Write>(
     let mut inlines: Vec<_> = children
         .into_iter()
         .map(|(node_name, child)| {
-            let range = node_source_info_with_context(node, context);
+            let source_info = node_source_info_with_context(node, context);
+            let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                &source_info,
+                context,
+            );
             match child {
                 PandocNativeIntermediate::IntermediateAttr(a) => {
                     attr = a;
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range.range.clone()),
+                        PandocNativeIntermediate::IntermediateUnknown(range.clone()),
                     )
                 }
                 PandocNativeIntermediate::IntermediateRawFormat(raw, _) => {
@@ -41,7 +45,7 @@ pub fn process_code_span<T: Write>(
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
-                        PandocNativeIntermediate::IntermediateUnknown(range.range.clone()),
+                        PandocNativeIntermediate::IntermediateUnknown(range.clone()),
                     )
                 }
                 PandocNativeIntermediate::IntermediateBaseText(text, range) => {

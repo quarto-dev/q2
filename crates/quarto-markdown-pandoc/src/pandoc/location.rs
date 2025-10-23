@@ -63,6 +63,16 @@ impl SourceInfo {
         }
     }
 
+    /// Get the start offset
+    pub fn start_offset(&self) -> usize {
+        self.range.start.offset
+    }
+
+    /// Get the end offset
+    pub fn end_offset(&self) -> usize {
+        self.range.end.offset
+    }
+
     /// Convert to quarto-source-map::SourceInfo (temporary conversion helper)
     ///
     /// This helper bridges between pandoc::location types and quarto-source-map types.
@@ -71,7 +81,7 @@ impl SourceInfo {
     /// Creates an Original mapping with a dummy FileId(0).
     /// For proper filename support, use to_source_map_info_with_mapping with a real FileId.
     pub fn to_source_map_info(&self) -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::original(
+        quarto_source_map::SourceInfo::from_range(
             quarto_source_map::FileId(0),
             quarto_source_map::Range {
                 start: quarto_source_map::Location {
@@ -96,7 +106,7 @@ impl SourceInfo {
         &self,
         file_id: quarto_source_map::FileId,
     ) -> quarto_source_map::SourceInfo {
-        quarto_source_map::SourceInfo::original(
+        quarto_source_map::SourceInfo::from_range(
             file_id,
             quarto_source_map::Range {
                 start: quarto_source_map::Location {
@@ -132,14 +142,14 @@ pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
 }
 
 pub fn node_source_info(node: &tree_sitter::Node) -> quarto_source_map::SourceInfo {
-    quarto_source_map::SourceInfo::original(quarto_source_map::FileId(0), node_location(node))
+    quarto_source_map::SourceInfo::from_range(quarto_source_map::FileId(0), node_location(node))
 }
 
 pub fn node_source_info_with_context(
     node: &tree_sitter::Node,
     context: &ASTContext,
 ) -> quarto_source_map::SourceInfo {
-    quarto_source_map::SourceInfo::original(context.current_file_id(), node_location(node))
+    quarto_source_map::SourceInfo::from_range(context.current_file_id(), node_location(node))
 }
 
 pub fn empty_range() -> Range {
@@ -158,7 +168,7 @@ pub fn empty_range() -> Range {
 }
 
 pub fn empty_source_info() -> quarto_source_map::SourceInfo {
-    quarto_source_map::SourceInfo::original(
+    quarto_source_map::SourceInfo::from_range(
         quarto_source_map::FileId(0),
         quarto_source_map::Range {
             start: quarto_source_map::Location {
@@ -177,15 +187,10 @@ pub fn empty_source_info() -> quarto_source_map::SourceInfo {
 
 /// Extract filename index from quarto_source_map::SourceInfo by walking to Original mapping
 pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<usize> {
-    match &info.mapping {
-        quarto_source_map::SourceMapping::Original { file_id } => Some(file_id.0),
-        quarto_source_map::SourceMapping::Substring { parent, .. } => {
-            extract_filename_index(parent)
-        }
-        quarto_source_map::SourceMapping::Transformed { parent, .. } => {
-            extract_filename_index(parent)
-        }
-        quarto_source_map::SourceMapping::Concat { pieces } => {
+    match info {
+        quarto_source_map::SourceInfo::Original { file_id, .. } => Some(file_id.0),
+        quarto_source_map::SourceInfo::Substring { parent, .. } => extract_filename_index(parent),
+        quarto_source_map::SourceInfo::Concat { pieces } => {
             // Return first non-None filename_index from pieces
             pieces
                 .iter()

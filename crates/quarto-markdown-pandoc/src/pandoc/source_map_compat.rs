@@ -29,7 +29,7 @@ pub fn node_to_source_info(node: &Node, file_id: FileId) -> SourceInfo {
     let start_pos = node.start_position();
     let end_pos = node.end_position();
 
-    SourceInfo::original(
+    SourceInfo::from_range(
         file_id,
         Range {
             start: Location {
@@ -91,21 +91,59 @@ pub fn old_to_new_source_info(
     };
 
     // Convert the Range (both use the same Location structure)
-    SourceInfo::original(
+    SourceInfo::from_range(
         file_id,
         Range {
             start: Location {
-                offset: old_info.range.start.offset,
+                offset: old_info.start_offset(),
                 row: old_info.range.start.row,
                 column: old_info.range.start.column,
             },
             end: Location {
-                offset: old_info.range.end.offset,
+                offset: old_info.end_offset(),
                 row: old_info.range.end.row,
                 column: old_info.range.end.column,
             },
         },
     )
+}
+
+/// Convert quarto-source-map::SourceInfo to a quarto_source_map::Range, with a fallback if mapping fails.
+///
+/// This is for use with PandocNativeIntermediate which uses quarto_source_map::Range.
+/// Provides a fallback Range with zero row/column values if the mapping fails.
+///
+/// # Arguments
+/// * `source_info` - The SourceInfo to convert
+/// * `ctx` - The ASTContext containing the source context
+///
+/// # Returns
+/// A quarto_source_map::Range with row/column information if available, or a Range with offsets only
+pub fn source_info_to_qsm_range_or_fallback(
+    source_info: &SourceInfo,
+    ctx: &ASTContext,
+) -> quarto_source_map::Range {
+    let start_mapped = source_info.map_offset(0, &ctx.source_context);
+    let end_mapped = source_info.map_offset(source_info.length(), &ctx.source_context);
+
+    match (start_mapped, end_mapped) {
+        (Some(start), Some(end)) => quarto_source_map::Range {
+            start: start.location,
+            end: end.location,
+        },
+        _ => quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: source_info.start_offset(),
+                row: 0,
+                column: 0,
+            },
+            end: quarto_source_map::Location {
+                offset: source_info.end_offset(),
+                row: 0,
+                column: 0,
+            },
+        },
+    }
 }
 
 // Note: Tests for these functions will be validated through integration tests
