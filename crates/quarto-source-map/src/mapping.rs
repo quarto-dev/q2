@@ -15,31 +15,37 @@ pub struct MappedLocation {
 impl SourceInfo {
     /// Map an offset in the current text back to original source
     pub fn map_offset(&self, offset: usize, ctx: &SourceContext) -> Option<MappedLocation> {
-        use crate::source_info::SourceMapping;
-
-        match &self.mapping {
-            SourceMapping::Original { file_id } => {
+        match self {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                ..
+            } => {
                 // Direct mapping to original file
                 let file = ctx.get_file(*file_id)?;
                 let file_info = file.file_info.as_ref()?;
 
+                // Compute the absolute offset in the file
+                let absolute_offset = start_offset + offset;
+
                 // Convert offset to Location with row/column using efficient binary search
-                let location = file_info.offset_to_location(offset)?;
+                let location = file_info.offset_to_location(absolute_offset)?;
 
                 Some(MappedLocation {
                     file_id: *file_id,
                     location,
                 })
             }
-            SourceMapping::Substring {
+            SourceInfo::Substring {
                 parent,
-                offset: parent_offset,
+                start_offset,
+                ..
             } => {
                 // Map to parent coordinates and recurse
-                let parent_offset_mapped = parent_offset + offset;
-                parent.map_offset(parent_offset_mapped, ctx)
+                let parent_offset = start_offset + offset;
+                parent.map_offset(parent_offset, ctx)
             }
-            SourceMapping::Concat { pieces } => {
+            SourceInfo::Concat { pieces } => {
                 // Find which piece contains this offset
                 for piece in pieces {
                     let piece_start = piece.offset_in_concat;
@@ -52,18 +58,6 @@ impl SourceInfo {
                     }
                 }
                 None // Offset not found in any piece
-            }
-            SourceMapping::Transformed { parent, mapping } => {
-                // Find the mapping that contains this offset
-                for range_mapping in mapping {
-                    if offset >= range_mapping.from_start && offset < range_mapping.from_end {
-                        // Map to parent coordinates
-                        let offset_in_range = offset - range_mapping.from_start;
-                        let parent_offset = range_mapping.to_start + offset_in_range;
-                        return parent.map_offset(parent_offset, ctx);
-                    }
-                }
-                None // Offset not found in any mapping
             }
         }
     }
@@ -91,7 +85,7 @@ mod tests {
         let mut ctx = SourceContext::new();
         let file_id = ctx.add_file("test.qmd".to_string(), Some("hello\nworld".to_string()));
 
-        let info = SourceInfo::original(
+        let info = SourceInfo::from_range(
             file_id,
             Range {
                 start: Location {
@@ -127,7 +121,7 @@ mod tests {
         let mut ctx = SourceContext::new();
         let file_id = ctx.add_file("test.qmd".to_string(), Some("0123456789".to_string()));
 
-        let original = SourceInfo::original(
+        let original = SourceInfo::from_range(
             file_id,
             Range {
                 start: Location {
@@ -163,7 +157,7 @@ mod tests {
         let file_id1 = ctx.add_file("first.qmd".to_string(), Some("AAA".to_string()));
         let file_id2 = ctx.add_file("second.qmd".to_string(), Some("BBB".to_string()));
 
-        let info1 = SourceInfo::original(
+        let info1 = SourceInfo::from_range(
             file_id1,
             Range {
                 start: Location {
@@ -179,7 +173,7 @@ mod tests {
             },
         );
 
-        let info2 = SourceInfo::original(
+        let info2 = SourceInfo::from_range(
             file_id2,
             Range {
                 start: Location {
@@ -210,55 +204,11 @@ mod tests {
     }
 
     #[test]
-    fn test_map_offset_transformed() {
-        let mut ctx = SourceContext::new();
-        let file_id = ctx.add_file("test.qmd".to_string(), Some("0123456789".to_string()));
-
-        let original = SourceInfo::original(
-            file_id,
-            Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 10,
-                    row: 0,
-                    column: 10,
-                },
-            },
-        );
-
-        // Transform: map [0,3) to [5,8), skip everything else
-        use crate::source_info::RangeMapping;
-        let transformed = SourceInfo::transformed(
-            original,
-            vec![RangeMapping {
-                from_start: 0,
-                from_end: 3,
-                to_start: 5,
-                to_end: 8,
-            }],
-        );
-
-        // Map offset 0 (should map to original offset 5, which is '5')
-        let mapped = transformed.map_offset(0, &ctx).unwrap();
-        assert_eq!(mapped.file_id, file_id);
-        assert_eq!(mapped.location.offset, 5);
-
-        // Map offset 2 (should map to original offset 7, which is '7')
-        let mapped = transformed.map_offset(2, &ctx).unwrap();
-        assert_eq!(mapped.file_id, file_id);
-        assert_eq!(mapped.location.offset, 7);
-    }
-
-    #[test]
     fn test_map_range() {
         let mut ctx = SourceContext::new();
         let file_id = ctx.add_file("test.qmd".to_string(), Some("hello\nworld".to_string()));
 
-        let info = SourceInfo::original(
+        let info = SourceInfo::from_range(
             file_id,
             Range {
                 start: Location {

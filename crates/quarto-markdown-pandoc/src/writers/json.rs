@@ -6,7 +6,7 @@
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
-use quarto_source_map::{FileId, Range, RangeMapping, SourceInfo, SourceMapping};
+use quarto_source_map::{FileId, SourceInfo};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -17,11 +17,15 @@ use std::collections::HashMap;
 /// Each unique SourceInfo is assigned an ID and stored in a pool. References to parent
 /// SourceInfo objects are replaced with parent_id integers.
 ///
-/// Serializes in compact format: {"r": [6 range values], "t": type_code, "d": type_data}
+/// Serializes in compact format: {"r": [2 offset values], "t": type_code, "d": type_data}
 /// The ID is implicit from the array index in the pool.
+///
+/// Note: Row/column information is not stored in the serialized format.
+/// To get row/column, the reader must map offsets through the SourceContext.
 struct SerializableSourceInfo {
     id: usize,
-    range: Range,
+    start_offset: usize,
+    end_offset: usize,
     mapping: SerializableSourceMapping,
 }
 
@@ -33,16 +37,9 @@ impl Serialize for SerializableSourceInfo {
         use serde::ser::SerializeMap;
         let mut map = serializer.serialize_map(Some(3))?;
 
-        // Serialize range as array [start_offset, start_row, start_col, end_offset, end_row, end_col]
-        let range_array = [
-            self.range.start.offset,
-            self.range.start.row,
-            self.range.start.column,
-            self.range.end.offset,
-            self.range.end.row,
-            self.range.end.column,
-        ];
-        map.serialize_entry("r", &range_array)?;
+        // Serialize offsets as array [start_offset, end_offset]
+        let offset_array = [self.start_offset, self.end_offset];
+        map.serialize_entry("r", &offset_array)?;
 
         // Serialize type code and data based on mapping variant
         match &self.mapping {
@@ -50,9 +47,9 @@ impl Serialize for SerializableSourceInfo {
                 map.serialize_entry("t", &0)?;
                 map.serialize_entry("d", &file_id.0)?;
             }
-            SerializableSourceMapping::Substring { parent_id, offset } => {
+            SerializableSourceMapping::Substring { parent_id } => {
                 map.serialize_entry("t", &1)?;
-                map.serialize_entry("d", &[parent_id, offset])?;
+                map.serialize_entry("d", parent_id)?;
             }
             SerializableSourceMapping::Concat { pieces } => {
                 map.serialize_entry("t", &2)?;
@@ -61,14 +58,6 @@ impl Serialize for SerializableSourceInfo {
                     .map(|p| [p.source_info_id, p.offset_in_concat, p.length])
                     .collect();
                 map.serialize_entry("d", &piece_arrays)?;
-            }
-            SerializableSourceMapping::Transformed { parent_id, mapping } => {
-                map.serialize_entry("t", &3)?;
-                let mapping_arrays: Vec<[usize; 4]> = mapping
-                    .iter()
-                    .map(|m| [m.from_start, m.from_end, m.to_start, m.to_end])
-                    .collect();
-                map.serialize_entry("d", &[json!(*parent_id), json!(mapping_arrays)])?;
             }
         }
 
@@ -83,14 +72,9 @@ enum SerializableSourceMapping {
     },
     Substring {
         parent_id: usize,
-        offset: usize,
     },
     Concat {
         pieces: Vec<SerializableSourcePiece>,
-    },
-    Transformed {
-        parent_id: usize,
-        mapping: Vec<RangeMapping>,
     },
 }
 
@@ -137,26 +121,30 @@ impl SourceInfoSerializer {
             return id;
         }
 
-        // Recursively intern parents and build the serializable mapping
-        let mapping = match &source_info.mapping {
-            SourceMapping::Original { file_id } => {
-                SerializableSourceMapping::Original { file_id: *file_id }
-            }
-            SourceMapping::Substring { parent, offset } => {
+        // Extract offsets and recursively intern parents to build the serializable mapping
+        let (start_offset, end_offset, mapping) = match source_info {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } => (
+                *start_offset,
+                *end_offset,
+                SerializableSourceMapping::Original { file_id: *file_id },
+            ),
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                end_offset,
+            } => {
                 let parent_id = self.intern(parent);
-                SerializableSourceMapping::Substring {
-                    parent_id,
-                    offset: *offset,
-                }
+                (
+                    *start_offset,
+                    *end_offset,
+                    SerializableSourceMapping::Substring { parent_id },
+                )
             }
-            SourceMapping::Transformed { parent, mapping } => {
-                let parent_id = self.intern(parent);
-                SerializableSourceMapping::Transformed {
-                    parent_id,
-                    mapping: mapping.clone(),
-                }
-            }
-            SourceMapping::Concat { pieces } => {
+            SourceInfo::Concat { pieces } => {
                 let serializable_pieces = pieces
                     .iter()
                     .map(|piece| SerializableSourcePiece {
@@ -165,9 +153,13 @@ impl SourceInfoSerializer {
                         length: piece.length,
                     })
                     .collect();
-                SerializableSourceMapping::Concat {
-                    pieces: serializable_pieces,
-                }
+                (
+                    0,
+                    pieces.iter().map(|p| p.length).sum(),
+                    SerializableSourceMapping::Concat {
+                        pieces: serializable_pieces,
+                    },
+                )
             }
         };
 
@@ -177,7 +169,8 @@ impl SourceInfoSerializer {
         // Add to pool
         self.pool.push(SerializableSourceInfo {
             id,
-            range: source_info.range.clone(),
+            start_offset,
+            end_offset,
             mapping,
         });
 
@@ -194,24 +187,30 @@ impl SourceInfoSerializer {
     }
 }
 
-fn write_location(source_info: &quarto_source_map::SourceInfo) -> Value {
-    // Extract filename index by walking to the Original mapping
-    let filename_index = crate::pandoc::location::extract_filename_index(source_info);
-
-    json!({
-        "start": {
-            "offset": source_info.range.start.offset,
-            "row": source_info.range.start.row,
-            "column": source_info.range.start.column,
-        },
-        "end": {
-            "offset": source_info.range.end.offset,
-            "row": source_info.range.end.row,
-            "column": source_info.range.end.column,
-        },
-        "filenameIndex": filename_index,
-    })
-}
+// NOTE: This function is currently unused and would need a SourceContext parameter
+// to map offsets to row/column positions. Commenting out for now.
+// fn write_location(source_info: &quarto_source_map::SourceInfo, ctx: &SourceContext) -> Value {
+//     // Extract filename index by walking to the Original mapping
+//     let filename_index = crate::pandoc::location::extract_filename_index(source_info);
+//
+//     // Map start and end offsets to locations with row/column
+//     let start_mapped = source_info.map_offset(0, ctx).unwrap();
+//     let end_mapped = source_info.map_offset(source_info.length(), ctx).unwrap();
+//
+//     json!({
+//         "start": {
+//             "offset": source_info.start_offset(),
+//             "row": start_mapped.location.row,
+//             "column": start_mapped.location.column,
+//         },
+//         "end": {
+//             "offset": source_info.end_offset(),
+//             "row": end_mapped.location.row,
+//             "column": end_mapped.location.column,
+//         },
+//         "filenameIndex": filename_index,
+//     })
+// }
 
 fn write_attr(attr: &Attr) -> Value {
     json!([

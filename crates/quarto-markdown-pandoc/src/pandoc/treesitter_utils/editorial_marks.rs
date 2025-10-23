@@ -44,12 +44,12 @@ macro_rules! process_editorial_mark {
                         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                             if let Some(_) = whitespace_re.find(&text) {
                                 content.push(Inline::Space(Space {
-                                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
+                                    source_info: quarto_source_map::SourceInfo::from_range(context.current_file_id(), range),
                                 }))
                             } else {
                                 content.push(Inline::Str(Str {
                                     text: apply_smart_quotes(text),
-                                    source_info: quarto_source_map::SourceInfo::original(context.current_file_id(), range),
+                                    source_info: quarto_source_map::SourceInfo::from_range(context.current_file_id(), range),
                                 }))
                             }
                         }

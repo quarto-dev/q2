@@ -28,7 +28,7 @@
 //! let yaml = parse(content).unwrap();
 //! // Access with source location tracking
 //! if let Some(title) = yaml.get_hash_value("title") {
-//!     println!("Title at offset {}", title.source_info.range.start.offset);
+//!     println!("Title at offset {}", title.source_info.start_offset());
 //! }
 //! ```
 

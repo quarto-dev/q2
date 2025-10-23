@@ -103,7 +103,7 @@ fn process_list(
     //     but the next item might not itself be a paragraph.
 
     let mut has_loose_item = false;
-    let mut last_para_range: Option<quarto_source_map::Range> = None;
+    let mut last_para_range: Option<crate::pandoc::location::Range> = None;
     let mut last_item_end_row: Option<usize> = None;
     let mut list_items: Vec<Blocks> = Vec::new();
     let mut is_ordered_list: Option<ListAttributes> = None;
@@ -189,9 +189,10 @@ fn process_list(
             // last paragraph range after setting has_loose_item,
             // but we do it in case we want to use it later
             last_para_range = None;
-            last_item_end_row = blocks
-                .last()
-                .map(|b| get_block_source_info(b).range.end.row);
+            last_item_end_row = blocks.last().and_then(|b| {
+                crate::pandoc::source_map_compat::source_info_to_range(get_block_source_info(b), context)
+                    .map(|r| r.end.row)
+            });
             list_items.push(blocks);
             continue;
         }
@@ -201,7 +202,8 @@ fn process_list(
             if let Some(Block::Paragraph(para)) = blocks.first() {
                 // yes, so store the range and wait to finish the check on
                 // next item
-                last_para_range = Some(para.source_info.range.clone());
+                last_para_range =
+                    crate::pandoc::source_map_compat::source_info_to_range(&para.source_info, context);
             } else {
                 // if the first block is not a paragraph, it's not loose
                 last_para_range = None;
@@ -212,9 +214,10 @@ fn process_list(
             // last_para_range since this item can't participate in loose detection
             last_para_range = None;
         }
-        last_item_end_row = blocks
-            .last()
-            .map(|b| get_block_source_info(b).range.end.row);
+        last_item_end_row = blocks.last().and_then(|b| {
+            crate::pandoc::source_map_compat::source_info_to_range(get_block_source_info(b), context)
+                .map(|r| r.end.row)
+        });
         list_items.push(blocks);
     }
 
@@ -361,7 +364,7 @@ fn process_native_inline<T: Write>(
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
-                    source_info: quarto_source_map::SourceInfo::original(
+                    source_info: quarto_source_map::SourceInfo::from_range(
                         context.current_file_id(),
                         range,
                     ),
@@ -369,7 +372,7 @@ fn process_native_inline<T: Write>(
             } else {
                 Inline::Str(Str {
                     text: apply_smart_quotes(text),
-                    source_info: quarto_source_map::SourceInfo::original(
+                    source_info: quarto_source_map::SourceInfo::from_range(
                         context.current_file_id(),
                         range,
                     ),
@@ -431,7 +434,7 @@ fn process_native_inlines<T: Write>(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if let Some(_) = whitespace_re.find(&text) {
                     inlines.push(Inline::Space(Space {
-                        source_info: quarto_source_map::SourceInfo::original(
+                        source_info: quarto_source_map::SourceInfo::from_range(
                             context.current_file_id(),
                             range,
                         ),
@@ -439,7 +442,7 @@ fn process_native_inlines<T: Write>(
                 } else {
                     inlines.push(Inline::Str(Str {
                         text: apply_smart_quotes(text),
-                        source_info: quarto_source_map::SourceInfo::original(
+                        source_info: quarto_source_map::SourceInfo::from_range(
                             context.current_file_id(),
                             range,
                         ),

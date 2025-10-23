@@ -26,10 +26,9 @@ pub fn process_list_marker(
     if marker_text == "(@)" {
         // For example lists, we use 1 as the starting number
         // The actual numbering will be handled in postprocessing
-        return PandocNativeIntermediate::IntermediateOrderedListMarker(
-            1,
-            node_source_info_with_context(node, context).range,
-        );
+        let source_info = node_source_info_with_context(node, context);
+        let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
+        return PandocNativeIntermediate::IntermediateOrderedListMarker(1, range);
     }
 
     let marker_text = marker_text
@@ -39,8 +38,7 @@ pub fn process_list_marker(
     let marker_number: usize = marker_text
         .parse()
         .unwrap_or_else(|_| panic!("Invalid list marker number: {}", marker_text));
-    PandocNativeIntermediate::IntermediateOrderedListMarker(
-        marker_number,
-        node_source_info_with_context(node, context).range,
-    )
+    let source_info = node_source_info_with_context(node, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
+    PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, range)
 }

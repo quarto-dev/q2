@@ -5,30 +5,56 @@ use std::fmt;
 use thiserror::Error;
 
 /// Errors that can occur during schema parsing from YAML
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum SchemaError {
     /// Invalid schema type name
-    #[error("Invalid schema type: {0}")]
     InvalidType(String),
 
     /// Invalid schema structure
-    #[error("Invalid schema structure: {message} (at line {}, col {})", .location.range.start.row + 1, .location.range.start.column + 1)]
     InvalidStructure {
         message: String,
         location: SourceInfo,
     },
 
     /// Missing required field
-    #[error("Missing required field '{field}' (at line {}, col {})", .location.range.start.row + 1, .location.range.start.column + 1)]
     MissingField { field: String, location: SourceInfo },
 
     /// Unresolved schema reference
-    #[error("Unresolved schema reference: {0}")]
     UnresolvedRef(String),
 
     /// YAML parsing error
-    #[error("YAML parsing error: {0}")]
-    YamlError(#[from] quarto_yaml::Error),
+    YamlError(quarto_yaml::Error),
+}
+
+impl fmt::Display for SchemaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SchemaError::InvalidType(s) => write!(f, "Invalid schema type: {}", s),
+            SchemaError::InvalidStructure { message, location } => {
+                write!(f, "Invalid schema structure: {} (at offset {})", message, location.start_offset())
+            }
+            SchemaError::MissingField { field, location } => {
+                write!(f, "Missing required field '{}' (at offset {})", field, location.start_offset())
+            }
+            SchemaError::UnresolvedRef(s) => write!(f, "Unresolved schema reference: {}", s),
+            SchemaError::YamlError(e) => write!(f, "YAML parsing error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for SchemaError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            SchemaError::YamlError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl From<quarto_yaml::Error> for SchemaError {
+    fn from(e: quarto_yaml::Error) -> Self {
+        SchemaError::YamlError(e)
+    }
 }
 
 /// Result type for schema parsing operations
@@ -91,10 +117,13 @@ impl ValidationError {
     /// Set the YAML node for this error
     pub fn with_yaml_node(mut self, node: YamlWithSourceInfo) -> Self {
         // Extract location from the node
+        // Note: Without SourceContext, we can only provide the offset, not row/column
+        // For now, we'll use placeholder values for line and column
+        // TODO: Pass SourceContext to get proper line/column info
         self.location = Some(SourceLocation {
             file: "<unknown>".to_string(), // File tracking will be added in k-31
-            line: node.source_info.range.start.row + 1, // 1-indexed for display
-            column: node.source_info.range.start.column + 1, // 1-indexed for display
+            line: 0, // Would need SourceContext to compute this from offset
+            column: node.source_info.start_offset(), // Using offset as a proxy
         });
         self.yaml_node = Some(node);
         self

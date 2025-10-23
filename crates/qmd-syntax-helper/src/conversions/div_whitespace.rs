@@ -72,7 +72,21 @@ impl DivWhitespaceConverter {
             let error_row = error
                 .location
                 .as_ref()
-                .map(|loc| loc.range.start.row)
+                .and_then(|loc| {
+                    // Get the start offset from SourceInfo
+                    let offset = loc.start_offset();
+                    // Binary search to find which line this offset is on
+                    match line_starts.binary_search(&offset) {
+                        Ok(idx) => Some(idx),
+                        Err(idx) => {
+                            if idx > 0 {
+                                Some(idx - 1)
+                            } else {
+                                Some(0)
+                            }
+                        }
+                    }
+                })
                 .unwrap_or(0);
 
             // The error might be on the line itself or the line before (for div fences)

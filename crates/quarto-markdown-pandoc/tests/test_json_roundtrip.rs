@@ -18,7 +18,7 @@ fn test_json_roundtrip_simple_paragraph() {
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "Hello, world!".to_string(),
-                source_info: SourceInfo::original(
+                source_info: SourceInfo::from_range(
                     FileId(0),
                     Range {
                         start: Location {
@@ -34,7 +34,7 @@ fn test_json_roundtrip_simple_paragraph() {
                     },
                 ),
             })],
-            source_info: SourceInfo::original(
+            source_info: SourceInfo::from_range(
                 FileId(0),
                 Range {
                     start: Location {
@@ -102,7 +102,7 @@ fn test_json_roundtrip_complex_document() {
                 content: vec![
                     Inline::Str(Str {
                         text: "This is ".to_string(),
-                        source_info: SourceInfo::original(
+                        source_info: SourceInfo::from_range(
                             FileId(0),
                             Range {
                                 start: Location {
@@ -121,7 +121,7 @@ fn test_json_roundtrip_complex_document() {
                     Inline::Strong(quarto_markdown_pandoc::pandoc::Strong {
                         content: vec![Inline::Str(Str {
                             text: "bold text".to_string(),
-                            source_info: SourceInfo::original(
+                            source_info: SourceInfo::from_range(
                                 FileId(0),
                                 Range {
                                     start: Location {
@@ -137,7 +137,7 @@ fn test_json_roundtrip_complex_document() {
                                 },
                             ),
                         })],
-                        source_info: SourceInfo::original(
+                        source_info: SourceInfo::from_range(
                             FileId(0),
                             Range {
                                 start: Location {
@@ -155,7 +155,7 @@ fn test_json_roundtrip_complex_document() {
                     }),
                     Inline::Str(Str {
                         text: ".".to_string(),
-                        source_info: SourceInfo::original(
+                        source_info: SourceInfo::from_range(
                             FileId(0),
                             Range {
                                 start: Location {
@@ -172,7 +172,7 @@ fn test_json_roundtrip_complex_document() {
                         ),
                     }),
                 ],
-                source_info: SourceInfo::original(
+                source_info: SourceInfo::from_range(
                     FileId(0),
                     Range {
                         start: Location {
@@ -191,7 +191,7 @@ fn test_json_roundtrip_complex_document() {
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
                 attr: ("".to_string(), vec![], HashMap::new()),
                 text: "print('Hello, world!')".to_string(),
-                source_info: SourceInfo::original(
+                source_info: SourceInfo::from_range(
                     FileId(0),
                     Range {
                         start: Location {
@@ -261,7 +261,7 @@ fn test_json_write_then_read_matches_original_structure() {
             Block::Plain(quarto_markdown_pandoc::pandoc::Plain {
                 content: vec![Inline::Str(Str {
                     text: "Plain text".to_string(),
-                    source_info: SourceInfo::original(
+                    source_info: SourceInfo::from_range(
                         FileId(0),
                         Range {
                             start: Location {
@@ -277,7 +277,7 @@ fn test_json_write_then_read_matches_original_structure() {
                         },
                     ),
                 })],
-                source_info: SourceInfo::original(
+                source_info: SourceInfo::from_range(
                     FileId(0),
                     Range {
                         start: Location {
@@ -296,7 +296,7 @@ fn test_json_write_then_read_matches_original_structure() {
             Block::RawBlock(quarto_markdown_pandoc::pandoc::RawBlock {
                 format: "html".to_string(),
                 text: "<div>Raw HTML</div>".to_string(),
-                source_info: SourceInfo::original(
+                source_info: SourceInfo::from_range(
                     FileId(0),
                     Range {
                         start: Location {

@@ -22,10 +22,9 @@ pub fn process_shortcode_string_arg(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let id = node.utf8_text(input_bytes).unwrap().to_string();
-    PandocNativeIntermediate::IntermediateShortcodeArg(
-        ShortcodeArg::String(id),
-        node_source_info_with_context(node, context).range,
-    )
+    let source_info = node_source_info_with_context(node, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
+    PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(id), range)
 }
 
 // Helper function to process shortcode_string nodes
@@ -40,10 +39,9 @@ pub fn process_shortcode_string(
             extract_quoted_text_fn()
         )
     };
-    PandocNativeIntermediate::IntermediateShortcodeArg(
-        ShortcodeArg::String(id),
-        node_source_info_with_context(node, context).range,
-    )
+    let source_info = node_source_info_with_context(node, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
+    PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(id), range)
 }
 
 pub fn process_shortcode_keyword_param<T: Write>(
@@ -104,7 +102,8 @@ pub fn process_shortcode_keyword_param<T: Write>(
             }
         }
     }
-    let range = node_source_info_with_context(node, context).range;
+    let source_info = node_source_info_with_context(node, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
     PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(result), range)
 }
 
@@ -182,7 +181,8 @@ pub fn process_shortcode_boolean(
         "false" => ShortcodeArg::Boolean(false),
         _ => panic!("Unexpected shortcode_boolean value: {}", value),
     };
-    let range = node_source_info_with_context(node, context).range;
+    let source_info = node_source_info_with_context(node, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
     PandocNativeIntermediate::IntermediateShortcodeArg(value, range)
 }
 
@@ -192,7 +192,8 @@ pub fn process_shortcode_number(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let value = node.utf8_text(input_bytes).unwrap();
-    let range = node_source_info_with_context(node, context).range;
+    let source_info = node_source_info_with_context(node, context);
+    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(&source_info, context);
     let Ok(num) = value.parse::<f64>() else {
         panic!("Invalid shortcode_number: {}", value)
     };

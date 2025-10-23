@@ -1,35 +1,46 @@
 //! Source information with transformation tracking
 
-use crate::types::{FileId, Location, Range};
+use crate::types::{FileId, Range};
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
 /// Source information tracking a location and its transformation history
+///
+/// This enum stores only byte offsets. Row and column information is computed
+/// on-demand via `map_offset()` using the FileInformation line break index.
+///
+/// Design notes:
+/// - Original: Points directly to a file with byte offsets
+/// - Substring: Points to a range within a parent SourceInfo (offsets are relative to parent)
+/// - Concat: Combines multiple SourceInfo pieces (preserves provenance when coalescing text)
+///
+/// The Transformed variant was removed because it's not used in production code.
+/// Text transformations (smart quotes, em-dashes) use Original SourceInfo pointing
+/// to the pre-transformation text, accepting that the byte offsets are approximate.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SourceInfo {
-    /// The range in the immediate/current text
-    pub range: Range,
-    /// How this range maps to its source
-    pub mapping: SourceMapping,
-}
-
-/// Describes how source content was transformed
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum SourceMapping {
+pub enum SourceInfo {
     /// Direct position in an original file
-    Original { file_id: FileId },
+    ///
+    /// Stores only byte offsets. Use `map_offset()` to get row/column information.
+    Original {
+        file_id: FileId,
+        start_offset: usize,
+        end_offset: usize,
+    },
     /// Substring extraction from a parent source
+    ///
+    /// Offsets are relative to the parent's text.
+    /// The chain of Substrings always resolves to an Original.
     Substring {
         parent: Rc<SourceInfo>,
-        offset: usize,
+        start_offset: usize,
+        end_offset: usize,
     },
     /// Concatenation of multiple sources
+    ///
+    /// Used when coalescing adjacent text nodes while preserving
+    /// the fact that they came from different source locations.
     Concat { pieces: Vec<SourcePiece> },
-    /// Transformed text with piecewise mapping
-    Transformed {
-        parent: Rc<SourceInfo>,
-        mapping: Vec<RangeMapping>,
-    },
 }
 
 /// A piece of a concatenated source
@@ -43,68 +54,44 @@ pub struct SourcePiece {
     pub length: usize,
 }
 
-/// Maps a range in transformed text to parent text
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct RangeMapping {
-    /// Start offset in transformed text
-    pub from_start: usize,
-    /// End offset in transformed text
-    pub from_end: usize,
-    /// Start offset in parent text
-    pub to_start: usize,
-    /// End offset in parent text
-    pub to_end: usize,
-}
-
 impl Default for SourceInfo {
     fn default() -> Self {
-        SourceInfo::original(
-            FileId(0),
-            Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-            },
-        )
+        SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 0,
+        }
     }
 }
 
 impl SourceInfo {
-    /// Create source info for a position in an original file
-    pub fn original(file_id: FileId, range: Range) -> Self {
-        SourceInfo {
-            range,
-            mapping: SourceMapping::Original { file_id },
+    /// Create source info for a position in an original file (from offsets)
+    pub fn original(file_id: FileId, start_offset: usize, end_offset: usize) -> Self {
+        SourceInfo::Original {
+            file_id,
+            start_offset,
+            end_offset,
+        }
+    }
+
+    /// Create source info for a position in an original file (from Range)
+    ///
+    /// This is a compatibility helper for code that still uses Range.
+    /// The row and column information in the Range is ignored; only offsets are stored.
+    pub fn from_range(file_id: FileId, range: Range) -> Self {
+        SourceInfo::Original {
+            file_id,
+            start_offset: range.start.offset,
+            end_offset: range.end.offset,
         }
     }
 
     /// Create source info for a substring extraction
     pub fn substring(parent: SourceInfo, start: usize, end: usize) -> Self {
-        let length = end - start;
-        SourceInfo {
-            range: Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: length,
-                    row: 0,
-                    column: 0,
-                },
-            },
-            mapping: SourceMapping::Substring {
-                parent: Rc::new(parent),
-                offset: start,
-            },
+        SourceInfo::Substring {
+            parent: Rc::new(parent),
+            start_offset: start,
+            end_offset: end,
         }
     }
 
@@ -130,49 +117,8 @@ impl SourceInfo {
             })
             .collect();
 
-        let total_length = cumulative_offset;
-
-        SourceInfo {
-            range: Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: total_length,
-                    row: 0,
-                    column: 0,
-                },
-            },
-            mapping: SourceMapping::Concat {
-                pieces: pieces_with_offsets,
-            },
-        }
-    }
-
-    /// Create source info for transformed text
-    pub fn transformed(parent: SourceInfo, mapping: Vec<RangeMapping>) -> Self {
-        // Find the max end offset in the transformed text
-        let total_length = mapping.iter().map(|m| m.from_end).max().unwrap_or(0);
-
-        SourceInfo {
-            range: Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: total_length,
-                    row: 0,
-                    column: 0,
-                },
-            },
-            mapping: SourceMapping::Transformed {
-                parent: Rc::new(parent),
-                mapping,
-            },
+        SourceInfo::Concat {
+            pieces: pieces_with_offsets,
         }
     }
 
@@ -181,13 +127,54 @@ impl SourceInfo {
     /// This creates a Concat mapping that preserves both sources.
     /// The resulting SourceInfo spans from the start of self to the end of other.
     pub fn combine(&self, other: &SourceInfo) -> Self {
-        let self_length = self.range.end.offset - self.range.start.offset;
-        let other_length = other.range.end.offset - other.range.start.offset;
+        let self_length = self.length();
+        let other_length = other.length();
 
         SourceInfo::concat(vec![
             (self.clone(), self_length),
             (other.clone(), other_length),
         ])
+    }
+
+    /// Get the length (in bytes) represented by this SourceInfo
+    pub fn length(&self) -> usize {
+        match self {
+            SourceInfo::Original {
+                start_offset,
+                end_offset,
+                ..
+            } => end_offset - start_offset,
+            SourceInfo::Substring {
+                start_offset,
+                end_offset,
+                ..
+            } => end_offset - start_offset,
+            SourceInfo::Concat { pieces } => pieces.iter().map(|p| p.length).sum(),
+        }
+    }
+
+    /// Get the start offset for this SourceInfo
+    ///
+    /// For Original and Substring, returns the start_offset field.
+    /// For Concat, returns 0 (the concat represents a new text starting at 0).
+    pub fn start_offset(&self) -> usize {
+        match self {
+            SourceInfo::Original { start_offset, .. } => *start_offset,
+            SourceInfo::Substring { start_offset, .. } => *start_offset,
+            SourceInfo::Concat { .. } => 0,
+        }
+    }
+
+    /// Get the end offset for this SourceInfo
+    ///
+    /// For Original and Substring, returns the end_offset field.
+    /// For Concat, returns the total length.
+    pub fn end_offset(&self) -> usize {
+        match self {
+            SourceInfo::Original { end_offset, .. } => *end_offset,
+            SourceInfo::Substring { end_offset, .. } => *end_offset,
+            SourceInfo::Concat { .. } => self.length(),
+        }
     }
 }
 
@@ -212,11 +199,13 @@ mod tests {
             },
         };
 
-        let info = SourceInfo::original(file_id, range.clone());
+        let info = SourceInfo::from_range(file_id, range.clone());
 
-        assert_eq!(info.range, range);
-        match info.mapping {
-            SourceMapping::Original { file_id: mapped_id } => {
+        assert_eq!(info.start_offset(), 0);
+        assert_eq!(info.end_offset(), 10);
+        assert_eq!(info.length(), 10);
+        match info {
+            SourceInfo::Original { file_id: mapped_id, .. } => {
                 assert_eq!(mapped_id, file_id);
             }
             _ => panic!("Expected Original mapping"),
@@ -239,7 +228,7 @@ mod tests {
             },
         };
 
-        let info = SourceInfo::original(file_id, range);
+        let info = SourceInfo::from_range(file_id, range);
         let json = serde_json::to_string(&info).unwrap();
         let deserialized: SourceInfo = serde_json::from_str(&json).unwrap();
 
@@ -261,16 +250,18 @@ mod tests {
                 column: 100,
             },
         };
-        let parent = SourceInfo::original(file_id, parent_range);
+        let parent = SourceInfo::from_range(file_id, parent_range);
 
         let substring = SourceInfo::substring(parent, 10, 20);
 
-        assert_eq!(substring.range.start.offset, 0);
-        assert_eq!(substring.range.end.offset, 10); // length = 20 - 10 = 10
+        assert_eq!(substring.start_offset(), 10);
+        assert_eq!(substring.end_offset(), 20);
+        assert_eq!(substring.length(), 10);
 
-        match substring.mapping {
-            SourceMapping::Substring { offset, .. } => {
-                assert_eq!(offset, 10);
+        match substring {
+            SourceInfo::Substring { start_offset, end_offset, .. } => {
+                assert_eq!(start_offset, 10);
+                assert_eq!(end_offset, 20);
             }
             _ => panic!("Expected Substring mapping"),
         }
@@ -281,7 +272,7 @@ mod tests {
         let file_id1 = FileId(0);
         let file_id2 = FileId(1);
 
-        let info1 = SourceInfo::original(
+        let info1 = SourceInfo::from_range(
             file_id1,
             Range {
                 start: Location {
@@ -297,7 +288,7 @@ mod tests {
             },
         );
 
-        let info2 = SourceInfo::original(
+        let info2 = SourceInfo::from_range(
             file_id2,
             Range {
                 start: Location {
@@ -315,11 +306,12 @@ mod tests {
 
         let concat = SourceInfo::concat(vec![(info1, 10), (info2, 15)]);
 
-        assert_eq!(concat.range.start.offset, 0);
-        assert_eq!(concat.range.end.offset, 25); // 10 + 15
+        assert_eq!(concat.start_offset(), 0);
+        assert_eq!(concat.end_offset(), 25); // 10 + 15
+        assert_eq!(concat.length(), 25);
 
-        match concat.mapping {
-            SourceMapping::Concat { pieces } => {
+        match concat {
+            SourceInfo::Concat { pieces } => {
                 assert_eq!(pieces.len(), 2);
                 assert_eq!(pieces[0].offset_in_concat, 0);
                 assert_eq!(pieces[0].length, 10);
@@ -331,112 +323,11 @@ mod tests {
     }
 
     #[test]
-    fn test_transformed_source_info() {
-        let file_id = FileId(0);
-        let parent = SourceInfo::original(
-            file_id,
-            Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 50,
-                    row: 0,
-                    column: 50,
-                },
-            },
-        );
-
-        let mapping = vec![
-            RangeMapping {
-                from_start: 0,
-                from_end: 10,
-                to_start: 0,
-                to_end: 10,
-            },
-            RangeMapping {
-                from_start: 10,
-                from_end: 20,
-                to_start: 20,
-                to_end: 30,
-            },
-        ];
-
-        let transformed = SourceInfo::transformed(parent, mapping.clone());
-
-        assert_eq!(transformed.range.start.offset, 0);
-        assert_eq!(transformed.range.end.offset, 20); // max from_end
-
-        match transformed.mapping {
-            SourceMapping::Transformed { mapping: m, .. } => {
-                assert_eq!(m, mapping);
-            }
-            _ => panic!("Expected Transformed mapping"),
-        }
-    }
-
-    #[test]
-    fn test_nested_transformations() {
-        let file_id = FileId(0);
-        let original = SourceInfo::original(
-            file_id,
-            Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 100,
-                    row: 0,
-                    column: 100,
-                },
-            },
-        );
-
-        // Extract a substring
-        let substring = SourceInfo::substring(original, 10, 50);
-
-        // Then transform it
-        let transformed = SourceInfo::transformed(
-            substring,
-            vec![RangeMapping {
-                from_start: 0,
-                from_end: 10,
-                to_start: 0,
-                to_end: 10,
-            }],
-        );
-
-        // Verify the chain: Original -> Substring -> Transformed
-        match &transformed.mapping {
-            SourceMapping::Transformed { parent, .. } => match &parent.mapping {
-                SourceMapping::Substring {
-                    parent: grandparent,
-                    offset,
-                } => {
-                    assert_eq!(*offset, 10);
-                    match &grandparent.mapping {
-                        SourceMapping::Original { file_id: id } => {
-                            assert_eq!(*id, file_id);
-                        }
-                        _ => panic!("Expected Original at root"),
-                    }
-                }
-                _ => panic!("Expected Substring as parent"),
-            },
-            _ => panic!("Expected Transformed at top level"),
-        }
-    }
-
-    #[test]
     fn test_combine_two_sources() {
         let file_id = FileId(0);
 
         // Create two separate source info objects
-        let info1 = SourceInfo::original(
+        let info1 = SourceInfo::from_range(
             file_id,
             Range {
                 start: Location {
@@ -452,7 +343,7 @@ mod tests {
             },
         );
 
-        let info2 = SourceInfo::original(
+        let info2 = SourceInfo::from_range(
             file_id,
             Range {
                 start: Location {
@@ -472,11 +363,12 @@ mod tests {
         let combined = info1.combine(&info2);
 
         // Should create a Concat with total length = 10 + 10 = 20
-        assert_eq!(combined.range.start.offset, 0);
-        assert_eq!(combined.range.end.offset, 20);
+        assert_eq!(combined.start_offset(), 0);
+        assert_eq!(combined.end_offset(), 20);
+        assert_eq!(combined.length(), 20);
 
-        match combined.mapping {
-            SourceMapping::Concat { pieces } => {
+        match combined {
+            SourceInfo::Concat { pieces } => {
                 assert_eq!(pieces.len(), 2);
                 assert_eq!(pieces[0].length, 10);
                 assert_eq!(pieces[0].offset_in_concat, 0);
@@ -493,7 +385,7 @@ mod tests {
         let file_id1 = FileId(5);
         let file_id2 = FileId(10);
 
-        let info1 = SourceInfo::original(
+        let info1 = SourceInfo::from_range(
             file_id1,
             Range {
                 start: Location {
@@ -509,7 +401,7 @@ mod tests {
             },
         );
 
-        let info2 = SourceInfo::original(
+        let info2 = SourceInfo::from_range(
             file_id2,
             Range {
                 start: Location {
@@ -528,19 +420,19 @@ mod tests {
         let combined = info1.combine(&info2);
 
         // Verify both sources are preserved in the Concat
-        match combined.mapping {
-            SourceMapping::Concat { pieces } => {
+        match combined {
+            SourceInfo::Concat { pieces } => {
                 assert_eq!(pieces.len(), 2);
 
                 // First piece should come from file_id1
-                match &pieces[0].source_info.mapping {
-                    SourceMapping::Original { file_id } => assert_eq!(*file_id, file_id1),
+                match &pieces[0].source_info {
+                    SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, file_id1),
                     _ => panic!("Expected Original mapping for first piece"),
                 }
 
                 // Second piece should come from file_id2
-                match &pieces[1].source_info.mapping {
-                    SourceMapping::Original { file_id } => assert_eq!(*file_id, file_id2),
+                match &pieces[1].source_info {
+                    SourceInfo::Original { file_id, .. } => assert_eq!(*file_id, file_id2),
                     _ => panic!("Expected Original mapping for second piece"),
                 }
             }
@@ -565,17 +457,13 @@ mod tests {
             },
         };
 
-        let info = SourceInfo::original(file_id, range);
+        let info = SourceInfo::from_range(file_id, range);
         let json = serde_json::to_value(&info).unwrap();
 
         // Verify JSON structure
-        assert_eq!(json["range"]["start"]["offset"], 10);
-        assert_eq!(json["range"]["start"]["row"], 1);
-        assert_eq!(json["range"]["start"]["column"], 5);
-        assert_eq!(json["range"]["end"]["offset"], 50);
-        assert_eq!(json["range"]["end"]["row"], 3);
-        assert_eq!(json["range"]["end"]["column"], 10);
-        assert_eq!(json["mapping"]["Original"]["file_id"], 0);
+        assert_eq!(json["Original"]["file_id"], 0);
+        assert_eq!(json["Original"]["start_offset"], 10);
+        assert_eq!(json["Original"]["end_offset"], 50);
 
         // Verify round-trip
         let deserialized: SourceInfo = serde_json::from_value(json).unwrap();
@@ -598,20 +486,19 @@ mod tests {
                 column: 20,
             },
         };
-        let parent = SourceInfo::original(file_id, parent_range);
+        let parent = SourceInfo::from_range(file_id, parent_range);
 
         let substring = SourceInfo::substring(parent, 10, 30);
         let json = serde_json::to_value(&substring).unwrap();
 
         // Verify JSON structure
-        assert_eq!(json["range"]["start"]["offset"], 0);
-        assert_eq!(json["range"]["end"]["offset"], 20); // length = 30 - 10 = 20
-        assert_eq!(json["mapping"]["Substring"]["offset"], 10);
+        assert_eq!(json["Substring"]["start_offset"], 10);
+        assert_eq!(json["Substring"]["end_offset"], 30);
 
         // Verify parent is serialized (with Rc, it's a full copy in JSON)
-        assert!(json["mapping"]["Substring"]["parent"].is_object());
+        assert!(json["Substring"]["parent"].is_object());
         assert_eq!(
-            json["mapping"]["Substring"]["parent"]["mapping"]["Original"]["file_id"],
+            json["Substring"]["parent"]["Original"]["file_id"],
             0
         );
 
@@ -638,7 +525,7 @@ mod tests {
                 column: 0,
             },
         };
-        let file_info = SourceInfo::original(file_id, file_range);
+        let file_info = SourceInfo::from_range(file_id, file_range);
 
         // Level 2: YAML frontmatter (substring of file)
         let yaml_info = SourceInfo::substring(file_info, 4, 150);
@@ -649,14 +536,14 @@ mod tests {
         let json = serde_json::to_value(&value_info).unwrap();
 
         // Verify nested structure
-        assert_eq!(json["mapping"]["Substring"]["offset"], 20);
+        assert_eq!(json["Substring"]["start_offset"], 20);
+        assert_eq!(json["Substring"]["end_offset"], 35);
         assert_eq!(
-            json["mapping"]["Substring"]["parent"]["mapping"]["Substring"]["offset"],
+            json["Substring"]["parent"]["Substring"]["start_offset"],
             4
         );
         assert_eq!(
-            json["mapping"]["Substring"]["parent"]["mapping"]["Substring"]["parent"]["mapping"]["Original"]
-                ["file_id"],
+            json["Substring"]["parent"]["Substring"]["parent"]["Original"]["file_id"],
             0
         );
 
@@ -671,7 +558,7 @@ mod tests {
         let file_id1 = FileId(0);
         let file_id2 = FileId(1);
 
-        let info1 = SourceInfo::original(
+        let info1 = SourceInfo::from_range(
             file_id1,
             Range {
                 start: Location {
@@ -687,7 +574,7 @@ mod tests {
             },
         );
 
-        let info2 = SourceInfo::original(
+        let info2 = SourceInfo::from_range(
             file_id2,
             Range {
                 start: Location {
@@ -707,15 +594,15 @@ mod tests {
         let json = serde_json::to_value(&combined).unwrap();
 
         // Verify JSON structure
-        assert!(json["mapping"]["Concat"]["pieces"].is_array());
-        let pieces = json["mapping"]["Concat"]["pieces"].as_array().unwrap();
+        assert!(json["Concat"]["pieces"].is_array());
+        let pieces = json["Concat"]["pieces"].as_array().unwrap();
         assert_eq!(pieces.len(), 2);
 
         // First piece
         assert_eq!(pieces[0]["offset_in_concat"], 0);
         assert_eq!(pieces[0]["length"], 10);
         assert_eq!(
-            pieces[0]["source_info"]["mapping"]["Original"]["file_id"],
+            pieces[0]["source_info"]["Original"]["file_id"],
             0
         );
 
@@ -723,7 +610,7 @@ mod tests {
         assert_eq!(pieces[1]["offset_in_concat"], 10);
         assert_eq!(pieces[1]["length"], 10);
         assert_eq!(
-            pieces[1]["source_info"]["mapping"]["Original"]["file_id"],
+            pieces[1]["source_info"]["Original"]["file_id"],
             1
         );
 
@@ -732,102 +619,13 @@ mod tests {
         assert_eq!(combined, deserialized);
     }
 
-    /// Test JSON serialization of Transformed mapping
-    #[test]
-    fn test_json_serialization_transformed() {
-        use crate::RangeMapping;
-
-        let file_id = FileId(0);
-        let parent = SourceInfo::original(
-            file_id,
-            Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 20,
-                    row: 0,
-                    column: 20,
-                },
-            },
-        );
-
-        // Create a transformed source with range mappings
-        let mappings = vec![
-            RangeMapping {
-                from_start: 0,
-                from_end: 5,
-                to_start: 0,
-                to_end: 5,
-            },
-            RangeMapping {
-                from_start: 5,
-                from_end: 10,
-                to_start: 10,
-                to_end: 15,
-            },
-        ];
-
-        let transformed = SourceInfo {
-            range: Range {
-                start: Location {
-                    offset: 0,
-                    row: 0,
-                    column: 0,
-                },
-                end: Location {
-                    offset: 10,
-                    row: 0,
-                    column: 10,
-                },
-            },
-            mapping: SourceMapping::Transformed {
-                parent: Rc::new(parent),
-                mapping: mappings.clone(),
-            },
-        };
-
-        let json = serde_json::to_value(&transformed).unwrap();
-
-        // Verify JSON structure
-        assert!(json["mapping"]["Transformed"]["mapping"].is_array());
-        let json_mappings = json["mapping"]["Transformed"]["mapping"]
-            .as_array()
-            .unwrap();
-        assert_eq!(json_mappings.len(), 2);
-
-        // Verify first mapping
-        assert_eq!(json_mappings[0]["from_start"], 0);
-        assert_eq!(json_mappings[0]["from_end"], 5);
-        assert_eq!(json_mappings[0]["to_start"], 0);
-        assert_eq!(json_mappings[0]["to_end"], 5);
-
-        // Verify second mapping
-        assert_eq!(json_mappings[1]["from_start"], 5);
-        assert_eq!(json_mappings[1]["from_end"], 10);
-        assert_eq!(json_mappings[1]["to_start"], 10);
-        assert_eq!(json_mappings[1]["to_end"], 15);
-
-        // Verify parent is serialized
-        assert_eq!(
-            json["mapping"]["Transformed"]["parent"]["mapping"]["Original"]["file_id"],
-            0
-        );
-
-        // Verify round-trip
-        let deserialized: SourceInfo = serde_json::from_value(json).unwrap();
-        assert_eq!(transformed, deserialized);
-    }
-
     /// Test JSON serialization of complex nested structure (real-world example)
     #[test]
     fn test_json_serialization_complex_nested() {
         let file_id = FileId(0);
 
         // Simulate a .qmd file structure
-        let qmd_file = SourceInfo::original(
+        let qmd_file = SourceInfo::from_range(
             file_id,
             Range {
                 start: Location {
@@ -859,7 +657,7 @@ mod tests {
 
         // Verify this complex structure serializes
         assert!(json.is_object());
-        assert!(json["mapping"]["Concat"].is_object());
+        assert!(json["Concat"].is_object());
 
         // Verify round-trip
         let deserialized: SourceInfo = serde_json::from_value(json).unwrap();

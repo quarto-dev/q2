@@ -30,38 +30,31 @@ impl fmt::Display for Error {
         match self {
             Error::ParseError { message, location } => {
                 write!(f, "Parse error: {}", message)?;
-                if let Some(loc) = location {
-                    // Display with 1-indexed row/column
-                    write!(
-                        f,
-                        " at {}:{}",
-                        loc.range.start.row + 1,
-                        loc.range.start.column + 1
-                    )?;
+                // TODO: Proper location display requires SourceContext to map offsets to row/column.
+                // For now, we only show the error message without location details.
+                // To fix: refactor Error type to carry SourceContext or resolve locations before creating errors.
+                if let Some(_loc) = location {
+                    // Location information available but cannot display without SourceContext
                 }
                 Ok(())
             }
             Error::UnexpectedEof { location } => {
                 write!(f, "Unexpected end of input")?;
-                if let Some(loc) = location {
-                    write!(
-                        f,
-                        " at {}:{}",
-                        loc.range.start.row + 1,
-                        loc.range.start.column + 1
-                    )?;
+                // TODO: Proper location display requires SourceContext to map offsets to row/column.
+                // For now, we only show the error message without location details.
+                // To fix: refactor Error type to carry SourceContext or resolve locations before creating errors.
+                if let Some(_loc) = location {
+                    // Location information available but cannot display without SourceContext
                 }
                 Ok(())
             }
             Error::InvalidStructure { message, location } => {
                 write!(f, "Invalid YAML structure: {}", message)?;
-                if let Some(loc) = location {
-                    write!(
-                        f,
-                        " at {}:{}",
-                        loc.range.start.row + 1,
-                        loc.range.start.column + 1
-                    )?;
+                // TODO: Proper location display requires SourceContext to map offsets to row/column.
+                // For now, we only show the error message without location details.
+                // To fix: refactor Error type to carry SourceContext or resolve locations before creating errors.
+                if let Some(_loc) = location {
+                    // Location information available but cannot display without SourceContext
                 }
                 Ok(())
             }

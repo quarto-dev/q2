@@ -18,7 +18,7 @@ use crate::pandoc::{
     RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
     Superscript, Underline,
 };
-use quarto_source_map::{FileId, RangeMapping, SourceMapping};
+use quarto_source_map::FileId;
 use serde_json::Value;
 use std::rc::Rc;
 
@@ -80,8 +80,11 @@ impl SourceInfoDeserializer {
 
     /// Build the pool from the sourceInfoPool JSON array (compact format)
     ///
-    /// Compact format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
+    /// New format: {"r": [start_offset, end_offset], "t": type_code, "d": data}
+    /// Old format: {"r": [start_off, start_row, start_col, end_off, end_row, end_col], "t": type_code, "d": data}
     /// ID is implicit from array index
+    ///
+    /// Note: Row/column information from old format is ignored since SourceInfo now stores only offsets.
     fn new(pool_json: &Value) -> Result<Self> {
         let pool_array = pool_json
             .as_array()
@@ -91,45 +94,39 @@ impl SourceInfoDeserializer {
 
         // Build pool in order - parents must come before children
         for item in pool_array {
-            // Parse range from "r" array: [start_offset, start_row, start_col, end_offset, end_row, end_col]
+            // Parse offsets from "r" array
             let range_array = item
                 .get("r")
                 .and_then(|v| v.as_array())
                 .ok_or(JsonReadError::MalformedSourceInfoPool)?;
 
-            if range_array.len() != 6 {
-                return Err(JsonReadError::MalformedSourceInfoPool);
-            }
-
-            let range = quarto_source_map::Range {
-                start: quarto_source_map::Location {
-                    offset: range_array[0]
+            let (start_offset, end_offset) = match range_array.len() {
+                2 => {
+                    // New format: [start_offset, end_offset]
+                    let start = range_array[0]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    row: range_array[1]
+                        as usize;
+                    let end = range_array[1]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    column: range_array[2]
+                        as usize;
+                    (start, end)
+                }
+                6 => {
+                    // Old format: [start_offset, start_row, start_col, end_offset, end_row, end_col]
+                    // Extract only offsets, ignore row/column
+                    let start = range_array[0]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                },
-                end: quarto_source_map::Location {
-                    offset: range_array[3]
+                        as usize;
+                    let end = range_array[3]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    row: range_array[4]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                    column: range_array[5]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize,
-                },
+                        as usize;
+                    (start, end)
+                }
+                _ => return Err(JsonReadError::MalformedSourceInfoPool),
             };
 
             // Parse type code from "t"
@@ -143,42 +140,47 @@ impl SourceInfoDeserializer {
                 .get("d")
                 .ok_or(JsonReadError::MalformedSourceInfoPool)?;
 
-            let mapping = match type_code {
+            let source_info = match type_code {
                 0 => {
                     // Original: data is file_id (number)
                     let file_id = data
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         as usize;
-                    SourceMapping::Original {
+                    quarto_source_map::SourceInfo::Original {
                         file_id: FileId(file_id),
+                        start_offset,
+                        end_offset,
                     }
                 }
                 1 => {
-                    // Substring: data is [parent_id, offset]
-                    let data_array = data
-                        .as_array()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-                    if data_array.len() != 2 {
+                    // Substring: data is parent_id (new format) or [parent_id, offset] (old format)
+                    // In new format, offsets are already in start_offset/end_offset above
+                    let parent_id = if let Some(id) = data.as_u64() {
+                        // New format: just parent_id
+                        id as usize
+                    } else if let Some(data_array) = data.as_array() {
+                        // Old format: [parent_id, offset] - ignore offset, use start_offset/end_offset
+                        if data_array.len() != 2 {
+                            return Err(JsonReadError::MalformedSourceInfoPool);
+                        }
+                        data_array[0]
+                            .as_u64()
+                            .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                            as usize
+                    } else {
                         return Err(JsonReadError::MalformedSourceInfoPool);
-                    }
-                    let parent_id = data_array[0]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize;
-                    let offset = data_array[1]
-                        .as_u64()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                        as usize;
+                    };
 
                     let parent = pool
                         .get(parent_id)
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         .clone();
 
-                    SourceMapping::Substring {
+                    quarto_source_map::SourceInfo::Substring {
                         parent: Rc::new(parent),
-                        offset,
+                        start_offset,
+                        end_offset,
                     }
                 }
                 2 => {
@@ -222,62 +224,33 @@ impl SourceInfoDeserializer {
                         })
                         .collect();
 
-                    SourceMapping::Concat { pieces: pieces? }
+                    quarto_source_map::SourceInfo::Concat { pieces: pieces? }
                 }
                 3 => {
-                    // Transformed: data is [parent_id, [[from_start, from_end, to_start, to_end], ...]]
+                    // Transformed variant no longer exists in SourceInfo
+                    // Convert to approximate Substring pointing to parent
+                    // This loses the transformation mapping but preserves the parent relationship
                     let data_array = data
                         .as_array()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-                    if data_array.len() != 2 {
+                    if data_array.is_empty() {
                         return Err(JsonReadError::MalformedSourceInfoPool);
                     }
                     let parent_id = data_array[0]
                         .as_u64()
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         as usize;
-                    let mapping_array = data_array[1]
-                        .as_array()
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-
-                    let range_mappings: Result<Vec<RangeMapping>> = mapping_array
-                        .iter()
-                        .map(|rm_array| {
-                            let rm = rm_array
-                                .as_array()
-                                .ok_or(JsonReadError::MalformedSourceInfoPool)?;
-                            if rm.len() != 4 {
-                                return Err(JsonReadError::MalformedSourceInfoPool);
-                            }
-                            Ok(RangeMapping {
-                                from_start: rm[0]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                                from_end: rm[1]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                                to_start: rm[2]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                                to_end: rm[3]
-                                    .as_u64()
-                                    .ok_or(JsonReadError::MalformedSourceInfoPool)?
-                                    as usize,
-                            })
-                        })
-                        .collect();
 
                     let parent = pool
                         .get(parent_id)
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         .clone();
 
-                    SourceMapping::Transformed {
+                    // Approximate with Substring
+                    quarto_source_map::SourceInfo::Substring {
                         parent: Rc::new(parent),
-                        mapping: range_mappings?,
+                        start_offset,
+                        end_offset,
                     }
                 }
                 _ => {
@@ -285,7 +258,7 @@ impl SourceInfoDeserializer {
                 }
             };
 
-            pool.push(quarto_source_map::SourceInfo { range, mapping });
+            pool.push(source_info);
         }
 
         Ok(SourceInfoDeserializer { pool })
@@ -320,7 +293,7 @@ fn make_source_info(filename_index: Option<usize>, range: Range) -> quarto_sourc
             column: range.end.column,
         },
     };
-    quarto_source_map::SourceInfo::original(file_id, qsm_range)
+    quarto_source_map::SourceInfo::from_range(file_id, qsm_range)
 }
 
 fn empty_range() -> Range {

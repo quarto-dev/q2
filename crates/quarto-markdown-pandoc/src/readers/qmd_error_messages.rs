@@ -403,7 +403,7 @@ fn error_diagnostic_from_parse_state(
         start: start_location,
         end: end_location,
     };
-    let source_info = quarto_source_map::SourceInfo::original(
+    let source_info = quarto_source_map::SourceInfo::from_range(
         quarto_source_map::FileId(0), // File ID 0 (set up in ASTContext)
         range,
     );
