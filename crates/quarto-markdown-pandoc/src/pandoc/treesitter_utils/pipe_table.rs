@@ -47,12 +47,14 @@ pub fn process_pipe_table_delimiter_cell(
 }
 
 pub fn process_pipe_table_header_or_row(
+    node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    _context: &ASTContext,
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut row = Row {
         attr: empty_attr(),
         cells: Vec::new(),
+        source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     };
     for (node, child) in children {
@@ -110,6 +112,7 @@ pub fn process_pipe_table_cell(
         row_span: 1,
         attr: ("".to_string(), vec![], HashMap::new()),
         content: vec![],
+        source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     };
     for (node, child) in children {
@@ -214,6 +217,7 @@ pub fn process_pipe_table(
     };
 
     // Construct caption from caption_inlines if present
+    // Per design decision: use empty range at end of table for absent caption
     let caption = if let Some(inlines) = caption_inlines {
         Caption {
             short: None,
@@ -221,11 +225,14 @@ pub fn process_pipe_table(
                 content: inlines,
                 source_info: node_source_info_with_context(node, context),
             })]),
+            source_info: node_source_info_with_context(node, context),
         }
     } else {
+        // Empty caption: use zero-length range at end of table
         Caption {
             short: None,
             long: None,
+            source_info: node_source_info_with_context(node, context),
         }
     };
 
@@ -236,6 +243,7 @@ pub fn process_pipe_table(
         head: TableHead {
             attr: empty_attr(),
             rows: thead_rows,
+            source_info: node_source_info_with_context(node, context),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
         bodies: vec![TableBody {
@@ -243,11 +251,13 @@ pub fn process_pipe_table(
             rowhead_columns: 0,
             head: vec![],
             body: body_rows,
+            source_info: node_source_info_with_context(node, context),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         }],
         foot: TableFoot {
             attr: empty_attr(),
             rows: vec![],
+            source_info: node_source_info_with_context(node, context),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
         source_info: node_source_info_with_context(node, context),

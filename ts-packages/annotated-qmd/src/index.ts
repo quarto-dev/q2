@@ -160,6 +160,8 @@ export {
 // Re-export classes
 export { SourceInfoReconstructor } from './source-map.js';
 export { MetadataConverter } from './meta-converter.js';
+export { InlineConverter } from './inline-converter.js';
+export { BlockConverter } from './block-converter.js';
 
 // Import for main function
 import { SourceInfoReconstructor } from './source-map.js';

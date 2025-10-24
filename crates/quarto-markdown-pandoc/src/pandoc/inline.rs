@@ -436,7 +436,14 @@ pub fn make_cite_inline(
 
     if !is_good_cite {
         // if the content is not a good Cite, we backtrack and return a Span
-        return make_span_inline(attr, target, content, source_info, attr_source, target_source);
+        return make_span_inline(
+            attr,
+            target,
+            content,
+            source_info,
+            attr_source,
+            target_source,
+        );
     }
 
     // we can now destructively create a Cite inline

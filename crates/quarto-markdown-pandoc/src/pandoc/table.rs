@@ -28,6 +28,7 @@ pub type ColSpec = (Alignment, ColWidth);
 pub struct Row {
     pub attr: Attr,
     pub cells: Vec<Cell>,
+    pub source_info: quarto_source_map::SourceInfo,
     pub attr_source: AttrSourceInfo,
 }
 
@@ -35,6 +36,7 @@ pub struct Row {
 pub struct TableHead {
     pub attr: Attr,
     pub rows: Vec<Row>,
+    pub source_info: quarto_source_map::SourceInfo,
     pub attr_source: AttrSourceInfo,
 }
 
@@ -44,6 +46,7 @@ pub struct TableBody {
     pub rowhead_columns: usize,
     pub head: Vec<Row>,
     pub body: Vec<Row>,
+    pub source_info: quarto_source_map::SourceInfo,
     pub attr_source: AttrSourceInfo,
 }
 
@@ -51,6 +54,7 @@ pub struct TableBody {
 pub struct TableFoot {
     pub attr: Attr,
     pub rows: Vec<Row>,
+    pub source_info: quarto_source_map::SourceInfo,
     pub attr_source: AttrSourceInfo,
 }
 
@@ -61,6 +65,7 @@ pub struct Cell {
     pub row_span: usize,
     pub col_span: usize,
     pub content: Blocks,
+    pub source_info: quarto_source_map::SourceInfo,
     pub attr_source: AttrSourceInfo,
 }
 

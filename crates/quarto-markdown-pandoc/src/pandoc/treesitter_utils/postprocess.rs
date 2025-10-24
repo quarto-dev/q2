@@ -374,6 +374,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 // TODO: Should derive from image.content inlines
                                 source_info: quarto_source_map::SourceInfo::default(),
                             })]),
+                            source_info: quarto_source_map::SourceInfo::default(),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
@@ -771,6 +772,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     content: caption_content,
                                     source_info: caption_block.source_info.clone(),
                                 })]),
+                                source_info: caption_block.source_info.clone(),
                             };
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {

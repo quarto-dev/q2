@@ -29,7 +29,9 @@ where
             citation_type = CitationMode::SuppressAuthor;
             if let PandocNativeIntermediate::IntermediateBaseText(id, range) = child {
                 citation_id = id;
-                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(&range, context));
+                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(
+                    &range, context,
+                ));
             } else {
                 panic!(
                     "Expected BaseText in citation_id_suppress_author, got {:?}",
@@ -40,7 +42,9 @@ where
             citation_type = CitationMode::AuthorInText;
             if let PandocNativeIntermediate::IntermediateBaseText(id, range) = child {
                 citation_id = id;
-                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(&range, context));
+                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(
+                    &range, context,
+                ));
             } else {
                 panic!(
                     "Expected BaseText in citation_id_author_in_text, got {:?}",

@@ -1165,7 +1165,13 @@ fn read_list_attributes(value: &Value) -> Result<ListAttributes> {
     Ok((start_num, number_style, number_delimiter))
 }
 
-fn read_caption(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Caption> {
+// Read caption from Pandoc array format: [short, long]
+// Source info is passed separately from parallel fields
+fn read_caption(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+    source_val: Option<&Value>,
+) -> Result<Caption> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Caption".to_string()))?;
@@ -1188,7 +1194,22 @@ fn read_caption(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<
         Some(read_blocks(&arr[1], deserializer)?)
     };
 
-    Ok(Caption { short, long })
+    // Read source info from parallel source value if provided
+    let source_info = if let Some(s_val) = source_val {
+        if s_val.is_number() {
+            deserializer.from_json_ref(s_val)?
+        } else {
+            quarto_source_map::SourceInfo::default()
+        }
+    } else {
+        quarto_source_map::SourceInfo::default()
+    };
+
+    Ok(Caption {
+        short,
+        long,
+        source_info,
+    })
 }
 
 fn read_blocks(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Vec<Block>> {
@@ -1262,7 +1283,13 @@ fn read_colspec(value: &Value) -> Result<ColSpec> {
     Ok((alignment, colwidth))
 }
 
-fn read_cell(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Cell> {
+// Read cell from Pandoc array format: [attr, alignment, rowSpan, colSpan, content]
+// Source info is passed separately from parallel fields
+fn read_cell(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+    source_val: Option<&Value>,
+) -> Result<Cell> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Cell".to_string()))?;
@@ -1277,13 +1304,29 @@ fn read_cell(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Cel
     let alignment = read_alignment(&arr[1])?;
     let row_span = arr[2]
         .as_u64()
-        .ok_or_else(|| JsonReadError::InvalidType("Cell row_span must be number".to_string()))?
+        .ok_or_else(|| JsonReadError::InvalidType("Cell rowSpan must be number".to_string()))?
         as usize;
     let col_span = arr[3]
         .as_u64()
-        .ok_or_else(|| JsonReadError::InvalidType("Cell col_span must be number".to_string()))?
+        .ok_or_else(|| JsonReadError::InvalidType("Cell colSpan must be number".to_string()))?
         as usize;
     let content = read_blocks(&arr[4], deserializer)?;
+
+    // Read source info from parallel source structure if provided
+    let (source_info, attr_source) = if let Some(s_obj) = source_val {
+        let source_info = if let Some(s_val) = s_obj.get("s") {
+            deserializer.from_json_ref(s_val)?
+        } else {
+            quarto_source_map::SourceInfo::default()
+        };
+        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
+        (source_info, attr_source)
+    } else {
+        (
+            quarto_source_map::SourceInfo::default(),
+            AttrSourceInfo::empty(),
+        )
+    };
 
     Ok(Cell {
         attr,
@@ -1291,11 +1334,18 @@ fn read_cell(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Cel
         row_span,
         col_span,
         content,
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        source_info,
+        attr_source,
     })
 }
 
-fn read_row(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Row> {
+// Read row from Pandoc array format: [attr, cells]
+// Source info is passed separately from parallel fields
+fn read_row(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+    source_val: Option<&Value>,
+) -> Result<Row> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for Row".to_string()))?;
@@ -1310,19 +1360,50 @@ fn read_row(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Row>
     let cells_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Row cells must be array".to_string()))?;
+
+    // Read source info from parallel source structure if provided
+    let (source_info, attr_source, cells_source) = if let Some(s_obj) = source_val {
+        let source_info = if let Some(s_val) = s_obj.get("s") {
+            deserializer.from_json_ref(s_val)?
+        } else {
+            quarto_source_map::SourceInfo::default()
+        };
+        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
+        let cells_source = s_obj.get("cellsS").and_then(|v| v.as_array());
+        (source_info, attr_source, cells_source)
+    } else {
+        (
+            quarto_source_map::SourceInfo::default(),
+            AttrSourceInfo::empty(),
+            None,
+        )
+    };
+
+    // Read cells with their source info
     let cells = cells_arr
         .iter()
-        .map(|v| read_cell(v, deserializer))
+        .enumerate()
+        .map(|(i, v)| {
+            let cell_source = cells_source.and_then(|cs| cs.get(i));
+            read_cell(v, deserializer, cell_source)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(Row {
         attr,
         cells,
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        source_info,
+        attr_source,
     })
 }
 
-fn read_table_head(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableHead> {
+// Read table head from Pandoc array format: [attr, rows]
+// Source info is passed separately from parallel fields
+fn read_table_head(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+    source_val: Option<&Value>,
+) -> Result<TableHead> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableHead".to_string()))?;
@@ -1337,19 +1418,50 @@ fn read_table_head(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
     let rows_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableHead rows must be array".to_string()))?;
+
+    // Read source info from parallel source structure if provided
+    let (source_info, attr_source, rows_source) = if let Some(s_obj) = source_val {
+        let source_info = if let Some(s_val) = s_obj.get("s") {
+            deserializer.from_json_ref(s_val)?
+        } else {
+            quarto_source_map::SourceInfo::default()
+        };
+        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
+        let rows_source = s_obj.get("rowsS").and_then(|v| v.as_array());
+        (source_info, attr_source, rows_source)
+    } else {
+        (
+            quarto_source_map::SourceInfo::default(),
+            AttrSourceInfo::empty(),
+            None,
+        )
+    };
+
+    // Read rows with their source info
     let rows = rows_arr
         .iter()
-        .map(|v| read_row(v, deserializer))
+        .enumerate()
+        .map(|(i, v)| {
+            let row_source = rows_source.and_then(|rs| rs.get(i));
+            read_row(v, deserializer, row_source)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(TableHead {
         attr,
         rows,
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        source_info,
+        attr_source,
     })
 }
 
-fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableBody> {
+// Read table body from Pandoc array format: [attr, rowHeadColumns, head, body]
+// Source info is passed separately from parallel fields
+fn read_table_body(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+    source_val: Option<&Value>,
+) -> Result<TableBody> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableBody".to_string()))?;
@@ -1362,21 +1474,53 @@ fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
 
     let attr = read_attr(&arr[0])?;
     let rowhead_columns = arr[1].as_u64().ok_or_else(|| {
-        JsonReadError::InvalidType("TableBody rowhead_columns must be number".to_string())
+        JsonReadError::InvalidType("TableBody rowHeadColumns must be number".to_string())
     })? as usize;
     let head_arr = arr[2]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody head must be array".to_string()))?;
-    let head = head_arr
-        .iter()
-        .map(|v| read_row(v, deserializer))
-        .collect::<Result<Vec<_>>>()?;
     let body_arr = arr[3]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableBody body must be array".to_string()))?;
+
+    // Read source info from parallel source structure if provided
+    let (source_info, attr_source, head_source, body_source) = if let Some(s_obj) = source_val {
+        let source_info = if let Some(s_val) = s_obj.get("s") {
+            deserializer.from_json_ref(s_val)?
+        } else {
+            quarto_source_map::SourceInfo::default()
+        };
+        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
+        let head_source = s_obj.get("headS").and_then(|v| v.as_array());
+        let body_source = s_obj.get("bodyS").and_then(|v| v.as_array());
+        (source_info, attr_source, head_source, body_source)
+    } else {
+        (
+            quarto_source_map::SourceInfo::default(),
+            AttrSourceInfo::empty(),
+            None,
+            None,
+        )
+    };
+
+    // Read head rows with their source info
+    let head = head_arr
+        .iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let row_source = head_source.and_then(|hs| hs.get(i));
+            read_row(v, deserializer, row_source)
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    // Read body rows with their source info
     let body = body_arr
         .iter()
-        .map(|v| read_row(v, deserializer))
+        .enumerate()
+        .map(|(i, v)| {
+            let row_source = body_source.and_then(|bs| bs.get(i));
+            read_row(v, deserializer, row_source)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(TableBody {
@@ -1384,11 +1528,18 @@ fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
         rowhead_columns,
         head,
         body,
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        source_info,
+        attr_source,
     })
 }
 
-fn read_table_foot(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableFoot> {
+// Read table foot from Pandoc array format: [attr, rows]
+// Source info is passed separately from parallel fields
+fn read_table_foot(
+    value: &Value,
+    deserializer: &SourceInfoDeserializer,
+    source_val: Option<&Value>,
+) -> Result<TableFoot> {
     let arr = value
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("Expected array for TableFoot".to_string()))?;
@@ -1403,15 +1554,40 @@ fn read_table_foot(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
     let rows_arr = arr[1]
         .as_array()
         .ok_or_else(|| JsonReadError::InvalidType("TableFoot rows must be array".to_string()))?;
+
+    // Read source info from parallel source structure if provided
+    let (source_info, attr_source, rows_source) = if let Some(s_obj) = source_val {
+        let source_info = if let Some(s_val) = s_obj.get("s") {
+            deserializer.from_json_ref(s_val)?
+        } else {
+            quarto_source_map::SourceInfo::default()
+        };
+        let attr_source = read_attr_source(s_obj.get("attrS"), deserializer)?;
+        let rows_source = s_obj.get("rowsS").and_then(|v| v.as_array());
+        (source_info, attr_source, rows_source)
+    } else {
+        (
+            quarto_source_map::SourceInfo::default(),
+            AttrSourceInfo::empty(),
+            None,
+        )
+    };
+
+    // Read rows with their source info
     let rows = rows_arr
         .iter()
-        .map(|v| read_row(v, deserializer))
+        .enumerate()
+        .map(|(i, v)| {
+            let row_source = rows_source.and_then(|rs| rs.get(i));
+            read_row(v, deserializer, row_source)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(TableFoot {
         attr,
         rows,
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        source_info,
+        attr_source,
     })
 }
 
@@ -1639,7 +1815,8 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            let caption = read_caption(&arr[1], deserializer)?;
+            // Figure caption uses old format (object), not parallel source fields yet
+            let caption = read_caption(&arr[1], deserializer, None)?;
             let content = read_blocks(&arr[2], deserializer)?;
             let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
             Ok(Block::Figure(Figure {
@@ -1663,7 +1840,14 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 ));
             }
             let attr = read_attr(&arr[0])?;
-            let caption = read_caption(&arr[1], deserializer)?;
+
+            // Read parallel source fields if present
+            let caption_source = obj.get("captionS");
+            let head_source = obj.get("headS");
+            let bodies_source = obj.get("bodiesS").and_then(|v| v.as_array());
+            let foot_source = obj.get("footS");
+
+            let caption = read_caption(&arr[1], deserializer, caption_source)?;
             let colspec_arr = arr[2].as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("Table colspec must be array".to_string())
             })?;
@@ -1671,15 +1855,19 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .iter()
                 .map(read_colspec)
                 .collect::<Result<Vec<_>>>()?;
-            let head = read_table_head(&arr[3], deserializer)?;
+            let head = read_table_head(&arr[3], deserializer, head_source)?;
             let bodies_arr = arr[4].as_array().ok_or_else(|| {
                 JsonReadError::InvalidType("Table bodies must be array".to_string())
             })?;
             let bodies = bodies_arr
                 .iter()
-                .map(|v| read_table_body(v, deserializer))
+                .enumerate()
+                .map(|(i, v)| {
+                    let body_source = bodies_source.and_then(|bs| bs.get(i));
+                    read_table_body(v, deserializer, body_source)
+                })
                 .collect::<Result<Vec<_>>>()?;
-            let foot = read_table_foot(&arr[5], deserializer)?;
+            let foot = read_table_foot(&arr[5], deserializer, foot_source)?;
             let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
             Ok(Block::Table(Table {
                 attr,

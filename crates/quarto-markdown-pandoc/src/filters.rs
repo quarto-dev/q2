@@ -925,6 +925,7 @@ fn traverse_caption(
         long: caption
             .long
             .map(|long| topdown_traverse_blocks(long, filter)),
+        source_info: caption.source_info,
     }
 }
 

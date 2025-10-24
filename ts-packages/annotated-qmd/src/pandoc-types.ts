@@ -211,40 +211,20 @@ export type Block_HorizontalRule = { t: "HorizontalRule" };
 export type Block_Null = { t: "Null" };
 
 // Tables
-export interface Row {
-  attr: Attr;
-  cells: Cell[];
-}
+// Table structural types - now matching Pandoc's array format
+export type Row = [Attr, Cell[]];
 
-export interface Cell {
-  attr: Attr;
-  alignment: Alignment;
-  rowSpan: number;
-  colSpan: number;
-  content: Block[];
-}
+export type Cell = [Attr, Alignment, number, number, Block[]]; // [attr, alignment, rowSpan, colSpan, content]
 
-export interface TableHead {
-  attr: Attr;
-  rows: Row[];
-}
+export type TableHead = [Attr, Row[]];
 
-export interface TableBody {
-  attr: Attr;
-  rowHeadColumns: number;
-  head: Row[];
-  body: Row[];
-}
+export type TableBody = [Attr, number, Row[], Row[]]; // [attr, rowHeadColumns, head, body]
 
-export interface TableFoot {
-  attr: Attr;
-  rows: Row[];
-}
+export type TableFoot = [Attr, Row[]];
 
-export interface Caption {
-  shortCaption: Inline[] | null;
-  longCaption: Block[];
-}
+// Caption types
+export type Caption = [Inline[] | null, Block[]]; // [short, long] - base Pandoc format
+export type Annotated_CaptionArray = [Annotated_Inline[] | null, Annotated_Block[]]; // [short, long] - with annotations
 
 export type Block_Table = {
   t: "Table";
@@ -284,31 +264,39 @@ export interface PandocDocument {
 }
 
 // =============================================================================
-// Annotated types (base + source info)
+// Sideloaded Source Info Types (for tuple-based structures)
 // =============================================================================
 
-// Annotated Inline types
-export type Annotated_Inline_Str = Inline_Str & { s: number };
-export type Annotated_Inline_Space = Inline_Space & { s: number };
-export type Annotated_Inline_SoftBreak = Inline_SoftBreak & { s: number };
-export type Annotated_Inline_LineBreak = Inline_LineBreak & { s: number };
-export type Annotated_Inline_Emph = Inline_Emph & { s: number };
-export type Annotated_Inline_Strong = Inline_Strong & { s: number };
-export type Annotated_Inline_Strikeout = Inline_Strikeout & { s: number };
-export type Annotated_Inline_Superscript = Inline_Superscript & { s: number };
-export type Annotated_Inline_Subscript = Inline_Subscript & { s: number };
-export type Annotated_Inline_SmallCaps = Inline_SmallCaps & { s: number };
-export type Annotated_Inline_Underline = Inline_Underline & { s: number };
-export type Annotated_Inline_Quoted = Inline_Quoted & { s: number };
-export type Annotated_Inline_Code = Inline_Code & { s: number };
-export type Annotated_Inline_Math = Inline_Math & { s: number };
-export type Annotated_Inline_RawInline = Inline_RawInline & { s: number };
-export type Annotated_Inline_Link = Inline_Link & { s: number };
-export type Annotated_Inline_Image = Inline_Image & { s: number };
-export type Annotated_Inline_Span = Inline_Span & { s: number };
-export type Annotated_Inline_Cite = Inline_Cite & { s: number };
-export type Annotated_Inline_Note = Inline_Note & { s: number };
+/**
+ * Source information for Attr tuple: [id, classes, key-value pairs]
+ * Mirrors the structure with source IDs (or null if empty/missing)
+ *
+ * Example for attr [id, ["class1", "class2"], [["key1", "value1"]]]
+ * attrS would be:  {id: 1, classes: [2, 3], kvs: [[4, 5]]}
+ */
+export interface AttrSourceInfo {
+  id: number | null;                     // Source ID for id string (null if "")
+  classes: (number | null)[];             // Source IDs for each class
+  kvs: [number | null, number | null][]; // Source IDs for each [key, value] pair
+}
 
+/**
+ * Source information for Target tuple: [url, title]
+ * Mirrors the structure with source IDs
+ *
+ * Example for target ["https://example.com", "Example"]
+ * targetS would be:  [10, 11]
+ */
+export type TargetSourceInfo = [
+  number | null,  // Source ID for URL
+  number | null   // Source ID for title
+];
+
+// =============================================================================
+// Annotated types (full parallel hierarchy with source info)
+// =============================================================================
+
+// Forward declarations for recursive annotated types
 export type Annotated_Inline =
   | Annotated_Inline_Str
   | Annotated_Inline_Space
@@ -331,22 +319,6 @@ export type Annotated_Inline =
   | Annotated_Inline_Cite
   | Annotated_Inline_Note;
 
-// Annotated Block types
-export type Annotated_Block_Plain = Block_Plain & { s: number };
-export type Annotated_Block_Para = Block_Para & { s: number };
-export type Annotated_Block_Header = Block_Header & { s: number };
-export type Annotated_Block_CodeBlock = Block_CodeBlock & { s: number };
-export type Annotated_Block_RawBlock = Block_RawBlock & { s: number };
-export type Annotated_Block_BlockQuote = Block_BlockQuote & { s: number };
-export type Annotated_Block_BulletList = Block_BulletList & { s: number };
-export type Annotated_Block_OrderedList = Block_OrderedList & { s: number };
-export type Annotated_Block_DefinitionList = Block_DefinitionList & { s: number };
-export type Annotated_Block_Div = Block_Div & { s: number };
-export type Annotated_Block_HorizontalRule = Block_HorizontalRule & { s: number };
-export type Annotated_Block_Null = Block_Null & { s: number };
-export type Annotated_Block_Table = Block_Table & { s: number };
-export type Annotated_Block_Figure = Block_Figure & { s: number };
-
 export type Annotated_Block =
   | Annotated_Block_Plain
   | Annotated_Block_Para
@@ -363,13 +335,337 @@ export type Annotated_Block =
   | Annotated_Block_Table
   | Annotated_Block_Figure;
 
-// Annotated Meta types
-export type Annotated_MetaValue_Map = MetaValue_Map & { s: number };
-export type Annotated_MetaValue_List = MetaValue_List & { s: number };
-export type Annotated_MetaValue_Bool = MetaValue_Bool & { s: number };
-export type Annotated_MetaValue_String = MetaValue_String & { s: number };
-export type Annotated_MetaValue_Inlines = MetaValue_Inlines & { s: number };
-export type Annotated_MetaValue_Blocks = MetaValue_Blocks & { s: number };
+// -----------------------------------------------------------------------------
+// Annotated Inline types (with proper nested references)
+// -----------------------------------------------------------------------------
+
+// Simple text (leaf nodes - no nested children)
+export interface Annotated_Inline_Str {
+  t: "Str";
+  c: string;
+  s: number;
+}
+
+export interface Annotated_Inline_Space {
+  t: "Space";
+  s: number;
+}
+
+export interface Annotated_Inline_SoftBreak {
+  t: "SoftBreak";
+  s: number;
+}
+
+export interface Annotated_Inline_LineBreak {
+  t: "LineBreak";
+  s: number;
+}
+
+// Formatting (contain Annotated_Inline[] not Inline[])
+export interface Annotated_Inline_Emph {
+  t: "Emph";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Inline_Strong {
+  t: "Strong";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Inline_Strikeout {
+  t: "Strikeout";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Inline_Superscript {
+  t: "Superscript";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Inline_Subscript {
+  t: "Subscript";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Inline_SmallCaps {
+  t: "SmallCaps";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Inline_Underline {
+  t: "Underline";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+// Quoted
+export interface Annotated_Inline_Quoted {
+  t: "Quoted";
+  c: [QuoteType, Annotated_Inline[]];
+  s: number;
+}
+
+// Code and math (leaf nodes with attributes)
+export interface Annotated_Inline_Code {
+  t: "Code";
+  c: [Attr, string];
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+export interface Annotated_Inline_Math {
+  t: "Math";
+  c: [MathType, string];
+  s: number;
+}
+
+export interface Annotated_Inline_RawInline {
+  t: "RawInline";
+  c: [string, string];  // [format, content]
+  s: number;
+}
+
+// Links and images (with attrS and targetS)
+export interface Annotated_Inline_Link {
+  t: "Link";
+  c: [Attr, Annotated_Inline[], Target];
+  s: number;
+  attrS: AttrSourceInfo;
+  targetS: TargetSourceInfo;
+}
+
+export interface Annotated_Inline_Image {
+  t: "Image";
+  c: [Attr, Annotated_Inline[], Target];
+  s: number;
+  attrS: AttrSourceInfo;
+  targetS: TargetSourceInfo;
+}
+
+// Span (with attrS)
+export interface Annotated_Inline_Span {
+  t: "Span";
+  c: [Attr, Annotated_Inline[]];
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+// Citations (with annotated Citation and citationIdS)
+export interface Annotated_Citation {
+  citationId: string;
+  citationPrefix: Annotated_Inline[];
+  citationSuffix: Annotated_Inline[];
+  citationMode: CitationMode;
+  citationNoteNum: number;
+  citationHash: number;
+  citationIdS: number | null;
+}
+
+export interface Annotated_Inline_Cite {
+  t: "Cite";
+  c: [Annotated_Citation[], Annotated_Inline[]];
+  s: number;
+}
+
+// Footnote (cross-reference to Annotated_Block)
+export interface Annotated_Inline_Note {
+  t: "Note";
+  c: Annotated_Block[];
+  s: number;
+}
+
+// -----------------------------------------------------------------------------
+// Annotated Block types (with proper nested references)
+// -----------------------------------------------------------------------------
+
+// Simple blocks with inline content
+export interface Annotated_Block_Plain {
+  t: "Plain";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_Block_Para {
+  t: "Para";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+// Headers (with attrS)
+export interface Annotated_Block_Header {
+  t: "Header";
+  c: [number, Attr, Annotated_Inline[]];
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+// Code blocks (with attrS)
+export interface Annotated_Block_CodeBlock {
+  t: "CodeBlock";
+  c: [Attr, string];
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+export interface Annotated_Block_RawBlock {
+  t: "RawBlock";
+  c: [string, string];  // [format, content]
+  s: number;
+}
+
+// Block quotes
+export interface Annotated_Block_BlockQuote {
+  t: "BlockQuote";
+  c: Annotated_Block[];
+  s: number;
+}
+
+// Lists
+export interface Annotated_Block_BulletList {
+  t: "BulletList";
+  c: Annotated_Block[][];  // List of items
+  s: number;
+}
+
+export interface Annotated_Block_OrderedList {
+  t: "OrderedList";
+  c: [ListAttributes, Annotated_Block[][]];
+  s: number;
+}
+
+export interface Annotated_Block_DefinitionList {
+  t: "DefinitionList";
+  c: [Annotated_Inline[], Annotated_Block[][]][];  // [(term, definitions)]
+  s: number;
+}
+
+// Structural (with attrS)
+export interface Annotated_Block_Div {
+  t: "Div";
+  c: [Attr, Annotated_Block[]];
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+export interface Annotated_Block_HorizontalRule {
+  t: "HorizontalRule";
+  s: number;
+}
+
+export interface Annotated_Block_Null {
+  t: "Null";
+  s: number;
+}
+
+// Tables (with annotated table components)
+// Annotated table types - arrays in 'c' field, source info in parallel fields
+
+// Source info for Cell
+export interface CellSourceInfo {
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+// Source info for Row
+export interface RowSourceInfo {
+  s: number;
+  attrS: AttrSourceInfo;
+  cellsS: CellSourceInfo[];
+}
+
+// Source info for TableHead
+export interface TableHeadSourceInfo {
+  s: number;
+  attrS: AttrSourceInfo;
+  rowsS: RowSourceInfo[];
+}
+
+// Source info for TableBody
+export interface TableBodySourceInfo {
+  s: number;
+  attrS: AttrSourceInfo;
+  headS: RowSourceInfo[];
+  bodyS: RowSourceInfo[];
+}
+
+// Source info for TableFoot
+export interface TableFootSourceInfo {
+  s: number;
+  attrS: AttrSourceInfo;
+  rowsS: RowSourceInfo[];
+}
+
+// Helper type for Caption with annotated content
+// Caption is [short | null, long] in Pandoc format
+export interface Annotated_Caption {
+  shortCaption: Annotated_Inline[] | null;
+  longCaption: Annotated_Block[];
+}
+
+export interface Annotated_Block_Table {
+  t: "Table";
+  c: [Attr, Annotated_CaptionArray, ColSpec[], TableHead, TableBody[], TableFoot];
+  s: number;
+  attrS: AttrSourceInfo;
+  captionS: number; // Source info ref for caption
+  headS: TableHeadSourceInfo;
+  bodiesS: TableBodySourceInfo[];
+  footS: TableFootSourceInfo;
+}
+
+// Figures (with attrS)
+export interface Annotated_Block_Figure {
+  t: "Figure";
+  c: [Attr, Annotated_CaptionArray, Annotated_Block[]];
+  s: number;
+  attrS: AttrSourceInfo;
+}
+
+// -----------------------------------------------------------------------------
+// Annotated Meta types (with proper nested references)
+// -----------------------------------------------------------------------------
+
+export interface Annotated_MetaValue_Map {
+  t: "MetaMap";
+  c: Record<string, Annotated_MetaValue>;
+  s: number;
+}
+
+export interface Annotated_MetaValue_List {
+  t: "MetaList";
+  c: Annotated_MetaValue[];
+  s: number;
+}
+
+export interface Annotated_MetaValue_Bool {
+  t: "MetaBool";
+  c: boolean;
+  s: number;
+}
+
+export interface Annotated_MetaValue_String {
+  t: "MetaString";
+  c: string;
+  s: number;
+}
+
+export interface Annotated_MetaValue_Inlines {
+  t: "MetaInlines";
+  c: Annotated_Inline[];
+  s: number;
+}
+
+export interface Annotated_MetaValue_Blocks {
+  t: "MetaBlocks";
+  c: Annotated_Block[];
+  s: number;
+}
 
 export type Annotated_MetaValue =
   | Annotated_MetaValue_Map

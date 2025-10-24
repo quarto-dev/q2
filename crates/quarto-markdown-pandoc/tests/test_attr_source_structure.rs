@@ -232,6 +232,7 @@ fn test_figure_has_attr_source_field() {
         caption: Caption {
             short: None,
             long: None,
+            source_info: SourceInfo::default(),
         },
         content: vec![],
         source_info: SourceInfo::default(),
@@ -252,17 +253,20 @@ fn test_table_has_attr_source_field() {
         caption: Caption {
             short: None,
             long: None,
+            source_info: SourceInfo::default(),
         },
         colspec: vec![],
         head: TableHead {
             attr: ("".to_string(), vec![], HashMap::new()),
             rows: vec![],
+            source_info: SourceInfo::default(),
             attr_source: AttrSourceInfo::empty(),
         },
         bodies: vec![],
         foot: TableFoot {
             attr: ("".to_string(), vec![], HashMap::new()),
             rows: vec![],
+            source_info: SourceInfo::default(),
             attr_source: AttrSourceInfo::empty(),
         },
         source_info: SourceInfo::default(),
@@ -277,6 +281,7 @@ fn test_table_head_has_attr_source_field() {
     let head = TableHead {
         attr: ("".to_string(), vec![], HashMap::new()),
         rows: vec![],
+        source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -290,6 +295,7 @@ fn test_table_body_has_attr_source_field() {
         rowhead_columns: 0,
         head: vec![],
         body: vec![],
+        source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -301,6 +307,7 @@ fn test_table_foot_has_attr_source_field() {
     let foot = TableFoot {
         attr: ("".to_string(), vec![], HashMap::new()),
         rows: vec![],
+        source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -312,6 +319,7 @@ fn test_row_has_attr_source_field() {
     let row = Row {
         attr: ("".to_string(), vec![], HashMap::new()),
         cells: vec![],
+        source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -328,6 +336,7 @@ fn test_cell_has_attr_source_field() {
         row_span: 1,
         col_span: 1,
         content: vec![],
+        source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
     };
 
@@ -377,7 +386,7 @@ fn test_citation_with_id_source_value() {
 
 #[test]
 fn test_nested_table_all_components_have_attr_source() {
-    use quarto_markdown_pandoc::pandoc::table::{Alignment, ColSpec, ColWidth};
+    use quarto_markdown_pandoc::pandoc::table::{Alignment, ColWidth};
 
     // Create a complete table with all components
     let table = Table {
@@ -389,6 +398,7 @@ fn test_nested_table_all_components_have_attr_source() {
         caption: Caption {
             short: None,
             long: None,
+            source_info: SourceInfo::default(),
         },
         colspec: vec![
             (Alignment::Default, ColWidth::Default),
@@ -405,6 +415,7 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
+                        source_info: SourceInfo::default(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                     Cell {
@@ -413,11 +424,14 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
+                        source_info: SourceInfo::default(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                 ],
+                source_info: SourceInfo::default(),
                 attr_source: AttrSourceInfo::empty(),
             }],
+            source_info: SourceInfo::default(),
             attr_source: AttrSourceInfo::empty(),
         },
         bodies: vec![TableBody {
@@ -433,6 +447,7 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
+                        source_info: SourceInfo::default(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                     Cell {
@@ -441,16 +456,20 @@ fn test_nested_table_all_components_have_attr_source() {
                         row_span: 1,
                         col_span: 1,
                         content: vec![],
+                        source_info: SourceInfo::default(),
                         attr_source: AttrSourceInfo::empty(),
                     },
                 ],
+                source_info: SourceInfo::default(),
                 attr_source: AttrSourceInfo::empty(),
             }],
+            source_info: SourceInfo::default(),
             attr_source: AttrSourceInfo::empty(),
         }],
         foot: TableFoot {
             attr: ("foot-id".to_string(), vec![], HashMap::new()),
             rows: vec![],
+            source_info: SourceInfo::default(),
             attr_source: AttrSourceInfo::empty(),
         },
         source_info: SourceInfo::default(),
