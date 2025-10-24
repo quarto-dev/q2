@@ -2,7 +2,7 @@
 
 ## Overview
 
-This crate implements `YamlWithSourceInfo`, a data structure that wraps `yaml-rust2::Yaml` with source location tracking.
+This crate implements `YamlWithSourceInfo`, a data structure that wraps `yaml-rust2::Yaml` with source location tracking. This uses the **owned data approach** as decided in the design discussion (see `/Users/cscheid/repos/github/cscheid/kyoto/claude-notes/session-logs/2025-10-13-yaml-lifetime-vs-owned-discussion.md`).
 
 ## Architecture Decision: Owned Data
 
@@ -159,3 +159,9 @@ impl MarkedEventReceiver for YamlBuilder {
 3. **Unified SourceInfo** - Replace with project-wide SourceInfo type
 4. **YAML tags** - Support for !expr and custom tags
 5. **Multi-document** - Support YAML streams
+
+## References
+
+- Design document: `/Users/cscheid/repos/github/cscheid/kyoto/claude-notes/yaml-with-source-info-design.md`
+- Session log: `/Users/cscheid/repos/github/cscheid/kyoto/claude-notes/session-logs/2025-10-13-yaml-lifetime-vs-owned-discussion.md`
+- rust-analyzer patterns: `/Users/cscheid/repos/github/cscheid/kyoto/claude-notes/rust-analyzer-owned-data-patterns.md`

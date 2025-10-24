@@ -1,5 +1,5 @@
 /**
- * @quarto/rust-qmd-json
+ * @quarto/annotated-qmd
  *
  * Converts quarto-markdown-pandoc JSON output to AnnotatedParse structures
  * compatible with quarto-cli's YAML validation infrastructure.
@@ -43,21 +43,22 @@ import type { SourceInfoErrorHandler } from './source-map.js';
  *
  * @example
  * ```typescript
- * import { parseRustQmdMetadata } from '@quarto/rust-qmd-json';
+ * import { parseRustQmdMetadata } from '@quarto/annotated-qmd';
  *
  * const json = {
  *   meta: {
  *     title: { t: 'MetaString', c: 'Hello', s: 0 }
  *   },
  *   blocks: [],
- *   source_pool: [
- *     { r: [11, 16], t: 0, d: 0 }
- *   ],
- *   source_context: {
+ *   astContext: {
+ *     sourceInfoPool: [
+ *       { r: [11, 16], t: 0, d: 0 }
+ *     ],
  *     files: [
- *       { id: 0, path: 'test.qmd', content: '---\ntitle: Hello\n---' }
+ *       { name: 'test.qmd', content: '---\ntitle: Hello\n---' }
  *     ]
- *   }
+ *   },
+ *   'pandoc-api-version': [1, 23, 1]
  * };
  *
  * const metadata = parseRustQmdMetadata(json);
@@ -68,15 +69,27 @@ export function parseRustQmdMetadata(
   json: RustQmdJson,
   errorHandler?: SourceInfoErrorHandler
 ): AnnotatedParse {
+  // Normalize the JSON structure to internal format
+  const sourceContext = {
+    files: json.astContext.files.map((f, idx) => ({
+      id: idx,
+      path: f.name,
+      content: f.content || ''
+    }))
+  };
+
   // 1. Create SourceInfoReconstructor with pool and context
   const sourceReconstructor = new SourceInfoReconstructor(
-    json.source_pool,
-    json.source_context,
+    json.astContext.sourceInfoPool,
+    sourceContext,
     errorHandler
   );
 
-  // 2. Create MetadataConverter
-  const converter = new MetadataConverter(sourceReconstructor);
+  // 2. Create MetadataConverter with metaTopLevelKeySources
+  const converter = new MetadataConverter(
+    sourceReconstructor,
+    json.astContext.metaTopLevelKeySources
+  );
 
   // 3. Convert metadata to AnnotatedParse
   return converter.convertMeta(json.meta);

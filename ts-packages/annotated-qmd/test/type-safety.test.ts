@@ -72,7 +72,7 @@ console.log('Running type safety tests...');
 
   const pool: SerializableSourceInfo[] = [
     { r: [0, 5], t: 0, d: 0 },
-    { r: [0, 10], t: 2, d: 'not-an-object' as unknown }  // Should be {pieces: [...]}
+    { r: [0, 10], t: 2, d: 'not-an-array' as unknown }  // Should be [[id, offset, length], ...]
   ];
 
   let errorCalled = false;

@@ -1,6 +1,6 @@
 {
-  "name": "@quarto/rust-qmd-json",
-  "version": "0.1.0",
+  "name": "@quarto/annotated-qmd",
+  "version": "0.1.1",
   "description": "Convert quarto-markdown-pandoc JSON output to AnnotatedParse structures",
   "license": "MIT",
   "author": {
@@ -12,8 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/quarto-dev/quarto.git",
-    "directory": "ts-packages/rust-qmd-json"
+    "url": "git+https://github.com/quarto-dev/quarto-markdown.git"
   },
   "type": "module",
   "main": "dist/index.js",

@@ -84,7 +84,7 @@ console.log('Running SourceInfo reconstruction tests...');
     {
       r: [0, 10],
       t: 2,
-      d: { pieces: [[0, 0, 5], [1, 0, 5]] }  // Concat "Hello" + "World"
+      d: [[0, 0, 5], [1, 0, 5]]  // Concat "Hello" + "World" (array format from Rust)
     }
   ];
 
