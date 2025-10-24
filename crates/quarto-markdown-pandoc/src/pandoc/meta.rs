@@ -635,8 +635,9 @@ pub fn rawblock_to_meta_with_source_info(
     let content = extract_between_delimiters(&block.text).unwrap();
 
     // Calculate offsets within RawBlock.text
-    // The text is "---\n<content>\n---", so content starts at index 4
-    let yaml_start = block.text.find("---\n").unwrap() + 4;
+    // Find the actual position of the trimmed content in the original text
+    // extract_between_delimiters trims the content, so we need to find where it actually starts
+    let yaml_start = block.text.find(content).unwrap();
 
     // block.source_info is already quarto_source_map::SourceInfo
     let parent = block.source_info.clone();
@@ -646,7 +647,7 @@ pub fn rawblock_to_meta_with_source_info(
         quarto_source_map::SourceInfo::substring(parent, yaml_start, yaml_start + content.len());
 
     // Parse YAML with source tracking
-    let yaml = match quarto_yaml::parse_with_parent(content, yaml_parent) {
+    let yaml = match quarto_yaml::parse_with_parent(content, yaml_parent.clone()) {
         Ok(y) => y,
         Err(e) => panic!(
             "(unimplemented syntax error - this is a bug!) Failed to parse metadata block as YAML: {}",
@@ -656,7 +657,19 @@ pub fn rawblock_to_meta_with_source_info(
 
     // Transform YamlWithSourceInfo to MetaValueWithSourceInfo
     // Pass by value since yaml is no longer needed
-    yaml_to_meta_with_source_info(yaml, context, diagnostics)
+    let mut result = yaml_to_meta_with_source_info(yaml, context, diagnostics);
+
+    // For the top-level metadata, replace the source_info with yaml_parent
+    // to ensure it spans the entire YAML content, not just where the mapping starts
+    if let MetaValueWithSourceInfo::MetaMap {
+        ref mut source_info,
+        ..
+    } = result
+    {
+        *source_info = yaml_parent;
+    }
+
+    result
 }
 
 /// Legacy version: Convert RawBlock to Meta (old implementation)

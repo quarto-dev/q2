@@ -227,3 +227,69 @@ description: This is a description
     );
     eprintln!("✓ LinkedHashMap fix working - key source information preserved!");
 }
+
+#[test]
+fn test_metadata_block_overall_source_info() {
+    // Test that the overall metadata block's source info points to the full metadata
+    // content (not just the opening "---\n" delimiter)
+    //
+    // This test verifies that when we have:
+    //   ---
+    //   title: Test
+    //   author: Me
+    //   ---
+    //
+    // The MetaMap's source_info should point to the entire YAML content
+    // "title: Test\nauthor: Me\n", not just "---\n"
+
+    let input = r#"---
+title: Test Document
+author: Test Author
+---
+
+Some content here.
+"#;
+
+    let (pandoc, _context, _warnings) =
+        readers::qmd::read(input.as_bytes(), false, "test.qmd", &mut std::io::sink())
+            .expect("Failed to parse");
+
+    // Extract metadata
+    let MetaValueWithSourceInfo::MetaMap {
+        entries,
+        source_info,
+    } = pandoc.meta
+    else {
+        panic!("Expected MetaMap");
+    };
+
+    // Verify the overall metadata source info
+    // The YAML content starts at offset 4 (after "---\n")
+    // and should span the entire YAML content area
+    let meta_offset = resolve_source_offset(&source_info);
+
+    eprintln!("\nMetadata block resolved offset: {}", meta_offset);
+    eprintln!("Metadata entries count: {}", entries.len());
+
+    // The metadata content starts at offset 4 (after "---\n")
+    assert_eq!(
+        meta_offset, 4,
+        "Metadata block should start at offset 4 (after opening '---\\n'), got {}",
+        meta_offset
+    );
+
+    // Also verify we have the expected entries
+    assert_eq!(entries.len(), 2, "Should have 2 metadata entries");
+
+    let has_title = entries.iter().any(|e| e.key == "title");
+    let has_author = entries.iter().any(|e| e.key == "author");
+
+    assert!(has_title, "Should have 'title' entry");
+    assert!(has_author, "Should have 'author' entry");
+
+    eprintln!("\n✅ Metadata block overall source info test passed!");
+    eprintln!(
+        "✓ Metadata block source points to correct offset ({})",
+        meta_offset
+    );
+}
