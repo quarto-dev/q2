@@ -24,6 +24,7 @@ where
     let mut attr = ("".to_string(), vec![], HashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut target: Target = ("".to_string(), "".to_string());
+    let mut target_source = crate::pandoc::attr::TargetSourceInfo::empty();
     let mut content: Vec<Inline> = Vec::new();
     for (node, child) in children {
         if node == "image_description" {
@@ -46,11 +47,13 @@ where
                 attr = a;
                 attr_source = as_;
             }
-            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
+            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if node == "link_destination" {
                     target.0 = text; // URL
+                    target_source.url = Some(crate::pandoc::source_map_compat::range_to_source_info_with_context(&range, context));
                 } else if node == "link_title" {
                     target.1 = text; // Title
+                    target_source.title = Some(crate::pandoc::source_map_compat::range_to_source_info_with_context(&range, context));
                 } else if node == "language_attribute" {
                     // TODO show position of this error
                     let _ = writeln!(
@@ -74,6 +77,6 @@ where
         target,
         source_info: node_source_info_with_context(node, context),
         attr_source,
-        target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
+        target_source,
     }))
 }

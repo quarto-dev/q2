@@ -316,6 +316,7 @@ pub fn make_span_inline(
     content: Inlines,
     source_info: quarto_source_map::SourceInfo,
     attr_source: AttrSourceInfo,
+    target_source: TargetSourceInfo,
 ) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
@@ -325,7 +326,7 @@ pub fn make_span_inline(
             target,
             source_info,
             attr_source,
-            target_source: TargetSourceInfo::empty(),
+            target_source,
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -347,6 +348,7 @@ pub fn make_span_inline(
             content,
             source_info.clone(),
             attr_source.clone(),
+            target_source.clone(),
         );
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
@@ -367,6 +369,7 @@ pub fn make_span_inline(
             content,
             source_info.clone(),
             attr_source.clone(),
+            target_source.clone(),
         );
         return Inline::Underline(Underline {
             content: vec![inner_inline],
@@ -391,6 +394,7 @@ pub fn make_span_inline(
             content,
             source_info.clone(),
             attr_source.clone(),
+            target_source.clone(),
         );
         return Inline::Underline(Underline {
             content: vec![inner_inline],
@@ -412,6 +416,7 @@ pub fn make_cite_inline(
     content: Inlines,
     source_info: quarto_source_map::SourceInfo,
     attr_source: AttrSourceInfo,
+    target_source: TargetSourceInfo,
 ) -> Inline {
     // the traversal here is slightly inefficient because we need
     // to non-destructively check for the goodness of the content
@@ -431,7 +436,7 @@ pub fn make_cite_inline(
 
     if !is_good_cite {
         // if the content is not a good Cite, we backtrack and return a Span
-        return make_span_inline(attr, target, content, source_info, attr_source);
+        return make_span_inline(attr, target, content, source_info, attr_source, target_source);
     }
 
     // we can now destructively create a Cite inline
@@ -597,6 +602,7 @@ mod tests {
             content,
             dummy_source_info(),
             AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
         );
 
         // Verify the result is a Cite
@@ -645,6 +651,7 @@ mod tests {
             content,
             dummy_source_info(),
             AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
         );
 
         match result {

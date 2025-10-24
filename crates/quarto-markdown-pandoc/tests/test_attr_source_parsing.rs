@@ -977,6 +977,185 @@ fn test_table_caption_with_id_and_classes_has_attr_source() {
 // ============================================================================
 // Summary Test
 // ============================================================================
+// ============================================================================
+// Target Source Tests (targetS field)
+// ============================================================================
+
+#[test]
+fn test_link_target_source_json_serialization() {
+    use std::io::Cursor;
+
+    let input = r#"[link text](https://example.com "Link Title"){#link-id}"#;
+    let pandoc = parse_qmd(input);
+    let context = ASTContext::anonymous();
+
+    let mut buffer = Cursor::new(Vec::new());
+    quarto_markdown_pandoc::writers::json::write(&pandoc, &context, &mut buffer)
+        .expect("Failed to write JSON");
+
+    let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
+    let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
+
+    // Navigate to the link
+    let blocks = json["blocks"].as_array().expect("blocks should be array");
+    let para = &blocks[0];
+    let inlines = para["c"].as_array().expect("c should be array");
+    let link = &inlines[0];
+
+    assert_eq!(link["t"], "Link", "Should be a Link");
+
+    // Verify targetS field exists
+    assert!(
+        link.get("targetS").is_some(),
+        "Link should have targetS field in JSON output"
+    );
+
+    // Verify targetS has the expected array structure [url_source, title_source]
+    let target_s = link["targetS"].as_array().expect("targetS should be an array");
+    assert_eq!(target_s.len(), 2, "targetS should have 2 elements");
+
+    // Verify URL source is not null
+    assert!(
+        !target_s[0].is_null(),
+        "targetS[0] (URL source) should not be null"
+    );
+
+    // Verify title source is not null (we have a title)
+    assert!(
+        !target_s[1].is_null(),
+        "targetS[1] (title source) should not be null"
+    );
+}
+
+#[test]
+fn test_link_target_source_without_title() {
+    use std::io::Cursor;
+
+    let input = r#"[link](https://example.com)"#;
+    let pandoc = parse_qmd(input);
+    let context = ASTContext::anonymous();
+
+    let mut buffer = Cursor::new(Vec::new());
+    quarto_markdown_pandoc::writers::json::write(&pandoc, &context, &mut buffer)
+        .expect("Failed to write JSON");
+
+    let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
+    let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
+
+    let blocks = json["blocks"].as_array().expect("blocks should be array");
+    let para = &blocks[0];
+    let inlines = para["c"].as_array().expect("c should be array");
+    let link = &inlines[0];
+
+    let target_s = link["targetS"].as_array().expect("targetS should be an array");
+
+    // URL should have source
+    assert!(
+        !target_s[0].is_null(),
+        "targetS[0] (URL source) should not be null"
+    );
+
+    // Title should be null (no title provided)
+    assert!(
+        target_s[1].is_null(),
+        "targetS[1] (title source) should be null when no title"
+    );
+}
+
+#[test]
+fn test_image_target_source_json_serialization() {
+    use std::io::Cursor;
+
+    // Standalone images become Figure blocks, image is nested inside
+    let input = "![alt text](image.png \"Image Title\"){#img-id}\n";
+    let pandoc = parse_qmd(input);
+    let context = ASTContext::anonymous();
+
+    let mut buffer = Cursor::new(Vec::new());
+    quarto_markdown_pandoc::writers::json::write(&pandoc, &context, &mut buffer)
+        .expect("Failed to write JSON");
+
+    let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
+    let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
+
+    // Navigate to: Figure > content (blocks) > Plain > content (inlines) > Image
+    let blocks = json["blocks"].as_array().expect("blocks should be array");
+    let figure = &blocks[0];
+    assert_eq!(figure["t"], "Figure", "Should be a Figure block");
+
+    let figure_content = figure["c"][2].as_array().expect("figure content should be array");
+    let plain = &figure_content[0];
+    assert_eq!(plain["t"], "Plain", "Should be a Plain block");
+
+    let inlines = plain["c"].as_array().expect("inlines should be array");
+    let image = &inlines[0];
+    assert_eq!(image["t"], "Image", "Should be an Image");
+
+    // Verify targetS field exists
+    assert!(
+        image.get("targetS").is_some(),
+        "Image should have targetS field in JSON output"
+    );
+
+    let target_s = image["targetS"].as_array().expect("targetS should be an array");
+    assert_eq!(target_s.len(), 2, "targetS should have 2 elements");
+
+    // Both URL and title should have sources
+    assert!(
+        !target_s[0].is_null(),
+        "targetS[0] (URL source) should not be null"
+    );
+    assert!(
+        !target_s[1].is_null(),
+        "targetS[1] (title source) should not be null"
+    );
+}
+
+// ============================================================================
+// Citation ID Source Tests (citationIdS field)
+// ============================================================================
+
+#[test]
+fn test_citation_id_source_json_serialization() {
+    use std::io::Cursor;
+
+    let input = r#"Citation [@smith2020]"#;
+    let pandoc = parse_qmd(input);
+    let context = ASTContext::anonymous();
+
+    let mut buffer = Cursor::new(Vec::new());
+    quarto_markdown_pandoc::writers::json::write(&pandoc, &context, &mut buffer)
+        .expect("Failed to write JSON");
+
+    let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
+    let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
+
+    let blocks = json["blocks"].as_array().expect("blocks should be array");
+    let para = &blocks[0];
+    let inlines = para["c"].as_array().expect("c should be array");
+
+    // Find the Cite inline (skip the "Citation " Str and Space)
+    let cite = &inlines[2];
+    assert_eq!(cite["t"], "Cite", "Should be a Cite");
+
+    // Get the citations array
+    let citations = cite["c"][0].as_array().expect("citations should be an array");
+    assert!(!citations.is_empty(), "Should have at least one citation");
+
+    let citation = &citations[0];
+
+    // Verify citationIdS field exists
+    assert!(
+        citation.get("citationIdS").is_some(),
+        "Citation should have citationIdS field in JSON output"
+    );
+
+    // Verify citationIdS is not null (we have a citation ID)
+    assert!(
+        !citation["citationIdS"].is_null(),
+        "citationIdS should not be null for citation with ID"
+    );
+}
 
 #[test]
 fn test_summary_all_inline_and_block_types_tested() {

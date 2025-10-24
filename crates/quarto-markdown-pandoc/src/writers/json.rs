@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::attr::AttrSourceInfo;
+use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
@@ -246,6 +246,13 @@ fn write_attr_source(attr_source: &AttrSourceInfo, serializer: &mut SourceInfoSe
     })
 }
 
+fn write_target_source(target_source: &TargetSourceInfo, serializer: &mut SourceInfoSerializer) -> Value {
+    json!([
+        target_source.url.as_ref().map(|s| serializer.to_json_ref(s)),
+        target_source.title.as_ref().map(|s| serializer.to_json_ref(s))
+    ])
+}
+
 fn write_citation_mode(mode: &CitationMode) -> Value {
     match mode {
         CitationMode::NormalCitation => json!({"t": "NormalCitation"}),
@@ -340,7 +347,8 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             "t": "Link",
             "c": [write_attr(&link.attr), write_inlines(&link.content, serializer), [link.target.0, link.target.1]],
             "s": serializer.to_json_ref(&link.source_info),
-            "attrS": write_attr_source(&link.attr_source, serializer)
+            "attrS": write_attr_source(&link.attr_source, serializer),
+            "targetS": write_target_source(&link.target_source, serializer)
         }),
         Inline::RawInline(raw) => json!({
             "t": "RawInline",
@@ -351,7 +359,8 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             "t": "Image",
             "c": [write_attr(&image.attr), write_inlines(&image.content, serializer), [image.target.0, image.target.1]],
             "s": serializer.to_json_ref(&image.source_info),
-            "attrS": write_attr_source(&image.attr_source, serializer)
+            "attrS": write_attr_source(&image.attr_source, serializer),
+            "targetS": write_target_source(&image.target_source, serializer)
         }),
         Inline::Span(span) => json!({
             "t": "Span",
@@ -376,7 +385,8 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
                         "citationSuffix": write_inlines(&citation.suffix, serializer),
                         "citationMode": write_citation_mode(&citation.mode),
                         "citationHash": citation.hash,
-                        "citationNoteNum": citation.note_num
+                        "citationNoteNum": citation.note_num,
+                        "citationIdS": citation.id_source.as_ref().map(|s| serializer.to_json_ref(s))
                     })
                 }).collect::<Vec<_>>(),
                 write_inlines(&cite.content, serializer)

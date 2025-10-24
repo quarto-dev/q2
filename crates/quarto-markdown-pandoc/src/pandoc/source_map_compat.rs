@@ -63,6 +63,19 @@ pub fn node_to_source_info_with_context(node: &Node, ctx: &ASTContext) -> Source
     node_to_source_info(node, file_id)
 }
 
+/// Convert a Range to SourceInfo using the context's primary file ID.
+///
+/// # Arguments
+/// * `range` - The Range to convert
+/// * `ctx` - The ASTContext to get the file ID from
+///
+/// # Returns
+/// A SourceInfo with Original mapping to the primary file
+pub fn range_to_source_info_with_context(range: &Range, ctx: &ASTContext) -> SourceInfo {
+    let file_id = ctx.primary_file_id().unwrap_or(FileId(0));
+    SourceInfo::from_range(file_id, range.clone())
+}
+
 /// Convert old pandoc::location::SourceInfo to new quarto-source-map::SourceInfo.
 ///
 /// This is a bridge function for gradual migration. It converts the old SourceInfo

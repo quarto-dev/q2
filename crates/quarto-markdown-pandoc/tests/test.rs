@@ -342,6 +342,8 @@ fn remove_location_fields(json: &mut serde_json::Value) {
         obj.remove("s"); // Remove the "s" field (new quarto_source_map::SourceInfo)
         obj.remove("astContext"); // Remove the astContext field (includes metaTopLevelKeySources)
         obj.remove("attrS"); // Remove the "attrS" field (AttrSourceInfo)
+        obj.remove("targetS"); // Remove the "targetS" field (TargetSourceInfo)
+        obj.remove("citationIdS"); // Remove the "citationIdS" field (Citation id source)
         for value in obj.values_mut() {
             remove_location_fields(value);
         }
