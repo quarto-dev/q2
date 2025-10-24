@@ -156,6 +156,8 @@ pub fn read<T: Write>(
     };
     // Store complete MetaMapEntry objects to preserve key_source information
     let mut meta_from_parses: Vec<crate::pandoc::meta::MetaMapEntry> = Vec::new();
+    // Track the source_info of the metadata block (for simple case with single block)
+    let mut meta_source_info: Option<quarto_source_map::SourceInfo> = None;
     // Create a separate diagnostic collector for metadata parsing warnings
     let mut meta_diagnostics = DiagnosticCollector::new();
 
@@ -222,7 +224,15 @@ pub fn read<T: Write>(
                 );
 
                 // Extract MetaMapEntry objects (preserving key_source) and store them
-                if let MetaValueWithSourceInfo::MetaMap { entries, .. } = parsed_meta {
+                if let MetaValueWithSourceInfo::MetaMap {
+                    entries,
+                    source_info,
+                } = parsed_meta
+                {
+                    // Store the source_info (for simple case with single metadata block)
+                    if meta_source_info.is_none() {
+                        meta_source_info = Some(source_info);
+                    }
                     for entry in entries {
                         meta_from_parses.push(entry);
                     }
@@ -240,9 +250,17 @@ pub fn read<T: Write>(
     // Merge meta_from_parses into result.meta
     // result.meta is MetaValueWithSourceInfo::MetaMap, so we need to append entries
     // Now meta_from_parses contains complete MetaMapEntry objects with key_source preserved
-    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = &mut result.meta {
+    if let MetaValueWithSourceInfo::MetaMap {
+        entries,
+        source_info,
+    } = &mut result.meta
+    {
         for entry in meta_from_parses.into_iter() {
             entries.push(entry);
+        }
+        // Update the overall metadata source_info if we captured one
+        if let Some(captured_source_info) = meta_source_info {
+            *source_info = captured_source_info;
         }
     }
 

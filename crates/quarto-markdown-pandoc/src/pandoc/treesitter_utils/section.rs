@@ -27,12 +27,15 @@ pub fn process_section(
             PandocNativeIntermediate::IntermediateSection(section) => {
                 blocks.extend(section);
             }
-            PandocNativeIntermediate::IntermediateMetadataString(text, _range) => {
+            PandocNativeIntermediate::IntermediateMetadataString(text, range) => {
                 // for now we assume it's metadata and emit it as a rawblock
                 blocks.push(Block::RawBlock(RawBlock {
                     format: "quarto_minus_metadata".to_string(),
                     text,
-                    source_info: node_source_info_with_context(section_node, context),
+                    source_info: quarto_source_map::SourceInfo::from_range(
+                        context.current_file_id(),
+                        range,
+                    ),
                 }));
             }
             _ => panic!("Expected Block or Section, got {:?}", child),
