@@ -20,6 +20,7 @@ pub fn process_fenced_code_block(
 ) -> PandocNativeIntermediate {
     let mut content: String = String::new();
     let mut attr: Attr = empty_attr();
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut raw_format: Option<String> = None;
     for (node, child) in children {
         if node == "block_continuation" {
@@ -31,10 +32,11 @@ pub fn process_fenced_code_block(
             };
             content = text;
         } else if node == "commonmark_attribute" {
-            let PandocNativeIntermediate::IntermediateAttr(a) = child else {
+            let PandocNativeIntermediate::IntermediateAttr(a, as_) = child else {
                 panic!("Expected Attr in commonmark_attribute, got {:?}", child)
             };
             attr = a;
+            attr_source = as_;
         } else if node == "raw_attribute" {
             let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child else {
                 panic!("Expected RawFormat in raw_attribute, got {:?}", child)
@@ -46,10 +48,11 @@ pub fn process_fenced_code_block(
             };
             attr.1.push(lang); // set the language
         } else if node == "info_string" {
-            let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child else {
+            let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_as_) = child else {
                 panic!("Expected Attr in info_string, got {:?}", child)
             };
             attr = inner_attr;
+            attr_source = inner_as_;
         }
     }
     let location = node_source_info_with_context(node, context);
@@ -71,7 +74,7 @@ pub fn process_fenced_code_block(
             attr,
             text: content,
             source_info: location,
-            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+            attr_source,
         }))
     }
 }

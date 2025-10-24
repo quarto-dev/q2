@@ -4,6 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
+use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use std::collections::HashMap;
 
@@ -15,11 +16,10 @@ pub fn process_info_string(
     for (_, child) in children {
         match child {
             PandocNativeIntermediate::IntermediateBaseText(text, _) => {
-                return PandocNativeIntermediate::IntermediateAttr((
-                    "".to_string(),
-                    vec![text],
-                    HashMap::new(),
-                ));
+                return PandocNativeIntermediate::IntermediateAttr(
+                    ("".to_string(), vec![text], HashMap::new()),
+                    AttrSourceInfo::empty(),
+                );
             }
             _ => {}
         }

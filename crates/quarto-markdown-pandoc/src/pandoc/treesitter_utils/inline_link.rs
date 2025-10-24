@@ -25,6 +25,7 @@ where
     F: Fn() -> String,
 {
     let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut target = ("".to_string(), "".to_string());
     let mut content: Vec<Inline> = Vec::new();
 
@@ -38,7 +39,10 @@ where
                     node_text()
                 );
             }
-            PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
+            PandocNativeIntermediate::IntermediateAttr(a, as_) => {
+                attr = a;
+                attr_source = as_;
+            }
             PandocNativeIntermediate::IntermediateBaseText(text, _) => {
                 if node == "link_destination" {
                     target.0 = text; // URL
@@ -75,6 +79,7 @@ where
             target,
             content,
             crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
+            attr_source,
         )
     } else {
         make_span_inline(
@@ -82,6 +87,7 @@ where
             target,
             content,
             crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
+            attr_source,
         )
     })
 }

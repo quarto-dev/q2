@@ -7,7 +7,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::attr::Attr;
+use crate::pandoc::attr::{Attr, AttrSourceInfo};
 use crate::pandoc::block::{Block, Header};
 use crate::pandoc::inline::Inline;
 use crate::pandoc::location::node_source_info_with_context;
@@ -25,6 +25,7 @@ pub fn process_atx_heading<T: Write>(
     let mut level = 0;
     let mut content: Vec<Inline> = Vec::new();
     let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr_source = AttrSourceInfo::empty();
     for (node, child) in children {
         if node == "block_continuation" {
             continue;
@@ -48,8 +49,10 @@ pub fn process_atx_heading<T: Write>(
                 panic!("Expected Inlines in atx_heading, got {:?}", child);
             }
         } else if node == "attribute" {
-            if let PandocNativeIntermediate::IntermediateAttr(inner_attr) = child {
+            if let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_attr_source) = child
+            {
                 attr = inner_attr;
+                attr_source = inner_attr_source;
             } else {
                 panic!("Expected Attr in attribute, got {:?}", child);
             }
@@ -62,6 +65,6 @@ pub fn process_atx_heading<T: Write>(
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        attr_source,
     }))
 }

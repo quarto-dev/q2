@@ -3,9 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use std::collections::HashMap;
 use quarto_source_map::SourceInfo;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub fn empty_attr() -> Attr {
     ("".to_string(), vec![], HashMap::new())

@@ -391,7 +391,9 @@ fn process_native_inline<T: Write>(
         //
         // see tests/cursed/002.qmd for why this cannot be parsed directly in
         // the block grammar.
-        PandocNativeIntermediate::IntermediateAttr(attr) => Inline::Attr(attr),
+        PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
+            Inline::Attr(attr, attr_source)
+        }
         PandocNativeIntermediate::IntermediateUnknown(range) => {
             writeln!(
                 inline_buf,

@@ -28,12 +28,14 @@ macro_rules! process_editorial_mark {
             ) -> PandocNativeIntermediate {
                 let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
                 let mut attr = ("".to_string(), vec![], HashMap::new());
+                let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
                 let mut content: Inlines = vec![];
 
                 for (_node_name, child) in children {
                     match child {
-                        PandocNativeIntermediate::IntermediateAttr(a) => {
+                        PandocNativeIntermediate::IntermediateAttr(a, as_) => {
                             attr = a;
+                            attr_source = as_;
                         }
                         PandocNativeIntermediate::IntermediateInline(inline) => {
                             content.push(inline);
@@ -72,7 +74,7 @@ macro_rules! process_editorial_mark {
                     attr,
                     content,
                     source_info: node_source_info_with_context(node, context),
-                    attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                    attr_source,
                 }))
             }
         }

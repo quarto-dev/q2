@@ -37,7 +37,7 @@ pub enum Inline {
     NoteReference(NoteReference),
     // this is used to represent commonmark attributes in the document in places
     // where they are not directly attached to a block, like in headings and tables
-    Attr(Attr),
+    Attr(Attr, AttrSourceInfo),
 
     // CriticMarkup-like extensions
     Insert(Insert),
@@ -296,12 +296,15 @@ impl_as_inline!(
     Span,
     Shortcode,
     NoteReference,
-    Attr,
     Insert,
     Delete,
     Highlight,
     EditComment
 );
+
+// Note: Attr is omitted from the macro because it has two fields (Attr, AttrSourceInfo)
+// and the macro doesn't support that pattern. Inline::Attr already IS an inline,
+// so it doesn't need AsInline impl - the generic impl for Inline handles it.
 
 pub fn is_empty_target(target: &Target) -> bool {
     target.0.is_empty() && target.1.is_empty()
@@ -312,6 +315,7 @@ pub fn make_span_inline(
     target: Target,
     content: Inlines,
     source_info: quarto_source_map::SourceInfo,
+    attr_source: AttrSourceInfo,
 ) -> Inline {
     // non-empty targets are never Underline or SmallCaps
     if !is_empty_target(&target) {
@@ -320,7 +324,7 @@ pub fn make_span_inline(
             content,
             target,
             source_info,
-            attr_source: AttrSourceInfo::empty(),
+            attr_source,
             target_source: TargetSourceInfo::empty(),
         });
     }
@@ -337,7 +341,13 @@ pub fn make_span_inline(
                 source_info,
             });
         }
-        let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
+        let inner_inline = make_span_inline(
+            new_attr,
+            target,
+            content,
+            source_info.clone(),
+            attr_source.clone(),
+        );
         return Inline::SmallCaps(SmallCaps {
             content: vec![inner_inline],
             source_info,
@@ -351,7 +361,13 @@ pub fn make_span_inline(
                 source_info,
             });
         }
-        let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
+        let inner_inline = make_span_inline(
+            new_attr,
+            target,
+            content,
+            source_info.clone(),
+            attr_source.clone(),
+        );
         return Inline::Underline(Underline {
             content: vec![inner_inline],
             source_info,
@@ -369,7 +385,13 @@ pub fn make_span_inline(
                 source_info,
             });
         }
-        let inner_inline = make_span_inline(new_attr, target, content, source_info.clone());
+        let inner_inline = make_span_inline(
+            new_attr,
+            target,
+            content,
+            source_info.clone(),
+            attr_source.clone(),
+        );
         return Inline::Underline(Underline {
             content: vec![inner_inline],
             source_info,
@@ -380,7 +402,7 @@ pub fn make_span_inline(
         attr,
         content,
         source_info,
-        attr_source: AttrSourceInfo::empty(),
+        attr_source,
     });
 }
 
@@ -389,6 +411,7 @@ pub fn make_cite_inline(
     target: Target,
     content: Inlines,
     source_info: quarto_source_map::SourceInfo,
+    attr_source: AttrSourceInfo,
 ) -> Inline {
     // the traversal here is slightly inefficient because we need
     // to non-destructively check for the goodness of the content
@@ -408,7 +431,7 @@ pub fn make_cite_inline(
 
     if !is_good_cite {
         // if the content is not a good Cite, we backtrack and return a Span
-        return make_span_inline(attr, target, content, source_info);
+        return make_span_inline(attr, target, content, source_info, attr_source);
     }
 
     // we can now destructively create a Cite inline
@@ -573,6 +596,7 @@ mod tests {
             ("".to_string(), "".to_string()),
             content,
             dummy_source_info(),
+            AttrSourceInfo::empty(),
         );
 
         // Verify the result is a Cite
@@ -620,6 +644,7 @@ mod tests {
             ("".to_string(), "".to_string()),
             content,
             dummy_source_info(),
+            AttrSourceInfo::empty(),
         );
 
         match result {

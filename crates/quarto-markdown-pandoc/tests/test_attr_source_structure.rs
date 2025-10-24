@@ -15,12 +15,12 @@
  */
 
 use quarto_markdown_pandoc::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
-use quarto_markdown_pandoc::pandoc::{
-    Block, CodeBlock, Div, Figure, Header, Inline, Link, Span, Image, Code,
-};
-use quarto_markdown_pandoc::pandoc::table::{Table, TableHead, TableBody, TableFoot, Row, Cell};
-use quarto_markdown_pandoc::pandoc::inline::{Citation, CitationMode};
 use quarto_markdown_pandoc::pandoc::caption::Caption;
+use quarto_markdown_pandoc::pandoc::inline::{Citation, CitationMode};
+use quarto_markdown_pandoc::pandoc::table::{Cell, Row, Table, TableBody, TableFoot, TableHead};
+use quarto_markdown_pandoc::pandoc::{
+    Block, Code, CodeBlock, Div, Figure, Header, Image, Inline, Link, Span,
+};
 use quarto_source_map::SourceInfo;
 use std::collections::HashMap;
 
@@ -32,9 +32,20 @@ use std::collections::HashMap;
 fn test_attr_source_info_empty() {
     let empty = AttrSourceInfo::empty();
 
-    assert_eq!(empty.id, None, "Empty AttrSourceInfo should have None for id");
-    assert_eq!(empty.classes.len(), 0, "Empty AttrSourceInfo should have no classes");
-    assert_eq!(empty.attributes.len(), 0, "Empty AttrSourceInfo should have no attributes");
+    assert_eq!(
+        empty.id, None,
+        "Empty AttrSourceInfo should have None for id"
+    );
+    assert_eq!(
+        empty.classes.len(),
+        0,
+        "Empty AttrSourceInfo should have no classes"
+    );
+    assert_eq!(
+        empty.attributes.len(),
+        0,
+        "Empty AttrSourceInfo should have no attributes"
+    );
 }
 
 #[test]
@@ -50,29 +61,43 @@ fn test_attr_source_info_with_values() {
 
     assert!(with_values.id.is_some(), "Should have id source");
     assert_eq!(with_values.classes.len(), 2, "Should have 2 class sources");
-    assert_eq!(with_values.attributes.len(), 2, "Should have 2 attribute sources");
+    assert_eq!(
+        with_values.attributes.len(),
+        2,
+        "Should have 2 attribute sources"
+    );
 }
 
 #[test]
 fn test_attr_source_info_mixed_none_some() {
     // Test the case where id is empty (None) but classes exist
     let mixed = AttrSourceInfo {
-        id: None,  // Empty id
+        id: None, // Empty id
         classes: vec![Some(SourceInfo::default())],
         attributes: vec![],
     };
 
     assert_eq!(mixed.id, None, "Empty id should be None");
     assert_eq!(mixed.classes.len(), 1, "Should have 1 class source");
-    assert_eq!(mixed.attributes.len(), 0, "Should have no attribute sources");
+    assert_eq!(
+        mixed.attributes.len(),
+        0,
+        "Should have no attribute sources"
+    );
 }
 
 #[test]
 fn test_target_source_info_empty() {
     let empty = TargetSourceInfo::empty();
 
-    assert_eq!(empty.url, None, "Empty TargetSourceInfo should have None for url");
-    assert_eq!(empty.title, None, "Empty TargetSourceInfo should have None for title");
+    assert_eq!(
+        empty.url, None,
+        "Empty TargetSourceInfo should have None for url"
+    );
+    assert_eq!(
+        empty.title, None,
+        "Empty TargetSourceInfo should have None for title"
+    );
 }
 
 #[test]
@@ -91,7 +116,7 @@ fn test_target_source_info_url_only() {
     // Test the case where URL exists but title is empty
     let url_only = TargetSourceInfo {
         url: Some(SourceInfo::default()),
-        title: None,  // No title
+        title: None, // No title
     };
 
     assert!(url_only.url.is_some(), "Should have url source");
@@ -204,7 +229,10 @@ fn test_div_has_attr_source_field() {
 fn test_figure_has_attr_source_field() {
     let figure = Figure {
         attr: ("".to_string(), vec![], HashMap::new()),
-        caption: Caption { short: None, long: None },
+        caption: Caption {
+            short: None,
+            long: None,
+        },
         content: vec![],
         source_info: SourceInfo::default(),
         attr_source: AttrSourceInfo::empty(),
@@ -221,7 +249,10 @@ fn test_figure_has_attr_source_field() {
 fn test_table_has_attr_source_field() {
     let table = Table {
         attr: ("".to_string(), vec![], HashMap::new()),
-        caption: Caption { short: None, long: None },
+        caption: Caption {
+            short: None,
+            long: None,
+        },
         colspec: vec![],
         head: TableHead {
             attr: ("".to_string(), vec![], HashMap::new()),
@@ -334,7 +365,10 @@ fn test_citation_with_id_source_value() {
         id_source: Some(SourceInfo::default()),
     };
 
-    assert!(citation.id_source.is_some(), "Citation should have id_source");
+    assert!(
+        citation.id_source.is_some(),
+        "Citation should have id_source"
+    );
 }
 
 // ============================================================================
@@ -347,72 +381,73 @@ fn test_nested_table_all_components_have_attr_source() {
 
     // Create a complete table with all components
     let table = Table {
-        attr: ("table-id".to_string(), vec!["table-class".to_string()], HashMap::new()),
-        caption: Caption { short: None, long: None },
+        attr: (
+            "table-id".to_string(),
+            vec!["table-class".to_string()],
+            HashMap::new(),
+        ),
+        caption: Caption {
+            short: None,
+            long: None,
+        },
         colspec: vec![
             (Alignment::Default, ColWidth::Default),
             (Alignment::Default, ColWidth::Default),
         ],
         head: TableHead {
             attr: ("head-id".to_string(), vec![], HashMap::new()),
-            rows: vec![
-                Row {
-                    attr: ("row1-id".to_string(), vec![], HashMap::new()),
-                    cells: vec![
-                        Cell {
-                            attr: ("cell1-id".to_string(), vec![], HashMap::new()),
-                            alignment: Alignment::Default,
-                            row_span: 1,
-                            col_span: 1,
-                            content: vec![],
-                            attr_source: AttrSourceInfo::empty(),
-                        },
-                        Cell {
-                            attr: ("cell2-id".to_string(), vec![], HashMap::new()),
-                            alignment: Alignment::Default,
-                            row_span: 1,
-                            col_span: 1,
-                            content: vec![],
-                            attr_source: AttrSourceInfo::empty(),
-                        },
-                    ],
-                    attr_source: AttrSourceInfo::empty(),
-                },
-            ],
-            attr_source: AttrSourceInfo::empty(),
-        },
-        bodies: vec![
-            TableBody {
-                attr: ("body-id".to_string(), vec![], HashMap::new()),
-                rowhead_columns: 0,
-                head: vec![],
-                body: vec![
-                    Row {
-                        attr: ("row2-id".to_string(), vec![], HashMap::new()),
-                        cells: vec![
-                            Cell {
-                                attr: ("cell3-id".to_string(), vec![], HashMap::new()),
-                                alignment: Alignment::Default,
-                                row_span: 1,
-                                col_span: 1,
-                                content: vec![],
-                                attr_source: AttrSourceInfo::empty(),
-                            },
-                            Cell {
-                                attr: ("cell4-id".to_string(), vec![], HashMap::new()),
-                                alignment: Alignment::Default,
-                                row_span: 1,
-                                col_span: 1,
-                                content: vec![],
-                                attr_source: AttrSourceInfo::empty(),
-                            },
-                        ],
+            rows: vec![Row {
+                attr: ("row1-id".to_string(), vec![], HashMap::new()),
+                cells: vec![
+                    Cell {
+                        attr: ("cell1-id".to_string(), vec![], HashMap::new()),
+                        alignment: Alignment::Default,
+                        row_span: 1,
+                        col_span: 1,
+                        content: vec![],
+                        attr_source: AttrSourceInfo::empty(),
+                    },
+                    Cell {
+                        attr: ("cell2-id".to_string(), vec![], HashMap::new()),
+                        alignment: Alignment::Default,
+                        row_span: 1,
+                        col_span: 1,
+                        content: vec![],
                         attr_source: AttrSourceInfo::empty(),
                     },
                 ],
                 attr_source: AttrSourceInfo::empty(),
-            },
-        ],
+            }],
+            attr_source: AttrSourceInfo::empty(),
+        },
+        bodies: vec![TableBody {
+            attr: ("body-id".to_string(), vec![], HashMap::new()),
+            rowhead_columns: 0,
+            head: vec![],
+            body: vec![Row {
+                attr: ("row2-id".to_string(), vec![], HashMap::new()),
+                cells: vec![
+                    Cell {
+                        attr: ("cell3-id".to_string(), vec![], HashMap::new()),
+                        alignment: Alignment::Default,
+                        row_span: 1,
+                        col_span: 1,
+                        content: vec![],
+                        attr_source: AttrSourceInfo::empty(),
+                    },
+                    Cell {
+                        attr: ("cell4-id".to_string(), vec![], HashMap::new()),
+                        alignment: Alignment::Default,
+                        row_span: 1,
+                        col_span: 1,
+                        content: vec![],
+                        attr_source: AttrSourceInfo::empty(),
+                    },
+                ],
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            attr_source: AttrSourceInfo::empty(),
+        }],
         foot: TableFoot {
             attr: ("foot-id".to_string(), vec![], HashMap::new()),
             rows: vec![],
@@ -562,5 +597,8 @@ fn test_summary_all_14_types_verified() {
     //
     // Total: 15 types verified
 
-    assert!(true, "All 15 types have been verified in individual tests above");
+    assert!(
+        true,
+        "All 15 types have been verified in individual tests above"
+    );
 }
