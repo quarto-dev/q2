@@ -49,7 +49,10 @@ function isTaggedSpan(obj: unknown): obj is {
  * Converts metadata from quarto-markdown-pandoc JSON to AnnotatedParse
  */
 export class MetadataConverter {
-  constructor(private sourceReconstructor: SourceInfoReconstructor) {}
+  constructor(
+    private sourceReconstructor: SourceInfoReconstructor,
+    private metaTopLevelKeySources?: Record<string, number>
+  ) {}
 
   /**
    * Convert top-level metadata object to AnnotatedParse
@@ -58,7 +61,8 @@ export class MetadataConverter {
     // Create a synthetic MetaMap for the top-level metadata
     const entries: MetaMapEntry[] = Object.entries(jsonMeta).map(([key, value]) => ({
       key,
-      key_source: value.s,  // Use value's source for key (not ideal, but metadata doesn't include key sources)
+      // Use metaTopLevelKeySources if available, otherwise fall back to value's source
+      key_source: this.metaTopLevelKeySources?.[key] ?? value.s,
       value
     }));
 
@@ -83,8 +87,10 @@ export class MetadataConverter {
 
     for (const [key, value] of Object.entries(jsonMeta)) {
       // Create AnnotatedParse for key
-      const [keyStart, keyEnd] = this.sourceReconstructor.getOffsets(value.s);
-      const keySource = this.sourceReconstructor.toMappedString(value.s);
+      // Use metaTopLevelKeySources if available, otherwise fall back to value's source
+      const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
+      const [keyStart, keyEnd] = this.sourceReconstructor.getOffsets(keySourceId);
+      const keySource = this.sourceReconstructor.toMappedString(keySourceId);
 
       const keyAP: AnnotatedParse = {
         result: key,

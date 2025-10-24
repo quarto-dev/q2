@@ -1,4 +1,4 @@
-# @quarto/rust-qmd-json
+# @quarto/annotated-qmd
 
 Convert quarto-markdown-pandoc JSON output to AnnotatedParse structures with full source mapping.
 
@@ -11,14 +11,14 @@ infrastructure. It preserves complete source location information through the co
 ## Installation
 
 ```bash
-npm install @quarto/rust-qmd-json
+npm install @quarto/annotated-qmd
 ```
 
 ## Quick Start
 
 ```typescript
-import { parseRustQmdMetadata } from '@quarto/rust-qmd-json';
-import type { RustQmdJson } from '@quarto/rust-qmd-json';
+import { parseRustQmdMetadata } from '@quarto/annotated-qmd';
+import type { RustQmdJson } from '@quarto/annotated-qmd';
 
 // JSON from quarto-markdown-pandoc
 const json: RustQmdJson = {
@@ -58,7 +58,7 @@ Main entry point for converting quarto-markdown-pandoc JSON to AnnotatedParse.
 **Example with error handling:**
 
 ```typescript
-import { parseRustQmdMetadata } from '@quarto/rust-qmd-json';
+import { parseRustQmdMetadata } from '@quarto/annotated-qmd';
 
 const errorHandler = (msg: string, id?: number) => {
   console.error(`SourceInfo error: ${msg}`, id);
@@ -81,7 +81,7 @@ import type {
   SerializableSourceInfo,
   SourceContext,
   SourceInfoErrorHandler
-} from '@quarto/rust-qmd-json';
+} from '@quarto/annotated-qmd';
 ```
 
 ### Advanced Usage
@@ -89,7 +89,7 @@ import type {
 For more control, you can use the underlying classes directly:
 
 ```typescript
-import { SourceInfoReconstructor, MetadataConverter } from '@quarto/rust-qmd-json';
+import { SourceInfoReconstructor, MetadataConverter } from '@quarto/annotated-qmd';
 
 const reconstructor = new SourceInfoReconstructor(
   json.source_pool,
@@ -115,24 +115,3 @@ npm test
 # Clean
 npm run clean
 ```
-
-## Architecture
-
-The conversion happens in two phases:
-
-1. **SourceInfo Reconstruction**: Convert the pooled SourceInfo format from JSON into
-   MappedString objects that track source locations through transformation chains.
-
-2. **Metadata Conversion**: Recursively convert MetaValue variants into AnnotatedParse
-   structures with proper source tracking. MetaInlines/MetaBlocks are treated as leaf
-   nodes with the JSON array structure preserved in the result.
-
-## Design Decisions
-
-- **Direct JSON Value Mapping**: MetaInlines and MetaBlocks are preserved as JSON arrays
-  in the `result` field, avoiding any text reconstruction
-- **Source Tracking**: Every value can be traced back to original file location via SourceInfo
-- **Compatible Types**: Produces AnnotatedParse structures compatible with existing validation code
-
-See repository's `claude-notes/plans/2025-10-23-json-to-annotated-parse-conversion.md` for
-detailed implementation plan.

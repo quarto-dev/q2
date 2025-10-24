@@ -18,13 +18,11 @@ export interface SerializableSourceInfo {
 
 /**
  * Type guard for Concat data structure
+ * Rust serializes Concat data as a plain array: [[source_info_id, offset, length], ...]
  */
-function isConcatData(data: unknown): data is { pieces: [number, number, number][] } {
-  return (
-    typeof data === 'object' &&
-    data !== null &&
-    'pieces' in data &&
-    Array.isArray((data as { pieces: unknown }).pieces)
+function isConcatData(data: unknown): data is [number, number, number][] {
+  return Array.isArray(data) && data.every(
+    item => Array.isArray(item) && item.length === 3
   );
 }
 
@@ -181,16 +179,17 @@ export class SourceInfoReconstructor {
 
   /**
    * Handle Concat SourceInfo type (t=2)
-   * Data format: {pieces: [[source_info_id, offset, length], ...]}
+   * Data format: [[source_info_id, offset, length], ...]
+   * (Rust serializes as plain array, not object with pieces field)
    */
   private handleConcat(id: number, info: SerializableSourceInfo): MappedString {
     // Runtime type check
     if (!isConcatData(info.d)) {
-      this.errorHandler(`Invalid Concat data format (expected {pieces: [...]}), got ${typeof info.d}`, id);
+      this.errorHandler(`Invalid Concat data format (expected array of [id, offset, length]), got ${typeof info.d}`, id);
       return asMappedString('');
     }
 
-    const pieces = info.d.pieces;
+    const pieces = info.d;  // Direct array access
 
     // Build MappedString array from pieces
     const mappedPieces: MappedString[] = [];
@@ -272,7 +271,7 @@ export class SourceInfoReconstructor {
             this.errorHandler(`Invalid Concat data format`, id);
             resolved = { file_id: -1, range: info.r };
           } else {
-            const pieces = info.d.pieces;
+            const pieces = info.d;  // Direct array access
             if (pieces.length === 0) {
               this.errorHandler(`Empty Concat pieces`, id);
               resolved = { file_id: -1, range: info.r };

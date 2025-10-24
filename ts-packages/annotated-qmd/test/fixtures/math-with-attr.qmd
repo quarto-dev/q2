@@ -1,0 +1,13 @@
+---
+title: math with **attributes**
+---
+
+Inline math with attribute: $E = mc^2$ {#eq-einstein}
+
+Display math with attribute:
+
+$$
+\int_0^\infty e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+$$ {#eq-gaussian}
+
+Another inline example: $a^2 + b^2 = c^2$ {#eq-pythagorean}

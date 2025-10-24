@@ -41,15 +41,16 @@ test('can convert complete JSON to AnnotatedParse', async () => {
       author: { t: 'MetaString', c: 'Alice', s: 1 }
     },
     blocks: [],
-    source_pool: [
-      { r: [11, 22], t: 0, d: 0 },  // "Hello World"
-      { r: [31, 36], t: 0, d: 0 }   // "Alice"
-    ],
-    source_context: {
+    astContext: {
+      sourceInfoPool: [
+        { r: [11, 22], t: 0, d: 0 },  // "Hello World"
+        { r: [31, 36], t: 0, d: 0 }   // "Alice"
+      ],
       files: [
-        { id: 0, path: 'test.qmd', content: '---\ntitle: Hello World\nauthor: Alice\n---' }
+        { name: 'test.qmd', content: '---\ntitle: Hello World\nauthor: Alice\n---' }
       ]
-    }
+    },
+    'pandoc-api-version': [1, 23, 1]
   };
 
   const result = parseRustQmdMetadata(json);
@@ -59,4 +60,35 @@ test('can convert complete JSON to AnnotatedParse', async () => {
   assert.strictEqual((result.result as any).title, 'Hello World');
   assert.strictEqual((result.result as any).author, 'Alice');
   assert.strictEqual(result.components.length, 4);  // title key, title value, author key, author value
+});
+
+test('can parse math-with-attr.json', async () => {
+  const { parseRustQmdMetadata } = await import('../src/index.js');
+  const fs = await import('fs/promises');
+  const path = await import('path');
+  const { fileURLToPath } = await import('url');
+
+  // Get the directory of this test file
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+  // Load JSON fixture from test/fixtures
+  const jsonPath = path.join(__dirname, 'fixtures', 'math-with-attr.json');
+  const jsonText = await fs.readFile(jsonPath, 'utf-8');
+  const json = JSON.parse(jsonText);
+
+  // Read the QMD file content from test/fixtures
+  const qmdPath = path.join(__dirname, 'fixtures', 'math-with-attr.qmd');
+  const qmdContent = await fs.readFile(qmdPath, 'utf-8');
+
+  // Populate file content (simulating what user would do)
+  for (const file of json.astContext.files) {
+    file.content = qmdContent;
+  }
+
+  const result = parseRustQmdMetadata(json);
+
+  // Basic validation that it didn't throw
+  assert.strictEqual(result.kind, 'mapping');
+  assert.ok(result.result);
+  assert.ok((result.result as any).title);
 });

@@ -48,17 +48,25 @@ export interface MetaMapEntry {
 }
 
 /**
+ * File information from Rust JSON output
+ */
+export interface RustFileInfo {
+  name: string;              // File path/name
+  line_breaks?: number[];    // Byte offsets of newlines
+  total_length?: number;     // Total file length in bytes
+  content?: string;          // File content (populated by consumer)
+}
+
+/**
  * Complete JSON output from quarto-markdown-pandoc
  */
 export interface RustQmdJson {
   meta: Record<string, JsonMetaValue>;
   blocks: unknown[];  // Not used in metadata conversion
-  source_pool: SerializableSourceInfo[];
-  source_context: {
-    files: Array<{
-      id: number;
-      path: string;
-      content: string;
-    }>;
+  astContext: {
+    sourceInfoPool: SerializableSourceInfo[];
+    files: RustFileInfo[];
+    metaTopLevelKeySources?: Record<string, number>;  // Maps metadata keys to SourceInfo IDs
   };
+  'pandoc-api-version': [number, number, number];
 }

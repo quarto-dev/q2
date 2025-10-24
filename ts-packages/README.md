@@ -7,7 +7,7 @@ this `ts-packages/` directory contains TypeScript packages that complement the R
 
 ## Packages
 
-- **rust-qmd-json** (`@quarto/rust-qmd-json`): Converts quarto-markdown-pandoc JSON output
+- **annotated-qmd** (`@quarto/annotated-qmd`): Converts quarto-markdown-pandoc JSON output
   to AnnotatedParse structures compatible with quarto-cli's YAML validation infrastructure.
 
 ## Development
@@ -15,18 +15,8 @@ this `ts-packages/` directory contains TypeScript packages that complement the R
 Each package is independent with its own `package.json` and can be developed/tested separately:
 
 ```bash
-cd ts-packages/rust-qmd-json
+cd ts-packages/annotated-qmd
 npm install
 npm test
 npm run build
-```
-
-## Publishing
-
-Packages are published to npm under the `@quarto` scope and can be consumed by quarto-cli
-and other projects:
-
-```bash
-cd ts-packages/rust-qmd-json
-npm publish
 ```
