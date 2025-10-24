@@ -350,6 +350,7 @@ impl InlineFilterableStructure for pandoc::Cite {
                     mode: cit.mode,
                     note_num: cit.note_num,
                     hash: cit.hash,
+                    id_source: cit.id_source,
                 })
                 .collect(),
             content: topdown_traverse_inlines(self.content, filter),
@@ -827,6 +828,7 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
                     mode: cit.mode,
                     note_num: cit.note_num,
                     hash: cit.hash,
+                    id_source: cit.id_source,
                 })
                 .collect(),
             content: topdown_traverse_inlines(c.content, filter),
@@ -837,12 +839,16 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
             target: l.target,
             content: topdown_traverse_inlines(l.content, filter),
             source_info: l.source_info,
+            attr_source: l.attr_source,
+            target_source: l.target_source,
         }),
         Inline::Image(i) => Inline::Image(crate::pandoc::Image {
             attr: i.attr,
             target: i.target,
             content: topdown_traverse_inlines(i.content, filter),
             source_info: i.source_info,
+            attr_source: i.attr_source,
+            target_source: i.target_source,
         }),
         Inline::Note(note) => Inline::Note(crate::pandoc::Note {
             content: topdown_traverse_blocks(note.content, filter),
@@ -852,6 +858,7 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
             attr: span.attr,
             content: topdown_traverse_inlines(span.content, filter),
             source_info: span.source_info,
+            attr_source: span.attr_source,
         }),
         _ => panic!("Unsupported inline type: {:?}", inline),
     }

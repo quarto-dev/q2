@@ -69,5 +69,7 @@ where
         content,
         target,
         source_info: node_source_info_with_context(node, context),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
     }))
 }

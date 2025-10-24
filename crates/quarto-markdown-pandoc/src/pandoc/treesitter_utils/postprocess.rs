@@ -367,6 +367,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         })],
                         // TODO: Should use para.source_info
                         source_info: quarto_source_map::SourceInfo::default(),
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -394,6 +395,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         ),
                         content: vec![],
                         source_info: note_ref.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     false,
                 )
@@ -407,6 +409,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
                         source_info: insert.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -420,6 +423,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
                         source_info: delete.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -433,6 +437,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
                         source_info: highlight.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -446,6 +451,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
                         source_info: edit_comment.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -477,6 +483,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     content: vec![Inline::Math(math.clone())],
                                     // TODO: Should combine() source info from math and attr (see k-82)
                                     source_info: quarto_source_map::SourceInfo::default(),
+                                    attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                                 }));
 
                                 // Skip the Math, optional Space, and Attr

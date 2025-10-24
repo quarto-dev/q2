@@ -71,6 +71,7 @@ pub fn process_fenced_code_block(
             attr,
             text: content,
             source_info: location,
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         }))
     }
 }

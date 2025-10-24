@@ -87,5 +87,6 @@ pub fn process_fenced_div_block<T: Write>(
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     }))
 }

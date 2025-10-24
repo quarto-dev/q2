@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::attr::Attr;
+use crate::pandoc::attr::{Attr, AttrSourceInfo};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::caption::Caption;
 use serde::{Deserialize, Serialize};
@@ -28,12 +28,14 @@ pub type ColSpec = (Alignment, ColWidth);
 pub struct Row {
     pub attr: Attr,
     pub cells: Vec<Cell>,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableHead {
     pub attr: Attr,
     pub rows: Vec<Row>,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -42,12 +44,14 @@ pub struct TableBody {
     pub rowhead_columns: usize,
     pub head: Vec<Row>,
     pub body: Vec<Row>,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TableFoot {
     pub attr: Attr,
     pub rows: Vec<Row>,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -57,6 +61,7 @@ pub struct Cell {
     pub row_span: usize,
     pub col_span: usize,
     pub content: Blocks,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,4 +73,5 @@ pub struct Table {
     pub bodies: Vec<TableBody>,
     pub foot: TableFoot,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }

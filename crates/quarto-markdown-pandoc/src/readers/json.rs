@@ -493,6 +493,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 text,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "Math" => {
@@ -663,6 +664,8 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 content,
                 target,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
             }))
         }
         "RawInline" => {
@@ -736,6 +739,8 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 content,
                 target,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
             }))
         }
         "Span" => {
@@ -757,6 +762,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                 attr,
                 content,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "Note" => {
@@ -838,6 +844,7 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
                         mode,
                         hash,
                         note_num,
+                        id_source: None,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?;
@@ -1192,6 +1199,7 @@ fn read_cell(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Cel
         row_span,
         col_span,
         content,
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     })
 }
 
@@ -1215,7 +1223,11 @@ fn read_row(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Row>
         .map(|v| read_cell(v, deserializer))
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(Row { attr, cells })
+    Ok(Row {
+        attr,
+        cells,
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+    })
 }
 
 fn read_table_head(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableHead> {
@@ -1238,7 +1250,11 @@ fn read_table_head(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
         .map(|v| read_row(v, deserializer))
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(TableHead { attr, rows })
+    Ok(TableHead {
+        attr,
+        rows,
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+    })
 }
 
 fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<TableBody> {
@@ -1276,6 +1292,7 @@ fn read_table_body(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
         rowhead_columns,
         head,
         body,
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     })
 }
 
@@ -1299,7 +1316,11 @@ fn read_table_foot(value: &Value, deserializer: &SourceInfoDeserializer) -> Resu
         .map(|v| read_row(v, deserializer))
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(TableFoot { attr, rows })
+    Ok(TableFoot {
+        attr,
+        rows,
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+    })
 }
 
 fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Block> {
@@ -1384,6 +1405,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 text,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "RawBlock" => {
@@ -1506,6 +1528,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 content,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "HorizontalRule" => Ok(Block::HorizontalRule(HorizontalRule { source_info })),
@@ -1529,6 +1552,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 caption,
                 content,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "Table" => {
@@ -1569,6 +1593,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 bodies,
                 foot,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "Div" => {
@@ -1589,6 +1614,7 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 attr,
                 content,
                 source_info,
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             }))
         }
         "BlockMetadata" => {

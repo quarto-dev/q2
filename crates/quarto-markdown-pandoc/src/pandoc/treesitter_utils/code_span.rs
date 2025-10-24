@@ -83,6 +83,7 @@ pub fn process_code_span<T: Write>(
             attr,
             text: "".to_string(),
             source_info: node_source_info_with_context(node, context),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         }));
     }
     let (_, child) = inlines.remove(0);
@@ -118,11 +119,13 @@ pub fn process_code_span<T: Write>(
                 attr,
                 text: lang + &" " + &text,
                 source_info: node_source_info_with_context(node, context),
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             })),
             None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
                 text,
                 source_info: node_source_info_with_context(node, context),
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             })),
         }
     }

@@ -53,6 +53,7 @@ pub fn process_pipe_table_header_or_row(
     let mut row = Row {
         attr: empty_attr(),
         cells: Vec::new(),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     };
     for (node, child) in children {
         if node == "|" {
@@ -109,6 +110,7 @@ pub fn process_pipe_table_cell(
         row_span: 1,
         attr: ("".to_string(), vec![], HashMap::new()),
         content: vec![],
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     };
     for (node, child) in children {
         if node == "inline" {
@@ -234,17 +236,21 @@ pub fn process_pipe_table(
         head: TableHead {
             attr: empty_attr(),
             rows: thead_rows,
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
         bodies: vec![TableBody {
             attr: empty_attr(),
             rowhead_columns: 0,
             head: vec![],
             body: body_rows,
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         }],
         foot: TableFoot {
             attr: empty_attr(),
             rows: vec![],
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
         source_info: node_source_info_with_context(node, context),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     }))
 }

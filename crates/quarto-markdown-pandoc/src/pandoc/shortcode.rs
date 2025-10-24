@@ -39,6 +39,7 @@ fn shortcode_value_span(str: String) -> Inline {
         ),
         content: vec![],
         source_info: empty_source_info(),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     })
 }
 
@@ -62,6 +63,7 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
         ),
         content: vec![],
         source_info: empty_source_info(),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     })
 }
 
@@ -126,5 +128,6 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
         ),
         content,
         source_info: empty_source_info(),
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     }
 }

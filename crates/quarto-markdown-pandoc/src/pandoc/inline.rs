@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::attr::{Attr, is_empty_attr};
+use crate::pandoc::attr::{Attr, AttrSourceInfo, TargetSourceInfo, is_empty_attr};
 use crate::pandoc::block::Blocks;
 use crate::pandoc::shortcode::Shortcode;
 use serde::{Deserialize, Serialize};
@@ -129,6 +129,7 @@ pub struct Code {
     pub attr: Attr,
     pub text: String,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -151,6 +152,8 @@ pub struct Link {
     pub content: Inlines,
     pub target: Target,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
+    pub target_source: TargetSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -159,6 +162,8 @@ pub struct Image {
     pub content: Inlines,
     pub target: Target,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
+    pub target_source: TargetSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -172,6 +177,7 @@ pub struct Span {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -203,6 +209,7 @@ pub struct Citation {
     pub mode: CitationMode,
     pub note_num: usize,
     pub hash: usize,
+    pub id_source: Option<quarto_source_map::SourceInfo>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -217,6 +224,7 @@ pub struct Insert {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -224,6 +232,7 @@ pub struct Delete {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -231,6 +240,7 @@ pub struct Highlight {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -238,6 +248,7 @@ pub struct EditComment {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 pub trait AsInline {
@@ -309,6 +320,8 @@ pub fn make_span_inline(
             content,
             target,
             source_info,
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
         });
     }
     if attr.1.contains(&"smallcaps".to_string()) {
@@ -367,6 +380,7 @@ pub fn make_span_inline(
         attr,
         content,
         source_info,
+        attr_source: AttrSourceInfo::empty(),
     });
 }
 
@@ -522,6 +536,7 @@ mod tests {
             mode: CitationMode::NormalCitation,
             note_num: 0,
             hash: 0,
+            id_source: None,
         }
     }
 

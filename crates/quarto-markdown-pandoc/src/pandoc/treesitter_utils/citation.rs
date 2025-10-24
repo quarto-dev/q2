@@ -54,6 +54,7 @@ where
             mode: citation_type,
             note_num: 1, // Pandoc expects citations to be numbered from 1
             hash: 0,
+            id_source: None,
         }],
         content: vec![Inline::Str(Str {
             text: node_text(),

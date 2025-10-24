@@ -72,6 +72,7 @@ macro_rules! process_editorial_mark {
                     attr,
                     content,
                     source_info: node_source_info_with_context(node, context),
+                    attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                 }))
             }
         }
