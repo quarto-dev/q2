@@ -12,7 +12,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/quarto-dev/quarto.git"
+    "url": "git+https://github.com/quarto-dev/quarto-markdown.git"
   },
   "type": "module",
   "main": "dist/index.js",
