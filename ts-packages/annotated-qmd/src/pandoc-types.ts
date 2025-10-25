@@ -213,14 +213,19 @@ export type Block_Null = { t: "Null" };
 // Tables
 // Table structural types - now matching Pandoc's array format
 export type Row = [Attr, Cell[]];
+export type Annotated_Row = [Attr, Annotated_Cell[]];
 
 export type Cell = [Attr, Alignment, number, number, Block[]]; // [attr, alignment, rowSpan, colSpan, content]
+export type Annotated_Cell = [Attr, Alignment, number, number, Annotated_Block[]]; // annotated version
 
 export type TableHead = [Attr, Row[]];
+export type Annotated_TableHead_Array = [Attr, Annotated_Row[]];
 
 export type TableBody = [Attr, number, Row[], Row[]]; // [attr, rowHeadColumns, head, body]
+export type Annotated_TableBody_Array = [Attr, number, Annotated_Row[], Annotated_Row[]];
 
 export type TableFoot = [Attr, Row[]];
+export type Annotated_TableFoot_Array = [Attr, Annotated_Row[]];
 
 // Caption types
 export type Caption = [Inline[] | null, Block[]]; // [short, long] - base Pandoc format
@@ -610,7 +615,7 @@ export interface Annotated_Caption {
 
 export interface Annotated_Block_Table {
   t: "Table";
-  c: [Attr, Annotated_CaptionArray, ColSpec[], TableHead, TableBody[], TableFoot];
+  c: [Attr, Annotated_CaptionArray, ColSpec[], Annotated_TableHead_Array, Annotated_TableBody_Array[], Annotated_TableFoot_Array];
   s: number;
   attrS: AttrSourceInfo;
   captionS: number; // Source info ref for caption

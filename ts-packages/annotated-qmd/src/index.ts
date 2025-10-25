@@ -162,12 +162,17 @@ export { SourceInfoReconstructor } from './source-map.js';
 export { MetadataConverter } from './meta-converter.js';
 export { InlineConverter } from './inline-converter.js';
 export { BlockConverter } from './block-converter.js';
+export { DocumentConverter } from './document-converter.js';
 
-// Import for main function
+// Import for main functions
 import { SourceInfoReconstructor } from './source-map.js';
 import { MetadataConverter } from './meta-converter.js';
+import { DocumentConverter, type AnnotatedPandocDocument } from './document-converter.js';
+import { BlockConverter } from './block-converter.js';
+import { InlineConverter } from './inline-converter.js';
 import type { RustQmdJson, AnnotatedParse } from './types.js';
 import type { SourceInfoErrorHandler } from './source-map.js';
+import type { Annotated_Block, Annotated_Inline } from './pandoc-types.js';
 
 /**
  * Convert quarto-markdown-pandoc JSON output to AnnotatedParse
@@ -228,4 +233,172 @@ export function parseRustQmdMetadata(
 
   // 3. Convert metadata to AnnotatedParse
   return converter.convertMeta(json.meta);
+}
+
+/**
+ * Convert a complete quarto-markdown-pandoc document to AnnotatedParse
+ *
+ * @param json - The JSON output from quarto-markdown-pandoc (full document)
+ * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
+ * @returns AnnotatedParse structure for the entire document
+ *
+ * @example
+ * ```typescript
+ * import { parseRustQmdDocument } from '@quarto/annotated-qmd';
+ *
+ * const json = {
+ *   meta: { title: { t: 'MetaString', c: 'Hello', s: 0 } },
+ *   blocks: [
+ *     { t: 'Para', c: [{ t: 'Str', c: 'World', s: 1 }], s: 2 }
+ *   ],
+ *   astContext: { ... },
+ *   'pandoc-api-version': [1, 23, 1]
+ * };
+ *
+ * const doc = parseRustQmdDocument(json);
+ * // doc.components includes metadata and all blocks
+ * ```
+ */
+export function parseRustQmdDocument(
+  json: RustQmdJson,
+  errorHandler?: SourceInfoErrorHandler
+): AnnotatedParse {
+  // Normalize the JSON structure to internal format
+  const sourceContext = {
+    files: json.astContext.files.map((f, idx) => ({
+      id: idx,
+      path: f.name,
+      content: f.content || ''
+    }))
+  };
+
+  // Create SourceInfoReconstructor
+  const sourceReconstructor = new SourceInfoReconstructor(
+    json.astContext.sourceInfoPool,
+    sourceContext,
+    errorHandler
+  );
+
+  // Create DocumentConverter
+  const converter = new DocumentConverter(
+    sourceReconstructor,
+    json.astContext.metaTopLevelKeySources
+  );
+
+  // Convert document (cast to AnnotatedPandocDocument since RustQmdJson extends it)
+  return converter.convertDocument(json as unknown as AnnotatedPandocDocument);
+}
+
+/**
+ * Convert an array of blocks to AnnotatedParse structures
+ *
+ * @param blocks - Array of annotated blocks from quarto-markdown-pandoc
+ * @param json - The full JSON for source context (needed for sourceInfoPool)
+ * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
+ * @returns Array of AnnotatedParse structures, one per block
+ *
+ * @example
+ * ```typescript
+ * import { parseRustQmdBlocks } from '@quarto/annotated-qmd';
+ *
+ * const blocks = parseRustQmdBlocks(json.blocks, json);
+ * ```
+ */
+export function parseRustQmdBlocks(
+  blocks: Annotated_Block[],
+  json: RustQmdJson,
+  errorHandler?: SourceInfoErrorHandler
+): AnnotatedParse[] {
+  const sourceContext = {
+    files: json.astContext.files.map((f, idx) => ({
+      id: idx,
+      path: f.name,
+      content: f.content || ''
+    }))
+  };
+
+  const sourceReconstructor = new SourceInfoReconstructor(
+    json.astContext.sourceInfoPool,
+    sourceContext,
+    errorHandler
+  );
+
+  const converter = new DocumentConverter(sourceReconstructor);
+  return converter.convertBlocks(blocks);
+}
+
+/**
+ * Convert a single block to AnnotatedParse
+ *
+ * @param block - A single annotated block from quarto-markdown-pandoc
+ * @param json - The full JSON for source context (needed for sourceInfoPool)
+ * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
+ * @returns AnnotatedParse structure for the block
+ *
+ * @example
+ * ```typescript
+ * import { parseRustQmdBlock } from '@quarto/annotated-qmd';
+ *
+ * const block = parseRustQmdBlock(json.blocks[0], json);
+ * ```
+ */
+export function parseRustQmdBlock(
+  block: Annotated_Block,
+  json: RustQmdJson,
+  errorHandler?: SourceInfoErrorHandler
+): AnnotatedParse {
+  const sourceContext = {
+    files: json.astContext.files.map((f, idx) => ({
+      id: idx,
+      path: f.name,
+      content: f.content || ''
+    }))
+  };
+
+  const sourceReconstructor = new SourceInfoReconstructor(
+    json.astContext.sourceInfoPool,
+    sourceContext,
+    errorHandler
+  );
+
+  const converter = new DocumentConverter(sourceReconstructor);
+  return converter.convertBlock(block);
+}
+
+/**
+ * Convert a single inline to AnnotatedParse
+ *
+ * @param inline - A single annotated inline from quarto-markdown-pandoc
+ * @param json - The full JSON for source context (needed for sourceInfoPool)
+ * @param errorHandler - Optional error handler for SourceInfo reconstruction errors
+ * @returns AnnotatedParse structure for the inline
+ *
+ * @example
+ * ```typescript
+ * import { parseRustQmdInline } from '@quarto/annotated-qmd';
+ *
+ * const inline = parseRustQmdInline(someInline, json);
+ * ```
+ */
+export function parseRustQmdInline(
+  inline: Annotated_Inline,
+  json: RustQmdJson,
+  errorHandler?: SourceInfoErrorHandler
+): AnnotatedParse {
+  const sourceContext = {
+    files: json.astContext.files.map((f, idx) => ({
+      id: idx,
+      path: f.name,
+      content: f.content || ''
+    }))
+  };
+
+  const sourceReconstructor = new SourceInfoReconstructor(
+    json.astContext.sourceInfoPool,
+    sourceContext,
+    errorHandler
+  );
+
+  const converter = new DocumentConverter(sourceReconstructor);
+  return converter.convertInline(inline);
 }

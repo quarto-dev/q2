@@ -200,9 +200,33 @@ export class BlockConverter {
           end
         };
 
-      // Table excluded per k-188 specification
+      // Table: [attr, caption, colspec, head, bodies, foot]
+      // Components flattened: attr, caption content, all rows/cells in document order
       case 'Table':
-        throw new Error('Table conversion not implemented in Phase 3 (see k-190)');
+        return {
+          result: block.c as unknown as import('./types.js').JSONValue,
+          kind: 'Table',
+          source,
+          components: [
+            // Table attr
+            ...this.convertAttr(block.c[0], block.attrS),
+            // Caption (short and long)
+            ...this.convertCaption({
+              shortCaption: block.c[1][0],
+              longCaption: block.c[1][1]
+            }),
+            // TableHead rows and cells
+            ...this.convertTableHead(block.c[3], block.headS),
+            // TableBody rows and cells (multiple bodies)
+            ...block.c[4].flatMap((body, i) =>
+              this.convertTableBody(body, block.bodiesS[i])
+            ),
+            // TableFoot rows and cells
+            ...this.convertTableFoot(block.c[5], block.footS)
+          ],
+          start,
+          end
+        };
 
       default:
         // Exhaustiveness check
@@ -307,6 +331,114 @@ export class BlockConverter {
     components.push(
       ...caption.longCaption.map(block => this.convertBlock(block))
     );
+
+    return components;
+  }
+
+  /**
+   * Convert TableHead to AnnotatedParse components
+   * TableHead = [attr, rows]
+   */
+  private convertTableHead(
+    head: import('./pandoc-types.js').Annotated_TableHead_Array,
+    headS: import('./pandoc-types.js').TableHeadSourceInfo
+  ): AnnotatedParse[] {
+    const components: AnnotatedParse[] = [];
+
+    // Head attr
+    components.push(...this.convertAttr(head[0], headS.attrS));
+
+    // Head rows
+    head[1].forEach((row, i) => {
+      components.push(...this.convertRow(row, headS.rowsS[i]));
+    });
+
+    return components;
+  }
+
+  /**
+   * Convert TableBody to AnnotatedParse components
+   * TableBody = [attr, rowHeadColumns, head, body]
+   */
+  private convertTableBody(
+    body: import('./pandoc-types.js').Annotated_TableBody_Array,
+    bodyS: import('./pandoc-types.js').TableBodySourceInfo
+  ): AnnotatedParse[] {
+    const components: AnnotatedParse[] = [];
+
+    // Body attr
+    components.push(...this.convertAttr(body[0], bodyS.attrS));
+
+    // Body head rows
+    body[2].forEach((row, i) => {
+      components.push(...this.convertRow(row, bodyS.headS[i]));
+    });
+
+    // Body body rows
+    body[3].forEach((row, i) => {
+      components.push(...this.convertRow(row, bodyS.bodyS[i]));
+    });
+
+    return components;
+  }
+
+  /**
+   * Convert TableFoot to AnnotatedParse components
+   * TableFoot = [attr, rows]
+   */
+  private convertTableFoot(
+    foot: import('./pandoc-types.js').Annotated_TableFoot_Array,
+    footS: import('./pandoc-types.js').TableFootSourceInfo
+  ): AnnotatedParse[] {
+    const components: AnnotatedParse[] = [];
+
+    // Foot attr
+    components.push(...this.convertAttr(foot[0], footS.attrS));
+
+    // Foot rows
+    foot[1].forEach((row, i) => {
+      components.push(...this.convertRow(row, footS.rowsS[i]));
+    });
+
+    return components;
+  }
+
+  /**
+   * Convert Row to AnnotatedParse components
+   * Row = [attr, cells]
+   */
+  private convertRow(
+    row: import('./pandoc-types.js').Annotated_Row,
+    rowS: import('./pandoc-types.js').RowSourceInfo
+  ): AnnotatedParse[] {
+    const components: AnnotatedParse[] = [];
+
+    // Row attr
+    components.push(...this.convertAttr(row[0], rowS.attrS));
+
+    // Row cells
+    row[1].forEach((cell, i) => {
+      components.push(...this.convertCell(cell, rowS.cellsS[i]));
+    });
+
+    return components;
+  }
+
+  /**
+   * Convert Cell to AnnotatedParse components
+   * Cell = [attr, alignment, rowSpan, colSpan, content]
+   */
+  private convertCell(
+    cell: import('./pandoc-types.js').Annotated_Cell,
+    cellS: import('./pandoc-types.js').CellSourceInfo
+  ): AnnotatedParse[] {
+    const components: AnnotatedParse[] = [];
+
+    // Cell attr
+    components.push(...this.convertAttr(cell[0], cellS.attrS));
+
+    // Cell content (blocks)
+    components.push(...cell[4].map(block => this.convertBlock(block)));
 
     return components;
   }
