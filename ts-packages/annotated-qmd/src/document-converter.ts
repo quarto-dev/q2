@@ -6,25 +6,18 @@
  * from quarto-markdown-pandoc JSON into AnnotatedParse structures.
  */
 
-import type { AnnotatedParse, JsonMetaValue } from './types.js';
-import type { SourceInfoReconstructor } from './source-map.js';
 import type {
+  AnnotatedParse,
+  JsonMetaValue,
+  RustQmdJson,
   Annotated_Block,
   Annotated_Inline
-} from './pandoc-types.js';
+} from './types.js';
+import type { SourceInfoReconstructor } from './source-map.js';
 import { asMappedString } from '@quarto/mapped-string';
 import { InlineConverter } from './inline-converter.js';
 import { BlockConverter } from './block-converter.js';
 import { MetadataConverter } from './meta-converter.js';
-
-/**
- * Annotated Pandoc Document structure from quarto-markdown-pandoc
- */
-export interface AnnotatedPandocDocument {
-  "pandoc-api-version": [number, number, number];
-  meta: Record<string, JsonMetaValue>;
-  blocks: Annotated_Block[];
-}
 
 /**
  * Converts complete Pandoc documents from quarto-markdown-pandoc
@@ -55,7 +48,7 @@ export class DocumentConverter {
    * - source: Full document source (if available)
    * - components: Array of metadata and block AnnotatedParse nodes
    */
-  convertDocument(doc: AnnotatedPandocDocument): AnnotatedParse {
+  convertDocument(doc: RustQmdJson): AnnotatedParse {
     const components: AnnotatedParse[] = [];
 
     // Convert metadata (if present)

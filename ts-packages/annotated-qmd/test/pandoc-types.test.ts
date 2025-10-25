@@ -11,7 +11,6 @@ import type {
   Inline,
   Block,
   PandocDocument,
-  QmdPandocDocument,
   Attr,
   Target,
   Inline_Str,
@@ -19,12 +18,11 @@ import type {
   Block_Para,
   Annotated_Inline_Str,
   Annotated_Block_Para,
-} from '../src/pandoc-types.js';
+} from '../src/types.js';
 import {
-  isQmdPandocDocument,
   isInline,
   isBlock,
-} from '../src/pandoc-types.js';
+} from '../src/types.js';
 
 test('Attr type matches Pandoc structure', () => {
   const attr: Attr = ["my-id", ["class1", "class2"], [["key", "value"]]];
@@ -234,28 +232,6 @@ test('PandocDocument type compiles correctly', () => {
 
   assert.deepStrictEqual(doc["pandoc-api-version"], [1, 23, 1]);
   assert.strictEqual(doc.blocks.length, 1);
-});
-
-test('QmdPandocDocument type compiles correctly', () => {
-  const doc: QmdPandocDocument = {
-    "pandoc-api-version": [1, 23, 1],
-    meta: {},
-    blocks: [
-      { t: "Para", c: [{ t: "Str", c: "Hello", s: 0 }], s: 1 }
-    ],
-    astContext: {
-      sourceInfoPool: [
-        { r: [0, 5], t: 0, d: 0 },
-        { r: [0, 10], t: 0, d: 0 }
-      ],
-      files: [
-        { name: "test.qmd", content: "Hello test" }
-      ]
-    }
-  };
-
-  assert.strictEqual(isQmdPandocDocument(doc), true);
-  assert.strictEqual(doc.astContext.sourceInfoPool.length, 2);
 });
 
 test('isInline type guard works', () => {

@@ -5,9 +5,8 @@
  * into AnnotatedParse structures compatible with quarto-cli.
  */
 
-import type { AnnotatedParse } from './types.js';
+import type { AnnotatedParse, Annotated_Block, Annotated_Caption } from './types.js';
 import type { SourceInfoReconstructor } from './source-map.js';
-import type { Annotated_Block, Annotated_Caption } from './pandoc-types.js';
 import { InlineConverter } from './inline-converter.js';
 
 /**
@@ -340,8 +339,8 @@ export class BlockConverter {
    * TableHead = [attr, rows]
    */
   private convertTableHead(
-    head: import('./pandoc-types.js').Annotated_TableHead_Array,
-    headS: import('./pandoc-types.js').TableHeadSourceInfo
+    head: import('./types.js').Annotated_TableHead_Array,
+    headS: import('./types.js').TableHeadSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -361,8 +360,8 @@ export class BlockConverter {
    * TableBody = [attr, rowHeadColumns, head, body]
    */
   private convertTableBody(
-    body: import('./pandoc-types.js').Annotated_TableBody_Array,
-    bodyS: import('./pandoc-types.js').TableBodySourceInfo
+    body: import('./types.js').Annotated_TableBody_Array,
+    bodyS: import('./types.js').TableBodySourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -387,8 +386,8 @@ export class BlockConverter {
    * TableFoot = [attr, rows]
    */
   private convertTableFoot(
-    foot: import('./pandoc-types.js').Annotated_TableFoot_Array,
-    footS: import('./pandoc-types.js').TableFootSourceInfo
+    foot: import('./types.js').Annotated_TableFoot_Array,
+    footS: import('./types.js').TableFootSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -408,8 +407,8 @@ export class BlockConverter {
    * Row = [attr, cells]
    */
   private convertRow(
-    row: import('./pandoc-types.js').Annotated_Row,
-    rowS: import('./pandoc-types.js').RowSourceInfo
+    row: import('./types.js').Annotated_Row,
+    rowS: import('./types.js').RowSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -429,8 +428,8 @@ export class BlockConverter {
    * Cell = [attr, alignment, rowSpan, colSpan, content]
    */
   private convertCell(
-    cell: import('./pandoc-types.js').Annotated_Cell,
-    cellS: import('./pandoc-types.js').CellSourceInfo
+    cell: import('./types.js').Annotated_Cell,
+    cellS: import('./types.js').CellSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 

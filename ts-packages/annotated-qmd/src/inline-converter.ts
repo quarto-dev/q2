@@ -5,9 +5,8 @@
  * into AnnotatedParse structures compatible with quarto-cli.
  */
 
-import type { AnnotatedParse } from './types.js';
+import type { AnnotatedParse, Annotated_Inline } from './types.js';
 import type { SourceInfoReconstructor } from './source-map.js';
-import type { Annotated_Inline } from './pandoc-types.js';
 
 /**
  * Converts Inline AST nodes from quarto-markdown-pandoc to AnnotatedParse
