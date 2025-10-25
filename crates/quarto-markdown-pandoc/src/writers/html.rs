@@ -210,7 +210,7 @@ fn write_inline<T: std::io::Write>(inline: &Inline, buf: &mut T) -> std::io::Res
             write!(buf, "</span>")?;
         }
         // Quarto extensions - render as raw HTML or skip
-        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_) => {
+        Inline::Shortcode(_) | Inline::NoteReference(_) | Inline::Attr(_, _) => {
             // These should not appear in final output
         }
         Inline::Insert(ins) => {

@@ -206,6 +206,7 @@ fn test_json_roundtrip_complex_document() {
                         },
                     },
                 ),
+                attr_source: quarto_markdown_pandoc::pandoc::attr::AttrSourceInfo::empty(),
             }),
         ],
     };

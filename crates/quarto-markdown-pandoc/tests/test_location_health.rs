@@ -355,7 +355,7 @@ fn collect_source_info_from_inline(inline: &Inline, source_infos: &mut Vec<Sourc
         Inline::NoteReference(note_ref) => {
             source_infos.push(note_ref.source_info.clone());
         }
-        Inline::Attr(_) => {
+        Inline::Attr(_, _) => {
             // Attr doesn't have source info - it's just metadata
         }
         Inline::Insert(insert) => {

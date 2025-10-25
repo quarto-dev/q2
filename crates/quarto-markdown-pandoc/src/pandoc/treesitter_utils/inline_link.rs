@@ -25,7 +25,9 @@ where
     F: Fn() -> String,
 {
     let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut target = ("".to_string(), "".to_string());
+    let mut target_source = crate::pandoc::attr::TargetSourceInfo::empty();
     let mut content: Vec<Inline> = Vec::new();
 
     for (node, child) in children {
@@ -38,12 +40,25 @@ where
                     node_text()
                 );
             }
-            PandocNativeIntermediate::IntermediateAttr(a) => attr = a,
-            PandocNativeIntermediate::IntermediateBaseText(text, _) => {
+            PandocNativeIntermediate::IntermediateAttr(a, as_) => {
+                attr = a;
+                attr_source = as_;
+            }
+            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if node == "link_destination" {
                     target.0 = text; // URL
+                    target_source.url = Some(
+                        crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                            &range, context,
+                        ),
+                    );
                 } else if node == "link_title" {
                     target.1 = text; // Title
+                    target_source.title = Some(
+                        crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                            &range, context,
+                        ),
+                    );
                 } else if node == "language_attribute" {
                     // TODO show position of this error
                     let _ = writeln!(
@@ -75,6 +90,8 @@ where
             target,
             content,
             crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
+            attr_source,
+            target_source,
         )
     } else {
         make_span_inline(
@@ -82,6 +99,8 @@ where
             target,
             content,
             crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
+            attr_source,
+            target_source,
         )
     })
 }

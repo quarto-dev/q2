@@ -3,7 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::attr::Attr;
+use crate::pandoc::attr::{Attr, AttrSourceInfo};
 use crate::pandoc::block::{Block, Blocks};
 use crate::pandoc::inline::{Inline, Inlines};
 
@@ -17,7 +17,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq)]
 pub enum PandocNativeIntermediate {
     IntermediatePandoc(Pandoc),
-    IntermediateAttr(Attr),
+    IntermediateAttr(Attr, AttrSourceInfo),
     IntermediateSection(Vec<Block>),
     IntermediateBlock(Block),
     IntermediateInline(Inline),

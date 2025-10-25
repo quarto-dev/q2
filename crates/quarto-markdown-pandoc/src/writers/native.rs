@@ -308,6 +308,7 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
                     id,
                     prefix,
                     suffix,
+                    id_source: _,
                 },
             ) in cite_struct.citations.iter().enumerate()
             {
@@ -419,6 +420,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             attr,
             text,
             source_info: _,
+            attr_source: _,
         }) => {
             write!(buf, "CodeBlock ")?;
             write_native_attr(attr, buf)?;

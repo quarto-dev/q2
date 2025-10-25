@@ -22,6 +22,7 @@ pub fn process_code_span<T: Write>(
 ) -> PandocNativeIntermediate {
     let mut is_raw: Option<String> = None;
     let mut attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut language_attribute: Option<String> = None;
     let mut inlines: Vec<_> = children
         .into_iter()
@@ -32,8 +33,9 @@ pub fn process_code_span<T: Write>(
                 context,
             );
             match child {
-                PandocNativeIntermediate::IntermediateAttr(a) => {
+                PandocNativeIntermediate::IntermediateAttr(a, as_) => {
                     attr = a;
+                    attr_source = as_;
                     // IntermediateUnknown here "consumes" the node
                     (
                         node_name,
@@ -83,6 +85,7 @@ pub fn process_code_span<T: Write>(
             attr,
             text: "".to_string(),
             source_info: node_source_info_with_context(node, context),
+            attr_source,
         }));
     }
     let (_, child) = inlines.remove(0);
@@ -118,11 +121,13 @@ pub fn process_code_span<T: Write>(
                 attr,
                 text: lang + &" " + &text,
                 source_info: node_source_info_with_context(node, context),
+                attr_source: attr_source.clone(),
             })),
             None => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
                 text,
                 source_info: node_source_info_with_context(node, context),
+                attr_source,
             })),
         }
     }

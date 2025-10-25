@@ -391,7 +391,9 @@ fn process_native_inline<T: Write>(
         //
         // see tests/cursed/002.qmd for why this cannot be parsed directly in
         // the block grammar.
-        PandocNativeIntermediate::IntermediateAttr(attr) => Inline::Attr(attr),
+        PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
+            Inline::Attr(attr, attr_source)
+        }
         PandocNativeIntermediate::IntermediateUnknown(range) => {
             writeln!(
                 inline_buf,
@@ -698,7 +700,7 @@ fn native_visitor<T: Write>(
         "uri_autolink" => process_uri_autolink(node, input_bytes, context),
         "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
         "pipe_table_header" | "pipe_table_row" => {
-            process_pipe_table_header_or_row(children, context)
+            process_pipe_table_header_or_row(node, children, context)
         }
         "pipe_table_delimiter_row" => process_pipe_table_delimiter_row(children, context),
         "pipe_table_cell" => process_pipe_table_cell(node, children, context),

@@ -297,7 +297,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let is_last_attr = header
                     .content
                     .last()
-                    .map_or(false, |v| matches!(v, Inline::Attr(_)));
+                    .map_or(false, |v| matches!(v, Inline::Attr(_, _)));
                 if !is_last_attr {
                     let mut attr = header.attr.clone();
                     if attr.0.is_empty() {
@@ -323,10 +323,11 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         Unchanged(header)
                     }
                 } else {
-                    let Some(Inline::Attr(attr)) = header.content.pop() else {
+                    let Some(Inline::Attr(attr, attr_source)) = header.content.pop() else {
                         panic!("shouldn't happen, header should have an attribute at this point");
                     };
                     header.attr = attr;
+                    header.attr_source = attr_source;
                     header.content = trim_inlines(header.content).0;
                     FilterResult(vec![Block::Header(header)], true)
                 }
@@ -345,8 +346,22 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 }
                 let figure_attr: Attr = (image.attr.0.clone(), vec![], HashMap::new());
                 let image_attr: Attr = ("".to_string(), image.attr.1.clone(), image.attr.2.clone());
+
+                // Split attr_source between figure and image
+                let figure_attr_source = crate::pandoc::attr::AttrSourceInfo {
+                    id: image.attr_source.id.clone(),
+                    classes: vec![],
+                    attributes: vec![],
+                };
+                let image_attr_source = crate::pandoc::attr::AttrSourceInfo {
+                    id: None,
+                    classes: image.attr_source.classes.clone(),
+                    attributes: image.attr_source.attributes.clone(),
+                };
+
                 let mut new_image = image.clone();
                 new_image.attr = image_attr;
+                new_image.attr_source = image_attr_source;
                 // FIXME all source location is broken here
                 // TODO: Should propagate from image.source_info and para.source_info
                 FilterResult(
@@ -359,6 +374,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 // TODO: Should derive from image.content inlines
                                 source_info: quarto_source_map::SourceInfo::default(),
                             })]),
+                            source_info: quarto_source_map::SourceInfo::default(),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
@@ -367,6 +383,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         })],
                         // TODO: Should use para.source_info
                         source_info: quarto_source_map::SourceInfo::default(),
+                        attr_source: figure_attr_source,
                     })],
                     true,
                 )
@@ -394,6 +411,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         ),
                         content: vec![],
                         source_info: note_ref.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     false,
                 )
@@ -407,6 +425,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (insert.attr.0, classes, insert.attr.2),
                         content,
                         source_info: insert.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -420,6 +439,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (delete.attr.0, classes, delete.attr.2),
                         content,
                         source_info: delete.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -433,6 +453,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (highlight.attr.0, classes, highlight.attr.2),
                         content,
                         source_info: highlight.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -446,6 +467,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         attr: (edit_comment.attr.0, classes, edit_comment.attr.2),
                         content,
                         source_info: edit_comment.source_info,
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     })],
                     true,
                 )
@@ -466,7 +488,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         let attr_idx = if has_space { i + 2 } else { i + 1 };
 
                         if attr_idx < inlines.len() {
-                            if let Inline::Attr(attr) = &inlines[attr_idx] {
+                            if let Inline::Attr(attr, attr_source) = &inlines[attr_idx] {
                                 // Found Math + (Space?) + Attr pattern
                                 // Wrap Math in a Span with the attribute
                                 let mut classes = vec!["quarto-math-with-attribute".to_string()];
@@ -477,6 +499,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     content: vec![Inline::Math(math.clone())],
                                     // TODO: Should combine() source info from math and attr (see k-82)
                                     source_info: quarto_source_map::SourceInfo::default(),
+                                    attr_source: attr_source.clone(),
                                 }));
 
                                 // Skip the Math, optional Space, and Attr
@@ -673,9 +696,13 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             // Extract any trailing Inline::Attr from caption content
                             let mut caption_content = caption_block.content.clone();
                             let mut caption_attr: Option<Attr> = None;
+                            let mut caption_attr_source: Option<
+                                crate::pandoc::attr::AttrSourceInfo,
+                            > = None;
 
-                            if let Some(Inline::Attr(attr)) = caption_content.last() {
+                            if let Some(Inline::Attr(attr, attr_source)) = caption_content.last() {
                                 caption_attr = Some(attr.clone());
+                                caption_attr_source = Some(attr_source.clone());
                                 caption_content.pop(); // Remove the Attr from caption content
                             }
 
@@ -683,19 +710,58 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             if let Some(caption_attr_value) = caption_attr {
                                 // Merge: caption attributes override table attributes
                                 // table.attr is (id, classes, key_values)
-                                // Merge key-value pairs from caption into table
-                                for (key, value) in caption_attr_value.2 {
-                                    table.attr.2.insert(key, value);
-                                }
-                                // Merge classes from caption into table
-                                for class in caption_attr_value.1 {
-                                    if !table.attr.1.contains(&class) {
-                                        table.attr.1.push(class);
+
+                                // Merge key-value pairs (both values and sources)
+                                if let Some(ref caption_attr_source_value) = caption_attr_source {
+                                    for ((key, value), (key_source, value_source)) in
+                                        caption_attr_value
+                                            .2
+                                            .iter()
+                                            .zip(caption_attr_source_value.attributes.iter())
+                                    {
+                                        table.attr.2.insert(key.clone(), value.clone());
+                                        table
+                                            .attr_source
+                                            .attributes
+                                            .push((key_source.clone(), value_source.clone()));
+                                    }
+                                } else {
+                                    // Fallback: merge values without sources
+                                    for (key, value) in caption_attr_value.2 {
+                                        table.attr.2.insert(key, value);
                                     }
                                 }
-                                // Use caption id if table doesn't have one
+
+                                // Merge classes (both values and sources)
+                                if let Some(ref caption_attr_source_value) = caption_attr_source {
+                                    for (class, class_source) in caption_attr_value
+                                        .1
+                                        .iter()
+                                        .zip(caption_attr_source_value.classes.iter())
+                                    {
+                                        if !table.attr.1.contains(class) {
+                                            table.attr.1.push(class.clone());
+                                            table.attr_source.classes.push(class_source.clone());
+                                        }
+                                    }
+                                } else {
+                                    // Fallback: merge classes without sources
+                                    for class in caption_attr_value.1 {
+                                        if !table.attr.1.contains(&class) {
+                                            table.attr.1.push(class);
+                                        }
+                                    }
+                                }
+
+                                // Use caption id if table doesn't have one (merge both value and source)
                                 if table.attr.0.is_empty() && !caption_attr_value.0.is_empty() {
                                     table.attr.0 = caption_attr_value.0;
+                                    // Also merge the source location
+                                    if let Some(caption_attr_source_value) = caption_attr_source {
+                                        if table.attr_source.id.is_none() {
+                                            table.attr_source.id = caption_attr_source_value.id;
+                                        }
+                                    }
                                 }
                             }
 
@@ -706,6 +772,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     content: caption_content,
                                     source_info: caption_block.source_info.clone(),
                                 })]),
+                                source_info: caption_block.source_info.clone(),
                             };
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {

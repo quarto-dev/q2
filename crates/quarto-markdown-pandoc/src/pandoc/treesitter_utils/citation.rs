@@ -23,11 +23,15 @@ where
 {
     let mut citation_type = CitationMode::NormalCitation;
     let mut citation_id = String::new();
+    let mut citation_id_source = None;
     for (node, child) in children {
         if node == "citation_id_suppress_author" {
             citation_type = CitationMode::SuppressAuthor;
-            if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
+            if let PandocNativeIntermediate::IntermediateBaseText(id, range) = child {
                 citation_id = id;
+                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(
+                    &range, context,
+                ));
             } else {
                 panic!(
                     "Expected BaseText in citation_id_suppress_author, got {:?}",
@@ -36,8 +40,11 @@ where
             }
         } else if node == "citation_id_author_in_text" {
             citation_type = CitationMode::AuthorInText;
-            if let PandocNativeIntermediate::IntermediateBaseText(id, _) = child {
+            if let PandocNativeIntermediate::IntermediateBaseText(id, range) = child {
                 citation_id = id;
+                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(
+                    &range, context,
+                ));
             } else {
                 panic!(
                     "Expected BaseText in citation_id_author_in_text, got {:?}",
@@ -54,6 +61,7 @@ where
             mode: citation_type,
             note_num: 1, // Pandoc expects citations to be numbered from 1
             hash: 0,
+            id_source: citation_id_source,
         }],
         content: vec![Inline::Str(Str {
             text: node_text(),

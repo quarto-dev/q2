@@ -60,5 +60,6 @@ pub fn process_indented_code_block(
         attr: empty_attr(),
         text: content.trim_end().to_string(),
         source_info: outer_range,
+        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     }))
 }

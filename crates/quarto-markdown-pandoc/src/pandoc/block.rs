@@ -4,7 +4,7 @@
  */
 
 use crate::pandoc::MetaValueWithSourceInfo;
-use crate::pandoc::attr::Attr;
+use crate::pandoc::attr::{Attr, AttrSourceInfo};
 use crate::pandoc::caption::Caption;
 use crate::pandoc::inline::Inlines;
 use crate::pandoc::list::ListAttributes;
@@ -59,6 +59,7 @@ pub struct CodeBlock {
     pub attr: Attr,
     pub text: String,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +100,7 @@ pub struct Header {
     pub attr: Attr,
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -112,6 +114,7 @@ pub struct Figure {
     pub caption: Caption,
     pub content: Blocks,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -119,6 +122,7 @@ pub struct Div {
     pub attr: Attr,
     pub content: Blocks,
     pub source_info: quarto_source_map::SourceInfo,
+    pub attr_source: AttrSourceInfo,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -295,6 +295,7 @@ fn parse_yaml_string_as_markdown(
                         source_info: quarto_source_map::SourceInfo::default(),
                     })],
                     source_info: quarto_source_map::SourceInfo::default(),
+                    attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                 };
                 MetaValueWithSourceInfo::MetaInlines {
                     content: vec![Inline::Span(span)],
@@ -324,6 +325,7 @@ fn parse_yaml_string_as_markdown(
                         source_info: quarto_source_map::SourceInfo::default(),
                     })],
                     source_info: quarto_source_map::SourceInfo::default(),
+                    attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                 };
                 MetaValueWithSourceInfo::MetaInlines {
                     content: vec![Inline::Span(span)],
@@ -436,6 +438,7 @@ pub fn yaml_to_meta_with_source_info(
                                 source_info: source_info.clone(),
                             })],
                             source_info: quarto_source_map::SourceInfo::default(),
+                            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                         };
                         MetaValueWithSourceInfo::MetaInlines {
                             content: vec![Inline::Span(span)],
@@ -561,6 +564,7 @@ impl YamlEventHandler {
                     source_info: quarto_source_map::SourceInfo::default(),
                 })],
                 source_info: quarto_source_map::SourceInfo::default(),
+                attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             };
             return MetaValue::MetaInlines(vec![Inline::Span(span)]);
         }
@@ -746,6 +750,7 @@ pub fn parse_metadata_strings_with_source_info(
                             source_info: quarto_source_map::SourceInfo::default(),
                         })],
                         source_info: quarto_source_map::SourceInfo::default(),
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     };
                     MetaValueWithSourceInfo::MetaInlines {
                         content: vec![Inline::Span(span)],
@@ -831,6 +836,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                             source_info: empty_source_info(),
                         })],
                         source_info: empty_source_info(),
+                        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     };
                     MetaValue::MetaInlines(vec![Inline::Span(span)])
                 }

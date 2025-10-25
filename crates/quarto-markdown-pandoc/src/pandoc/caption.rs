@@ -11,4 +11,5 @@ use serde::{Deserialize, Serialize};
 pub struct Caption {
     pub short: Option<Inlines>,
     pub long: Option<Blocks>,
+    pub source_info: quarto_source_map::SourceInfo,
 }

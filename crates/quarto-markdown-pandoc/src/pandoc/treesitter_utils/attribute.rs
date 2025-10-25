@@ -13,9 +13,9 @@ pub fn process_attribute(
 ) -> PandocNativeIntermediate {
     for (node, child) in children {
         match child {
-            PandocNativeIntermediate::IntermediateAttr(attr) => {
+            PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
                 if node == "commonmark_attribute" {
-                    return PandocNativeIntermediate::IntermediateAttr(attr);
+                    return PandocNativeIntermediate::IntermediateAttr(attr, attr_source);
                 } else if node == "raw_attribute" {
                     panic!("Unexpected raw attribute in attribute: {:?}", attr);
                 } else {

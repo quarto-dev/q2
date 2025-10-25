@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
@@ -223,6 +224,44 @@ fn write_attr(attr: &Attr) -> Value {
     ])
 }
 
+/// Serialize AttrSourceInfo as JSON.
+///
+/// Format: {
+///   "id": <source_info_ref or null>,
+///   "classes": [<source_info_ref or null>, ...],
+///   "kvs": [[<key_ref or null>, <value_ref or null>], ...]
+/// }
+fn write_attr_source(attr_source: &AttrSourceInfo, serializer: &mut SourceInfoSerializer) -> Value {
+    json!({
+        "id": attr_source.id.as_ref().map(|s| serializer.to_json_ref(s)),
+        "classes": attr_source.classes.iter().map(|cls|
+            cls.as_ref().map(|s| serializer.to_json_ref(s))
+        ).collect::<Vec<_>>(),
+        "kvs": attr_source.attributes.iter().map(|(k, v)|
+            json!([
+                k.as_ref().map(|s| serializer.to_json_ref(s)),
+                v.as_ref().map(|s| serializer.to_json_ref(s))
+            ])
+        ).collect::<Vec<_>>()
+    })
+}
+
+fn write_target_source(
+    target_source: &TargetSourceInfo,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
+    json!([
+        target_source
+            .url
+            .as_ref()
+            .map(|s| serializer.to_json_ref(s)),
+        target_source
+            .title
+            .as_ref()
+            .map(|s| serializer.to_json_ref(s))
+    ])
+}
+
 fn write_citation_mode(mode: &CitationMode) -> Value {
     match mode {
         CitationMode::NormalCitation => json!({"t": "NormalCitation"}),
@@ -263,7 +302,8 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
         Inline::Code(c) => json!({
             "t": "Code",
             "c": [write_attr(&c.attr), c.text],
-            "s": serializer.to_json_ref(&c.source_info)
+            "s": serializer.to_json_ref(&c.source_info),
+            "attrS": write_attr_source(&c.attr_source, serializer)
         }),
         Inline::Math(m) => {
             let math_type = match m.math_type {
@@ -315,7 +355,9 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
         Inline::Link(link) => json!({
             "t": "Link",
             "c": [write_attr(&link.attr), write_inlines(&link.content, serializer), [link.target.0, link.target.1]],
-            "s": serializer.to_json_ref(&link.source_info)
+            "s": serializer.to_json_ref(&link.source_info),
+            "attrS": write_attr_source(&link.attr_source, serializer),
+            "targetS": write_target_source(&link.target_source, serializer)
         }),
         Inline::RawInline(raw) => json!({
             "t": "RawInline",
@@ -325,12 +367,15 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
         Inline::Image(image) => json!({
             "t": "Image",
             "c": [write_attr(&image.attr), write_inlines(&image.content, serializer), [image.target.0, image.target.1]],
-            "s": serializer.to_json_ref(&image.source_info)
+            "s": serializer.to_json_ref(&image.source_info),
+            "attrS": write_attr_source(&image.attr_source, serializer),
+            "targetS": write_target_source(&image.target_source, serializer)
         }),
         Inline::Span(span) => json!({
             "t": "Span",
             "c": [write_attr(&span.attr), write_inlines(&span.content, serializer)],
-            "s": serializer.to_json_ref(&span.source_info)
+            "s": serializer.to_json_ref(&span.source_info),
+            "attrS": write_attr_source(&span.attr_source, serializer)
         }),
         Inline::Note(note) => json!({
             "t": "Note",
@@ -349,7 +394,8 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
                         "citationSuffix": write_inlines(&citation.suffix, serializer),
                         "citationMode": write_citation_mode(&citation.mode),
                         "citationHash": citation.hash,
-                        "citationNoteNum": citation.note_num
+                        "citationNoteNum": citation.note_num,
+                        "citationIdS": citation.id_source.as_ref().map(|s| serializer.to_json_ref(s))
                     })
                 }).collect::<Vec<_>>(),
                 write_inlines(&cite.content, serializer)
@@ -358,7 +404,7 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
         }),
         Inline::Shortcode(_)
         | Inline::NoteReference(_)
-        | Inline::Attr(_)
+        | Inline::Attr(_, _)
         | Inline::Insert(_)
         | Inline::Delete(_)
         | Inline::Highlight(_)
@@ -408,6 +454,7 @@ fn write_blockss(blockss: &[Vec<Block>], serializer: &mut SourceInfoSerializer) 
     )
 }
 
+// Write caption as Pandoc array format: [short, long]
 fn write_caption(caption: &Caption, serializer: &mut SourceInfoSerializer) -> Value {
     json!([
         &caption
@@ -420,6 +467,11 @@ fn write_caption(caption: &Caption, serializer: &mut SourceInfoSerializer) -> Va
             .map(|l| write_blocks(&l, serializer))
             .unwrap_or_else(|| json!([])),
     ])
+}
+
+// Write caption source info separately
+fn write_caption_source(caption: &Caption, serializer: &mut SourceInfoSerializer) -> Value {
+    json!(serializer.to_json_ref(&caption.source_info))
 }
 
 fn write_alignment(alignment: &crate::pandoc::table::Alignment) -> Value {
@@ -442,6 +494,7 @@ fn write_colspec(colspec: &crate::pandoc::table::ColSpec) -> Value {
     json!([write_alignment(&colspec.0), write_colwidth(&colspec.1)])
 }
 
+// Write cell as Pandoc array format: [attr, alignment, rowSpan, colSpan, content]
 fn write_cell(cell: &crate::pandoc::table::Cell, serializer: &mut SourceInfoSerializer) -> Value {
     json!([
         write_attr(&cell.attr),
@@ -452,6 +505,18 @@ fn write_cell(cell: &crate::pandoc::table::Cell, serializer: &mut SourceInfoSeri
     ])
 }
 
+// Write cell source info separately
+fn write_cell_source(
+    cell: &crate::pandoc::table::Cell,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
+    json!({
+        "s": serializer.to_json_ref(&cell.source_info),
+        "attrS": write_attr_source(&cell.attr_source, serializer)
+    })
+}
+
+// Write row as Pandoc array format: [attr, cells]
 fn write_row(row: &crate::pandoc::table::Row, serializer: &mut SourceInfoSerializer) -> Value {
     json!([
         write_attr(&row.attr),
@@ -462,6 +527,22 @@ fn write_row(row: &crate::pandoc::table::Row, serializer: &mut SourceInfoSeriali
     ])
 }
 
+// Write row source info separately
+fn write_row_source(
+    row: &crate::pandoc::table::Row,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
+    json!({
+        "s": serializer.to_json_ref(&row.source_info),
+        "attrS": write_attr_source(&row.attr_source, serializer),
+        "cellsS": row.cells
+            .iter()
+            .map(|cell| write_cell_source(cell, serializer))
+            .collect::<Vec<_>>()
+    })
+}
+
+// Write table head as Pandoc array format: [attr, rows]
 fn write_table_head(
     head: &crate::pandoc::table::TableHead,
     serializer: &mut SourceInfoSerializer,
@@ -475,6 +556,22 @@ fn write_table_head(
     ])
 }
 
+// Write table head source info separately
+fn write_table_head_source(
+    head: &crate::pandoc::table::TableHead,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
+    json!({
+        "s": serializer.to_json_ref(&head.source_info),
+        "attrS": write_attr_source(&head.attr_source, serializer),
+        "rowsS": head.rows
+            .iter()
+            .map(|row| write_row_source(row, serializer))
+            .collect::<Vec<_>>()
+    })
+}
+
+// Write table body as Pandoc array format: [attr, rowHeadColumns, head, body]
 fn write_table_body(
     body: &crate::pandoc::table::TableBody,
     serializer: &mut SourceInfoSerializer,
@@ -493,6 +590,26 @@ fn write_table_body(
     ])
 }
 
+// Write table body source info separately
+fn write_table_body_source(
+    body: &crate::pandoc::table::TableBody,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
+    json!({
+        "s": serializer.to_json_ref(&body.source_info),
+        "attrS": write_attr_source(&body.attr_source, serializer),
+        "headS": body.head
+            .iter()
+            .map(|row| write_row_source(row, serializer))
+            .collect::<Vec<_>>(),
+        "bodyS": body.body
+            .iter()
+            .map(|row| write_row_source(row, serializer))
+            .collect::<Vec<_>>()
+    })
+}
+
+// Write table foot as Pandoc array format: [attr, rows]
 fn write_table_foot(
     foot: &crate::pandoc::table::TableFoot,
     serializer: &mut SourceInfoSerializer,
@@ -506,6 +623,21 @@ fn write_table_foot(
     ])
 }
 
+// Write table foot source info separately
+fn write_table_foot_source(
+    foot: &crate::pandoc::table::TableFoot,
+    serializer: &mut SourceInfoSerializer,
+) -> Value {
+    json!({
+        "s": serializer.to_json_ref(&foot.source_info),
+        "attrS": write_attr_source(&foot.attr_source, serializer),
+        "rowsS": foot.rows
+            .iter()
+            .map(|row| write_row_source(row, serializer))
+            .collect::<Vec<_>>()
+    })
+}
+
 fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
     match block {
         Block::Figure(figure) => json!({
@@ -515,7 +647,8 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 write_caption(&figure.caption, serializer),
                 write_blocks(&figure.content, serializer)
             ],
-            "s": serializer.to_json_ref(&figure.source_info)
+            "s": serializer.to_json_ref(&figure.source_info),
+            "attrS": write_attr_source(&figure.attr_source, serializer)
         }),
         Block::DefinitionList(deflist) => json!({
             "t": "DefinitionList",
@@ -558,12 +691,21 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 write_table_foot(&table.foot, serializer)
             ],
             "s": serializer.to_json_ref(&table.source_info),
+            "attrS": write_attr_source(&table.attr_source, serializer),
+            "captionS": write_caption_source(&table.caption, serializer),
+            "headS": write_table_head_source(&table.head, serializer),
+            "bodiesS": table.bodies
+                .iter()
+                .map(|body| write_table_body_source(body, serializer))
+                .collect::<Vec<_>>(),
+            "footS": write_table_foot_source(&table.foot, serializer)
         }),
 
         Block::Div(div) => json!({
             "t": "Div",
             "c": [write_attr(&div.attr), write_blocks(&div.content, serializer)],
             "s": serializer.to_json_ref(&div.source_info),
+            "attrS": write_attr_source(&div.attr_source, serializer)
         }),
         Block::BlockQuote(quote) => json!({
             "t": "BlockQuote",
@@ -585,12 +727,14 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 "t": "Header",
                 "c": [header.level, write_attr(&header.attr), write_inlines(&header.content, serializer)],
                 "s": serializer.to_json_ref(&header.source_info),
+                "attrS": write_attr_source(&header.attr_source, serializer)
             })
         }
         Block::CodeBlock(codeblock) => json!({
             "t": "CodeBlock",
             "c": [write_attr(&codeblock.attr), codeblock.text],
             "s": serializer.to_json_ref(&codeblock.source_info),
+            "attrS": write_attr_source(&codeblock.attr_source, serializer)
         }),
         Block::Plain(plain) => json!({
             "t": "Plain",

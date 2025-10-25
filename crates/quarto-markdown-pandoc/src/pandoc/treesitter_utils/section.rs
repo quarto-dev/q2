@@ -8,12 +8,11 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, RawBlock};
-use crate::pandoc::location::node_source_info_with_context;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
 pub fn process_section(
-    section_node: &tree_sitter::Node,
+    _section_node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {

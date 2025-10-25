@@ -291,9 +291,20 @@ impl_inline_filterable_terminal!(
     Math,
     RawInline,
     Shortcode,
-    NoteReference,
-    Attr
+    NoteReference
 );
+
+// Attr is special because it has two fields (Attr, AttrSourceInfo)
+// We need a custom impl that preserves attr_source
+// However, filters don't actually work on Attr values directly,
+// so this is just a placeholder that should never be called
+impl InlineFilterableStructure for (pandoc::Attr, crate::pandoc::attr::AttrSourceInfo) {
+    fn filter_structure(self, _: &mut Filter) -> Inline {
+        // Note: This should not be called in practice because Attr inlines
+        // are stripped during postprocessing before filters run
+        Inline::Attr(self.0, self.1)
+    }
+}
 
 macro_rules! impl_inline_filterable_simple {
     ($($variant:ident),*) => {
@@ -350,6 +361,7 @@ impl InlineFilterableStructure for pandoc::Cite {
                     mode: cit.mode,
                     note_num: cit.note_num,
                     hash: cit.hash,
+                    id_source: cit.id_source,
                 })
                 .collect(),
             content: topdown_traverse_inlines(self.content, filter),
@@ -641,8 +653,22 @@ pub fn topdown_traverse_inline(inline: Inline, filter: &mut Filter) -> Inlines {
         Inline::NoteReference(note_ref) => {
             handle_inline_filter!(NoteReference, note_ref, note_reference, filter)
         }
-        Inline::Attr(attr) => {
-            handle_inline_filter!(Attr, attr, attr, filter)
+        Inline::Attr(attr, attr_source) => {
+            // Special handling for Attr since it has two fields and filters don't actually work on Attr tuples
+            // Attr inlines should be stripped during postprocessing before filters run
+            // So this branch should rarely be hit
+            if let Some(f) = &mut filter.inline {
+                let inline = Inline::Attr(attr, attr_source);
+                match f(inline.clone()) {
+                    FilterReturn::Unchanged(_) => vec![inline],
+                    FilterReturn::FilterResult(result, _should_recurse) => result,
+                }
+            } else {
+                vec![traverse_inline_structure(
+                    Inline::Attr(attr, attr_source),
+                    filter,
+                )]
+            }
         }
         Inline::Insert(ins) => {
             handle_inline_filter!(Insert, ins, insert, filter)
@@ -827,6 +853,7 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
                     mode: cit.mode,
                     note_num: cit.note_num,
                     hash: cit.hash,
+                    id_source: cit.id_source,
                 })
                 .collect(),
             content: topdown_traverse_inlines(c.content, filter),
@@ -837,12 +864,16 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
             target: l.target,
             content: topdown_traverse_inlines(l.content, filter),
             source_info: l.source_info,
+            attr_source: l.attr_source,
+            target_source: l.target_source,
         }),
         Inline::Image(i) => Inline::Image(crate::pandoc::Image {
             attr: i.attr,
             target: i.target,
             content: topdown_traverse_inlines(i.content, filter),
             source_info: i.source_info,
+            attr_source: i.attr_source,
+            target_source: i.target_source,
         }),
         Inline::Note(note) => Inline::Note(crate::pandoc::Note {
             content: topdown_traverse_blocks(note.content, filter),
@@ -852,6 +883,7 @@ fn traverse_inline_nonterminal(inline: Inline, filter: &mut Filter) -> Inline {
             attr: span.attr,
             content: topdown_traverse_inlines(span.content, filter),
             source_info: span.source_info,
+            attr_source: span.attr_source,
         }),
         _ => panic!("Unsupported inline type: {:?}", inline),
     }
@@ -870,7 +902,7 @@ pub fn traverse_inline_structure(inline: Inline, filter: &mut Filter) -> Inline 
         // extensions
         Inline::Shortcode(_) => inline,
         Inline::NoteReference(_) => inline,
-        Inline::Attr(_) => inline,
+        Inline::Attr(_, _) => inline,
         _ => traverse_inline_nonterminal(inline, filter),
     }
 }
@@ -893,6 +925,7 @@ fn traverse_caption(
         long: caption
             .long
             .map(|long| topdown_traverse_blocks(long, filter)),
+        source_info: caption.source_info,
     }
 }
 

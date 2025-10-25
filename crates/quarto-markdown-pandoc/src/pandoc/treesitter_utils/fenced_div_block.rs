@@ -22,6 +22,7 @@ pub fn process_fenced_div_block<T: Write>(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut content: Vec<Block> = Vec::new();
     for (node, child) in children {
         if node == "block_continuation" {
@@ -53,8 +54,9 @@ pub fn process_fenced_div_block<T: Write>(
                 )
                 .unwrap();
             }
-            PandocNativeIntermediate::IntermediateAttr(a) => {
+            PandocNativeIntermediate::IntermediateAttr(a, as_) => {
                 attr = a;
+                attr_source = as_;
             }
             PandocNativeIntermediate::IntermediateBlock(block) => {
                 content.push(block);
@@ -87,5 +89,6 @@ pub fn process_fenced_div_block<T: Write>(
         attr,
         content,
         source_info: node_source_info_with_context(node, context),
+        attr_source,
     }))
 }
