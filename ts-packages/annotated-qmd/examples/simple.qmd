@@ -1,0 +1,19 @@
+---
+title: Simple Example
+author: Test Author
+---
+
+# Introduction
+
+This is a simple Quarto document with some **bold** and *italic* text.
+
+## Code Example
+
+```python
+def hello():
+    print("Hello, World!")
+```
+
+- Item 1
+- Item 2
+- Item 3
