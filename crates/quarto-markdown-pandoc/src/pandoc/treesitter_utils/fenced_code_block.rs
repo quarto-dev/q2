@@ -43,10 +43,16 @@ pub fn process_fenced_code_block(
             };
             raw_format = Some(format);
         } else if node == "language_attribute" {
-            let PandocNativeIntermediate::IntermediateBaseText(lang, _) = child else {
+            let PandocNativeIntermediate::IntermediateBaseText(lang, range) = child else {
                 panic!("Expected BaseText in language_attribute, got {:?}", child)
             };
             attr.1.push(lang); // set the language
+
+            // Track source location for the language specifier
+            let lang_source = crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                &range, context,
+            );
+            attr_source.classes.push(Some(lang_source));
         } else if node == "info_string" {
             let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_as_) = child else {
                 panic!("Expected Attr in info_string, got {:?}", child)

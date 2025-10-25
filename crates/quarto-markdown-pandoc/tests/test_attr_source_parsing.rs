@@ -488,6 +488,39 @@ fn test_code_block_with_classes_has_attr_source() {
     assert_source_matches(input, numberlines_source, ".numberLines");
 }
 
+#[test]
+fn test_code_block_with_bare_language_has_attr_source() {
+    // Test the common ``` python syntax (bare language specifier)
+    let input = "```python\nprint(\"hello\")\n```";
+    let pandoc = parse_qmd(input);
+
+    let Block::CodeBlock(code_block) = &pandoc.blocks[0] else {
+        panic!("Expected CodeBlock");
+    };
+
+    // Verify that "python" is in the classes
+    assert_eq!(code_block.attr.1.len(), 1);
+    assert_eq!(code_block.attr.1[0], "python");
+
+    // BUG: The attr_source.classes should also have length 1 with source tracking
+    // for the "python" language specifier
+    assert_eq!(
+        code_block.attr_source.classes.len(),
+        1,
+        "attr_source.classes should have same length as attr.1 (classes)"
+    );
+    assert!(
+        code_block.attr_source.classes[0].is_some(),
+        "Language specifier should have source tracking"
+    );
+
+    // Verify the source location
+    // Input layout: "```python\nprint(\"hello\")\n```"
+    // python is at bytes 3-9
+    let python_source = code_block.attr_source.classes[0].as_ref().unwrap();
+    assert_source_matches(input, python_source, "python");
+}
+
 // ============================================================================
 // Header with Attributes Tests
 // ============================================================================
