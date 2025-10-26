@@ -28,24 +28,6 @@ function isMetaValueArray(c: unknown): c is JsonMetaValue[] {
 }
 
 /**
- * Type guard for Span structure with yaml-tagged-string
- */
-function isTaggedSpan(obj: unknown): obj is {
-  t: string;
-  c: [{ c: unknown; kv?: [string, string][] }, unknown];
-} {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    't' in obj &&
-    (obj as { t: unknown }).t === 'Span' &&
-    'c' in obj &&
-    Array.isArray((obj as { c: unknown }).c) &&
-    (obj as { c: unknown[] }).c.length === 2
-  );
-}
-
-/**
  * Converts metadata from quarto-markdown-pandoc JSON to AnnotatedParse
  */
 export class MetadataConverter {
@@ -159,7 +141,7 @@ export class MetadataConverter {
       case 'MetaInlines':
         return {
           result: meta.c as JSONValue,  // Array of inline JSON objects AS-IS
-          kind: this.extractKind(meta),  // Handle tagged values
+          kind: meta.t,  // Just use the type directly - tag info is in the structure
           source,
           components: [],  // Empty - cannot track internal locations yet
           start,
@@ -283,42 +265,5 @@ export class MetadataConverter {
       start,
       end
     };
-  }
-
-  /**
-   * Extract kind with special tag handling for YAML tagged values
-   *
-   * TODO: For now, use simple encoding like "MetaInlines:tagged:expr"
-   * Future enhancement: Modify @quarto/mapped-string to add optional tag field
-   * to AnnotatedParse interface, then use that instead
-   */
-  private extractKind(meta: JsonMetaValue): string {
-    if (meta.t !== 'MetaInlines' || !Array.isArray(meta.c) || meta.c.length === 0) {
-      return meta.t;
-    }
-
-    // Check if wrapped in Span with yaml-tagged-string class
-    const first = meta.c[0];
-    if (!isTaggedSpan(first)) {
-      return 'MetaInlines';
-    }
-
-    const [attrs, _content] = first.c;
-
-    // Check if attrs.c is an array containing 'yaml-tagged-string'
-    if (!Array.isArray(attrs.c) || !attrs.c.includes('yaml-tagged-string')) {
-      return 'MetaInlines';
-    }
-
-    // Find the tag in kv pairs
-    if (attrs.kv) {
-      const tagPair = attrs.kv.find(([k, _]) => k === 'tag');
-      if (tagPair) {
-        const tag = tagPair[1];
-        return `MetaInlines:tagged:${tag}`;
-      }
-    }
-
-    return 'MetaInlines';
   }
 }

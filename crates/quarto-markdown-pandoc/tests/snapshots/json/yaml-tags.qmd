@@ -1,0 +1,7 @@
+---
+compute: !expr x + 1
+path: !path /usr/local/bin
+date: !date 2024-01-15
+---
+
+This document demonstrates YAML tagged values.

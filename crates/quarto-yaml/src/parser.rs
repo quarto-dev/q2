@@ -183,8 +183,8 @@ fn create_contiguous_span(start_info: &SourceInfo, end_info: &SourceInfo) -> Sou
 
 /// Builder that implements MarkedEventReceiver to construct YamlWithSourceInfo.
 struct YamlBuilder<'a> {
-    /// The source text being parsed (reserved for future use in accurate scalar length computation)
-    _source: &'a str,
+    /// The source text being parsed
+    source: &'a str,
 
     /// Optional parent source info for substring tracking
     parent: Option<SourceInfo>,
@@ -214,7 +214,7 @@ enum BuildNode {
 impl<'a> YamlBuilder<'a> {
     fn new(source: &'a str, parent: Option<SourceInfo>) -> Self {
         Self {
-            _source: source,
+            source,
             parent,
             stack: Vec::new(),
             root: None,
@@ -295,6 +295,66 @@ impl<'a> YamlBuilder<'a> {
         // considering quotes, escapes, etc.
         value.len()
     }
+
+    /// Find the byte offset of a tag before a scalar value.
+    ///
+    /// When yaml-rust2 emits a Scalar event with a tag, the marker points to the
+    /// start of the VALUE, not the tag. We need to search backwards in the source
+    /// to find where the tag actually is.
+    ///
+    /// For example, in "key: !expr x + 1", if marker points to "x", we need to
+    /// find "!expr" which comes before it.
+    ///
+    /// Returns the byte offset of the '!' character.
+    fn find_tag_start_offset(&self, value_marker: &Marker, tag_suffix: &str) -> Option<usize> {
+        let value_pos = value_marker.index();
+
+        // The tag format is: !<suffix>
+        let tag_text = format!("!{}", tag_suffix);
+        let tag_len = tag_text.len();
+
+        // Search backwards from value_pos for the tag
+        // We need at least enough characters for the tag
+        if value_pos < tag_len {
+            return None;
+        }
+
+        // Look in a reasonable window before the value (tag + some whitespace)
+        let search_start = value_pos.saturating_sub(tag_len + 10);
+        let search_end = value_pos;
+
+        if search_end > self.source.len() {
+            return None;
+        }
+
+        let search_slice = &self.source[search_start..search_end];
+
+        // Find the last occurrence of the tag in this slice
+        if let Some(relative_pos) = search_slice.rfind(&tag_text) {
+            let absolute_pos = search_start + relative_pos;
+            Some(absolute_pos)
+        } else {
+            None
+        }
+    }
+
+    /// Create SourceInfo for a tag at a specific byte offset.
+    fn make_tag_source_info(&self, tag_start_offset: usize, tag_len: usize) -> SourceInfo {
+        let end_offset = tag_start_offset + tag_len;
+
+        if let Some(ref parent) = self.parent {
+            // We're parsing a substring - create a Substring mapping
+            SourceInfo::substring(parent.clone(), tag_start_offset, end_offset)
+        } else {
+            // We're parsing an original file - create an Original mapping
+            // For row/column, we'd need to scan the source, but for now use approximations
+            SourceInfo::original(
+                quarto_source_map::FileId(0),
+                tag_start_offset,
+                end_offset,
+            )
+        }
+    }
 }
 
 impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
@@ -309,17 +369,25 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
 
             Event::Scalar(value, _style, _anchor_id, tag) => {
                 // Capture tag information if present
-                let tag_info = tag.as_ref().map(|t| {
-                    // Tag appears at marker position
-                    // Format: !<suffix> where suffix is what we care about
+                let tag_info = tag.as_ref().and_then(|t| {
+                    // The marker points to the start of the VALUE, not the tag
+                    // We need to find where the tag actually is in the source
                     let tag_len = 1 + t.suffix.len(); // ! + suffix
-                    let tag_source_info = self.make_source_info(&marker, tag_len);
-                    (t.suffix.clone(), tag_source_info)
+
+                    // Find the tag position by searching backwards in the source
+                    if let Some(tag_offset) = self.find_tag_start_offset(&marker, &t.suffix) {
+                        let tag_source_info = self.make_tag_source_info(tag_offset, tag_len);
+                        Some((t.suffix.clone(), tag_source_info))
+                    } else {
+                        // Fallback: if we can't find the tag, use the marker position
+                        // This will be wrong but at least we won't panic
+                        let tag_source_info = self.make_source_info(&marker, tag_len);
+                        Some((t.suffix.clone(), tag_source_info))
+                    }
                 });
 
                 // Compute source info for the value itself
-                // For now, use the existing logic (marker + value length)
-                // TODO: This should account for tag length + whitespace for more accuracy
+                // The marker points to the start of the value
                 let len = self.compute_scalar_len(&marker, &value);
                 let source_info = self.make_source_info(&marker, len);
 

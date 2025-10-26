@@ -231,8 +231,17 @@ console.log('Running Metadata conversion tests...');
 
   const result = converter.convertMetaValue(metaValue);
 
-  assert.equal(result.kind, 'MetaInlines:tagged:expr');
+  // Kind should be plain 'MetaInlines', not encoded with tag
+  assert.equal(result.kind, 'MetaInlines');
   assert.ok(Array.isArray(result.result));
+
+  // Tag information is in the result structure (Span attributes)
+  const firstInline = result.result[0];
+  assert.equal(firstInline.t, 'Span');
+  assert.ok(firstInline.c[0].c.includes('yaml-tagged-string'));
+  const tagKv = firstInline.c[0].kv.find(([k, _]) => k === 'tag');
+  assert.ok(tagKv);
+  assert.equal(tagKv[1], 'expr');
 
   console.log('✔ Tagged YAML value (!expr) works');
 }

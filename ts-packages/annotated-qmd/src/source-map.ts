@@ -411,6 +411,6 @@ export class SourceInfoReconstructor {
     return resolved;
   }
 
-  // TODO: Implement circular reference detection
+  // TODO (k-214): Implement circular reference detection
   // This would require tracking visited IDs during resolveChain traversal
 }

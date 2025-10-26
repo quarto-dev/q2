@@ -293,3 +293,109 @@ Some content here.
         meta_offset
     );
 }
+
+#[test]
+fn test_yaml_tagged_value_source_tracking() {
+    /*
+     * Test that YAML tagged values (!expr, !date, etc.) have source tracking
+     * for the tag in the Span's attrS field.
+     *
+     * File: tests/snapshots/json/yaml-tags.qmd
+     * (Also available in: ts-packages/annotated-qmd/examples/yaml-tags.qmd)
+     *
+     * Content:
+     * ---
+     * compute: !expr x + 1
+     * path: !path /usr/local/bin
+     * date: !date 2024-01-15
+     * ---
+     *
+     * This document demonstrates YAML tagged values.
+     *
+     * Byte offsets for "compute: !expr x + 1" line:
+     * - Line 0 (0-3): "---"
+     * - Line 1 (4-24): "compute: !expr x + 1"
+     *   - "compute" at offset 4-11
+     *   - ": " at offset 11-13
+     *   - "!expr" at offset 13-18 (the tag itself)
+     *   - " " at offset 18-19
+     *   - "x + 1" at offset 19-24
+     */
+
+    let test_file = "tests/snapshots/json/yaml-tags.qmd";
+    let qmd_content = std::fs::read_to_string(test_file).expect("Failed to read test file");
+
+    // Parse QMD
+    let mut output_stream =
+        quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
+    let (pandoc, _context, _warnings) =
+        readers::qmd::read(qmd_content.as_bytes(), false, test_file, &mut output_stream)
+            .expect("Failed to parse QMD");
+    
+    // Get metadata
+    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = pandoc.meta {
+        let compute_entry = entries
+            .iter()
+            .find(|e| e.key == "compute")
+            .expect("Should have 'compute' in metadata");
+        
+        // The value should be MetaInlines containing a Span
+        match &compute_entry.value {
+            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                assert_eq!(content.len(), 1, "Should have one inline element (Span)");
+                
+                // Check it's a Span
+                match &content[0] {
+                    quarto_markdown_pandoc::pandoc::Inline::Span(span) => {
+                        // Check the attr has "yaml-tagged-string" class
+                        assert!(
+                            span.attr.1.contains(&"yaml-tagged-string".to_string()),
+                            "Span should have 'yaml-tagged-string' class"
+                        );
+                        
+                        // Check the attr has "tag" => "expr" in attributes
+                        let tag_attr = span.attr.2.get("tag");
+                        assert_eq!(tag_attr, Some(&"expr".to_string()), "Should have tag='expr' attribute");
+                        
+                        // **THE KEY TEST**: Check that attrS.kvs has source info for the tag
+                        eprintln!("\n🔍 Checking attrS.attributes for tag source tracking...");
+                        eprintln!("   attrS.id: {:?}", span.attr_source.id);
+                        eprintln!("   attrS.classes: {:?}", span.attr_source.classes);
+                        eprintln!("   attrS.attributes: {:?}", span.attr_source.attributes);
+                        
+                        // Should have one attribute entry: ("tag", "expr")
+                        assert_eq!(
+                            span.attr_source.attributes.len(), 1,
+                            "Should have one attribute source entry for 'tag'"
+                        );
+                        
+                        let (_key_source, value_source) = &span.attr_source.attributes[0];
+                        
+                        // The tag value source should point to "!expr" at offset 13-18
+                        assert!(
+                            value_source.is_some(),
+                            "Tag value should have source tracking"
+                        );
+                        
+                        if let Some(source) = value_source {
+                            let offset = resolve_source_offset(source);
+                            eprintln!("   Tag source offset: {}", offset);
+                            
+                            // "!expr" starts at offset 13
+                            assert_eq!(
+                                offset, 13,
+                                "Tag '!expr' should start at offset 13"
+                            );
+                        }
+                        
+                        eprintln!("\n✅ YAML tagged value source tracking test passed!");
+                    }
+                    other => panic!("Expected Span, got {:?}", other),
+                }
+            }
+            other => panic!("Expected MetaInlines, got {:?}", other),
+        }
+    } else {
+        panic!("Expected MetaMap for metadata");
+    }
+}
