@@ -190,30 +190,32 @@ export class InlineConverter {
         };
 
       // Link (has Attr, Inlines, Target + attrS + targetS)
+      // Components in source order: content, target, attr
       case 'Link':
         return {
           result: inline.c as unknown as import('./types.js').JSONValue,
           kind: 'Link',
           source,
           components: [
-            ...this.convertAttr(inline.c[0], inline.attrS),
             ...inline.c[1].map(child => this.convertInline(child)),
-            ...this.convertTarget(inline.c[2], inline.targetS)
+            ...this.convertTarget(inline.c[2], inline.targetS),
+            ...this.convertAttr(inline.c[0], inline.attrS)
           ],
           start,
           end
         };
 
       // Image (has Attr, Inlines, Target + attrS + targetS)
+      // Components in source order: content, target, attr
       case 'Image':
         return {
           result: inline.c as unknown as import('./types.js').JSONValue,
           kind: 'Image',
           source,
           components: [
-            ...this.convertAttr(inline.c[0], inline.attrS),
             ...inline.c[1].map(child => this.convertInline(child)),
-            ...this.convertTarget(inline.c[2], inline.targetS)
+            ...this.convertTarget(inline.c[2], inline.targetS),
+            ...this.convertAttr(inline.c[0], inline.attrS)
           ],
           start,
           end

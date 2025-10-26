@@ -197,10 +197,18 @@ describe('Tree Validation', () => {
 
       for (const node of allNodes) {
         for (const component of node.components) {
+          if (component.start < node.start) {
+            console.log(`\nFound violation:`);
+            console.log(`  Parent: ${node.kind} [${node.start}, ${node.end}]`);
+            console.log(`  Child:  ${component.kind} [${component.start}, ${component.end}]`);
+            if (node.kind === 'Para' || node.kind === 'Plain') {
+              console.log(`  Parent text: "${node.source.value.substring(node.start, Math.min(node.end, node.start + 50))}..."`);
+            }
+          }
           assert.ok(component.start >= node.start,
-            `Child start should be >= parent start`);
+            `Child ${component.kind}@${component.start} start should be >= parent ${node.kind}@${node.start} start`);
           assert.ok(component.end <= node.end,
-            `Child end should be <= parent end`);
+            `Child ${component.kind}@${component.end} end should be <= parent ${node.kind}@${node.end} end`);
         }
       }
     });

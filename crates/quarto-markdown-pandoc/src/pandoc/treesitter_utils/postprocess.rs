@@ -526,6 +526,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 //    Here, we emit the cite and add the span content to the cite suffix.
                 let mut state = 0;
                 let mut pending_cite: Option<crate::pandoc::inline::Cite> = None;
+                let mut pending_space: Option<crate::pandoc::inline::Space> = None;
 
                 for inline in math_processed {
                     match state {
@@ -549,8 +550,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         }
                         1 => {
                             // Just saw a valid cite - check for space
-                            if let Inline::Space(_) = inline {
-                                // Transition to state 2
+                            if let Inline::Space(space) = inline {
+                                // Save the space and transition to state 2
+                                pending_space = Some(space);
                                 state = 2;
                             } else {
                                 // Not a space, emit pending cite and reset
@@ -640,10 +642,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     if let Some(cite) = pending_cite.take() {
                                         result.push(Inline::Cite(cite));
                                     }
-                                    result.push(Inline::Space(Space {
-                                        // Synthetic Space: restore space between cite and invalid span
-                                        source_info: quarto_source_map::SourceInfo::default(),
-                                    }));
+                                    if let Some(space) = pending_space.take() {
+                                        result.push(Inline::Space(space));
+                                    }
                                     result.push(inline);
                                     state = 0;
                                 }
@@ -652,10 +653,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 if let Some(cite) = pending_cite.take() {
                                     result.push(Inline::Cite(cite));
                                 }
-                                result.push(Inline::Space(Space {
-                                    // Synthetic Space: restore space between cite and non-span element
-                                    source_info: quarto_source_map::SourceInfo::default(),
-                                }));
+                                if let Some(space) = pending_space.take() {
+                                    result.push(Inline::Space(space));
+                                }
                                 result.push(inline);
                                 state = 0;
                             }
@@ -668,10 +668,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 if let Some(cite) = pending_cite {
                     result.push(Inline::Cite(cite));
                     if state == 2 {
-                        result.push(Inline::Space(Space {
-                            // Synthetic Space: restore trailing space after incomplete citation pattern
-                            source_info: quarto_source_map::SourceInfo::default(),
-                        }));
+                        if let Some(space) = pending_space {
+                            result.push(Inline::Space(space));
+                        }
                     }
                 }
 

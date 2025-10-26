@@ -868,6 +868,81 @@ mod tests {
     }
 
     #[test]
+    fn test_space_after_cite_in_footnote() {
+        // Test that Space elements after Cite in footnotes have valid source info
+        // This is a regression test for k-235: Space after @citation in ^[footnote]
+        // was getting [0,0] range instead of actual position
+        let source = "Text with citation^[See @ipcc2021 for comprehensive discussion].";
+        let doc = parse_qmd_helper(source);
+
+        // Find all Space inlines in the document
+        fn find_spaces(inline: &Inline) -> Vec<&Inline> {
+            let mut spaces = Vec::new();
+            match inline {
+                Inline::Space(_) => spaces.push(inline),
+                Inline::Emph(e) => {
+                    for child in &e.content {
+                        spaces.extend(find_spaces(child));
+                    }
+                }
+                Inline::Strong(s) => {
+                    for child in &s.content {
+                        spaces.extend(find_spaces(child));
+                    }
+                }
+                Inline::Note(n) => {
+                    for block in &n.content {
+                        if let Block::Paragraph(p) = block {
+                            for child in &p.content {
+                                spaces.extend(find_spaces(child));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+            spaces
+        }
+
+        let mut all_spaces = Vec::new();
+        for block in &doc.blocks {
+            if let Block::Paragraph(p) = block {
+                for inline in &p.content {
+                    all_spaces.extend(find_spaces(inline));
+                }
+            }
+        }
+
+        // Check that all Space elements have non-zero ranges
+        for space in &all_spaces {
+            if let Inline::Space(s) = space {
+                let start = s.source_info.start_offset();
+                let end = s.source_info.end_offset();
+
+                assert!(
+                    start != 0 || end != 0,
+                    "Space element should not have [0,0] range, got [{},{}]",
+                    start,
+                    end
+                );
+            }
+        }
+
+        // Also run full core properties validation
+        let violations = validate_core_properties(&doc, source);
+        if !violations.is_empty() {
+            eprintln!("Found {} violations:", violations.len());
+            for v in &violations {
+                eprintln!("  {}", v);
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "All Space elements should have valid source info"
+        );
+    }
+
+    #[test]
     fn test_core_properties_on_smoke_tests() {
         use std::fs;
         use std::path::Path;
