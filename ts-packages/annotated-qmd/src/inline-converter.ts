@@ -222,28 +222,30 @@ export class InlineConverter {
         };
 
       // Span (has Attr and Inlines + attrS)
+      // Components in source order: content first, then attr (attr comes after in source)
       case 'Span':
         return {
           result: inline.c as unknown as import('./types.js').JSONValue,
           kind: 'Span',
           source,
           components: [
-            ...this.convertAttr(inline.c[0], inline.attrS),
-            ...inline.c[1].map(child => this.convertInline(child))
+            ...inline.c[1].map(child => this.convertInline(child)),
+            ...this.convertAttr(inline.c[0], inline.attrS)
           ],
           start,
           end
         };
 
       // Cite (has Citations and Inlines)
+      // Components in source order: content first, then citation metadata
       case 'Cite':
         return {
           result: inline.c as unknown as import('./types.js').JSONValue,
           kind: 'Cite',
           source,
           components: [
-            ...inline.c[0].flatMap(citation => this.convertCitation(citation)),
-            ...inline.c[1].map(child => this.convertInline(child))
+            ...inline.c[1].map(child => this.convertInline(child)),
+            ...inline.c[0].flatMap(citation => this.convertCitation(citation))
           ],
           start,
           end
@@ -415,6 +417,11 @@ export class InlineConverter {
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
+    // Prefix inlines (come before citation ID in source order)
+    components.push(
+      ...citation.citationPrefix.map(inline => this.convertInline(inline))
+    );
+
     // Citation ID
     if (citation.citationIdS !== null) {
       const { source, start, end } =
@@ -429,12 +436,7 @@ export class InlineConverter {
       });
     }
 
-    // Prefix inlines
-    components.push(
-      ...citation.citationPrefix.map(inline => this.convertInline(inline))
-    );
-
-    // Suffix inlines
+    // Suffix inlines (come after citation ID in source order)
     components.push(
       ...citation.citationSuffix.map(inline => this.convertInline(inline))
     );

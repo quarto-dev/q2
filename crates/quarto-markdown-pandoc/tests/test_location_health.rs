@@ -943,6 +943,66 @@ mod tests {
     }
 
     #[test]
+    fn test_table_with_caption_attributes() {
+        // Test that Table elements with caption attributes have source ranges that include the caption
+        // This is a regression test for k-236: Table attr-id extends beyond table boundary
+        let source = "| Column 1 | Column 2 |\n|----------|----------|\n| A        | B        |\n\n: Example table {#tbl-example}";
+        let doc = parse_qmd_helper(source);
+
+        // Find the Table block
+        let table = doc.blocks.iter().find_map(|b| {
+            if let Block::Table(t) = b {
+                Some(t)
+            } else {
+                None
+            }
+        });
+
+        assert!(table.is_some(), "Expected to find a Table block");
+        let table = table.unwrap();
+
+        // Check that table has the ID from the caption
+        assert_eq!(table.attr.0, "tbl-example", "Table should have ID from caption");
+
+        // Get the table's source range
+        let table_start = table.source_info.start_offset();
+        let table_end = table.source_info.end_offset();
+
+        // Get the ID's source range if it exists
+        if let Some(ref id_source) = table.attr_source.id {
+            let id_start = id_source.start_offset();
+            let id_end = id_source.end_offset();
+
+            // The attr-id should be within the table's bounds
+            assert!(
+                id_start >= table_start,
+                "Table attr-id start {} should be >= table start {}",
+                id_start,
+                table_start
+            );
+            assert!(
+                id_end <= table_end,
+                "Table attr-id end {} should be <= table end {}",
+                id_end,
+                table_end
+            );
+        }
+
+        // Also run full core properties validation
+        let violations = validate_core_properties(&doc, source);
+        if !violations.is_empty() {
+            eprintln!("Found {} violations:", violations.len());
+            for v in &violations {
+                eprintln!("  {}", v);
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "Table with caption attributes should have valid source info"
+        );
+    }
+
+    #[test]
     fn test_core_properties_on_smoke_tests() {
         use std::fs;
         use std::path::Path;

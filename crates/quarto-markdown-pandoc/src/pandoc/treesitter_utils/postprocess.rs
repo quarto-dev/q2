@@ -774,6 +774,13 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 })]),
                                 source_info: caption_block.source_info.clone(),
                             };
+
+                            // Extend table's source range to include the caption
+                            // This ensures that caption attributes are within the table's bounds
+                            table.source_info = table
+                                .source_info
+                                .combine(&caption_block.source_info);
+
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
                             // Issue a warning when caption has no preceding table

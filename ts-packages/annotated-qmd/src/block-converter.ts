@@ -163,18 +163,19 @@ export class BlockConverter {
         };
 
       // Figure: [attr, caption, blocks]
+      // Components in source order: caption, blocks, then attr (attr comes after in source)
       case 'Figure':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
           kind: 'Figure',
           source,
           components: [
-            ...this.convertAttr(block.c[0], block.attrS),
             ...this.convertCaption({
               shortCaption: block.c[1][0],
               longCaption: block.c[1][1]
             }),
-            ...block.c[2].map(b => this.convertBlock(b))
+            ...block.c[2].map(b => this.convertBlock(b)),
+            ...this.convertAttr(block.c[0], block.attrS)
           ],
           start,
           end
@@ -209,13 +210,7 @@ export class BlockConverter {
           kind: 'Table',
           source,
           components: [
-            // Table attr
-            ...this.convertAttr(block.c[0], block.attrS),
-            // Caption (short and long)
-            ...this.convertCaption({
-              shortCaption: block.c[1][0],
-              longCaption: block.c[1][1]
-            }),
+            // Components in source order:
             // TableHead rows and cells
             ...this.convertTableHead(block.c[3], block.headS),
             // TableBody rows and cells (multiple bodies)
@@ -223,7 +218,14 @@ export class BlockConverter {
               this.convertTableBody(body, block.bodiesS[i])
             ),
             // TableFoot rows and cells
-            ...this.convertTableFoot(block.c[5], block.footS)
+            ...this.convertTableFoot(block.c[5], block.footS),
+            // Caption (short and long) - comes after table in source
+            ...this.convertCaption({
+              shortCaption: block.c[1][0],
+              longCaption: block.c[1][1]
+            }),
+            // Table attr - extracted from caption, so comes last
+            ...this.convertAttr(block.c[0], block.attrS)
           ],
           start,
           end

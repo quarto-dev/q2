@@ -445,8 +445,13 @@ describe('Tree Validation', () => {
         const json = loadExample(docName);
         const doc = parseRustQmdDocument(json);
 
-        // Run comprehensive validation (should not throw)
-        validateTree(doc);
+        try {
+          // Run comprehensive validation (should not throw)
+          validateTree(doc);
+        } catch (e) {
+          console.error(`Validation failed for document: ${docName}`);
+          throw e;
+        }
       }
     });
   });
