@@ -266,8 +266,10 @@ export class SourceInfoReconstructor {
     const mappedPieces: MappedString[] = [];
     for (const [pieceId, offset, length] of pieces) {
       const pieceMapped = this.toMappedString(pieceId);
-      // Extract substring at specified offset/length
-      const substring = mappedSubstring(pieceMapped, offset, offset + length);
+      // Extract first 'length' characters from this piece
+      // Note: 'offset' is offset_in_concat (where piece goes in final string),
+      // NOT an offset into the piece itself
+      const substring = mappedSubstring(pieceMapped, 0, length);
       mappedPieces.push(substring);
     }
 
@@ -334,9 +336,7 @@ export class SourceInfoReconstructor {
         }
         break;
 
-      case 2: // Concat - use first piece's resolution
-        // TODO: Concat doesn't have a single file location, so we use the first piece
-        // For error reporting, this may not be ideal
+      case 2: // Concat - resolve using MappedString.map()
         {
           if (!isConcatData(info.d)) {
             this.errorHandler(`Invalid Concat data format`, id);
@@ -347,14 +347,55 @@ export class SourceInfoReconstructor {
               this.errorHandler(`Empty Concat pieces`, id);
               resolved = { file_id: -1, range: info.r };
             } else {
-              const [firstPieceId, offset, length] = pieces[0];
-              const firstResolved = this.resolveChain(firstPieceId);
-              // Offset into the first piece
-              const [pieceStart, _] = firstResolved.range;
-              resolved = {
-                file_id: firstResolved.file_id,
-                range: [pieceStart + offset, pieceStart + offset + length]
-              };
+              // Get the concatenated MappedString (already built by handleConcat)
+              const concatMapped = this.toMappedString(id);
+
+              if (concatMapped.value.length === 0) {
+                // Empty concat - use first piece's location
+                const [firstPieceId] = pieces[0];
+                const firstResolved = this.resolveChain(firstPieceId);
+                resolved = {
+                  file_id: firstResolved.file_id,
+                  range: [firstResolved.range[0], firstResolved.range[0]]
+                };
+                break;
+              }
+
+              // Map the start position (offset 0 in concat)
+              const startMap = concatMapped.map(0);
+              if (!startMap) {
+                this.errorHandler(`Failed to map start position for Concat`, id);
+                resolved = { file_id: -1, range: info.r };
+                break;
+              }
+
+              // Map the last character position (length - 1)
+              const lastCharMap = concatMapped.map(concatMapped.value.length - 1);
+              if (!lastCharMap) {
+                this.errorHandler(`Failed to map last character position for Concat`, id);
+                resolved = { file_id: -1, range: info.r };
+                break;
+              }
+
+              // Find the file_id by checking which top-level MappedString this is
+              let file_id = -1;
+              for (const [fid, topLevel] of this.topLevelMappedStrings.entries()) {
+                if (topLevel === startMap.originalString) {
+                  file_id = fid;
+                  break;
+                }
+              }
+
+              if (file_id === -1) {
+                this.errorHandler(`Could not find file_id for Concat originalString`, id);
+                resolved = { file_id: -1, range: info.r };
+              } else {
+                // End position is one past the last character
+                resolved = {
+                  file_id,
+                  range: [startMap.index, lastCharMap.index + 1]
+                };
+              }
             }
           }
         }
