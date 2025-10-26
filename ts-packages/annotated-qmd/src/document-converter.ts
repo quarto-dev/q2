@@ -37,6 +37,8 @@ export class DocumentConverter {
       sourceReconstructor,
       metaTopLevelKeySources
     );
+    // Wire the converters together to handle Note elements with block content
+    this.inlineConverter.setBlockConverter(this.blockConverter);
   }
 
   /**
@@ -61,11 +63,10 @@ export class DocumentConverter {
       components.push(...doc.blocks.map(block => this.blockConverter.convertBlock(block)));
     }
 
-    // Try to get overall document source if we have file context
-    // For now, use empty MappedString as we don't track document-level source
-    const source = asMappedString('');
+    // Document spans entire file (file ID 0 is main document)
+    const source = this.sourceReconstructor.getTopLevelMappedString(0);
     const start = 0;
-    const end = 0;
+    const end = source.value.length;
 
     return {
       result: doc as unknown as import('./types.js').JSONValue,

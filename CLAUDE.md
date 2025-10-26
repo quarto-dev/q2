@@ -101,6 +101,8 @@ When fixing ANY bug:
 
 **This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior. Only deviate if writing new features.**
 
+**Do NOT close a beads test suite item unless all tests pass. If you feel you're low on tokens, report that and open subtasks to work on new sessions.**
+
 ## Workspace structure
 
 ### `crates` - corresponds to the crates in the public quarto-markdown repo
@@ -120,13 +122,19 @@ When fixing ANY bug:
 - `private-crates/quarto`: The future main entry point for the `quarto` command line binary.
 - `private-crates/quarto-core`: supporting library for `quarto`
 
+## Testing instructions
+
+- **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
+
+## Coding instructions
+
+- **CRITICAL** If you'll be writing code, read the special instructions on file claude-notes/instructions/coding.md
+
 ## General Instructions
 
 - in this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, discrepancies in the behavior might not be bugs.
 - the qmd format only supports the inline syntax for a link [link](./target.html), and not the reference-style syntax [link][1].
-- Always strive for test documents as small as possible. Prefer a large number of small test documents instead of small number of large documents.
 - When fixing bugs, always try to isolate and fix one bug at a time.
-- **CRITICAL - TEST FIRST**: When fixing bugs using tests, you MUST run the failing test BEFORE implementing any fix. This is non-negotiable. Verify the test fails in the expected way, then implement the fix, then verify the test passes.
 - If you need to fix parser bugs, you will find use in running the application with "-v", which will provide a large amount of information from the tree-sitter parsing process, including a print of the concrete syntax tree out to stderr.
 - use "cargo run --" instead of trying to find the binary location, which will often be outside of this crate.
 - when calling shell scripts, ALWAYS BE MINDFUL of the current directory you're operating in. use `pwd` as necessary to avoid confusing yourself over commands that use relative paths.
@@ -136,8 +144,6 @@ When fixing ANY bug:
 - In the tree-sitter-markdown and tree-sitter-markdown-inline directories, you rebuild the parsers using "tree-sitter generate; tree-sitter build". Make sure the shell is in the correct directory before running those. Every time you change the tree-sitter parsers, rebuild them and run "tree-sitter test". If the tests fail, fix the code. Only change tree-sitter tests you've just added; do not touch any other tests. If you end up getting stuck there, stop and ask for my help.
 - When attempting to find binary differences between files, always use `xxd` instead of other tools.
 - .c only works in JSON formats. Inside Lua filters, you need to use Pandoc's Lua API. Study https://raw.githubusercontent.com/jgm/pandoc/refs/heads/main/doc/lua-filters.md and make notes to yourself as necessary (use claude-notes in this directory)
-- Sometimes you get confused by macOS's weird renaming of /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
+- Sometimes you get confused by macOS's using many different /private/tmp directories linked to /tmp. Prefer to use temporary directories local to the project you're working on (which you can later clean)
 - The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.
-- Do NOT add "TODO, for now, ignore.." or other things to your code without asking me about it or reporting back.
 - **CRITICALLY IMPORTANT**. IF YOU EVER FIND YOURSELF WANTING TO WRITE A HACKY SOLUTION (OR A "TODO" THAT UNDOES EXISTING WORK), STOP AND ASK THE USER. THAT MEANS YOUR PLAN IS NOT GOOD ENOUGH
-- Do NOT close a beads test suite item unless all tests pass. If you feel you're low on tokens, report that and open subtasks to work on new sessions.

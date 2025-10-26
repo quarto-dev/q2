@@ -1,0 +1,1 @@
+- Try hard to avoid "TODO" comments in the code base. If are running low on context and you do have to add it, make sure there's a beads task (even if low-priority) to track the TODO, and add the issue id to the TODO line.

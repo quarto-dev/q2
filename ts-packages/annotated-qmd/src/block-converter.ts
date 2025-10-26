@@ -19,14 +19,16 @@ export class BlockConverter {
     private sourceReconstructor: SourceInfoReconstructor
   ) {
     this.inlineConverter = new InlineConverter(sourceReconstructor);
+    // Wire the converters together to handle Note elements with block content
+    this.inlineConverter.setBlockConverter(this);
   }
 
   /**
    * Convert a Block node to AnnotatedParse
    */
   convertBlock(block: Annotated_Block): AnnotatedParse {
-    const source = this.sourceReconstructor.toMappedString(block.s);
-    const [start, end] = this.sourceReconstructor.getOffsets(block.s);
+    const { source, start, end } =
+      this.sourceReconstructor.getAnnotatedParseSourceFields(block.s);
 
     switch (block.t) {
       // Simple blocks with inline content
@@ -247,8 +249,8 @@ export class BlockConverter {
 
     // ID
     if (attr[0] && attrS.id !== null) {
-      const source = this.sourceReconstructor.toMappedString(attrS.id);
-      const [start, end] = this.sourceReconstructor.getOffsets(attrS.id);
+      const { source, start, end } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(attrS.id);
       components.push({
         result: attr[0],
         kind: 'attr-id',
@@ -264,8 +266,8 @@ export class BlockConverter {
       const className = attr[1][i];
       const classSourceId = attrS.classes[i];
       if (classSourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(classSourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(classSourceId);
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(classSourceId);
         components.push({
           result: className,
           kind: 'attr-class',
@@ -283,8 +285,8 @@ export class BlockConverter {
       const [keySourceId, valueSourceId] = attrS.kvs[i];
 
       if (keySourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(keySourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(keySourceId);
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(keySourceId);
         components.push({
           result: key,
           kind: 'attr-key',
@@ -296,8 +298,8 @@ export class BlockConverter {
       }
 
       if (valueSourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(valueSourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(valueSourceId);
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(valueSourceId);
         components.push({
           result: value,
           kind: 'attr-value',

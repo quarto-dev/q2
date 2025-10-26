@@ -67,12 +67,18 @@ export class MetadataConverter {
     }));
 
     // Find the overall range by getting min/max offsets
+    // Must use getSourceLocation() to get RESOLVED top-level coordinates,
+    // not getOffsets() which returns LOCAL coordinates from the pool
     let minStart = Infinity;
     let maxEnd = -Infinity;
-    for (const value of Object.values(jsonMeta)) {
-      const [start, end] = this.sourceReconstructor.getOffsets(value.s);
-      minStart = Math.min(minStart, start);
-      maxEnd = Math.max(maxEnd, end);
+    for (const [key, value] of Object.entries(jsonMeta)) {
+      // Consider both key and value positions
+      const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
+      const keyLoc = this.sourceReconstructor.getSourceLocation(keySourceId);
+      const valueLoc = this.sourceReconstructor.getSourceLocation(value.s);
+
+      minStart = Math.min(minStart, keyLoc.start, valueLoc.start);
+      maxEnd = Math.max(maxEnd, keyLoc.end, valueLoc.end);
     }
 
     // If no metadata, use defaults
@@ -89,8 +95,8 @@ export class MetadataConverter {
       // Create AnnotatedParse for key
       // Use metaTopLevelKeySources if available, otherwise fall back to value's source
       const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
-      const [keyStart, keyEnd] = this.sourceReconstructor.getOffsets(keySourceId);
-      const keySource = this.sourceReconstructor.toMappedString(keySourceId);
+      const { source: keySource, start: keyStart, end: keyEnd } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(keySourceId);
 
       const keyAP: AnnotatedParse = {
         result: key,
@@ -109,11 +115,8 @@ export class MetadataConverter {
       result[key] = valueAP.result;
     }
 
-    // Create synthetic MappedString for top-level (using first file if available)
-    const firstFile = this.sourceReconstructor['sourceContext'].files[0];
-    const topSource = this.sourceReconstructor['sourceContext'].files[0]
-      ? this.sourceReconstructor.toMappedString(0)  // Use first SourceInfo if available
-      : this.sourceReconstructor.toMappedString(0);
+    // Get top-level MappedString for metadata section (file 0 is main document)
+    const topSource = this.sourceReconstructor.getTopLevelMappedString(0);
 
     return {
       result,
@@ -129,8 +132,8 @@ export class MetadataConverter {
    * Convert individual MetaValue to AnnotatedParse
    */
   convertMetaValue(meta: JsonMetaValue): AnnotatedParse {
-    const source = this.sourceReconstructor.toMappedString(meta.s);
-    const [start, end] = this.sourceReconstructor.getOffsets(meta.s);
+    const { source, start, end } =
+      this.sourceReconstructor.getAnnotatedParseSourceFields(meta.s);
 
     switch (meta.t) {
       case 'MetaString':
@@ -253,8 +256,8 @@ export class MetadataConverter {
     const result: Record<string, JSONValue> = {};
 
     for (const entry of entries) {
-      const keySource = this.sourceReconstructor.toMappedString(entry.key_source);
-      const [keyStart, keyEnd] = this.sourceReconstructor.getOffsets(entry.key_source);
+      const { source: keySource, start: keyStart, end: keyEnd } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(entry.key_source);
 
       const keyAP: AnnotatedParse = {
         result: entry.key,

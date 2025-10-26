@@ -67,6 +67,7 @@ export class SourceInfoReconstructor {
   private errorHandler: SourceInfoErrorHandler;
   private resolvedCache = new Map<number, ResolvedSource>();
   private mappedStringCache = new Map<number, MappedString>();
+  private topLevelMappedStrings = new Map<number, MappedString>();
 
   constructor(
     pool: SerializableSourceInfo[],
@@ -76,6 +77,21 @@ export class SourceInfoReconstructor {
     this.pool = pool;
     this.sourceContext = sourceContext;
     this.errorHandler = errorHandler || defaultErrorHandler;
+
+    // Create top-level MappedStrings for all files
+    // Validate that content is populated - this is required for proper source mapping
+    for (const file of sourceContext.files) {
+      if (file.content === null || file.content === undefined) {
+        throw new Error(
+          `File ${file.id} (${file.path}) missing content. ` +
+          `astContext.files[].content must be populated for source mapping to work.`
+        );
+      }
+      this.topLevelMappedStrings.set(
+        file.id,
+        asMappedString(file.content, file.path)
+      );
+    }
   }
 
   /**
@@ -130,6 +146,61 @@ export class SourceInfoReconstructor {
   }
 
   /**
+   * Get top-level MappedString for a file
+   *
+   * This returns the full file content as a MappedString.
+   * Use this for the AnnotatedParse.source field at the document level.
+   */
+  getTopLevelMappedString(fileId: number): MappedString {
+    const result = this.topLevelMappedStrings.get(fileId);
+    if (!result) {
+      throw new Error(
+        `No top-level MappedString for file ${fileId}. ` +
+        `Available file IDs: ${Array.from(this.topLevelMappedStrings.keys()).join(', ')}`
+      );
+    }
+    return result;
+  }
+
+  /**
+   * Get file ID and offsets in top-level coordinates
+   *
+   * Resolves the SourceInfo chain to find which file this SourceInfo
+   * ultimately refers to, and what offsets in that file's content.
+   */
+  getSourceLocation(id: number): { fileId: number; start: number; end: number } {
+    const resolved = this.resolveChain(id);
+    return {
+      fileId: resolved.file_id,
+      start: resolved.range[0],
+      end: resolved.range[1]
+    };
+  }
+
+  /**
+   * Get all three AnnotatedParse source fields (source, start, end)
+   *
+   * This is the primary API for converters to use. It returns:
+   * - source: The top-level MappedString for the file (full file content)
+   * - start: Offset in top-level coordinates
+   * - end: Offset in top-level coordinates
+   *
+   * Invariant: source.value.substring(start, end) extracts the correct text
+   */
+  getAnnotatedParseSourceFields(id: number): {
+    source: MappedString;
+    start: number;
+    end: number;
+  } {
+    const { fileId, start, end } = this.getSourceLocation(id);
+    return {
+      source: this.getTopLevelMappedString(fileId),
+      start,
+      end
+    };
+  }
+
+  /**
    * Handle Original SourceInfo type (t=0)
    * Data format: file_id (number)
    */
@@ -143,16 +214,16 @@ export class SourceInfoReconstructor {
     const fileId = info.d;
     const [start, end] = info.r;
 
-    // Find file in context
-    const file = this.sourceContext.files.find(f => f.id === fileId);
-    if (!file) {
+    // Get top-level MappedString for this file
+    const topLevel = this.topLevelMappedStrings.get(fileId);
+    if (!topLevel) {
       this.errorHandler(`File ID ${fileId} not found in source context`, id);
       return asMappedString('');
     }
 
-    // Extract substring from file content
-    const content = file.content.substring(start, end);
-    return asMappedString(content, file.path);
+    // Use mappedSubstring to maintain connection to top-level file
+    // This preserves the mapping chain so that AnnotatedParse.source can reference top-level
+    return mappedSubstring(topLevel, start, end);
   }
 
   /**

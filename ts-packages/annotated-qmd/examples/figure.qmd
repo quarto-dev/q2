@@ -1,0 +1,17 @@
+---
+title: Figure Example
+---
+
+# Figures
+
+![](placeholder.png){#fig-simple}
+
+![Simple figure caption](placeholder.png){#fig-with-caption}
+
+::: {#fig-layout}
+![First](placeholder.png){#fig-a}
+
+![Second](placeholder.png){#fig-b}
+
+Figure layout with multiple images
+:::

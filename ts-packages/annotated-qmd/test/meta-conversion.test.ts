@@ -34,7 +34,8 @@ console.log('Running Metadata conversion tests...');
 
   assert.equal(result.result, 'Hello');
   assert.equal(result.kind, 'MetaString');
-  assert.equal(result.source.value, 'Hello');
+  // In new architecture: source is top-level, use substring to extract
+  assert.equal(result.source.value.substring(result.start, result.end), 'Hello', 'MetaString source substring is value content');
   assert.equal(result.components.length, 0);
   assert.equal(result.start, 11);
   assert.equal(result.end, 16);

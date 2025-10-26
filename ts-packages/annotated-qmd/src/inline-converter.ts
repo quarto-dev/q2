@@ -12,16 +12,25 @@ import type { SourceInfoReconstructor } from './source-map.js';
  * Converts Inline AST nodes from quarto-markdown-pandoc to AnnotatedParse
  */
 export class InlineConverter {
+  private blockConverter?: { convertBlock: (block: any) => AnnotatedParse };
+
   constructor(
     private sourceReconstructor: SourceInfoReconstructor
   ) {}
 
   /**
+   * Set the block converter for handling Note elements with block content
+   */
+  setBlockConverter(blockConverter: { convertBlock: (block: any) => AnnotatedParse }) {
+    this.blockConverter = blockConverter;
+  }
+
+  /**
    * Convert an Inline node to AnnotatedParse
    */
   convertInline(inline: Annotated_Inline): AnnotatedParse {
-    const source = this.sourceReconstructor.toMappedString(inline.s);
-    const [start, end] = this.sourceReconstructor.getOffsets(inline.s);
+    const { source, start, end } =
+      this.sourceReconstructor.getAnnotatedParseSourceFields(inline.s);
 
     switch (inline.t) {
       // Simple text nodes
@@ -238,13 +247,15 @@ export class InlineConverter {
           end
         };
 
-      // Note (has Blocks - cross-reference, will need BlockConverter)
+      // Note (has Blocks - contains block-level content like Para)
       case 'Note':
         return {
           result: inline.c as unknown as import('./types.js').JSONValue,
           kind: 'Note',
           source,
-          components: [],  // Will be filled in when BlockConverter is available
+          components: this.blockConverter
+            ? inline.c.map(block => this.blockConverter!.convertBlock(block))
+            : [],
           start,
           end
         };
@@ -269,8 +280,8 @@ export class InlineConverter {
 
     // ID
     if (attr[0] && attrS.id !== null) {
-      const source = this.sourceReconstructor.toMappedString(attrS.id);
-      const [start, end] = this.sourceReconstructor.getOffsets(attrS.id);
+      const { source, start, end } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(attrS.id);
       components.push({
         result: attr[0],
         kind: 'attr-id',
@@ -285,9 +296,11 @@ export class InlineConverter {
     for (let i = 0; i < attr[1].length; i++) {
       const className = attr[1][i];
       const classSourceId = attrS.classes[i];
-      if (classSourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(classSourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(classSourceId);
+      // Only add source info if the ID exists and is not null
+      // (some classes may be programmatically added without source locations)
+      if (classSourceId !== null && classSourceId !== undefined) {
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(classSourceId);
         components.push({
           result: className,
           kind: 'attr-class',
@@ -302,11 +315,19 @@ export class InlineConverter {
     // Key-value pairs
     for (let i = 0; i < attr[2].length; i++) {
       const [key, value] = attr[2][i];
-      const [keySourceId, valueSourceId] = attrS.kvs[i];
+      const kvPair = attrS.kvs[i];
 
-      if (keySourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(keySourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(keySourceId);
+      // Skip if no source info for this kv pair
+      // (some attributes may be programmatically added without source locations)
+      if (!kvPair) {
+        continue;
+      }
+
+      const [keySourceId, valueSourceId] = kvPair;
+
+      if (keySourceId !== null && keySourceId !== undefined) {
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(keySourceId);
         components.push({
           result: key,
           kind: 'attr-key',
@@ -317,9 +338,9 @@ export class InlineConverter {
         });
       }
 
-      if (valueSourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(valueSourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(valueSourceId);
+      if (valueSourceId !== null && valueSourceId !== undefined) {
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(valueSourceId);
         components.push({
           result: value,
           kind: 'attr-value',
@@ -347,8 +368,8 @@ export class InlineConverter {
 
     // URL
     if (target[0] && targetS[0] !== null) {
-      const source = this.sourceReconstructor.toMappedString(targetS[0]);
-      const [start, end] = this.sourceReconstructor.getOffsets(targetS[0]);
+      const { source, start, end } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(targetS[0]);
       components.push({
         result: target[0],
         kind: 'target-url',
@@ -361,8 +382,8 @@ export class InlineConverter {
 
     // Title
     if (target[1] && targetS[1] !== null) {
-      const source = this.sourceReconstructor.toMappedString(targetS[1]);
-      const [start, end] = this.sourceReconstructor.getOffsets(targetS[1]);
+      const { source, start, end } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(targetS[1]);
       components.push({
         result: target[1],
         kind: 'target-title',
@@ -394,8 +415,8 @@ export class InlineConverter {
 
     // Citation ID
     if (citation.citationIdS !== null) {
-      const source = this.sourceReconstructor.toMappedString(citation.citationIdS);
-      const [start, end] = this.sourceReconstructor.getOffsets(citation.citationIdS);
+      const { source, start, end } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(citation.citationIdS);
       components.push({
         result: citation.citationId,
         kind: 'citation-id',

@@ -1,0 +1,6 @@
+- **CRITICAL - TEST FIRST**: When fixing bugs using tests, you MUST run the failing test BEFORE implementing any fix. This is non-negotiable. Verify the test fails in the expected way, then implement the fix, then verify the test passes.
+- Always strive for minimal test documents as small as possible. Create many small test documents instead of a few large test documents.
+- You are encouraged to spend time and tokens on thinking about good tests.
+- If writing tests is taking a lot of time, decompose the writing of tests into subtasks. Good tests are important!
+- Precise tests are good tests. **bad**: testing for the presence of a field in an object. **good** testing if the value of the field is correct.
+- Do not write tests that expect known-bad inputs. Instead, add a failing test, and create a beads task to handle the problem.

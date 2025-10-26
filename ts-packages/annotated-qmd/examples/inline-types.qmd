@@ -1,0 +1,62 @@
+---
+title: Inline Types Example
+---
+
+# Inline Elements
+
+## Image
+
+Here is an inline image: ![alt text](placeholder.png)
+
+## Span with Attributes
+
+This is a [span with class]{.highlight} and this is a [span with ID]{#my-span} and this is a [span with custom attrs]{data-value="42"}.
+
+## Citations
+
+This is a citation reference [@smith2020] and multiple citations [@jones2021; @doe2022].
+
+## Footnotes
+
+This is a sentence with a footnote^[This is the footnote text.] embedded in it.
+
+## Quoted Text
+
+She said 'Hello' using single quotes.
+
+He replied "World" using double quotes.
+
+## Strikeout
+
+This text has ~~strikethrough~~ formatting.
+
+## Superscript and Subscript
+
+The formula is E = mc^2^ for superscript.
+
+The chemical formula is H~2~O for subscript.
+
+## SmallCaps
+
+This text uses [small caps]{.smallcaps} formatting.
+
+## Underline
+
+This text has [underlined]{.underline} formatting.
+
+## RawInline
+
+This paragraph contains `<span class="raw">raw HTML</span>`{=html} inline.
+
+This paragraph contains `\textrm{raw LaTeX}`{=latex} inline.
+
+## Line Breaks
+
+This is a line with a soft break
+that continues on the next line.
+
+This is a line with a hard break\
+that forces a line break.
+
+This is another hard break
+using two trailing spaces.

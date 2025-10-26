@@ -1,0 +1,33 @@
+---
+title: Div with Attributes
+---
+
+# Divs
+
+Simple div with class:
+
+::: {.callout-note}
+This is a note callout.
+:::
+
+Div with ID and class:
+
+::: {#my-div .important}
+Important content here.
+:::
+
+Div with custom attributes:
+
+::: {.panel data-value="42" custom-key="test"}
+Panel with custom attributes.
+:::
+
+Nested divs:
+
+::: {.outer}
+Outer div content.
+
+::: {.inner}
+Inner div content.
+:::
+:::

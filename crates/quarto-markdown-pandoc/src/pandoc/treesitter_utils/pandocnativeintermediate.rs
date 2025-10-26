@@ -12,7 +12,6 @@ use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::ShortcodeArg;
 use crate::pandoc::table::{Alignment, Cell, Row};
 use quarto_source_map::Range;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PandocNativeIntermediate {
@@ -25,7 +24,8 @@ pub enum PandocNativeIntermediate {
     IntermediateBaseText(String, Range),
     IntermediateLatexInlineDelimiter(Range),
     IntermediateLatexDisplayDelimiter(Range),
-    IntermediateKeyValueSpec(HashMap<String, String>),
+    // Vec of (key, value, key_range, value_range) tuples
+    IntermediateKeyValueSpec(Vec<(String, String, Range, Range)>),
     IntermediateRawFormat(String, Range),
     IntermediateShortcodeArg(ShortcodeArg, Range),
     IntermediateUnknown(Range),
