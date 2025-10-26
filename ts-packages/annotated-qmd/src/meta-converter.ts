@@ -70,10 +70,22 @@ export class MetadataConverter {
     }
 
     // Convert to AnnotatedParse components
+    // Sort entries by source position to maintain source order
+    const sortedEntries: Array<{ key: string; value: JsonMetaValue; keyStart: number }> = [];
+
+    for (const [key, value] of Object.entries(jsonMeta)) {
+      const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
+      const keyLoc = this.sourceReconstructor.getSourceLocation(keySourceId);
+      sortedEntries.push({ key, value, keyStart: keyLoc.start });
+    }
+
+    // Sort by key start position
+    sortedEntries.sort((a, b) => a.keyStart - b.keyStart);
+
     const components: AnnotatedParse[] = [];
     const result: Record<string, JSONValue> = {};
 
-    for (const [key, value] of Object.entries(jsonMeta)) {
+    for (const { key, value } of sortedEntries) {
       // Create AnnotatedParse for key
       // Use metaTopLevelKeySources if available, otherwise fall back to value's source
       const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;

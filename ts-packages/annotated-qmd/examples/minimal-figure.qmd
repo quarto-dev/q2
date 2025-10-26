@@ -1,0 +1,11 @@
+---
+title: "Minimal Figure Test"
+---
+
+# Simple Figure
+
+![Figure caption text](image.png)
+
+# Detailed Figure with Attributes
+
+![Detailed caption with **bold**](image.png){#fig-test}

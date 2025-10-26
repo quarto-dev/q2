@@ -790,6 +790,84 @@ mod tests {
     }
 
     #[test]
+    fn test_figure_source_tracking() {
+        // Test that Figure blocks and their nested Plain blocks have valid source info
+        // This is a regression test for k-233: Figures were getting [0,0] ranges
+        let source = "![Figure caption text](image.png)";
+        let doc = parse_qmd_helper(source);
+
+        // Find the Figure block
+        let figure = doc.blocks.iter().find_map(|b| {
+            if let Block::Figure(f) = b {
+                Some(f)
+            } else {
+                None
+            }
+        });
+
+        assert!(figure.is_some(), "Expected to find a Figure block");
+        let figure = figure.unwrap();
+
+        // Check that Figure has non-default source info
+        // Default source info would have offsets of 0 and 0
+        let fig_start = figure.source_info.start_offset();
+        let fig_end = figure.source_info.end_offset();
+        assert!(
+            fig_start != 0 || fig_end != 0,
+            "Figure source_info should not be default [0,0], got [{},{}]",
+            fig_start,
+            fig_end
+        );
+
+        // Check that content Plain block has non-default source info
+        assert!(!figure.content.is_empty(), "Figure should have content");
+        if let Block::Plain(content_plain) = &figure.content[0] {
+            let content_start = content_plain.source_info.start_offset();
+            let content_end = content_plain.source_info.end_offset();
+            assert!(
+                content_start != 0 || content_end != 0,
+                "Figure content Plain source_info should not be default [0,0], got [{},{}]",
+                content_start,
+                content_end
+            );
+        } else {
+            panic!("Expected Figure content[0] to be Plain block");
+        }
+
+        // Check that caption Plain block has non-default source info
+        if let Some(ref long_caption) = figure.caption.long {
+            assert!(!long_caption.is_empty(), "Caption should have blocks");
+            if let Block::Plain(caption_plain) = &long_caption[0] {
+                let caption_start = caption_plain.source_info.start_offset();
+                let caption_end = caption_plain.source_info.end_offset();
+                assert!(
+                    caption_start != 0 || caption_end != 0,
+                    "Caption Plain source_info should not be default [0,0], got [{},{}]",
+                    caption_start,
+                    caption_end
+                );
+            } else {
+                panic!("Expected caption long[0] to be Plain block");
+            }
+        } else {
+            panic!("Expected Figure to have long caption");
+        }
+
+        // Also run full core properties validation
+        let violations = validate_core_properties(&doc, source);
+        if !violations.is_empty() {
+            eprintln!("Found {} violations:", violations.len());
+            for v in &violations {
+                eprintln!("  {}", v);
+            }
+        }
+        assert!(
+            violations.is_empty(),
+            "Figure should have valid source info with no violations"
+        );
+    }
+
+    #[test]
     fn test_core_properties_on_smoke_tests() {
         use std::fs;
         use std::path::Path;

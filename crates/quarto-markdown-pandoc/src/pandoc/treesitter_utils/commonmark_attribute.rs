@@ -45,7 +45,10 @@ pub fn process_commonmark_attribute(
                 attr.2.insert(key, value);
                 // Convert ranges to SourceInfo
                 let key_source = Some(SourceInfo::from_range(context.current_file_id(), key_range));
-                let value_source = Some(SourceInfo::from_range(context.current_file_id(), value_range));
+                let value_source = Some(SourceInfo::from_range(
+                    context.current_file_id(),
+                    value_range,
+                ));
                 attr_source.attributes.push((key_source, value_source));
             }
         }

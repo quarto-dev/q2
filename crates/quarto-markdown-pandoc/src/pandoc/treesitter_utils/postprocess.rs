@@ -362,8 +362,8 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let mut new_image = image.clone();
                 new_image.attr = image_attr;
                 new_image.attr_source = image_attr_source;
-                // FIXME all source location is broken here
-                // TODO: Should propagate from image.source_info and para.source_info
+
+                // Use proper source info from the original paragraph and image
                 FilterResult(
                     vec![Block::Figure(Figure {
                         attr: figure_attr,
@@ -371,18 +371,19 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             short: None,
                             long: Some(vec![Block::Plain(Plain {
                                 content: image.content.clone(),
-                                // TODO: Should derive from image.content inlines
-                                source_info: quarto_source_map::SourceInfo::default(),
+                                // Caption text comes from image's alt text
+                                source_info: image.source_info.clone(),
                             })]),
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            // Caption as a whole also uses image's source info
+                            source_info: image.source_info.clone(),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
-                            // TODO: Should use image.source_info
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            // Content contains the image
+                            source_info: image.source_info.clone(),
                         })],
-                        // TODO: Should use para.source_info
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        // Figure spans the entire paragraph
+                        source_info: para.source_info.clone(),
                         attr_source: figure_attr_source,
                     })],
                     true,
