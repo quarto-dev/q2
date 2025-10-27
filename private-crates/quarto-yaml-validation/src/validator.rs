@@ -1,7 +1,8 @@
 // YAML validation engine
 
-use crate::error::{InstancePath, PathSegment, SchemaPath, ValidationError, ValidationResult};
+use crate::error::{InstancePath, PathSegment, SchemaPath, ValidationError, ValidationErrorKind, ValidationResult};
 use crate::schema::{Schema, SchemaRegistry};
+use quarto_source_map::SourceContext;
 use quarto_yaml::YamlWithSourceInfo;
 use regex::Regex;
 use std::collections::HashSet;
@@ -12,8 +13,9 @@ pub fn validate(
     value: &YamlWithSourceInfo,
     schema: &Schema,
     registry: &SchemaRegistry,
+    source_ctx: &SourceContext,
 ) -> ValidationResult<()> {
-    let mut context = ValidationContext::new(registry);
+    let mut context = ValidationContext::new(registry, source_ctx);
     validate_generic(value, schema, &mut context)
 }
 
@@ -21,6 +23,8 @@ pub fn validate(
 pub struct ValidationContext<'a> {
     /// Reference to the schema registry for $ref resolution
     registry: &'a SchemaRegistry,
+    /// Source context for mapping offsets to line/column
+    source_ctx: &'a SourceContext,
     /// Current instance path (e.g., ["format", "html", "toc"])
     instance_path: InstancePath,
     /// Current schema path (e.g., ["properties", "format"])
@@ -31,9 +35,10 @@ pub struct ValidationContext<'a> {
 
 impl<'a> ValidationContext<'a> {
     /// Create a new validation context
-    pub fn new(registry: &'a SchemaRegistry) -> Self {
+    pub fn new(registry: &'a SchemaRegistry, source_ctx: &'a SourceContext) -> Self {
         Self {
             registry,
+            source_ctx,
             instance_path: InstancePath::new(),
             schema_path: SchemaPath::new(),
             errors: Vec::new(),
@@ -41,10 +46,10 @@ impl<'a> ValidationContext<'a> {
     }
 
     /// Add an error to the context
-    pub fn add_error(&mut self, message: impl Into<String>, node: &YamlWithSourceInfo) {
-        let error = ValidationError::new(message, self.instance_path.clone())
+    pub fn add_error(&mut self, kind: ValidationErrorKind, node: &YamlWithSourceInfo) {
+        let error = ValidationError::new(kind, self.instance_path.clone())
             .with_schema_path(self.schema_path.clone())
-            .with_yaml_node(node.clone());
+            .with_yaml_node(node.clone(), self.source_ctx);
         self.errors.push(error);
     }
 
@@ -159,7 +164,7 @@ fn validate_generic(
 ) -> ValidationResult<()> {
     match schema {
         Schema::False => {
-            context.add_error("Schema 'false' always fails validation", value);
+            context.add_error(ValidationErrorKind::SchemaFalse, value);
             Err(context.errors[0].clone())
         }
         Schema::True => Ok(()),
@@ -187,7 +192,9 @@ fn validate_generic(
                 validate_generic(value, resolved, context)
             } else {
                 context.add_error(
-                    format!("Unresolved schema reference: {}", s.reference),
+                    ValidationErrorKind::UnresolvedReference {
+                        ref_id: s.reference.clone(),
+                    },
                     value,
                 );
                 Err(context.errors[0].clone())
@@ -206,7 +213,10 @@ fn validate_boolean(
         Yaml::Boolean(_) => Ok(()),
         _ => {
             context.add_error(
-                format!("Expected boolean, got {}", yaml_type_name(&value.yaml)),
+                ValidationErrorKind::TypeMismatch {
+                    expected: "boolean".to_string(),
+                    got: yaml_type_name(&value.yaml).to_string(),
+                },
                 value,
             );
             Err(context.errors[0].clone())
@@ -225,7 +235,10 @@ fn validate_number(
         Yaml::Real(s) => s.parse::<f64>().unwrap_or(f64::NAN),
         _ => {
             context.add_error(
-                format!("Expected number, got {}", yaml_type_name(&value.yaml)),
+                ValidationErrorKind::TypeMismatch {
+                    expected: "number".to_string(),
+                    got: yaml_type_name(&value.yaml).to_string(),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -236,7 +249,13 @@ fn validate_number(
     if let Some(min) = schema.minimum {
         if num < min {
             context.add_error(
-                format!("Number {} is less than minimum {}", num, min),
+                ValidationErrorKind::NumberOutOfRange {
+                    value: num,
+                    minimum: Some(min),
+                    maximum: None,
+                    exclusive_minimum: None,
+                    exclusive_maximum: None,
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -247,7 +266,13 @@ fn validate_number(
     if let Some(max) = schema.maximum {
         if num > max {
             context.add_error(
-                format!("Number {} is greater than maximum {}", num, max),
+                ValidationErrorKind::NumberOutOfRange {
+                    value: num,
+                    minimum: None,
+                    maximum: Some(max),
+                    exclusive_minimum: None,
+                    exclusive_maximum: None,
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -257,7 +282,16 @@ fn validate_number(
     // Check exclusive minimum
     if let Some(min) = schema.exclusive_minimum {
         if num <= min {
-            context.add_error(format!("Number {} is not greater than {}", num, min), value);
+            context.add_error(
+                ValidationErrorKind::NumberOutOfRange {
+                    value: num,
+                    minimum: None,
+                    maximum: None,
+                    exclusive_minimum: Some(min),
+                    exclusive_maximum: None,
+                },
+                value,
+            );
             return Err(context.errors[0].clone());
         }
     }
@@ -265,7 +299,16 @@ fn validate_number(
     // Check exclusive maximum
     if let Some(max) = schema.exclusive_maximum {
         if num >= max {
-            context.add_error(format!("Number {} is not less than {}", num, max), value);
+            context.add_error(
+                ValidationErrorKind::NumberOutOfRange {
+                    value: num,
+                    minimum: None,
+                    maximum: None,
+                    exclusive_minimum: None,
+                    exclusive_maximum: Some(max),
+                },
+                value,
+            );
             return Err(context.errors[0].clone());
         }
     }
@@ -274,7 +317,10 @@ fn validate_number(
     if let Some(multiple) = schema.multiple_of {
         if (num % multiple).abs() > f64::EPSILON {
             context.add_error(
-                format!("Number {} is not a multiple of {}", num, multiple),
+                ValidationErrorKind::NumberNotMultipleOf {
+                    value: num,
+                    multiple_of: multiple,
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -294,7 +340,10 @@ fn validate_string(
         Yaml::String(s) => s,
         _ => {
             context.add_error(
-                format!("Expected string, got {}", yaml_type_name(&value.yaml)),
+                ValidationErrorKind::TypeMismatch {
+                    expected: "string".to_string(),
+                    got: yaml_type_name(&value.yaml).to_string(),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -305,7 +354,11 @@ fn validate_string(
     if let Some(min) = schema.min_length {
         if s.len() < min {
             context.add_error(
-                format!("String length {} is less than minimum {}", s.len(), min),
+                ValidationErrorKind::StringLengthInvalid {
+                    length: s.len(),
+                    min_length: Some(min),
+                    max_length: None,
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -316,7 +369,11 @@ fn validate_string(
     if let Some(max) = schema.max_length {
         if s.len() > max {
             context.add_error(
-                format!("String length {} is greater than maximum {}", s.len(), max),
+                ValidationErrorKind::StringLengthInvalid {
+                    length: s.len(),
+                    min_length: None,
+                    max_length: Some(max),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -326,15 +383,24 @@ fn validate_string(
     // Check pattern
     if let Some(pattern) = &schema.pattern {
         let re = Regex::new(pattern).map_err(|e| {
+            // Invalid regex is a schema error, not a validation error.
+            // This is a programming error in the schema definition itself.
+            // We use Other here because this isn't really a validation failure
+            // of the YAML document - it's a problem with the schema.
             ValidationError::new(
-                format!("Invalid regex pattern '{}': {}", pattern, e),
+                ValidationErrorKind::Other {
+                    message: format!("Invalid regex pattern '{}': {}", pattern, e),
+                },
                 context.instance_path.clone(),
             )
         })?;
 
         if !re.is_match(s) {
             context.add_error(
-                format!("String '{}' does not match pattern '{}'", s, pattern),
+                ValidationErrorKind::StringPatternMismatch {
+                    value: s.clone(),
+                    pattern: pattern.clone(),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -354,7 +420,10 @@ fn validate_null(
         Yaml::Null => Ok(()),
         _ => {
             context.add_error(
-                format!("Expected null, got {}", yaml_type_name(&value.yaml)),
+                ValidationErrorKind::TypeMismatch {
+                    expected: "null".to_string(),
+                    got: yaml_type_name(&value.yaml).to_string(),
+                },
                 value,
             );
             Err(context.errors[0].clone())
@@ -378,15 +447,14 @@ fn validate_enum(
     }
 
     context.add_error(
-        format!(
-            "Value must be one of: {}",
-            schema
+        ValidationErrorKind::InvalidEnumValue {
+            value: format!("{}", json_value),
+            allowed: schema
                 .values
                 .iter()
                 .map(|v| format!("{}", v))
-                .collect::<Vec<_>>()
-                .join(", ")
-        ),
+                .collect(),
+        },
         value,
     );
     Err(context.errors[0].clone())
@@ -401,7 +469,7 @@ fn validate_any_of(
     let original_error_count = context.errors.len();
 
     for (_i, subschema) in schema.schemas.iter().enumerate() {
-        let mut sub_context = ValidationContext::new(context.registry);
+        let mut sub_context = ValidationContext::new(context.registry, context.source_ctx);
         sub_context.instance_path = context.instance_path.clone();
         sub_context.schema_path = context.schema_path.clone();
 
@@ -442,7 +510,10 @@ fn validate_array(
         Some(items) => items,
         None => {
             context.add_error(
-                format!("Expected array, got {}", yaml_type_name(&value.yaml)),
+                ValidationErrorKind::TypeMismatch {
+                    expected: "array".to_string(),
+                    got: yaml_type_name(&value.yaml).to_string(),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -453,7 +524,11 @@ fn validate_array(
     if let Some(min) = schema.min_items {
         if items.len() < min {
             context.add_error(
-                format!("Array length {} is less than minimum {}", items.len(), min),
+                ValidationErrorKind::ArrayLengthInvalid {
+                    length: items.len(),
+                    min_items: Some(min),
+                    max_items: None,
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -464,11 +539,11 @@ fn validate_array(
     if let Some(max) = schema.max_items {
         if items.len() > max {
             context.add_error(
-                format!(
-                    "Array length {} is greater than maximum {}",
-                    items.len(),
-                    max
-                ),
+                ValidationErrorKind::ArrayLengthInvalid {
+                    length: items.len(),
+                    min_items: None,
+                    max_items: Some(max),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -481,7 +556,7 @@ fn validate_array(
         for item in items {
             let json_value = yaml_to_json_value(&item.yaml);
             if !seen.insert(format!("{:?}", json_value)) {
-                context.add_error("Array items must be unique", value);
+                context.add_error(ValidationErrorKind::ArrayItemsNotUnique, value);
                 return Err(context.errors[0].clone());
             }
         }
@@ -509,7 +584,10 @@ fn validate_object(
         Some(entries) => entries,
         None => {
             context.add_error(
-                format!("Expected object, got {}", yaml_type_name(&value.yaml)),
+                ValidationErrorKind::TypeMismatch {
+                    expected: "object".to_string(),
+                    got: yaml_type_name(&value.yaml).to_string(),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -527,7 +605,12 @@ fn validate_object(
     // Check required properties
     for required in &schema.required {
         if !keys.contains(required) {
-            context.add_error(format!("Missing required property '{}'", required), value);
+            context.add_error(
+                ValidationErrorKind::MissingRequiredProperty {
+                    property: required.clone(),
+                },
+                value,
+            );
             return Err(context.errors[0].clone());
         }
     }
@@ -536,11 +619,11 @@ fn validate_object(
     if let Some(min) = schema.min_properties {
         if entries.len() < min {
             context.add_error(
-                format!(
-                    "Object has {} properties, minimum is {}",
-                    entries.len(),
-                    min
-                ),
+                ValidationErrorKind::ObjectPropertyCountInvalid {
+                    count: entries.len(),
+                    min_properties: Some(min),
+                    max_properties: None,
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -550,11 +633,11 @@ fn validate_object(
     if let Some(max) = schema.max_properties {
         if entries.len() > max {
             context.add_error(
-                format!(
-                    "Object has {} properties, maximum is {}",
-                    entries.len(),
-                    max
-                ),
+                ValidationErrorKind::ObjectPropertyCountInvalid {
+                    count: entries.len(),
+                    min_properties: None,
+                    max_properties: Some(max),
+                },
                 value,
             );
             return Err(context.errors[0].clone());
@@ -573,7 +656,12 @@ fn validate_object(
                 })?;
             } else if schema.closed {
                 // Closed object - no additional properties allowed
-                context.add_error(format!("Unknown property '{}'", key), value);
+                context.add_error(
+                    ValidationErrorKind::UnknownProperty {
+                        property: key.clone(),
+                    },
+                    value,
+                );
                 return Err(context.errors[0].clone());
             } else if let Some(additional) = &schema.additional_properties {
                 // Validate against additional properties schema
@@ -643,18 +731,20 @@ mod tests {
     #[test]
     fn test_validate_boolean() {
         let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
         let schema = Schema::Boolean(BooleanSchema {
             annotations: SchemaAnnotations::default(),
         });
 
         let yaml = YamlWithSourceInfo::new_scalar(Yaml::Boolean(true), SourceInfo::default());
 
-        assert!(validate(&yaml, &schema, &registry).is_ok());
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
     }
 
     #[test]
     fn test_validate_boolean_wrong_type() {
         let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
         let schema = Schema::Boolean(BooleanSchema {
             annotations: SchemaAnnotations::default(),
         });
@@ -664,6 +754,6 @@ mod tests {
             SourceInfo::default(),
         );
 
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
     }
 }

@@ -4,6 +4,7 @@
 mod integration_tests {
     use crate::schema::*;
     use crate::validator::validate;
+    use quarto_source_map::SourceContext;
     use quarto_yaml::{SourceInfo, YamlWithSourceInfo};
     use yaml_rust2::Yaml;
 
@@ -19,6 +20,10 @@ mod integration_tests {
         YamlWithSourceInfo::new_scalar(Yaml::Integer(value), SourceInfo::default())
     }
 
+    fn make_source_ctx() -> SourceContext {
+        SourceContext::new()
+    }
+
     #[test]
     fn test_boolean_validation() {
         let registry = SchemaRegistry::new();
@@ -27,10 +32,10 @@ mod integration_tests {
         });
 
         let yaml = make_yaml_bool(true);
-        assert!(validate(&yaml, &schema, &registry).is_ok());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_ok());
 
         let yaml = make_yaml_string("not a boolean");
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_err());
     }
 
     #[test]
@@ -44,13 +49,13 @@ mod integration_tests {
         });
 
         let yaml = make_yaml_string("hello");
-        assert!(validate(&yaml, &schema, &registry).is_ok());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_ok());
 
         let yaml = make_yaml_string("hi");
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_err());
 
         let yaml = make_yaml_string("this is too long");
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_err());
     }
 
     #[test]
@@ -66,13 +71,13 @@ mod integration_tests {
         });
 
         let yaml = make_yaml_number(50);
-        assert!(validate(&yaml, &schema, &registry).is_ok());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_ok());
 
         let yaml = make_yaml_number(-1);
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_err());
 
         let yaml = make_yaml_number(101);
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_err());
     }
 
     #[test]
@@ -88,10 +93,10 @@ mod integration_tests {
         });
 
         let yaml = make_yaml_string("red");
-        assert!(validate(&yaml, &schema, &registry).is_ok());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_ok());
 
         let yaml = make_yaml_string("yellow");
-        assert!(validate(&yaml, &schema, &registry).is_err());
+        assert!(validate(&yaml, &schema, &registry, &make_source_ctx()).is_err());
     }
 
     #[test]
@@ -100,9 +105,9 @@ mod integration_tests {
         let yaml = make_yaml_bool(true);
 
         let schema_true = Schema::True;
-        assert!(validate(&yaml, &schema_true, &registry).is_ok());
+        assert!(validate(&yaml, &schema_true, &registry, &make_source_ctx()).is_ok());
 
         let schema_false = Schema::False;
-        assert!(validate(&yaml, &schema_false, &registry).is_err());
+        assert!(validate(&yaml, &schema_false, &registry, &make_source_ctx()).is_err());
     }
 }

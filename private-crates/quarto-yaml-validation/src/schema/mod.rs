@@ -18,11 +18,13 @@ use std::collections::HashMap;
 // Internal modules
 mod annotations;
 mod helpers;
+mod merge;
 mod parser;
 mod parsers;
 mod types;
 
 // Public re-exports
+pub use merge::merge_object_schemas;
 pub use types::{
     AllOfSchema, AnyOfSchema, AnySchema, ArraySchema, BooleanSchema, EnumSchema, NamingConvention,
     NullSchema, NumberSchema, ObjectSchema, RefSchema, SchemaAnnotations, StringSchema,
@@ -158,6 +160,199 @@ impl Schema {
             Schema::Array(_) => "array",
             Schema::Object(_) => "object",
             Schema::Ref(_) => "$ref",
+        }
+    }
+
+    /// Compile a schema by resolving eager references and merging inheritance.
+    ///
+    /// This creates a structurally complete schema suitable for validation.
+    /// Lazy references (eager=false) are kept as references and resolved
+    /// during validation to support circular dependencies.
+    ///
+    /// # Two-Phase Processing
+    ///
+    /// Schemas go through two phases:
+    /// 1. **Parsing** (stateless, no registry): YAML → Schema AST
+    /// 2. **Compilation** (with registry): Schema AST → Compiled Schema
+    ///
+    /// Compilation resolves:
+    /// - Eager references (`resolveRef`, `eager: true`) - must resolve for schema completeness
+    /// - Object inheritance (`base_schema`) - merges properties from base schemas
+    /// - Nested schemas recursively
+    ///
+    /// Compilation preserves:
+    /// - Lazy references (`ref`, `eager: false`) - resolved during validation
+    ///
+    /// # Arguments
+    /// * `registry` - Schema registry for resolving references
+    ///
+    /// # Returns
+    /// A compiled schema with all eager references resolved and inheritance merged
+    ///
+    /// # Errors
+    /// Returns error if:
+    /// - An eager reference cannot be resolved (not in registry)
+    /// - Base schema is not an ObjectSchema
+    /// - Circular eager references detected (future enhancement)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_yaml_validation::{Schema, SchemaRegistry};
+    /// use quarto_yaml;
+    ///
+    /// let mut registry = SchemaRegistry::new();
+    ///
+    /// // Parse and register base schema
+    /// let base_yaml = quarto_yaml::parse(r#"
+    /// object:
+    ///   properties:
+    ///     id: string
+    /// "#).unwrap();
+    /// let base = Schema::from_yaml(&base_yaml).unwrap();
+    /// registry.register("base".to_string(), base);
+    ///
+    /// // Parse derived schema with inheritance
+    /// let derived_yaml = quarto_yaml::parse(r#"
+    /// object:
+    ///   super:
+    ///     resolveRef: base
+    ///   properties:
+    ///     name: string
+    /// "#).unwrap();
+    /// let derived = Schema::from_yaml(&derived_yaml).unwrap();
+    ///
+    /// // Compile - merges base and derived
+    /// let compiled = derived.compile(&registry).unwrap();
+    ///
+    /// // Compiled schema now has both 'id' and 'name' properties
+    /// ```
+    pub fn compile(&self, registry: &SchemaRegistry) -> SchemaResult<Schema> {
+        match self {
+            // Object with inheritance - must merge base schemas
+            Schema::Object(obj) if obj.base_schema.is_some() => {
+                // Compile base schemas first (recursive)
+                let base_schemas = obj.base_schema.as_ref().unwrap();
+                let compiled_bases: SchemaResult<Vec<_>> = base_schemas
+                    .iter()
+                    .map(|s| s.compile(registry))
+                    .collect();
+                let compiled_bases = compiled_bases?;
+
+                // Merge with derived schema
+                let merged = merge_object_schemas(&compiled_bases, obj, registry)?;
+
+                // Result has no base_schema (it's been merged)
+                Ok(Schema::Object(merged))
+            }
+
+            // Eager reference - must resolve now
+            Schema::Ref(r) if r.eager => {
+                let resolved = registry.resolve(&r.reference)
+                    .ok_or_else(|| crate::error::SchemaError::InvalidStructure {
+                        message: format!(
+                            "Cannot resolve eager reference '{}' - not found in registry",
+                            r.reference
+                        ),
+                        location: quarto_yaml::SourceInfo::default(),
+                    })?;
+
+                // Recursively compile the resolved schema
+                resolved.compile(registry)
+            }
+
+            // Lazy reference - keep as is for validation time
+            Schema::Ref(_) => Ok(self.clone()),
+
+            // Recursively compile nested schemas in containers
+            Schema::AnyOf(anyof) => {
+                let compiled_schemas: SchemaResult<Vec<_>> = anyof.schemas
+                    .iter()
+                    .map(|s| s.compile(registry))
+                    .collect();
+                Ok(Schema::AnyOf(AnyOfSchema {
+                    annotations: anyof.annotations.clone(),
+                    schemas: compiled_schemas?,
+                }))
+            }
+
+            Schema::AllOf(allof) => {
+                let compiled_schemas: SchemaResult<Vec<_>> = allof.schemas
+                    .iter()
+                    .map(|s| s.compile(registry))
+                    .collect();
+                Ok(Schema::AllOf(AllOfSchema {
+                    annotations: allof.annotations.clone(),
+                    schemas: compiled_schemas?,
+                }))
+            }
+
+            Schema::Array(arr) => {
+                let compiled_items = if let Some(items) = &arr.items {
+                    Some(Box::new(items.compile(registry)?))
+                } else {
+                    None
+                };
+                Ok(Schema::Array(ArraySchema {
+                    annotations: arr.annotations.clone(),
+                    items: compiled_items,
+                    min_items: arr.min_items,
+                    max_items: arr.max_items,
+                    unique_items: arr.unique_items,
+                }))
+            }
+
+            Schema::Object(obj) => {
+                // Object without inheritance - compile nested property schemas
+                let mut compiled_properties = HashMap::new();
+                for (key, prop_schema) in &obj.properties {
+                    compiled_properties.insert(key.clone(), prop_schema.compile(registry)?);
+                }
+
+                let mut compiled_pattern_properties = HashMap::new();
+                for (pattern, prop_schema) in &obj.pattern_properties {
+                    compiled_pattern_properties.insert(
+                        pattern.clone(),
+                        prop_schema.compile(registry)?
+                    );
+                }
+
+                let compiled_additional = if let Some(ap) = &obj.additional_properties {
+                    Some(Box::new(ap.compile(registry)?))
+                } else {
+                    None
+                };
+
+                let compiled_property_names = if let Some(pn) = &obj.property_names {
+                    Some(Box::new(pn.compile(registry)?))
+                } else {
+                    None
+                };
+
+                Ok(Schema::Object(ObjectSchema {
+                    annotations: obj.annotations.clone(),
+                    properties: compiled_properties,
+                    pattern_properties: compiled_pattern_properties,
+                    additional_properties: compiled_additional,
+                    required: obj.required.clone(),
+                    min_properties: obj.min_properties,
+                    max_properties: obj.max_properties,
+                    closed: obj.closed,
+                    property_names: compiled_property_names,
+                    naming_convention: obj.naming_convention.clone(),
+                    base_schema: None,  // No inheritance at this level
+                }))
+            }
+
+            // Primitives don't need compilation
+            Schema::False
+            | Schema::True
+            | Schema::Boolean(_)
+            | Schema::Number(_)
+            | Schema::String(_)
+            | Schema::Null(_)
+            | Schema::Enum(_)
+            | Schema::Any(_) => Ok(self.clone()),
         }
     }
 }
@@ -1214,6 +1409,133 @@ string:
             );
         } else {
             panic!("Expected String schema");
+        }
+    }
+
+    // Tests for schema inheritance (super field)
+
+    #[test]
+    fn test_object_with_super_single() {
+        let yaml = quarto_yaml::parse(
+            r#"
+object:
+  super:
+    resolveRef: base-schema
+  properties:
+    name: string
+"#,
+        )
+        .unwrap();
+
+        let schema = Schema::from_yaml(&yaml).unwrap();
+        match schema {
+            Schema::Object(obj) => {
+                assert!(obj.base_schema.is_some());
+                let bases = obj.base_schema.unwrap();
+                assert_eq!(bases.len(), 1);
+                match &bases[0] {
+                    Schema::Ref(r) => {
+                        assert_eq!(r.reference, "base-schema");
+                        assert_eq!(r.eager, true);
+                    }
+                    _ => panic!("Expected Ref schema"),
+                }
+                assert!(obj.properties.contains_key("name"));
+            }
+            _ => panic!("Expected Object schema"),
+        }
+    }
+
+    #[test]
+    fn test_object_with_super_array() {
+        let yaml = quarto_yaml::parse(
+            r#"
+object:
+  super:
+    - resolveRef: base1
+    - resolveRef: base2
+  properties:
+    name: string
+"#,
+        )
+        .unwrap();
+
+        let schema = Schema::from_yaml(&yaml).unwrap();
+        match schema {
+            Schema::Object(obj) => {
+                assert!(obj.base_schema.is_some());
+                let bases = obj.base_schema.unwrap();
+                assert_eq!(bases.len(), 2);
+                match &bases[0] {
+                    Schema::Ref(r) => {
+                        assert_eq!(r.reference, "base1");
+                        assert_eq!(r.eager, true);
+                    }
+                    _ => panic!("Expected Ref schema for base1"),
+                }
+                match &bases[1] {
+                    Schema::Ref(r) => {
+                        assert_eq!(r.reference, "base2");
+                        assert_eq!(r.eager, true);
+                    }
+                    _ => panic!("Expected Ref schema for base2"),
+                }
+            }
+            _ => panic!("Expected Object schema"),
+        }
+    }
+
+    #[test]
+    fn test_object_without_super() {
+        let yaml = quarto_yaml::parse(
+            r#"
+object:
+  properties:
+    name: string
+"#,
+        )
+        .unwrap();
+
+        let schema = Schema::from_yaml(&yaml).unwrap();
+        match schema {
+            Schema::Object(obj) => {
+                assert!(obj.base_schema.is_none());
+                assert!(obj.properties.contains_key("name"));
+            }
+            _ => panic!("Expected Object schema"),
+        }
+    }
+
+    #[test]
+    fn test_super_with_inline_schema() {
+        let yaml = quarto_yaml::parse(
+            r#"
+object:
+  super:
+    object:
+      properties:
+        base_field: string
+  properties:
+    derived_field: number
+"#,
+        )
+        .unwrap();
+
+        let schema = Schema::from_yaml(&yaml).unwrap();
+        match schema {
+            Schema::Object(obj) => {
+                assert!(obj.base_schema.is_some());
+                let bases = obj.base_schema.unwrap();
+                assert_eq!(bases.len(), 1);
+                match &bases[0] {
+                    Schema::Object(base_obj) => {
+                        assert!(base_obj.properties.contains_key("base_field"));
+                    }
+                    _ => panic!("Expected Object schema for base"),
+                }
+                assert!(obj.properties.contains_key("derived_field"));
+            }
+            _ => panic!("Expected Object schema"),
         }
     }
 }

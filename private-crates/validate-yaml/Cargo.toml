@@ -11,9 +11,13 @@ repository.workspace = true
 quarto-yaml.workspace = true
 quarto-yaml-validation.workspace = true
 quarto-error-reporting.workspace = true
+quarto-source-map.workspace = true
 
 # Error handling
 anyhow.workspace = true
 
 # CLI argument parsing
 clap.workspace = true
+
+# JSON serialization
+serde_json.workspace = true

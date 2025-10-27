@@ -143,6 +143,12 @@ pub struct ObjectSchema {
     pub property_names: Option<Box<Schema>>,
     /// Quarto extension: naming convention(s) for property names
     pub naming_convention: Option<NamingConvention>,
+    /// Base schemas for inheritance (via `super` field in YAML)
+    ///
+    /// Can contain Schema::Ref with eager=true (to be resolved during compilation)
+    /// or actual ObjectSchema instances (if already resolved).
+    /// When present, schemas should be merged during compilation phase.
+    pub base_schema: Option<Vec<Schema>>,
 }
 
 /// Reference to another schema

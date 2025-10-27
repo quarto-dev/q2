@@ -1,15 +1,9 @@
-mod error_codes;
-mod error_conversion;
-
 use anyhow::{Context, Result};
 use clap::Parser;
-use quarto_error_reporting::{DetailKind, DiagnosticMessage};
-use quarto_yaml_validation::{Schema, SchemaRegistry, validate};
+use quarto_yaml_validation::{Schema, SchemaRegistry, ValidationDiagnostic, validate};
 use std::fs;
 use std::path::PathBuf;
 use std::process;
-
-use error_conversion::validation_error_to_diagnostic;
 
 /// Validate a YAML document against a schema
 #[derive(Parser, Debug)]
@@ -23,6 +17,10 @@ struct Args {
     /// Path to the YAML schema file
     #[arg(long, value_name = "FILE")]
     schema: PathBuf,
+
+    /// Output errors as JSON instead of text
+    #[arg(long)]
+    json: bool,
 }
 
 fn main() {
@@ -77,69 +75,62 @@ fn run() -> Result<()> {
         anyhow::anyhow!("Failed to parse input file {}: {}", args.input.display(), e)
     })?;
 
+    // Create a SourceContext and register the input file
+    // This enables proper file name and line/column tracking in error messages
+    let mut source_ctx = quarto_source_map::SourceContext::new();
+
+    // Compute the same FileId that quarto-yaml uses (hash of filename)
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    input_filename.hash(&mut hasher);
+    let expected_file_id = quarto_source_map::FileId(hasher.finish() as usize);
+
+    // Register the file with the computed FileId
+    let file_id = source_ctx.add_file_with_id(
+        expected_file_id,
+        args.input.to_string_lossy().to_string(),
+        Some(input_content.clone())
+    );
+
+    // Verify we got the expected file_id
+    debug_assert_eq!(file_id, expected_file_id,
+        "FileId mismatch: quarto-yaml will use {:?} but SourceContext has {:?}",
+        expected_file_id, file_id);
+
     // Create a schema registry (empty for now, but needed for $ref resolution)
     let registry = SchemaRegistry::new();
 
     // Validate the document against the schema
-    match validate(&input_yaml, &schema, &registry) {
+    match validate(&input_yaml, &schema, &registry, &source_ctx) {
         Ok(()) => {
-            println!("✓ Validation successful");
-            println!("  Input: {}", args.input.display());
-            println!("  Schema: {}", args.schema.display());
+            if args.json {
+                // JSON success output
+                println!(r#"{{"success": true}}"#);
+            } else {
+                // Human-readable success output
+                println!("✓ Validation successful");
+                println!("  Input: {}", args.input.display());
+                println!("  Schema: {}", args.schema.display());
+            }
             Ok(())
         }
         Err(error) => {
-            // Convert ValidationError to DiagnosticMessage for better presentation
-            let diagnostic = validation_error_to_diagnostic(&error);
-            display_diagnostic(&diagnostic);
+            // Convert ValidationError to ValidationDiagnostic
+            let diagnostic = ValidationDiagnostic::from_validation_error(&error, &source_ctx);
+
+            if args.json {
+                // JSON error output with structured paths and source ranges
+                let json = serde_json::json!({
+                    "success": false,
+                    "errors": [diagnostic.to_json()]
+                });
+                println!("{}", serde_json::to_string_pretty(&json)?);
+            } else {
+                // Human-readable error output with ariadne-style rendering
+                eprint!("{}", diagnostic.to_text(&source_ctx));
+            }
             process::exit(1);
         }
-    }
-}
-
-/// Display a diagnostic message in tidyverse style.
-///
-/// This provides a simple text-based rendering. In Phase 2, this could be replaced
-/// with ariadne for visual error reports with source context.
-fn display_diagnostic(diagnostic: &DiagnosticMessage) {
-    // Title with error code
-    if let Some(code) = &diagnostic.code {
-        eprintln!("Error: {} ({})", diagnostic.title, code);
-    } else {
-        eprintln!("Error: {}", diagnostic.title);
-    }
-    eprintln!();
-
-    // Problem statement
-    if let Some(problem) = &diagnostic.problem {
-        eprintln!("Problem: {}", problem.as_str());
-        eprintln!();
-    }
-
-    // Details with bullets
-    if !diagnostic.details.is_empty() {
-        for detail in &diagnostic.details {
-            let bullet = match detail.kind {
-                DetailKind::Error => "  ✖",
-                DetailKind::Info => "  ℹ",
-                DetailKind::Note => "  •",
-            };
-            eprintln!("{} {}", bullet, detail.content.as_str());
-        }
-        eprintln!();
-    }
-
-    // Hints
-    if !diagnostic.hints.is_empty() {
-        for hint in &diagnostic.hints {
-            eprintln!("  ? {}", hint.as_str());
-        }
-        eprintln!();
-    }
-
-    // Documentation link
-    if let Some(url) = diagnostic.docs_url() {
-        eprintln!("See {} for more information", url);
-        eprintln!();
     }
 }

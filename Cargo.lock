@@ -648,6 +648,8 @@ name = "quarto-yaml-validation"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "quarto-error-reporting",
+ "quarto-source-map",
  "quarto-yaml",
  "regex",
  "serde",
@@ -959,8 +961,10 @@ dependencies = [
  "anyhow",
  "clap",
  "quarto-error-reporting",
+ "quarto-source-map",
  "quarto-yaml",
  "quarto-yaml-validation",
+ "serde_json",
 ]
 
 [[package]]

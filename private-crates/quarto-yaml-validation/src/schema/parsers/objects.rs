@@ -220,6 +220,23 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
         None
     };
 
+    // Parse super/baseSchema for inheritance
+    let base_schema = if let Some(super_yaml) = yaml.get_hash_value("super") {
+        if let Some(arr) = super_yaml.as_array() {
+            // Array form: super: [schema1, schema2]
+            let schemas: SchemaResult<Vec<_>> = arr
+                .iter()
+                .map(|item| from_yaml(item))
+                .collect();
+            Some(schemas?)
+        } else {
+            // Single schema form: super: { resolveRef: ... }
+            Some(vec![from_yaml(super_yaml)?])
+        }
+    } else {
+        None
+    };
+
     Ok(Schema::Object(ObjectSchema {
         annotations,
         properties,
@@ -231,6 +248,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
         closed,
         property_names,
         naming_convention,
+        base_schema,
     }))
 }
 
@@ -308,6 +326,7 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
             closed: false,
             property_names,
             naming_convention: None,
+            base_schema: None,
         }));
     }
 
@@ -375,5 +394,6 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
         closed: true,  // Records are always closed
         property_names: None,
         naming_convention: None,
+        base_schema: None,
     }))
 }
