@@ -185,11 +185,12 @@ pub fn process_pipe_table(
             } else {
                 panic!("Expected Row in pipe_table_row, got {:?}", child);
             }
-        } else if node == "table_caption" {
-            if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                caption_inlines = Some(inlines);
-            } else {
-                panic!("Expected Inlines in table_caption, got {:?}", child);
+        } else if node == "caption" {
+            match child {
+                PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(caption_block)) => {
+                    caption_inlines = Some(caption_block.content);
+                }
+                _ => panic!("Expected CaptionBlock in caption, got {:?}", child),
             }
         } else {
             panic!("Unexpected node in pipe_table: {}", node);

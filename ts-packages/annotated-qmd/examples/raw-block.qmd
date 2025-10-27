@@ -1,0 +1,21 @@
+---
+title: Raw Block Example
+---
+
+# Raw Blocks
+
+Regular paragraph.
+
+```{=html}
+<div class="custom">
+  <p>Raw HTML block</p>
+</div>
+```
+
+```{=latex}
+\begin{theorem}
+Raw LaTeX block
+\end{theorem}
+```
+
+Another regular paragraph.

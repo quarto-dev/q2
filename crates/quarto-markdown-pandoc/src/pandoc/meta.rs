@@ -438,7 +438,13 @@ pub fn yaml_to_meta_with_source_info(
                                 source_info: source_info.clone(),
                             })],
                             source_info: quarto_source_map::SourceInfo::default(),
-                            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+                            attr_source: crate::pandoc::attr::AttrSourceInfo {
+                                id: None,            // No id
+                                classes: vec![None], // "yaml-tagged-string" class has no source tracking
+                                attributes: vec![
+                                    (None, Some(tag_source_info)), // "tag" key has no source, value points to the tag
+                                ],
+                            },
                         };
                         MetaValueWithSourceInfo::MetaInlines {
                             content: vec![Inline::Span(span)],

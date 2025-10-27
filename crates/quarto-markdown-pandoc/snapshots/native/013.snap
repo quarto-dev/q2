@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Span ( "" , ["quarto-insert"] , [] ) [Str "insertions", Space, Str "with", Space, Str "markdown", Space, Emph [Str "inside"], Space, Str "them"], Str ",", Space, Span ( "" , ["quarto-delete"] , [] ) [Str "deletions,", Space, Strong [Str "likewise"]], Str ",", Space, Span ( "" , ["quarto-highlight"] , [] ) [Str "highlight", Space, Str "this", Space, Str "part"], Span ( "" , ["quarto-edit-comment"] , [] ) [Str "with", Space, Str "a", Space, Str "comment", Space, Str "about", Space, Str "the", Space, Str "previous", Space, Str "highlight"], Str "."] ]

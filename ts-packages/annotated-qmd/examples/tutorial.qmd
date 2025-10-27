@@ -1,0 +1,174 @@
+---
+title: "Building Your First Web API"
+subtitle: "A Step-by-Step Tutorial"
+author: "Tutorial Team"
+format: html
+---
+
+# Overview
+
+This tutorial teaches you to build a simple REST API. By the end, you'll have a working API with authentication and database integration.
+
+::: {.callout-note}
+## Prerequisites
+
+Before starting, ensure you have:
+
+- Python 3.8 or higher
+- Basic understanding of HTTP
+- A code editor
+:::
+
+# Step 1: Project Setup
+
+Create a new directory for your project:
+
+```bash
+mkdir my-api
+cd my-api
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+::: {.callout-tip}
+### Virtual Environments
+
+Always use a virtual environment to isolate your project dependencies. This prevents conflicts between different projects.
+
+::: {.callout-warning}
+Make sure to activate the virtual environment before installing packages!
+:::
+:::
+
+# Step 2: Install Dependencies
+
+Install the required packages:
+
+```bash
+pip install fastapi uvicorn sqlalchemy
+```
+
+Create a `requirements.txt` file:
+
+```txt
+fastapi==0.104.0
+uvicorn==0.24.0
+sqlalchemy==2.0.23
+```
+
+![Project structure visualization](structure.png){#fig-structure}
+
+# Step 3: Create the API
+
+## Define Data Models
+
+Create `models.py`:
+
+```python
+from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True)
+    username = Column(String, unique=True)
+    email = Column(String)
+```
+
+## Create API Endpoints
+
+Create `main.py`:
+
+```python
+from fastapi import FastAPI, HTTPException
+from typing import List
+
+app = FastAPI()
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the API"}
+
+@app.get("/users")
+def list_users():
+    return [
+        {"id": 1, "username": "alice"},
+        {"id": 2, "username": "bob"}
+    ]
+```
+
+::: {.callout-important}
+## Security Considerations
+
+In production, always:
+
+1. Use environment variables for secrets
+2. Implement proper authentication
+3. Validate all input data
+4. Use HTTPS
+:::
+
+# Step 4: Run the Server
+
+Start your API server:
+
+```bash
+uvicorn main:app --reload
+```
+
+Visit `http://localhost:8000/docs` to see the interactive API documentation.
+
+# Step 5: Testing
+
+## Manual Testing
+
+Test your endpoints using curl:
+
+```bash
+curl http://localhost:8000/users
+```
+
+## Automated Tests
+
+Create `test_main.py`:
+
+```python
+from fastapi.testclient import TestClient
+from main import app
+
+client = TestClient(app)
+
+def test_read_root():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Welcome to the API"}
+```
+
+::: {.callout-tip}
+Run tests with: `pytest test_main.py`
+:::
+
+# Next Steps
+
+Congratulations! You've built a working API. Here's what to learn next:
+
+1. Add database integration
+2. Implement authentication (JWT tokens)
+3. Add request validation with Pydantic
+4. Deploy to a cloud platform
+5. Set up monitoring and logging
+
+::: {.callout-note}
+## Additional Resources
+
+- [FastAPI Documentation](https://fastapi.tiangolo.com)
+- [SQLAlchemy Tutorial](https://docs.sqlalchemy.org)
+- [API Design Best Practices](https://restfulapi.net)
+:::
+
+# Conclusion
+
+You now have the foundation for building production-ready APIs. Keep practicing and exploring the ecosystem!

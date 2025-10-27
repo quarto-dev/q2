@@ -1,0 +1,37 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "details": [
+      {
+        "content": {
+          "content": "This key-value pair cannot appear before the class specifier.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 19,
+            "file_id": 0,
+            "start_offset": 10
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 26,
+        "file_id": 0,
+        "start_offset": 20
+      }
+    },
+    "problem": {
+      "content": "This class specifier appears after the key-value pair.",
+      "type": "markdown"
+    },
+    "title": "Key-value Pair Before Class Specifier in Attribute"
+  }
+]

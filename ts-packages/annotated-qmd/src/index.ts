@@ -146,16 +146,12 @@ export type {
   Annotated_MetaValue_String,
   Annotated_MetaValue_Inlines,
   Annotated_MetaValue_Blocks,
-
-  // QMD Document
-  QmdPandocDocument,
-} from './pandoc-types.js';
+} from './types.js';
 
 export {
-  isQmdPandocDocument,
   isInline,
   isBlock,
-} from './pandoc-types.js';
+} from './types.js';
 
 // Re-export classes
 export { SourceInfoReconstructor } from './source-map.js';
@@ -167,12 +163,11 @@ export { DocumentConverter } from './document-converter.js';
 // Import for main functions
 import { SourceInfoReconstructor } from './source-map.js';
 import { MetadataConverter } from './meta-converter.js';
-import { DocumentConverter, type AnnotatedPandocDocument } from './document-converter.js';
+import { DocumentConverter } from './document-converter.js';
 import { BlockConverter } from './block-converter.js';
 import { InlineConverter } from './inline-converter.js';
-import type { RustQmdJson, AnnotatedParse } from './types.js';
+import type { RustQmdJson, AnnotatedParse, Annotated_Block, Annotated_Inline } from './types.js';
 import type { SourceInfoErrorHandler } from './source-map.js';
-import type { Annotated_Block, Annotated_Inline } from './pandoc-types.js';
 
 /**
  * Convert quarto-markdown-pandoc JSON output to AnnotatedParse
@@ -285,8 +280,8 @@ export function parseRustQmdDocument(
     json.astContext.metaTopLevelKeySources
   );
 
-  // Convert document (cast to AnnotatedPandocDocument since RustQmdJson extends it)
-  return converter.convertDocument(json as unknown as AnnotatedPandocDocument);
+  // Convert document
+  return converter.convertDocument(json);
 }
 
 /**

@@ -40,12 +40,16 @@ pub fn process_commonmark_attribute(
             }
         }
         PandocNativeIntermediate::IntermediateKeyValueSpec(spec) => {
-            // TODO: We need to track individual key and value source locations
-            // For now, just add empty entries to maintain structure
-            for (key, value) in spec {
+            // spec is Vec<(key, value, key_range, value_range)>
+            for (key, value, key_range, value_range) in spec {
                 attr.2.insert(key, value);
-                // Placeholder: We don't have source info for keys/values yet
-                attr_source.attributes.push((None, None));
+                // Convert ranges to SourceInfo
+                let key_source = Some(SourceInfo::from_range(context.current_file_id(), key_range));
+                let value_source = Some(SourceInfo::from_range(
+                    context.current_file_id(),
+                    value_range,
+                ));
+                attr_source.attributes.push((key_source, value_source));
             }
         }
         PandocNativeIntermediate::IntermediateUnknown(_) => {}

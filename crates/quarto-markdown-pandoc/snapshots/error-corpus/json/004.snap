@@ -1,0 +1,66 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "details": [
+      {
+        "content": {
+          "content": "This div fence needs a space before the attribute.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 3,
+            "file_id": 0,
+            "start_offset": 0
+          }
+        }
+      },
+      {
+        "content": {
+          "content": "Add a space here before the attribute.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 4,
+            "file_id": 0,
+            "start_offset": 3
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 4,
+        "file_id": 0,
+        "start_offset": 3
+      }
+    },
+    "problem": {
+      "content": "A space is required after ':::' when specifying div attributes.",
+      "type": "markdown"
+    },
+    "title": "Missing Space After Div Fence"
+  },
+  {
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 43,
+        "file_id": 0,
+        "start_offset": 42
+      }
+    },
+    "problem": {
+      "content": "unexpected character or token here",
+      "type": "markdown"
+    },
+    "title": "Parse error"
+  }
+]

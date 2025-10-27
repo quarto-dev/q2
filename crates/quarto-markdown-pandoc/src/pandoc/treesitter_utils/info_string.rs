@@ -17,9 +17,10 @@ pub fn process_info_string(
         match child {
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 // Track source location for the language specifier
-                let lang_source = crate::pandoc::source_map_compat::range_to_source_info_with_context(
-                    &range, context,
-                );
+                let lang_source =
+                    crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                        &range, context,
+                    );
 
                 let mut attr_source = AttrSourceInfo::empty();
                 attr_source.classes.push(Some(lang_source));

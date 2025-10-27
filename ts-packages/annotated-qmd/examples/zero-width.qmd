@@ -1,0 +1,23 @@
+---
+title: "Zero-Width Elements"
+---
+
+# Zero-Width Elements
+
+Word\
+Word
+
+This paragraph has multiple     spaces between words.
+
+SoftBreak happens
+when text wraps naturally
+across multiple lines.
+
+LineBreak uses backslash:\
+Like this.
+
+# File Boundaries
+
+First character test.
+
+Last character test.

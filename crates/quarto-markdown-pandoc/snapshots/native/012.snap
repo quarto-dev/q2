@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Str "Pages", Space, Str "1–30.", Space, Str "Hello—maybe—world…"] ]

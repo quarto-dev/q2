@@ -67,6 +67,7 @@ export class SourceInfoReconstructor {
   private errorHandler: SourceInfoErrorHandler;
   private resolvedCache = new Map<number, ResolvedSource>();
   private mappedStringCache = new Map<number, MappedString>();
+  private topLevelMappedStrings = new Map<number, MappedString>();
 
   constructor(
     pool: SerializableSourceInfo[],
@@ -76,6 +77,21 @@ export class SourceInfoReconstructor {
     this.pool = pool;
     this.sourceContext = sourceContext;
     this.errorHandler = errorHandler || defaultErrorHandler;
+
+    // Create top-level MappedStrings for all files
+    // Validate that content is populated - this is required for proper source mapping
+    for (const file of sourceContext.files) {
+      if (file.content === null || file.content === undefined) {
+        throw new Error(
+          `File ${file.id} (${file.path}) missing content. ` +
+          `astContext.files[].content must be populated for source mapping to work.`
+        );
+      }
+      this.topLevelMappedStrings.set(
+        file.id,
+        asMappedString(file.content, file.path)
+      );
+    }
   }
 
   /**
@@ -130,6 +146,61 @@ export class SourceInfoReconstructor {
   }
 
   /**
+   * Get top-level MappedString for a file
+   *
+   * This returns the full file content as a MappedString.
+   * Use this for the AnnotatedParse.source field at the document level.
+   */
+  getTopLevelMappedString(fileId: number): MappedString {
+    const result = this.topLevelMappedStrings.get(fileId);
+    if (!result) {
+      throw new Error(
+        `No top-level MappedString for file ${fileId}. ` +
+        `Available file IDs: ${Array.from(this.topLevelMappedStrings.keys()).join(', ')}`
+      );
+    }
+    return result;
+  }
+
+  /**
+   * Get file ID and offsets in top-level coordinates
+   *
+   * Resolves the SourceInfo chain to find which file this SourceInfo
+   * ultimately refers to, and what offsets in that file's content.
+   */
+  getSourceLocation(id: number): { fileId: number; start: number; end: number } {
+    const resolved = this.resolveChain(id);
+    return {
+      fileId: resolved.file_id,
+      start: resolved.range[0],
+      end: resolved.range[1]
+    };
+  }
+
+  /**
+   * Get all three AnnotatedParse source fields (source, start, end)
+   *
+   * This is the primary API for converters to use. It returns:
+   * - source: The top-level MappedString for the file (full file content)
+   * - start: Offset in top-level coordinates
+   * - end: Offset in top-level coordinates
+   *
+   * Invariant: source.value.substring(start, end) extracts the correct text
+   */
+  getAnnotatedParseSourceFields(id: number): {
+    source: MappedString;
+    start: number;
+    end: number;
+  } {
+    const { fileId, start, end } = this.getSourceLocation(id);
+    return {
+      source: this.getTopLevelMappedString(fileId),
+      start,
+      end
+    };
+  }
+
+  /**
    * Handle Original SourceInfo type (t=0)
    * Data format: file_id (number)
    */
@@ -143,16 +214,16 @@ export class SourceInfoReconstructor {
     const fileId = info.d;
     const [start, end] = info.r;
 
-    // Find file in context
-    const file = this.sourceContext.files.find(f => f.id === fileId);
-    if (!file) {
+    // Get top-level MappedString for this file
+    const topLevel = this.topLevelMappedStrings.get(fileId);
+    if (!topLevel) {
       this.errorHandler(`File ID ${fileId} not found in source context`, id);
       return asMappedString('');
     }
 
-    // Extract substring from file content
-    const content = file.content.substring(start, end);
-    return asMappedString(content, file.path);
+    // Use mappedSubstring to maintain connection to top-level file
+    // This preserves the mapping chain so that AnnotatedParse.source can reference top-level
+    return mappedSubstring(topLevel, start, end);
   }
 
   /**
@@ -195,8 +266,10 @@ export class SourceInfoReconstructor {
     const mappedPieces: MappedString[] = [];
     for (const [pieceId, offset, length] of pieces) {
       const pieceMapped = this.toMappedString(pieceId);
-      // Extract substring at specified offset/length
-      const substring = mappedSubstring(pieceMapped, offset, offset + length);
+      // Extract first 'length' characters from this piece
+      // Note: 'offset' is offset_in_concat (where piece goes in final string),
+      // NOT an offset into the piece itself
+      const substring = mappedSubstring(pieceMapped, 0, length);
       mappedPieces.push(substring);
     }
 
@@ -263,9 +336,7 @@ export class SourceInfoReconstructor {
         }
         break;
 
-      case 2: // Concat - use first piece's resolution
-        // TODO: Concat doesn't have a single file location, so we use the first piece
-        // For error reporting, this may not be ideal
+      case 2: // Concat - resolve using MappedString.map()
         {
           if (!isConcatData(info.d)) {
             this.errorHandler(`Invalid Concat data format`, id);
@@ -276,14 +347,55 @@ export class SourceInfoReconstructor {
               this.errorHandler(`Empty Concat pieces`, id);
               resolved = { file_id: -1, range: info.r };
             } else {
-              const [firstPieceId, offset, length] = pieces[0];
-              const firstResolved = this.resolveChain(firstPieceId);
-              // Offset into the first piece
-              const [pieceStart, _] = firstResolved.range;
-              resolved = {
-                file_id: firstResolved.file_id,
-                range: [pieceStart + offset, pieceStart + offset + length]
-              };
+              // Get the concatenated MappedString (already built by handleConcat)
+              const concatMapped = this.toMappedString(id);
+
+              if (concatMapped.value.length === 0) {
+                // Empty concat - use first piece's location
+                const [firstPieceId] = pieces[0];
+                const firstResolved = this.resolveChain(firstPieceId);
+                resolved = {
+                  file_id: firstResolved.file_id,
+                  range: [firstResolved.range[0], firstResolved.range[0]]
+                };
+                break;
+              }
+
+              // Map the start position (offset 0 in concat)
+              const startMap = concatMapped.map(0);
+              if (!startMap) {
+                this.errorHandler(`Failed to map start position for Concat`, id);
+                resolved = { file_id: -1, range: info.r };
+                break;
+              }
+
+              // Map the last character position (length - 1)
+              const lastCharMap = concatMapped.map(concatMapped.value.length - 1);
+              if (!lastCharMap) {
+                this.errorHandler(`Failed to map last character position for Concat`, id);
+                resolved = { file_id: -1, range: info.r };
+                break;
+              }
+
+              // Find the file_id by checking which top-level MappedString this is
+              let file_id = -1;
+              for (const [fid, topLevel] of this.topLevelMappedStrings.entries()) {
+                if (topLevel === startMap.originalString) {
+                  file_id = fid;
+                  break;
+                }
+              }
+
+              if (file_id === -1) {
+                this.errorHandler(`Could not find file_id for Concat originalString`, id);
+                resolved = { file_id: -1, range: info.r };
+              } else {
+                // End position is one past the last character
+                resolved = {
+                  file_id,
+                  range: [startMap.index, lastCharMap.index + 1]
+                };
+              }
             }
           }
         }
@@ -299,6 +411,6 @@ export class SourceInfoReconstructor {
     return resolved;
   }
 
-  // TODO: Implement circular reference detection
+  // TODO (k-214): Implement circular reference detection
   // This would require tracking visited IDs during resolveChain traversal
 }

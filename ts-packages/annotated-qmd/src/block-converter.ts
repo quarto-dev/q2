@@ -5,9 +5,8 @@
  * into AnnotatedParse structures compatible with quarto-cli.
  */
 
-import type { AnnotatedParse } from './types.js';
+import type { AnnotatedParse, Annotated_Block, Annotated_Caption } from './types.js';
 import type { SourceInfoReconstructor } from './source-map.js';
-import type { Annotated_Block, Annotated_Caption } from './pandoc-types.js';
 import { InlineConverter } from './inline-converter.js';
 
 /**
@@ -20,14 +19,16 @@ export class BlockConverter {
     private sourceReconstructor: SourceInfoReconstructor
   ) {
     this.inlineConverter = new InlineConverter(sourceReconstructor);
+    // Wire the converters together to handle Note elements with block content
+    this.inlineConverter.setBlockConverter(this);
   }
 
   /**
    * Convert a Block node to AnnotatedParse
    */
   convertBlock(block: Annotated_Block): AnnotatedParse {
-    const source = this.sourceReconstructor.toMappedString(block.s);
-    const [start, end] = this.sourceReconstructor.getOffsets(block.s);
+    const { source, start, end } =
+      this.sourceReconstructor.getAnnotatedParseSourceFields(block.s);
 
     switch (block.t) {
       // Simple blocks with inline content
@@ -122,7 +123,7 @@ export class BlockConverter {
       // BulletList: [[blocks]]
       // NOTE: components are flattened - all blocks from all items in document order.
       // Item boundaries are lost. Reconstruct from result field or use helper API.
-      // TODO: Create helper API to navigate list items (tracked in beads)
+      // TODO (k-193): Create helper API to navigate list items
       case 'BulletList':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
@@ -136,7 +137,7 @@ export class BlockConverter {
       // OrderedList: [listAttrs, [[blocks]]]
       // NOTE: components are flattened - all blocks from all items in document order.
       // Item boundaries are lost. Reconstruct from result field or use helper API.
-      // TODO: Create helper API to navigate list items (tracked in beads)
+      // TODO (k-193): Create helper API to navigate list items
       case 'OrderedList':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
@@ -162,18 +163,19 @@ export class BlockConverter {
         };
 
       // Figure: [attr, caption, blocks]
+      // Components in source order: caption, blocks, then attr (attr comes after in source)
       case 'Figure':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
           kind: 'Figure',
           source,
           components: [
-            ...this.convertAttr(block.c[0], block.attrS),
             ...this.convertCaption({
               shortCaption: block.c[1][0],
               longCaption: block.c[1][1]
             }),
-            ...block.c[2].map(b => this.convertBlock(b))
+            ...block.c[2].map(b => this.convertBlock(b)),
+            ...this.convertAttr(block.c[0], block.attrS)
           ],
           start,
           end
@@ -184,7 +186,7 @@ export class BlockConverter {
       // Structure lost: can't distinguish term boundaries, definition boundaries,
       // or which blocks belong to which definition. Reconstruct from result field
       // or use helper API.
-      // TODO: Create helper API to navigate definition list structure (tracked in beads)
+      // TODO (k-193): Create helper API to navigate definition list structure
       case 'DefinitionList':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
@@ -208,13 +210,7 @@ export class BlockConverter {
           kind: 'Table',
           source,
           components: [
-            // Table attr
-            ...this.convertAttr(block.c[0], block.attrS),
-            // Caption (short and long)
-            ...this.convertCaption({
-              shortCaption: block.c[1][0],
-              longCaption: block.c[1][1]
-            }),
+            // Components in source order:
             // TableHead rows and cells
             ...this.convertTableHead(block.c[3], block.headS),
             // TableBody rows and cells (multiple bodies)
@@ -222,7 +218,14 @@ export class BlockConverter {
               this.convertTableBody(body, block.bodiesS[i])
             ),
             // TableFoot rows and cells
-            ...this.convertTableFoot(block.c[5], block.footS)
+            ...this.convertTableFoot(block.c[5], block.footS),
+            // Caption (short and long) - comes after table in source
+            ...this.convertCaption({
+              shortCaption: block.c[1][0],
+              longCaption: block.c[1][1]
+            }),
+            // Table attr - extracted from caption, so comes last
+            ...this.convertAttr(block.c[0], block.attrS)
           ],
           start,
           end
@@ -248,8 +251,8 @@ export class BlockConverter {
 
     // ID
     if (attr[0] && attrS.id !== null) {
-      const source = this.sourceReconstructor.toMappedString(attrS.id);
-      const [start, end] = this.sourceReconstructor.getOffsets(attrS.id);
+      const { source, start, end } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(attrS.id);
       components.push({
         result: attr[0],
         kind: 'attr-id',
@@ -265,8 +268,8 @@ export class BlockConverter {
       const className = attr[1][i];
       const classSourceId = attrS.classes[i];
       if (classSourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(classSourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(classSourceId);
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(classSourceId);
         components.push({
           result: className,
           kind: 'attr-class',
@@ -284,8 +287,8 @@ export class BlockConverter {
       const [keySourceId, valueSourceId] = attrS.kvs[i];
 
       if (keySourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(keySourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(keySourceId);
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(keySourceId);
         components.push({
           result: key,
           kind: 'attr-key',
@@ -297,8 +300,8 @@ export class BlockConverter {
       }
 
       if (valueSourceId !== null) {
-        const source = this.sourceReconstructor.toMappedString(valueSourceId);
-        const [start, end] = this.sourceReconstructor.getOffsets(valueSourceId);
+        const { source, start, end } =
+          this.sourceReconstructor.getAnnotatedParseSourceFields(valueSourceId);
         components.push({
           result: value,
           kind: 'attr-value',
@@ -340,8 +343,8 @@ export class BlockConverter {
    * TableHead = [attr, rows]
    */
   private convertTableHead(
-    head: import('./pandoc-types.js').Annotated_TableHead_Array,
-    headS: import('./pandoc-types.js').TableHeadSourceInfo
+    head: import('./types.js').Annotated_TableHead_Array,
+    headS: import('./types.js').TableHeadSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -361,8 +364,8 @@ export class BlockConverter {
    * TableBody = [attr, rowHeadColumns, head, body]
    */
   private convertTableBody(
-    body: import('./pandoc-types.js').Annotated_TableBody_Array,
-    bodyS: import('./pandoc-types.js').TableBodySourceInfo
+    body: import('./types.js').Annotated_TableBody_Array,
+    bodyS: import('./types.js').TableBodySourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -387,8 +390,8 @@ export class BlockConverter {
    * TableFoot = [attr, rows]
    */
   private convertTableFoot(
-    foot: import('./pandoc-types.js').Annotated_TableFoot_Array,
-    footS: import('./pandoc-types.js').TableFootSourceInfo
+    foot: import('./types.js').Annotated_TableFoot_Array,
+    footS: import('./types.js').TableFootSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -408,8 +411,8 @@ export class BlockConverter {
    * Row = [attr, cells]
    */
   private convertRow(
-    row: import('./pandoc-types.js').Annotated_Row,
-    rowS: import('./pandoc-types.js').RowSourceInfo
+    row: import('./types.js').Annotated_Row,
+    rowS: import('./types.js').RowSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
@@ -429,8 +432,8 @@ export class BlockConverter {
    * Cell = [attr, alignment, rowSpan, colSpan, content]
    */
   private convertCell(
-    cell: import('./pandoc-types.js').Annotated_Cell,
-    cellS: import('./pandoc-types.js').CellSourceInfo
+    cell: import('./types.js').Annotated_Cell,
+    cellS: import('./types.js').CellSourceInfo
   ): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 

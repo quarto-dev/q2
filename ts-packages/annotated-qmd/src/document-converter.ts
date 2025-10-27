@@ -6,25 +6,18 @@
  * from quarto-markdown-pandoc JSON into AnnotatedParse structures.
  */
 
-import type { AnnotatedParse, JsonMetaValue } from './types.js';
-import type { SourceInfoReconstructor } from './source-map.js';
 import type {
+  AnnotatedParse,
+  JsonMetaValue,
+  RustQmdJson,
   Annotated_Block,
   Annotated_Inline
-} from './pandoc-types.js';
+} from './types.js';
+import type { SourceInfoReconstructor } from './source-map.js';
 import { asMappedString } from '@quarto/mapped-string';
 import { InlineConverter } from './inline-converter.js';
 import { BlockConverter } from './block-converter.js';
 import { MetadataConverter } from './meta-converter.js';
-
-/**
- * Annotated Pandoc Document structure from quarto-markdown-pandoc
- */
-export interface AnnotatedPandocDocument {
-  "pandoc-api-version": [number, number, number];
-  meta: Record<string, JsonMetaValue>;
-  blocks: Annotated_Block[];
-}
 
 /**
  * Converts complete Pandoc documents from quarto-markdown-pandoc
@@ -44,6 +37,8 @@ export class DocumentConverter {
       sourceReconstructor,
       metaTopLevelKeySources
     );
+    // Wire the converters together to handle Note elements with block content
+    this.inlineConverter.setBlockConverter(this.blockConverter);
   }
 
   /**
@@ -55,7 +50,7 @@ export class DocumentConverter {
    * - source: Full document source (if available)
    * - components: Array of metadata and block AnnotatedParse nodes
    */
-  convertDocument(doc: AnnotatedPandocDocument): AnnotatedParse {
+  convertDocument(doc: RustQmdJson): AnnotatedParse {
     const components: AnnotatedParse[] = [];
 
     // Convert metadata (if present)
@@ -68,11 +63,10 @@ export class DocumentConverter {
       components.push(...doc.blocks.map(block => this.blockConverter.convertBlock(block)));
     }
 
-    // Try to get overall document source if we have file context
-    // For now, use empty MappedString as we don't track document-level source
-    const source = asMappedString('');
+    // Document spans entire file (file ID 0 is main document)
+    const source = this.sourceReconstructor.getTopLevelMappedString(0);
     const start = 0;
-    const end = 0;
+    const end = source.value.length;
 
     return {
       result: doc as unknown as import('./types.js').JSONValue,

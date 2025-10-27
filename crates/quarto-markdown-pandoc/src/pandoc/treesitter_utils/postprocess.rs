@@ -362,8 +362,8 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let mut new_image = image.clone();
                 new_image.attr = image_attr;
                 new_image.attr_source = image_attr_source;
-                // FIXME all source location is broken here
-                // TODO: Should propagate from image.source_info and para.source_info
+
+                // Use proper source info from the original paragraph and image
                 FilterResult(
                     vec![Block::Figure(Figure {
                         attr: figure_attr,
@@ -371,18 +371,19 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             short: None,
                             long: Some(vec![Block::Plain(Plain {
                                 content: image.content.clone(),
-                                // TODO: Should derive from image.content inlines
-                                source_info: quarto_source_map::SourceInfo::default(),
+                                // Caption text comes from image's alt text
+                                source_info: image.source_info.clone(),
                             })]),
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            // Caption as a whole also uses image's source info
+                            source_info: image.source_info.clone(),
                         },
                         content: vec![Block::Plain(Plain {
                             content: vec![Inline::Image(new_image)],
-                            // TODO: Should use image.source_info
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            // Content contains the image
+                            source_info: image.source_info.clone(),
                         })],
-                        // TODO: Should use para.source_info
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        // Figure spans the entire paragraph
+                        source_info: para.source_info.clone(),
                         attr_source: figure_attr_source,
                     })],
                     true,
@@ -395,6 +396,99 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 } else {
                     Unchanged(div)
                 }
+            })
+            // Fix table captions that were parsed as last row (no blank line before caption)
+            .with_table(|mut table| {
+                // Check if caption is empty
+                let caption_is_empty = table.caption.long.is_none()
+                    || table
+                        .caption
+                        .long
+                        .as_ref()
+                        .map_or(true, |blocks| blocks.is_empty());
+
+                if !caption_is_empty || table.bodies.is_empty() {
+                    return Unchanged(table);
+                }
+
+                // Get the last body and check if it has rows
+                let last_body = table.bodies.last_mut().unwrap();
+                if last_body.body.is_empty() {
+                    return Unchanged(table);
+                }
+
+                // Check if last row has exactly one cell
+                let last_row = last_body.body.last().unwrap();
+                if last_row.cells.len() != 1 {
+                    return Unchanged(table);
+                }
+
+                // Check if cell has exactly one Plain block
+                let cell = &last_row.cells[0];
+                if cell.content.len() != 1 {
+                    return Unchanged(table);
+                }
+
+                let Block::Plain(plain) = &cell.content[0] else {
+                    return Unchanged(table);
+                };
+
+                // Check if Plain starts with Str that begins with ":"
+                if plain.content.is_empty() {
+                    return Unchanged(table);
+                }
+
+                let starts_with_colon = match &plain.content[0] {
+                    Inline::Str(s) => s.text.starts_with(':'),
+                    _ => false,
+                };
+
+                if !starts_with_colon {
+                    return Unchanged(table);
+                }
+
+                // Pattern matched! Transform the table.
+                // Remove the last row and extract its content
+                let caption_row = last_body.body.pop().unwrap();
+                let caption_cell = &caption_row.cells[0];
+                let Block::Plain(caption_plain) = &caption_cell.content[0] else {
+                    unreachable!("Already checked this is Plain");
+                };
+
+                let mut caption_inlines = caption_plain.content.clone();
+
+                // Strip leading ":" from first Str
+                if let Some(Inline::Str(first_str)) = caption_inlines.first_mut() {
+                    // Remove leading ":" and trim whitespace
+                    first_str.text = first_str
+                        .text
+                        .strip_prefix(':')
+                        .unwrap_or(&first_str.text)
+                        .trim_start()
+                        .to_string();
+
+                    // If the string is now empty, remove it
+                    if first_str.text.is_empty() {
+                        caption_inlines.remove(0);
+                        // Also remove following Space if present
+                        if matches!(caption_inlines.first(), Some(Inline::Space(_))) {
+                            caption_inlines.remove(0);
+                        }
+                    }
+                }
+
+                // Create the caption
+                table.caption = Caption {
+                    short: None,
+                    long: Some(vec![Block::Plain(Plain {
+                        content: caption_inlines,
+                        source_info: caption_row.source_info.clone(),
+                    })]),
+                    source_info: caption_row.source_info.clone(),
+                };
+
+                // Return the transformed table
+                FilterResult(vec![Block::Table(table)], false)
             })
             .with_shortcode(|shortcode| {
                 FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
@@ -525,6 +619,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 //    Here, we emit the cite and add the span content to the cite suffix.
                 let mut state = 0;
                 let mut pending_cite: Option<crate::pandoc::inline::Cite> = None;
+                let mut pending_space: Option<crate::pandoc::inline::Space> = None;
 
                 for inline in math_processed {
                     match state {
@@ -548,8 +643,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         }
                         1 => {
                             // Just saw a valid cite - check for space
-                            if let Inline::Space(_) = inline {
-                                // Transition to state 2
+                            if let Inline::Space(space) = inline {
+                                // Save the space and transition to state 2
+                                pending_space = Some(space);
                                 state = 2;
                             } else {
                                 // Not a space, emit pending cite and reset
@@ -639,10 +735,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     if let Some(cite) = pending_cite.take() {
                                         result.push(Inline::Cite(cite));
                                     }
-                                    result.push(Inline::Space(Space {
-                                        // Synthetic Space: restore space between cite and invalid span
-                                        source_info: quarto_source_map::SourceInfo::default(),
-                                    }));
+                                    if let Some(space) = pending_space.take() {
+                                        result.push(Inline::Space(space));
+                                    }
                                     result.push(inline);
                                     state = 0;
                                 }
@@ -651,10 +746,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 if let Some(cite) = pending_cite.take() {
                                     result.push(Inline::Cite(cite));
                                 }
-                                result.push(Inline::Space(Space {
-                                    // Synthetic Space: restore space between cite and non-span element
-                                    source_info: quarto_source_map::SourceInfo::default(),
-                                }));
+                                if let Some(space) = pending_space.take() {
+                                    result.push(Inline::Space(space));
+                                }
                                 result.push(inline);
                                 state = 0;
                             }
@@ -667,10 +761,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 if let Some(cite) = pending_cite {
                     result.push(Inline::Cite(cite));
                     if state == 2 {
-                        result.push(Inline::Space(Space {
-                            // Synthetic Space: restore trailing space after incomplete citation pattern
-                            source_info: quarto_source_map::SourceInfo::default(),
-                        }));
+                        if let Some(space) = pending_space {
+                            result.push(Inline::Space(space));
+                        }
                     }
                 }
 
@@ -774,6 +867,12 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 })]),
                                 source_info: caption_block.source_info.clone(),
                             };
+
+                            // Extend table's source range to include the caption
+                            // This ensures that caption attributes are within the table's bounds
+                            table.source_info =
+                                table.source_info.combine(&caption_block.source_info);
+
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
                             // Issue a warning when caption has no preceding table

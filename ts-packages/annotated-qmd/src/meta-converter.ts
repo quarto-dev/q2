@@ -28,24 +28,6 @@ function isMetaValueArray(c: unknown): c is JsonMetaValue[] {
 }
 
 /**
- * Type guard for Span structure with yaml-tagged-string
- */
-function isTaggedSpan(obj: unknown): obj is {
-  t: string;
-  c: [{ c: unknown; kv?: [string, string][] }, unknown];
-} {
-  return (
-    typeof obj === 'object' &&
-    obj !== null &&
-    't' in obj &&
-    (obj as { t: unknown }).t === 'Span' &&
-    'c' in obj &&
-    Array.isArray((obj as { c: unknown }).c) &&
-    (obj as { c: unknown[] }).c.length === 2
-  );
-}
-
-/**
  * Converts metadata from quarto-markdown-pandoc JSON to AnnotatedParse
  */
 export class MetadataConverter {
@@ -67,12 +49,18 @@ export class MetadataConverter {
     }));
 
     // Find the overall range by getting min/max offsets
+    // Must use getSourceLocation() to get RESOLVED top-level coordinates,
+    // not getOffsets() which returns LOCAL coordinates from the pool
     let minStart = Infinity;
     let maxEnd = -Infinity;
-    for (const value of Object.values(jsonMeta)) {
-      const [start, end] = this.sourceReconstructor.getOffsets(value.s);
-      minStart = Math.min(minStart, start);
-      maxEnd = Math.max(maxEnd, end);
+    for (const [key, value] of Object.entries(jsonMeta)) {
+      // Consider both key and value positions
+      const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
+      const keyLoc = this.sourceReconstructor.getSourceLocation(keySourceId);
+      const valueLoc = this.sourceReconstructor.getSourceLocation(value.s);
+
+      minStart = Math.min(minStart, keyLoc.start, valueLoc.start);
+      maxEnd = Math.max(maxEnd, keyLoc.end, valueLoc.end);
     }
 
     // If no metadata, use defaults
@@ -82,15 +70,27 @@ export class MetadataConverter {
     }
 
     // Convert to AnnotatedParse components
+    // Sort entries by source position to maintain source order
+    const sortedEntries: Array<{ key: string; value: JsonMetaValue; keyStart: number }> = [];
+
+    for (const [key, value] of Object.entries(jsonMeta)) {
+      const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
+      const keyLoc = this.sourceReconstructor.getSourceLocation(keySourceId);
+      sortedEntries.push({ key, value, keyStart: keyLoc.start });
+    }
+
+    // Sort by key start position
+    sortedEntries.sort((a, b) => a.keyStart - b.keyStart);
+
     const components: AnnotatedParse[] = [];
     const result: Record<string, JSONValue> = {};
 
-    for (const [key, value] of Object.entries(jsonMeta)) {
+    for (const { key, value } of sortedEntries) {
       // Create AnnotatedParse for key
       // Use metaTopLevelKeySources if available, otherwise fall back to value's source
       const keySourceId = this.metaTopLevelKeySources?.[key] ?? value.s;
-      const [keyStart, keyEnd] = this.sourceReconstructor.getOffsets(keySourceId);
-      const keySource = this.sourceReconstructor.toMappedString(keySourceId);
+      const { source: keySource, start: keyStart, end: keyEnd } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(keySourceId);
 
       const keyAP: AnnotatedParse = {
         result: key,
@@ -109,11 +109,8 @@ export class MetadataConverter {
       result[key] = valueAP.result;
     }
 
-    // Create synthetic MappedString for top-level (using first file if available)
-    const firstFile = this.sourceReconstructor['sourceContext'].files[0];
-    const topSource = this.sourceReconstructor['sourceContext'].files[0]
-      ? this.sourceReconstructor.toMappedString(0)  // Use first SourceInfo if available
-      : this.sourceReconstructor.toMappedString(0);
+    // Get top-level MappedString for metadata section (file 0 is main document)
+    const topSource = this.sourceReconstructor.getTopLevelMappedString(0);
 
     return {
       result,
@@ -129,8 +126,8 @@ export class MetadataConverter {
    * Convert individual MetaValue to AnnotatedParse
    */
   convertMetaValue(meta: JsonMetaValue): AnnotatedParse {
-    const source = this.sourceReconstructor.toMappedString(meta.s);
-    const [start, end] = this.sourceReconstructor.getOffsets(meta.s);
+    const { source, start, end } =
+      this.sourceReconstructor.getAnnotatedParseSourceFields(meta.s);
 
     switch (meta.t) {
       case 'MetaString':
@@ -156,7 +153,7 @@ export class MetadataConverter {
       case 'MetaInlines':
         return {
           result: meta.c as JSONValue,  // Array of inline JSON objects AS-IS
-          kind: this.extractKind(meta),  // Handle tagged values
+          kind: meta.t,  // Just use the type directly - tag info is in the structure
           source,
           components: [],  // Empty - cannot track internal locations yet
           start,
@@ -253,8 +250,8 @@ export class MetadataConverter {
     const result: Record<string, JSONValue> = {};
 
     for (const entry of entries) {
-      const keySource = this.sourceReconstructor.toMappedString(entry.key_source);
-      const [keyStart, keyEnd] = this.sourceReconstructor.getOffsets(entry.key_source);
+      const { source: keySource, start: keyStart, end: keyEnd } =
+        this.sourceReconstructor.getAnnotatedParseSourceFields(entry.key_source);
 
       const keyAP: AnnotatedParse = {
         result: entry.key,
@@ -280,42 +277,5 @@ export class MetadataConverter {
       start,
       end
     };
-  }
-
-  /**
-   * Extract kind with special tag handling for YAML tagged values
-   *
-   * TODO: For now, use simple encoding like "MetaInlines:tagged:expr"
-   * Future enhancement: Modify @quarto/mapped-string to add optional tag field
-   * to AnnotatedParse interface, then use that instead
-   */
-  private extractKind(meta: JsonMetaValue): string {
-    if (meta.t !== 'MetaInlines' || !Array.isArray(meta.c) || meta.c.length === 0) {
-      return meta.t;
-    }
-
-    // Check if wrapped in Span with yaml-tagged-string class
-    const first = meta.c[0];
-    if (!isTaggedSpan(first)) {
-      return 'MetaInlines';
-    }
-
-    const [attrs, _content] = first.c;
-
-    // Check if attrs.c is an array containing 'yaml-tagged-string'
-    if (!Array.isArray(attrs.c) || !attrs.c.includes('yaml-tagged-string')) {
-      return 'MetaInlines';
-    }
-
-    // Find the tag in kv pairs
-    if (attrs.kv) {
-      const tagPair = attrs.kv.find(([k, _]) => k === 'tag');
-      if (tagPair) {
-        const tag = tagPair[1];
-        return `MetaInlines:tagged:${tag}`;
-      }
-    }
-
-    return 'MetaInlines';
   }
 }

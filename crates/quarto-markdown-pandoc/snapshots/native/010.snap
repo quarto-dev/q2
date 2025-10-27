@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ CodeBlock ( "" , [] , [] ) "$ quarto pandoc -o custom-reference-doc.docx \\\n   --print-default-data-file reference.docx" ]

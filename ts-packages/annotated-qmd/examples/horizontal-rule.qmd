@@ -1,0 +1,19 @@
+---
+title: Horizontal Rule Example
+---
+
+# Horizontal Rules
+
+Above the rule.
+
+---
+
+Below the rule.
+
+***
+
+Another paragraph.
+
+___
+
+Final paragraph.

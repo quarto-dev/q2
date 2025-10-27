@@ -1,0 +1,66 @@
+---
+title: "Getting Started with Quarto"
+author: "Jane Doe"
+date: "2024-10-26"
+categories: [tutorial, quarto, publishing]
+---
+
+# Introduction
+
+**Quarto** is an *open-source* scientific and technical publishing system. It allows you to create dynamic content with Python, R, Julia, and Observable.
+
+## Why Use Quarto?
+
+Here are some key benefits:
+
+1. Write once, publish to multiple formats
+2. Combine code and narrative seamlessly
+3. Beautiful output with minimal effort
+4. Extensive customization options
+
+## Getting Started
+
+### Installation
+
+Installing Quarto is straightforward. Visit [quarto.org](https://quarto.org) and download the installer for your platform.
+
+```bash
+# Verify installation
+quarto --version
+```
+
+### Your First Document
+
+Create a new file called `hello.qmd`:
+
+```python
+print("Hello, Quarto!")
+```
+
+![Quarto Logo](https://quarto.org/quarto.png){width=200}
+
+> **Note**: Make sure to check the [official documentation](https://quarto.org/docs) for more details.
+
+## Advanced Features
+
+- ~~Basic features~~ Advanced capabilities
+- Cross-references
+- Citations and bibliographies
+- Interactive widgets
+
+### Code Execution
+
+Quarto can execute code blocks and display results:
+
+```{python}
+#| echo: true
+#| eval: false
+
+import pandas as pd
+data = pd.DataFrame({'x': [1, 2, 3], 'y': [4, 5, 6]})
+print(data.head())
+```
+
+## Conclusion
+
+Whether you're writing a blog post, scientific paper, or book, Quarto provides the tools you need. Start exploring today!
