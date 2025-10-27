@@ -1,0 +1,37 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening bracket for the span",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 4,
+            "file_id": 0,
+            "start_offset": 3
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 18,
+        "file_id": 0,
+        "start_offset": 17
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing ']' for the span or link.",
+      "type": "markdown"
+    },
+    "title": "Unclosed Span"
+  }
+]

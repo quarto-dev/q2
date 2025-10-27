@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Div ( "" , ["definition-list"] , [] ) [BulletList [[Para [Str "term"], Para [Str "extra", Space, Str "paragraph"], BulletList [[Plain [Str "definition"]]]]]] ]

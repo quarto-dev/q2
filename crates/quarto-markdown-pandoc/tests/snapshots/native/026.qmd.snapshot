@@ -1,1 +1,0 @@
-[ CodeBlock ( "" , ["powershell"] , [] ) "$ENV:QUARTO_PRINT_STACK=\"true\"", CodeBlock ( "" , ["bash"] , [] ) "export FOO=$BAR\necho $HOME", CodeBlock ( "" , ["r"] , [] ) "# Dollar signs in comments\nx <- \"$variable\"" ]

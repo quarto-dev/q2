@@ -1,1 +1,0 @@
-[ CodeBlock ( "" , [] , [] ) "$ quarto pandoc -o custom-reference-doc.docx \\\n   --print-default-data-file reference.docx" ]

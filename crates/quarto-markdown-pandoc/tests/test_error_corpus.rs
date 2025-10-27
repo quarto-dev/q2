@@ -7,6 +7,7 @@
 use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
+use glob::glob;
 
 /// Test that all files in resources/error-corpus/*.qmd produce ariadne-formatted errors
 /// with file:line:column information and source code snippets.
@@ -228,6 +229,132 @@ fn test_error_corpus_json_locations() {
                     }
                 }
             }
+        }
+    }
+}
+
+/// Snapshot test for error corpus text output (ariadne format)
+///
+/// This test captures the full ariadne-formatted error message for each file
+/// in the error corpus, ensuring that error message formatting doesn't regress.
+#[test]
+fn test_error_corpus_text_snapshots() {
+    // Configure insta settings for error corpus
+    let mut settings = insta::Settings::clone_current();
+    settings.set_snapshot_path("../snapshots/error-corpus/text");
+    settings.set_prepend_module_to_snapshot(false);
+    let _guard = settings.bind_to_scope();
+
+    // Find all .qmd files in the error corpus
+    let pattern = "resources/error-corpus/*.qmd";
+    for entry in glob(pattern).expect("Failed to read glob pattern") {
+        match entry {
+            Ok(path) => {
+                eprintln!("Testing error snapshot (text): {}", path.display());
+
+                let content = fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e));
+
+                // Parse the file - we expect it to fail with diagnostics
+                let result = quarto_markdown_pandoc::readers::qmd::read(
+                    content.as_bytes(),
+                    false,
+                    &path.to_string_lossy(),
+                    &mut std::io::sink(),
+                );
+
+                match result {
+                    Ok(_) => {
+                        panic!(
+                            "Expected {} to produce errors, but it parsed successfully",
+                            path.display()
+                        );
+                    }
+                    Err(diagnostics) => {
+                        // Create a SourceContext for rendering
+                        let mut source_context = quarto_source_map::SourceContext::new();
+                        source_context.add_file(path.to_string_lossy().to_string(), Some(content));
+
+                        // Render all diagnostics to text
+                        let mut error_output = String::new();
+                        for diagnostic in &diagnostics {
+                            let text_output = diagnostic.to_text(Some(&source_context));
+                            error_output.push_str(&text_output);
+                            error_output.push('\n');
+                        }
+
+                        // Use the file stem as the snapshot name
+                        let snapshot_name = path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .expect("Invalid file name");
+
+                        insta::assert_snapshot!(snapshot_name, error_output);
+                    }
+                }
+            }
+            Err(e) => panic!("Error reading glob entry: {}", e),
+        }
+    }
+}
+
+/// Snapshot test for error corpus JSON output
+///
+/// This test captures the JSON-formatted error message for each file
+/// in the error corpus, ensuring that error message structure doesn't regress.
+#[test]
+fn test_error_corpus_json_snapshots() {
+    // Configure insta settings for error corpus
+    let mut settings = insta::Settings::clone_current();
+    settings.set_snapshot_path("../snapshots/error-corpus/json");
+    settings.set_prepend_module_to_snapshot(false);
+    let _guard = settings.bind_to_scope();
+
+    // Find all .qmd files in the error corpus
+    let pattern = "resources/error-corpus/*.qmd";
+    for entry in glob(pattern).expect("Failed to read glob pattern") {
+        match entry {
+            Ok(path) => {
+                eprintln!("Testing error snapshot (json): {}", path.display());
+
+                let content = fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e));
+
+                // Parse the file - we expect it to fail with diagnostics
+                let result = quarto_markdown_pandoc::readers::qmd::read(
+                    content.as_bytes(),
+                    false,
+                    &path.to_string_lossy(),
+                    &mut std::io::sink(),
+                );
+
+                match result {
+                    Ok(_) => {
+                        panic!(
+                            "Expected {} to produce errors, but it parsed successfully",
+                            path.display()
+                        );
+                    }
+                    Err(diagnostics) => {
+                        // Render all diagnostics to JSON
+                        let json_output: Vec<serde_json::Value> = diagnostics
+                            .iter()
+                            .map(|d| d.to_json())
+                            .collect();
+
+                        // Use the file stem as the snapshot name
+                        let snapshot_name = path.file_stem()
+                            .and_then(|s| s.to_str())
+                            .expect("Invalid file name");
+
+                        // Pretty-print the JSON for better diffs
+                        let json_string = serde_json::to_string_pretty(&json_output)
+                            .expect("Failed to serialize JSON");
+
+                        insta::assert_snapshot!(snapshot_name, json_string);
+                    }
+                }
+            }
+            Err(e) => panic!("Error reading glob entry: {}", e),
         }
     }
 }

@@ -1,1 +1,0 @@
-[ DefinitionList [([Strong [Str "term", Space, Str "with", Space, Str "emphasis"]], [[Plain [Str "definition", Space, Str "for", Space, Str "emphasized", Space, Str "term"]]]), ([Code ( "" , [] , [] ) "code term"], [[Plain [Str "definition", Space, Str "for", Space, Str "code", Space, Str "term"]]])] ]

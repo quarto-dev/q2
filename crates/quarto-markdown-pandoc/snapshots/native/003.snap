@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Str "Blah", Space, Str "Blah", Space, Cite [Citation { citationId = "knuth1984", citationPrefix = [], citationSuffix = [Str ",", Space, Str "pp. 33-35,", Space, Str "38-39", Space, Str "and", Space, Str "passim"], citationMode = NormalCitation, citationNoteNum = 1, citationHash = 0 }] []] ]
