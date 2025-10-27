@@ -285,7 +285,8 @@ where
                 let output = String::from_utf8(buffer).expect("Invalid UTF-8 in output");
 
                 // Use the file stem (without extension) as the snapshot name
-                let snapshot_name = path.file_stem()
+                let snapshot_name = path
+                    .file_stem()
                     .and_then(|s| s.to_str())
                     .expect("Invalid file name");
 

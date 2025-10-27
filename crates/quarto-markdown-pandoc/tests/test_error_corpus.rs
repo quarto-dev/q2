@@ -4,10 +4,10 @@
  * Tests to verify error messages from the error corpus produce proper output
  */
 
+use glob::glob;
 use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
-use glob::glob;
 
 /// Test that all files in resources/error-corpus/*.qmd produce ariadne-formatted errors
 /// with file:line:column information and source code snippets.
@@ -284,7 +284,8 @@ fn test_error_corpus_text_snapshots() {
                         }
 
                         // Use the file stem as the snapshot name
-                        let snapshot_name = path.file_stem()
+                        let snapshot_name = path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .expect("Invalid file name");
 
@@ -336,13 +337,12 @@ fn test_error_corpus_json_snapshots() {
                     }
                     Err(diagnostics) => {
                         // Render all diagnostics to JSON
-                        let json_output: Vec<serde_json::Value> = diagnostics
-                            .iter()
-                            .map(|d| d.to_json())
-                            .collect();
+                        let json_output: Vec<serde_json::Value> =
+                            diagnostics.iter().map(|d| d.to_json()).collect();
 
                         // Use the file stem as the snapshot name
-                        let snapshot_name = path.file_stem()
+                        let snapshot_name = path
+                            .file_stem()
                             .and_then(|s| s.to_str())
                             .expect("Invalid file name");
 

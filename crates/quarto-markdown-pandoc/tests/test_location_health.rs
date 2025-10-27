@@ -962,7 +962,10 @@ mod tests {
         let table = table.unwrap();
 
         // Check that table has the ID from the caption
-        assert_eq!(table.attr.0, "tbl-example", "Table should have ID from caption");
+        assert_eq!(
+            table.attr.0, "tbl-example",
+            "Table should have ID from caption"
+        );
 
         // Get the table's source range
         let table_start = table.source_info.start_offset();

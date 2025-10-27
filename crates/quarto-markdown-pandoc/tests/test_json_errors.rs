@@ -1,6 +1,6 @@
 use quarto_markdown_pandoc::readers;
-use std::process::Command;
 use std::fs;
+use std::process::Command;
 
 #[test]
 fn test_json_error_format() {
@@ -71,7 +71,15 @@ description: "[incomplete link"
 
     // Run the binary with --json-errors flag
     let output = Command::new("cargo")
-        .args(&["run", "-p", "quarto-markdown-pandoc", "--", "-i", temp_file, "--json-errors"])
+        .args(&[
+            "run",
+            "-p",
+            "quarto-markdown-pandoc",
+            "--",
+            "-i",
+            temp_file,
+            "--json-errors",
+        ])
         .output()
         .expect("Failed to execute command");
 
@@ -79,15 +87,16 @@ description: "[incomplete link"
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     // Parse the JSON from stderr
-    let json_lines: Vec<&str> = stderr.lines()
+    let json_lines: Vec<&str> = stderr
+        .lines()
         .filter(|line| line.starts_with("{"))
         .collect();
 
     assert!(!json_lines.is_empty(), "Expected JSON output on stderr");
 
     // Parse the first JSON line
-    let json_value: serde_json::Value = serde_json::from_str(json_lines[0])
-        .expect("Failed to parse JSON from stderr");
+    let json_value: serde_json::Value =
+        serde_json::from_str(json_lines[0]).expect("Failed to parse JSON from stderr");
 
     // Verify the JSON structure
     assert_eq!(json_value["kind"], "warning", "Expected warning kind");
@@ -109,7 +118,15 @@ fn test_json_errors_flag_with_error() {
 
     // Run the binary with --json-errors flag
     let output = Command::new("cargo")
-        .args(&["run", "-p", "quarto-markdown-pandoc", "--", "-i", temp_file, "--json-errors"])
+        .args(&[
+            "run",
+            "-p",
+            "quarto-markdown-pandoc",
+            "--",
+            "-i",
+            temp_file,
+            "--json-errors",
+        ])
         .output()
         .expect("Failed to execute command");
 
@@ -120,15 +137,19 @@ fn test_json_errors_flag_with_error() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     // Parse the JSON from stdout
-    let json_lines: Vec<&str> = stdout.lines()
+    let json_lines: Vec<&str> = stdout
+        .lines()
         .filter(|line| line.starts_with("{"))
         .collect();
 
-    assert!(!json_lines.is_empty(), "Expected JSON output on stdout for errors");
+    assert!(
+        !json_lines.is_empty(),
+        "Expected JSON output on stdout for errors"
+    );
 
     // Parse the first JSON line
-    let json_value: serde_json::Value = serde_json::from_str(json_lines[0])
-        .expect("Failed to parse JSON from stdout");
+    let json_value: serde_json::Value =
+        serde_json::from_str(json_lines[0]).expect("Failed to parse JSON from stdout");
 
     // Verify the JSON structure
     assert_eq!(json_value["kind"], "error", "Expected error kind");

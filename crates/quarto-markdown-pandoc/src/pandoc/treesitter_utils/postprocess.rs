@@ -397,6 +397,99 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     Unchanged(div)
                 }
             })
+            // Fix table captions that were parsed as last row (no blank line before caption)
+            .with_table(|mut table| {
+                // Check if caption is empty
+                let caption_is_empty = table.caption.long.is_none()
+                    || table
+                        .caption
+                        .long
+                        .as_ref()
+                        .map_or(true, |blocks| blocks.is_empty());
+
+                if !caption_is_empty || table.bodies.is_empty() {
+                    return Unchanged(table);
+                }
+
+                // Get the last body and check if it has rows
+                let last_body = table.bodies.last_mut().unwrap();
+                if last_body.body.is_empty() {
+                    return Unchanged(table);
+                }
+
+                // Check if last row has exactly one cell
+                let last_row = last_body.body.last().unwrap();
+                if last_row.cells.len() != 1 {
+                    return Unchanged(table);
+                }
+
+                // Check if cell has exactly one Plain block
+                let cell = &last_row.cells[0];
+                if cell.content.len() != 1 {
+                    return Unchanged(table);
+                }
+
+                let Block::Plain(plain) = &cell.content[0] else {
+                    return Unchanged(table);
+                };
+
+                // Check if Plain starts with Str that begins with ":"
+                if plain.content.is_empty() {
+                    return Unchanged(table);
+                }
+
+                let starts_with_colon = match &plain.content[0] {
+                    Inline::Str(s) => s.text.starts_with(':'),
+                    _ => false,
+                };
+
+                if !starts_with_colon {
+                    return Unchanged(table);
+                }
+
+                // Pattern matched! Transform the table.
+                // Remove the last row and extract its content
+                let caption_row = last_body.body.pop().unwrap();
+                let caption_cell = &caption_row.cells[0];
+                let Block::Plain(caption_plain) = &caption_cell.content[0] else {
+                    unreachable!("Already checked this is Plain");
+                };
+
+                let mut caption_inlines = caption_plain.content.clone();
+
+                // Strip leading ":" from first Str
+                if let Some(Inline::Str(first_str)) = caption_inlines.first_mut() {
+                    // Remove leading ":" and trim whitespace
+                    first_str.text = first_str
+                        .text
+                        .strip_prefix(':')
+                        .unwrap_or(&first_str.text)
+                        .trim_start()
+                        .to_string();
+
+                    // If the string is now empty, remove it
+                    if first_str.text.is_empty() {
+                        caption_inlines.remove(0);
+                        // Also remove following Space if present
+                        if matches!(caption_inlines.first(), Some(Inline::Space(_))) {
+                            caption_inlines.remove(0);
+                        }
+                    }
+                }
+
+                // Create the caption
+                table.caption = Caption {
+                    short: None,
+                    long: Some(vec![Block::Plain(Plain {
+                        content: caption_inlines,
+                        source_info: caption_row.source_info.clone(),
+                    })]),
+                    source_info: caption_row.source_info.clone(),
+                };
+
+                // Return the transformed table
+                FilterResult(vec![Block::Table(table)], false)
+            })
             .with_shortcode(|shortcode| {
                 FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
             })
@@ -777,9 +870,8 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
 
                             // Extend table's source range to include the caption
                             // This ensures that caption attributes are within the table's bounds
-                            table.source_info = table
-                                .source_info
-                                .combine(&caption_block.source_info);
+                            table.source_info =
+                                table.source_info.combine(&caption_block.source_info);
 
                             // Don't add the CaptionBlock to the result (it's now attached)
                         } else {
