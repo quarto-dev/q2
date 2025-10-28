@@ -8,9 +8,14 @@
  * Other blocks panic with helpful messages indicating they need implementation.
  */
 
-use crate::pandoc::{Attr, Block, BulletList, Div, Inline, OrderedList, Pandoc};
+use crate::pandoc::{
+    Attr, Block, BlockQuote, BulletList, DefinitionList, Div, Inline, OrderedList, Pandoc,
+};
 use crossterm::style::{Color, Stylize};
 use std::io::Write;
+
+#[cfg(feature = "terminal-hyperlinks")]
+use supports_hyperlinks;
 
 /// Tracks the spacing behavior of the last block written
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -142,6 +147,8 @@ pub struct AnsiConfig {
     pub width: usize,
     /// Indent size for nested structures
     pub indent: usize,
+    /// Enable clickable hyperlinks (OSC 8)
+    pub hyperlinks: bool,
 }
 
 impl Default for AnsiConfig {
@@ -150,6 +157,21 @@ impl Default for AnsiConfig {
             colors: true,
             width: 80,
             indent: 2,
+            hyperlinks: Self::detect_hyperlink_support(),
+        }
+    }
+}
+
+impl AnsiConfig {
+    /// Detect if the terminal supports hyperlinks
+    fn detect_hyperlink_support() -> bool {
+        #[cfg(feature = "terminal-hyperlinks")]
+        {
+            supports_hyperlinks::on(supports_hyperlinks::Stream::Stdout)
+        }
+        #[cfg(not(feature = "terminal-hyperlinks"))]
+        {
+            false
         }
     }
 }
@@ -160,10 +182,11 @@ struct BulletListContext<'a, W: Write + ?Sized> {
     at_line_start: bool,
     is_first_line: bool,
     bullet: &'static str,
+    config: &'a AnsiConfig,
 }
 
 impl<'a, W: Write + ?Sized> BulletListContext<'a, W> {
-    fn new(inner: &'a mut W, depth: usize) -> Self {
+    fn new(inner: &'a mut W, depth: usize, config: &'a AnsiConfig) -> Self {
         let bullet = match depth % 3 {
             0 => "*  ",
             1 => "-  ",
@@ -175,6 +198,7 @@ impl<'a, W: Write + ?Sized> BulletListContext<'a, W> {
             at_line_start: true,
             is_first_line: true,
             bullet,
+            config,
         }
     }
 }
@@ -185,7 +209,12 @@ impl<'a, W: Write + ?Sized> Write for BulletListContext<'a, W> {
         for &byte in buf {
             if self.at_line_start {
                 if self.is_first_line {
-                    self.inner.write_all(self.bullet.as_bytes())?;
+                    // Write bullet marker in muted color (dark grey)
+                    if self.config.colors {
+                        write!(self.inner, "{}", self.bullet.to_string().dark_grey())?;
+                    } else {
+                        self.inner.write_all(self.bullet.as_bytes())?;
+                    }
                     self.is_first_line = false;
                 } else {
                     self.inner.write_all(b"   ")?; // 3 spaces for continuation
@@ -213,10 +242,11 @@ struct OrderedListContext<'a, W: Write + ?Sized> {
     is_first_line: bool,
     item_num_str: String,
     continuation_indent: String,
+    config: &'a AnsiConfig,
 }
 
 impl<'a, W: Write + ?Sized> OrderedListContext<'a, W> {
-    fn new(inner: &'a mut W, item_num: usize, indent_width: usize) -> Self {
+    fn new(inner: &'a mut W, item_num: usize, indent_width: usize, config: &'a AnsiConfig) -> Self {
         let item_num_str = format!("{}. ", item_num);
         let continuation_indent = " ".repeat(indent_width.max(item_num_str.len()));
         Self {
@@ -225,6 +255,7 @@ impl<'a, W: Write + ?Sized> OrderedListContext<'a, W> {
             is_first_line: true,
             item_num_str,
             continuation_indent,
+            config,
         }
     }
 }
@@ -235,10 +266,59 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
         for &byte in buf {
             if self.at_line_start {
                 if self.is_first_line {
-                    self.inner.write_all(self.item_num_str.as_bytes())?;
+                    // Write number marker in muted color (dark grey)
+                    if self.config.colors {
+                        write!(self.inner, "{}", self.item_num_str.as_str().dark_grey())?;
+                    } else {
+                        self.inner.write_all(self.item_num_str.as_bytes())?;
+                    }
                     self.is_first_line = false;
                 } else {
                     self.inner.write_all(self.continuation_indent.as_bytes())?;
+                }
+                self.at_line_start = false;
+            }
+            self.inner.write_all(&[byte])?;
+            written += 1;
+            if byte == b'\n' {
+                self.at_line_start = true;
+            }
+        }
+        Ok(written)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Context for writing block quotes with vertical line marker
+struct BlockQuoteContext<'a, W: Write + ?Sized> {
+    inner: &'a mut W,
+    at_line_start: bool,
+    config: &'a AnsiConfig,
+}
+
+impl<'a, W: Write + ?Sized> BlockQuoteContext<'a, W> {
+    fn new(inner: &'a mut W, config: &'a AnsiConfig) -> Self {
+        Self {
+            inner,
+            at_line_start: true,
+            config,
+        }
+    }
+}
+
+impl<'a, W: Write + ?Sized> Write for BlockQuoteContext<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut written = 0;
+        for &byte in buf {
+            if self.at_line_start {
+                // Write vertical line marker in muted color (dark grey)
+                if self.config.colors {
+                    write!(self.inner, "{}", "│ ".dark_grey())?;
+                } else {
+                    self.inner.write_all(b"> ")?; // Fallback to > for no-color
                 }
                 self.at_line_start = false;
             }
@@ -399,6 +479,8 @@ fn write_block_with_depth(
         Block::Div(div) => write_div(div, buf, config, list_depth),
         Block::BulletList(list) => write_bulletlist(list, buf, config, list_depth),
         Block::OrderedList(list) => write_orderedlist(list, buf, config, list_depth),
+        Block::DefinitionList(list) => write_definitionlist(list, buf, config, list_depth),
+        Block::BlockQuote(bq) => write_blockquote(bq, buf, config, list_depth),
 
         // All other blocks panic with helpful messages
         Block::LineBlock(_) => {
@@ -411,20 +493,17 @@ fn write_block_with_depth(
                 "CodeBlock not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
             );
         }
-        Block::RawBlock(_) => {
-            panic!(
-                "RawBlock not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
-            );
-        }
-        Block::BlockQuote(_) => {
-            panic!(
-                "BlockQuote not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
-            );
-        }
-        Block::DefinitionList(_) => {
-            panic!(
-                "DefinitionList not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
-            );
+        Block::RawBlock(raw) => {
+            // Only render raw content if format matches "ansi"
+            if raw.format == "ansi" {
+                // Write content directly with single newline (Plain semantics)
+                write!(buf, "{}", raw.text)?;
+                writeln!(buf)?;
+                Ok(LastBlockSpacing::Plain)
+            } else {
+                // Skip blocks with wrong format - return None to indicate nothing written
+                Ok(LastBlockSpacing::None)
+            }
         }
         Block::Header(_) => {
             panic!(
@@ -516,7 +595,7 @@ fn write_bulletlist(
         }
 
         // Create context for this item
-        let mut ctx = BulletListContext::new(buf, list_depth);
+        let mut ctx = BulletListContext::new(buf, list_depth, config);
 
         // Write all blocks in item through the context
         for block in item {
@@ -555,7 +634,7 @@ fn write_orderedlist(
         }
 
         let item_num = start_number + i;
-        let mut ctx = OrderedListContext::new(buf, item_num, indent_width);
+        let mut ctx = OrderedListContext::new(buf, item_num, indent_width, config);
 
         // Write all blocks in item through the context
         for block in item {
@@ -565,6 +644,107 @@ fn write_orderedlist(
         ctx.flush()?;
     }
 
+    Ok(LastBlockSpacing::Paragraph)
+}
+
+/// Write a definition list
+fn write_definitionlist(
+    list: &DefinitionList,
+    buf: &mut dyn Write,
+    config: &AnsiConfig,
+    list_depth: usize,
+) -> std::io::Result<LastBlockSpacing> {
+    let mut style_ctx = StyleContext::new();
+
+    for (i, (term, definitions)) in list.content.iter().enumerate() {
+        // Add blank line between definition list items (except before first)
+        if i > 0 {
+            writeln!(buf)?;
+        }
+
+        // Write the term in bold
+        if config.colors {
+            let term_str = format_inlines(term, config, &mut style_ctx);
+            write!(buf, "{}", term_str.bold())?;
+        } else {
+            write_inlines(term, buf, config, &mut style_ctx)?;
+        }
+        writeln!(buf)?;
+
+        // Write each definition with ": " prefix
+        for definition in definitions {
+            // Write the colon in muted color (dark grey)
+            if config.colors {
+                write!(buf, "{}", ":".dark_grey())?;
+            } else {
+                write!(buf, ":")?;
+            }
+            write!(buf, " ")?;
+
+            // Write the definition blocks with proper spacing between them
+            let mut last_spacing = LastBlockSpacing::None;
+            for (j, block) in definition.iter().enumerate() {
+                // Write the block to a buffer first so we can control indentation
+                let mut def_buf = Vec::new();
+                let block_spacing =
+                    write_block_with_depth(block, &mut def_buf, config, list_depth + 1)?;
+
+                if j > 0 {
+                    // Determine if we need a blank line before this block
+                    let needs_blank = match (&last_spacing, block) {
+                        (LastBlockSpacing::Plain, Block::Plain(_)) => false,
+                        (LastBlockSpacing::None, _) => false,
+                        _ => true,
+                    };
+
+                    if needs_blank {
+                        writeln!(buf)?; // Extra newline for blank line
+                    }
+                    write!(buf, "  ")?; // Indent continuation
+                }
+
+                // Write the definition content, trimming trailing newline since we control spacing
+                let content = String::from_utf8_lossy(&def_buf);
+                let trimmed = content.trim_end();
+                write!(buf, "{}", trimmed)?;
+                writeln!(buf)?; // Write the natural newline for this block
+
+                last_spacing = block_spacing;
+            }
+        }
+    }
+
+    Ok(LastBlockSpacing::Paragraph)
+}
+
+/// Write a block quote with vertical line marker
+fn write_blockquote(
+    blockquote: &BlockQuote,
+    buf: &mut dyn Write,
+    config: &AnsiConfig,
+    list_depth: usize,
+) -> std::io::Result<LastBlockSpacing> {
+    let mut ctx = BlockQuoteContext::new(buf, config);
+    let mut last_spacing = LastBlockSpacing::None;
+
+    for (i, block) in blockquote.content.iter().enumerate() {
+        // Determine if we need a blank line before this block
+        if i > 0 {
+            let needs_blank = match (&last_spacing, block) {
+                (LastBlockSpacing::Plain, Block::Plain(_)) => false,
+                (LastBlockSpacing::None, _) => false,
+                _ => true,
+            };
+
+            if needs_blank {
+                writeln!(&mut ctx)?; // Extra newline for blank line
+            }
+        }
+
+        last_spacing = write_block_with_depth(block, &mut ctx, config, list_depth)?;
+    }
+
+    ctx.flush()?;
     Ok(LastBlockSpacing::Paragraph)
 }
 
@@ -797,23 +977,32 @@ fn write_inline<T: Write + ?Sized>(
             }
         }
         Inline::RawInline(raw) => {
-            // Pass through raw content as-is
-            write!(buf, "{}", raw.text)?;
+            // Only render raw content if format matches "ansi"
+            if raw.format == "ansi" {
+                write!(buf, "{}", raw.text)?;
+            }
+            // Otherwise skip - wrong format for this writer
         }
         Inline::Link(link) => {
-            if config.colors {
-                write!(
-                    buf,
-                    "{}",
-                    format_inlines(&link.content, config, style_ctx)
-                        .cyan()
-                        .underlined()
-                )?;
+            let url = &link.target.0;
+            let link_text = format_inlines(&link.content, config, style_ctx);
+
+            if config.hyperlinks && config.colors {
+                // OSC 8 hyperlink: \x1b]8;;URL\x1b\\TEXT\x1b]8;;\x1b\\
+                write!(buf, "\x1b]8;;{}\x1b\\", url)?;
+                write!(buf, "{}", link_text.cyan().underlined())?;
+                write!(buf, "\x1b]8;;\x1b\\")?;
+                // Restore parent colors after link styling
+                style_ctx.restore_current_style(buf)?;
+            } else if config.colors {
+                // Styled but not clickable
+                write!(buf, "{}", link_text.cyan().underlined())?;
                 // Restore parent colors after link styling
                 style_ctx.restore_current_style(buf)?;
             } else {
+                // No colors - show URL in parentheses
                 write_inlines(&link.content, buf, config, style_ctx)?;
-                write!(buf, " ({}, {})", link.target.0, link.target.1)?;
+                write!(buf, " ({})", url)?;
             }
         }
         Inline::Image(image) => {
