@@ -1,0 +1,3 @@
+This is [red text]{color="red"} and [blue text]{color="blue"}.
+
+Here is [white on red]{color="white" background-color="red"} background.

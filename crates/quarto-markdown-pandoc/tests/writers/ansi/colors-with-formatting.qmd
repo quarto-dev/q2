@@ -1,0 +1,7 @@
+Regular text with **[bold red]{color="red"}** and *[italic blue]{color="blue"}*.
+
+[Colored `code` text]{color="green"} and `normal code`.
+
+Nested: **bold with [red part]{color="red"} inside**.
+
+[Multiple styles]{color="yellow" background-color="dark-blue"} work together.

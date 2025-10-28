@@ -687,6 +687,53 @@ fn test_qmd_roundtrip_consistency() {
 }
 
 #[test]
+fn test_ansi_writer_smoke() {
+    // Smoke test: read markdown, produce AST, write ANSI output
+    // Just verifying that the code runs without panicking
+    let mut file_count = 0;
+    for entry in glob("tests/writers/ansi/*.qmd").expect("Failed to read glob pattern") {
+        match entry {
+            Ok(path) => {
+                eprintln!("Testing ANSI writer on: {}", path.display());
+                let markdown = std::fs::read_to_string(&path).expect("Failed to read file");
+
+                // Parse with our qmd reader to get AST
+                let doc_result = readers::qmd::read(
+                    markdown.as_bytes(),
+                    false,
+                    path.to_str().unwrap(),
+                    &mut std::io::sink(),
+                );
+
+                match doc_result {
+                    Ok((doc, _context, _warnings)) => {
+                        // Write it out using the ANSI writer
+                        let mut buf = Vec::new();
+                        writers::ansi::write(&doc, &mut buf).expect("Failed to write ANSI");
+
+                        // Convert to string to ensure it's valid UTF-8
+                        let output = String::from_utf8(buf)
+                            .expect("Invalid UTF-8 in ANSI writer output");
+
+                        // Verify output contains ANSI escape codes or plain text
+                        // (depends on whether colors are enabled)
+                        assert!(!output.is_empty(), "ANSI output should not be empty");
+                    }
+                    Err(_) => {
+                        // Skip files that have parse errors - they may be testing error cases
+                        eprintln!("Skipping {} due to parse error", path.display());
+                    }
+                }
+
+                file_count += 1;
+            }
+            Err(e) => panic!("Error reading glob entry: {}", e),
+        }
+    }
+    assert!(file_count > 0, "No files found in tests/writers/ansi directory");
+}
+
+#[test]
 fn test_empty_blockquote_roundtrip() {
     // Specific test for empty blockquote roundtrip consistency
     let test_file = "tests/roundtrip_tests/qmd-json-qmd/blockquote_with_elements.qmd";

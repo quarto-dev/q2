@@ -30,6 +30,7 @@ yaml-rust2 = { workspace = true }
 hashlink = { version = "0.10.0", features = ["serde_impl"] }
 error-message-macros = { path = "./error-message-macros" }
 ariadne = "0.4"
+crossterm = "0.28"
 
 [dev-dependencies]
 insta = { version = "1.40", features = ["json", "redactions"] }

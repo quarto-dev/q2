@@ -1,0 +1,3 @@
+RGB colors: [orange]{color="#FF6B35"} and [teal]{color="rgb(0, 128, 128)"}.
+
+Short hex: [lime]{color="#0F0"} green.
