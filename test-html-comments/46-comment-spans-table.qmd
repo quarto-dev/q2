@@ -1,0 +1,9 @@
+# Test 46: Comment spans pipe table
+
+Before <!-- comment
+
+| Col1 | Col2 |
+|------|------|
+| A    | B    |
+
+Table is commented --> after.

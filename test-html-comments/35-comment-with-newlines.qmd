@@ -1,0 +1,7 @@
+# Test 35: Comment with explicit newlines in content
+
+<!--
+Line 1
+Line 2
+Line 3
+-->

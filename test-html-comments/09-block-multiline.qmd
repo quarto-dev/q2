@@ -1,0 +1,9 @@
+# Test 9: Multi-line block comment
+
+This paragraph is visible.
+
+<!-- This entire comment
+spans multiple lines
+at block level. -->
+
+This paragraph is also visible.

@@ -1,0 +1,6 @@
+# Test 25: Comment in code block (should be literal)
+
+```
+<!-- This should NOT be parsed as a comment -->
+This is literal code
+```

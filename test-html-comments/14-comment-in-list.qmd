@@ -1,0 +1,5 @@
+# Test 14: Comment commenting out list items
+
+- Item 1
+<!-- - Item 2 (commented out) -->
+- Item 3

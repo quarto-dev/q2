@@ -1,0 +1,9 @@
+# Test 41: Comment spans blank lines
+
+Paragraph before <!-- comment with
+
+
+multiple blank lines inside
+
+
+still commented --> after comment.

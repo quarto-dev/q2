@@ -1,0 +1,8 @@
+# Test 48: Unclosed comment spanning to EOF
+
+Paragraph before <!-- comment starts
+
+* List is commented
+* Still commented
+
+This goes to end of file without closing

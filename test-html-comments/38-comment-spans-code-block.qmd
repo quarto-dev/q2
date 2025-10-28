@@ -1,0 +1,10 @@
+# Test 38: Comment spans through code block
+
+Paragraph before <!-- comment starts
+
+```
+This code block is inside the comment
+and should not be rendered as code
+```
+
+Still in comment --> back to paragraph.

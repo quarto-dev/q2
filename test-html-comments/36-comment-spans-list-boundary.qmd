@@ -1,0 +1,8 @@
+# Test 36: Comment spans from paragraph into list (original case)
+
+This is a paragraph <!-- this is a comment
+
+* this list cannot be parsed
+* this is still a comment --> and now this is the end of the paragraph.
+
+Another paragraph.

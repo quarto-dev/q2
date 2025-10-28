@@ -1,0 +1,11 @@
+# Test 40: Comment spans multiple paragraphs
+
+First paragraph <!-- comment starts here.
+
+This entire paragraph is inside the comment.
+
+This paragraph is also inside the comment.
+
+Still inside --> back to normal.
+
+This paragraph is visible.
