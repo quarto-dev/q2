@@ -1505,7 +1505,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     bool inside_fenced_code = s->open_blocks.size > 0 &&
                               s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
 
-    if (!s->simulate && lexer->lookahead == '$' &&
+    // IMPORTANT: Don't process DISPLAY_MATH_STATE_TRACK_MARKER when we're in STATE_MATCHING mode.
+    // When matching block continuations (e.g., inside a fenced div), we need to let the block
+    // continuation logic run first. Otherwise, we'll consume the $$ before checking if we need
+    // to match the block structure, causing a parse error.
+    if (!s->simulate && !(s->state & STATE_MATCHING) && lexer->lookahead == '$' &&
         !inside_fenced_code &&
         valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
         advance(s, lexer);
