@@ -230,6 +230,8 @@ impl Rule for DefinitionListConverter {
                     row: list.start_line + 1, // Convert 0-indexed to 1-indexed
                     column: 1,
                 }),
+                error_code: None,
+                error_codes: None,
             });
         }
 

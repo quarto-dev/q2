@@ -4,19 +4,19 @@ expression: json_string
 ---
 [
   {
-    "code": "Q-2-1",
+    "code": "Q-2-5",
     "details": [
       {
         "content": {
-          "content": "This is the opening bracket for the span",
+          "content": "This is the opening delimiter for the emphasis",
           "type": "markdown"
         },
         "kind": "info",
         "location": {
           "Original": {
-            "end_offset": 4,
+            "end_offset": 12,
             "file_id": 0,
-            "start_offset": 3
+            "start_offset": 11
           }
         }
       }
@@ -30,9 +30,9 @@ expression: json_string
       }
     },
     "problem": {
-      "content": "I reached the end of the block before finding a closing ']' for the span or link.",
+      "content": "I reached the end of the block before finding a closing '_' for the emphasis.",
       "type": "markdown"
     },
-    "title": "Unclosed Span"
+    "title": "Unclosed Emphasis"
   }
 ]

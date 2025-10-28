@@ -177,6 +177,8 @@ impl Rule for GridTableConverter {
                     row: table.start_line + 1, // Convert 0-indexed to 1-indexed
                     column: 1,
                 }),
+                error_code: None,
+                error_codes: None,
             });
         }
 

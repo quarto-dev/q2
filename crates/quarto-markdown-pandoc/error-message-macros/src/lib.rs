@@ -30,6 +30,7 @@ struct Note {
 
 #[derive(Deserialize)]
 struct ErrorInfo {
+    code: Option<String>,
     title: String,
     message: String,
     captures: Vec<Capture>,
@@ -67,6 +68,10 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
         let sym = &entry.sym;
         let row = entry.row;
         let column = entry.column;
+        let code = match &entry.error_info.code {
+            Some(c) => quote! { Some(#c) },
+            None => quote! { None },
+        };
         let title = &entry.error_info.title;
         let message = &entry.error_info.message;
         let name = &entry.name;
@@ -125,6 +130,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                 row: #row,
                 column: #column,
                 error_info: crate::readers::qmd_error_message_table::ErrorInfo {
+                    code: #code,
                     title: #title,
                     message: #message,
                     captures: &[#(#captures),*],

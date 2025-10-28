@@ -82,5 +82,40 @@
     "message_template": "A validation error occurred.",
     "docs_url": "https://quarto.org/docs/errors/Q-1-99",
     "since_version": "99.9.9"
+  },
+  "Q-2-1": {
+    "subsystem": "markdown",
+    "title": "Unclosed Span",
+    "message_template": "I reached the end of the block before finding a closing ']' for the span or link.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-1",
+    "since_version": "99.9.9"
+  },
+  "Q-2-2": {
+    "subsystem": "markdown",
+    "title": "Mismatched Delimiter in Attribute Specifier",
+    "message_template": "I expected a '}', language specifier, an identifier, a class specifier, or a key-value pair.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-2",
+    "since_version": "99.9.9"
+  },
+  "Q-2-3": {
+    "subsystem": "markdown",
+    "title": "Key-value Pair Before Class Specifier in Attribute",
+    "message_template": "This class specifier appears after the key-value pair.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-3",
+    "since_version": "99.9.9"
+  },
+  "Q-2-4": {
+    "subsystem": "markdown",
+    "title": "Missing Space After Div Fence",
+    "message_template": "A space is required after ':::' when specifying div attributes.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-4",
+    "since_version": "99.9.9"
+  },
+  "Q-2-5": {
+    "subsystem": "markdown",
+    "title": "Unclosed Emphasis",
+    "message_template": "I reached the end of the block before finding a closing '_' for the emphasis.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-5",
+    "since_version": "99.9.9"
   }
 }

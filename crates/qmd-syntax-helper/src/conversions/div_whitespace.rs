@@ -273,6 +273,8 @@ impl Rule for DivWhitespaceConverter {
                 issue_count: 1,
                 message: Some("Div fence missing whitespace (:::{ should be ::: {)".to_string()),
                 location: Some(location),
+                error_code: None,
+                error_codes: None,
             });
         }
 

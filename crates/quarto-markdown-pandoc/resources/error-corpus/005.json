@@ -1,0 +1,20 @@
+{
+    "code": "Q-2-5",
+    "title": "Unclosed Emphasis",
+    "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+    "captures": [
+        {
+            "label": "emphasis-start",
+            "row": 0,
+            "column": 11,
+            "size": 1
+        }
+    ],
+    "notes": [
+        {
+            "message": "This is the opening delimiter for the emphasis",
+            "label": "emphasis-start",
+            "noteType": "simple"
+        }
+    ]
+}

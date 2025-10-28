@@ -414,6 +414,11 @@ fn error_diagnostic_from_parse_state(
             .with_location(source_info.clone())
             .problem(entry.error_info.message);
 
+        // Add error code if present
+        if let Some(code) = entry.error_info.code {
+            builder = builder.with_code(code);
+        }
+
         // Add notes with their corresponding source locations
         for note in entry.error_info.notes {
             match note.note_type {
