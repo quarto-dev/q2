@@ -1,0 +1,9 @@
+First paragraph before the rule.
+
+---
+
+Second paragraph after the rule.
+
+---
+
+Third paragraph.

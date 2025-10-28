@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Str "First", Space, Str "paragraph", Space, Str "before", Space, Str "the", Space, Str "rule."], HorizontalRule, Para [Str "Second", Space, Str "paragraph", Space, Str "after", Space, Str "the", Space, Str "rule."], HorizontalRule, Para [Str "Third", Space, Str "paragraph."] ]

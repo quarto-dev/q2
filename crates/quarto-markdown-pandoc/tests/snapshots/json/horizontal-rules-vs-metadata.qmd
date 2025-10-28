@@ -1,0 +1,10 @@
+---
+title: Test Document
+author: Test Author
+---
+
+Content paragraph after metadata.
+
+---
+
+Second paragraph after horizontal rule.

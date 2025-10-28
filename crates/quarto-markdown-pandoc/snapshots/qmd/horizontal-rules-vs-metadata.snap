@@ -1,0 +1,14 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+---
+title: Test Document
+author: Test Author
+---
+
+Content paragraph after metadata.
+
+---
+
+Second paragraph after horizontal rule.

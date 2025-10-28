@@ -12,7 +12,7 @@ pub struct SourceContext {
     files: Vec<SourceFile>,
     /// Sparse mapping for non-sequential file IDs (e.g., from hash-based IDs)
     /// Only populated when add_file_with_id is used
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     file_id_map: HashMap<usize, usize>, // Maps FileId.0 -> index in files vec
 }
 

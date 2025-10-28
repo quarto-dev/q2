@@ -325,3 +325,41 @@ Some text in between.
         (list_marker_example)
         (paragraph
           (inline))))))
+================================================================================
+Horizontal rules with blank lines should not be parsed as metadata
+================================================================================
+First paragraph.
+
+---
+
+Second paragraph.
+
+---
+
+Third paragraph.
+--------------------------------------------------------------------------------
+(document
+  (section
+    (paragraph
+      (inline))
+    (thematic_break)
+    (paragraph
+      (inline))
+    (thematic_break)
+    (paragraph
+      (inline))))
+================================================================================
+YAML metadata block should still work
+================================================================================
+---
+title: Test
+author: Someone
+---
+
+Content paragraph.
+--------------------------------------------------------------------------------
+(document
+  (minus_metadata)
+  (section
+    (paragraph
+      (inline))))

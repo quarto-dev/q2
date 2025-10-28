@@ -1,0 +1,13 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+First paragraph before the rule.
+
+---
+
+Second paragraph after the rule.
+
+---
+
+Third paragraph.

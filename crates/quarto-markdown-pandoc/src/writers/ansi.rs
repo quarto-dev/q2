@@ -164,9 +164,17 @@ impl Default for AnsiConfig {
 
 impl AnsiConfig {
     /// Detect terminal width, defaulting to 80 if detection fails
+    /// Can be overridden with QUARTO_TERMINAL_WIDTH environment variable
     fn detect_terminal_width() -> usize {
-        use crossterm::terminal::size;
+        // Check for environment variable override first
+        if let Ok(width_str) = std::env::var("QUARTO_TERMINAL_WIDTH") {
+            if let Ok(width) = width_str.parse::<usize>() {
+                return width;
+            }
+        }
 
+        // Otherwise detect from terminal
+        use crossterm::terminal::size;
         size().ok().map(|(cols, _rows)| cols as usize).unwrap_or(80)
     }
 
@@ -1223,7 +1231,9 @@ mod tests {
     fn test_config_defaults() {
         let config = AnsiConfig::default();
         assert_eq!(config.colors, true);
-        assert_eq!(config.width, 80);
+        // Width should match what detect_terminal_width returns
+        let expected_width = AnsiConfig::detect_terminal_width();
+        assert_eq!(config.width, expected_width);
         assert_eq!(config.indent, 2);
     }
 

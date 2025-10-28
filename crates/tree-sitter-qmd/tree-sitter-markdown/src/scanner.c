@@ -1100,16 +1100,52 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
         if (minus_count == 3 && (!minus_after_whitespace) && line_end &&
             valid_symbols[MINUS_METADATA]) {
-            for (;;) {
-                // advance over newline
-                if (lexer->lookahead == '\r') {
-                    advance(s, lexer);
-                    if (lexer->lookahead == '\n') {
-                        advance(s, lexer);
-                    }
-                } else {
+            // Before we start scanning for metadata, peek ahead to check if there's
+            // a blank line after the opening ---. If so, this is a horizontal rule.
+            // We need to do this without consuming input.
+
+            // Current position: right after the three minuses, at the newline
+            // We need to check: is the character after this newline another newline?
+            // We can do this by advancing, checking, then either continuing or bailing
+
+            // Advance over the newline to peek at next line
+            if (lexer->lookahead == '\r') {
+                advance(s, lexer);
+                if (lexer->lookahead == '\n') {
                     advance(s, lexer);
                 }
+            } else if (lexer->lookahead == '\n') {
+                advance(s, lexer);
+            }
+
+            // Check if we're at another newline (blank line)
+            bool is_blank_line = (lexer->lookahead == '\r' || lexer->lookahead == '\n');
+
+            if (is_blank_line) {
+                // This is a horizontal rule, not metadata
+                // Don't try to parse as metadata.
+                // The THEMATIC_BREAK handler should have already been tried.
+                // Don't return false here - instead, skip the metadata parsing
+                // and let the normal flow continue (which will check 'success' variable)
+            } else {
+
+            // Not a blank line, continue with metadata scanning
+            // Note: we've already advanced past the first newline above
+            bool first_iteration = true;
+            for (;;) {
+                // On subsequent iterations, advance over the newline
+                if (!first_iteration) {
+                    if (lexer->lookahead == '\r') {
+                        advance(s, lexer);
+                        if (lexer->lookahead == '\n') {
+                            advance(s, lexer);
+                        }
+                    } else {
+                        advance(s, lexer);
+                    }
+                }
+                first_iteration = false;
+
                 // check for minuses
                 minus_count = 0;
                 while (lexer->lookahead == '-') {
@@ -1148,6 +1184,7 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     break;
                 }
             }
+            } // end of else block for metadata scanning
         }
         if (success) {
             return true;
