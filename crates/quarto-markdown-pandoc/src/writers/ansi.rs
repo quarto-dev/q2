@@ -155,7 +155,7 @@ impl Default for AnsiConfig {
     fn default() -> Self {
         Self {
             colors: true,
-            width: 80,
+            width: Self::detect_terminal_width(),
             indent: 2,
             hyperlinks: Self::detect_hyperlink_support(),
         }
@@ -163,6 +163,13 @@ impl Default for AnsiConfig {
 }
 
 impl AnsiConfig {
+    /// Detect terminal width, defaulting to 80 if detection fails
+    fn detect_terminal_width() -> usize {
+        use crossterm::terminal::size;
+
+        size().ok().map(|(cols, _rows)| cols as usize).unwrap_or(80)
+    }
+
     /// Detect if the terminal supports hyperlinks
     fn detect_hyperlink_support() -> bool {
         #[cfg(feature = "terminal-hyperlinks")]
@@ -453,7 +460,7 @@ pub fn write_with_config<T: Write>(
             writeln!(buf)?; // Extra \n for blank line
         }
 
-        last_spacing = write_block_with_depth(block, buf, config, 0)?;
+        last_spacing = write_block_with_depth(block, buf, config, 0, 0)?;
     }
     Ok(())
 }
@@ -463,6 +470,7 @@ fn write_block_with_depth(
     buf: &mut dyn Write,
     config: &AnsiConfig,
     list_depth: usize,
+    indent_chars: usize, // Total character indentation from all contexts
 ) -> std::io::Result<LastBlockSpacing> {
     let mut style_ctx = StyleContext::new();
     match block {
@@ -476,11 +484,13 @@ fn write_block_with_depth(
             writeln!(buf)?;
             Ok(LastBlockSpacing::Paragraph)
         }
-        Block::Div(div) => write_div(div, buf, config, list_depth),
-        Block::BulletList(list) => write_bulletlist(list, buf, config, list_depth),
-        Block::OrderedList(list) => write_orderedlist(list, buf, config, list_depth),
-        Block::DefinitionList(list) => write_definitionlist(list, buf, config, list_depth),
-        Block::BlockQuote(bq) => write_blockquote(bq, buf, config, list_depth),
+        Block::Div(div) => write_div(div, buf, config, list_depth, indent_chars),
+        Block::BulletList(list) => write_bulletlist(list, buf, config, list_depth, indent_chars),
+        Block::OrderedList(list) => write_orderedlist(list, buf, config, list_depth, indent_chars),
+        Block::DefinitionList(list) => {
+            write_definitionlist(list, buf, config, list_depth, indent_chars)
+        }
+        Block::BlockQuote(bq) => write_blockquote(bq, buf, config, list_depth, indent_chars),
 
         // All other blocks panic with helpful messages
         Block::LineBlock(_) => {
@@ -505,15 +515,71 @@ fn write_block_with_depth(
                 Ok(LastBlockSpacing::None)
             }
         }
-        Block::Header(_) => {
-            panic!(
-                "Header not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
-            );
+        Block::Header(header) => {
+            // Format the header content with styling
+            let content = format_inlines(&header.content, config, &mut style_ctx);
+
+            // Apply level-specific styling
+            let styled_content = if config.colors {
+                match header.level {
+                    1 => {
+                        // H1: bright (Color::White) and bold, centered
+                        let text = content.white().bold().to_string();
+                        let text_width = display_width(&text);
+                        let available_width = if config.width > indent_chars {
+                            config.width - indent_chars
+                        } else {
+                            config.width
+                        };
+
+                        // Calculate left padding for centering
+                        let left_padding = if available_width > text_width {
+                            (available_width - text_width) / 2
+                        } else {
+                            0
+                        };
+
+                        format!("{}{}", " ".repeat(left_padding), text)
+                    }
+                    2 => {
+                        // H2: bright and bold
+                        content.white().bold().to_string()
+                    }
+                    3 => {
+                        // H3: bright
+                        content.white().to_string()
+                    }
+                    4 => {
+                        // H4: muted
+                        content.dark_grey().to_string()
+                    }
+                    _ => {
+                        // H5, H6: default
+                        content
+                    }
+                }
+            } else {
+                content
+            };
+
+            writeln!(buf, "{}", styled_content)?;
+            Ok(LastBlockSpacing::Paragraph)
         }
         Block::HorizontalRule(_) => {
-            panic!(
-                "HorizontalRule not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
-            );
+            // Calculate effective width accounting for indentation
+            let line_width = if config.width > indent_chars {
+                config.width - indent_chars
+            } else {
+                10 // Minimum width if indentation is too large
+            };
+
+            let line = "─".repeat(line_width);
+            if config.colors {
+                writeln!(buf, "{}", line.dark_grey())?;
+            } else {
+                writeln!(buf, "{}", line)?;
+            }
+            Ok(LastBlockSpacing::Paragraph)
         }
         Block::Table(_) => {
             panic!(
@@ -554,6 +620,7 @@ fn write_div(
     buf: &mut dyn Write,
     config: &AnsiConfig,
     list_depth: usize,
+    indent_chars: usize,
 ) -> std::io::Result<LastBlockSpacing> {
     let fg_color = parse_color_attr(&div.attr, "color");
     let bg_color = parse_color_attr(&div.attr, "background-color");
@@ -562,13 +629,13 @@ fn write_div(
     if fg_color.is_some() || bg_color.is_some() {
         let mut ctx = DivContext::new(buf, fg_color, bg_color, config);
         for block in &div.content {
-            write_block_with_depth(block, &mut ctx, config, list_depth)?;
+            write_block_with_depth(block, &mut ctx, config, list_depth, indent_chars)?;
         }
         ctx.flush()?;
     } else {
         // No colors, write blocks directly
         for block in &div.content {
-            write_block_with_depth(block, buf, config, list_depth)?;
+            write_block_with_depth(block, buf, config, list_depth, indent_chars)?;
         }
     }
 
@@ -581,6 +648,7 @@ fn write_bulletlist(
     buf: &mut dyn Write,
     config: &AnsiConfig,
     list_depth: usize,
+    indent_chars: usize,
 ) -> std::io::Result<LastBlockSpacing> {
     // Determine if list is tight (all first blocks are Plain) or loose
     let is_tight = list
@@ -594,12 +662,12 @@ fn write_bulletlist(
             writeln!(buf)?;
         }
 
-        // Create context for this item
+        // Create context for this item (adds 3 characters: "*, ", "-  ", or "+  ")
         let mut ctx = BulletListContext::new(buf, list_depth, config);
 
         // Write all blocks in item through the context
         for block in item {
-            write_block_with_depth(block, &mut ctx, config, list_depth + 1)?;
+            write_block_with_depth(block, &mut ctx, config, list_depth + 1, indent_chars + 3)?;
         }
 
         ctx.flush()?;
@@ -614,6 +682,7 @@ fn write_orderedlist(
     buf: &mut dyn Write,
     config: &AnsiConfig,
     list_depth: usize,
+    indent_chars: usize,
 ) -> std::io::Result<LastBlockSpacing> {
     // ListAttributes is (start_number, number_style, number_delim)
     let start_number = list.attr.0;
@@ -638,7 +707,13 @@ fn write_orderedlist(
 
         // Write all blocks in item through the context
         for block in item {
-            write_block_with_depth(block, &mut ctx, config, list_depth + 1)?;
+            write_block_with_depth(
+                block,
+                &mut ctx,
+                config,
+                list_depth + 1,
+                indent_chars + indent_width,
+            )?;
         }
 
         ctx.flush()?;
@@ -653,6 +728,7 @@ fn write_definitionlist(
     buf: &mut dyn Write,
     config: &AnsiConfig,
     list_depth: usize,
+    indent_chars: usize,
 ) -> std::io::Result<LastBlockSpacing> {
     let mut style_ctx = StyleContext::new();
 
@@ -686,8 +762,13 @@ fn write_definitionlist(
             for (j, block) in definition.iter().enumerate() {
                 // Write the block to a buffer first so we can control indentation
                 let mut def_buf = Vec::new();
-                let block_spacing =
-                    write_block_with_depth(block, &mut def_buf, config, list_depth + 1)?;
+                let block_spacing = write_block_with_depth(
+                    block,
+                    &mut def_buf,
+                    config,
+                    list_depth + 1,
+                    indent_chars + 2,
+                )?;
 
                 if j > 0 {
                     // Determine if we need a blank line before this block
@@ -723,6 +804,7 @@ fn write_blockquote(
     buf: &mut dyn Write,
     config: &AnsiConfig,
     list_depth: usize,
+    indent_chars: usize,
 ) -> std::io::Result<LastBlockSpacing> {
     let mut ctx = BlockQuoteContext::new(buf, config);
     let mut last_spacing = LastBlockSpacing::None;
@@ -741,7 +823,9 @@ fn write_blockquote(
             }
         }
 
-        last_spacing = write_block_with_depth(block, &mut ctx, config, list_depth)?;
+        // BlockQuoteContext adds 2 characters: "│ "
+        last_spacing =
+            write_block_with_depth(block, &mut ctx, config, list_depth, indent_chars + 2)?;
     }
 
     ctx.flush()?;
@@ -854,6 +938,31 @@ fn parse_color_value(value: &str) -> Option<Color> {
     }
 
     None
+}
+
+/// Calculate the display width of a string by stripping ANSI escape sequences
+/// This is useful for centering and alignment calculations
+fn display_width(s: &str) -> usize {
+    let mut width = 0;
+    let mut chars = s.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\x1b' {
+            // Start of an ANSI escape sequence
+            // Skip until we find the final character (letter)
+            while let Some(&next_ch) = chars.peek() {
+                chars.next();
+                if next_ch.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            // Regular character - count it
+            width += 1;
+        }
+    }
+
+    width
 }
 
 fn write_inline<T: Write + ?Sized>(
