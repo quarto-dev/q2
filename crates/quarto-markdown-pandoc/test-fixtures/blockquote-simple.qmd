@@ -1,0 +1,4 @@
+> This is a simple blockquote.
+> It has multiple lines.
+
+Regular paragraph after the quote.
