@@ -1,0 +1,12 @@
+* First item
+* Second item
+* Third item
+
+Nested list:
+
+* Outer one
+  - Inner one
+  - Inner two
+    + Deep one
+    + Deep two
+* Outer two

@@ -1,0 +1,3 @@
+[Outer green [inner red]{color="red"} back to green]{color="green"}
+
+[Outer with **bold** and [colored]{color="blue"} parts]{color="yellow"}

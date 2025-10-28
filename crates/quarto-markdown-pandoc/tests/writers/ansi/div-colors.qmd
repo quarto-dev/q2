@@ -1,0 +1,13 @@
+::: {color="red"}
+Red text in div
+:::
+
+::: {color="blue" background-color="yellow"}
+Blue text with yellow background
+:::
+
+::: {color="red"}
+Multiple paragraphs in red div.
+
+Second paragraph still red.
+:::

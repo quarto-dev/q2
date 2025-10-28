@@ -712,8 +712,8 @@ fn test_ansi_writer_smoke() {
                         writers::ansi::write(&doc, &mut buf).expect("Failed to write ANSI");
 
                         // Convert to string to ensure it's valid UTF-8
-                        let output = String::from_utf8(buf)
-                            .expect("Invalid UTF-8 in ANSI writer output");
+                        let output =
+                            String::from_utf8(buf).expect("Invalid UTF-8 in ANSI writer output");
 
                         // Verify output contains ANSI escape codes or plain text
                         // (depends on whether colors are enabled)
@@ -730,7 +730,10 @@ fn test_ansi_writer_smoke() {
             Err(e) => panic!("Error reading glob entry: {}", e),
         }
     }
-    assert!(file_count > 0, "No files found in tests/writers/ansi directory");
+    assert!(
+        file_count > 0,
+        "No files found in tests/writers/ansi directory"
+    );
 }
 
 #[test]
