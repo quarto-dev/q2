@@ -1,0 +1,16 @@
+1. First item
+2. Second item
+3. Third item
+
+Wide numbers:
+
+100. Item one hundred
+101. Item one hundred one
+102. Item one hundred two
+
+Nested:
+
+1. Outer one
+   1. Inner one
+   2. Inner two
+2. Outer two

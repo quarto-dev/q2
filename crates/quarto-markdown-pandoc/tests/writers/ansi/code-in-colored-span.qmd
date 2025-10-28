@@ -1,0 +1,5 @@
+[Colored `code` text]{color="green"} and `normal code`.
+
+[Text with `code` and **bold** and *italic*]{color="cyan"} after.
+
+[Multiple `code blocks` in `one span`]{color="magenta"} works.

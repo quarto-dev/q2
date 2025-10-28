@@ -1,0 +1,7 @@
+> This is the first paragraph in a blockquote.
+>
+> This is the second paragraph.
+
+Regular paragraph.
+
+> Another blockquote with **bold** and *italic* text.

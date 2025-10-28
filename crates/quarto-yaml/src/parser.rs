@@ -289,6 +289,38 @@ impl<'a> YamlBuilder<'a> {
         }
     }
 
+    fn make_source_info_at_offset(&self, start_offset: usize, len: usize) -> SourceInfo {
+        let end_offset = start_offset + len;
+
+        if let Some(ref parent) = self.parent {
+            // We're parsing a substring - create a Substring mapping
+            SourceInfo::substring(parent.clone(), start_offset, end_offset)
+        } else {
+            // We're parsing an original file - create an Original mapping
+            // We don't have row/column info without a marker, so we need to compute it
+            // from the content
+            use quarto_source_map::{Location, Range};
+
+            // For now, create a minimal SourceInfo without accurate row/column
+            // This should still work correctly because SourceContext can map offsets
+            SourceInfo::from_range(
+                quarto_source_map::FileId(0),
+                Range {
+                    start: Location {
+                        offset: start_offset,
+                        row: 0, // Will be computed from offset by SourceContext
+                        column: 0,
+                    },
+                    end: Location {
+                        offset: end_offset,
+                        row: 0,
+                        column: 0,
+                    },
+                },
+            )
+        }
+    }
+
     fn compute_scalar_len(&self, _marker: &Marker, value: &str) -> usize {
         // For now, use the value length
         // TODO: This should be computed more accurately from the source
@@ -443,10 +475,6 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
                     entries,
                 } = build_node
                 {
-                    // Compute the length from start to current marker
-                    let len = marker.index().saturating_sub(start_marker.index());
-                    let source_info = self.make_source_info(&start_marker, len);
-
                     // Build the hash entries
                     let mut hash_entries = Vec::new();
                     let mut yaml_pairs = Vec::new();
@@ -472,6 +500,22 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
 
                         yaml_pairs.push((key.yaml.clone(), value.yaml.clone()));
                     }
+
+                    // Compute source_info for the entire object
+                    // If we have entries, use the first key's start and the current marker's end
+                    // Otherwise, use start_marker to current marker
+                    let source_info = if let Some(first_entry) = hash_entries.first() {
+                        // Get the start offset from the first key
+                        let first_key_start = first_entry.key.source_info.start_offset();
+                        // Compute length from first key start to current marker
+                        let len = marker.index().saturating_sub(first_key_start);
+                        // Create SourceInfo starting from first key
+                        self.make_source_info_at_offset(first_key_start, len)
+                    } else {
+                        // Empty object: use start_marker to current marker
+                        let len = marker.index().saturating_sub(start_marker.index());
+                        self.make_source_info(&start_marker, len)
+                    };
 
                     // Build the Yaml::Hash
                     let yaml = Yaml::Hash(yaml_pairs.into_iter().collect());
@@ -1081,8 +1125,8 @@ We used the following approach...
             yaml_end
         );
 
-        // Extract and verify the exact string - yaml-rust2 reports the first value, not the first key
-        let yaml_root_expected = ": \"My Research Paper\""; // Colon and first value
+        // Extract and verify the exact string - the YAML root should start at the first key
+        let yaml_root_expected = "title: \"My Research P"; // First key and start of value
         let resolved_yaml_str =
             &qmd_content[resolved_yaml_offset..resolved_yaml_offset + yaml_root_expected.len()];
         assert_eq!(
@@ -1148,5 +1192,26 @@ We used the following approach...
         }
 
         // All tests passed - offset resolution works correctly through the double-substring chain!
+    }
+
+    #[test]
+    fn test_object_source_range_starts_at_first_key() {
+        let yaml_content = "title: \"My Research Paper\"\nauthor: \"John Doe\"\n";
+        let parsed = parse_file(yaml_content, "test.yaml").expect("parse failed");
+
+        // The root should be an object
+        assert!(parsed.is_hash());
+
+        // Check the SourceInfo of the object
+        let source_info = &parsed.source_info;
+
+        // The object should span from offset 0 (start of "title") to the end
+        // NOT from offset 5 (the colon)
+        assert_eq!(source_info.start_offset(), 0,
+                   "Object should start at offset 0 (beginning of first key), not at the colon");
+
+        // The end should be at the end of the content
+        assert_eq!(source_info.end_offset(), yaml_content.len(),
+                   "Object should end at end of content");
     }
 }

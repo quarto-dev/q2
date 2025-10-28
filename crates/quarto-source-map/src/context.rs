@@ -4,10 +4,16 @@ use crate::file_info::FileInformation;
 use crate::types::FileId;
 use serde::{Deserialize, Serialize};
 
+use std::collections::HashMap;
+
 /// Context for managing source files
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SourceContext {
     files: Vec<SourceFile>,
+    /// Sparse mapping for non-sequential file IDs (e.g., from hash-based IDs)
+    /// Only populated when add_file_with_id is used
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
+    file_id_map: HashMap<usize, usize>, // Maps FileId.0 -> index in files vec
 }
 
 /// A source file with content and metadata
@@ -37,7 +43,10 @@ pub struct FileMetadata {
 impl SourceContext {
     /// Create a new empty source context
     pub fn new() -> Self {
-        SourceContext { files: Vec::new() }
+        SourceContext {
+            files: Vec::new(),
+            file_id_map: HashMap::new(),
+        }
     }
 
     /// Add a file to the context and return its ID
@@ -92,8 +101,56 @@ impl SourceContext {
         id
     }
 
+    /// Add a file with a specific FileId
+    ///
+    /// This is useful when interfacing with systems that use hash-based or non-sequential
+    /// FileIds (like quarto-yaml). The FileId must not already exist in the context.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the FileId already exists in the context.
+    pub fn add_file_with_id(
+        &mut self,
+        id: FileId,
+        path: String,
+        content: Option<String>,
+    ) -> FileId {
+        // Check if ID already exists
+        if self.get_file(id).is_some() {
+            panic!("FileId {:?} already exists in SourceContext", id);
+        }
+
+        // Process content same as add_file
+        let (stored_content, content_for_info) = match content {
+            Some(c) => (Some(c.clone()), Some(c)),
+            None => (None, std::fs::read_to_string(&path).ok()),
+        };
+
+        let file_info = content_for_info.as_ref().map(|c| FileInformation::new(c));
+
+        // Add to files vec and create mapping
+        let index = self.files.len();
+        self.files.push(SourceFile {
+            path,
+            content: stored_content,
+            file_info,
+            metadata: FileMetadata { file_type: None },
+        });
+
+        // Store mapping from FileId to index
+        self.file_id_map.insert(id.0, index);
+
+        id
+    }
+
     /// Get a file by ID
     pub fn get_file(&self, id: FileId) -> Option<&SourceFile> {
+        // First check if this is a mapped ID
+        if let Some(&index) = self.file_id_map.get(&id.0) {
+            return self.files.get(index);
+        }
+
+        // Otherwise use direct indexing (for sequential IDs from add_file)
         self.files.get(id.0)
     }
 
@@ -114,6 +171,7 @@ impl SourceContext {
                     metadata: f.metadata.clone(),
                 })
                 .collect(),
+            file_id_map: self.file_id_map.clone(), // Preserve mapping
         }
     }
 }

@@ -177,6 +177,7 @@ fn main() {
         "native" => writers::native::write(&pandoc, &mut buf),
         "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
         "html" => writers::html::write(&pandoc, &mut buf),
+        "ansi" => writers::ansi::write(&pandoc, &mut buf),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             return;

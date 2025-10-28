@@ -1,0 +1,1 @@
+ANSI palette: [bright red]{color="ansi(196)"} and [purple]{color="ansi-129"}.
