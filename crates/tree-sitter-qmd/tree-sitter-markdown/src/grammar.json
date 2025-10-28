@@ -3509,6 +3509,10 @@
                 "name": "_inline_math_state_track_marker"
               },
               {
+                "type": "SYMBOL",
+                "name": "_html_comment"
+              },
+              {
                 "type": "SEQ",
                 "members": [
                   {
@@ -3680,6 +3684,10 @@
                 {
                   "type": "SYMBOL",
                   "name": "_whitespace"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_html_comment"
                 },
                 {
                   "type": "SEQ",
@@ -4455,6 +4463,10 @@
               "name": "_whitespace"
             },
             {
+              "type": "SYMBOL",
+              "name": "_html_comment"
+            },
+            {
               "type": "SEQ",
               "members": [
                 {
@@ -4637,6 +4649,10 @@
                   "name": "_whitespace"
                 },
                 {
+                  "type": "SYMBOL",
+                  "name": "_html_comment"
+                },
+                {
                   "type": "SEQ",
                   "members": [
                     {
@@ -4808,6 +4824,10 @@
                   {
                     "type": "SYMBOL",
                     "name": "_whitespace"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_html_comment"
                   },
                   {
                     "type": "SEQ",
@@ -4989,6 +5009,10 @@
             {
               "type": "SYMBOL",
               "name": "_whitespace"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_html_comment"
             },
             {
               "type": "SEQ",
@@ -6563,6 +6587,10 @@
     {
       "type": "SYMBOL",
       "name": "_latex_span_close"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_html_comment"
     }
   ],
   "inline": [],

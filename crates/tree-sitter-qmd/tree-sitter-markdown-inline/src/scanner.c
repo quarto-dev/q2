@@ -47,6 +47,7 @@ typedef enum {
     STRONG_EMPHASIS_CLOSE_STAR,
     STRONG_EMPHASIS_OPEN_UNDERSCORE,
     STRONG_EMPHASIS_CLOSE_UNDERSCORE,
+    HTML_COMMENT,
 } TokenType;
 
 static bool is_lookahead_line_end(TSLexer *lexer) {
@@ -518,6 +519,61 @@ static bool parse_key_name_and_equals(UNUSED Scanner *s, TSLexer *lexer,
     return true;
 }
 
+// Parse HTML comment: <!-- ... -->
+// This consumes everything from <!-- to --> atomically, including
+// newlines and any markdown syntax inside.
+static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[HTML_COMMENT]) {
+        return false;
+    }
+
+    // Current position should be '<'
+    if (lexer->lookahead != '<') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '!') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '-') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '-') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    // Now consume everything until we find '-->'
+    while (!lexer->eof(lexer)) {
+        if (lexer->lookahead == '-') {
+            lexer->advance(lexer, false);
+            if (lexer->lookahead == '-') {
+                lexer->advance(lexer, false);
+                if (lexer->lookahead == '>') {
+                    lexer->advance(lexer, false);
+                    lexer->mark_end(lexer);
+                    lexer->result_symbol = HTML_COMMENT;
+                    return true;
+                }
+                // Not the end, continue consuming
+            }
+            // Continue consuming
+        } else {
+            lexer->advance(lexer, false);
+        }
+    }
+
+    // Unclosed comment - consumed until EOF
+    lexer->mark_end(lexer);
+    lexer->result_symbol = HTML_COMMENT;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
@@ -528,6 +584,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Decide which tokens to consider based on the first non-whitespace
     // character
     switch (lexer->lookahead) {
+        case '<':
+            // Check for HTML comment
+            return parse_html_comment(lexer, valid_symbols);
         case '{':
             return parse_shortcode_open(s, lexer, valid_symbols);
         case '>':

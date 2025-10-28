@@ -61,6 +61,8 @@ typedef enum {
     // latex span delimiters for parsing pipe table cells
     LATEX_SPAN_START,
     LATEX_SPAN_CLOSE,
+    // HTML comment token
+    HTML_COMMENT,
 } TokenType;
 
 // Description of a block on the block stack.
@@ -1477,6 +1479,63 @@ static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbo
     return false;
 }
 
+// Parse HTML comment: <!-- ... -->
+// This must consume everything from <!-- to --> atomically, including
+// newlines and what would otherwise be block markers (lists, headings, etc.)
+// This is critical for handling comments that span block boundaries.
+static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[HTML_COMMENT]) {
+        return false;
+    }
+
+    // Current position should be '<'
+    if (lexer->lookahead != '<') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '!') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '-') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '-') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    // Now consume everything until we find '-->'
+    // This includes newlines, list markers, heading markers, etc.
+    while (!lexer->eof(lexer)) {
+        if (lexer->lookahead == '-') {
+            lexer->advance(lexer, false);
+            if (lexer->lookahead == '-') {
+                lexer->advance(lexer, false);
+                if (lexer->lookahead == '>') {
+                    lexer->advance(lexer, false);
+                    lexer->mark_end(lexer);
+                    lexer->result_symbol = HTML_COMMENT;
+                    return true;
+                }
+                // Not the end, continue consuming
+            }
+            // Continue consuming
+        } else {
+            lexer->advance(lexer, false);
+        }
+    }
+
+    // Unclosed comment - consumed until EOF
+    lexer->mark_end(lexer);
+    lexer->result_symbol = HTML_COMMENT;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // printf("-- scan() state=%d\n", s->state);
     // A normal tree-sitter rule decided that the current branch is invalid and
@@ -1497,13 +1556,22 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return parse_latex_span(s, lexer, valid_symbols);
     }
 
+    // Don't parse HTML comments or track math state when inside a fenced code block -
+    // these characters should be literal
+    bool inside_fenced_code = s->open_blocks.size > 0 &&
+                              s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
+
+    // Handle HTML comments - must consume atomically to prevent block structure
+    // recognition inside comments (e.g., list markers, headings)
+    // But NOT inside fenced code blocks where they should be literal
+    if (lexer->lookahead == '<' && !inside_fenced_code && valid_symbols[HTML_COMMENT]) {
+        return parse_html_comment(lexer, valid_symbols);
+    }
+
     // the logic here is tricky. We're trying to see a $$, mark STATE_IN_DISPLAY_MATH
     // and go on. But we can only serialize state if we successfully return an external
     // token.
     //
-    // Don't track math state when inside a fenced code block - dollar signs should be literal
-    bool inside_fenced_code = s->open_blocks.size > 0 &&
-                              s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
 
     // IMPORTANT: Don't process DISPLAY_MATH_STATE_TRACK_MARKER when we're in STATE_MATCHING mode.
     // When matching block continuations (e.g., inside a fenced div), we need to let the block

@@ -2205,6 +2205,10 @@
         }
       ]
     },
+    "html_comment": {
+      "type": "SYMBOL",
+      "name": "_html_comment"
+    },
     "insert": {
       "type": "PREC_RIGHT",
       "value": 0,
@@ -3863,6 +3867,10 @@
             },
             {
               "type": "SYMBOL",
+              "name": "html_comment"
+            },
+            {
+              "type": "SYMBOL",
               "name": "quoted_span"
             },
             {
@@ -5302,6 +5310,10 @@
     {
       "type": "SYMBOL",
       "name": "_strong_emphasis_close_underscore"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_html_comment"
     }
   ],
   "inline": [],

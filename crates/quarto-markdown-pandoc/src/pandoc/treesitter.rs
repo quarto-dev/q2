@@ -19,6 +19,7 @@ use crate::pandoc::treesitter_utils::editorial_marks::{
 };
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
+use crate::pandoc::treesitter_utils::html_comment::process_html_comment;
 use crate::pandoc::treesitter_utils::indented_code_block::process_indented_code_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
 use crate::pandoc::treesitter_utils::inline_link::process_inline_link;
@@ -680,6 +681,7 @@ fn native_visitor<T: Write>(
         "quoted_span" => process_quoted_span(node, children, native_inline, context),
         "code_span" => process_code_span(buf, node, children, context),
         "latex_span" => process_latex_span(node, children, context),
+        "html_comment" => process_html_comment(node, input_bytes, context),
         "list" => process_list(node, children, context),
         "list_item" => process_list_item(node, children, context),
         "info_string" => process_info_string(children, context),
