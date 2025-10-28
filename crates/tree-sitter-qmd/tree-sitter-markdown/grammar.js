@@ -626,6 +626,7 @@ module.exports = grammar({
         [$.indented_code_block, $._block],
     ],
     conflicts: $ => [
+        [$.language_attribute, $._atx_heading_line],
     ],
     extras: $ => [],
 });

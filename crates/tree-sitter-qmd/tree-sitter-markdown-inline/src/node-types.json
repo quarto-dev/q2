@@ -1237,6 +1237,10 @@
         {
           "type": "language",
           "named": true
+        },
+        {
+          "type": "language_attribute",
+          "named": true
         }
       ]
     }

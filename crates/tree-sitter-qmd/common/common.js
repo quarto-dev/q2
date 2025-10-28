@@ -134,9 +134,12 @@ module.exports.rules = {
       repeat(seq(alias($._attribute, $.key_value_specifier), optional($._commonmark_whitespace))),
       "}"
     ))),
-    language_attribute: $ => prec.dynamic(1, seq(
+    language_attribute: $ => prec.dynamic(3, seq(
       "{",
-      alias($.commonmark_name, $.language),
+      choice(
+        alias($.commonmark_name, $.language),
+        $.language_attribute
+      ),
       "}"
     )),
 
