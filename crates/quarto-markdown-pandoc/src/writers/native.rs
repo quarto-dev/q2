@@ -591,6 +591,11 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             }
             write!(buf, "]")?;
         }
+        Block::NoteDefinitionPara(_) | Block::NoteDefinitionFencedBlock(_) => {
+            // Note definitions are not represented as separate blocks in Pandoc's native format.
+            // The content is coalesced into Note inline elements where referenced.
+            // Skip output for native writer.
+        }
         _ => panic!("Unsupported block type in native writer: {:?}", block),
     }
     Ok(())

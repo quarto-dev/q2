@@ -1,4 +1,5 @@
 {
+    "code": "Q-2-3",
     "title": "Key-value Pair Before Class Specifier in Attribute",
     "message": "This class specifier appears after the key-value pair.",
     "captures": [
@@ -18,7 +19,7 @@
     "notes": [
         {
             "message": "This key-value pair cannot appear before the class specifier.",
-            "noteType": "label-range",            
+            "noteType": "label-range",
             "labelBegin": "key-value-begin",
             "labelEnd": "key-value-end"
         }

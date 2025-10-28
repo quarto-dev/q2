@@ -27,6 +27,7 @@ pub struct ErrorNote {
 
 #[derive(Debug)]
 pub struct ErrorInfo {
+    pub code: Option<&'static str>,
     pub title: &'static str,
     pub message: &'static str,
     pub captures: &'static [ErrorCapture],

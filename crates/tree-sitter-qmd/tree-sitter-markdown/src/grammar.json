@@ -1646,7 +1646,7 @@
     },
     "language_attribute": {
       "type": "PREC_DYNAMIC",
-      "value": 1,
+      "value": 3,
       "content": {
         "type": "SEQ",
         "members": [
@@ -1655,13 +1655,22 @@
             "value": "{"
           },
           {
-            "type": "ALIAS",
-            "content": {
-              "type": "SYMBOL",
-              "name": "commonmark_name"
-            },
-            "named": true,
-            "value": "language"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "commonmark_name"
+                },
+                "named": true,
+                "value": "language"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "language_attribute"
+              }
+            ]
           },
           {
             "type": "STRING",
@@ -6312,7 +6321,12 @@
     }
   },
   "extras": [],
-  "conflicts": [],
+  "conflicts": [
+    [
+      "language_attribute",
+      "_atx_heading_line"
+    ]
+  ],
   "precedences": [
     [
       {

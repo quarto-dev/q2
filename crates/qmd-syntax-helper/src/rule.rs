@@ -23,6 +23,12 @@ pub struct CheckResult {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<SourceLocation>,
+    /// Error code (e.g., "Q-2-5") for parse errors
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_code: Option<String>,
+    /// All error codes found (for parse rule with multiple errors)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_codes: Option<Vec<String>>,
 }
 
 /// Result of converting/fixing a file
@@ -75,6 +81,9 @@ impl RuleRegistry {
         ));
 
         // Register conversion rules
+        registry.register(Arc::new(
+            crate::conversions::attribute_ordering::AttributeOrderingConverter::new()?,
+        ));
         registry.register(Arc::new(
             crate::conversions::grid_tables::GridTableConverter::new()?,
         ));

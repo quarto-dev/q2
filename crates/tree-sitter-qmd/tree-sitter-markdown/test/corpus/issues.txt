@@ -45,6 +45,7 @@
 ```
 
 --------------------------------------------------------------------------------
+
 (document
   (section
     (fenced_code_block
@@ -62,6 +63,7 @@
       (code_fence_content
         (block_continuation))
       (fenced_code_block_delimiter))))
+
 ================================================================================
 #72 -  Can't create list item after a list item with a newline and indent
 ================================================================================
@@ -157,3 +159,24 @@ $$
   (section
     (paragraph
       (inline))))
+
+================================================================================
+Display math inside fenced div should parse correctly
+================================================================================
+::: {}
+
+$$hello$$
+
+:::
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (fenced_div_block
+      (block_continuation)
+      (block_continuation)
+      (paragraph
+        (inline)
+        (block_continuation))
+      (block_continuation))))

@@ -2,7 +2,7 @@
 source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
 expression: error_output
 ---
-[31mError:[0m Unclosed Span
+[31mError:[0m [Q-2-1] Unclosed Span
    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/001.qmd:1:18[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249ma[0m[38;5;249mn[0m[38;5;249m [0m[36m[[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249mc[0m[38;5;249ml[0m[38;5;249mo[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249mp[0m[38;5;249ma[0m[38;5;249mn[0m

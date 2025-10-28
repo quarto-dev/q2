@@ -2,9 +2,10 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1283,
+    "state": 1292,
     "sym": "end",
     "errorInfo": {
+      "code": "Q-2-1",
       "title": "Unclosed Span",
       "message": "I reached the end of the block before finding a closing ']' for the span or link.",
       "captures": [
@@ -30,15 +31,16 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2678,
+    "state": 2644,
     "sym": "class_specifier",
     "errorInfo": {
+      "code": "Q-2-3",
       "title": "Key-value Pair Before Class Specifier in Attribute",
       "message": "This class specifier appears after the key-value pair.",
       "captures": [
         {
           "column": 10,
-          "lrState": 2720,
+          "lrState": 2740,
           "row": 0,
           "size": 3,
           "sym": "key_value_key",
@@ -46,7 +48,7 @@
         },
         {
           "column": 14,
-          "lrState": 2600,
+          "lrState": 2571,
           "row": 0,
           "size": 5,
           "sym": "key_value_value_token1",
@@ -67,15 +69,16 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2020,
+    "state": 2009,
     "sym": "_error",
     "errorInfo": {
+      "code": "Q-2-2",
       "title": "Mismatched Delimiter in Attribute Specifier",
       "message": "I expected a '}', language specifier, an identifier, a class specifier, or a key-value pair.",
       "captures": [
         {
           "column": 17,
-          "lrState": 2020,
+          "lrState": 2009,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -93,17 +96,47 @@
     "name": "002"
   },
   {
+    "column": 17,
+    "row": 0,
+    "state": 822,
+    "sym": "end",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "column": 11,
+          "lrState": 18,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening delimiter for the emphasis",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "005"
+  },
+  {
     "column": 3,
     "row": 0,
-    "state": 932,
+    "state": 902,
     "sym": "{",
     "errorInfo": {
+      "code": "Q-2-4",
       "title": "Missing Space After Div Fence",
       "message": "A space is required after ':::' when specifying div attributes.",
       "captures": [
         {
           "column": 0,
-          "lrState": 932,
+          "lrState": 902,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",

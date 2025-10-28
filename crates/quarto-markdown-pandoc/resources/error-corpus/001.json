@@ -1,4 +1,5 @@
 {
+    "code": "Q-2-1",
     "title": "Unclosed Span",
     "message": "I reached the end of the block before finding a closing ']' for the span or link.",
     "captures": [
