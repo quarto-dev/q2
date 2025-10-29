@@ -31,7 +31,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2670,
+    "state": 2662,
     "sym": "class_specifier",
     "errorInfo": {
       "code": "Q-2-3",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2751,
+          "lrState": 2763,
           "row": 0,
           "size": 3,
           "sym": "key_value_key",
@@ -69,7 +69,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2017,
+    "state": 2024,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-2",
@@ -78,7 +78,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2017,
+          "lrState": 2024,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -98,7 +98,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 800,
+    "state": 843,
     "sym": "end",
     "errorInfo": {
       "code": "Q-2-5",

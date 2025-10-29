@@ -117,6 +117,7 @@ module.exports = grammar(add_inline_rules({
     rules: {
         inline: $ => seq(optional($._last_token_whitespace), $._inline),
 
+        raw_specifier: $ => /[<=][a-zA-Z_][a-zA-Z0-9_-]*/, 
         ...common.rules,
 
         // A lot of inlines are defined in `add_inline_rules`, including:
@@ -452,6 +453,7 @@ module.exports = grammar(add_inline_rules({
         _code_span_text_base: $ => prec.right(choice(
             $._word,
             common.punctuation_without($, []),
+            '<', '>',
             $._whitespace,
         )),
 
