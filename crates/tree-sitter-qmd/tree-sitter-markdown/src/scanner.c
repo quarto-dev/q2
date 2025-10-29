@@ -8,6 +8,10 @@
 // #define SCAN_DEBUG 1
 
 #ifdef SCAN_DEBUG
+#define DEBUG_HERE printf("At line %d\n", __LINE__);
+#endif
+
+#ifdef SCAN_DEBUG
 #include <stdio.h>
 #endif
 
@@ -1693,11 +1697,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return error(lexer);
     }
 
-    // Handle code spans for pipe table cells
-    if (lexer->lookahead == '`' && (valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
-        return parse_code_span(s, lexer, valid_symbols);
-    }
-
     // Handle latex spans for pipe table cells
     // This must come BEFORE the display math state tracking below, so that
     // latex spans in pipe table cells are parsed correctly
@@ -1734,6 +1733,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // to match the block structure, causing a parse error.
     if (!s->simulate && !(s->state & STATE_MATCHING) && lexer->lookahead == '$' &&
         !inside_fenced_code &&
+        !s->inside_code_span &&
         valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
         advance(s, lexer);
         if (lexer->lookahead == '$') {
@@ -1752,7 +1752,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     }
 
     // Handle code spans for pipe table cells
-    if (lexer->lookahead == '`' && (valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
+    if (lexer->lookahead == '`' && !valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
+        valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
+        #ifdef SCAN_DEBUG
+        printf("Trying to scan a code span\n");
+        #endif
         return parse_code_span(s, lexer, valid_symbols);
     }
 
@@ -1811,6 +1815,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
         // Decide which tokens to consider based on the first non-whitespace
         // character
+        #ifdef SCAN_DEBUG
+        printf("before main lookahead switch\n");
+        #endif
         switch (lexer->lookahead) {
             case '\r':
             case '\n':
@@ -1826,6 +1833,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case '`':
                 // A backtick could mark the beginning or ending of a fenced
                 // code block.
+                #ifdef SCAN_DEBUG
+                printf("Trying to parse fenced code block\n");
+                #endif
                 return parse_fenced_code_block(s, '`', lexer, valid_symbols);
             case '~':
                 // A tilde could mark the beginning or ending of a fenced code

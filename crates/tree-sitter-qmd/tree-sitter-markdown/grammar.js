@@ -413,6 +413,7 @@ module.exports = grammar({
             $.raw_specifier,
             $._autolink,
             $._escaped_characters,
+            $._pipe_table_code_span,
             '[>>', // this needs to be accepted for highlights in editorial comments
         ),
 
