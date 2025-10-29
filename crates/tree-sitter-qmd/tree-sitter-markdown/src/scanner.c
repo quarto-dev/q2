@@ -75,6 +75,8 @@ typedef enum {
     HTML_COMMENT,
     RAW_SPECIFIER,
     AUTOLINK,
+    LANGUAGE_SPECIFIER,
+    KEY_SPECIFIER,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -137,7 +139,9 @@ static char* token_names[] = {
     // HTML comment token
     "HTML_COMMENT",
     "RAW_SPECIFIER",
-    "AUTOLINK"
+    "AUTOLINK",
+    "LANGUAGE_SPECIFIER",
+    "KEY_SPECIFIER"
 };
 
 #endif
@@ -240,6 +244,8 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // LATEX_SPAN_CLOSE
     false, // RAW_SPECIFIER
     false, // AUTOLINK
+    false, // LANGUAGE_SPECIFIER
+    false, // KEY_SPECIFIER
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -294,6 +300,8 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // LATEX_SPAN_CLOSE
     false, // RAW_SPECIFIER
     false, // AUTOLINK
+    false, // LANGUAGE_SPECIFIER
+    false, // KEY_SPECIFIER
 };
 
 // State bitflags used with `Scanner.state`
@@ -1673,6 +1681,66 @@ static bool parse_raw_specifier(TSLexer *lexer, const bool *valid_symbols) {
 
 }
 
+static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[LANGUAGE_SPECIFIER] && !valid_symbols[KEY_SPECIFIER]) {
+        return false;
+    }
+    // Current position should be 'A-Za-z'
+    if (!((lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+          (lexer->lookahead >= 'a' && lexer->lookahead <= 'z'))) {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    // consume all alphanumeric characters until one of:
+    // - '}', EOF: that was a language specifier
+    // - '=': that was a key-value key
+    // - ' ', '\t': look ahead of whitespace to peek for an '=' to make the call
+
+    do {
+        if (
+            (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+            (lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
+            (lexer->lookahead >= '0' && lexer->lookahead <= '9') ||
+            (lexer->lookahead == '_') ||
+            (lexer->lookahead == '-')
+        ) {
+            lexer->advance(lexer, false);
+            continue;
+        }
+        if (lexer->lookahead == '}') {
+            lexer->mark_end(lexer);
+            lexer->result_symbol = LANGUAGE_SPECIFIER;
+            return true;
+        }
+        if (lexer->lookahead == '=') {
+            lexer->mark_end(lexer);
+            lexer->result_symbol = KEY_SPECIFIER;
+            return true;
+        }
+        if ((lexer->lookahead == ' ') || (lexer->lookahead == '\t')) {
+            lexer->mark_end(lexer);
+            while (!lexer->eof(lexer) && (lexer->lookahead == ' ') || (lexer->lookahead == '\t')) {
+                lexer->advance(lexer, false);
+            }
+            if (lexer->eof(lexer)) {
+                lexer->result_symbol = LANGUAGE_SPECIFIER;
+                return true;
+            }
+            if (lexer->lookahead == '=') {
+                lexer->result_symbol = KEY_SPECIFIER;
+                return true;
+            } else {
+                lexer->result_symbol = LANGUAGE_SPECIFIER;
+                return true;
+            }
+        }
+        return false;
+    } while (!lexer->eof(lexer));
+    lexer->result_symbol = LANGUAGE_SPECIFIER;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Don't parse HTML comments or track math state when inside a fenced code block -
     // these characters should be literal
@@ -1893,6 +1961,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
             valid_symbols[PIPE_TABLE_START]) {
             return parse_pipe_table(s, lexer, valid_symbols);
+        }
+        if ((valid_symbols[LANGUAGE_SPECIFIER] || valid_symbols[KEY_SPECIFIER]) &&  
+            ((lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+             (lexer->lookahead >= 'a' && lexer->lookahead <= 'z'))) {
+            return parse_language_specifier(lexer, valid_symbols);
         }
     } else { // we are in the state of trying to match all currently open blocks
         bool partial_success = false;

@@ -132,25 +132,50 @@ module.exports = grammar({
             optional(choice(
                 $.raw_specifier,
                 $.language_specifier,
-                $.commonmark_specifier
+                $.commonmark_specifier,
+                alias($._commonmark_specifier_no_id, $.commonmark_specifier),
+                alias($._commonmark_specifier_no_id_no_class, $.commonmark_specifier)
             )),
             '}'
         ),
 
         language_specifier: $ => choice(
-            /[A-Za-z][A-Za-z0-9_-]*/,
+            $._language_specifier_token,
             seq('{', $.language_specifier, '}')
         ),
 
         commonmark_specifier: $ => seq(
             optional($._inline_whitespace),
             alias(/[#][A-Za-z][A-Za-z0-9_-]*/, $.attribute_id),
-            optional($._inline_whitespace)
+            optional(seq($._inline_whitespace, $._commonmark_specifier_no_id)),
             // optional($._inline_whitespace),
             // repeat(seq(alias(/[.][A-Za-z][A-Za-z0-9_-]*/, attribute_class), optional($._inline_whitespace))),
             // repeat(seq(alias(/[.][A-Za-z][A-Za-z0-9_-]*/, attribute_class), optional($._inline_whitespace)))            
         ),
 
+        _commonmark_specifier_no_id: $ => seq(
+            alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class),
+            optional(repeat(seq($._inline_whitespace, alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class)))),
+            optional(seq($._inline_whitespace, $._commonmark_specifier_no_id_no_class)),
+        ),
+
+        _commonmark_specifier_no_id_no_class: $ => seq(
+            alias($._commonmark_key_value_specifier, $.key_value_specifier),
+            optional(repeat(seq($._inline_whitespace, alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
+            optional($._inline_whitespace)
+        ),
+
+        _commonmark_key_value_specifier: $ => seq(
+            alias($._key_specifier_token, $.key_value_key),
+            optional($._inline_whitespace),
+            '=',
+            optional($._inline_whitespace),
+            alias(choice($._commonmark_naked_value, $._commonmark_single_quote_string, $._commonmark_double_quote_string), $.key_value_value)
+        ),
+
+        _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
+        _commonmark_single_quote_string: $ => /['][^']*[']/,
+        _commonmark_double_quote_string: $ => /["][^"]*["]/,
 
         _line: $ => seq($._inline_element, repeat(seq(alias($._whitespace, $.pandoc_space), $._inline_element))),
 
@@ -306,7 +331,10 @@ module.exports = grammar({
         $.raw_specifier, // no leading underscore because it is needed in common.js without it.
 
         // autolinks
-        $._autolink
+        $._autolink,
+
+        $._language_specifier_token, // external so we can do negative lookahead assertions.
+        $._key_specifier_token
     ],
     precedences: $ => [],
     extras: $ => [],
