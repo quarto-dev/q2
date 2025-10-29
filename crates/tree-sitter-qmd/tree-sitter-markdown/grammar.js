@@ -397,7 +397,7 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
         // Some symbols get parsed as single tokens so that html blocks get detected properly
-        _code_line:        $ => prec.right(repeat1(choice($._word, '<', '>', $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, $._html_comment, common.punctuation_without($, [])))),
+        _code_line:        $ => prec.right(repeat1(choice($._word, '<', '>', '{{<', '}}>', $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, $._html_comment, common.punctuation_without($, [])))),
 
         // the gymnastics around `:` in _line exist to make the parser reject paragraphs that start with a colon.
         // Those are technically valid in Markdown, but disallowing them here makes it possible to detect an
@@ -414,6 +414,7 @@ module.exports = grammar({
             $._autolink,
             $._escaped_characters,
             $._pipe_table_code_span,
+            '{{<', '>}}', // shortcodes
             '[>>', // this needs to be accepted for highlights in editorial comments
         ),
 

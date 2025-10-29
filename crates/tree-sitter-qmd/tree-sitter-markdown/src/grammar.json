@@ -3033,6 +3033,14 @@
               "value": ">"
             },
             {
+              "type": "STRING",
+              "value": "{{<"
+            },
+            {
+              "type": "STRING",
+              "value": "}}>"
+            },
+            {
               "type": "SYMBOL",
               "name": "_display_math_state_track_marker"
             },
@@ -3232,6 +3240,14 @@
         {
           "type": "SYMBOL",
           "name": "_pipe_table_code_span"
+        },
+        {
+          "type": "STRING",
+          "value": "{{<"
+        },
+        {
+          "type": "STRING",
+          "value": ">}}"
         },
         {
           "type": "STRING",

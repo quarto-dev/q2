@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Span ( "" , ["quarto-shortcode__"] , [("data-is-shortcode", "1")] ) [Span ( "" , ["quarto-shortcode__-param"] , [("data-value", "include"), ("data-is-shortcode", "1"), ("data-raw", "include")] ) [], Span ( "" , ["quarto-shortcode__-param"] , [("data-is-shortcode", "1"), ("data-value", "/docs/prerelease/1.5/_pre-release-feature.qmd"), ("data-raw", "/docs/prerelease/1.5/_pre-release-feature.qmd")] ) []]] ]
