@@ -14,8 +14,8 @@ module.exports.EXTENSION_LATEX = true; // process.env.EXTENSION_LATEX || module.
 
 const PUNCTUATION_CHARACTERS_REGEX = '!-/:-@\\[-`\\{-~';
 const PUNCTUATION_CHARACTERS_ARRAY = [
-    '!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<',
-    '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'
+    '!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', ';',
+    '=', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'
 ];
 
 const PRECEDENCE_LEVEL_LINK = 10;
@@ -111,7 +111,8 @@ module.exports.rules = {
     ),
     // we also allow "<" in the raw specifier,
     // which is a Quarto-specific extension to allow "custom readers"
-    raw_specifier: $ => /[<=][a-zA-Z_][a-zA-Z0-9_-]*/,
+    // raw_specifiers need to be lexed externally to avoid a lexing conflict with autolinks
+    // raw_specifier: $ => /[<=][a-zA-Z_][a-zA-Z0-9_-]*/, 
     _commonmark_whitespace: $ => /[ \t]+/,
     raw_attribute: $ => prec(2, seq(
       "{",

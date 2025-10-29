@@ -395,6 +395,10 @@
         {
           "type": "block_continuation",
           "named": true
+        },
+        {
+          "type": "raw_specifier",
+          "named": true
         }
       ]
     }
@@ -1040,6 +1044,10 @@
   },
   {
     "type": "[",
+    "named": false
+  },
+  {
+    "type": "[>>",
     "named": false
   },
   {

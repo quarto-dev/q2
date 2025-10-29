@@ -755,6 +755,8 @@ fn escape_markdown(text: &str) -> String {
             '\\' => result.push_str("\\\\"),
             // Greater-than sign must be escaped to avoid blockquote interpretation
             '>' => result.push_str("\\>"),
+            // Less-than sign must be escaped to avoid html comment, raw specifier etc interpretation
+            '<' => result.push_str("\\<"),
             // Hash must be escaped to avoid header interpretation
             '#' => result.push_str("\\#"),
             // Other characters pass through unchanged

@@ -3,7 +3,13 @@
 #include <ctype.h>
 #include <string.h>
 #include <wctype.h>
-// #include <stdio.h>
+
+// set this define to turn on debugging printouts
+// #define SCAN_DEBUG 1
+
+#ifdef SCAN_DEBUG
+#include <stdio.h>
+#endif
 
 // For explanation of the tokens see grammar.js
 typedef enum {
@@ -61,7 +67,76 @@ typedef enum {
     // latex span delimiters for parsing pipe table cells
     LATEX_SPAN_START,
     LATEX_SPAN_CLOSE,
+    // HTML comment token
+    HTML_COMMENT,
+    RAW_SPECIFIER,
+    AUTOLINK,
 } TokenType;
+
+#ifdef SCAN_DEBUG
+
+static char* token_names[] = {
+    "LINE_ENDING",
+    "SOFT_LINE_ENDING",
+    "BLOCK_CLOSE",
+    "BLOCK_CONTINUATION",
+    "BLOCK_QUOTE_START",
+    "INDENTED_CHUNK_START",
+    "ATX_H1_MARKER",
+    "ATX_H2_MARKER",
+    "ATX_H3_MARKER",
+    "ATX_H4_MARKER",
+    "ATX_H5_MARKER",
+    "ATX_H6_MARKER",
+    "SETEXT_H1_UNDERLINE",
+    "SETEXT_H2_UNDERLINE",
+    "THEMATIC_BREAK",
+    "LIST_MARKER_MINUS",
+    "LIST_MARKER_PLUS",
+    "LIST_MARKER_STAR",
+    "LIST_MARKER_PARENTHESIS",
+    "LIST_MARKER_DOT",
+    "LIST_MARKER_MINUS_DONT_INTERRUPT",
+    "LIST_MARKER_PLUS_DONT_INTERRUPT",
+    "LIST_MARKER_STAR_DONT_INTERRUPT",
+    "LIST_MARKER_PARENTHESIS_DONT_INTERRUPT",
+    "LIST_MARKER_DOT_DONT_INTERRUPT",
+    "LIST_MARKER_EXAMPLE",
+    "LIST_MARKER_EXAMPLE_DONT_INTERRUPT",
+    "FENCED_CODE_BLOCK_START_BACKTICK",
+    "FENCED_CODE_BLOCK_START_TILDE",
+    "BLANK_LINE_START",
+    "FENCED_CODE_BLOCK_END_BACKTICK",
+    "FENCED_CODE_BLOCK_END_TILDE",
+    "CLOSE_BLOCK",
+    "NO_INDENTED_CHUNK",
+    "ERROR",
+    "TRIGGER_ERROR",
+    "TOKEN_EOF",
+    "MINUS_METADATA",
+    "PLUS_METADATA",
+    "PIPE_TABLE_START",
+    "PIPE_TABLE_LINE_ENDING",
+    "FENCED_DIV_START",
+    "FENCED_DIV_END",
+    "REF_ID_SPECIFIER",
+    "FENCED_DIV_NOTE_ID",
+    // special tokens to trigger serialization to track in-display-math mode
+    "DISPLAY_MATH_STATE_TRACK_MARKER",
+    "INLINE_MATH_STATE_TRACK_MARKER",
+    // code span delimiters for parsing pipe table cells
+    "CODE_SPAN_START",
+    "CODE_SPAN_CLOSE",
+    // latex span delimiters for parsing pipe table cells
+    "LATEX_SPAN_START",
+    "LATEX_SPAN_CLOSE",
+    // HTML comment token
+    "HTML_COMMENT",
+    "RAW_SPECIFIER",
+    "AUTOLINK"
+};
+
+#endif
 
 // Description of a block on the block stack.
 //
@@ -159,6 +234,8 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // CODE_SPAN_CLOSE
     false, // LATEX_SPAN_START
     false, // LATEX_SPAN_CLOSE
+    false, // RAW_SPECIFIER
+    false, // AUTOLINK
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -211,6 +288,8 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // CODE_SPAN_CLOSE
     false, // LATEX_SPAN_START
     false, // LATEX_SPAN_CLOSE
+    false, // RAW_SPECIFIER
+    false, // AUTOLINK
 };
 
 // State bitflags used with `Scanner.state`
@@ -1477,8 +1556,137 @@ static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbo
     return false;
 }
 
+// Parse HTML comment: <!-- ... -->
+// This must consume everything from <!-- to --> atomically, including
+// newlines and what would otherwise be block markers (lists, headings, etc.)
+// This is critical for handling comments that span block boundaries.
+// parse_html_comment is called from parse_open_angle_brace, which has already consumed '<'
+static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[HTML_COMMENT]) {
+        return false;
+    }
+
+    if (lexer->lookahead != '!') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '-') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead != '-') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    // Now consume everything until we find '-->'
+    // This includes newlines, list markers, heading markers, etc.
+    while (!lexer->eof(lexer)) {
+        if (lexer->lookahead == '-') {
+            lexer->advance(lexer, false);
+            if (lexer->lookahead == '-') {
+                lexer->advance(lexer, false);
+                if (lexer->lookahead == '>') {
+                    lexer->advance(lexer, false);
+                    lexer->mark_end(lexer);
+                    lexer->result_symbol = HTML_COMMENT;
+                    return true;
+                }
+                // Not the end, continue consuming
+            }
+            // Continue consuming
+        } else {
+            lexer->advance(lexer, false);
+        }
+    }
+
+    // Unclosed comment - consumed until EOF
+    lexer->mark_end(lexer);
+    lexer->result_symbol = HTML_COMMENT;
+    return true;
+}
+
+static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[AUTOLINK] && !valid_symbols[RAW_SPECIFIER] && !valid_symbols[HTML_COMMENT]) {
+        return false;
+    }
+
+    // Current position should be '<'
+    if (lexer->lookahead != '<') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    if (lexer->lookahead == '!') {
+        return parse_html_comment(lexer, valid_symbols);
+    }
+
+    // consume all characters until one of:
+    // - '}': that was a raw specifier
+    // - '>': that was an autolink
+    // - ' ', '\t', EOF: that was a bad lex
+
+    while (!lexer->eof(lexer) && lexer->lookahead != ' ' && lexer->lookahead != '\t') {
+        if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
+            lexer->mark_end(lexer);
+            lexer->result_symbol = RAW_SPECIFIER;
+            return true;
+        } else if (valid_symbols[AUTOLINK] && lexer->lookahead == '>') {
+            lexer->advance(lexer, false); // we want to consume '>' for autolinks
+            lexer->result_symbol = AUTOLINK;
+            return true;
+        }
+        lexer->advance(lexer, false);
+    }
+    return false;
+}
+
+static bool parse_raw_specifier(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[RAW_SPECIFIER]) {
+        return false;
+    }
+    // Current position should be '='
+    if (lexer->lookahead != '=') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+
+    // consume all characters until one of:
+    // - '}': that was a raw specifier
+    // - ' ', '\t', EOF: that was a bad lex
+
+    while (!lexer->eof(lexer) && lexer->lookahead != ' ' && lexer->lookahead != '\t') {
+        if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
+            lexer->mark_end(lexer);
+            lexer->result_symbol = RAW_SPECIFIER;
+            return true;
+        }
+        lexer->advance(lexer, false);
+    }
+    return false;
+
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
-    // printf("-- scan() state=%d\n", s->state);
+    // Don't parse HTML comments or track math state when inside a fenced code block -
+    // these characters should be literal
+    bool inside_fenced_code = s->open_blocks.size > 0 &&
+                              s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
+
+    #ifdef SCAN_DEBUG
+    printf("valid symbols:\n");    
+    for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
+        if (valid_symbols[i]) {
+            printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
+        }
+    }
+    printf("-- scan() state=%d\n", s->state);
+    printf("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
+    printf("   inside_fenced_code: %s\n", inside_fenced_code ? "true": "false");
+    printf("   lookahead: %c (%d)\n", lexer->lookahead, (int)lexer->lookahead);
+    #endif
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
     if (valid_symbols[TRIGGER_ERROR]) {
@@ -1497,13 +1705,28 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return parse_latex_span(s, lexer, valid_symbols);
     }
 
+
+    // Handle HTML comments, raw_specifiers, autolinks - must consume atomically to prevent block structure
+    // recognition inside comments (e.g., list markers, headings)
+    // But NOT inside fenced code blocks where they should be literal
+    if (!s->simulate && !(s->state & STATE_MATCHING) && 
+        lexer->lookahead == '<' && !inside_fenced_code && 
+        (valid_symbols[HTML_COMMENT] || valid_symbols[AUTOLINK] || valid_symbols[RAW_SPECIFIER])) {
+        return parse_open_angle_brace(lexer, valid_symbols);
+    }
+    if (!s->simulate && !(s->state & STATE_MATCHING) && 
+        lexer->lookahead == '=' && // this needs to be allowed inside_fenced_code because we're actually inside fenced code..
+        (valid_symbols[RAW_SPECIFIER])) {
+        #ifdef SCAN_DEBUG
+        printf("Attempting to lex RAW_SPECIFIER\n");
+        #endif
+        return parse_raw_specifier(lexer, valid_symbols);
+    }
+
     // the logic here is tricky. We're trying to see a $$, mark STATE_IN_DISPLAY_MATH
     // and go on. But we can only serialize state if we successfully return an external
     // token.
     //
-    // Don't track math state when inside a fenced code block - dollar signs should be literal
-    bool inside_fenced_code = s->open_blocks.size > 0 &&
-                              s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
 
     // IMPORTANT: Don't process DISPLAY_MATH_STATE_TRACK_MARKER when we're in STATE_MATCHING mode.
     // When matching block continuations (e.g., inside a fenced div), we need to let the block

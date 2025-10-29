@@ -1,0 +1,3 @@
+# Test 17: Comment at start of line
+
+<!-- Comment at line start --> followed by text

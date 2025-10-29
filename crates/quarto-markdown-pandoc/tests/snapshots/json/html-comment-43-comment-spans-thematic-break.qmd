@@ -1,0 +1,9 @@
+# Test 43: Comment spans thematic break
+
+Paragraph before <!-- comment starts
+
+---
+
+This thematic break and following text are commented --> done.
+
+This is visible.

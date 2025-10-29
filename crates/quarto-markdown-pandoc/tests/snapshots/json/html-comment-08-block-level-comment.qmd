@@ -1,0 +1,7 @@
+# Test 8: Comment at block level
+
+This paragraph is visible.
+
+<!-- This entire paragraph should be commented out. -->
+
+This paragraph is also visible.

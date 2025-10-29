@@ -1,0 +1,10 @@
+# Test 45: Nested list inside comment
+
+Before <!-- comment starts
+
+* Item 1
+  * Nested item
+  * Another nested
+* Item 2
+
+All commented --> after.

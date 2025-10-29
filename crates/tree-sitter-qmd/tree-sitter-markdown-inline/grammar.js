@@ -92,6 +92,9 @@ module.exports = grammar(add_inline_rules({
         $._strong_emphasis_open_underscore,
         $._strong_emphasis_close_underscore,
 
+        // HTML comment token
+        $._html_comment,
+
     ],
     precedences: $ => [
         [$._strong_emphasis_star_no_link, $._inline_element_no_star_no_link],
@@ -114,6 +117,7 @@ module.exports = grammar(add_inline_rules({
     rules: {
         inline: $ => seq(optional($._last_token_whitespace), $._inline),
 
+        raw_specifier: $ => /[<=][a-zA-Z_][a-zA-Z0-9_-]*/, 
         ...common.rules,
 
         // A lot of inlines are defined in `add_inline_rules`, including:
@@ -139,6 +143,9 @@ module.exports = grammar(add_inline_rules({
             alias(repeat(choice(/[^$\n\\]+/, '[', ']', /[\\]./, $._soft_line_break, $.backslash_escape)), $.latex_content),
             alias($._latex_span_close, $.latex_span_delimiter),
         ),
+
+        // HTML comment - consumed atomically by external scanner
+        html_comment: $ => $._html_comment,
 
         insert: $ => prec.right(seq(
             prec(3, alias(/\[\+\+[ ]*/, $.insert_delimiter)),
@@ -415,6 +422,7 @@ module.exports = grammar(add_inline_rules({
             $.numeric_character_reference,
             $.latex_span,
             $.code_span,
+            $.html_comment,
             $.quoted_span,
             $.inline_note,
             $.superscript,
@@ -445,6 +453,7 @@ module.exports = grammar(add_inline_rules({
         _code_span_text_base: $ => prec.right(choice(
             $._word,
             common.punctuation_without($, []),
+            '<', '>',
             $._whitespace,
         )),
 

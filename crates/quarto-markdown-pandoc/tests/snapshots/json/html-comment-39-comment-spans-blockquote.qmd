@@ -1,0 +1,11 @@
+# Test 39: Comment spans through blockquote
+
+Text before <!-- comment starts
+
+> This blockquote is commented out
+> Multiple lines
+> All commented
+
+Still commented --> end of comment.
+
+Real paragraph.

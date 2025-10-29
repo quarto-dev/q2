@@ -1,0 +1,9 @@
+# Test 37: Comment spans from paragraph through heading
+
+This is a paragraph <!-- comment starts here
+
+## This heading is commented out
+
+Still inside comment --> and continues.
+
+Real heading below.

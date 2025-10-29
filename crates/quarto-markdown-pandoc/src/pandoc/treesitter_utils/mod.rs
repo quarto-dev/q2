@@ -16,6 +16,7 @@ pub mod document;
 pub mod editorial_marks;
 pub mod fenced_code_block;
 pub mod fenced_div_block;
+pub mod html_comment;
 pub mod image;
 pub mod indented_code_block;
 pub mod info_string;

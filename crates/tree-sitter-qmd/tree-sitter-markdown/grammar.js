@@ -23,8 +23,21 @@ module.exports = grammar({
             repeat($.section),
         ),
 
-        ...common.rules,
+        // ...common.rules,
         _last_token_punctuation: $ => choice(), // needed for compatibility with common rules
+
+        _qmd_attribute: common.rules._qmd_attribute,
+        language_attribute: common.rules.language_attribute,
+        raw_attribute: common.rules.raw_attribute,
+        commonmark_attribute: common.rules.commonmark_attribute,
+        commonmark_name: common.rules.commonmark_name,
+        _commonmark_whitespace: common.rules._commonmark_whitespace,
+        id_specifier: common.rules.id_specifier,
+        class_specifier: common.rules.class_specifier,
+        _attribute: common.rules._attribute,
+        key_value_key: common.rules.key_value_key,
+        key_value_value: common.rules.key_value_value,
+        _backslash_escape: common.rules._backslash_escape,
 
         // BLOCK STRUCTURE
 
@@ -266,8 +279,8 @@ module.exports = grammar({
 
         // Caption line content - similar to _line but doesn't start with whitespace
         _caption_line: $ => prec.right(seq(
-            choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, common.punctuation_without($, [])),
-            repeat(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))
+            choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._html_comment, common.punctuation_without($, [])),
+            repeat(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, $._html_comment, common.punctuation_without($, [])))
         )),
 
 
@@ -384,15 +397,29 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
         // Some symbols get parsed as single tokens so that html blocks get detected properly
-        _code_line:        $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
+        _code_line:        $ => prec.right(repeat1(choice($._word, '<', '>', $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, $._html_comment, common.punctuation_without($, [])))),
 
         // the gymnastics around `:` in _line exist to make the parser reject paragraphs that start with a colon.
         // Those are technically valid in Markdown, but disallowing them here makes it possible to detect an
         // accidentally-continued paragraph with a colon that should have been a fenced div marker.
         // In these cases, users can use \: to escape the first colon.
-        _line:             $ => prec.right(seq(prec.right(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [":"]))),
-                                               prec.right(repeat(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))))),
-        _atx_heading_line: $ => prec.right(repeat1(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, common.punctuation_without($, [])))),
+
+        _regular_block_content: $ => choice(
+            $._word, 
+            $._display_math_state_track_marker, 
+            $._inline_math_state_track_marker, 
+            $._whitespace, 
+            $._html_comment,
+            $.raw_specifier,
+            $._autolink,
+            $._escaped_characters,
+            '[>>', // this needs to be accepted for highlights in editorial comments
+        ),
+
+        _escaped_characters: $ => /\\./,
+        _line:             $ => prec.right(seq(prec.right(choice(       $._regular_block_content, common.punctuation_without($, [":"]))),
+                                               prec.right(repeat(choice($._regular_block_content, common.punctuation_without($, [])))))),
+        _atx_heading_line: $ => prec.right(repeat1(choice($._regular_block_content, common.punctuation_without($, [])))),
         _word: $ => new RegExp('[^' + PUNCTUATION_CHARACTERS_REGEX + ' \\t\\n\\r]+'),
         // The external scanner emits some characters that should just be ignored.
         _whitespace: $ => /[ \t]+/,
@@ -474,6 +501,7 @@ module.exports = grammar({
                 repeat(choice(
                     $._word,
                     $._whitespace,
+                    '>', '<',
                     common.punctuation_without($, []),
                 )),
                 $._code_span_close,
@@ -485,6 +513,7 @@ module.exports = grammar({
                 repeat(choice(
                     $._word,
                     $._whitespace,
+                    '>', '<',
                     common.punctuation_without($, []),
                 )),
                 $._latex_span_close,
@@ -619,6 +648,15 @@ module.exports = grammar({
         // latex span delimiters for parsing pipe table cells
         $._latex_span_start,
         $._latex_span_close,
+
+        // HTML comment token
+        $._html_comment,
+
+        // raw specifiers
+        $.raw_specifier, // no leading underscore because it is needed in common.js without it.
+
+        // autolinks
+        $._autolink
     ],
     precedences: $ => [
         [$._setext_heading1, $._block],

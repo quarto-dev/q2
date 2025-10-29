@@ -1,0 +1,5 @@
+# Test 7: Multi-line comment inline
+
+This is text <!-- this comment
+spans multiple
+lines --> and continues.

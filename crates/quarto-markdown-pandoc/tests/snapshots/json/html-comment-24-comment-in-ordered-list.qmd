@@ -1,0 +1,4 @@
+# Test 24: Comment in ordered list
+
+1. First item <!-- comment in list -->
+2. Second item

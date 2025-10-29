@@ -1,0 +1,15 @@
+# Test 42: Comment spans fenced div
+
+Before <!-- comment starts
+
+::: {.callout-note}
+This div is commented out
+:::
+
+Still in comment --> after.
+
+Real div:
+
+::: {.callout-note}
+This is visible
+:::

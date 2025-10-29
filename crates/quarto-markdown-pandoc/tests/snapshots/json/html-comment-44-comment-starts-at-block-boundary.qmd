@@ -1,0 +1,8 @@
+# Test 44: Comment starts at block boundary (start of paragraph)
+
+<!-- Comment starts at beginning of what would be a paragraph
+
+* List is commented
+* Still commented
+
+--> Continues after comment.

@@ -1,0 +1,11 @@
+# Test 47: Multiple comments each spanning blocks
+
+Text <!-- first comment
+
+* List in first comment
+
+--> between comments <!-- second comment
+
+## Heading in second comment
+
+--> after both.

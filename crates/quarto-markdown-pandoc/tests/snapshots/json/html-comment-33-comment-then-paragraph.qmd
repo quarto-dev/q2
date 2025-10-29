@@ -1,0 +1,5 @@
+# Test 33: Comment followed by paragraph
+
+<!-- Comment first -->
+
+Then a paragraph.
