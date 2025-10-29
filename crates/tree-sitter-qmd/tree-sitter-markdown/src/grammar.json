@@ -3230,6 +3230,10 @@
           "name": "_escaped_characters"
         },
         {
+          "type": "SYMBOL",
+          "name": "_pipe_table_code_span"
+        },
+        {
           "type": "STRING",
           "value": "[>>"
         }

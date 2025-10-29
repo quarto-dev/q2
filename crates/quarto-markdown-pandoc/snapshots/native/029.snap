@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Str "a", Space, Code ( "" , [] , [] ) "$$", Space, Str "b"], BulletList [[BulletList [[Plain [Str "c"]], [Plain [Str "d"]]]]] ]
