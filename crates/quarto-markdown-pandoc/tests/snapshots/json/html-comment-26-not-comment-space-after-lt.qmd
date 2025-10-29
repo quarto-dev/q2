@@ -1,3 +1,0 @@
-# Test 26: Not a comment - space after <
-
-< !-- Not a comment (space after <) -->

@@ -127,7 +127,7 @@
   {
     "column": 3,
     "row": 0,
-    "state": 902,
+    "state": 934,
     "sym": "{",
     "errorInfo": {
       "code": "Q-2-4",
@@ -136,7 +136,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 902,
+          "lrState": 934,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",

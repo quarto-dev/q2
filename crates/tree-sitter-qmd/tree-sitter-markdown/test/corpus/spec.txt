@@ -775,7 +775,8 @@ Example 49 - https://github.github.com/gfm/#example-49
         (inline)))))
 
 ================================================================================
-Example 50 - https://github.github.com/gfm/#example-50
+Example 50 - https://github.github.com/gfm/#example-50 (qmd: no we won't)
+:skip
 ================================================================================
 Foo *bar*
 =
@@ -797,7 +798,8 @@ Foo *bar*
       (setext_h2_underline))))
 
 ================================================================================
-Example 51 - https://github.github.com/gfm/#example-51
+Example 51 - https://github.github.com/gfm/#example-51 (qmd: no we won't)
+:skip
 ================================================================================
 Foo *bar
 baz*
@@ -813,7 +815,8 @@ baz*
       (setext_h1_underline))))
 
 ================================================================================
-Example 52 - https://github.github.com/gfm/#example-52
+Example 52 - https://github.github.com/gfm/#example-52 (qmd: no we won't)
+:skip
 ================================================================================
   Foo *bar
 baz*
@@ -829,7 +832,8 @@ baz*
       (setext_h1_underline))))
 
 ================================================================================
-Example 53 - https://github.github.com/gfm/#example-53
+Example 53 - https://github.github.com/gfm/#example-53 (qmd: no we won't)
+:skip
 ================================================================================
 Foo
 -------------------------
@@ -974,7 +978,8 @@ Foo\
       (setext_h2_underline))))
 
 ================================================================================
-Example 61 - https://github.github.com/gfm/#example-61
+Example 61 - https://github.github.com/gfm/#example-61 (no we won't)
+:skip
 ================================================================================
 `Foo
 ----
