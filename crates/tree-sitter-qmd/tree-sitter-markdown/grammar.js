@@ -1,43 +1,11 @@
-// This grammar only concerns the block structure according to the CommonMark Spec
-// (https://spec.commonmark.org/0.30/#blocks-and-inlines)
-// For more information see README.md
-
-/// <reference types="tree-sitter-cli/dsl" />
-
-const common = require('../common/common');
-
-const PRECEDENCE_LEVEL_LINK = common.PRECEDENCE_LEVEL_LINK;
-
-const PUNCTUATION_CHARACTERS_REGEX = '!-/:-@\\[-`\\{-~';
-
 module.exports = grammar({
     name: 'markdown',
 
     rules: {
         document: $ => seq(
-            optional(choice(
-                $.minus_metadata,
-                common.EXTENSION_PLUS_METADATA ? $.plus_metadata : choice(),
-            )),
             alias(prec.right(repeat($._block_not_section)), $.section),
             repeat($.section),
         ),
-
-        // ...common.rules,
-        _last_token_punctuation: $ => choice(), // needed for compatibility with common rules
-
-        _qmd_attribute: common.rules._qmd_attribute,
-        language_attribute: common.rules.language_attribute,
-        raw_attribute: common.rules.raw_attribute,
-        commonmark_attribute: common.rules.commonmark_attribute,
-        commonmark_name: common.rules.commonmark_name,
-        _commonmark_whitespace: common.rules._commonmark_whitespace,
-        id_specifier: common.rules.id_specifier,
-        class_specifier: common.rules.class_specifier,
-        _attribute: common.rules._attribute,
-        key_value_key: common.rules.key_value_key,
-        key_value_value: common.rules.key_value_value,
-        _backslash_escape: common.rules._backslash_escape,
 
         // BLOCK STRUCTURE
 
@@ -47,21 +15,12 @@ module.exports = grammar({
             $.section,
         ),
         _block_not_section: $ => choice(
-            alias($._setext_heading1, $.setext_heading),
-            alias($._setext_heading2, $.setext_heading),
-            $.paragraph,
-            $.inline_ref_def,
-            $.note_definition_fenced_block,
-            $.indented_code_block,
-            $.block_quote,
-            $.thematic_break,
-            $.list,
-            $.fenced_code_block,
-            $.fenced_div_block,
-            $._blank_line,
-            $.pipe_table,
-            $.caption,
-            prec(-1, $.minus_metadata),
+            $.pandoc_paragraph,
+            $.pandoc_block_quote,
+            $.pandoc_span,
+
+            $._soft_line_break,
+            $._newline
         ),
         section: $ => choice($._section1, $._section2, $._section3, $._section4, $._section5, $._section6),
         _section1: $ => prec.right(seq(
@@ -106,12 +65,6 @@ module.exports = grammar({
 
         // LEAF BLOCKS
 
-        // A thematic break. This is currently handled by the external scanner but maybe could be
-        // parsed using normal tree-sitter rules.
-        //
-        // https://github.github.com/gfm/#thematic-breaks
-        thematic_break: $ => seq($._thematic_break, choice($._newline, $._eof)),
-
         // An ATX heading. This is currently handled by the external scanner but maybe could be
         // parsed using normal tree-sitter rules.
         //
@@ -119,170 +72,98 @@ module.exports = grammar({
         _atx_heading1: $ => prec(1, seq(
             $.atx_h1_marker,
             optional($._atx_heading_content),
-            optional(alias($._qmd_attribute, $.attribute)),
+            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading2: $ => prec(1, seq(
             $.atx_h2_marker,
             optional($._atx_heading_content),
-            optional(alias($._qmd_attribute, $.attribute)),
+            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading3: $ => prec(1, seq(
             $.atx_h3_marker,
             optional($._atx_heading_content),
-            optional(alias($._qmd_attribute, $.attribute)),
+            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading4: $ => prec(1, seq(
             $.atx_h4_marker,
             optional($._atx_heading_content),
-            optional(alias($._qmd_attribute, $.attribute)),
+            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading5: $ => prec(1, seq(
             $.atx_h5_marker,
             optional($._atx_heading_content),
-            optional(alias($._qmd_attribute, $.attribute)),
+            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading6: $ => prec(1, seq(
             $.atx_h6_marker,
             optional($._atx_heading_content),
-            optional(alias($._qmd_attribute, $.attribute)),
+            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading_content: $ => prec(1, seq(
             optional($._whitespace),
-            field('heading_content', alias($._atx_heading_line, $.inline))
+            field('heading_content', $.pandoc_paragraph)
         )),
 
-        // A setext heading. The underlines are currently handled by the external scanner but maybe
-        // could be parsed using normal tree-sitter rules.
-        //
-        // https://github.github.com/gfm/#setext-headings
-        _setext_heading1: $ => seq(
-            field('heading_content', $.paragraph),
-            $.setext_h1_underline,
-            choice($._newline, $._eof),
-        ),
-        _setext_heading2: $ => seq(
-            field('heading_content', $.paragraph),
-            $.setext_h2_underline,
-            choice($._newline, $._eof),
+        _inlines: $ => seq(
+            $._line,
+            repeat(seq(alias($._soft_line_break, $.pandoc_soft_break), $._line))
         ),
 
-        // An indented code block. An indented code block is made up of indented chunks and blank
-        // lines. The indented chunks are handeled by the external scanner.
-        //
-        // https://github.github.com/gfm/#indented-code-blocks
-        indented_code_block: $ => prec.right(seq($._indented_chunk, repeat(choice($._indented_chunk, $._blank_line)))),
-        _indented_chunk: $ => seq($._indented_chunk_start, repeat(choice($._code_line, $._newline)), $._block_close, optional($.block_continuation)),
-
-        fenced_div_block: $ => seq(
-          $._fenced_div_start,
-          $._whitespace,
-          choice($.info_string, $._qmd_attribute, "{}"),
-          $._newline,
-          repeat($._block),
-          optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
-          $._block_close,
+        pandoc_paragraph: $ => seq(
+            $._inlines, 
+            choice($._newline, $._eof)
         ),
-        // A fenced code block. Fenced code blocks are mainly handled by the external scanner. In
-        // case of backtick code blocks the external scanner also checks that the info string is
-        // proper.
-        //
-        // https://github.github.com/gfm/#fenced-code-blocks
-        fenced_code_block: $ => prec.right(choice(
-            seq(
-                alias($._fenced_code_block_start_backtick, $.fenced_code_block_delimiter),
-                optional($._whitespace),
-                optional(choice($.info_string, $._qmd_attribute)),
-                $._newline,
-                optional($.code_fence_content),
-                optional(seq(alias($._fenced_code_block_end_backtick, $.fenced_code_block_delimiter), $._close_block, $._newline)),
-                $._block_close,
-            ),
-            seq(
-                alias($._fenced_code_block_start_tilde, $.fenced_code_block_delimiter),
-                optional($._whitespace),
-                optional(choice($.info_string, $._qmd_attribute)),
-                $._newline,
-                optional($.code_fence_content),
-                optional(seq(alias($._fenced_code_block_end_tilde, $.fenced_code_block_delimiter), $._close_block, $._newline)),
-                $._block_close,
-            ),
-        )),
-        code_fence_content: $ => repeat1(choice($._newline, $._code_line)),
 
-        // QMD CHANGES
-        // we support a stricter set of infostrings, namely the ones that Pandoc appears to support
-        // We do not allow curly braces in the content of the infostring (which pandoc does)
-        // We also don't allow starting with ^ (reserved for note definitions)
-        // https://pandoc.org/MANUAL.html#extension-fenced_code_attributes
-
-        info_string: $ => alias(/[^{}\s^][^{}\s]*/, $.language),
-        // language: $ => prec.right(repeat1(choice($._word, common.punctuation_without($, ['{', '}', ',']), $.backslash_escape, $.entity_reference, $.numeric_character_reference))),
-
-        // A paragraph. The parsing tactic for deciding when a paragraph ends is as follows:
-        // on every newline inside a paragraph a conflict is triggered manually using
-        // `$._split_token` to split the parse state into two branches.
-        //
-        // One of them - the one that also contains a `$._soft_line_break_marker` will try to
-        // continue the paragraph, but we make sure that the beginning of a new block that can
-        // interrupt a paragraph can also be parsed. If this is the case we know that the paragraph
-        // should have been closed and the external parser will emit an `$._error` to kill the parse
-        // branch.
-        //
-        // The other parse branch consideres the paragraph to be over. It will be killed if no valid new
-        // block is detected before the next newline. (For example it will also be killed if a indented
-        // code block is detected, which cannot interrupt paragraphs).
-        //
-        // Either way, after the next newline only one branch will exist, so the ammount of branches
-        // related to paragraphs ending does not grow.
-        //
-        // https://github.github.com/gfm/#paragraphs
-        paragraph: $ => seq(alias(repeat1(choice($._line, $._soft_line_break)), $.inline), choice($._newline, $._eof)),
-
-        inline_ref_def: $ => seq(
-            $.ref_id_specifier,
-            $._whitespace,
-            $.paragraph),
-
-        note_definition_fenced_block: $ => seq(
-            $._fenced_div_start,
-            $._whitespace,
-            $.fenced_div_note_id,
-            $._newline,
-            repeat($._block),
-            optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
-            $._block_close,
+        pandoc_span: $ => seq(
+            '[',
+            alias($._inlines, $.content),
+            ']',
+            optional($.attribute_specifier)
         ),
+
+        attribute_specifier: $ => seq(
+            '{',
+            optional(choice(
+                $.raw_specifier,
+                $.language_specifier,
+                $.commonmark_specifier
+            )),
+            '}'
+        ),
+
+        language_specifier: $ => choice(
+            /[A-Za-z][A-Za-z0-9_-]*/,
+            seq('{', $.language_specifier, '}')
+        ),
+
+        commonmark_specifier: $ => seq(
+            optional($._inline_whitespace),
+            alias(/[#][A-Za-z][A-Za-z0-9_-]*/, $.attribute_id),
+            optional($._inline_whitespace)
+            // optional($._inline_whitespace),
+            // repeat(seq(alias(/[.][A-Za-z][A-Za-z0-9_-]*/, attribute_class), optional($._inline_whitespace))),
+            // repeat(seq(alias(/[.][A-Za-z][A-Za-z0-9_-]*/, attribute_class), optional($._inline_whitespace)))            
+        ),
+
+
+        _line: $ => seq($._inline_element, repeat(seq(alias($._whitespace, $.pandoc_space), $._inline_element))),
+
+        _inline_element: $ => choice($.pandoc_str, $.prose_punctuation),
+
+        // Things that are parsed directly as a pandoc str
+        pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,
+        prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // A blank line including the following newline.
         //
         // https://github.github.com/gfm/#blank-lines
         _blank_line: $ => seq($._blank_line_start, choice($._newline, $._eof)),
-
-        // A caption block: blank line followed by ": caption text"
-        // Used for table captions (and potentially other elements)
-        // Note: This matches a SINGLE colon only, not multiple colons (which would be fenced divs)
-        caption: $ => prec.right(seq(
-            $._blank_line,
-            ':',
-            optional(seq(
-                $._whitespace,
-                alias($._caption_line, $.inline)
-            )),
-            choice($._newline, $._eof),
-        )),
-
-        // Caption line content - similar to _line but doesn't start with whitespace
-        _caption_line: $ => prec.right(seq(
-            choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._html_comment, common.punctuation_without($, [])),
-            repeat(choice($._word, $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, $._html_comment, common.punctuation_without($, [])))
-        )),
-
 
         // CONTAINER BLOCKS
 
@@ -290,100 +171,12 @@ module.exports = grammar({
         // external scanner.
         //
         // https://github.github.com/gfm/#block-quotes
-        block_quote: $ => seq(
+        pandoc_block_quote: $ => seq(
             alias($._block_quote_start, $.block_quote_marker),
             optional($.block_continuation),
             repeat($._block),
             $._block_close,
             optional($.block_continuation)
-        ),
-
-        // A list. This grammar does not differentiate between loose and tight lists for efficiency
-        // reasons.
-        //
-        // Lists can only contain list items with list markers of the same type. List items are
-        // handled by the external scanner.
-        //
-        // https://github.github.com/gfm/#lists
-        list: $ => prec.right(choice(
-            $._list_plus,
-            $._list_minus,
-            $._list_star,
-            $._list_dot,
-            $._list_parenthesis,
-            $._list_example
-        )),
-        _list_plus: $ => prec.right(repeat1(alias($._list_item_plus, $.list_item))),
-        _list_minus: $ => prec.right(repeat1(alias($._list_item_minus, $.list_item))),
-        _list_star: $ => prec.right(repeat1(alias($._list_item_star, $.list_item))),
-        _list_dot: $ => prec.right(repeat1(alias($._list_item_dot, $.list_item))),
-        _list_parenthesis: $ => prec.right(repeat1(alias($._list_item_parenthesis, $.list_item))),
-        _list_example: $ => prec.right(repeat1(alias($._list_item_example, $.list_item))),
-        // Some list items can not interrupt a paragraph and are marked as such by the external
-        // scanner.
-        list_marker_plus: $ => choice($._list_marker_plus, $._list_marker_plus_dont_interrupt),
-        list_marker_minus: $ => choice($._list_marker_minus, $._list_marker_minus_dont_interrupt),
-        list_marker_star: $ => choice($._list_marker_star, $._list_marker_star_dont_interrupt),
-        list_marker_dot: $ => choice($._list_marker_dot, $._list_marker_dot_dont_interrupt),
-        list_marker_parenthesis: $ => choice($._list_marker_parenthesis, $._list_marker_parenthesis_dont_interrupt),
-        list_marker_example: $ => choice($._list_marker_example, $._list_marker_example_dont_interrupt),
-        _list_item_plus: $ => seq(
-            $.list_marker_plus,
-            optional($.block_continuation),
-            $._list_item_content,
-            $._block_close,
-            optional($.block_continuation)
-        ),
-        _list_item_minus: $ => seq(
-            $.list_marker_minus,
-            optional($.block_continuation),
-            $._list_item_content,
-            $._block_close,
-            optional($.block_continuation)
-        ),
-        _list_item_star: $ => seq(
-            $.list_marker_star,
-            optional($.block_continuation),
-            $._list_item_content,
-            $._block_close,
-            optional($.block_continuation)
-        ),
-        _list_item_dot: $ => seq(
-            $.list_marker_dot,
-            optional($.block_continuation),
-            $._list_item_content,
-            $._block_close,
-            optional($.block_continuation)
-        ),
-        _list_item_parenthesis: $ => seq(
-            $.list_marker_parenthesis,
-            optional($.block_continuation),
-            $._list_item_content,
-            $._block_close,
-            optional($.block_continuation)
-        ),
-        _list_item_example: $ => seq(
-            $.list_marker_example,
-            optional($.block_continuation),
-            $._list_item_content,
-            $._block_close,
-            optional($.block_continuation)
-        ),
-        // List items are closed after two consecutive blank lines
-        _list_item_content: $ => choice(
-            prec(1, seq(
-                $._blank_line,
-                $._blank_line,
-                $._close_block,
-                optional($.block_continuation)
-            )),
-            repeat1($._block),
-            common.EXTENSION_TASK_LIST ? prec(1, seq(
-                choice($.task_list_marker_checked, $.task_list_marker_unchecked),
-                $._whitespace,
-                $.paragraph,
-                repeat($._block)
-            )) : choice()
         ),
 
         // Newlines as in the spec. Parsing a newline triggers the matching process by making
@@ -396,155 +189,10 @@ module.exports = grammar({
             $._soft_line_ending,
             optional($.block_continuation)
         ),
-        // Some symbols get parsed as single tokens so that html blocks get detected properly
-        _code_line:        $ => prec.right(repeat1(choice($._word, '<', '>', '{{<', '}}>', $._display_math_state_track_marker, $._inline_math_state_track_marker, $._whitespace, $._html_comment, common.punctuation_without($, [])))),
 
-        // the gymnastics around `:` in _line exist to make the parser reject paragraphs that start with a colon.
-        // Those are technically valid in Markdown, but disallowing them here makes it possible to detect an
-        // accidentally-continued paragraph with a colon that should have been a fenced div marker.
-        // In these cases, users can use \: to escape the first colon.
-
-        _regular_block_content: $ => choice(
-            $._word, 
-            $._display_math_state_track_marker, 
-            $._inline_math_state_track_marker, 
-            $._whitespace, 
-            $._html_comment,
-            $.raw_specifier,
-            $._autolink,
-            $._escaped_characters,
-            $._pipe_table_code_span,
-            '{{<', '>}}', // shortcodes
-            '[>>', // this needs to be accepted for highlights in editorial comments
-        ),
-
-        _escaped_characters: $ => /\\./,
-        _line:             $ => prec.right(seq(prec.right(choice(       $._regular_block_content, common.punctuation_without($, [":"]))),
-                                               prec.right(repeat(choice($._regular_block_content, common.punctuation_without($, [])))))),
-        _atx_heading_line: $ => prec.right(repeat1(choice($._regular_block_content, common.punctuation_without($, [])))),
-        _word: $ => new RegExp('[^' + PUNCTUATION_CHARACTERS_REGEX + ' \\t\\n\\r]+'),
-        // The external scanner emits some characters that should just be ignored.
+        _inline_whitespace: $ => choice($._whitespace, $._soft_line_break),
         _whitespace: $ => /[ \t]+/,
 
-        ...(common.EXTENSION_PIPE_TABLE ? {
-            pipe_table: $ => prec.right(seq(
-                $._pipe_table_start,
-                alias($.pipe_table_row, $.pipe_table_header),
-                $._newline,
-                $.pipe_table_delimiter_row,
-                repeat(seq($._pipe_table_newline, optional($.pipe_table_row))),
-                choice($._newline, $._eof),
-            )),
-
-            _pipe_table_newline: $ => seq(
-                $._pipe_table_line_ending,
-                optional($.block_continuation)
-            ),
-
-            pipe_table_delimiter_row: $ => seq(
-                optional(seq(
-                    optional($._whitespace),
-                    '|',
-                )),
-                repeat1(prec.right(seq(
-                    optional($._whitespace),
-                    $.pipe_table_delimiter_cell,
-                    optional($._whitespace),
-                    '|',
-                ))),
-                optional($._whitespace),
-                optional(seq(
-                    $.pipe_table_delimiter_cell,
-                    optional($._whitespace)
-                )),
-            ),
-
-            pipe_table_delimiter_cell: $ => seq(
-                optional(alias(':', $.pipe_table_align_left)),
-                repeat1('-'),
-                optional(alias(':', $.pipe_table_align_right)),
-            ),
-
-            pipe_table_row: $ => seq(
-                optional(seq(
-                    optional($._whitespace),
-                    '|',
-                )),
-                choice(
-                    seq(
-                        repeat1(prec.right(seq(
-                            choice(
-                                seq(
-                                    optional($._whitespace),
-                                    $.pipe_table_cell,
-                                    optional($._whitespace)
-                                ),
-                                alias($._whitespace, $.pipe_table_cell)
-                            ),
-                            '|',
-                        ))),
-                        optional($._whitespace),
-                        optional(seq(
-                            $.pipe_table_cell,
-                            optional($._whitespace)
-                        )),
-                    ),
-                    seq(
-                        optional($._whitespace),
-                        $.pipe_table_cell,
-                        optional($._whitespace)
-                    )
-                ),
-            ),
-
-            // Code span within pipe table cells - simplified version that only handles backticks
-            _pipe_table_code_span: $ => seq(
-                $._code_span_start,
-                repeat(choice(
-                    $._word,
-                    $._whitespace,
-                    '>', '<',
-                    common.punctuation_without($, []),
-                )),
-                $._code_span_close,
-            ),
-
-            // Latex span within pipe table cells - simplified version that only handles dollar signs
-            _pipe_table_latex_span: $ => seq(
-                $._latex_span_start,
-                repeat(choice(
-                    $._word,
-                    $._whitespace,
-                    '>', '<',
-                    common.punctuation_without($, []),
-                )),
-                $._latex_span_close,
-            ),
-
-            _pipe_table_cell_contents: $ => prec.right(
-                seq(
-                    choice(
-                        $._word,
-                        $._display_math_state_track_marker,
-                        $._inline_math_state_track_marker,
-                        $._backslash_escape,
-                        $._pipe_table_code_span,
-                        $._pipe_table_latex_span,
-                        common.punctuation_without($, ['|']),
-                    ),
-                    repeat(choice(
-                        $._word,
-                        $._display_math_state_track_marker,
-                        $._inline_math_state_track_marker,
-                        $._whitespace,
-                        $._backslash_escape,
-                        $._pipe_table_code_span,
-                        $._pipe_table_latex_span,
-                        common.punctuation_without($, ['|']),
-                    )))),
-
-            pipe_table_cell: $ => alias($._pipe_table_cell_contents, $.inline),
-        } : {}),
     },
 
     externals: $ => [
@@ -660,13 +308,6 @@ module.exports = grammar({
         // autolinks
         $._autolink
     ],
-    precedences: $ => [
-        [$._setext_heading1, $._block],
-        [$._setext_heading2, $._block],
-        [$.indented_code_block, $._block],
-    ],
-    conflicts: $ => [
-        [$.language_attribute, $._atx_heading_line],
-    ],
+    precedences: $ => [],
     extras: $ => [],
 });

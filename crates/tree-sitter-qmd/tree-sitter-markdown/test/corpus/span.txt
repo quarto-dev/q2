@@ -1,0 +1,102 @@
+================================================================================
+1
+================================================================================
+[a span]{}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier))))
+================================================================================
+2 (raw specifier)
+================================================================================
+[a span]{=latex}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier
+            (raw_specifier)))))
+================================================================================
+3 (raw reader syntax, qmd extension)
+================================================================================
+[a span]{<pandoc}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier
+            (raw_specifier)))))
+================================================================================
+4 (technically a type mismatch but syntax allows)
+================================================================================
+[a span]{r}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier
+            (language_specifier)))))
+================================================================================
+5 - fenced language specifiers
+================================================================================
+[a span]{{r}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier
+            (language_specifier
+              (language_specifier))))))
+================================================================================
+6 - deeply nested language specifiers
+================================================================================
+[a span]{{{{r}}}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier
+            (language_specifier
+              (language_specifier
+                (language_specifier
+                  (language_specifier))))))))
+================================================================================
+7 - identifiers
+================================================================================
+[a span]{#with_id}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_span
+          (content
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str))
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id))))))
