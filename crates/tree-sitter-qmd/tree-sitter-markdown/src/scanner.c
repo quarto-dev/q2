@@ -62,6 +62,7 @@ typedef enum {
     FENCED_DIV_END,
     REF_ID_SPECIFIER,
     FENCED_DIV_NOTE_ID,
+
     // special tokens to trigger serialization to track in-display-math mode
     DISPLAY_MATH_STATE_TRACK_MARKER,
     INLINE_MATH_STATE_TRACK_MARKER,
@@ -77,7 +78,10 @@ typedef enum {
     AUTOLINK,
     LANGUAGE_SPECIFIER,
     KEY_SPECIFIER,
-    NAKED_VALUE_SPECIFIER
+    NAKED_VALUE_SPECIFIER,
+
+    // now all the tokens from the inline scanner since we're doing it all here
+    // SPAN_START
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -143,7 +147,7 @@ static char* token_names[] = {
     "AUTOLINK",
     "LANGUAGE_SPECIFIER",
     "KEY_SPECIFIER",
-    "NAKED_VALUE_SPECIFIER"
+    "NAKED_VALUE_SPECIFIER",
 };
 
 #endif

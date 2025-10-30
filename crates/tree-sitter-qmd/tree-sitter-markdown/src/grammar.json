@@ -87,6 +87,10 @@
             "name": "pandoc_div"
           },
           {
+            "type": "SYMBOL",
+            "name": "pandoc_horizontal_rule"
+          },
+          {
             "type": "PREC",
             "value": -1,
             "content": {
@@ -98,6 +102,14 @@
               "named": true,
               "value": "metadata"
             }
+          },
+          {
+            "type": "SYMBOL",
+            "name": "note_definition_fenced_block"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "inline_ref_def"
           },
           {
             "type": "SYMBOL",
@@ -631,6 +643,67 @@
         ]
       }
     },
+    "pandoc_horizontal_rule": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_thematic_break"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_newline"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_eof"
+            }
+          ]
+        }
+      ]
+    },
+    "pandoc_paragraph": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_inlines"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_newline"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_eof"
+            }
+          ]
+        }
+      ]
+    },
+    "inline_ref_def": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "ref_id_specifier"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_whitespace"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pandoc_paragraph"
+        }
+      ]
+    },
     "_inlines": {
       "type": "SEQ",
       "members": [
@@ -658,28 +731,6 @@
               }
             ]
           }
-        }
-      ]
-    },
-    "pandoc_paragraph": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "SYMBOL",
-          "name": "_inlines"
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_newline"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_eof"
-            }
-          ]
         }
       ]
     },
@@ -2102,6 +2153,72 @@
               "name": "attribute_specifier"
             }
           ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_newline"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_block"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_fenced_div_end"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_close_block"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_newline"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_eof"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_block_close"
+        }
+      ]
+    },
+    "note_definition_fenced_block": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_fenced_div_start"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_whitespace"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "fenced_div_note_id"
         },
         {
           "type": "SYMBOL",

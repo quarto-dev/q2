@@ -223,6 +223,25 @@
     }
   },
   {
+    "type": "inline_ref_def",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "ref_id_specifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "key_value_specifier",
     "named": true,
     "fields": {},
@@ -273,6 +292,10 @@
           "named": true
         },
         {
+          "type": "inline_ref_def",
+          "named": true
+        },
+        {
           "type": "list_marker_dot",
           "named": true
         },
@@ -301,6 +324,10 @@
           "named": true
         },
         {
+          "type": "note_definition_fenced_block",
+          "named": true
+        },
+        {
           "type": "pandoc_block_quote",
           "named": true
         },
@@ -310,6 +337,10 @@
         },
         {
           "type": "pandoc_div",
+          "named": true
+        },
+        {
+          "type": "pandoc_horizontal_rule",
           "named": true
         },
         {
@@ -358,6 +389,65 @@
     "fields": {}
   },
   {
+    "type": "note_definition_fenced_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "fenced_div_note_id",
+          "named": true
+        },
+        {
+          "type": "inline_ref_def",
+          "named": true
+        },
+        {
+          "type": "metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_block_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_div",
+          "named": true
+        },
+        {
+          "type": "pandoc_horizontal_rule",
+          "named": true
+        },
+        {
+          "type": "pandoc_list",
+          "named": true
+        },
+        {
+          "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "section",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "pandoc_block_quote",
     "named": true,
     "fields": {},
@@ -374,7 +464,15 @@
           "named": true
         },
         {
+          "type": "inline_ref_def",
+          "named": true
+        },
+        {
           "type": "metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
           "named": true
         },
         {
@@ -387,6 +485,10 @@
         },
         {
           "type": "pandoc_div",
+          "named": true
+        },
+        {
+          "type": "pandoc_horizontal_rule",
           "named": true
         },
         {
@@ -484,7 +586,15 @@
           "named": true
         },
         {
+          "type": "inline_ref_def",
+          "named": true
+        },
+        {
           "type": "metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
           "named": true
         },
         {
@@ -500,6 +610,10 @@
           "named": true
         },
         {
+          "type": "pandoc_horizontal_rule",
+          "named": true
+        },
+        {
           "type": "pandoc_list",
           "named": true
         },
@@ -509,6 +623,21 @@
         },
         {
           "type": "section",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pandoc_horizontal_rule",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "block_continuation",
           "named": true
         }
       ]
@@ -686,7 +815,15 @@
           "named": true
         },
         {
+          "type": "inline_ref_def",
+          "named": true
+        },
+        {
           "type": "metadata",
+          "named": true
+        },
+        {
+          "type": "note_definition_fenced_block",
           "named": true
         },
         {
@@ -699,6 +836,10 @@
         },
         {
           "type": "pandoc_div",
+          "named": true
+        },
+        {
+          "type": "pandoc_horizontal_rule",
           "named": true
         },
         {
@@ -824,6 +965,10 @@
     "named": true
   },
   {
+    "type": "fenced_div_note_id",
+    "named": true
+  },
+  {
     "type": "info_string",
     "named": true
   },
@@ -849,6 +994,10 @@
   },
   {
     "type": "raw_specifier",
+    "named": true
+  },
+  {
+    "type": "ref_id_specifier",
     "named": true
   },
   {

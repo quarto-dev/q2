@@ -1,0 +1,21 @@
+================================================================================
+1
+================================================================================
+[^1]: This is an inline reference definition.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)))))

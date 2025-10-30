@@ -25,8 +25,12 @@ module.exports = grammar({
             $.pandoc_list,
             $.pandoc_code_block,
             $.pandoc_div,
+            $.pandoc_horizontal_rule,
 
             prec(-1, alias($.minus_metadata, $.metadata)),
+
+            $.note_definition_fenced_block,
+            $.inline_ref_def,
 
             $._soft_line_break,
             $._newline
@@ -114,7 +118,18 @@ module.exports = grammar({
             $._inlines, 
             choice($._newline, $._eof)
         )),
+        pandoc_horizontal_rule: $ => seq($._thematic_break, choice($._newline, $._eof)),
 
+        pandoc_paragraph: $ => seq(
+            $._inlines, 
+            choice($._newline, $._eof)
+        ),
+
+        inline_ref_def: $ => seq(
+            $.ref_id_specifier,
+            $._whitespace,
+            $.pandoc_paragraph),
+        
         ///////////////////////////////////////////////////////////////////////////////////////////
         // inline nodes
 
@@ -123,10 +138,6 @@ module.exports = grammar({
             repeat(seq(alias($._soft_line_break, $.pandoc_soft_break), $._line))
         ),
 
-        pandoc_paragraph: $ => seq(
-            $._inlines, 
-            choice($._newline, $._eof)
-        ),
 
         pandoc_span: $ => prec.right(seq(
             '[',
@@ -375,7 +386,7 @@ module.exports = grammar({
         
 
         ///////////////////////////////////////////////////////////////////////////////////////////
-        // A fenced div block
+        // fenced divs
 
         pandoc_div: $ => seq(
           $._fenced_div_start,
@@ -385,6 +396,25 @@ module.exports = grammar({
           repeat($._block),
           optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
           $._block_close,
+        ),
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // qmd extension: a fenced block for note definitions:
+
+        /// ::: ^note
+        /// this is a longer note
+        /// 
+        /// many paras even
+        /// :::
+
+        note_definition_fenced_block: $ => seq(
+            $._fenced_div_start,
+            $._whitespace,
+            $.fenced_div_note_id,
+            $._newline,
+            repeat($._block),
+            optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
+            $._block_close,
         ),
 
         ///////////////////////////////////////////////////////////////////////////////////////////
