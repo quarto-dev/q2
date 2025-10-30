@@ -189,6 +189,35 @@ module.exports = grammar({
             alias($._code_span_close, $.code_span_delimiter),
             optional($.attribute_specifier)
         )),
+
+        // insert: $ => prec.right(seq(
+        //     prec(3, alias(/\[\+\+[ ]*/, $.insert_delimiter)),
+        //     optional(alias($._inlines, $.content)),
+        //     prec(3, alias(/[ ]*\]/, $.insert_delimiter)),
+        //     optional($.attribute_specifier)
+        // )),
+
+        // delete: $ => prec.right(seq(
+        //     prec(3, alias(/\[\-\-[ ]*/, $.delete_delimiter)),
+        //     optional(alias($._inlines, $.content)),
+        //     prec(3, alias(/[ ]*\]/, $.delete_delimiter)),
+        //     optional($.attribute_specifier)
+        // )),
+
+        highlight: $ => prec.right(seq(
+            prec(3, alias($._highlight_span_start, $.highlight_delimiter)),
+            optional(alias($._inlines, $.content)),
+            prec(3, alias(/[ ]*\]/, $.highlight_delimiter)),
+            optional($.attribute_specifier)
+        )),
+
+        // edit_comment: $ => prec.right(seq(
+        //     prec(3, alias(/\[>>[ ]*/, $.edit_comment_delimiter)),
+        //     optional(alias($._inlines, $.content)),
+        //     prec(3, alias(/[ ]*\]/, $.edit_comment_delimiter)),
+        //     optional($.attribute_specifier)
+        // )),
+
         
         attribute_specifier: $ => seq(
             '{',
@@ -252,6 +281,8 @@ module.exports = grammar({
             $.pandoc_image,
 
             alias($._html_comment, $.comment),
+
+            $.highlight,
 
             $.prose_punctuation,
             $.attribute_specifier

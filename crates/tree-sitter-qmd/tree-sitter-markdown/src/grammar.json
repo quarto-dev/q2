@@ -986,6 +986,70 @@
         ]
       }
     },
+    "highlight": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "PREC",
+            "value": 3,
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_highlight_span_start"
+              },
+              "named": true,
+              "value": "highlight_delimiter"
+            }
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_inlines"
+                },
+                "named": true,
+                "value": "content"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          },
+          {
+            "type": "PREC",
+            "value": 3,
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "PATTERN",
+                "value": "[ ]*\\]"
+              },
+              "named": true,
+              "value": "highlight_delimiter"
+            }
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "attribute_specifier"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
+    },
     "attribute_specifier": {
       "type": "SEQ",
       "members": [
@@ -1392,6 +1456,10 @@
           },
           "named": true,
           "value": "comment"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "highlight"
         },
         {
           "type": "SYMBOL",

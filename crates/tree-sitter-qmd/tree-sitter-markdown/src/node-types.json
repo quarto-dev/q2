@@ -67,6 +67,10 @@
           "named": true
         },
         {
+          "type": "highlight",
+          "named": true
+        },
+        {
           "type": "pandoc_code_span",
           "named": true
         },
@@ -164,6 +168,10 @@
           "named": true
         },
         {
+          "type": "highlight",
+          "named": true
+        },
+        {
           "type": "pandoc_code_span",
           "named": true
         },
@@ -217,6 +225,29 @@
         },
         {
           "type": "section",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "highlight",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "highlight_delimiter",
           "named": true
         }
       ]
@@ -707,6 +738,10 @@
           "named": true
         },
         {
+          "type": "highlight",
+          "named": true
+        },
+        {
           "type": "pandoc_code_span",
           "named": true
         },
@@ -966,6 +1001,10 @@
   },
   {
     "type": "fenced_div_note_id",
+    "named": true
+  },
+  {
+    "type": "highlight_delimiter",
     "named": true
   },
   {

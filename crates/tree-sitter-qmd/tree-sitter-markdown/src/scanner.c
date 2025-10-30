@@ -1448,32 +1448,31 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
     return true;
 }
 
+// parse_open_square_brace has already advanced the '['
 static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // unused
     (void)(valid_symbols);
     
-    // precondition: lexer->lookahead == '['
-    advance(s, lexer);
     if (lexer->lookahead != '^') {
         return false;
     }
-    advance(s, lexer);
+    lexer->advance(lexer, false);
 
     // https://pandoc.org/MANUAL.html#extension-footnotes
     // The identifiers in footnote references may not contain spaces, tabs, newlines, 
     // or the characters ^, [, or ].
     while (lexer->lookahead != ' ' && lexer->lookahead != '\t' && lexer->lookahead != '\n' &&
            lexer->lookahead != '^' && lexer->lookahead != '['  && lexer->lookahead != ']') {
-        advance(s, lexer);        
+        lexer->advance(lexer, false);
     }
     if (lexer->lookahead != ']') {
         return false;
     }
-    advance(s, lexer);        
+    lexer->advance(lexer, false);
     if (lexer->lookahead != ':') {
         return false;
     }
-    advance(s, lexer);
+    lexer->advance(lexer, false);
     lexer->mark_end(lexer);
     lexer->result_symbol = REF_ID_SPECIFIER;
     return true;
@@ -1781,6 +1780,33 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
     return true;
 }
 
+static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    if (lexer->lookahead != '[') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    
+    if (valid_symbols[REF_ID_SPECIFIER] && lexer->lookahead == '^') {
+        return parse_ref_id_specifier(s, lexer, valid_symbols);
+    }
+
+    if (valid_symbols[HIGHLIGHT_SPAN_START] && lexer->lookahead == '!') {
+        lexer->advance(lexer, false);
+        if (lexer->lookahead != '!') {
+            return false;
+        }
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+            lexer->advance(lexer, false);
+        }
+        lexer->result_symbol = HIGHLIGHT_SPAN_START;
+        return true;
+    }
+    
+    return false;   
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Don't parse HTML comments or track math state when inside a fenced code block -
     // these characters should be literal
@@ -1788,16 +1814,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                               s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
 
     #ifdef SCAN_DEBUG
-    printf("valid_symbols pointer: %x\n", valid_symbols);
-    printf("Own size: %d\n", s->own_size);
     printf("valid symbols:\n");    
-    // for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
-    //     if (valid_symbols[i]) {
-    //         printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
-    //     }
-    // }
-    for (int i = 0; i < 80; ++i) {
-        printf("  %s [%d] = %d (%c)\n", i < 58 ? token_names[i] : NULL, i, (int)(valid_symbols[i]), (char)(valid_symbols[i]));
+    for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
+        if (valid_symbols[i]) {
+            printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
+        }
     }
     printf("-- scan() state=%d\n", s->state);
     printf("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
@@ -1995,8 +2016,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 // setext underline
                 return parse_minus(s, lexer, valid_symbols);
             case '[':
-                if (valid_symbols[REF_ID_SPECIFIER]) {
-                    return parse_ref_id_specifier(s, lexer, valid_symbols);
+                if (valid_symbols[HIGHLIGHT_SPAN_START] || valid_symbols[REF_ID_SPECIFIER]) {
+                    return parse_open_square_brace(s, lexer, valid_symbols);
                 }
                 break;
             case '^':
