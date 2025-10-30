@@ -307,6 +307,8 @@ module.exports = grammar({
             $.shortcode,
             $.shortcode_escaped,
 
+            $.citation,
+
             $.prose_punctuation,
             $.attribute_specifier
         ),
@@ -346,11 +348,12 @@ module.exports = grammar({
         ),
 
         shortcode_name: $ => token(prec(1, new RustRegex("[a-zA-Z_][a-zA-Z0-9_-]*"))),
-        shortcode_naked_string: $ => 
-            choice(token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$&()+,;-]|\[)+/)),
-                   token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$&()+,;-]|\[)+[?](?:[A-Za-z0-9_.~:/?#\]@!$&()+,;?=-]|\[)+/))),
 
-        // shortcode_string: $ => new RegExp("[a-zA-Z_][a-zA-Z0-9_-]*"),
+        // we want these to allow :, /, etc to make it possible to put URLs as naked strings
+        shortcode_naked_string: $ => 
+            choice(token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[)+/)),
+                   token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$%&()+,;-]|\[)+[?](?:[A-Za-z0-9_.~:/?#\]@!%$&()+,;?=-]|\[)+/))),
+
         shortcode_string: $ => choice(
             $._commonmark_single_quote_string,
             $._commonmark_double_quote_string,
@@ -358,6 +361,36 @@ module.exports = grammar({
         // // shortcode numbers are numbers as JSON sees them
         // // https://stackoverflow.com/a/13340826
         shortcode_number: $ => token(prec(3, /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/)),
+      
+        /*
+            From https://pandoc.org/demo/example33/8.20-citation-syntax.html:
+
+            Unless a citation key starts with a letter, digit, or _, and contains only 
+            alphanumerics and single internal punctuation characters (:.#$%&-+?<>~/), 
+            it must be surrounded by curly braces, which are not considered part of the key.
+
+            citations are impossible to parse in a context-free manner, so we parse
+            them as terminal nodes and then use a post-processing step taking advantage
+            of the inline_link syntax
+        */
+
+        citation: $ => choice(
+            seq(alias($._cite_author_in_text_with_open_bracket, $.citation_delimiter),
+                alias(new RegExp('[^\\s\\n}]+'), $.citation_id_author_in_text),
+                alias("}", $.citation_delimiter),
+            ),
+            seq(alias($._cite_suppress_author_with_open_bracket, $.citation_delimiter),
+                alias(new RegExp('[^\\s\\n}]+'), $.citation_id_suppress_author),
+                alias("}", $.citation_delimiter),
+            ),
+            seq(alias($._cite_author_in_text, $.citation_delimiter),
+                alias(new RegExp('[0-9A-Za-z_]+([:.#$%&+?<>~/-][0-9A-Za-z_]+)*'), $.citation_id_author_in_text)
+            ),
+            seq(alias($._cite_suppress_author, $.citation_delimiter),
+                alias(new RegExp('[0-9A-Za-z_]+([:.#$%&+?<>~/-][0-9A-Za-z_]+)*'), $.citation_id_suppress_author)
+            ),
+        ),
+
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,
@@ -667,6 +700,11 @@ module.exports = grammar({
         $._shortcode_close_escaped,
         $._shortcode_open,
         $._shortcode_close,
+
+        $._cite_author_in_text_with_open_bracket,
+        $._cite_suppress_author_with_open_bracket,
+        $._cite_author_in_text,
+        $._cite_suppress_author,
     ],
     precedences: $ => [],
     extras: $ => [],

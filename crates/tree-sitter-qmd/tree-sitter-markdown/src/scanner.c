@@ -97,6 +97,11 @@ typedef enum {
     SHORTCODE_CLOSE_ESCAPED,
     SHORTCODE_OPEN,
     SHORTCODE_CLOSE,
+
+    CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET,
+    CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
+    CITE_AUTHOR_IN_TEXT,
+    CITE_SUPPRESS_AUTHOR,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -178,6 +183,11 @@ static char* token_names[] = {
     "SHORTCODE_CLOSE_ESCAPED",
     "SHORTCODE_OPEN",
     "SHORTCODE_CLOSE",
+
+    "CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET",
+    "CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET",
+    "CITE_AUTHOR_IN_TEXT",
+    "CITE_SUPPRESS_AUTHOR",
 };
 
 #endif
@@ -298,6 +308,10 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // SHORTCODE_CLOSE_ESCAPED,
     false, // SHORTCODE_OPEN,
     false, // SHORTCODE_CLOSE,
+    false, // CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET,
+    false, // CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
+    false, // CITE_AUTHOR_IN_TEXT,
+    false, // CITE_SUPPRESS_AUTHOR,
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -370,6 +384,10 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // SHORTCODE_CLOSE_ESCAPED,
     false, // SHORTCODE_OPEN,
     false, // SHORTCODE_CLOSE,
+    false, // CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET,
+    false, // CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
+    false, // CITE_AUTHOR_IN_TEXT,
+    false, // CITE_SUPPRESS_AUTHOR,
 };
 
 // State bitflags used with `Scanner.state`
@@ -1180,11 +1198,30 @@ static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
     return false;
 }
 
+static bool parse_cite_suppress_author(Scanner *_, TSLexer *lexer,
+                                       const bool *valid_symbols) {
+    if (lexer->lookahead == '@') {
+        lexer->advance(lexer, false);
+        if (lexer->lookahead == '{' && valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET]) {
+            lexer->advance(lexer, false);
+            lexer->result_symbol = CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET;
+            lexer->mark_end(lexer);
+            return true;
+        } else if (valid_symbols[CITE_SUPPRESS_AUTHOR]) {
+            lexer->result_symbol = CITE_SUPPRESS_AUTHOR;
+            lexer->mark_end(lexer);
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (s->indentation <= 3 &&
         (valid_symbols[LIST_MARKER_MINUS] ||
          valid_symbols[LIST_MARKER_MINUS_DONT_INTERRUPT] ||
          valid_symbols[SETEXT_H2_UNDERLINE] || valid_symbols[THEMATIC_BREAK] ||
+         valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET] || 
          valid_symbols[MINUS_METADATA])) {
         mark_end(s, lexer);
         bool whitespace_after_minus = false;
@@ -1352,6 +1389,8 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
             } // end of else block for metadata scanning
+        } else if (minus_count == 1 && valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET]) {
+            return parse_cite_suppress_author(s, lexer, valid_symbols);
         }
         if (success) {
             return true;
@@ -1999,6 +2038,24 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
     return true;
 }
 
+static bool parse_cite_author_in_text(Scanner *_, TSLexer *lexer,
+                                      const bool *valid_symbols) {
+    lexer->advance(lexer, false);
+    if (lexer->lookahead == '{' && valid_symbols[CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET]) {
+        lexer->advance(lexer, false);
+        // We have an opening bracket, so we can parse the author in text with
+        // brackets.
+        lexer->result_symbol = CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET;
+        lexer->mark_end(lexer);
+        return true;
+    } else if (valid_symbols[CITE_AUTHOR_IN_TEXT]) {
+        lexer->result_symbol = CITE_AUTHOR_IN_TEXT;
+        lexer->mark_end(lexer);
+        return true;
+    }
+    return false;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Don't parse HTML comments or track math state when inside a fenced code block -
     // these characters should be literal
@@ -2208,8 +2265,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 break;
             case '-':
-                // A minus could mark a list marker, a thematic break or a
-                // setext underline
+                // A minus could mark a list marker, a thematic break, a
+                // setext underline, or a cite_suppress_author
                 return parse_minus(s, lexer, valid_symbols);
             case '[':
                 if (valid_symbols[HIGHLIGHT_SPAN_START] || 
@@ -2236,6 +2293,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 if (valid_symbols[SHORTCODE_OPEN] || valid_symbols[SHORTCODE_OPEN_ESCAPED]) {
                     return parse_shortcode_open(s, lexer, valid_symbols);
                 }
+                break;
+            case '@':
+                return parse_cite_author_in_text(s, lexer, valid_symbols);
         }
         DEBUG_HERE;
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
