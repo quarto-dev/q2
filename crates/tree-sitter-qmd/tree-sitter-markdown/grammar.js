@@ -122,7 +122,7 @@ module.exports = grammar({
 
         pandoc_span: $ => seq(
             '[',
-            alias($._inlines, $.content),
+            optional(alias($._inlines, $.content)),
             ']',
             optional($.attribute_specifier)
         ),
@@ -133,8 +133,8 @@ module.exports = grammar({
                 $.raw_specifier,
                 $.language_specifier,
                 $.commonmark_specifier,
-                alias($._commonmark_specifier_no_id, $.commonmark_specifier),
-                alias($._commonmark_specifier_no_id_no_class, $.commonmark_specifier)
+                alias($._commonmark_specifier_start_with_class, $.commonmark_specifier),
+                alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier)
             )),
             '}'
         ),
@@ -147,19 +147,20 @@ module.exports = grammar({
         commonmark_specifier: $ => seq(
             optional($._inline_whitespace),
             alias(/[#][A-Za-z][A-Za-z0-9_-]*/, $.attribute_id),
-            optional(seq($._inline_whitespace, $._commonmark_specifier_no_id)),
-            // optional($._inline_whitespace),
-            // repeat(seq(alias(/[.][A-Za-z][A-Za-z0-9_-]*/, attribute_class), optional($._inline_whitespace))),
-            // repeat(seq(alias(/[.][A-Za-z][A-Za-z0-9_-]*/, attribute_class), optional($._inline_whitespace)))            
+            optional(
+                seq($._inline_whitespace, 
+                    choice(
+                        $._commonmark_specifier_start_with_class, 
+                        $._commonmark_specifier_start_with_kv))),
         ),
 
-        _commonmark_specifier_no_id: $ => seq(
+        _commonmark_specifier_start_with_class: $ => seq(
             alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class),
             optional(repeat(seq($._inline_whitespace, alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class)))),
-            optional(seq($._inline_whitespace, $._commonmark_specifier_no_id_no_class)),
+            optional(seq($._inline_whitespace, $._commonmark_specifier_start_with_kv)),
         ),
 
-        _commonmark_specifier_no_id_no_class: $ => seq(
+        _commonmark_specifier_start_with_kv: $ => seq(
             alias($._commonmark_key_value_specifier, $.key_value_specifier),
             optional(repeat(seq($._inline_whitespace, alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
             optional($._inline_whitespace)
@@ -170,7 +171,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             '=',
             optional($._inline_whitespace),
-            alias(choice($._commonmark_naked_value, $._commonmark_single_quote_string, $._commonmark_double_quote_string), $.key_value_value)
+            alias(choice($._value_specifier_token, $._commonmark_single_quote_string, $._commonmark_double_quote_string), $.key_value_value)
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
@@ -334,7 +335,8 @@ module.exports = grammar({
         $._autolink,
 
         $._language_specifier_token, // external so we can do negative lookahead assertions.
-        $._key_specifier_token
+        $._key_specifier_token,
+        $._value_specifier_token, // external so we can emit it only when allowed
     ],
     precedences: $ => [],
     extras: $ => [],

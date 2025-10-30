@@ -640,13 +640,21 @@
           "value": "["
         },
         {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_inlines"
-          },
-          "named": true,
-          "value": "content"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_inlines"
+              },
+              "named": true,
+              "value": "content"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "STRING",
@@ -695,7 +703,7 @@
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "_commonmark_specifier_no_id"
+                    "name": "_commonmark_specifier_start_with_class"
                   },
                   "named": true,
                   "value": "commonmark_specifier"
@@ -704,7 +712,7 @@
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "_commonmark_specifier_no_id_no_class"
+                    "name": "_commonmark_specifier_start_with_kv"
                   },
                   "named": true,
                   "value": "commonmark_specifier"
@@ -783,8 +791,17 @@
                   "name": "_inline_whitespace"
                 },
                 {
-                  "type": "SYMBOL",
-                  "name": "_commonmark_specifier_no_id"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_commonmark_specifier_start_with_class"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_commonmark_specifier_start_with_kv"
+                    }
+                  ]
                 }
               ]
             },
@@ -795,7 +812,7 @@
         }
       ]
     },
-    "_commonmark_specifier_no_id": {
+    "_commonmark_specifier_start_with_class": {
       "type": "SEQ",
       "members": [
         {
@@ -848,7 +865,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "_commonmark_specifier_no_id_no_class"
+                  "name": "_commonmark_specifier_start_with_kv"
                 }
               ]
             },
@@ -859,7 +876,7 @@
         }
       ]
     },
-    "_commonmark_specifier_no_id_no_class": {
+    "_commonmark_specifier_start_with_kv": {
       "type": "SEQ",
       "members": [
         {
@@ -961,7 +978,7 @@
             "members": [
               {
                 "type": "SYMBOL",
-                "name": "_commonmark_naked_value"
+                "name": "_value_specifier_token"
               },
               {
                 "type": "SYMBOL",
@@ -1404,6 +1421,10 @@
     {
       "type": "SYMBOL",
       "name": "_key_specifier_token"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_value_specifier_token"
     }
   ],
   "inline": [],

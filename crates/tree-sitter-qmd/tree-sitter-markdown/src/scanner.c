@@ -5,7 +5,7 @@
 #include <wctype.h>
 
 // set this define to turn on debugging printouts
-// #define SCAN_DEBUG 1
+#define SCAN_DEBUG 1
 
 #ifdef SCAN_DEBUG
 #define DEBUG_HERE printf("At line %d\n", __LINE__);
@@ -77,6 +77,7 @@ typedef enum {
     AUTOLINK,
     LANGUAGE_SPECIFIER,
     KEY_SPECIFIER,
+    NAKED_VALUE_SPECIFIER
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -141,7 +142,8 @@ static char* token_names[] = {
     "RAW_SPECIFIER",
     "AUTOLINK",
     "LANGUAGE_SPECIFIER",
-    "KEY_SPECIFIER"
+    "KEY_SPECIFIER",
+    "NAKED_VALUE_SPECIFIER"
 };
 
 #endif
@@ -246,6 +248,7 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // AUTOLINK
     false, // LANGUAGE_SPECIFIER
     false, // KEY_SPECIFIER
+    false, // NAKED_VALUE_SPECIFIER
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -302,6 +305,7 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // AUTOLINK
     false, // LANGUAGE_SPECIFIER
     false, // KEY_SPECIFIER
+    false, // NAKED_VALUE_SPECIFIER
 };
 
 // State bitflags used with `Scanner.state`
@@ -1682,12 +1686,16 @@ static bool parse_raw_specifier(TSLexer *lexer, const bool *valid_symbols) {
 }
 
 static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) {
-    if (!valid_symbols[LANGUAGE_SPECIFIER] && !valid_symbols[KEY_SPECIFIER]) {
+    if (!valid_symbols[LANGUAGE_SPECIFIER] && 
+        !valid_symbols[KEY_SPECIFIER] && 
+        !valid_symbols[NAKED_VALUE_SPECIFIER]) {
         return false;
     }
     // Current position should be 'A-Za-z'
     if (!((lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
-          (lexer->lookahead >= 'a' && lexer->lookahead <= 'z'))) {
+          (lexer->lookahead >= 'a' && lexer->lookahead <= 'z')) &&
+        !(valid_symbols[NAKED_VALUE_SPECIFIER] && 
+          (lexer->lookahead >= '0' && lexer->lookahead <= '9'))) {
         return false;
     }
     lexer->advance(lexer, false);
@@ -1710,7 +1718,11 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
         }
         if (lexer->lookahead == '}') {
             lexer->mark_end(lexer);
-            lexer->result_symbol = LANGUAGE_SPECIFIER;
+            if (valid_symbols[NAKED_VALUE_SPECIFIER]) {
+                lexer->result_symbol = NAKED_VALUE_SPECIFIER;
+            } else {
+                lexer->result_symbol = LANGUAGE_SPECIFIER;
+            }
             return true;
         }
         if (lexer->lookahead == '=') {
@@ -1731,7 +1743,11 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
                 lexer->result_symbol = KEY_SPECIFIER;
                 return true;
             } else {
-                lexer->result_symbol = LANGUAGE_SPECIFIER;
+                if (valid_symbols[NAKED_VALUE_SPECIFIER]) {
+                    lexer->result_symbol = NAKED_VALUE_SPECIFIER;
+                } else {
+                    lexer->result_symbol = LANGUAGE_SPECIFIER;
+                }
                 return true;
             }
         }
@@ -1937,9 +1953,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case '7':
             case '8':
             case '9':
+                DEBUG_HERE;
                 // A number could be a list marker (if followed by a dot or a
                 // parenthesis)
-                return parse_ordered_list_marker(s, lexer, valid_symbols);
+                if (!valid_symbols[NAKED_VALUE_SPECIFIER]) {
+                    return parse_ordered_list_marker(s, lexer, valid_symbols);
+                }
+                break;
             case '-':
                 // A minus could mark a list marker, a thematic break or a
                 // setext underline
@@ -1958,13 +1978,22 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 // A '(' could be an example list marker (@)
                 return parse_example_list_marker(s, lexer, valid_symbols);
         }
+        DEBUG_HERE;
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
             valid_symbols[PIPE_TABLE_START]) {
             return parse_pipe_table(s, lexer, valid_symbols);
         }
-        if ((valid_symbols[LANGUAGE_SPECIFIER] || valid_symbols[KEY_SPECIFIER]) &&  
+        if ((valid_symbols[LANGUAGE_SPECIFIER] || 
+             valid_symbols[KEY_SPECIFIER] || 
+             valid_symbols[NAKED_VALUE_SPECIFIER]) &&  
             ((lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
              (lexer->lookahead >= 'a' && lexer->lookahead <= 'z'))) {
+            DEBUG_HERE;
+            return parse_language_specifier(lexer, valid_symbols);
+        }
+        DEBUG_HERE;
+        if (valid_symbols[NAKED_VALUE_SPECIFIER] && (lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+            DEBUG_HERE;
             return parse_language_specifier(lexer, valid_symbols);
         }
     } else { // we are in the state of trying to match all currently open blocks
