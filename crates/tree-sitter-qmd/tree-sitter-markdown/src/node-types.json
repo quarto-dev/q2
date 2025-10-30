@@ -67,7 +67,19 @@
           "named": true
         },
         {
+          "type": "delete",
+          "named": true
+        },
+        {
+          "type": "edit_comment",
+          "named": true
+        },
+        {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "insert",
           "named": true
         },
         {
@@ -168,7 +180,19 @@
           "named": true
         },
         {
+          "type": "delete",
+          "named": true
+        },
+        {
+          "type": "edit_comment",
+          "named": true
+        },
+        {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "insert",
           "named": true
         },
         {
@@ -211,6 +235,33 @@
     }
   },
   {
+    "type": "delete",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "delete_delimiter",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "document",
     "named": true,
     "root": true,
@@ -231,6 +282,33 @@
     }
   },
   {
+    "type": "edit_comment",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "edit_comment_delimiter",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "highlight",
     "named": true,
     "fields": {},
@@ -240,6 +318,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
           "named": true
         },
         {
@@ -267,6 +349,33 @@
         },
         {
           "type": "ref_id_specifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "insert",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "insert_delimiter",
           "named": true
         }
       ]
@@ -738,7 +847,19 @@
           "named": true
         },
         {
+          "type": "delete",
+          "named": true
+        },
+        {
+          "type": "edit_comment",
+          "named": true
+        },
+        {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "insert",
           "named": true
         },
         {
@@ -996,6 +1117,14 @@
     "named": true
   },
   {
+    "type": "delete_delimiter",
+    "named": true
+  },
+  {
+    "type": "edit_comment_delimiter",
+    "named": true
+  },
+  {
     "type": "fenced_code_block_delimiter",
     "named": true
   },
@@ -1009,6 +1138,10 @@
   },
   {
     "type": "info_string",
+    "named": true
+  },
+  {
+    "type": "insert_delimiter",
     "named": true
   },
   {

@@ -84,6 +84,9 @@ typedef enum {
     // SPAN_START
 
     HIGHLIGHT_SPAN_START,
+    INSERT_SPAN_START,
+    DELETE_SPAN_START,
+    COMMENT_SPAN_START,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -152,6 +155,9 @@ static char* token_names[] = {
     "NAKED_VALUE_SPECIFIER",
 
     "HIGHLIGHT_SPAN_START",
+    "INSERT_SPAN_START",
+    "DELETE_SPAN_START",
+    "COMMENT_SPAN_START",
 };
 
 #endif
@@ -261,6 +267,9 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // KEY_SPECIFIER
     false, // NAKED_VALUE_SPECIFIER
     false, // HIGHLIGHT_SPAN_START
+    false, // INSERT_SPAN_START
+    false, // DELETE_SPAN_START
+    false, // COMMENT_SPAN_START
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -322,6 +331,9 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // KEY_SPECIFIER
     false, // NAKED_VALUE_SPECIFIER
     false, // HIGHLIGHT_SPAN_START
+    false, // INSERT_SPAN_START
+    false, // DELETE_SPAN_START
+    false, // COMMENT_SPAN_START
 };
 
 // State bitflags used with `Scanner.state`
@@ -1803,6 +1815,49 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
         lexer->result_symbol = HIGHLIGHT_SPAN_START;
         return true;
     }
+
+    if (valid_symbols[INSERT_SPAN_START] && lexer->lookahead == '+') {
+        lexer->advance(lexer, false);
+        if (lexer->lookahead != '+') {
+            return false;
+        }
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+            lexer->advance(lexer, false);
+        }
+        lexer->result_symbol = INSERT_SPAN_START;
+        return true;
+    }
+
+    if (valid_symbols[DELETE_SPAN_START] && lexer->lookahead == '-') {
+        lexer->advance(lexer, false);
+        if (lexer->lookahead != '-') {
+            return false;
+        }
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+            lexer->advance(lexer, false);
+        }
+        lexer->result_symbol = DELETE_SPAN_START;
+        return true;
+    }
+
+    if (valid_symbols[COMMENT_SPAN_START] && lexer->lookahead == '>') {
+        lexer->advance(lexer, false);
+        if (lexer->lookahead != '>') {
+            return false;
+        }
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
+            lexer->advance(lexer, false);
+        }
+        lexer->result_symbol = COMMENT_SPAN_START;
+        return true;
+    }
+
     
     return false;   
 }
@@ -2016,7 +2071,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 // setext underline
                 return parse_minus(s, lexer, valid_symbols);
             case '[':
-                if (valid_symbols[HIGHLIGHT_SPAN_START] || valid_symbols[REF_ID_SPECIFIER]) {
+                if (valid_symbols[HIGHLIGHT_SPAN_START] || 
+                    valid_symbols[INSERT_SPAN_START] || 
+                    valid_symbols[DELETE_SPAN_START] || 
+                    valid_symbols[COMMENT_SPAN_START] || 
+                    valid_symbols[REF_ID_SPECIFIER]) {
                     return parse_open_square_brace(s, lexer, valid_symbols);
                 }
                 break;

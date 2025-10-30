@@ -190,35 +190,38 @@ module.exports = grammar({
             optional($.attribute_specifier)
         )),
 
-        // insert: $ => prec.right(seq(
-        //     prec(3, alias(/\[\+\+[ ]*/, $.insert_delimiter)),
-        //     optional(alias($._inlines, $.content)),
-        //     prec(3, alias(/[ ]*\]/, $.insert_delimiter)),
-        //     optional($.attribute_specifier)
-        // )),
+        insert: $ => prec.right(seq(
+            prec(3, alias($._insert_span_start, $.insert_delimiter)),
+            optional($._inline_whitespace),
+            optional(alias($._inlines, $.content)),
+            prec(3, alias(/[ ]*\]/, $.insert_delimiter)),
+            optional($.attribute_specifier)
+        )),
 
-        // delete: $ => prec.right(seq(
-        //     prec(3, alias(/\[\-\-[ ]*/, $.delete_delimiter)),
-        //     optional(alias($._inlines, $.content)),
-        //     prec(3, alias(/[ ]*\]/, $.delete_delimiter)),
-        //     optional($.attribute_specifier)
-        // )),
+        delete: $ => prec.right(seq(
+            prec(3, alias($._delete_span_start, $.delete_delimiter)),
+            optional($._inline_whitespace),
+            optional(alias($._inlines, $.content)),
+            prec(3, alias(/[ ]*\]/, $.delete_delimiter)),
+            optional($.attribute_specifier)
+        )),
+
+        edit_comment: $ => prec.right(seq(
+            prec(3, alias($._edit_comment_span_start, $.edit_comment_delimiter)),
+            optional($._inline_whitespace),
+            optional(alias($._inlines, $.content)),
+            prec(3, alias(/[ ]*\]/, $.edit_comment_delimiter)),
+            optional($.attribute_specifier)
+        )),
 
         highlight: $ => prec.right(seq(
             prec(3, alias($._highlight_span_start, $.highlight_delimiter)),
+            optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             prec(3, alias(/[ ]*\]/, $.highlight_delimiter)),
             optional($.attribute_specifier)
         )),
-
-        // edit_comment: $ => prec.right(seq(
-        //     prec(3, alias(/\[>>[ ]*/, $.edit_comment_delimiter)),
-        //     optional(alias($._inlines, $.content)),
-        //     prec(3, alias(/[ ]*\]/, $.edit_comment_delimiter)),
-        //     optional($.attribute_specifier)
-        // )),
-
-        
+       
         attribute_specifier: $ => seq(
             '{',
             optional(choice(
@@ -283,6 +286,9 @@ module.exports = grammar({
             alias($._html_comment, $.comment),
 
             $.highlight,
+            $.insert,
+            $.delete,
+            $.edit_comment,
 
             $.prose_punctuation,
             $.attribute_specifier
@@ -583,6 +589,9 @@ module.exports = grammar({
         $._value_specifier_token, // external so we can emit it only when allowed
 
         $._highlight_span_start,
+        $._insert_span_start,
+        $._delete_span_start,
+        $._edit_comment_span_start,
     ],
     precedences: $ => [],
     extras: $ => [],
