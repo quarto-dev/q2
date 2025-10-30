@@ -71,6 +71,10 @@
           "named": true
         },
         {
+          "type": "pandoc_image",
+          "named": true
+        },
+        {
           "type": "pandoc_math",
           "named": true
         },
@@ -157,6 +161,10 @@
         },
         {
           "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_image",
           "named": true
         },
         {
@@ -428,6 +436,29 @@
     "fields": {}
   },
   {
+    "type": "pandoc_image",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "target",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "pandoc_list",
     "named": true,
     "fields": {},
@@ -469,6 +500,10 @@
         },
         {
           "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_image",
           "named": true
         },
         {
@@ -612,6 +647,10 @@
         }
       ]
     }
+  },
+  {
+    "type": "![",
+    "named": false
   },
   {
     "type": "$",

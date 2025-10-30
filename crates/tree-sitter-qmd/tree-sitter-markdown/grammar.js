@@ -134,6 +134,17 @@ module.exports = grammar({
             optional($.attribute_specifier)
         )),
 
+        pandoc_image: $ => prec.right(seq(
+            '![',
+            optional(alias($._inlines, $.content)),
+            choice(
+                $.target,
+                ']',
+            ),
+            optional($.attribute_specifier)
+        )),
+
+
         target: $ => seq(
             '](', 
             alias(/[^ \t)]+/, $.url),
@@ -224,6 +235,7 @@ module.exports = grammar({
             $.pandoc_math,
             $.pandoc_display_math,
             $.pandoc_code_span,
+            $.pandoc_image,
 
             $.prose_punctuation,
             $.attribute_specifier
