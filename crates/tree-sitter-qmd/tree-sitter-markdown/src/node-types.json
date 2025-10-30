@@ -91,11 +91,19 @@
           "named": true
         },
         {
+          "type": "pandoc_double_quote",
+          "named": true
+        },
+        {
           "type": "pandoc_image",
           "named": true
         },
         {
           "type": "pandoc_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_single_quote",
           "named": true
         },
         {
@@ -204,11 +212,19 @@
           "named": true
         },
         {
+          "type": "pandoc_double_quote",
+          "named": true
+        },
+        {
           "type": "pandoc_image",
           "named": true
         },
         {
           "type": "pandoc_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_single_quote",
           "named": true
         },
         {
@@ -769,6 +785,25 @@
     }
   },
   {
+    "type": "pandoc_double_quote",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "double_quote",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "pandoc_horizontal_rule",
     "named": true,
     "fields": {},
@@ -871,11 +906,19 @@
           "named": true
         },
         {
+          "type": "pandoc_double_quote",
+          "named": true
+        },
+        {
           "type": "pandoc_image",
           "named": true
         },
         {
           "type": "pandoc_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_single_quote",
           "named": true
         },
         {
@@ -896,6 +939,25 @@
         },
         {
           "type": "prose_punctuation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pandoc_single_quote",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "content",
+          "named": true
+        },
+        {
+          "type": "single_quote",
           "named": true
         }
       ]
@@ -1121,6 +1183,10 @@
     "named": true
   },
   {
+    "type": "double_quote",
+    "named": true
+  },
+  {
     "type": "edit_comment_delimiter",
     "named": true
   },
@@ -1170,6 +1236,10 @@
   },
   {
     "type": "ref_id_specifier",
+    "named": true
+  },
+  {
+    "type": "single_quote",
     "named": true
   },
   {

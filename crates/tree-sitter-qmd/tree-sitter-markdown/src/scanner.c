@@ -87,6 +87,11 @@ typedef enum {
     INSERT_SPAN_START,
     DELETE_SPAN_START,
     COMMENT_SPAN_START,
+
+    SINGLE_QUOTE_OPEN,
+    SINGLE_QUOTE_CLOSE,
+    DOUBLE_QUOTE_OPEN,
+    DOUBLE_QUOTE_CLOSE,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -158,6 +163,11 @@ static char* token_names[] = {
     "INSERT_SPAN_START",
     "DELETE_SPAN_START",
     "COMMENT_SPAN_START",
+
+    "SINGLE_QUOTE_OPEN",
+    "SINGLE_QUOTE_CLOSE",
+    "DOUBLE_QUOTE_OPEN",
+    "DOUBLE_QUOTE_CLOSE",
 };
 
 #endif
@@ -270,6 +280,10 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // INSERT_SPAN_START
     false, // DELETE_SPAN_START
     false, // COMMENT_SPAN_START
+    false, // SINGLE_QUOTE_OPEN
+    false, // SINGLE_QUOTE_CLOSE
+    false, // DOUBLE_QUOTE_OPEN
+    false, // DOUBLE_QUOTE_CLOSE
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -334,6 +348,10 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // INSERT_SPAN_START
     false, // DELETE_SPAN_START
     false, // COMMENT_SPAN_START
+    false, // SINGLE_QUOTE_OPEN
+    false, // SINGLE_QUOTE_CLOSE
+    false, // DOUBLE_QUOTE_OPEN
+    false, // DOUBLE_QUOTE_CLOSE
 };
 
 // State bitflags used with `Scanner.state`
@@ -1862,6 +1880,44 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
     return false;   
 }
 
+static bool parse_single_quote(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    if (lexer->lookahead != '\'') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    // prioritize close over open so 'word' works as expected.
+    if (valid_symbols[SINGLE_QUOTE_CLOSE]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SINGLE_QUOTE_CLOSE;
+        return true;
+    }
+    if (valid_symbols[SINGLE_QUOTE_OPEN]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SINGLE_QUOTE_OPEN;
+        return true;
+    }
+    return false;
+}
+
+static bool parse_double_quote(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    if (lexer->lookahead != '"') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    // prioritize close over open so 'word' works as expected.
+    if (valid_symbols[DOUBLE_QUOTE_CLOSE]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = DOUBLE_QUOTE_CLOSE;
+        return true;
+    }
+    if (valid_symbols[DOUBLE_QUOTE_OPEN]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = DOUBLE_QUOTE_OPEN;
+        return true;
+    }
+    return false;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Don't parse HTML comments or track math state when inside a fenced code block -
     // these characters should be literal
@@ -2087,6 +2143,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case '(':
                 // A '(' could be an example list marker (@)
                 return parse_example_list_marker(s, lexer, valid_symbols);
+            case '\'':
+                return parse_single_quote(s, lexer, valid_symbols);
+            case '"':
+                return parse_double_quote(s, lexer, valid_symbols);
         }
         DEBUG_HERE;
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&

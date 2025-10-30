@@ -190,6 +190,18 @@ module.exports = grammar({
             optional($.attribute_specifier)
         )),
 
+        pandoc_single_quote: $ => prec.right(seq(
+            alias($._single_quote_span_open, $.single_quote),
+            optional(alias($._inlines, $.content)),
+            alias($._single_quote_span_close, $.single_quote),
+        )),
+
+        pandoc_double_quote: $ => prec.right(seq(
+            alias($._double_quote_span_open, $.double_quote),
+            optional(alias($._inlines, $.content)),
+            alias($._double_quote_span_close, $.double_quote),
+        )),
+
         insert: $ => prec.right(seq(
             prec(3, alias($._insert_span_start, $.insert_delimiter)),
             optional($._inline_whitespace),
@@ -282,6 +294,8 @@ module.exports = grammar({
             $.pandoc_display_math,
             $.pandoc_code_span,
             $.pandoc_image,
+            $.pandoc_single_quote,
+            $.pandoc_double_quote,
 
             alias($._html_comment, $.comment),
 
@@ -592,6 +606,11 @@ module.exports = grammar({
         $._insert_span_start,
         $._delete_span_start,
         $._edit_comment_span_start,
+
+        $._single_quote_span_open,
+        $._single_quote_span_close,
+        $._double_quote_span_open,
+        $._double_quote_span_close,
     ],
     precedences: $ => [],
     extras: $ => [],

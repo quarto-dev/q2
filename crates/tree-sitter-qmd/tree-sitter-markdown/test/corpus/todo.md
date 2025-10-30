@@ -14,7 +14,6 @@ blocks:
 inlines:
 
 - underline, emphasis, superscript etc
-- all editorial comments
 - citations
 - footnotes
 - quotes
