@@ -110,6 +110,15 @@ typedef enum {
     SUPERSCRIPT_OPEN,
     SUPERSCRIPT_CLOSE,
     INLINE_NOTE_START_TOKEN,
+
+    STRONG_EMPHASIS_OPEN_STAR,
+    STRONG_EMPHASIS_CLOSE_STAR,
+    STRONG_EMPHASIS_OPEN_UNDERSCORE,
+    STRONG_EMPHASIS_CLOSE_UNDERSCORE,
+    EMPHASIS_OPEN_STAR,
+    EMPHASIS_CLOSE_STAR,
+    EMPHASIS_OPEN_UNDERSCORE,
+    EMPHASIS_CLOSE_UNDERSCORE,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -204,6 +213,15 @@ static char* token_names[] = {
     "SUPERSCRIPT_OPEN",
     "SUPERSCRIPT_CLOSE",
     "INLINE_NOTE_START_TOKEN",
+
+    "STRONG_EMPHASIS_OPEN_STAR",
+    "STRONG_EMPHASIS_CLOSE_STAR",
+    "STRONG_EMPHASIS_OPEN_UNDERSCORE",
+    "STRONG_EMPHASIS_CLOSE_UNDERSCORE",
+    "EMPHASIS_OPEN_STAR",
+    "EMPHASIS_CLOSE_STAR",
+    "EMPHASIS_OPEN_UNDERSCORE",
+    "EMPHASIS_CLOSE_UNDERSCORE",
 };
 
 #endif
@@ -335,6 +353,14 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // SUPERSCRIPT_OPEN,
     false, // SUPERSCRIPT_CLOSE,
     false, // INLINE_NOTE_START_TOKEN,
+    false, // STRONG_EMPHASIS_OPEN_STAR,
+    false, // STRONG_EMPHASIS_CLOSE_STAR,
+    false, // STRONG_EMPHASIS_OPEN_UNDERSCORE,
+    false, // STRONG_EMPHASIS_CLOSE_UNDERSCORE,
+    false, // EMPHASIS_OPEN_STAR,
+    false, // EMPHASIS_CLOSE_STAR,
+    false, // EMPHASIS_OPEN_UNDERSCORE,
+    false, // EMPHASIS_CLOSE_UNDERSCORE,
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -418,6 +444,14 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // SUPERSCRIPT_OPEN,
     false, // SUPERSCRIPT_CLOSE,
     false, // INLINE_NOTE_START_TOKEN,
+    false, // STRONG_EMPHASIS_OPEN_STAR,
+    false, // STRONG_EMPHASIS_CLOSE_STAR,
+    false, // STRONG_EMPHASIS_OPEN_UNDERSCORE,
+    false, // STRONG_EMPHASIS_CLOSE_UNDERSCORE,
+    false, // EMPHASIS_OPEN_STAR,
+    false, // EMPHASIS_CLOSE_STAR,
+    false, // EMPHASIS_OPEN_UNDERSCORE,
+    false, // EMPHASIS_CLOSE_UNDERSCORE,
 };
 
 // State bitflags used with `Scanner.state`
@@ -903,6 +937,26 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             dont_interrupt ? LIST_MARKER_STAR_DONT_INTERRUPT : LIST_MARKER_STAR;
         return true;
     }
+    if (star_count == 1 && valid_symbols[EMPHASIS_CLOSE_STAR]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = EMPHASIS_CLOSE_STAR;
+        return true;
+    }
+    if (star_count == 1 && valid_symbols[EMPHASIS_OPEN_STAR]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = EMPHASIS_OPEN_STAR;
+        return true;
+    }
+    if (star_count == 2 && valid_symbols[STRONG_EMPHASIS_CLOSE_STAR]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = STRONG_EMPHASIS_CLOSE_STAR;
+        return true;
+    }
+    if (star_count == 2 && valid_symbols[STRONG_EMPHASIS_OPEN_STAR]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = STRONG_EMPHASIS_OPEN_STAR;
+        return true;
+    }
     return false;
 }
 
@@ -926,6 +980,27 @@ static bool parse_thematic_break_underscore(Scanner *s, TSLexer *lexer,
         lexer->result_symbol = THEMATIC_BREAK;
         mark_end(s, lexer);
         s->indentation = 0;
+        return true;
+    }
+
+    if (underscore_count == 1 && valid_symbols[EMPHASIS_CLOSE_UNDERSCORE]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = EMPHASIS_CLOSE_UNDERSCORE;
+        return true;
+    }
+    if (underscore_count == 1 && valid_symbols[EMPHASIS_OPEN_UNDERSCORE]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = EMPHASIS_OPEN_UNDERSCORE;
+        return true;
+    }
+    if (underscore_count == 2 && valid_symbols[STRONG_EMPHASIS_CLOSE_UNDERSCORE]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = STRONG_EMPHASIS_CLOSE_UNDERSCORE;
+        return true;
+    }
+    if (underscore_count == 2 && valid_symbols[STRONG_EMPHASIS_OPEN_UNDERSCORE]) {
+        mark_end(s, lexer);
+        lexer->result_symbol = STRONG_EMPHASIS_OPEN_UNDERSCORE;
         return true;
     }
     return false;

@@ -1839,6 +1839,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "pandoc_emph"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pandoc_strong"
+        },
+        {
+          "type": "SYMBOL",
           "name": "prose_punctuation"
         },
         {
@@ -2362,6 +2370,124 @@
           },
           "named": true,
           "value": "strikeout_delimiter"
+        }
+      ]
+    },
+    "pandoc_emph": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_emphasis_open_star"
+              },
+              "named": true,
+              "value": "emphasis_delimiter"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_inlines"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_emphasis_close_star"
+              },
+              "named": true,
+              "value": "emphasis_delimiter"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_emphasis_open_underscore"
+              },
+              "named": true,
+              "value": "emphasis_delimiter"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_inlines"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_emphasis_close_underscore"
+              },
+              "named": true,
+              "value": "emphasis_delimiter"
+            }
+          ]
+        }
+      ]
+    },
+    "pandoc_strong": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_strong_emphasis_open_star"
+              },
+              "named": true,
+              "value": "strong_emphasis_delimiter"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_inlines"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_strong_emphasis_close_star"
+              },
+              "named": true,
+              "value": "strong_emphasis_delimiter"
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_strong_emphasis_open_underscore"
+              },
+              "named": true,
+              "value": "strong_emphasis_delimiter"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_inlines"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_strong_emphasis_close_underscore"
+              },
+              "named": true,
+              "value": "strong_emphasis_delimiter"
+            }
+          ]
         }
       ]
     },
@@ -3616,6 +3742,38 @@
     {
       "type": "SYMBOL",
       "name": "_inline_note_start_token"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_strong_emphasis_open_star"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_strong_emphasis_close_star"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_strong_emphasis_open_underscore"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_strong_emphasis_close_underscore"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_emphasis_open_star"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_emphasis_close_star"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_emphasis_open_underscore"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_emphasis_close_underscore"
     }
   ],
   "inline": [],

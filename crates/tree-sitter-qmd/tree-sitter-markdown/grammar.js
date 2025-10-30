@@ -314,6 +314,9 @@ module.exports = grammar({
             $.pandoc_subscript,
             $.pandoc_strikeout,
 
+            $.pandoc_emph,
+            $.pandoc_strong,
+
             $.prose_punctuation,
             $.attribute_specifier
         ),
@@ -420,6 +423,25 @@ module.exports = grammar({
             alias($._strikeout_close, $.strikeout_delimiter),
         ),
 
+        pandoc_emph: $ => choice(seq(
+            alias($._emphasis_open_star, $.emphasis_delimiter),
+            $._inlines,
+            alias($._emphasis_close_star, $.emphasis_delimiter),
+        ), seq(
+            alias($._emphasis_open_underscore, $.emphasis_delimiter),
+            $._inlines,
+            alias($._emphasis_close_underscore, $.emphasis_delimiter),
+        )),
+
+        pandoc_strong: $ => choice(seq(
+            alias($._strong_emphasis_open_star, $.strong_emphasis_delimiter),
+            $._inlines,
+            alias($._strong_emphasis_close_star, $.strong_emphasis_delimiter),
+        ), seq(
+            alias($._strong_emphasis_open_underscore, $.strong_emphasis_delimiter),
+            $._inlines,
+            alias($._strong_emphasis_close_underscore, $.strong_emphasis_delimiter),
+        )),
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,
@@ -742,6 +764,15 @@ module.exports = grammar({
         $._superscript_open,
         $._superscript_close,
         $._inline_note_start_token,
+
+        $._strong_emphasis_open_star,
+        $._strong_emphasis_close_star,
+        $._strong_emphasis_open_underscore,
+        $._strong_emphasis_close_underscore,
+        $._emphasis_open_star,
+        $._emphasis_close_star,
+        $._emphasis_open_underscore,
+        $._emphasis_close_underscore,
     ],
     precedences: $ => [],
     extras: $ => [],

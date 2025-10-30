@@ -52,3 +52,67 @@ Fancy Product^TM^.
             (pandoc_str)
             (superscript_delimiter))
           (pandoc_str))))
+================================================================================
+star emphasis
+================================================================================
+This is *emph*.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str))))
+================================================================================
+strong star emphasis
+================================================================================
+This is **strong**.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter))
+          (pandoc_str))))
+================================================================================
+underscore emphasis
+================================================================================
+This is _emph_.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str))))
+================================================================================
+strong underscore emphasis
+================================================================================
+This is __strong__.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter))
+          (pandoc_str))))
