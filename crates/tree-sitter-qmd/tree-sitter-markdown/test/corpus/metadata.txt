@@ -1,0 +1,45 @@
+================================================================================
+1
+================================================================================
+---
+hello: world
+---
+
+This has metadata.
+--------------------------------------------------------------------------------
+    (document
+      (metadata)
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+2 - we keep metadata at the block level
+================================================================================
+---
+hello: world
+---
+
+This has metadata.
+
+---
+title: inner
+---
+
+More.
+--------------------------------------------------------------------------------
+    (document
+      (metadata)
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (metadata)
+        (pandoc_paragraph
+          (pandoc_str))))

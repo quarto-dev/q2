@@ -1,0 +1,47 @@
+================================================================================
+1
+================================================================================
+::: {}
+hello world
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation)))))
+================================================================================
+2
+================================================================================
+::: {#id}
+
+---
+inner_for_real: now
+---
+
+More stuff.
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (block_continuation)
+          (metadata)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
+          

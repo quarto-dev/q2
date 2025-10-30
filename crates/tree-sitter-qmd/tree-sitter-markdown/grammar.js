@@ -6,6 +6,7 @@ module.exports = grammar({
         // document
 
         document: $ => seq(
+            optional(alias($.minus_metadata, $.metadata)),
             alias(prec.right(repeat($._block_not_section)), $.section),
             repeat($.section),
         ),
@@ -18,15 +19,18 @@ module.exports = grammar({
             $._block_not_section,
             $.section,
         ),
-        _block_not_section: $ => choice(
+        _block_not_section: $ => prec.right(choice(
             $.pandoc_paragraph,
             $.pandoc_block_quote,
             $.pandoc_list,
             $.pandoc_code_block,
+            $.pandoc_div,
+
+            prec(-1, alias($.minus_metadata, $.metadata)),
 
             $._soft_line_break,
             $._newline
-        ),
+        )),
         section: $ => choice($._section1, $._section2, $._section3, $._section4, $._section5, $._section6),
         _section1: $ => prec.right(seq(
             alias($._atx_heading1, $.atx_heading),
@@ -144,7 +148,6 @@ module.exports = grammar({
             optional($.attribute_specifier)
         )),
 
-
         target: $ => seq(
             '](', 
             alias(/[^ \t)]+/, $.url),
@@ -236,6 +239,8 @@ module.exports = grammar({
             $.pandoc_display_math,
             $.pandoc_code_span,
             $.pandoc_image,
+
+            alias($._html_comment, $.comment),
 
             $.prose_punctuation,
             $.attribute_specifier
@@ -368,6 +373,20 @@ module.exports = grammar({
         code_fence_content: $ => repeat1(choice($._newline, $._code_line)),
         _code_line:         $ => /[^\n]+/,
         
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // A fenced div block
+
+        pandoc_div: $ => seq(
+          $._fenced_div_start,
+          $._whitespace,
+          choice(alias($._commonmark_naked_value, $.info_string), $.attribute_specifier),
+          $._newline,
+          repeat($._block),
+          optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),
+          $._block_close,
+        ),
+
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Newlines as in the spec. Parsing a newline triggers the matching process by making
         // the external parser emit a `$._line_ending`.

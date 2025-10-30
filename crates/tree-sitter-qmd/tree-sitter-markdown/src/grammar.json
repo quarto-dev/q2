@@ -6,6 +6,23 @@
       "type": "SEQ",
       "members": [
         {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "minus_metadata"
+              },
+              "named": true,
+              "value": "metadata"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
           "type": "ALIAS",
           "content": {
             "type": "PREC_RIGHT",
@@ -44,33 +61,54 @@
       ]
     },
     "_block_not_section": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "SYMBOL",
-          "name": "pandoc_paragraph"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "pandoc_block_quote"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "pandoc_list"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "pandoc_code_block"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_soft_line_break"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_newline"
-        }
-      ]
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "CHOICE",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "pandoc_paragraph"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "pandoc_block_quote"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "pandoc_list"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "pandoc_code_block"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "pandoc_div"
+          },
+          {
+            "type": "PREC",
+            "value": -1,
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "minus_metadata"
+              },
+              "named": true,
+              "value": "metadata"
+            }
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_soft_line_break"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_newline"
+          }
+        ]
+      }
     },
     "section": {
       "type": "CHOICE",
@@ -1296,6 +1334,15 @@
           "name": "pandoc_image"
         },
         {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_html_comment"
+          },
+          "named": true,
+          "value": "comment"
+        },
+        {
           "type": "SYMBOL",
           "name": "prose_punctuation"
         },
@@ -2026,6 +2073,86 @@
     "_code_line": {
       "type": "PATTERN",
       "value": "[^\\n]+"
+    },
+    "pandoc_div": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_fenced_div_start"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_whitespace"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_commonmark_naked_value"
+              },
+              "named": true,
+              "value": "info_string"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "attribute_specifier"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_newline"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_block"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_fenced_div_end"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_close_block"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_newline"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_eof"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_block_close"
+        }
+      ]
     },
     "_newline": {
       "type": "SEQ",

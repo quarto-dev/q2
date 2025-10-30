@@ -63,6 +63,10 @@
           "named": true
         },
         {
+          "type": "comment",
+          "named": true
+        },
+        {
           "type": "pandoc_code_span",
           "named": true
         },
@@ -156,6 +160,10 @@
           "named": true
         },
         {
+          "type": "comment",
+          "named": true
+        },
+        {
           "type": "pandoc_code_span",
           "named": true
         },
@@ -203,6 +211,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "metadata",
+          "named": true
+        },
         {
           "type": "section",
           "named": true
@@ -285,11 +297,19 @@
           "named": true
         },
         {
+          "type": "metadata",
+          "named": true
+        },
+        {
           "type": "pandoc_block_quote",
           "named": true
         },
         {
           "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_div",
           "named": true
         },
         {
@@ -354,11 +374,19 @@
           "named": true
         },
         {
+          "type": "metadata",
+          "named": true
+        },
+        {
           "type": "pandoc_block_quote",
           "named": true
         },
         {
           "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_div",
           "named": true
         },
         {
@@ -436,6 +464,57 @@
     "fields": {}
   },
   {
+    "type": "pandoc_div",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "info_string",
+          "named": true
+        },
+        {
+          "type": "metadata",
+          "named": true
+        },
+        {
+          "type": "pandoc_block_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_div",
+          "named": true
+        },
+        {
+          "type": "pandoc_list",
+          "named": true
+        },
+        {
+          "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "section",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "pandoc_image",
     "named": true,
     "fields": {},
@@ -492,6 +571,10 @@
         },
         {
           "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "comment",
           "named": true
         },
         {
@@ -603,11 +686,19 @@
           "named": true
         },
         {
+          "type": "metadata",
+          "named": true
+        },
+        {
           "type": "pandoc_block_quote",
           "named": true
         },
         {
           "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_div",
           "named": true
         },
         {
@@ -725,6 +816,10 @@
     "named": true
   },
   {
+    "type": "comment",
+    "named": true
+  },
+  {
     "type": "fenced_code_block_delimiter",
     "named": true
   },
@@ -738,6 +833,10 @@
   },
   {
     "type": "key_value_value",
+    "named": true
+  },
+  {
+    "type": "metadata",
     "named": true
   },
   {
