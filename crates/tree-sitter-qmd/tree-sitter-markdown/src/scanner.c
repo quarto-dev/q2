@@ -246,12 +246,15 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // PIPE_TABLE_LINE_ENDING,
     true,  // FENCED_DIV_START,
     true,  // FENCED_DIV_END,
+    false, // REF_ID_SPECIFIER,
+    false, // FENCED_DIV_NOTE_ID,
     false, // DISPLAY_MATH_STATE_TRACK_MARKER
     false, // INLINE_MATH_STATE_TRACK_MARKER
     false, // CODE_SPAN_START
     false, // CODE_SPAN_CLOSE
     false, // LATEX_SPAN_START
     false, // LATEX_SPAN_CLOSE
+    false, // HTML_COMMENT
     false, // RAW_SPECIFIER
     false, // AUTOLINK
     false, // LANGUAGE_SPECIFIER
@@ -304,12 +307,15 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // PIPE_TABLE_LINE_ENDING,
     true,  // FENCED_DIV_START,
     true,  // FENCED_DIV_END,
+    false, // REF_ID_SPECIFIER,
+    false, // FENCED_DIV_NOTE_ID,
     false, // DISPLAY_MATH_STATE_TRACK_MARKER
     false, // INLINE_MATH_STATE_TRACK_MARKER
     false, // CODE_SPAN_START
     false, // CODE_SPAN_CLOSE
     false, // LATEX_SPAN_START
     false, // LATEX_SPAN_CLOSE
+    false, // HTML_COMMENT
     false, // RAW_SPECIFIER
     false, // AUTOLINK
     false, // LANGUAGE_SPECIFIER
