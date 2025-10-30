@@ -2562,6 +2562,10 @@
     {
       "type": "SYMBOL",
       "name": "_value_specifier_token"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_highlight_span_start"
     }
   ],
   "inline": [],

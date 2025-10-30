@@ -82,6 +82,8 @@ typedef enum {
 
     // now all the tokens from the inline scanner since we're doing it all here
     // SPAN_START
+
+    HIGHLIGHT_SPAN_START,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -148,6 +150,8 @@ static char* token_names[] = {
     "LANGUAGE_SPECIFIER",
     "KEY_SPECIFIER",
     "NAKED_VALUE_SPECIFIER",
+
+    "HIGHLIGHT_SPAN_START",
 };
 
 #endif
@@ -253,6 +257,7 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // LANGUAGE_SPECIFIER
     false, // KEY_SPECIFIER
     false, // NAKED_VALUE_SPECIFIER
+    false, // HIGHLIGHT_SPAN_START
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -310,6 +315,7 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // LANGUAGE_SPECIFIER
     false, // KEY_SPECIFIER
     false, // NAKED_VALUE_SPECIFIER
+    false, // HIGHLIGHT_SPAN_START
 };
 
 // State bitflags used with `Scanner.state`
@@ -1744,7 +1750,7 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
         }
         if ((lexer->lookahead == ' ') || (lexer->lookahead == '\t')) {
             lexer->mark_end(lexer);
-            while (!lexer->eof(lexer) && (lexer->lookahead == ' ') || (lexer->lookahead == '\t')) {
+            while (!lexer->eof(lexer) && ((lexer->lookahead == ' ') || (lexer->lookahead == '\t'))) {
                 lexer->advance(lexer, false);
             }
             if (lexer->eof(lexer)) {
@@ -1776,11 +1782,16 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                               s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
 
     #ifdef SCAN_DEBUG
+    printf("valid_symbols pointer: %x\n", valid_symbols);
+    printf("Own size: %d\n", s->own_size);
     printf("valid symbols:\n");    
-    for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
-        if (valid_symbols[i]) {
-            printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
-        }
+    // for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
+    //     if (valid_symbols[i]) {
+    //         printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
+    //     }
+    // }
+    for (int i = 0; i < 80; ++i) {
+        printf("  %s [%d] = %d (%c)\n", i < 58 ? token_names[i] : NULL, i, (int)(valid_symbols[i]), (char)(valid_symbols[i]));
     }
     printf("-- scan() state=%d\n", s->state);
     printf("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
@@ -1968,6 +1979,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 DEBUG_HERE;
                 // A number could be a list marker (if followed by a dot or a
                 // parenthesis)
+
                 if (!valid_symbols[NAKED_VALUE_SPECIFIER]) {
                     return parse_ordered_list_marker(s, lexer, valid_symbols);
                 }

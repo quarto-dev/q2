@@ -550,6 +550,8 @@ module.exports = grammar({
         $._language_specifier_token, // external so we can do negative lookahead assertions.
         $._key_specifier_token,
         $._value_specifier_token, // external so we can emit it only when allowed
+
+        $._highlight_span_start,
     ],
     precedences: $ => [],
     extras: $ => [],
