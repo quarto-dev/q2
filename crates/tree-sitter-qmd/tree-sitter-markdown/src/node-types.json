@@ -25,18 +25,7 @@
   {
     "type": "atx_heading",
     "named": true,
-    "fields": {
-      "heading_content": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "pandoc_paragraph",
-            "named": true
-          }
-        ]
-      }
-    },
+    "fields": {},
     "children": {
       "multiple": true,
       "required": true,
@@ -67,6 +56,10 @@
         },
         {
           "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "pandoc_paragraph",
           "named": true
         }
       ]
@@ -108,11 +101,19 @@
       "required": false,
       "types": [
         {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
           "type": "pandoc_soft_break",
           "named": true
         },
         {
           "type": "pandoc_space",
+          "named": true
+        },
+        {
+          "type": "pandoc_span",
           "named": true
         },
         {
@@ -205,10 +206,6 @@
           "named": true
         },
         {
-          "type": "pandoc_span",
-          "named": true
-        },
-        {
           "type": "section",
           "named": true
         }
@@ -224,6 +221,10 @@
       "required": false,
       "types": [
         {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
           "type": "block_continuation",
           "named": true
         },
@@ -233,6 +234,10 @@
         },
         {
           "type": "pandoc_space",
+          "named": true
+        },
+        {
+          "type": "pandoc_span",
           "named": true
         },
         {
@@ -317,10 +322,6 @@
         },
         {
           "type": "pandoc_paragraph",
-          "named": true
-        },
-        {
-          "type": "pandoc_span",
           "named": true
         },
         {

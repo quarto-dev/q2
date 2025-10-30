@@ -17,7 +17,6 @@ module.exports = grammar({
         _block_not_section: $ => choice(
             $.pandoc_paragraph,
             $.pandoc_block_quote,
-            $.pandoc_span,
 
             $._soft_line_break,
             $._newline
@@ -72,42 +71,36 @@ module.exports = grammar({
         _atx_heading1: $ => prec(1, seq(
             $.atx_h1_marker,
             optional($._atx_heading_content),
-            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading2: $ => prec(1, seq(
             $.atx_h2_marker,
             optional($._atx_heading_content),
-            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading3: $ => prec(1, seq(
             $.atx_h3_marker,
             optional($._atx_heading_content),
-            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading4: $ => prec(1, seq(
             $.atx_h4_marker,
             optional($._atx_heading_content),
-            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading5: $ => prec(1, seq(
             $.atx_h5_marker,
             optional($._atx_heading_content),
-            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading6: $ => prec(1, seq(
             $.atx_h6_marker,
             optional($._atx_heading_content),
-            // optional(alias($._qmd_attribute, $.attribute)),
             $._newline
         )),
         _atx_heading_content: $ => prec(1, seq(
             optional($._whitespace),
-            field('heading_content', $.pandoc_paragraph)
+            $.pandoc_paragraph
         )),
 
         _inlines: $ => seq(
@@ -180,7 +173,13 @@ module.exports = grammar({
 
         _line: $ => seq($._inline_element, repeat(seq(alias($._whitespace, $.pandoc_space), $._inline_element))),
 
-        _inline_element: $ => choice($.pandoc_str, $.prose_punctuation),
+        _inline_element: $ => choice(
+            $.pandoc_str, 
+            $.pandoc_span,
+
+            $.prose_punctuation,
+            $.attribute_specifier
+        ),
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,

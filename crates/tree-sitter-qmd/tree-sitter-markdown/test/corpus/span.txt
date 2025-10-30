@@ -5,12 +5,13 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier))))
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (attribute_specifier)))))
 ================================================================================
 2 (raw specifier)
 ================================================================================
@@ -18,13 +19,14 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (raw_specifier)))))
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (attribute_specifier
+              (raw_specifier))))))
 ================================================================================
 3 (raw reader syntax, qmd extension)
 ================================================================================
@@ -32,13 +34,14 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (raw_specifier)))))
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (attribute_specifier
+              (raw_specifier))))))
 ================================================================================
 4 (technically a type mismatch but syntax allows)
 ================================================================================
@@ -46,13 +49,14 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (language_specifier)))))
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (attribute_specifier
+              (language_specifier))))))
 ================================================================================
 5 - fenced language specifiers
 ================================================================================
@@ -60,62 +64,66 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (language_specifier
-              (language_specifier))))))
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (attribute_specifier
+              (language_specifier
+                (language_specifier)))))))
 ================================================================================
 6 - deeply nested language specifiers
 ================================================================================
 [a span]{{{{r}}}}
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (attribute_specifier
+          (language_specifier
             (language_specifier
               (language_specifier
-                (language_specifier
-                  (language_specifier))))))))
+                (language_specifier)))))))))
 ================================================================================
 7 - identifiers
 ================================================================================
 [a span]{#with_id}
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (commonmark_specifier
-              (attribute_id))))))
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_id)))))))
 ================================================================================
 8
 ================================================================================
 [a span]{#with_id .and_class}
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (commonmark_specifier
-              (attribute_id)
-              (attribute_class))))))
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_id)
+            (attribute_class)))))))
 ================================================================================
 9
 ================================================================================
@@ -123,56 +131,60 @@
 --------------------------------------------------------------------------------
 (document
   (section
-    (pandoc_span
-      (content
-        (pandoc_str)
-        (pandoc_space)
-        (pandoc_str))
-      (attribute_specifier
-        (commonmark_specifier
-          (attribute_class))))))
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)))))))
 ================================================================================
 10
 ================================================================================
 [a span]{key=value}
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_span
-          (content
-            (pandoc_str)
-            (pandoc_space)
-            (pandoc_str))
-          (attribute_specifier
-            (commonmark_specifier
-              (key_value_specifier
-                (key_value_key)
-                (key_value_value)))))))
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
 ================================================================================
 11
 ================================================================================
 []{}
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_span
-          (attribute_specifier))))
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier)))))
 ================================================================================
 12
 ================================================================================
 []{key1=value1 key2=value2}
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_span
-          (attribute_specifier
-            (commonmark_specifier
-              (key_value_specifier
-                (key_value_key)
-                (key_value_value))
-              (key_value_specifier
-                (key_value_key)
-                (key_value_value)))))))
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
 ================================================================================
 13
 ================================================================================
@@ -180,12 +192,13 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (attribute_specifier
-            (commonmark_specifier
-              (key_value_specifier
-                (key_value_key)
-                (key_value_value)))))))
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))
 ================================================================================
 14
 ================================================================================
@@ -193,28 +206,30 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (attribute_specifier
-            (commonmark_specifier
-              (key_value_specifier
-                (key_value_key)
-                (key_value_value)))))))
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))
 ================================================================================
 15
 ================================================================================
 []{key="123" value=345}
 --------------------------------------------------------------------------------
-(document
-    (section
-    (pandoc_span
-        (attribute_specifier
-        (commonmark_specifier
-            (key_value_specifier
-            (key_value_key)
-            (key_value_value))
-            (key_value_specifier
-            (key_value_key)
-            (key_value_value)))))))
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))
 ================================================================================
 16
 ================================================================================
@@ -222,24 +237,26 @@
 --------------------------------------------------------------------------------
     (document
       (section
-        (pandoc_span
-          (attribute_specifier
-            (commonmark_specifier
-              (attribute_class)
-              (key_value_specifier
-                (key_value_key)
-                (key_value_value)))))))
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))
 ================================================================================
 17
 ================================================================================
 []{#id key="123"}
 --------------------------------------------------------------------------------
-(document
-  (section
-    (pandoc_span
-      (attribute_specifier
-        (commonmark_specifier
-          (attribute_id)
-          (key_value_specifier
-            (key_value_key)
-            (key_value_value)))))))
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))

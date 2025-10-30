@@ -56,10 +56,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "pandoc_span"
-        },
-        {
-          "type": "SYMBOL",
           "name": "_soft_line_break"
         },
         {
@@ -570,12 +566,8 @@
             ]
           },
           {
-            "type": "FIELD",
-            "name": "heading_content",
-            "content": {
-              "type": "SYMBOL",
-              "name": "pandoc_paragraph"
-            }
+            "type": "SYMBOL",
+            "name": "pandoc_paragraph"
           }
         ]
       }
@@ -1046,7 +1038,15 @@
         },
         {
           "type": "SYMBOL",
+          "name": "pandoc_span"
+        },
+        {
+          "type": "SYMBOL",
           "name": "prose_punctuation"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "attribute_specifier"
         }
       ]
     },
