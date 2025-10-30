@@ -725,6 +725,66 @@
         }
       ]
     },
+    "pandoc_code_span": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_code_span_start"
+            },
+            "named": true,
+            "value": "code_span_delimiter"
+          },
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "REPEAT1",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "PATTERN",
+                    "value": "[^`]+"
+                  },
+                  {
+                    "type": "PATTERN",
+                    "value": "[`]"
+                  }
+                ]
+              }
+            },
+            "named": true,
+            "value": "content"
+          },
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_code_span_close"
+            },
+            "named": true,
+            "value": "code_span_delimiter"
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "attribute_specifier"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
+    },
     "attribute_specifier": {
       "type": "SEQ",
       "members": [
@@ -1114,6 +1174,10 @@
         {
           "type": "SYMBOL",
           "name": "pandoc_display_math"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pandoc_code_span"
         },
         {
           "type": "SYMBOL",

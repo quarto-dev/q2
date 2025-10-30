@@ -643,6 +643,14 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
         level++;
     }
     mark_end(s, lexer);
+
+    // we might need to open a code span at the start of a paragraph
+    if (valid_symbols[CODE_SPAN_START] && delimiter == '`' && level < 3) {
+        lexer->result_symbol = CODE_SPAN_START;
+        s->code_span_delimiter_length = level;
+        s->inside_code_span = 1;
+        return true;
+    }
     // If this is able to close a fenced code block then that is the only valid
     // interpretation. It can only close a fenced code block if the number of
     // backticks is at least the number of backticks of the opening delimiter.

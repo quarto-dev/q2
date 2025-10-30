@@ -2,11 +2,15 @@ module.exports = grammar({
     name: 'markdown',
 
     rules: {
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // document
+
         document: $ => seq(
             alias(prec.right(repeat($._block_not_section)), $.section),
             repeat($.section),
         ),
 
+        ///////////////////////////////////////////////////////////////////////////////////////////
         // BLOCK STRUCTURE
 
         // All blocks. Every block contains a trailing newline.
@@ -64,6 +68,7 @@ module.exports = grammar({
             repeat($._block_not_section)
         )),
 
+        ///////////////////////////////////////////////////////////////////////////////////////////
         // LEAF BLOCKS
 
         // An ATX heading. This is currently handled by the external scanner but maybe could be
@@ -106,6 +111,9 @@ module.exports = grammar({
             choice($._newline, $._eof)
         )),
 
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // inline nodes
+
         _inlines: $ => seq(
             $._line,
             repeat(seq(alias($._soft_line_break, $.pandoc_soft_break), $._line))
@@ -134,6 +142,19 @@ module.exports = grammar({
             /[^$]+/,
             '$$'
         ),
+
+        pandoc_code_span: $ => prec.right(seq(
+            alias($._code_span_start, $.code_span_delimiter),
+            // this is a goofy construction but it lets the external scanner in to 
+            // do add the code_span_code token
+            alias(repeat1(choice(
+                    /[^`]+/,
+                    /[`]/
+                )), $.content),
+            alias($._code_span_close, $.code_span_delimiter),
+            optional($.attribute_specifier)
+        )),
+        
 
         attribute_specifier: $ => seq(
             '{',
@@ -193,6 +214,7 @@ module.exports = grammar({
             $.pandoc_span,
             $.pandoc_math,
             $.pandoc_display_math,
+            $.pandoc_code_span,
 
             $.prose_punctuation,
             $.attribute_specifier
