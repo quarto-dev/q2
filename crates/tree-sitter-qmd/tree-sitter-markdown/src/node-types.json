@@ -753,6 +753,10 @@
           "named": true
         },
         {
+          "type": "pipe_table",
+          "named": true
+        },
+        {
           "type": "section",
           "named": true
         }
@@ -842,6 +846,10 @@
           "named": true
         },
         {
+          "type": "pipe_table",
+          "named": true
+        },
+        {
           "type": "section",
           "named": true
         }
@@ -898,6 +906,10 @@
         },
         {
           "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "pipe_table",
           "named": true
         },
         {
@@ -1020,6 +1032,10 @@
         },
         {
           "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "pipe_table",
           "named": true
         },
         {
@@ -1878,6 +1894,208 @@
     }
   },
   {
+    "type": "pipe_table",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "pipe_table_delimiter_row",
+          "named": true
+        },
+        {
+          "type": "pipe_table_header",
+          "named": true
+        },
+        {
+          "type": "pipe_table_row",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_table_cell",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "citation",
+          "named": true
+        },
+        {
+          "type": "comment",
+          "named": true
+        },
+        {
+          "type": "delete",
+          "named": true
+        },
+        {
+          "type": "edit_comment",
+          "named": true
+        },
+        {
+          "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "inline_note",
+          "named": true
+        },
+        {
+          "type": "insert",
+          "named": true
+        },
+        {
+          "type": "pandoc_code_span",
+          "named": true
+        },
+        {
+          "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_double_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_emph",
+          "named": true
+        },
+        {
+          "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_single_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_space",
+          "named": true
+        },
+        {
+          "type": "pandoc_span",
+          "named": true
+        },
+        {
+          "type": "pandoc_str",
+          "named": true
+        },
+        {
+          "type": "pandoc_strikeout",
+          "named": true
+        },
+        {
+          "type": "pandoc_strong",
+          "named": true
+        },
+        {
+          "type": "pandoc_subscript",
+          "named": true
+        },
+        {
+          "type": "pandoc_superscript",
+          "named": true
+        },
+        {
+          "type": "prose_punctuation",
+          "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_escaped",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_table_delimiter_cell",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "pipe_table_align_left",
+          "named": true
+        },
+        {
+          "type": "pipe_table_align_right",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_table_delimiter_row",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "pipe_table_delimiter_cell",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_table_header",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "pipe_table_cell",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_table_row",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "pipe_table_cell",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "prose_punctuation",
     "named": true,
     "fields": {},
@@ -1942,6 +2160,10 @@
         },
         {
           "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "pipe_table",
           "named": true
         },
         {
@@ -2079,6 +2301,10 @@
     "named": false
   },
   {
+    "type": "-",
+    "named": false
+  },
+  {
     "type": "=",
     "named": false
   },
@@ -2211,6 +2437,14 @@
     "named": true
   },
   {
+    "type": "pipe_table_align_left",
+    "named": true
+  },
+  {
+    "type": "pipe_table_align_right",
+    "named": true
+  },
+  {
     "type": "raw_specifier",
     "named": true
   },
@@ -2260,6 +2494,10 @@
   },
   {
     "type": "{",
+    "named": false
+  },
+  {
+    "type": "|",
     "named": false
   },
   {

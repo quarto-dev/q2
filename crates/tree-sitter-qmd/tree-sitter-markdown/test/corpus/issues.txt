@@ -1,0 +1,34 @@
+================================================================================
+#17 - Titles not detected after an empty inner list item (bullet point)
+================================================================================
+* a
+  * b
+  *
+
+
+# C
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation)))
+              (list_item
+                (list_marker_star)
+                (block_continuation)
+                (block_continuation))))))
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str))))
+          

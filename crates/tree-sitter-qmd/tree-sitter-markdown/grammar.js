@@ -26,6 +26,7 @@ module.exports = grammar({
             $.pandoc_code_block,
             $.pandoc_div,
             $.pandoc_horizontal_rule,
+            $.pipe_table,
 
             prec(-1, alias($.minus_metadata, $.metadata)),
 
@@ -86,7 +87,7 @@ module.exports = grammar({
         _atx_heading1: $ => prec(1, seq(
             $.atx_h1_marker,
             optional($._atx_heading_content),
-            $._newline
+            choice($._newline, $._eof)
         )),
         _atx_heading2: $ => prec(1, seq(
             $.atx_h2_marker,
@@ -129,14 +130,90 @@ module.exports = grammar({
             $.ref_id_specifier,
             $._whitespace,
             $.pandoc_paragraph),
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // pipe tables
+        
+        pipe_table: $ => prec.right(seq(
+            $._pipe_table_start,
+            alias($.pipe_table_row, $.pipe_table_header),
+            $._newline,
+            $.pipe_table_delimiter_row,
+            repeat(seq($._pipe_table_newline, optional($.pipe_table_row))),
+            choice($._newline, $._eof),
+        )),
+
+        _pipe_table_newline: $ => seq(
+            $._pipe_table_line_ending,
+            optional($.block_continuation)
+        ),
+
+        pipe_table_delimiter_row: $ => seq(
+            optional(seq(
+                optional($._whitespace),
+                '|',
+            )),
+            repeat1(prec.right(seq(
+                optional($._whitespace),
+                $.pipe_table_delimiter_cell,
+                optional($._whitespace),
+                '|',
+            ))),
+            optional($._whitespace),
+            optional(seq(
+                $.pipe_table_delimiter_cell,
+                optional($._whitespace)
+            )),
+        ),
+
+        pipe_table_delimiter_cell: $ => seq(
+            optional(alias(':', $.pipe_table_align_left)),
+            repeat1('-'),
+            optional(alias(':', $.pipe_table_align_right)),
+        ),
+
+        pipe_table_row: $ => prec(2, seq(
+            optional(seq(
+                optional($._whitespace),
+                '|',
+            )),
+            choice(
+                seq(
+                    repeat1(prec(2, prec.right(seq(
+                        choice(
+                            seq(
+                                optional($._whitespace),
+                                $.pipe_table_cell,
+                                optional($._whitespace)
+                            ),
+                            alias($._whitespace, $.pipe_table_cell)
+                        ),
+                        '|',
+                    )))),
+                    optional($._whitespace),
+                    optional(seq(
+                        $.pipe_table_cell,
+                        optional($._whitespace)
+                    )),
+                ),
+                seq(
+                    optional($._whitespace),
+                    $.pipe_table_cell,
+                    optional($._whitespace)
+                )
+            ),
+        )),
+
+        pipe_table_cell: $ => $._line_with_maybe_spaces,
+        
         
         ///////////////////////////////////////////////////////////////////////////////////////////
         // inline nodes
 
-        _inlines: $ => seq(
+        _inlines: $ => prec.right(seq(
             $._line,
             repeat(seq(alias($._soft_line_break, $.pandoc_soft_break), $._line))
-        ),
+        )),
 
 
         pandoc_span: $ => prec.right(seq(
@@ -285,7 +362,8 @@ module.exports = grammar({
         _commonmark_single_quote_string: $ => /['][^']*[']/,
         _commonmark_double_quote_string: $ => /["][^"]*["]/,
 
-        _line: $ => seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element))),
+        _line: $ => prec.right(seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element)))),
+        _line_with_maybe_spaces: $ => prec.right(repeat1(choice(alias($._whitespace, $.pandoc_space), $._inline_element))),
 
         _inline_element: $ => choice(
             $.pandoc_str, 
@@ -444,7 +522,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,
+        pandoc_str: $ => /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.)*/,
         prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // A blank line including the following newline.
