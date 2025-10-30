@@ -83,6 +83,10 @@
           "named": true
         },
         {
+          "type": "inline_note",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -236,6 +240,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "inline_note",
           "named": true
         },
         {
@@ -393,6 +401,105 @@
         },
         {
           "type": "highlight_delimiter",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "inline_note",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "citation",
+          "named": true
+        },
+        {
+          "type": "comment",
+          "named": true
+        },
+        {
+          "type": "delete",
+          "named": true
+        },
+        {
+          "type": "edit_comment",
+          "named": true
+        },
+        {
+          "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "inline_note",
+          "named": true
+        },
+        {
+          "type": "inline_note_delimiter",
+          "named": true
+        },
+        {
+          "type": "insert",
+          "named": true
+        },
+        {
+          "type": "pandoc_code_span",
+          "named": true
+        },
+        {
+          "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_double_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_single_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_soft_break",
+          "named": true
+        },
+        {
+          "type": "pandoc_space",
+          "named": true
+        },
+        {
+          "type": "pandoc_span",
+          "named": true
+        },
+        {
+          "type": "pandoc_str",
+          "named": true
+        },
+        {
+          "type": "prose_punctuation",
+          "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_escaped",
           "named": true
         }
       ]
@@ -976,6 +1083,10 @@
           "named": true
         },
         {
+          "type": "inline_note",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -1394,6 +1505,10 @@
   },
   {
     "type": "info_string",
+    "named": true
+  },
+  {
+    "type": "inline_note_delimiter",
     "named": true
   },
   {

@@ -308,6 +308,7 @@ module.exports = grammar({
             $.shortcode_escaped,
 
             $.citation,
+            $.inline_note,
 
             $.prose_punctuation,
             $.attribute_specifier
@@ -391,6 +392,11 @@ module.exports = grammar({
             ),
         ),
 
+        inline_note: $ => prec(2, seq(
+            alias("^[", $.inline_note_delimiter),
+            $._inlines,
+            alias("]", $.inline_note_delimiter),
+        )),
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,

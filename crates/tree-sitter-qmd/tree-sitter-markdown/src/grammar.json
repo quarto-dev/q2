@@ -1823,6 +1823,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "inline_note"
+        },
+        {
+          "type": "SYMBOL",
           "name": "prose_punctuation"
         },
         {
@@ -2236,6 +2240,37 @@
           ]
         }
       ]
+    },
+    "inline_note": {
+      "type": "PREC",
+      "value": 2,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "STRING",
+              "value": "^["
+            },
+            "named": true,
+            "value": "inline_note_delimiter"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_inlines"
+          },
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "STRING",
+              "value": "]"
+            },
+            "named": true,
+            "value": "inline_note_delimiter"
+          }
+        ]
+      }
     },
     "pandoc_str": {
       "type": "PATTERN",
