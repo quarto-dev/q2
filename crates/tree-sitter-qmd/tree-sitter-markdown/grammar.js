@@ -100,7 +100,8 @@ module.exports = grammar({
         )),
         _atx_heading_content: $ => prec(1, seq(
             optional($._whitespace),
-            $.pandoc_paragraph
+            $._inlines, 
+            choice($._newline, $._eof)
         )),
 
         _inlines: $ => seq(
@@ -113,11 +114,23 @@ module.exports = grammar({
             choice($._newline, $._eof)
         ),
 
-        pandoc_span: $ => seq(
+        pandoc_span: $ => prec.right(seq(
             '[',
             optional(alias($._inlines, $.content)),
             ']',
             optional($.attribute_specifier)
+        )),
+
+        pandoc_math: $ => seq(
+            '$',
+            /[^$ \t\n]([ \t]?[^$ \t\n]+)*/,
+            '$',
+        ),
+
+        pandoc_display_math: $ => seq(
+            '$$',
+            /[^$]+/,
+            '$$'
         ),
 
         attribute_specifier: $ => seq(
@@ -171,11 +184,13 @@ module.exports = grammar({
         _commonmark_single_quote_string: $ => /['][^']*[']/,
         _commonmark_double_quote_string: $ => /["][^"]*["]/,
 
-        _line: $ => seq($._inline_element, repeat(seq(alias($._whitespace, $.pandoc_space), $._inline_element))),
+        _line: $ => seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element))),
 
         _inline_element: $ => choice(
             $.pandoc_str, 
             $.pandoc_span,
+            $.pandoc_math,
+            $.pandoc_display_math,
 
             $.prose_punctuation,
             $.attribute_specifier

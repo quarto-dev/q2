@@ -567,7 +567,20 @@
           },
           {
             "type": "SYMBOL",
-            "name": "pandoc_paragraph"
+            "name": "_inlines"
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_newline"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_eof"
+              }
+            ]
           }
         ]
       }
@@ -625,44 +638,82 @@
       ]
     },
     "pandoc_span": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "["
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_inlines"
+                },
+                "named": true,
+                "value": "content"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          },
+          {
+            "type": "STRING",
+            "value": "]"
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "attribute_specifier"
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "pandoc_math": {
       "type": "SEQ",
       "members": [
         {
           "type": "STRING",
-          "value": "["
+          "value": "$"
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_inlines"
-              },
-              "named": true,
-              "value": "content"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
+          "type": "PATTERN",
+          "value": "[^$ \\t\\n]([ \\t]?[^$ \\t\\n]+)*"
         },
         {
           "type": "STRING",
-          "value": "]"
+          "value": "$"
+        }
+      ]
+    },
+    "pandoc_display_math": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "$$"
         },
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "attribute_specifier"
-            },
-            {
-              "type": "BLANK"
-            }
-          ]
+          "type": "PATTERN",
+          "value": "[^$]+"
+        },
+        {
+          "type": "STRING",
+          "value": "$$"
         }
       ]
     },
@@ -1012,13 +1063,21 @@
             "type": "SEQ",
             "members": [
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_whitespace"
-                },
-                "named": true,
-                "value": "pandoc_space"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_whitespace"
+                    },
+                    "named": true,
+                    "value": "pandoc_space"
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
               },
               {
                 "type": "SYMBOL",
@@ -1039,6 +1098,14 @@
         {
           "type": "SYMBOL",
           "name": "pandoc_span"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pandoc_math"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "pandoc_display_math"
         },
         {
           "type": "SYMBOL",

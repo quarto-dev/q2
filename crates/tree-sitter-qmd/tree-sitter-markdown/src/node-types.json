@@ -31,6 +31,10 @@
       "required": true,
       "types": [
         {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
           "type": "atx_h1_marker",
           "named": true
         },
@@ -59,7 +63,31 @@
           "named": true
         },
         {
-          "type": "pandoc_paragraph",
+          "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_soft_break",
+          "named": true
+        },
+        {
+          "type": "pandoc_space",
+          "named": true
+        },
+        {
+          "type": "pandoc_span",
+          "named": true
+        },
+        {
+          "type": "pandoc_str",
+          "named": true
+        },
+        {
+          "type": "prose_punctuation",
           "named": true
         }
       ]
@@ -102,6 +130,14 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_math",
           "named": true
         },
         {
@@ -213,6 +249,16 @@
     }
   },
   {
+    "type": "pandoc_display_math",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "pandoc_math",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "pandoc_paragraph",
     "named": true,
     "fields": {},
@@ -226,6 +272,14 @@
         },
         {
           "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "pandoc_display_math",
+          "named": true
+        },
+        {
+          "type": "pandoc_math",
           "named": true
         },
         {
@@ -330,6 +384,14 @@
         }
       ]
     }
+  },
+  {
+    "type": "$",
+    "named": false
+  },
+  {
+    "type": "$$",
+    "named": false
   },
   {
     "type": "=",

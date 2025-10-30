@@ -1,0 +1,66 @@
+================================================================================
+1
+================================================================================
+$e=mc^2$
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_math))))
+================================================================================
+2 (mismatched braces and other special characters inside math)
+================================================================================
+$e=m[[#]$
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_math))))
+================================================================================
+3 - spaces and more stuff in a paragraph
+================================================================================
+Math paragraph: $a b dc--[[]##$.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_math)
+          (pandoc_str))))
+================================================================================
+4 - display math
+================================================================================
+Math display extended inline: $$A long
+equation that spans
+many lines.
+and then finishes.
+$$ And the rest of the paragraph
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_display_math)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+          
