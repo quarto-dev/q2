@@ -304,9 +304,60 @@ module.exports = grammar({
             $.delete,
             $.edit_comment,
 
+            $.shortcode,
+            $.shortcode_escaped,
+
             $.prose_punctuation,
             $.attribute_specifier
         ),
+
+        // shortcodes
+        shortcode_escaped: $ => seq(
+            alias($._shortcode_open_escaped, $.shortcode_delimiter), // "{{{<",
+            $._whitespace,
+            $.shortcode_name,
+            repeat(seq($._whitespace, $._shortcode_value)),
+
+            repeat(seq($._whitespace, alias($._commonmark_key_value_specifier, $.key_value_specifier))),
+            $._whitespace,
+            alias($._shortcode_close_escaped, $.shortcode_delimiter), //">}}}",
+        ),
+
+        shortcode: $ => seq(
+            alias($._shortcode_open, $.shortcode_delimiter), // "{{<",
+            $._whitespace,
+            $.shortcode_name,
+            repeat(seq($._whitespace, $._shortcode_value)),
+
+            repeat(seq($._whitespace, alias($._shortcode_key_value_specifier, $.key_value_specifier))),
+            $._whitespace,
+
+            alias($._shortcode_close, $.shortcode_delimiter), //">}}",
+        ),
+
+        _shortcode_value: $ => choice($.shortcode_name, alias($._language_specifier_token, $.shortcode_naked_string), $.shortcode_naked_string, $.shortcode_string, $.shortcode, $.shortcode_number),
+
+        _shortcode_key_value_specifier: $ => seq(
+            alias($._key_specifier_token, $.key_value_key),
+            optional($._inline_whitespace),
+            '=',
+            optional($._inline_whitespace),
+            alias($._shortcode_value, $.key_value_value)
+        ),
+
+        shortcode_name: $ => token(prec(1, new RustRegex("[a-zA-Z_][a-zA-Z0-9_-]*"))),
+        shortcode_naked_string: $ => 
+            choice(token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$&()+,;-]|\[)+/)),
+                   token(prec(1, /(?:[A-Za-z0-9_.~:/?#\]@!$&()+,;-]|\[)+[?](?:[A-Za-z0-9_.~:/?#\]@!$&()+,;?=-]|\[)+/))),
+
+        // shortcode_string: $ => new RegExp("[a-zA-Z_][a-zA-Z0-9_-]*"),
+        shortcode_string: $ => choice(
+            $._commonmark_single_quote_string,
+            $._commonmark_double_quote_string,
+        ),
+        // // shortcode numbers are numbers as JSON sees them
+        // // https://stackoverflow.com/a/13340826
+        shortcode_number: $ => token(prec(3, /-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/)),
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,
@@ -611,6 +662,11 @@ module.exports = grammar({
         $._single_quote_span_close,
         $._double_quote_span_open,
         $._double_quote_span_close,
+
+        $._shortcode_open_escaped,
+        $._shortcode_close_escaped,
+        $._shortcode_open,
+        $._shortcode_close,
     ],
     precedences: $ => [],
     extras: $ => [],

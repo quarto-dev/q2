@@ -125,6 +125,14 @@
         {
           "type": "prose_punctuation",
           "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_escaped",
+          "named": true
         }
       ]
     }
@@ -245,6 +253,14 @@
         },
         {
           "type": "prose_punctuation",
+          "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_escaped",
           "named": true
         }
       ]
@@ -415,6 +431,37 @@
         },
         {
           "type": "key_value_value",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "key_value_value",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_naked_string",
+          "named": true
+        },
+        {
+          "type": "shortcode_name",
+          "named": true
+        },
+        {
+          "type": "shortcode_number",
+          "named": true
+        },
+        {
+          "type": "shortcode_string",
           "named": true
         }
       ]
@@ -940,6 +987,14 @@
         {
           "type": "prose_punctuation",
           "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_escaped",
+          "named": true
         }
       ]
     }
@@ -1074,6 +1129,94 @@
         }
       ]
     }
+  },
+  {
+    "type": "shortcode",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "key_value_specifier",
+          "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_delimiter",
+          "named": true
+        },
+        {
+          "type": "shortcode_naked_string",
+          "named": true
+        },
+        {
+          "type": "shortcode_name",
+          "named": true
+        },
+        {
+          "type": "shortcode_number",
+          "named": true
+        },
+        {
+          "type": "shortcode_string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "shortcode_escaped",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "key_value_specifier",
+          "named": true
+        },
+        {
+          "type": "shortcode",
+          "named": true
+        },
+        {
+          "type": "shortcode_delimiter",
+          "named": true
+        },
+        {
+          "type": "shortcode_naked_string",
+          "named": true
+        },
+        {
+          "type": "shortcode_name",
+          "named": true
+        },
+        {
+          "type": "shortcode_number",
+          "named": true
+        },
+        {
+          "type": "shortcode_string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "shortcode_naked_string",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "shortcode_string",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "target",
@@ -1215,10 +1358,6 @@
     "named": true
   },
   {
-    "type": "key_value_value",
-    "named": true
-  },
-  {
     "type": "metadata",
     "named": true
   },
@@ -1236,6 +1375,18 @@
   },
   {
     "type": "ref_id_specifier",
+    "named": true
+  },
+  {
+    "type": "shortcode_delimiter",
+    "named": true
+  },
+  {
+    "type": "shortcode_name",
+    "named": true
+  },
+  {
+    "type": "shortcode_number",
     "named": true
   },
   {

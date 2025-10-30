@@ -16,5 +16,4 @@ inlines:
 - underline, emphasis, superscript etc
 - citations
 - footnotes
-- quotes
 - shortcodes

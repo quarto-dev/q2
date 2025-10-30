@@ -92,6 +92,11 @@ typedef enum {
     SINGLE_QUOTE_CLOSE,
     DOUBLE_QUOTE_OPEN,
     DOUBLE_QUOTE_CLOSE,
+
+    SHORTCODE_OPEN_ESCAPED,
+    SHORTCODE_CLOSE_ESCAPED,
+    SHORTCODE_OPEN,
+    SHORTCODE_CLOSE,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -168,6 +173,11 @@ static char* token_names[] = {
     "SINGLE_QUOTE_CLOSE",
     "DOUBLE_QUOTE_OPEN",
     "DOUBLE_QUOTE_CLOSE",
+
+    "SHORTCODE_OPEN_ESCAPED",
+    "SHORTCODE_CLOSE_ESCAPED",
+    "SHORTCODE_OPEN",
+    "SHORTCODE_CLOSE",
 };
 
 #endif
@@ -284,6 +294,10 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // SINGLE_QUOTE_CLOSE
     false, // DOUBLE_QUOTE_OPEN
     false, // DOUBLE_QUOTE_CLOSE
+    false, // SHORTCODE_OPEN_ESCAPED,
+    false, // SHORTCODE_CLOSE_ESCAPED,
+    false, // SHORTCODE_OPEN,
+    false, // SHORTCODE_CLOSE,
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -352,6 +366,10 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // SINGLE_QUOTE_CLOSE
     false, // DOUBLE_QUOTE_OPEN
     false, // DOUBLE_QUOTE_CLOSE
+    false, // SHORTCODE_OPEN_ESCAPED,
+    false, // SHORTCODE_CLOSE_ESCAPED,
+    false, // SHORTCODE_OPEN,
+    false, // SHORTCODE_CLOSE,
 };
 
 // State bitflags used with `Scanner.state`
@@ -1918,6 +1936,69 @@ static bool parse_double_quote(Scanner *s, TSLexer *lexer, const bool *valid_sym
     return false;
 }
 
+static bool parse_shortcode_close(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    if (lexer->lookahead != '>') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    if (!valid_symbols[SHORTCODE_CLOSE] && !valid_symbols[SHORTCODE_CLOSE_ESCAPED]) {
+        return false;
+    }
+    if (lexer->eof(lexer) || lexer->lookahead != '}') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    if (lexer->eof(lexer) || lexer->lookahead != '}') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    if (!lexer->eof(lexer) && lexer->lookahead == '}' && valid_symbols[SHORTCODE_CLOSE_ESCAPED]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SHORTCODE_CLOSE_ESCAPED;
+        return true;
+    }
+    if (!valid_symbols[SHORTCODE_CLOSE]) {
+        return false;
+    }
+    lexer->mark_end(lexer);
+    lexer->result_symbol = SHORTCODE_CLOSE;
+    return true;
+}
+
+static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    if (lexer->lookahead != '{') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    if ((!valid_symbols[SHORTCODE_OPEN] && 
+         !valid_symbols[SHORTCODE_OPEN_ESCAPED]) || 
+         lexer->eof(lexer) || 
+         lexer->lookahead != '{') {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    if (!lexer->eof(lexer) && lexer->lookahead == '<' && valid_symbols[SHORTCODE_OPEN]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SHORTCODE_OPEN;
+        return true;
+    }
+
+    if (lexer->eof(lexer) || lexer->lookahead != '{' || !valid_symbols[SHORTCODE_OPEN_ESCAPED]) {
+        return false;
+    }
+
+    lexer->advance(lexer, false);
+    if (lexer->eof(lexer) || lexer->lookahead != '<' || !valid_symbols[SHORTCODE_OPEN]) {
+        return false;
+    }
+    lexer->advance(lexer, false);
+    lexer->mark_end(lexer);
+    lexer->result_symbol = SHORTCODE_OPEN_ESCAPED;
+    return true;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Don't parse HTML comments or track math state when inside a fenced code block -
     // these characters should be literal
@@ -2093,8 +2174,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case '_':
                 return parse_thematic_break_underscore(s, lexer, valid_symbols);
             case '>':
-                // A '>' could mark the beginning of a block quote
-                return parse_block_quote(s, lexer, valid_symbols);
+                // A '>' could mark the closing of shortcodes or the beginning of a block quote 
+                if (valid_symbols[SHORTCODE_CLOSE] || valid_symbols[SHORTCODE_CLOSE_ESCAPED]) {
+                    return parse_shortcode_close(s, lexer, valid_symbols);
+                } else {
+                    return parse_block_quote(s, lexer, valid_symbols);
+                }
             case '#':
                 // A '#' could mark a atx heading
                 return parse_atx_heading(s, lexer, valid_symbols);
@@ -2147,6 +2232,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 return parse_single_quote(s, lexer, valid_symbols);
             case '"':
                 return parse_double_quote(s, lexer, valid_symbols);
+            case '{':
+                if (valid_symbols[SHORTCODE_OPEN] || valid_symbols[SHORTCODE_OPEN_ESCAPED]) {
+                    return parse_shortcode_open(s, lexer, valid_symbols);
+                }
         }
         DEBUG_HERE;
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
