@@ -1,0 +1,99 @@
+================================================================================
+1
+================================================================================
+* hello
+* world
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+2
+================================================================================
+* hello
+  * nested
+  * world
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation)))
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str))))))))
+================================================================================
+3
+================================================================================
+* hello
+  * a $$display math with a
+      * b$$
+  * and then more lists
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_display_math)
+                  (block_continuation)))
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str))))))))
+================================================================================
+4
+================================================================================
+1. item
+2. item
+3. item
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
+        

@@ -1,0 +1,64 @@
+================================================================================
+1
+================================================================================
+````{r}
+asdf
+```
+stuff
+````
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)
+            (block_continuation)
+            (block_continuation))
+          (fenced_code_block_delimiter))))
+================================================================================
+2
+================================================================================
+> ```python
+> Nested
+> ```
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_code_block
+            (fenced_code_block_delimiter)
+            (info_string)
+            (block_continuation)
+            (code_fence_content
+              (block_continuation))))))
+================================================================================
+3
+================================================================================
+* ```
+  in list
+  ```
+* then more
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_code_block
+              (fenced_code_block_delimiter)
+              (block_continuation)
+              (code_fence_content
+                (block_continuation))
+              (fenced_code_block_delimiter)))
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))

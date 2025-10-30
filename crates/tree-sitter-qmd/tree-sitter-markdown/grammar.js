@@ -17,6 +17,8 @@ module.exports = grammar({
         _block_not_section: $ => choice(
             $.pandoc_paragraph,
             $.pandoc_block_quote,
+            $.pandoc_list,
+            $.pandoc_code_block,
 
             $._soft_line_break,
             $._newline
@@ -207,6 +209,7 @@ module.exports = grammar({
 
         // CONTAINER BLOCKS
 
+        ///////////////////////////////////////////////////////////////////////////////////////////
         // A block quote. This is the most basic example of a container block handled by the
         // external scanner.
         //
@@ -219,6 +222,110 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
 
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // A list. This grammar does not differentiate between loose and tight lists for efficiency
+        // reasons.
+        //
+        // Lists can only contain list items with list markers of the same type. List items are
+        // handled by the external scanner.
+        //
+        // https://github.github.com/gfm/#lists
+        pandoc_list: $ => prec.right(choice(
+            $._list_plus,
+            $._list_minus,
+            $._list_star,
+            $._list_dot,
+            $._list_parenthesis,
+            $._list_example
+        )),
+        _list_plus: $ => prec.right(repeat1(alias($._list_item_plus, $.list_item))),
+        _list_minus: $ => prec.right(repeat1(alias($._list_item_minus, $.list_item))),
+        _list_star: $ => prec.right(repeat1(alias($._list_item_star, $.list_item))),
+        _list_dot: $ => prec.right(repeat1(alias($._list_item_dot, $.list_item))),
+        _list_parenthesis: $ => prec.right(repeat1(alias($._list_item_parenthesis, $.list_item))),
+        _list_example: $ => prec.right(repeat1(alias($._list_item_example, $.list_item))),
+        // Some list items can not interrupt a paragraph and are marked as such by the external
+        // scanner.
+        list_marker_plus: $ => choice($._list_marker_plus, $._list_marker_plus_dont_interrupt),
+        list_marker_minus: $ => choice($._list_marker_minus, $._list_marker_minus_dont_interrupt),
+        list_marker_star: $ => choice($._list_marker_star, $._list_marker_star_dont_interrupt),
+        list_marker_dot: $ => choice($._list_marker_dot, $._list_marker_dot_dont_interrupt),
+        list_marker_parenthesis: $ => choice($._list_marker_parenthesis, $._list_marker_parenthesis_dont_interrupt),
+        list_marker_example: $ => choice($._list_marker_example, $._list_marker_example_dont_interrupt),
+        _list_item_plus: $ => seq(
+            $.list_marker_plus,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        _list_item_minus: $ => seq(
+            $.list_marker_minus,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        _list_item_star: $ => seq(
+            $.list_marker_star,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        _list_item_dot: $ => seq(
+            $.list_marker_dot,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        _list_item_parenthesis: $ => seq(
+            $.list_marker_parenthesis,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        _list_item_example: $ => seq(
+            $.list_marker_example,
+            optional($.block_continuation),
+            $._list_item_content,
+            $._block_close,
+            optional($.block_continuation)
+        ),
+        // List items are closed after two consecutive blank lines
+        _list_item_content: $ => choice(
+            prec(1, seq(
+                $._blank_line,
+                $._blank_line,
+                $._close_block,
+                optional($.block_continuation)
+            )),
+            repeat1($._block),
+        ),
+
+        ///////////////////////////////////////////////////////////////////////////////////////////
+        // A fenced code block. Fenced code blocks are mainly handled by the external scanner. In
+        // case of backtick code blocks the external scanner also checks that the info string is
+        // proper.
+        //
+        // https://github.github.com/gfm/#fenced-code-blocks
+        pandoc_code_block: $ => prec.right(choice(
+            seq(
+                alias($._fenced_code_block_start_backtick, $.fenced_code_block_delimiter),
+                optional($._whitespace),
+                optional(choice(alias($._commonmark_naked_value, $.info_string), $.attribute_specifier)),
+                $._newline,
+                optional($.code_fence_content),
+                optional(seq(alias($._fenced_code_block_end_backtick, $.fenced_code_block_delimiter), $._close_block, choice($._newline, $._eof))),
+                $._block_close,
+            ),
+        )),
+        code_fence_content: $ => repeat1(choice($._newline, $._code_line)),
+        _code_line:         $ => /[^\n]+/,
+        
+        ///////////////////////////////////////////////////////////////////////////////////////////
         // Newlines as in the spec. Parsing a newline triggers the matching process by making
         // the external parser emit a `$._line_ending`.
         _newline: $ => seq(

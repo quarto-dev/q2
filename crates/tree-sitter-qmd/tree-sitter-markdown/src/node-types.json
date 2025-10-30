@@ -94,6 +94,21 @@
     }
   },
   {
+    "type": "code_fence_content",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "commonmark_specifier",
     "named": true,
     "fields": {},
@@ -218,6 +233,95 @@
     }
   },
   {
+    "type": "list_item",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "list_marker_dot",
+          "named": true
+        },
+        {
+          "type": "list_marker_example",
+          "named": true
+        },
+        {
+          "type": "list_marker_minus",
+          "named": true
+        },
+        {
+          "type": "list_marker_parenthesis",
+          "named": true
+        },
+        {
+          "type": "list_marker_plus",
+          "named": true
+        },
+        {
+          "type": "list_marker_star",
+          "named": true
+        },
+        {
+          "type": "pandoc_block_quote",
+          "named": true
+        },
+        {
+          "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_list",
+          "named": true
+        },
+        {
+          "type": "pandoc_paragraph",
+          "named": true
+        },
+        {
+          "type": "section",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "list_marker_dot",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "list_marker_example",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "list_marker_minus",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "list_marker_parenthesis",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "list_marker_plus",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "list_marker_star",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "pandoc_block_quote",
     "named": true,
     "fields": {},
@@ -238,6 +342,14 @@
           "named": true
         },
         {
+          "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_list",
+          "named": true
+        },
+        {
           "type": "pandoc_paragraph",
           "named": true
         },
@@ -249,9 +361,55 @@
     }
   },
   {
+    "type": "pandoc_code_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "code_fence_content",
+          "named": true
+        },
+        {
+          "type": "fenced_code_block_delimiter",
+          "named": true
+        },
+        {
+          "type": "info_string",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "pandoc_display_math",
     "named": true,
     "fields": {}
+  },
+  {
+    "type": "pandoc_list",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "list_item",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "pandoc_math",
@@ -375,6 +533,14 @@
           "named": true
         },
         {
+          "type": "pandoc_code_block",
+          "named": true
+        },
+        {
+          "type": "pandoc_list",
+          "named": true
+        },
+        {
           "type": "pandoc_paragraph",
           "named": true
         },
@@ -443,6 +609,14 @@
   },
   {
     "type": "block_quote_marker",
+    "named": true
+  },
+  {
+    "type": "fenced_code_block_delimiter",
+    "named": true
+  },
+  {
+    "type": "info_string",
     "named": true
   },
   {
