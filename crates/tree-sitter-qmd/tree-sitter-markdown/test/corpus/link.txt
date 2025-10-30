@@ -1,0 +1,56 @@
+================================================================================
+1 - note how links are spans with targets
+================================================================================
+[a link](./a-page.qmd)
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (target
+              (url))))))
+================================================================================
+2 - targets can have titles
+================================================================================
+[a link](./a-page.qmd "a title")
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))
+            (target
+              (url)
+              (title))))))
+================================================================================
+3 - spans nest (even though links technically don't, shrug)
+================================================================================
+[a [nested span]{.class}](./link){#id}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_span
+                (content
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str))
+                (attribute_specifier
+                  (commonmark_specifier
+                    (attribute_class)))))
+            (target
+              (url))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)))))))

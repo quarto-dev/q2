@@ -528,6 +528,10 @@
         {
           "type": "content",
           "named": true
+        },
+        {
+          "type": "target",
+          "named": true
         }
       ]
     }
@@ -587,11 +591,38 @@
     }
   },
   {
+    "type": "target",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "title",
+          "named": true
+        },
+        {
+          "type": "url",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "$",
     "named": false
   },
   {
     "type": "$$",
+    "named": false
+  },
+  {
+    "type": ")",
     "named": false
   },
   {
@@ -604,6 +635,10 @@
   },
   {
     "type": "]",
+    "named": false
+  },
+  {
+    "type": "](",
     "named": false
   },
   {
@@ -676,6 +711,14 @@
   },
   {
     "type": "raw_specifier",
+    "named": true
+  },
+  {
+    "type": "title",
+    "named": true
+  },
+  {
+    "type": "url",
     "named": true
   },
   {

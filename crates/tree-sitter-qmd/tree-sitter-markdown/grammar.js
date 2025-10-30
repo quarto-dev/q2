@@ -127,9 +127,19 @@ module.exports = grammar({
         pandoc_span: $ => prec.right(seq(
             '[',
             optional(alias($._inlines, $.content)),
-            ']',
+            choice(
+                $.target,
+                ']',
+            ),
             optional($.attribute_specifier)
         )),
+
+        target: $ => seq(
+            '](', 
+            alias(/[^ \t)]+/, $.url),
+            optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
+            ')'
+        ),
 
         pandoc_math: $ => seq(
             '$',
@@ -155,7 +165,6 @@ module.exports = grammar({
             optional($.attribute_specifier)
         )),
         
-
         attribute_specifier: $ => seq(
             '{',
             optional(choice(

@@ -673,8 +673,17 @@
             ]
           },
           {
-            "type": "STRING",
-            "value": "]"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "target"
+              },
+              {
+                "type": "STRING",
+                "value": "]"
+              }
+            ]
           },
           {
             "type": "CHOICE",
@@ -690,6 +699,54 @@
           }
         ]
       }
+    },
+    "target": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "]("
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "PATTERN",
+            "value": "[^ \\t)]+"
+          },
+          "named": true,
+          "value": "url"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_inline_whitespace"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_commonmark_double_quote_string"
+                  },
+                  "named": true,
+                  "value": "title"
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        }
+      ]
     },
     "pandoc_math": {
       "type": "SEQ",
