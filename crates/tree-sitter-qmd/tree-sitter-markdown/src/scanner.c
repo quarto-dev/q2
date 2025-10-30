@@ -102,6 +102,14 @@ typedef enum {
     CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
     CITE_AUTHOR_IN_TEXT,
     CITE_SUPPRESS_AUTHOR,
+
+    STRIKEOUT_OPEN,
+    STRIKEOUT_CLOSE,
+    SUBSCRIPT_OPEN,
+    SUBSCRIPT_CLOSE,
+    SUPERSCRIPT_OPEN,
+    SUPERSCRIPT_CLOSE,
+    INLINE_NOTE_START_TOKEN,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -188,6 +196,14 @@ static char* token_names[] = {
     "CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET",
     "CITE_AUTHOR_IN_TEXT",
     "CITE_SUPPRESS_AUTHOR",
+
+    "STRIKEOUT_OPEN",
+    "STRIKEOUT_CLOSE",
+    "SUBSCRIPT_OPEN",
+    "SUBSCRIPT_CLOSE",
+    "SUPERSCRIPT_OPEN",
+    "SUPERSCRIPT_CLOSE",
+    "INLINE_NOTE_START_TOKEN",
 };
 
 #endif
@@ -312,6 +328,13 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
     false, // CITE_AUTHOR_IN_TEXT,
     false, // CITE_SUPPRESS_AUTHOR,
+    false, // STRIKEOUT_OPEN
+    false, // STRIKEOUT_CLOSE
+    false, // SUBSCRIPT_OPEN
+    false, // SUBSCRIPT_CLOSE
+    false, // SUPERSCRIPT_OPEN,
+    false, // SUPERSCRIPT_CLOSE,
+    false, // INLINE_NOTE_START_TOKEN,
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -388,6 +411,13 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
     false, // CITE_AUTHOR_IN_TEXT,
     false, // CITE_SUPPRESS_AUTHOR,
+    false, // STRIKEOUT_OPEN
+    false, // STRIKEOUT_CLOSE
+    false, // SUBSCRIPT_OPEN
+    false, // SUBSCRIPT_CLOSE
+    false, // SUPERSCRIPT_OPEN,
+    false, // SUPERSCRIPT_CLOSE,
+    false, // INLINE_NOTE_START_TOKEN,
 };
 
 // State bitflags used with `Scanner.state`
@@ -2056,6 +2086,58 @@ static bool parse_cite_author_in_text(Scanner *_, TSLexer *lexer,
     return false;
 }
 
+static bool parse_tilde(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    lexer->advance(lexer, false);
+    if (lexer->lookahead == '~' && valid_symbols[STRIKEOUT_CLOSE]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        lexer->result_symbol = STRIKEOUT_CLOSE;
+        return true;
+    }
+    if (lexer->lookahead == '~' && valid_symbols[STRIKEOUT_OPEN]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        lexer->result_symbol = STRIKEOUT_OPEN;
+        return true;
+    }
+    if (valid_symbols[SUBSCRIPT_CLOSE]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SUBSCRIPT_CLOSE;
+        return true;
+    }
+    if (valid_symbols[SUBSCRIPT_OPEN]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SUBSCRIPT_OPEN;
+        return true;
+    }
+    return false;
+}
+
+static bool parse_caret(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[FENCED_DIV_NOTE_ID]) {
+        return parse_fenced_div_note_id(s, lexer, valid_symbols);
+    }
+    lexer->advance(lexer, false);
+    if (lexer->lookahead == '[' && valid_symbols[INLINE_NOTE_START_TOKEN]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        lexer->result_symbol = INLINE_NOTE_START_TOKEN;
+        return true;
+
+    }
+    if (valid_symbols[SUPERSCRIPT_CLOSE]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SUPERSCRIPT_CLOSE;
+        return true;
+    }
+    if (valid_symbols[SUPERSCRIPT_OPEN]) {
+        lexer->mark_end(lexer);
+        lexer->result_symbol = SUPERSCRIPT_OPEN;
+        return true;
+    }
+    return false;
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Don't parse HTML comments or track math state when inside a fenced code block -
     // these characters should be literal
@@ -2221,9 +2303,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 #endif
                 return parse_fenced_code_block(s, '`', lexer, valid_symbols);
             case '~':
-                // A tilde could mark the beginning or ending of a fenced code
-                // block.
-                return parse_fenced_code_block(s, '~', lexer, valid_symbols);
+                // A tilde could be strikeout or subscript.
+                return parse_tilde(s, lexer, valid_symbols);
             case '*':
                 // A star could either mark  a list item or a thematic break.
                 // This code is similar to the code for '_' and '+'.
@@ -2278,8 +2359,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 break;
             case '^':
-                if (valid_symbols[FENCED_DIV_NOTE_ID]) {
-                    return parse_fenced_div_note_id(s, lexer, valid_symbols);
+                if (valid_symbols[FENCED_DIV_NOTE_ID] || valid_symbols[SUPERSCRIPT_CLOSE] || valid_symbols[SUPERSCRIPT_OPEN]) {
+                    return parse_caret(s, lexer, valid_symbols);
                 }
                 break;
             case '(':

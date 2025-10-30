@@ -14,4 +14,3 @@ blocks:
 inlines:
 
 - underline, emphasis, superscript etc
-- footnotes

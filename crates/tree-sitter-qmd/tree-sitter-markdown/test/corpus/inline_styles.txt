@@ -1,0 +1,54 @@
+================================================================================
+subscript
+================================================================================
+this is water: H~2~O.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_subscript
+            (subscript_delimiter)
+            (pandoc_str)
+            (subscript_delimiter))
+          (pandoc_str))))
+================================================================================
+strikeout
+================================================================================
+things are going ~~terribly~~great.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_strikeout
+            (strikeout_delimiter)
+            (pandoc_str)
+            (strikeout_delimiter))
+          (pandoc_str))))
+================================================================================
+superscript
+================================================================================
+Fancy Product^TM^.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_superscript
+            (superscript_delimiter)
+            (pandoc_str)
+            (superscript_delimiter))
+          (pandoc_str))))

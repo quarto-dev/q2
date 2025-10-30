@@ -310,6 +310,10 @@ module.exports = grammar({
             $.citation,
             $.inline_note,
 
+            $.pandoc_superscript,
+            $.pandoc_subscript,
+            $.pandoc_strikeout,
+
             $.prose_punctuation,
             $.attribute_specifier
         ),
@@ -393,10 +397,29 @@ module.exports = grammar({
         ),
 
         inline_note: $ => prec(2, seq(
-            alias("^[", $.inline_note_delimiter),
+            alias($._inline_note_start_token, $.inline_note_delimiter),
             $._inlines,
             alias("]", $.inline_note_delimiter),
         )),
+
+        pandoc_superscript: $ => seq(
+            alias($._superscript_open, $.superscript_delimiter),
+            $._inlines,
+            alias($._superscript_close, $.superscript_delimiter),
+        ),
+
+        pandoc_subscript: $ => seq(
+            alias($._subscript_open, $.subscript_delimiter),
+            $._inlines,
+            alias($._subscript_close, $.subscript_delimiter),
+        ),
+
+        pandoc_strikeout: $ => seq(
+            alias($._strikeout_open, $.strikeout_delimiter),
+            $._inlines,
+            alias($._strikeout_close, $.strikeout_delimiter),
+        ),
+
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /[0-9A-Za-z%&()+-/][0-9A-Za-z!%&()+,./;?:-]*/,
@@ -711,6 +734,14 @@ module.exports = grammar({
         $._cite_suppress_author_with_open_bracket,
         $._cite_author_in_text,
         $._cite_suppress_author,
+
+        $._strikeout_open,
+        $._strikeout_close,
+        $._subscript_open,
+        $._subscript_close,
+        $._superscript_open,
+        $._superscript_close,
+        $._inline_note_start_token,
     ],
     precedences: $ => [],
     extras: $ => [],
