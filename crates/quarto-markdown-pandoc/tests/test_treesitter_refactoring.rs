@@ -1138,3 +1138,216 @@ fn test_backslash_before_letter() {
         result
     );
 }
+
+// ============================================================================
+// Link Tests
+// ============================================================================
+
+/// Test basic link
+#[test]
+fn test_link_basic() {
+    let input = "[link text](https://example.com)";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Link"), "Should contain Link: {}", result);
+    assert!(
+        result.contains("\"https://example.com\""),
+        "Should contain URL: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"link\""),
+        "Should contain link text: {}",
+        result
+    );
+}
+
+/// Test link with title
+#[test]
+fn test_link_with_title() {
+    let input = r#"[link](url "title text")"#;
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Link"), "Should contain Link: {}", result);
+    assert!(result.contains("\"url\""), "Should contain URL: {}", result);
+    assert!(
+        result.contains("\"title text\""),
+        "Should contain title: {}",
+        result
+    );
+}
+
+/// Test link in context
+#[test]
+fn test_link_in_context() {
+    let input = "text [link](url) more";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain leading text: {}",
+        result
+    );
+    assert!(result.contains("Link"), "Should contain Link: {}", result);
+    assert!(
+        result.contains("Str \"more\""),
+        "Should contain trailing text: {}",
+        result
+    );
+}
+
+/// Test link with attributes
+#[test]
+fn test_link_with_attributes() {
+    let input = "[link](url){#myid .class}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Link"), "Should contain Link: {}", result);
+    assert!(result.contains("\"myid\""), "Should contain id: {}", result);
+    assert!(
+        result.contains("\"class\""),
+        "Should contain class: {}",
+        result
+    );
+}
+
+/// Test link with nested formatting
+#[test]
+fn test_link_with_formatting() {
+    let input = "[**bold** text](url)";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Link"), "Should contain Link: {}", result);
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Span Tests
+// ============================================================================
+
+/// Test basic span
+#[test]
+fn test_span_basic() {
+    let input = "[text]{.class}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Span"), "Should contain Span: {}", result);
+    assert!(
+        result.contains("\"class\""),
+        "Should contain class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain text: {}",
+        result
+    );
+}
+
+/// Test span with full attributes
+#[test]
+fn test_span_with_full_attributes() {
+    let input = r#"[text]{#myid .c1 .c2 key="value"}"#;
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Span"), "Should contain Span: {}", result);
+    assert!(result.contains("\"myid\""), "Should contain id: {}", result);
+    assert!(result.contains("\"c1\""), "Should contain c1: {}", result);
+    assert!(result.contains("\"c2\""), "Should contain c2: {}", result);
+    assert!(result.contains("\"key\""), "Should contain key: {}", result);
+    assert!(
+        result.contains("\"value\""),
+        "Should contain value: {}",
+        result
+    );
+}
+
+/// Test span with empty attributes - QMD difference!
+#[test]
+fn test_span_empty_attributes() {
+    let input = "[text]{}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // QMD produces Span with empty attributes
+    assert!(result.contains("Span"), "Should contain Span: {}", result);
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain text: {}",
+        result
+    );
+}
+
+/// Test bare brackets - QMD difference!
+#[test]
+fn test_bare_brackets() {
+    let input = "[text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // QMD produces Span with empty attributes (differs from Pandoc)
+    assert!(result.contains("Span"), "Should contain Span: {}", result);
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain text: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Image Tests
+// ============================================================================
+
+/// Test basic image (inline)
+#[test]
+fn test_image_basic() {
+    let input = "text ![alt](img.png) more";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Image"), "Should contain Image: {}", result);
+    assert!(
+        result.contains("\"img.png\""),
+        "Should contain URL: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"alt\""),
+        "Should contain alt text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain leading text: {}",
+        result
+    );
+}
+
+/// Test image with title
+#[test]
+fn test_image_with_title() {
+    let input = r#"![alt](img.png "title text")"#;
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Image"), "Should contain Image: {}", result);
+    assert!(
+        result.contains("\"title text\""),
+        "Should contain title: {}",
+        result
+    );
+}
+
+/// Test image with attributes
+#[test]
+fn test_image_with_attributes() {
+    let input = "![alt](img.png){.class}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Image"), "Should contain Image: {}", result);
+    assert!(
+        result.contains("\"class\""),
+        "Should contain class: {}",
+        result
+    );
+}
