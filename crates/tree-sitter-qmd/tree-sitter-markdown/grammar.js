@@ -591,7 +591,7 @@ module.exports = grammar({
         _list_item_minus: $ => seq(
             $.list_marker_minus,
             optional($.block_continuation),
-            optional($._list_item_content),
+            $._list_item_content,
             $._block_close,
             optional($.block_continuation)
         ),
