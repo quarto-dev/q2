@@ -1646,6 +1646,7 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
 static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // unused
     (void)(valid_symbols);
+    (void)(s);
     
     if (lexer->lookahead != '^') {
         return false;
@@ -2045,6 +2046,9 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
 }
 
 static bool parse_single_quote(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     if (lexer->lookahead != '\'') {
         return false;
     }
@@ -2064,6 +2068,9 @@ static bool parse_single_quote(Scanner *s, TSLexer *lexer, const bool *valid_sym
 }
 
 static bool parse_double_quote(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     if (lexer->lookahead != '"') {
         return false;
     }
@@ -2083,6 +2090,9 @@ static bool parse_double_quote(Scanner *s, TSLexer *lexer, const bool *valid_sym
 }
 
 static bool parse_shortcode_close(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     if (lexer->lookahead != '>') {
         return false;
     }
@@ -2113,6 +2123,9 @@ static bool parse_shortcode_close(Scanner *s, TSLexer *lexer, const bool *valid_
 }
 
 static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     if (lexer->lookahead != '{') {
         return false;
     }
@@ -2145,8 +2158,11 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
     return true;
 }
 
-static bool parse_cite_author_in_text(Scanner *_, TSLexer *lexer,
+static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
                                       const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     lexer->advance(lexer, false);
     if (lexer->lookahead == '{' && valid_symbols[CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET]) {
         lexer->advance(lexer, false);
@@ -2164,6 +2180,9 @@ static bool parse_cite_author_in_text(Scanner *_, TSLexer *lexer,
 }
 
 static bool parse_tilde(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+
     lexer->advance(lexer, false);
     if (lexer->lookahead == '~' && valid_symbols[STRIKEOUT_CLOSE]) {
         lexer->advance(lexer, false);
