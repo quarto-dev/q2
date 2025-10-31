@@ -20,7 +20,7 @@ pub fn process_commonmark_attribute(
 
     children.into_iter().for_each(|(node, child)| match child {
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-            if node == "id_specifier" {
+            if node == "attribute_id" {
                 attr.0 = text;
                 // Track source location of id (empty id gets None)
                 attr_source.id = if attr.0.is_empty() {
@@ -28,7 +28,7 @@ pub fn process_commonmark_attribute(
                 } else {
                     Some(SourceInfo::from_range(context.current_file_id(), range))
                 };
-            } else if node == "class_specifier" {
+            } else if node == "attribute_class" {
                 attr.1.push(text);
                 // Track source location of this class
                 attr_source.classes.push(Some(SourceInfo::from_range(

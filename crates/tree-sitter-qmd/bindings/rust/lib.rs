@@ -29,12 +29,10 @@ unsafe extern "C" {
 pub const LANGUAGE: LanguageFn = unsafe { LanguageFn::from_raw(tree_sitter_markdown) };
 
 /// The syntax highlighting queries for the markdown grammar.
-pub const HIGHLIGHT_QUERY: &str =
-    include_str!("../../tree-sitter-markdown/queries/highlights.scm");
+pub const HIGHLIGHT_QUERY: &str = include_str!("../../tree-sitter-markdown/queries/highlights.scm");
 
 /// The language injection queries for the markdown grammar.
-pub const INJECTION_QUERY: &str =
-    include_str!("../../tree-sitter-markdown/queries/injections.scm");
+pub const INJECTION_QUERY: &str = include_str!("../../tree-sitter-markdown/queries/injections.scm");
 
 /// The content of the [`node-types.json`][] file for the markdown grammar.
 ///

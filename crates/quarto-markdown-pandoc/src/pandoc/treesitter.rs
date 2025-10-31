@@ -751,6 +751,93 @@ fn native_visitor<T: Write>(
             // Return the text range so parent can extract it
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
+        // Attribute-related nodes
+        "{" | "}" | "=" => {
+            // Delimiter nodes for attributes - marker only
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "attribute_id" => {
+            // Extract ID, strip leading '#'
+            let text = node.utf8_text(input_bytes).unwrap();
+            let id = if text.starts_with('#') {
+                &text[1..]
+            } else {
+                text
+            };
+            PandocNativeIntermediate::IntermediateBaseText(id.to_string(), node_location(node))
+        }
+        "attribute_class" => {
+            // Extract class, strip leading '.'
+            let text = node.utf8_text(input_bytes).unwrap();
+            let class = if text.starts_with('.') {
+                &text[1..]
+            } else {
+                text
+            };
+            PandocNativeIntermediate::IntermediateBaseText(class.to_string(), node_location(node))
+        }
+        "key_value_key" => {
+            // Extract key name and trim whitespace
+            let text = node.utf8_text(input_bytes).unwrap().trim().to_string();
+            PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
+        }
+        "key_value_value" => {
+            // Extract value, strip quotes if present
+            let text = node.utf8_text(input_bytes).unwrap();
+            let value = extract_quoted_text(text);
+            PandocNativeIntermediate::IntermediateBaseText(value, node_location(node))
+        }
+        "key_value_specifier" => {
+            // Collect key and value from children
+            let mut key = String::new();
+            let mut value = String::new();
+            let mut key_range = node_location(node);
+            let mut value_range = node_location(node);
+
+            for (node_name, child) in children {
+                match node_name.as_str() {
+                    "key_value_key" => {
+                        if let PandocNativeIntermediate::IntermediateBaseText(text, range) = child {
+                            key = text;
+                            key_range = range;
+                        }
+                    }
+                    "key_value_value" => {
+                        if let PandocNativeIntermediate::IntermediateBaseText(text, range) = child {
+                            value = text;
+                            value_range = range;
+                        }
+                    }
+                    "=" => {} // Ignore delimiter
+                    _ => {}
+                }
+            }
+
+            PandocNativeIntermediate::IntermediateKeyValueSpec(vec![(
+                key,
+                value,
+                key_range,
+                value_range,
+            )])
+        }
+        "commonmark_specifier" => {
+            // Process commonmark attributes (id, classes, key-value pairs)
+            process_commonmark_attribute(children, context)
+        }
+        "attribute_specifier" => {
+            // Filter out delimiter nodes and pass through the commonmark_specifier result
+            for (node_name, child) in children {
+                if node_name == "commonmark_specifier" {
+                    return child; // Should be IntermediateAttr
+                }
+            }
+            // If no commonmark_specifier found, return empty attr
+            use std::collections::HashMap;
+            PandocNativeIntermediate::IntermediateAttr(
+                ("".to_string(), vec![], HashMap::new()),
+                AttrSourceInfo::empty(),
+            )
+        }
         // "indented_code_block" => {
         //     process_indented_code_block(node, children, input_bytes, &indent_re, context)
         // }

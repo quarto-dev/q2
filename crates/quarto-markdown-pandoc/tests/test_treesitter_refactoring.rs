@@ -866,3 +866,156 @@ fn test_pandoc_display_math_with_latex() {
     );
     assert!(result.contains("frac"), "Should contain 'frac': {}", result);
 }
+
+// ============================================================================
+// ATTRIBUTE TESTS (FOR CODE SPANS AND OTHER INLINE ELEMENTS)
+// ============================================================================
+
+/// Test code span with simple class attribute
+#[test]
+fn test_code_span_with_class() {
+    let input = "`code`{.lang}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "" , [ "lang" ] , [] ) "code" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"lang\""),
+        "Should contain class \"lang\": {}",
+        result
+    );
+    assert!(
+        result.contains("\"code\""),
+        "Should contain code text: {}",
+        result
+    );
+}
+
+/// Test code span with ID attribute
+#[test]
+fn test_code_span_with_id() {
+    let input = "`code`{#myid}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "myid" , [] , [] ) "code" ]
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"myid\""),
+        "Should contain id \"myid\": {}",
+        result
+    );
+}
+
+/// Test code span with multiple classes
+#[test]
+fn test_code_span_with_multiple_classes() {
+    let input = "`code`{.class1 .class2 .class3}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "" , [ "class1" , "class2" , "class3" ] , [] ) "code" ]
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"class1\""),
+        "Should contain class1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"class2\""),
+        "Should contain class2: {}",
+        result
+    );
+    assert!(
+        result.contains("\"class3\""),
+        "Should contain class3: {}",
+        result
+    );
+}
+
+/// Test code span with key-value attribute
+#[test]
+fn test_code_span_with_key_value() {
+    let input = "`code`{key=\"value\"}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "" , [] , [ ( "key" , "value" ) ] ) "code" ]
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(result.contains("\"key\""), "Should contain key: {}", result);
+    assert!(
+        result.contains("\"value\""),
+        "Should contain value: {}",
+        result
+    );
+}
+
+/// Test code span with combined attributes
+#[test]
+fn test_code_span_with_combined_attributes() {
+    let input = "`code`{#myid .class1 .class2 key=\"value\"}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "myid" , [ "class1" , "class2" ] , [ ( "key" , "value" ) ] ) "code" ]
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(result.contains("\"myid\""), "Should contain id: {}", result);
+    assert!(
+        result.contains("\"class1\""),
+        "Should contain class1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"class2\""),
+        "Should contain class2: {}",
+        result
+    );
+    assert!(result.contains("\"key\""), "Should contain key: {}", result);
+    assert!(
+        result.contains("\"value\""),
+        "Should contain value: {}",
+        result
+    );
+}
+
+/// Test code span with no attributes (baseline)
+#[test]
+fn test_code_span_without_attributes() {
+    let input = "`code`";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "" , [] , [] ) "code" ]
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"code\""),
+        "Should contain code text: {}",
+        result
+    );
+}
+
+/// Test code span with multiple key-value pairs
+#[test]
+fn test_code_span_with_multiple_key_values() {
+    let input = "`code`{key1=\"value1\" key2=\"value2\"}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ( "" , [] , [ ( "key1" , "value1" ) , ( "key2" , "value2" ) ] ) "code" ]
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"key1\""),
+        "Should contain key1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"value1\""),
+        "Should contain value1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"key2\""),
+        "Should contain key2: {}",
+        result
+    );
+    assert!(
+        result.contains("\"value2\""),
+        "Should contain value2: {}",
+        result
+    );
+}
