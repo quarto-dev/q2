@@ -112,6 +112,78 @@ pub fn apply_smart_quotes(text: String) -> String {
     text.replace('\'', "\u{2019}")
 }
 
+/// Process backslash escapes in text according to Pandoc rules
+/// A backslash before any ASCII punctuation character is treated as an escape
+/// and the backslash is removed, leaving only the escaped character.
+///
+/// According to Pandoc spec, these characters can be escaped:
+/// !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~
+pub fn process_backslash_escapes(text: String) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            // Check if next character is ASCII punctuation
+            if let Some(&next_ch) = chars.peek() {
+                if is_escapable_punctuation(next_ch) {
+                    // This is an escape sequence - skip the backslash and include the character
+                    chars.next(); // consume the next character
+                    result.push(next_ch);
+                } else {
+                    // Not an escape sequence - keep the backslash
+                    result.push(ch);
+                }
+            } else {
+                // Backslash at end of string - keep it
+                result.push(ch);
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
+/// Check if a character is ASCII punctuation that can be escaped
+fn is_escapable_punctuation(ch: char) -> bool {
+    matches!(
+        ch,
+        '!' | '"'
+            | '#'
+            | '$'
+            | '%'
+            | '&'
+            | '\''
+            | '('
+            | ')'
+            | '*'
+            | '+'
+            | ','
+            | '-'
+            | '.'
+            | '/'
+            | ':'
+            | ';'
+            | '<'
+            | '='
+            | '>'
+            | '?'
+            | '@'
+            | '['
+            | '\\'
+            | ']'
+            | '^'
+            | '_'
+            | '`'
+            | '{'
+            | '|'
+            | '}'
+            | '~'
+    )
+}
+
 /// Helper function to create simple line break inlines
 pub fn create_line_break_inline(
     node: &tree_sitter::Node,

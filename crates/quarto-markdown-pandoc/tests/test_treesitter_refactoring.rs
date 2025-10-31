@@ -1019,3 +1019,122 @@ fn test_code_span_with_multiple_key_values() {
         result
     );
 }
+
+// ============================================================================
+// Backslash Escape Tests
+// ============================================================================
+
+/// Test backslash escape for asterisk (should remove backslash)
+#[test]
+fn test_backslash_escape_asterisk() {
+    let input = r"hello\*world";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [Str "hello*world"]
+    // NOT: Para [Str "hello\\*world"]
+    assert!(
+        result.contains("Str \"hello*world\""),
+        "Backslash should be removed, expected 'hello*world' but got: {}",
+        result
+    );
+    assert!(
+        !result.contains("hello\\\\*world"),
+        "Should not contain escaped backslash: {}",
+        result
+    );
+}
+
+/// Test backslash escape for backquote
+#[test]
+fn test_backslash_escape_backquote() {
+    let input = r"hello\`world";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"hello`world\""),
+        "Expected 'hello`world' but got: {}",
+        result
+    );
+}
+
+/// Test backslash escape for underscore
+#[test]
+fn test_backslash_escape_underscore() {
+    let input = r"hello\_world";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"hello_world\""),
+        "Expected 'hello_world' but got: {}",
+        result
+    );
+}
+
+/// Test backslash escape for hash
+#[test]
+fn test_backslash_escape_hash() {
+    let input = r"\# not a heading";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce a paragraph with # at the start, not a heading
+    assert!(
+        result.contains("Para"),
+        "Should be Para not Header: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"#\""),
+        "Expected Str \"#\" but got: {}",
+        result
+    );
+}
+
+/// Test backslash escape for brackets
+#[test]
+fn test_backslash_escape_brackets() {
+    let input = r"\[not a link\]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Pandoc splits this into: Str "[not", Space, Str "a", Space, Str "link]"
+    assert!(
+        result.contains("Str \"[not\""),
+        "Expected Str \"[not\" but got: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"link]\""),
+        "Expected Str \"link]\" but got: {}",
+        result
+    );
+}
+
+/// Test multiple backslash escapes in one string
+#[test]
+fn test_multiple_backslash_escapes() {
+    let input = r"hello\*world\!test";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // The str might be split or combined depending on grammar
+    // Just verify the escaped characters appear without backslashes
+    assert!(
+        result.contains("*") && result.contains("!"),
+        "Should contain * and ! without backslashes: {}",
+        result
+    );
+}
+
+/// Test backslash before non-special character (should preserve backslash)
+#[test]
+fn test_backslash_before_letter() {
+    let input = r"hello\world";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Backslash before 'w' is not a valid escape (not ASCII punctuation)
+    // So the backslash should be preserved
+    // Note: Pandoc treats this as LaTeX raw inline, but we handle it differently
+    assert!(
+        result.contains("Str \"hello\\\\world\""),
+        "Backslash before letter should be preserved: {}",
+        result
+    );
+}

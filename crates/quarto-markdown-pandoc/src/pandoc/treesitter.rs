@@ -568,6 +568,8 @@ fn native_visitor<T: Write>(
         }
         "pandoc_str" => {
             let text = node.utf8_text(input_bytes).unwrap().to_string();
+            // Process backslash escapes first, then apply smart quotes
+            let text = process_backslash_escapes(text);
             PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
                 text: apply_smart_quotes(text),
                 source_info: node_source_info_with_context(node, context),
