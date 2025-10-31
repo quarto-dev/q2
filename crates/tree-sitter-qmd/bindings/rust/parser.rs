@@ -10,7 +10,7 @@ use tree_sitter::{InputEdit, Language, Node, Parser, Point, Tree, TreeCursor};
 
 /// A parser that produces [`MarkdownTree`]s.
 ///
-/// This is a convenience wrapper around [`LANGUAGE`] and [`INLINE_LANGUAGE`].
+/// This is a convenience wrapper around the unified [`LANGUAGE`] grammar.
 pub struct MarkdownParser {
     pub parser: Parser,
     block_language: Language,
@@ -18,8 +18,7 @@ pub struct MarkdownParser {
 
 /// A stateful object for walking a [`MarkdownTree`] efficiently.
 ///
-/// This exposes the same methdos as [`TreeCursor`], but abstracts away the
-/// double block / inline structure of [`MarkdownTree`].
+/// This is a thin wrapper around [`TreeCursor`] for the unified markdown tree.
 pub struct MarkdownCursor<'a> {
     block_cursor: TreeCursor<'a>,
 }
