@@ -1,0 +1,153 @@
+================================================================================
+attribute id
+================================================================================
+[]{#id}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_id)))))))
+================================================================================
+attribute class
+================================================================================
+[]{.class}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)))))))
+================================================================================
+empty attribute
+================================================================================
+[]{}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier)))))
+================================================================================
+attribute two classes with spaces
+================================================================================
+[]{.class1 .class2}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (attribute_class)
+            (attribute_class)))))))
+================================================================================
+attribute class with period in the name
+================================================================================
+[]{.class1.class2}
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_class)))))))
+================================================================================
+attribute key-value
+================================================================================
+[]{k=v}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
+================================================================================
+attribute key-value
+================================================================================
+[]{k="v"}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
+================================================================================
+attribute 2 key-values
+================================================================================
+[]{k="v"k2="v2"}
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))
+================================================================================
+attribute 2 key-values with spaces
+================================================================================
+[]{ k="v" k2="v2" }
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (attribute_specifier
+          (commonmark_specifier
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value))))))))
+================================================================================
+attribute key-values with escaped quote in value
+(NB: the tree-sitter test infra wants the backslash in this file to be escaped)
+================================================================================
+[]{ k2="v\\"2" }
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))

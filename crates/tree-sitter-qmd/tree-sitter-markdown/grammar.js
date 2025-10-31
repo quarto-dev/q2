@@ -248,13 +248,13 @@ module.exports = grammar({
 
         pandoc_math: $ => seq(
             '$',
-            /[^$ \t\n]([ \t]?[^$ \t\n]+)*/,
+            /[^$ \t\n]([ \t]?[^$ \t\n]+|\\\$)*/,
             '$',
         ),
 
         pandoc_display_math: $ => seq(
             '$$',
-            /[^$]+/,
+            /([^$]|\\\$)+/,
             '$$'
         ),
 
@@ -342,14 +342,14 @@ module.exports = grammar({
         ),
 
         _commonmark_specifier_start_with_class: $ => seq(
-            alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class),
+            alias(/[.][A-Za-z][A-Za-z0-9_.-]*/, $.attribute_class),
             optional(repeat(seq($._inline_whitespace, alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class)))),
             optional(seq($._inline_whitespace, $._commonmark_specifier_start_with_kv)),
         ),
 
         _commonmark_specifier_start_with_kv: $ => seq(
             alias($._commonmark_key_value_specifier, $.key_value_specifier),
-            optional(repeat(seq($._inline_whitespace, alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
+            optional(repeat(seq(optional($._inline_whitespace), alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
             optional($._inline_whitespace)
         ),
 
@@ -362,8 +362,8 @@ module.exports = grammar({
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
-        _commonmark_single_quote_string: $ => /['][^']*[']/,
-        _commonmark_double_quote_string: $ => /["][^"]*["]/,
+        _commonmark_single_quote_string: $ => /[']([^']|\\')*[']/,
+        _commonmark_double_quote_string: $ => /["]([^"]|\\")*["]/,
 
         _line: $ => prec.right(seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element)))),
         _line_with_maybe_spaces: $ => prec.right(repeat1(choice(alias($._whitespace, $.pandoc_space), $._inline_element))),

@@ -1,0 +1,110 @@
+================================================================================
+inline code cell with language
+================================================================================
+`f(3 ** 4)`{python}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)
+        (attribute_specifier
+          (language_specifier))))))
+================================================================================
+inline code cell with spaces (shouldn't count as attribute)
+================================================================================
+`f(3 ** 4)` {python}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (attribute_specifier
+        (language_specifier)))))
+================================================================================
+Footnote reference
+================================================================================
+A note[^another-note] [^2].
+
+--------------------------------------------------------------------------------
+
+ERROR: tree-sitter parse failed
+
+================================================================================
+Insert markers
+================================================================================
+[++Hello world]
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (insert
+        (insert_delimiter)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (insert_delimiter)))))
+================================================================================
+(QMD): Delete markers
+================================================================================
+[--Hello world]
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (delete
+        (delete_delimiter)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (delete_delimiter)))))
+================================================================================
+Highlight markers
+================================================================================
+[!!Hello world]
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (highlight
+        (highlight_delimiter)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (highlight_delimiter)))))
+================================================================================
+Edit comment markers
+================================================================================
+[>>Hello world]
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (edit_comment
+        (edit_comment_delimiter)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (edit_comment_delimiter)))))

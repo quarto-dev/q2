@@ -1,0 +1,54 @@
+================================================================================
+basic suppress author
+================================================================================
+-@hello
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (citation
+        (citation_delimiter)
+        (citation_id_suppress_author)))))
+================================================================================
+basic author in text
+================================================================================
+@hello
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (citation
+        (citation_delimiter)
+        (citation_id_author_in_text)))))
+================================================================================
+basic author in text with brackets
+================================================================================
+@{https://example.com}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (citation
+        (citation_delimiter)
+        (citation_id_author_in_text)
+        (citation_delimiter)))))
+================================================================================
+basic suppress author with brackets
+================================================================================
+-@{https://example.com}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (citation
+        (citation_delimiter)
+        (citation_id_suppress_author)
+        (citation_delimiter)))))

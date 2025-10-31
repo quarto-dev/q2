@@ -1,0 +1,114 @@
+================================================================================
+Strikeout basic
+================================================================================
+~~a~~
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_strikeout
+        (strikeout_delimiter)
+        (pandoc_str)
+        (strikeout_delimiter)))))
+================================================================================
+Subscript basic
+================================================================================
+a~b~c
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_str))))
+================================================================================
+Subscript nesting
+================================================================================
+a~b*c*d~e
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (pandoc_emph
+          (emphasis_delimiter)
+          (pandoc_str)
+          (emphasis_delimiter))
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_str))))
+================================================================================
+Subscript alternation
+================================================================================
+a~b~c~d~e
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_str))))
+================================================================================
+Nested subscript and strikeout
+================================================================================
+a~b~~c~~d~e
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (pandoc_strikeout
+          (strikeout_delimiter)
+          (pandoc_str)
+          (strikeout_delimiter))
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_str))))
+================================================================================
+Nested strikeout and subscript
+================================================================================
+a~~b~c~d~~e
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_strikeout
+        (strikeout_delimiter)
+        (pandoc_str)
+        (pandoc_subscript
+          (subscript_delimiter)
+          (pandoc_str)
+          (subscript_delimiter))
+        (pandoc_str)
+        (strikeout_delimiter))
+      (pandoc_str))))

@@ -1404,7 +1404,7 @@
         },
         {
           "type": "PATTERN",
-          "value": "[^$ \\t\\n]([ \\t]?[^$ \\t\\n]+)*"
+          "value": "[^$ \\t\\n]([ \\t]?[^$ \\t\\n]+|\\\\\\$)*"
         },
         {
           "type": "STRING",
@@ -1421,7 +1421,7 @@
         },
         {
           "type": "PATTERN",
-          "value": "[^$]+"
+          "value": "([^$]|\\\\\\$)+"
         },
         {
           "type": "STRING",
@@ -2026,7 +2026,7 @@
           "type": "ALIAS",
           "content": {
             "type": "PATTERN",
-            "value": "[.][A-Za-z][A-Za-z0-9_-]*"
+            "value": "[.][A-Za-z][A-Za-z0-9_.-]*"
           },
           "named": true,
           "value": "attribute_class"
@@ -2104,8 +2104,16 @@
                 "type": "SEQ",
                 "members": [
                   {
-                    "type": "SYMBOL",
-                    "name": "_inline_whitespace"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "_inline_whitespace"
+                      },
+                      {
+                        "type": "BLANK"
+                      }
+                    ]
                   },
                   {
                     "type": "ALIAS",
@@ -2208,11 +2216,11 @@
     },
     "_commonmark_single_quote_string": {
       "type": "PATTERN",
-      "value": "['][^']*[']"
+      "value": "[']([^']|\\\\')*[']"
     },
     "_commonmark_double_quote_string": {
       "type": "PATTERN",
-      "value": "[\"][^\"]*[\"]"
+      "value": "[\"]([^\"]|\\\\\")*[\"]"
     },
     "_line": {
       "type": "PREC_RIGHT",

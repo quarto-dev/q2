@@ -1,0 +1,37 @@
+================================================================================
+Example 491 - https://github.github.com/gfm/#example-491
+================================================================================
+~~Hi~~ Hello, ~there~ world!
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_strikeout
+        (strikeout_delimiter)
+        (pandoc_str)
+        (strikeout_delimiter))
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (subscript_delimiter))
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+Example 492 - https://github.github.com/gfm/#example-492 (qmd issues error)
+================================================================================
+This ~~has a
+
+--------------------------------------------------------------------------------
+
+    (document
+      (ERROR
+        (pandoc_str)
+        (strikeout_delimiter)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (UNEXPECTED '\n')))
