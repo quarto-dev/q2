@@ -242,3 +242,33 @@ Create tests for:
 - Existing attribute processors: `commonmark_attribute.rs`, `attribute.rs`
 - Helper function: `extract_quoted_text()` in `text_helpers.rs`
 - Test examples: Look at headings with attributes (already working in atx_heading handler)
+
+## IMPORTANT: Pattern for Future Handler Implementation
+
+**2025-10-31 UPDATE**: When adding new match arm handlers in `treesitter.rs`, follow this pattern to keep the match statement maintainable:
+
+1. **Complex handlers (>20 lines)** → Extract to helper files in `treesitter_utils/`
+   - Create a new `<feature>_helpers.rs` file (e.g., `span_link_helpers.rs`, `quote_helpers.rs`)
+   - Export helper functions with signature: `pub fn process_<node_type>(node, children, context) -> PandocNativeIntermediate`
+   - Add module export in `treesitter_utils/mod.rs`
+   - Import and use in match statement: `"node_type" => process_node_type(node, children, context),`
+
+2. **Simple extractors/leaf nodes (<5 lines)** → Keep inline in match statement
+   - Examples: delimiter nodes, simple text extractors
+
+3. **Mid-level collectors (5-20 lines)** → Use judgment based on reusability
+   - If reusable across multiple node types → Extract to helper
+   - If single-use and simple → Can stay inline
+
+**Examples from recent refactoring (k-289)**:
+- ✅ Extracted: `pandoc_span` (54 lines) → `process_pandoc_span()` in `span_link_helpers.rs`
+- ✅ Extracted: `pandoc_image` (42 lines) → `process_pandoc_image()` in `span_link_helpers.rs`
+- ✅ Extracted: `pandoc_single_quote` (21 lines) → `process_quoted()` in `quote_helpers.rs`
+- ✅ Kept inline: `"[" | "]" | "]("` (1 line each) - simple delimiter markers
+- ✅ Kept inline: `"url"` (3 lines) - simple text extraction
+
+**Benefits**:
+- Keeps match statement readable and maintainable
+- Isolates complex logic for easier testing
+- Follows established patterns in codebase (e.g., `process_inline_with_delimiter_spaces`)
+- Makes code reviews easier by grouping related functionality

@@ -12,6 +12,7 @@ use crate::pandoc::treesitter_utils::caption::process_caption;
 use crate::pandoc::treesitter_utils::citation::process_citation;
 use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_content;
 use crate::pandoc::treesitter_utils::code_span::process_code_span;
+use crate::pandoc::treesitter_utils::code_span_helpers::process_pandoc_code_span;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
 use crate::pandoc::treesitter_utils::document::process_document;
 use crate::pandoc::treesitter_utils::editorial_marks::{
@@ -38,6 +39,7 @@ use crate::pandoc::treesitter_utils::pipe_table::{
     process_pipe_table_delimiter_row, process_pipe_table_header_or_row,
 };
 use crate::pandoc::treesitter_utils::postprocess::{merge_strs, postprocess};
+use crate::pandoc::treesitter_utils::quote_helpers::process_quoted;
 use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
 use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
 use crate::pandoc::treesitter_utils::raw_specifier::process_raw_specifier;
@@ -46,6 +48,9 @@ use crate::pandoc::treesitter_utils::setext_heading::process_setext_heading;
 use crate::pandoc::treesitter_utils::shortcode::{
     process_shortcode, process_shortcode_boolean, process_shortcode_keyword_param,
     process_shortcode_number, process_shortcode_string, process_shortcode_string_arg,
+};
+use crate::pandoc::treesitter_utils::span_link_helpers::{
+    process_content_node, process_pandoc_image, process_pandoc_span, process_target,
 };
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
@@ -670,153 +675,27 @@ fn native_visitor<T: Write>(
             // Marker node, no processing needed
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "pandoc_code_span" => {
-            // Extract code text and optional attributes
-            // Also check for spaces in delimiters (similar to emphasis handling)
-            let mut code_text = String::new();
-            let mut attr: Attr = empty_attr();
-            let mut attr_source = AttrSourceInfo::empty();
-            let mut has_leading_space = false;
-            let mut has_trailing_space = false;
-            let mut first_delimiter = true;
-
-            for (node_name, child) in &children {
-                match node_name.as_str() {
-                    "content" => {
-                        // Extract text from content node
-                        if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                            code_text = std::str::from_utf8(
-                                &input_bytes[range.start.offset..range.end.offset],
-                            )
-                            .unwrap()
-                            .to_string();
-                        }
-                    }
-                    "code_span_delimiter" => {
-                        // Check if delimiter includes spaces
-                        if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                            let text = std::str::from_utf8(
-                                &input_bytes[range.start.offset..range.end.offset],
-                            )
-                            .unwrap();
-                            if first_delimiter {
-                                // Opening delimiter - check for leading space
-                                has_leading_space = text.starts_with(char::is_whitespace);
-                                first_delimiter = false;
-                            } else {
-                                // Closing delimiter - check for trailing space
-                                has_trailing_space = text.ends_with(char::is_whitespace);
-                            }
-                        }
-                    }
-                    "attribute_specifier" => {
-                        // Process attributes if present
-                        if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child
-                        {
-                            attr = attrs.clone();
-                            attr_source = attrs_src.clone();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-
-            // Create Code inline
-            let code = Inline::Code(Code {
-                attr,
-                text: code_text,
-                source_info: node_source_info_with_context(node, context),
-                attr_source,
-            });
-
-            // Build result with injected Space nodes as needed
-            let mut result = Vec::new();
-
-            if has_leading_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-
-            result.push(code);
-
-            if has_trailing_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-
-            PandocNativeIntermediate::IntermediateInlines(result)
-        }
+        "pandoc_code_span" => process_pandoc_code_span(node, children, input_bytes, context),
         // Quote-related nodes
         "single_quote" | "double_quote" => {
             // Delimiter nodes for quotes - marker only
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "pandoc_single_quote" => {
-            // Single quoted text: 'text'
-            let mut content_inlines: Vec<Inline> = Vec::new();
-
-            for (node_name, child) in children {
-                match node_name.as_str() {
-                    "content" => {
-                        if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                            content_inlines = inlines;
-                        }
-                    }
-                    "single_quote" => {} // Skip delimiters
-                    _ => {}
-                }
-            }
-
-            PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
-                quote_type: QuoteType::SingleQuote,
-                content: content_inlines,
-                source_info: node_source_info_with_context(node, context),
-            }))
-        }
-        "pandoc_double_quote" => {
-            // Double quoted text: "text"
-            let mut content_inlines: Vec<Inline> = Vec::new();
-
-            for (node_name, child) in children {
-                match node_name.as_str() {
-                    "content" => {
-                        if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                            content_inlines = inlines;
-                        }
-                    }
-                    "double_quote" => {} // Skip delimiters
-                    _ => {}
-                }
-            }
-
-            PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
-                quote_type: QuoteType::DoubleQuote,
-                content: content_inlines,
-                source_info: node_source_info_with_context(node, context),
-            }))
-        }
-        "content" => {
-            // Generic node used in multiple contexts
-            // For code_span: return range for text extraction
-            // For links/spans/images: return processed inlines
-            if children.is_empty() {
-                // No processed children - this is code_span content, return range
-                PandocNativeIntermediate::IntermediateUnknown(node_location(node))
-            } else {
-                // Has children - this is link/span/image content, return processed inlines
-                let inlines: Vec<Inline> = children
-                    .into_iter()
-                    .flat_map(|(_, child)| match child {
-                        PandocNativeIntermediate::IntermediateInline(inline) => vec![inline],
-                        PandocNativeIntermediate::IntermediateInlines(inlines) => inlines,
-                        _ => vec![],
-                    })
-                    .collect();
-                PandocNativeIntermediate::IntermediateInlines(inlines)
-            }
-        }
+        "pandoc_single_quote" => process_quoted(
+            node,
+            children,
+            QuoteType::SingleQuote,
+            "single_quote",
+            context,
+        ),
+        "pandoc_double_quote" => process_quoted(
+            node,
+            children,
+            QuoteType::DoubleQuote,
+            "double_quote",
+            context,
+        ),
+        "content" => process_content_node(node, children),
         // Attribute-related nodes
         "{" | "}" | "=" => {
             // Delimiter nodes for attributes - marker only
@@ -920,128 +799,9 @@ fn native_visitor<T: Write>(
             let title = extract_quoted_text(text);
             PandocNativeIntermediate::IntermediateBaseText(title, node_location(node))
         }
-        "target" => {
-            // Collect URL and optional title from children
-            let mut url = String::new();
-            let mut title = String::new();
-
-            for (node_name, child) in children {
-                match node_name.as_str() {
-                    "url" => {
-                        if let PandocNativeIntermediate::IntermediateBaseText(text, _) = child {
-                            url = text;
-                        }
-                    }
-                    "title" => {
-                        if let PandocNativeIntermediate::IntermediateBaseText(text, _) = child {
-                            title = text;
-                        }
-                    }
-                    "](" | ")" => {} // Ignore delimiters
-                    _ => {}
-                }
-            }
-
-            PandocNativeIntermediate::IntermediateTarget(url, title, node_location(node))
-        }
-        "pandoc_span" => {
-            // Handles both links and spans
-            // - Has target → Link
-            // - No target → Span (QMD design: [text] becomes Span, not literal)
-            let mut content_inlines: Vec<Inline> = Vec::new();
-            let mut target: Option<(String, String)> = None;
-            let mut attr = ("".to_string(), vec![], std::collections::HashMap::new());
-            let mut attr_source = AttrSourceInfo::empty();
-
-            for (node_name, child) in children {
-                match node_name.as_str() {
-                    "content" => {
-                        if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                            content_inlines = inlines;
-                        }
-                    }
-                    "target" => {
-                        if let PandocNativeIntermediate::IntermediateTarget(url, title, _) = child {
-                            target = Some((url, title));
-                        }
-                    }
-                    "attribute_specifier" => {
-                        if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child
-                        {
-                            attr = attrs;
-                            attr_source = attrs_src;
-                        }
-                    }
-                    "[" | "]" => {} // Skip delimiters
-                    _ => {}
-                }
-            }
-
-            // Decide what to create based on presence of target
-            if let Some((url, title)) = target {
-                // This is a LINK
-                PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {
-                    attr,
-                    content: content_inlines,
-                    target: (url, title),
-                    source_info: node_source_info_with_context(node, context),
-                    attr_source,
-                    target_source: TargetSourceInfo::empty(),
-                }))
-            } else {
-                // No target → SPAN (even if attributes are empty)
-                // QMD design choice: [text] becomes Span, not literal brackets
-                PandocNativeIntermediate::IntermediateInline(Inline::Span(Span {
-                    attr,
-                    content: content_inlines,
-                    source_info: node_source_info_with_context(node, context),
-                    attr_source,
-                }))
-            }
-        }
-        "pandoc_image" => {
-            // Handles images: ![alt](url)
-            // Similar structure to links but creates Image inline
-            let mut alt_inlines: Vec<Inline> = Vec::new();
-            let mut target: Option<(String, String)> = None;
-            let mut attr = ("".to_string(), vec![], std::collections::HashMap::new());
-            let mut attr_source = AttrSourceInfo::empty();
-
-            for (node_name, child) in children {
-                match node_name.as_str() {
-                    "content" => {
-                        if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
-                            alt_inlines = inlines;
-                        }
-                    }
-                    "target" => {
-                        if let PandocNativeIntermediate::IntermediateTarget(url, title, _) = child {
-                            target = Some((url, title));
-                        }
-                    }
-                    "attribute_specifier" => {
-                        if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child
-                        {
-                            attr = attrs;
-                            attr_source = attrs_src;
-                        }
-                    }
-                    _ => {} // Ignore other nodes (delimiters, etc.)
-                }
-            }
-
-            // Create Image inline
-            let (url, title) = target.unwrap_or_else(|| ("".to_string(), "".to_string()));
-
-            PandocNativeIntermediate::IntermediateInline(Inline::Image(Image {
-                attr,
-                content: alt_inlines,
-                target: (url, title),
-                source_info: node_source_info_with_context(node, context),
-                attr_source,
-                target_source: TargetSourceInfo::empty(),
-            }))
-        }
+        "target" => process_target(children),
+        "pandoc_span" => process_pandoc_span(node, children, context),
+        "pandoc_image" => process_pandoc_image(node, children, context),
         // "indented_code_block" => {
         //     process_indented_code_block(node, children, input_bytes, &indent_re, context)
         // }
