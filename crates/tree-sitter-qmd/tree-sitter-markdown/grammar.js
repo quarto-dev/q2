@@ -1,3 +1,5 @@
+const common = require('../common/common');
+
 module.exports = grammar({
     name: 'markdown',
 
@@ -92,32 +94,31 @@ module.exports = grammar({
         _atx_heading2: $ => prec(1, seq(
             $.atx_h2_marker,
             optional($._atx_heading_content),
-            $._newline
+            choice($._newline, $._eof)
         )),
         _atx_heading3: $ => prec(1, seq(
             $.atx_h3_marker,
             optional($._atx_heading_content),
-            $._newline
+            choice($._newline, $._eof)
         )),
         _atx_heading4: $ => prec(1, seq(
             $.atx_h4_marker,
             optional($._atx_heading_content),
-            $._newline
+            choice($._newline, $._eof)
         )),
         _atx_heading5: $ => prec(1, seq(
             $.atx_h5_marker,
             optional($._atx_heading_content),
-            $._newline
+            choice($._newline, $._eof)
         )),
         _atx_heading6: $ => prec(1, seq(
             $.atx_h6_marker,
             optional($._atx_heading_content),
-            $._newline
+            choice($._newline, $._eof)
         )),
         _atx_heading_content: $ => prec(1, seq(
             optional($._whitespace),
             $._inlines, 
-            choice($._newline, $._eof)
         )),
         pandoc_horizontal_rule: $ => seq($._thematic_break, choice($._newline, $._eof)),
 
@@ -206,9 +207,11 @@ module.exports = grammar({
 
         pipe_table_cell: $ => $._line_with_maybe_spaces,
         
-        
         ///////////////////////////////////////////////////////////////////////////////////////////
         // inline nodes
+
+        entity_reference: $ => common.html_entity_regex(),
+        numeric_character_reference: $ => /&#([0-9]{1,7}|[xX][0-9a-fA-F]{1,6});/,
 
         _inlines: $ => prec.right(seq(
             $._line,
@@ -394,6 +397,9 @@ module.exports = grammar({
 
             $.pandoc_emph,
             $.pandoc_strong,
+
+            $.entity_reference,
+            $.numeric_character_reference,
 
             $.prose_punctuation,
             $.attribute_specifier

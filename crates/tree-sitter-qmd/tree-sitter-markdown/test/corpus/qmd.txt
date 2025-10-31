@@ -18,3 +18,473 @@ Hello World
       (pandoc_str)
       (pandoc_space)
       (pandoc_str))))
+================================================================================
+Code blocks with language specifier
+================================================================================
+
+```{python}
+print(1)
+```
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))))
+================================================================================
+Code blocks with id, class and key-value pairs
+================================================================================
+
+```{#id .class key=value}
+print(1)
+```
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)
+              (attribute_class)
+              (key_value_specifier
+                (key_value_key)
+                (key_value_value))))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))))
+================================================================================
+Fenced divs
+================================================================================
+::: {}
+
+Hello, world
+
+:::
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
+================================================================================
+Fenced divs with a space at the closing fence
+================================================================================
+::: {}
+
+Hello, world
+
+::: 
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
+================================================================================
+Code block with a colon inside
+================================================================================
+```{python}
+print(1:2)
+```
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)))))
+================================================================================
+A header with three colons inside
+================================================================================
+# Header with three colons `:::`
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)))))
+================================================================================
+A code cell with three colons at the beginning of a line
+================================================================================
+```
+Here is how you use a fenced div:
+
+::: {.cell}
+
+Your content
+
+:::
+```
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)))))
+================================================================================
+A paragraph that starts with a colon
+================================================================================
+\: This is a paragraph that starts with a colon.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+Empty fenced div 1
+================================================================================
+::: {#hello}
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (block_continuation))))
+================================================================================
+Empty fenced div 2
+================================================================================
+::: {#hello}
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation))))
+================================================================================
+Nested empty fenced divs
+================================================================================
+::: {#hello}
+::: {#world}
+:::
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (pandoc_div
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)))
+            (block_continuation)
+            (block_continuation)))))
+================================================================================
+A fenced div with a paragraph inside a bulleted list
+================================================================================
+- ::: {}
+  Hi
+
+  :::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_div
+              (attribute_specifier)
+              (block_continuation)
+              (pandoc_paragraph
+                (pandoc_str)
+                (block_continuation))
+              (block_continuation))))))
+================================================================================
+A code block with a single one-character class specifier
+================================================================================
+```{.c}
+printf("hello");
+```
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)))))
+================================================================================
+Inline reference id definitions
+================================================================================
+[^no-way]: this actually worked.
+Can we do soft breaks?
+
+And a new para?
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+Fenced block note definitions
+================================================================================
+::: ^my-note
+This is a note with multiple blocks.
+
+Another paragraph in the note.
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (note_definition_fenced_block
+          (fenced_div_note_id)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation)))))
+================================================================================
+Example list with (@) syntax
+================================================================================
+(@) First item
+
+(@) Second item
+
+(@) Third item
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))
+================================================================================
+Multiple example lists separated by text
+================================================================================
+(@) First item
+
+(@) Second item
+
+Some text in between.
+
+(@) Third item
+
+(@) Fourth item
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))
+================================================================================
+Horizontal rules with blank lines should not be parsed as metadata
+================================================================================
+First paragraph.
+
+---
+
+Second paragraph.
+
+---
+
+Third paragraph.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pandoc_horizontal_rule)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pandoc_horizontal_rule)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+YAML metadata block should still work
+================================================================================
+---
+title: Test
+author: Someone
+---
+
+Content paragraph.
+--------------------------------------------------------------------------------
+    (document
+      (metadata)
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))

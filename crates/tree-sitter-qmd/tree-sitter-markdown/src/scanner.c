@@ -5,10 +5,12 @@
 #include <wctype.h>
 
 // set this define to turn on debugging printouts
-#define SCAN_DEBUG 1
+// #define SCAN_DEBUG 1
 
 #ifdef SCAN_DEBUG
 #define DEBUG_HERE printf("At line %d\n", __LINE__);
+#else
+#define DEBUG_HERE
 #endif
 
 #ifdef SCAN_DEBUG

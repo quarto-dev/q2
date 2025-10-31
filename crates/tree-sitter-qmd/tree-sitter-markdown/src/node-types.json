@@ -79,6 +79,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -88,6 +92,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -259,6 +267,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -268,6 +280,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -475,6 +491,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -488,6 +508,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1097,6 +1121,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1106,6 +1134,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1274,6 +1306,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1283,6 +1319,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1446,6 +1486,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1455,6 +1499,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1565,6 +1613,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1574,6 +1626,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1684,6 +1740,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1693,6 +1753,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1803,6 +1867,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1812,6 +1880,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -1949,6 +2021,10 @@
           "named": true
         },
         {
+          "type": "entity_reference",
+          "named": true
+        },
+        {
           "type": "highlight",
           "named": true
         },
@@ -1958,6 +2034,10 @@
         },
         {
           "type": "insert",
+          "named": true
+        },
+        {
+          "type": "numeric_character_reference",
           "named": true
         },
         {
@@ -2397,6 +2477,10 @@
     "named": true
   },
   {
+    "type": "entity_reference",
+    "named": true
+  },
+  {
     "type": "fenced_code_block_delimiter",
     "named": true
   },
@@ -2426,6 +2510,10 @@
   },
   {
     "type": "metadata",
+    "named": true
+  },
+  {
+    "type": "numeric_character_reference",
     "named": true
   },
   {

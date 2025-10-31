@@ -1,0 +1,303 @@
+================================================================================
+Example 4 - https://github.github.com/gfm/#example-4
+================================================================================
+  - foo
+
+	bar
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (block_continuation)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+Example 9 - https://github.github.com/gfm/#example-9
+================================================================================
+ - foo
+   - bar
+	 - baz
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_minus)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation))
+                (pandoc_list
+                  (list_item
+                    (list_marker_minus)
+                    (pandoc_paragraph
+                      (pandoc_str))))))))))
+================================================================================
+Example 10 - https://github.github.com/gfm/#example-10
+================================================================================
+#	Foo
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str))))
+================================================================================
+Example 11 - https://github.github.com/gfm/#example-11
+================================================================================
+*	*	*
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 13 - https://github.github.com/gfm/#example-13
+================================================================================
+***
+---
+___
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)
+        (pandoc_horizontal_rule)
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 14 - https://github.github.com/gfm/#example-14
+================================================================================
++++
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Example 20 - https://github.github.com/gfm/#example-20
+================================================================================
+_____________________________________
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 21 - https://github.github.com/gfm/#example-21
+================================================================================
+ - - -
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 22 - https://github.github.com/gfm/#example-22
+================================================================================
+ **  * ** * ** * **
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 23 - https://github.github.com/gfm/#example-23
+================================================================================
+-     -      -      -
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 24 - https://github.github.com/gfm/#example-24
+================================================================================
+- - - -
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_horizontal_rule)))
+================================================================================
+Example 25 - https://github.github.com/gfm/#example-25
+================================================================================
+a------
+
+---a---
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Example 26 - https://github.github.com/gfm/#example-26
+================================================================================
+ *-*
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter)))))
+================================================================================
+Example 27 - https://github.github.com/gfm/#example-27
+================================================================================
+- foo
+***
+- bar
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))
+        (pandoc_horizontal_rule)
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+Example 28 - https://github.github.com/gfm/#example-28
+================================================================================
+Foo
+***
+bar
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pandoc_horizontal_rule)
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Example 30 - https://github.github.com/gfm/#example-30
+================================================================================
+* Foo
+* * *
+* Bar
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str))))
+        (pandoc_horizontal_rule)
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+Example 31 - https://github.github.com/gfm/#example-31
+================================================================================
+- Foo
+- * * *
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_horizontal_rule)))))
+================================================================================
+Example 32 - https://github.github.com/gfm/#example-32
+================================================================================
+# foo
+## foo
+### foo
+#### foo
+##### foo
+###### foo
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str))
+        (section
+          (atx_heading
+            (atx_h2_marker)
+            (pandoc_str))
+          (section
+            (atx_heading
+              (atx_h3_marker)
+              (pandoc_str))
+            (section
+              (atx_heading
+                (atx_h4_marker)
+                (pandoc_str))
+              (section
+                (atx_heading
+                  (atx_h5_marker)
+                  (pandoc_str))
+                (section
+                  (atx_heading
+                    (atx_h6_marker)
+                    (pandoc_str)))))))))
+================================================================================
+Example 34 - https://github.github.com/gfm/#example-34 (qmd needs escaping on #)
+================================================================================
+\#5 bolt
+
+\#hashtag
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Example 36 - https://github.github.com/gfm/#example-36
+================================================================================
+# foo *bar* \*baz\*
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str))))

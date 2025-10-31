@@ -31,4 +31,142 @@
         (atx_heading
           (atx_h1_marker)
           (pandoc_str))))
-          
+================================================================================
+#33 - Fenced code block attributes
+================================================================================
+```{R}
+1 + 1
+```
+
+```{}
+1 + 1
+```
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))))
+================================================================================
+#72 -  Can't create list item after a list item with a newline and indent
+================================================================================
+1. a
+1. b
+   c
+2. d
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_soft_break
+                (block_continuation))
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+#135 - Closing code block fence not recognized when it has trailing space
+================================================================================
+```
+// returns 2
+globalNS.method1(5, 10);
+```    
+
+@example
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)
+            (block_continuation))
+          (fenced_code_block_delimiter))
+        (pandoc_paragraph
+          (citation
+            (citation_delimiter)
+            (citation_id_author_in_text)))))
+================================================================================
+Display math with list markers should remain a single paragraph
+================================================================================
+$$
+1
+* 2
+$$
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))
+================================================================================
+Display math with minus list marker should remain a single paragraph
+================================================================================
+$$
+a
+- b
+$$
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))
+================================================================================
+Display math with ordered list marker should remain a single paragraph
+================================================================================
+$$
+x
+1. y
+$$
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))
+================================================================================
+Display math inside fenced div should parse correctly
+================================================================================
+::: {}
+
+$$hello$$
+
+:::
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_display_math)
+            (block_continuation))
+          (block_continuation))))
