@@ -3383,8 +3383,16 @@
           ]
         },
         {
-          "type": "SYMBOL",
-          "name": "_list_item_content"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_list_item_content"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "SYMBOL",

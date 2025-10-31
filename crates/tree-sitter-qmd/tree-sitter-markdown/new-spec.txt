@@ -1,0 +1,2753 @@
+================================================================================
+Example 9 - https://github.github.com/gfm/#example-9
+================================================================================
+ - foo
+   - bar
+	 - baz
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_minus)
+                (pandoc_paragraph
+                  (pandoc_str))))))))))
+================================================================================
+Example 10 - https://github.github.com/gfm/#example-10
+================================================================================
+#	Foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str))))
+================================================================================
+Example 11 - https://github.github.com/gfm/#example-11
+================================================================================
+*	*	*
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 13 - https://github.github.com/gfm/#example-13
+================================================================================
+***
+---
+___
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)
+    (pandoc_horizontal_rule)
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 14 - https://github.github.com/gfm/#example-14
+================================================================================
++++
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 17 - https://github.github.com/gfm/#example-17
+================================================================================
+ ***
+  ***
+   ***
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)
+    (pandoc_horizontal_rule)
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 20 - https://github.github.com/gfm/#example-20
+================================================================================
+_____________________________________
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 21 - https://github.github.com/gfm/#example-21
+================================================================================
+ - - -
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 22 - https://github.github.com/gfm/#example-22
+================================================================================
+ **  * ** * ** * **
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 23 - https://github.github.com/gfm/#example-23
+================================================================================
+-     -      -      -
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 24 - https://github.github.com/gfm/#example-24
+================================================================================
+- - - -
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 26 - https://github.github.com/gfm/#example-26
+================================================================================
+ *-*
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+================================================================================
+Example 27 - https://github.github.com/gfm/#example-27
+================================================================================
+- foo
+***
+- bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_horizontal_rule)
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 28 - https://github.github.com/gfm/#example-28
+================================================================================
+Foo
+***
+bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 29 - https://github.github.com/gfm/#example-29
+================================================================================
+Foo
+---
+bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 30 - https://github.github.com/gfm/#example-30
+================================================================================
+* Foo
+* * *
+* Bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_horizontal_rule)
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 31 - https://github.github.com/gfm/#example-31
+================================================================================
+- Foo
+- * * *
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_horizontal_rule)))))
+================================================================================
+Example 32 - https://github.github.com/gfm/#example-32
+================================================================================
+# foo
+## foo
+### foo
+#### foo
+##### foo
+###### foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str))
+    (section
+      (atx_heading
+        (atx_h2_marker)
+        (pandoc_str))
+      (section
+        (atx_heading
+          (atx_h3_marker)
+          (pandoc_str))
+        (section
+          (atx_heading
+            (atx_h4_marker)
+            (pandoc_str))
+          (section
+            (atx_heading
+              (atx_h5_marker)
+              (pandoc_str))
+            (section
+              (atx_heading
+                (atx_h6_marker)
+                (pandoc_str)))))))))
+================================================================================
+Example 36 - https://github.github.com/gfm/#example-36
+================================================================================
+# foo *bar* \*baz\*
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_str))))
+================================================================================
+Example 38 - https://github.github.com/gfm/#example-38
+================================================================================
+ ### foo
+  ## foo
+   # foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (atx_heading
+      (atx_h3_marker)
+      (pandoc_str)))
+  (section
+    (atx_heading
+      (atx_h2_marker)
+      (pandoc_str)))
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str))))
+================================================================================
+Example 47 - https://github.github.com/gfm/#example-47
+================================================================================
+****
+## foo
+****
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_horizontal_rule))
+  (section
+    (atx_heading
+      (atx_h2_marker)
+      (pandoc_str))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 48 - https://github.github.com/gfm/#example-48
+================================================================================
+Foo bar
+# baz
+Bar foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)))
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+Example 62 - https://github.github.com/gfm/#example-62
+================================================================================
+> Foo
+---
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 64 - https://github.github.com/gfm/#example-64
+================================================================================
+- Foo
+---
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 65 - https://github.github.com/gfm/#example-65
+================================================================================
+Foo
+Bar
+---
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 66 - https://github.github.com/gfm/#example-66 (NA, qmd doesn't promise setext)
+================================================================================
+Extra text so this is not parsed as metadata.
+
+---
+Foo
+---
+Bar
+---
+Baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (metadata)
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 68 - https://github.github.com/gfm/#example-68 (NA, we pick yaml block)
+================================================================================
+Extra text so this is not parsed as metadata.
+
+---
+---
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (metadata)))
+================================================================================
+Example 69 - https://github.github.com/gfm/#example-69
+================================================================================
+- foo
+-----
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 71 - https://github.github.com/gfm/#example-71
+================================================================================
+> foo
+-----
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 72 - https://github.github.com/gfm/#example-72
+================================================================================
+\> foo
+------
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 73 - https://github.github.com/gfm/#example-73
+================================================================================
+Foo
+
+bar
+---
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 74 - https://github.github.com/gfm/#example-74
+================================================================================
+Foo
+bar
+
+---
+
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 75 - https://github.github.com/gfm/#example-75
+================================================================================
+Foo
+bar
+* * *
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))
+    (pandoc_horizontal_rule)
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 76 - https://github.github.com/gfm/#example-76
+================================================================================
+Foo
+bar
+\---
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))))
+================================================================================
+Example 78 - https://github.github.com/gfm/#example-78
+================================================================================
+  - foo
+
+    bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 79 - https://github.github.com/gfm/#example-79
+================================================================================
+1.  foo
+
+    - bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))))
+================================================================================
+Example 89 - https://github.github.com/gfm/#example-89
+================================================================================
+```
+<
+ >
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 91 - https://github.github.com/gfm/#example-91
+================================================================================
+``
+foo
+``
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+================================================================================
+Example 92 - https://github.github.com/gfm/#example-92
+================================================================================
+```
+aaa
+~~~
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 94 - https://github.github.com/gfm/#example-94
+================================================================================
+````
+aaa
+```
+``````
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 99 - https://github.github.com/gfm/#example-99
+================================================================================
+```
+
+
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 100 - https://github.github.com/gfm/#example-100
+================================================================================
+```
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 101 - https://github.github.com/gfm/#example-101
+================================================================================
+ ```
+ aaa
+aaa
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 102 - https://github.github.com/gfm/#example-102
+================================================================================
+  ```
+aaa
+  aaa
+aaa
+  ```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 103 - https://github.github.com/gfm/#example-103
+================================================================================
+   ```
+   aaa
+    aaa
+  aaa
+   ```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 105 - https://github.github.com/gfm/#example-105
+================================================================================
+```
+aaa
+  ```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 106 - https://github.github.com/gfm/#example-106
+================================================================================
+   ```
+aaa
+  ```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 110 - https://github.github.com/gfm/#example-110
+================================================================================
+foo
+```
+bar
+```
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation))
+      (fenced_code_block_delimiter))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 112 - https://github.github.com/gfm/#example-112
+================================================================================
+```ruby
+def foo(x)
+  return 3
+end
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (info_string)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 117 - https://github.github.com/gfm/#example-117
+================================================================================
+```
+``` aaa
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 146 - https://github.github.com/gfm/#example-146 (qmd: no we won't)
+:skip
+================================================================================
+<!-- foo -->*bar*
+*baz*
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (comment)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter))
+      (pandoc_soft_break)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+================================================================================
+Example 148 - https://github.github.com/gfm/#example-148 (qmd: no we won't)
+:skip
+================================================================================
+<!-- Foo
+
+bar
+   baz -->
+okay
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (comment)
+      (pandoc_soft_break)
+      (pandoc_str))))
+================================================================================
+Example 189 - https://github.github.com/gfm/#example-189
+================================================================================
+aaa
+
+bbb
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 190 - https://github.github.com/gfm/#example-190
+================================================================================
+aaa
+bbb
+
+ccc
+ddd
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))))
+================================================================================
+Example 191 - https://github.github.com/gfm/#example-191
+================================================================================
+aaa
+
+
+bbb
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 196 - https://github.github.com/gfm/#example-196
+================================================================================
+aaa  
+bbb
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str))))
+================================================================================
+Example 197 - https://github.github.com/gfm/#example-197
+================================================================================
+
+
+aaa
+
+
+# aaa
+
+
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)))
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (pandoc_str))))
+================================================================================
+Example 206 - https://github.github.com/gfm/#example-206
+================================================================================
+> # Foo
+> bar
+> baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str))))))
+================================================================================
+Example 207 - https://github.github.com/gfm/#example-207
+================================================================================
+># Foo
+>bar
+> baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str))))))
+================================================================================
+Example 208 - https://github.github.com/gfm/#example-208
+================================================================================
+   > # Foo
+   > bar
+ > baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str))))))
+================================================================================
+Example 209 - https://github.github.com/gfm/#example-209
+================================================================================
+    > # Foo
+    > bar
+    > baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str))))))
+================================================================================
+Example 210 - https://github.github.com/gfm/#example-210
+================================================================================
+> # Foo
+> bar
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_soft_break
+            (block_continuation))
+          (pandoc_str)
+          (pandoc_soft_break)
+          (pandoc_str))))))
+================================================================================
+Example 211 - https://github.github.com/gfm/#example-211
+================================================================================
+> bar
+baz
+> foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_soft_break)
+        (pandoc_str)
+        (pandoc_soft_break
+          (block_continuation))
+        (pandoc_str)))))
+================================================================================
+Example 212 - https://github.github.com/gfm/#example-212
+================================================================================
+> foo
+---
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_horizontal_rule)))
+================================================================================
+Example 213 - https://github.github.com/gfm/#example-213
+================================================================================
+> - foo
+- bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_list
+        (list_item
+          (list_marker_minus)
+          (pandoc_paragraph
+            (pandoc_str)))))
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 215 - https://github.github.com/gfm/#example-215
+================================================================================
+> ```
+foo
+```
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_code_block
+        (fenced_code_block_delimiter)))
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_code_block
+      (fenced_code_block_delimiter))))
+================================================================================
+Example 217 - https://github.github.com/gfm/#example-217
+================================================================================
+>
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker))))
+================================================================================
+Example 218 - https://github.github.com/gfm/#example-218
+================================================================================
+>
+>
+>
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (block_continuation)
+      (block_continuation))))
+================================================================================
+Example 219 - https://github.github.com/gfm/#example-219
+================================================================================
+>
+> foo
+>
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation)))))
+================================================================================
+Example 220 - https://github.github.com/gfm/#example-220
+================================================================================
+> foo
+
+> bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))))
+================================================================================
+Example 221 - https://github.github.com/gfm/#example-221
+================================================================================
+> foo
+> bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_soft_break
+          (block_continuation))
+        (pandoc_str)))))
+================================================================================
+Example 222 - https://github.github.com/gfm/#example-222
+================================================================================
+> foo
+>
+> bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (block_continuation)
+      (pandoc_paragraph
+        (pandoc_str)))))
+================================================================================
+Example 223 - https://github.github.com/gfm/#example-223
+================================================================================
+foo
+> bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))))
+================================================================================
+Example 224 - https://github.github.com/gfm/#example-224
+================================================================================
+> aaa
+***
+> bbb
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_horizontal_rule)
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))))
+================================================================================
+Example 225 - https://github.github.com/gfm/#example-225
+================================================================================
+> bar
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_soft_break)
+        (pandoc_str)))))
+================================================================================
+Example 226 - https://github.github.com/gfm/#example-226
+================================================================================
+> bar
+
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 227 - https://github.github.com/gfm/#example-227
+================================================================================
+> bar
+>
+baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (pandoc_paragraph
+        (pandoc_str)))))
+================================================================================
+Example 228 - https://github.github.com/gfm/#example-228
+================================================================================
+> > > foo
+bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_block_quote
+        (block_quote_marker)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)))))))
+================================================================================
+Example 229 - https://github.github.com/gfm/#example-229
+================================================================================
+>>> foo
+> bar
+>>baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_block_quote
+        (block_quote_marker)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break
+              (block_continuation))
+            (pandoc_str)
+            (pandoc_soft_break
+              (block_continuation))
+            (pandoc_str)))))))
+================================================================================
+Example 234 - https://github.github.com/gfm/#example-234
+================================================================================
+- one
+
+  two
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 236 - https://github.github.com/gfm/#example-236
+================================================================================
+ -    one
+
+      two
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 239 - https://github.github.com/gfm/#example-239
+================================================================================
+-one
+
+2.two
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Example 240 - https://github.github.com/gfm/#example-240
+================================================================================
+- foo
+
+
+  bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 241 - https://github.github.com/gfm/#example-241
+================================================================================
+1.  foo
+
+    ```
+    bar
+    ```
+
+    baz
+
+    > bam
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)))))))
+================================================================================
+Example 243 - https://github.github.com/gfm/#example-243
+================================================================================
+123456789. ok
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 244 - https://github.github.com/gfm/#example-244
+================================================================================
+1234567890. not ok
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+Example 245 - https://github.github.com/gfm/#example-245
+================================================================================
+0. ok
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 246 - https://github.github.com/gfm/#example-246
+================================================================================
+003. ok
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 247 - https://github.github.com/gfm/#example-247
+================================================================================
+-1. not ok
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+Example 255 - https://github.github.com/gfm/#example-255
+================================================================================
+-  foo
+
+   bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 257 - https://github.github.com/gfm/#example-257
+================================================================================
+-
+  foo
+
+
+--------------------------------------------------------------------------------
+
+ERROR: tree-sitter parse failed
+
+================================================================================
+Example 259 - https://github.github.com/gfm/#example-259
+================================================================================
+- foo
+-
+- bar
+
+
+--------------------------------------------------------------------------------
+
+ERROR: tree-sitter parse failed
+
+================================================================================
+Example 260 - https://github.github.com/gfm/#example-260
+================================================================================
+- foo
+-
+- bar
+
+
+--------------------------------------------------------------------------------
+
+ERROR: tree-sitter parse failed
+
+================================================================================
+Example 261 - https://github.github.com/gfm/#example-261
+================================================================================
+1. foo
+2.
+3. bar
+
+
+--------------------------------------------------------------------------------
+
+ERROR: tree-sitter parse failed
+
+================================================================================
+Example 262 - https://github.github.com/gfm/#example-262
+================================================================================
+*
+
+
+--------------------------------------------------------------------------------
+
+ERROR: tree-sitter parse failed
+
+================================================================================
+Example 270 - https://github.github.com/gfm/#example-270
+================================================================================
+> 1. > Blockquote
+continued here.
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_list
+        (list_item
+          (list_marker_dot)
+          (pandoc_block_quote
+            (block_quote_marker)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_soft_break)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))))
+================================================================================
+Example 271 - https://github.github.com/gfm/#example-271
+================================================================================
+> 1. > Blockquote
+> continued here.
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_block_quote
+      (block_quote_marker)
+      (pandoc_list
+        (list_item
+          (list_marker_dot)
+          (pandoc_block_quote
+            (block_quote_marker)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_soft_break
+                (block_continuation))
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))))
+================================================================================
+Example 272 - https://github.github.com/gfm/#example-272
+================================================================================
+- foo
+  - bar
+    - baz
+      - boo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_minus)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation))
+                (pandoc_list
+                  (list_item
+                    (list_marker_minus)
+                    (pandoc_paragraph
+                      (pandoc_str))))))))))))
+================================================================================
+Example 273 - https://github.github.com/gfm/#example-273
+================================================================================
+- foo
+ - bar
+  - baz
+   - boo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 274 - https://github.github.com/gfm/#example-274
+================================================================================
+10) foo
+    - bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_parenthesis)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))))
+================================================================================
+Example 275 - https://github.github.com/gfm/#example-275
+================================================================================
+10) foo
+   - bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_parenthesis)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 276 - https://github.github.com/gfm/#example-276
+================================================================================
+- - foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))))
+================================================================================
+Example 277 - https://github.github.com/gfm/#example-277
+================================================================================
+1. - 2. foo
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_list
+              (list_item
+                (list_marker_dot)
+                (pandoc_paragraph
+                  (pandoc_str))))))))))
+================================================================================
+Example 278 - https://github.github.com/gfm/#example-278
+================================================================================
+- # Foo
+- Bar
+  ---
+  baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (section
+          (atx_heading
+            (atx_h1_marker)
+            (pandoc_str))))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_horizontal_rule
+          (block_continuation))
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 281 - https://github.github.com/gfm/#example-281
+================================================================================
+- foo
+- bar
++ baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_list
+      (list_item
+        (list_marker_plus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 282 - https://github.github.com/gfm/#example-282
+================================================================================
+1. foo
+2. bar
+3) baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_list
+      (list_item
+        (list_marker_parenthesis)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 283 - https://github.github.com/gfm/#example-283
+================================================================================
+Foo
+- bar
+- baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 284 - https://github.github.com/gfm/#example-284
+================================================================================
+The number of windows in my house is
+14.  The number of doors is 6.
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_soft_break)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+Example 285 - https://github.github.com/gfm/#example-285
+================================================================================
+The number of windows in my house is
+1.  The number of doors is 6.
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
+================================================================================
+Example 286 - https://github.github.com/gfm/#example-286
+================================================================================
+- foo
+
+- bar
+
+
+- baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 287 - https://github.github.com/gfm/#example-287
+================================================================================
+- foo
+  - bar
+    - baz
+
+
+      bim
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_minus)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation))
+                (block_continuation)
+                (block_continuation)
+                (pandoc_paragraph
+                  (pandoc_str))))))))))
+================================================================================
+Example 288 - https://github.github.com/gfm/#example-288 (qmd: no we won't)
+:skip
+================================================================================
+- foo
+- bar
+
+<!-- -->
+
+- baz
+- bim
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_paragraph
+          (comment)
+          (block_continuation)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 290 - https://github.github.com/gfm/#example-290
+================================================================================
+- a
+ - b
+  - c
+   - d
+  - e
+ - f
+- g
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 291 - https://github.github.com/gfm/#example-291
+================================================================================
+1. a
+
+  2. b
+
+   3. c
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation)))
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation)))
+      (list_item
+        (list_marker_dot)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 294 - https://github.github.com/gfm/#example-294
+================================================================================
+- a
+- b
+
+- c
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 295 - https://github.github.com/gfm/#example-295
+================================================================================
+* a
+*
+
+* c
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_star)
+        (block_continuation))
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 296 - https://github.github.com/gfm/#example-296
+================================================================================
+- a
+- b
+
+  c
+- d
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 298 - https://github.github.com/gfm/#example-298
+================================================================================
+- a
+- ```
+  b
+
+
+  ```
+- c
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)
+            (block_continuation)
+            (block_continuation))
+          (fenced_code_block_delimiter)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 299 - https://github.github.com/gfm/#example-299
+================================================================================
+- a
+  - b
+
+    c
+- d
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (block_continuation)
+            (pandoc_paragraph
+              (pandoc_str)))))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 300 - https://github.github.com/gfm/#example-300
+================================================================================
+* a
+  > b
+  >
+* c
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation))))
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 301 - https://github.github.com/gfm/#example-301
+================================================================================
+- a
+  > b
+  ```
+  c
+  ```
+- d
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation)))
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 302 - https://github.github.com/gfm/#example-302
+================================================================================
+- a
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 303 - https://github.github.com/gfm/#example-303
+================================================================================
+- a
+  - b
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))))
+================================================================================
+Example 304 - https://github.github.com/gfm/#example-304
+================================================================================
+1. ```
+   foo
+   ```
+
+   bar
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_dot)
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+Example 305 - https://github.github.com/gfm/#example-305
+================================================================================
+* foo
+  * bar
+
+  baz
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (block_continuation)
+            (pandoc_paragraph
+              (pandoc_str))))))))
+================================================================================
+Example 306 - https://github.github.com/gfm/#example-306
+================================================================================
+- a
+  - b
+  - c
+
+- d
+  - e
+  - f
+
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation)))))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))))
+================================================================================
+Example 334 - https://github.github.com/gfm/#example-334
+================================================================================
+&#42; foo
+
+* foo
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (numeric_character_reference)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))))))
