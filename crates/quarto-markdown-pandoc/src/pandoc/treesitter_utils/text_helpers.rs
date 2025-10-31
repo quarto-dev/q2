@@ -3,8 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::inline::{Inline, LineBreak, SoftBreak};
-use crate::pandoc::location::node_location;
+use crate::pandoc::ast_context::ASTContext;
+use crate::pandoc::inline::{Inline, LineBreak, SoftBreak, Space};
+use crate::pandoc::location::{node_location, node_source_info_with_context};
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -133,4 +134,79 @@ pub fn create_line_break_inline(
         })
     };
     PandocNativeIntermediate::IntermediateInline(inline)
+}
+
+/// Helper function to process inline nodes with delimiter-based space handling.
+/// This is used for emphasis, strong, strikeout, superscript, and subscript nodes
+/// which may capture spaces in their delimiters that need to be injected as Space nodes.
+///
+/// # Parameters
+/// - `node`: The tree-sitter node being processed
+/// - `children`: The children of the node
+/// - `delimiter_name`: The name of the delimiter node to scan (e.g., "emphasis_delimiter")
+/// - `input_bytes`: The input source bytes (needed to extract delimiter text)
+/// - `context`: The AST context
+/// - `native_inline`: Function to recursively process inline nodes
+/// - `create_inline`: Closure to create the final inline element from processed inlines
+///
+/// # Returns
+/// IntermediateInlines containing the inline element, potentially wrapped with Space nodes
+pub fn process_inline_with_delimiter_spaces<F, G>(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+    delimiter_name: &str,
+    input_bytes: &[u8],
+    context: &ASTContext,
+    native_inline: F,
+    create_inline: G,
+) -> PandocNativeIntermediate
+where
+    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
+    G: FnOnce(Vec<Inline>) -> Inline,
+{
+    // Scan delimiters to check for captured spaces
+    let mut has_leading_space = false;
+    let mut has_trailing_space = false;
+    let mut first_delimiter = true;
+
+    for (node_name, child) in &children {
+        if node_name == delimiter_name {
+            if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
+                let text = std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
+                    .unwrap();
+
+                if first_delimiter {
+                    // Opening delimiter - check for leading space
+                    has_leading_space = text.starts_with(char::is_whitespace);
+                    first_delimiter = false;
+                } else {
+                    // Closing delimiter - check for trailing space
+                    has_trailing_space = text.ends_with(char::is_whitespace);
+                }
+            }
+        }
+    }
+
+    // Build the inline element using existing helper
+    let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
+    let inline = create_inline(inlines);
+
+    // Build result with injected Space nodes as needed
+    let mut result = Vec::new();
+
+    if has_leading_space {
+        result.push(Inline::Space(Space {
+            source_info: node_source_info_with_context(node, context),
+        }));
+    }
+
+    result.push(inline);
+
+    if has_trailing_space {
+        result.push(Inline::Space(Space {
+            source_info: node_source_info_with_context(node, context),
+        }));
+    }
+
+    PandocNativeIntermediate::IntermediateInlines(result)
 }

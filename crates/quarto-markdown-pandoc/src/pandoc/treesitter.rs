@@ -585,247 +585,85 @@ fn native_visitor<T: Write>(
             // This is a marker node, we don't need to process it
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "pandoc_emph" => {
-            // Scan delimiters to check for captured spaces
-            let mut has_leading_space = false;
-            let mut has_trailing_space = false;
-            let mut first_delimiter = true;
-
-            for (node_name, child) in &children {
-                if node_name == "emphasis_delimiter" {
-                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                        let text =
-                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                .unwrap();
-
-                        if first_delimiter {
-                            // Opening delimiter - check for leading space
-                            has_leading_space = text.starts_with(char::is_whitespace);
-                            first_delimiter = false;
-                        } else {
-                            // Closing delimiter - check for trailing space
-                            has_trailing_space = text.ends_with(char::is_whitespace);
-                        }
-                    }
-                }
-            }
-
-            // Build the Emph inline using existing helper
-            let inlines =
-                process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
-
-            let emph = Inline::Emph(Emph {
-                content: inlines,
-                source_info: node_source_info_with_context(node, context),
-            });
-
-            // Build result with injected Space nodes as needed
-            let mut result = Vec::new();
-
-            if has_leading_space {
-                result.push(Inline::Space(Space {
+        "pandoc_emph" => process_inline_with_delimiter_spaces(
+            node,
+            children,
+            "emphasis_delimiter",
+            input_bytes,
+            context,
+            native_inline,
+            |inlines| {
+                Inline::Emph(Emph {
+                    content: inlines,
                     source_info: node_source_info_with_context(node, context),
-                }));
-            }
-
-            result.push(emph);
-
-            if has_trailing_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-
-            PandocNativeIntermediate::IntermediateInlines(result)
-        }
+                })
+            },
+        ),
         "strong_emphasis_delimiter" => {
             // This is a marker node, we don't need to process it
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "pandoc_strong" => {
-            // Scan delimiters to check for captured spaces
-            let mut has_leading_space = false;
-            let mut has_trailing_space = false;
-            let mut first_delimiter = true;
-
-            for (node_name, child) in &children {
-                if node_name == "strong_emphasis_delimiter" {
-                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                        let text =
-                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                .unwrap();
-
-                        if first_delimiter {
-                            // Opening delimiter - check for leading space
-                            has_leading_space = text.starts_with(char::is_whitespace);
-                            first_delimiter = false;
-                        } else {
-                            // Closing delimiter - check for trailing space
-                            has_trailing_space = text.ends_with(char::is_whitespace);
-                        }
-                    }
-                }
-            }
-
-            // Build the Strong inline using existing helper
-            let inlines =
-                process_emphasis_like_inline(children, "strong_emphasis_delimiter", native_inline);
-
-            let strong = Inline::Strong(Strong {
-                content: inlines,
-                source_info: node_source_info_with_context(node, context),
-            });
-
-            // Build result with injected Space nodes as needed
-            let mut result = Vec::new();
-
-            if has_leading_space {
-                result.push(Inline::Space(Space {
+        "pandoc_strong" => process_inline_with_delimiter_spaces(
+            node,
+            children,
+            "strong_emphasis_delimiter",
+            input_bytes,
+            context,
+            native_inline,
+            |inlines| {
+                Inline::Strong(Strong {
+                    content: inlines,
                     source_info: node_source_info_with_context(node, context),
-                }));
-            }
-
-            result.push(strong);
-
-            if has_trailing_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-
-            PandocNativeIntermediate::IntermediateInlines(result)
-        }
+                })
+            },
+        ),
         "strikeout_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "pandoc_strikeout" => {
-            let mut has_leading_space = false;
-            let mut has_trailing_space = false;
-            let mut first_delimiter = true;
-
-            for (node_name, child) in &children {
-                if node_name == "strikeout_delimiter" {
-                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                        let text =
-                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                .unwrap();
-                        if first_delimiter {
-                            has_leading_space = text.starts_with(char::is_whitespace);
-                            first_delimiter = false;
-                        } else {
-                            has_trailing_space = text.ends_with(char::is_whitespace);
-                        }
-                    }
-                }
-            }
-
-            let inlines =
-                process_emphasis_like_inline(children, "strikeout_delimiter", native_inline);
-            let strikeout = Inline::Strikeout(Strikeout {
-                content: inlines,
-                source_info: node_source_info_with_context(node, context),
-            });
-
-            let mut result = Vec::new();
-            if has_leading_space {
-                result.push(Inline::Space(Space {
+        "pandoc_strikeout" => process_inline_with_delimiter_spaces(
+            node,
+            children,
+            "strikeout_delimiter",
+            input_bytes,
+            context,
+            native_inline,
+            |inlines| {
+                Inline::Strikeout(Strikeout {
+                    content: inlines,
                     source_info: node_source_info_with_context(node, context),
-                }));
-            }
-            result.push(strikeout);
-            if has_trailing_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-            PandocNativeIntermediate::IntermediateInlines(result)
-        }
+                })
+            },
+        ),
         "superscript_delimiter" => {
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "pandoc_superscript" => {
-            let mut has_leading_space = false;
-            let mut has_trailing_space = false;
-            let mut first_delimiter = true;
-
-            for (node_name, child) in &children {
-                if node_name == "superscript_delimiter" {
-                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                        let text =
-                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                .unwrap();
-                        if first_delimiter {
-                            has_leading_space = text.starts_with(char::is_whitespace);
-                            first_delimiter = false;
-                        } else {
-                            has_trailing_space = text.ends_with(char::is_whitespace);
-                        }
-                    }
-                }
-            }
-
-            let inlines =
-                process_emphasis_like_inline(children, "superscript_delimiter", native_inline);
-            let superscript = Inline::Superscript(Superscript {
-                content: inlines,
-                source_info: node_source_info_with_context(node, context),
-            });
-
-            let mut result = Vec::new();
-            if has_leading_space {
-                result.push(Inline::Space(Space {
+        "pandoc_superscript" => process_inline_with_delimiter_spaces(
+            node,
+            children,
+            "superscript_delimiter",
+            input_bytes,
+            context,
+            native_inline,
+            |inlines| {
+                Inline::Superscript(Superscript {
+                    content: inlines,
                     source_info: node_source_info_with_context(node, context),
-                }));
-            }
-            result.push(superscript);
-            if has_trailing_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-            PandocNativeIntermediate::IntermediateInlines(result)
-        }
+                })
+            },
+        ),
         "subscript_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "pandoc_subscript" => {
-            let mut has_leading_space = false;
-            let mut has_trailing_space = false;
-            let mut first_delimiter = true;
-
-            for (node_name, child) in &children {
-                if node_name == "subscript_delimiter" {
-                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                        let text =
-                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                .unwrap();
-                        if first_delimiter {
-                            has_leading_space = text.starts_with(char::is_whitespace);
-                            first_delimiter = false;
-                        } else {
-                            has_trailing_space = text.ends_with(char::is_whitespace);
-                        }
-                    }
-                }
-            }
-
-            let inlines =
-                process_emphasis_like_inline(children, "subscript_delimiter", native_inline);
-            let subscript = Inline::Subscript(Subscript {
-                content: inlines,
-                source_info: node_source_info_with_context(node, context),
-            });
-
-            let mut result = Vec::new();
-            if has_leading_space {
-                result.push(Inline::Space(Space {
+        "pandoc_subscript" => process_inline_with_delimiter_spaces(
+            node,
+            children,
+            "subscript_delimiter",
+            input_bytes,
+            context,
+            native_inline,
+            |inlines| {
+                Inline::Subscript(Subscript {
+                    content: inlines,
                     source_info: node_source_info_with_context(node, context),
-                }));
-            }
-            result.push(subscript);
-            if has_trailing_space {
-                result.push(Inline::Space(Space {
-                    source_info: node_source_info_with_context(node, context),
-                }));
-            }
-            PandocNativeIntermediate::IntermediateInlines(result)
-        }
+                })
+            },
+        ),
         "code_span_delimiter" => {
             // Marker node, no processing needed
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
