@@ -2395,7 +2395,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "prose_punctuation"
+          "name": "_prose_punctuation"
         },
         {
           "type": "SYMBOL",
@@ -3043,7 +3043,7 @@
       "type": "PATTERN",
       "value": "(?:[0-9A-Za-z%&()+-/]|\\\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\\\.)*"
     },
-    "prose_punctuation": {
+    "_prose_punctuation": {
       "type": "ALIAS",
       "content": {
         "type": "PATTERN",

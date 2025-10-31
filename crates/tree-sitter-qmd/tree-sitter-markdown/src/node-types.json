@@ -159,10 +159,6 @@
           "named": true
         },
         {
-          "type": "prose_punctuation",
-          "named": true
-        },
-        {
           "type": "shortcode",
           "named": true
         },
@@ -344,10 +340,6 @@
         },
         {
           "type": "pandoc_superscript",
-          "named": true
-        },
-        {
-          "type": "prose_punctuation",
           "named": true
         },
         {
@@ -572,10 +564,6 @@
         },
         {
           "type": "pandoc_superscript",
-          "named": true
-        },
-        {
-          "type": "prose_punctuation",
           "named": true
         },
         {
@@ -1201,10 +1189,6 @@
           "named": true
         },
         {
-          "type": "prose_punctuation",
-          "named": true
-        },
-        {
           "type": "shortcode",
           "named": true
         },
@@ -1386,10 +1370,6 @@
           "named": true
         },
         {
-          "type": "prose_punctuation",
-          "named": true
-        },
-        {
           "type": "shortcode",
           "named": true
         },
@@ -1566,10 +1546,6 @@
           "named": true
         },
         {
-          "type": "prose_punctuation",
-          "named": true
-        },
-        {
           "type": "shortcode",
           "named": true
         },
@@ -1690,10 +1666,6 @@
         },
         {
           "type": "pandoc_superscript",
-          "named": true
-        },
-        {
-          "type": "prose_punctuation",
           "named": true
         },
         {
@@ -1820,10 +1792,6 @@
           "named": true
         },
         {
-          "type": "prose_punctuation",
-          "named": true
-        },
-        {
           "type": "shortcode",
           "named": true
         },
@@ -1944,10 +1912,6 @@
         },
         {
           "type": "pandoc_superscript",
-          "named": true
-        },
-        {
-          "type": "prose_punctuation",
           "named": true
         },
         {
@@ -2097,10 +2061,6 @@
           "named": true
         },
         {
-          "type": "prose_punctuation",
-          "named": true
-        },
-        {
           "type": "shortcode",
           "named": true
         },
@@ -2170,21 +2130,6 @@
       "types": [
         {
           "type": "pipe_table_cell",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
-    "type": "prose_punctuation",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": true,
-      "types": [
-        {
-          "type": "pandoc_str",
           "named": true
         }
       ]

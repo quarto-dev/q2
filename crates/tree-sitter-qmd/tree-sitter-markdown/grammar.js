@@ -401,7 +401,7 @@ module.exports = grammar({
             $.entity_reference,
             $.numeric_character_reference,
 
-            $.prose_punctuation,
+            $._prose_punctuation,
             $.attribute_specifier
         ),
 
@@ -529,7 +529,7 @@ module.exports = grammar({
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.)*/,
-        prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
+        _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // A blank line including the following newline.
         //

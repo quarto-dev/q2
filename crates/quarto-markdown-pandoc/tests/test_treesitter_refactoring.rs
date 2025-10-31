@@ -11,7 +11,7 @@
 
 use quarto_markdown_pandoc::pandoc::{ASTContext, treesitter_to_pandoc};
 use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
-use quarto_markdown_pandoc::{writers};
+use quarto_markdown_pandoc::writers;
 use tree_sitter_qmd::MarkdownParser;
 
 /// Helper function to parse QMD input and convert to Pandoc AST
@@ -46,8 +46,16 @@ fn test_pandoc_str_single_word() {
 
     // Should produce: Para [Str "hello"]
     // The exact format from native writer is: [ Para [ Str "hello" ] ]
-    assert!(result.contains("Para"), "Output should contain Para: {}", result);
-    assert!(result.contains("Str \"hello\""), "Output should contain Str \"hello\": {}", result);
+    assert!(
+        result.contains("Para"),
+        "Output should contain Para: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Output should contain Str \"hello\": {}",
+        result
+    );
 }
 
 /// Test pandoc_str with multiple words (should be multiple Str nodes with Space between)
@@ -57,9 +65,21 @@ fn test_pandoc_str_multiple_words() {
     let result = parse_qmd_to_pandoc_ast(input);
 
     // Should produce: Para [Str "hello", Space, Str "world"]
-    assert!(result.contains("Para"), "Output should contain Para: {}", result);
-    assert!(result.contains("Str \"hello\""), "Output should contain Str \"hello\": {}", result);
-    assert!(result.contains("Str \"world\""), "Output should contain Str \"world\": {}", result);
+    assert!(
+        result.contains("Para"),
+        "Output should contain Para: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Output should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"world\""),
+        "Output should contain Str \"world\": {}",
+        result
+    );
 }
 
 /// Test pandoc_str with numbers
@@ -68,7 +88,11 @@ fn test_pandoc_str_with_numbers() {
     let input = "test123";
     let result = parse_qmd_to_pandoc_ast(input);
 
-    assert!(result.contains("Str \"test123\""), "Output should contain Str \"test123\": {}", result);
+    assert!(
+        result.contains("Str \"test123\""),
+        "Output should contain Str \"test123\": {}",
+        result
+    );
 }
 
 /// Test pandoc_str with allowed punctuation
@@ -77,5 +101,45 @@ fn test_pandoc_str_with_punctuation() {
     let input = "hello-world";
     let result = parse_qmd_to_pandoc_ast(input);
 
-    assert!(result.contains("Str \"hello-world\""), "Output should contain Str \"hello-world\": {}", result);
+    assert!(
+        result.contains("Str \"hello-world\""),
+        "Output should contain Str \"hello-world\": {}",
+        result
+    );
+}
+
+/// Test soft break - single newline within a paragraph
+#[test]
+fn test_soft_break() {
+    let input = "hello\nworld";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "hello" , SoftBreak , Str "world" ]
+    assert!(
+        result.contains("Para"),
+        "Output should contain Para: {}",
+        result
+    );
+    assert!(
+        result.contains("SoftBreak"),
+        "Output should contain SoftBreak: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Output should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"world\""),
+        "Output should contain Str \"world\": {}",
+        result
+    );
+
+    // Should NOT concatenate the words
+    assert!(
+        !result.contains("helloworld"),
+        "Output should NOT concatenate words: {}",
+        result
+    );
 }

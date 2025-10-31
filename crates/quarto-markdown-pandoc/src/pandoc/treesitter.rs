@@ -54,7 +54,7 @@ use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Emph, Inline, Note, RawInline, Space, Str, Strikeout, Strong, Subscript, Superscript,
+    Emph, Inline, Note, RawInline, SoftBreak, Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{node_location, node_source_info, node_source_info_with_context};
@@ -535,8 +535,11 @@ fn native_visitor<T: Write>(
                 source_info: node_source_info_with_context(node, context),
             }))
         }
-        "pandoc_space" => {
-            PandocNativeIntermediate::IntermediateInline(Inline::Space(Space {
+        "pandoc_space" => PandocNativeIntermediate::IntermediateInline(Inline::Space(Space {
+            source_info: node_source_info_with_context(node, context),
+        })),
+        "pandoc_soft_break" => {
+            PandocNativeIntermediate::IntermediateInline(Inline::SoftBreak(SoftBreak {
                 source_info: node_source_info_with_context(node, context),
             }))
         }
