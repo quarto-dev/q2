@@ -353,3 +353,42 @@ fn test_pandoc_emph_space_after_only() {
         result
     );
 }
+
+/// Test basic strong emphasis with asterisks
+#[test]
+fn test_pandoc_strong_basic() {
+    let input = "**hello**";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Strong [ Str "hello" ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+}
+
+/// Test strong emphasis with spaces
+#[test]
+fn test_pandoc_strong_with_spaces() {
+    let input = "x **y** z";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "x" , Space , Strong [ Str "y" ] , Space , Str "z" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+    assert!(result.contains("Space"), "Should contain Space: {}", result);
+    let space_count = result.matches("Space").count();
+    assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
+}
+
