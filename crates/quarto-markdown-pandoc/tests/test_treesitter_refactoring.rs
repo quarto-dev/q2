@@ -1351,3 +1351,277 @@ fn test_image_with_attributes() {
         result
     );
 }
+
+// ============================================================================
+// Quoted text tests
+// ============================================================================
+
+/// Test basic single quote
+#[test]
+fn test_single_quote_basic() {
+    let input = "'text'";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Quoted"),
+        "Should contain Quoted: {}",
+        result
+    );
+    assert!(
+        result.contains("SingleQuote"),
+        "Should contain SingleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain quoted text: {}",
+        result
+    );
+}
+
+/// Test basic double quote
+#[test]
+fn test_double_quote_basic() {
+    let input = "\"text\"";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Quoted"),
+        "Should contain Quoted: {}",
+        result
+    );
+    assert!(
+        result.contains("DoubleQuote"),
+        "Should contain DoubleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain quoted text: {}",
+        result
+    );
+}
+
+/// Test single quote in context
+#[test]
+fn test_single_quote_in_context() {
+    let input = "before 'quoted' after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("Quoted"),
+        "Should contain Quoted: {}",
+        result
+    );
+    assert!(
+        result.contains("SingleQuote"),
+        "Should contain SingleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"quoted\""),
+        "Should contain quoted text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test double quote in context
+#[test]
+fn test_double_quote_in_context() {
+    let input = "before \"quoted\" after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("Quoted"),
+        "Should contain Quoted: {}",
+        result
+    );
+    assert!(
+        result.contains("DoubleQuote"),
+        "Should contain DoubleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"quoted\""),
+        "Should contain quoted text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test nested quotes: single inside double
+#[test]
+fn test_nested_single_in_double() {
+    let input = "\"outer 'inner' text\"";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should have outer DoubleQuote
+    assert!(
+        result.contains("DoubleQuote"),
+        "Should contain DoubleQuote: {}",
+        result
+    );
+    // Should have inner SingleQuote nested inside
+    assert!(
+        result.contains("SingleQuote"),
+        "Should contain nested SingleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"outer\""),
+        "Should contain 'outer': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"inner\""),
+        "Should contain 'inner': {}",
+        result
+    );
+}
+
+/// Test nested quotes: double inside single
+#[test]
+fn test_nested_double_in_single() {
+    let input = "'outer \"inner\" text'";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should have outer SingleQuote
+    assert!(
+        result.contains("SingleQuote"),
+        "Should contain SingleQuote: {}",
+        result
+    );
+    // Should have inner DoubleQuote nested inside
+    assert!(
+        result.contains("DoubleQuote"),
+        "Should contain nested DoubleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"outer\""),
+        "Should contain 'outer': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"inner\""),
+        "Should contain 'inner': {}",
+        result
+    );
+}
+
+/// Test quotes with formatting
+#[test]
+fn test_quotes_with_formatting() {
+    let input = "\"**bold** text\"";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Quoted"),
+        "Should contain Quoted: {}",
+        result
+    );
+    assert!(
+        result.contains("DoubleQuote"),
+        "Should contain DoubleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"bold\""),
+        "Should contain bold text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain plain text: {}",
+        result
+    );
+}
+
+/// Test quotes with multiple words
+#[test]
+fn test_quotes_multiple_words() {
+    let input = "'multiple word quote'";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Quoted"),
+        "Should contain Quoted: {}",
+        result
+    );
+    assert!(
+        result.contains("SingleQuote"),
+        "Should contain SingleQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"multiple\""),
+        "Should contain 'multiple': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"word\""),
+        "Should contain 'word': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"quote\""),
+        "Should contain 'quote': {}",
+        result
+    );
+}
+
+/// Test empty quotes (edge case)
+#[test]
+fn test_empty_quotes() {
+    let input_single = "''";
+    let result_single = parse_qmd_to_pandoc_ast(input_single);
+
+    assert!(
+        result_single.contains("Quoted"),
+        "Should contain Quoted for single: {}",
+        result_single
+    );
+    assert!(
+        result_single.contains("SingleQuote"),
+        "Should contain SingleQuote: {}",
+        result_single
+    );
+
+    let input_double = "\"\"";
+    let result_double = parse_qmd_to_pandoc_ast(input_double);
+
+    assert!(
+        result_double.contains("Quoted"),
+        "Should contain Quoted for double: {}",
+        result_double
+    );
+    assert!(
+        result_double.contains("DoubleQuote"),
+        "Should contain DoubleQuote: {}",
+        result_double
+    );
+}

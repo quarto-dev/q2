@@ -55,8 +55,8 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Code, Emph, Image, Inline, Link, Math, MathType, Note, RawInline, SoftBreak, Space, Span, Str,
-    Strikeout, Strong, Subscript, Superscript,
+    Code, Emph, Image, Inline, Link, Math, MathType, Note, QuoteType, Quoted, RawInline, SoftBreak,
+    Space, Span, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{node_location, node_source_info, node_source_info_with_context};
@@ -747,6 +747,55 @@ fn native_visitor<T: Write>(
             }
 
             PandocNativeIntermediate::IntermediateInlines(result)
+        }
+        // Quote-related nodes
+        "single_quote" | "double_quote" => {
+            // Delimiter nodes for quotes - marker only
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "pandoc_single_quote" => {
+            // Single quoted text: 'text'
+            let mut content_inlines: Vec<Inline> = Vec::new();
+
+            for (node_name, child) in children {
+                match node_name.as_str() {
+                    "content" => {
+                        if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
+                            content_inlines = inlines;
+                        }
+                    }
+                    "single_quote" => {} // Skip delimiters
+                    _ => {}
+                }
+            }
+
+            PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
+                quote_type: QuoteType::SingleQuote,
+                content: content_inlines,
+                source_info: node_source_info_with_context(node, context),
+            }))
+        }
+        "pandoc_double_quote" => {
+            // Double quoted text: "text"
+            let mut content_inlines: Vec<Inline> = Vec::new();
+
+            for (node_name, child) in children {
+                match node_name.as_str() {
+                    "content" => {
+                        if let PandocNativeIntermediate::IntermediateInlines(inlines) = child {
+                            content_inlines = inlines;
+                        }
+                    }
+                    "double_quote" => {} // Skip delimiters
+                    _ => {}
+                }
+            }
+
+            PandocNativeIntermediate::IntermediateInline(Inline::Quoted(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content: content_inlines,
+                source_info: node_source_info_with_context(node, context),
+            }))
         }
         "content" => {
             // Generic node used in multiple contexts
