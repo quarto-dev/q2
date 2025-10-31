@@ -538,3 +538,331 @@ fn test_pandoc_code_span_preserves_spaces() {
     );
 }
 
+// ============================================================================
+// ATX HEADING TESTS
+// ============================================================================
+
+/// Test H1 heading with single word
+#[test]
+fn test_atx_heading_h1_single_word() {
+    let input = "# Hello";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Header 1 ("hello", [], []) [ Str "Hello" ]
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("1"), "Should contain level 1: {}", result);
+    assert!(
+        result.contains("Str \"Hello\""),
+        "Should contain Str \"Hello\": {}",
+        result
+    );
+}
+
+/// Test H2 heading
+#[test]
+fn test_atx_heading_h2() {
+    let input = "## Second Level";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Header 2 (...) [ Str "Second" , Space , Str "Level" ]
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("2"), "Should contain level 2: {}", result);
+    assert!(
+        result.contains("Str \"Second\""),
+        "Should contain Str \"Second\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"Level\""),
+        "Should contain Str \"Level\": {}",
+        result
+    );
+}
+
+/// Test H3 heading
+#[test]
+fn test_atx_heading_h3() {
+    let input = "### Third";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("3"), "Should contain level 3: {}", result);
+}
+
+/// Test H4 heading
+#[test]
+fn test_atx_heading_h4() {
+    let input = "#### Fourth";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("4"), "Should contain level 4: {}", result);
+}
+
+/// Test H5 heading
+#[test]
+fn test_atx_heading_h5() {
+    let input = "##### Fifth";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("5"), "Should contain level 5: {}", result);
+}
+
+/// Test H6 heading
+#[test]
+fn test_atx_heading_h6() {
+    let input = "###### Sixth";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("6"), "Should contain level 6: {}", result);
+}
+
+/// Test heading with multiple words
+#[test]
+fn test_atx_heading_multiple_words() {
+    let input = "# This is a heading";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Header 1 (...) [ Str "This" , Space , Str "is" , Space , Str "a" , Space , Str "heading" ]
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"This\""),
+        "Should contain Str \"This\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"is\""),
+        "Should contain Str \"is\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"heading\""),
+        "Should contain Str \"heading\": {}",
+        result
+    );
+}
+
+/// Test heading with emphasis
+#[test]
+fn test_atx_heading_with_emphasis() {
+    let input = "# Heading with *emphasis*";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Header 1 (...) [ Str "Heading" , Space , Str "with" , Space , Emph [ Str "emphasis" ] ]
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("Str \"emphasis\""),
+        "Should contain Str \"emphasis\": {}",
+        result
+    );
+}
+
+/// Test heading with code span
+#[test]
+fn test_atx_heading_with_code() {
+    let input = "# Heading with `code`";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Header 1 (...) [ Str "Heading" , Space , Str "with" , Space , Code (...) "code" ]
+    assert!(
+        result.contains("Header"),
+        "Should contain Header: {}",
+        result
+    );
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+}
+
+// ============================================================================
+// MATH TESTS (INLINE AND DISPLAY)
+// ============================================================================
+
+/// Test inline math with single variable
+#[test]
+fn test_pandoc_math_single_variable() {
+    let input = "$x$";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Math InlineMath "x" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("InlineMath"),
+        "Should contain InlineMath: {}",
+        result
+    );
+    assert!(result.contains("\"x\""), "Should contain \"x\": {}", result);
+}
+
+/// Test inline math with expression
+#[test]
+fn test_pandoc_math_expression() {
+    let input = "$x + y$";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Math InlineMath "x + y" ]
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("InlineMath"),
+        "Should contain InlineMath: {}",
+        result
+    );
+    assert!(
+        result.contains("x + y"),
+        "Should contain 'x + y': {}",
+        result
+    );
+}
+
+/// Test inline math in text
+#[test]
+fn test_pandoc_math_in_text() {
+    let input = "The equation $x + y = z$ is simple";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "The" , Space , Str "equation" , Space , Math InlineMath "x + y = z" , Space , Str "is" , Space , Str "simple" ]
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("InlineMath"),
+        "Should contain InlineMath: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"The\""),
+        "Should contain Str \"The\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"simple\""),
+        "Should contain Str \"simple\": {}",
+        result
+    );
+}
+
+/// Test inline math with LaTeX commands
+#[test]
+fn test_pandoc_math_with_latex() {
+    let input = r"$\frac{a}{b}$";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Math InlineMath "\\frac{a}{b}" ]
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("InlineMath"),
+        "Should contain InlineMath: {}",
+        result
+    );
+    assert!(result.contains("frac"), "Should contain 'frac': {}", result);
+}
+
+/// Test display math with single variable
+#[test]
+fn test_pandoc_display_math_single_variable() {
+    let input = "$$x$$";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Math DisplayMath "x" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("DisplayMath"),
+        "Should contain DisplayMath: {}",
+        result
+    );
+    assert!(result.contains("\"x\""), "Should contain \"x\": {}", result);
+}
+
+/// Test display math with expression
+#[test]
+fn test_pandoc_display_math_expression() {
+    let input = "$$x + y$$";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Math DisplayMath "x + y" ]
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("DisplayMath"),
+        "Should contain DisplayMath: {}",
+        result
+    );
+    assert!(
+        result.contains("x + y"),
+        "Should contain 'x + y': {}",
+        result
+    );
+}
+
+/// Test display math in text
+#[test]
+fn test_pandoc_display_math_in_text() {
+    let input = "The equation $$x + y = z$$ is simple";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "The" , Space , Str "equation" , Space , Math DisplayMath "x + y = z" , Space , Str "is" , Space , Str "simple" ]
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("DisplayMath"),
+        "Should contain DisplayMath: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"The\""),
+        "Should contain Str \"The\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"simple\""),
+        "Should contain Str \"simple\": {}",
+        result
+    );
+}
+
+/// Test display math with LaTeX commands
+#[test]
+fn test_pandoc_display_math_with_latex() {
+    let input = r"$$\frac{a}{b}$$";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Math DisplayMath "\\frac{a}{b}" ]
+    assert!(result.contains("Math"), "Should contain Math: {}", result);
+    assert!(
+        result.contains("DisplayMath"),
+        "Should contain DisplayMath: {}",
+        result
+    );
+    assert!(result.contains("frac"), "Should contain 'frac': {}", result);
+}

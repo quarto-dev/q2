@@ -55,7 +55,8 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, AttrSourceInfo, empty_attr};
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Code, Emph, Inline, Note, RawInline, SoftBreak, Space, Str, Strikeout, Strong, Subscript, Superscript,
+    Code, Emph, Inline, Math, MathType, Note, RawInline, SoftBreak, Space, Str, Strikeout, Strong,
+    Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{node_location, node_source_info, node_source_info_with_context};
@@ -529,6 +530,42 @@ fn native_visitor<T: Write>(
         "document" => process_document(node, children, context),
         "section" => process_section(node, children, context),
         "pandoc_paragraph" => process_paragraph(node, children, context),
+        "atx_heading" => process_atx_heading(buf, node, children, context),
+        "atx_h1_marker" | "atx_h2_marker" | "atx_h3_marker" | "atx_h4_marker" | "atx_h5_marker"
+        | "atx_h6_marker" => {
+            // Marker nodes - these are processed by the parent atx_heading node
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "$" | "$$" => {
+            // Math delimiters - these are processed by parent math nodes
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "pandoc_math" => {
+            // Extract math content (text between $ delimiters)
+            // Node structure: '$' content '$'
+            // Get the full text and strip the delimiters
+            let full_text = node.utf8_text(input_bytes).unwrap();
+            let content = &full_text[1..full_text.len() - 1]; // Strip leading and trailing $
+
+            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+                math_type: MathType::InlineMath,
+                text: content.to_string(),
+                source_info: node_source_info_with_context(node, context),
+            }))
+        }
+        "pandoc_display_math" => {
+            // Extract display math content (text between $$ delimiters)
+            // Node structure: '$$' content '$$'
+            // Get the full text and strip the delimiters
+            let full_text = node.utf8_text(input_bytes).unwrap();
+            let content = &full_text[2..full_text.len() - 2]; // Strip leading and trailing $$
+
+            PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
+                math_type: MathType::DisplayMath,
+                text: content.to_string(),
+                source_info: node_source_info_with_context(node, context),
+            }))
+        }
         "pandoc_str" => {
             let text = node.utf8_text(input_bytes).unwrap().to_string();
             PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
@@ -808,17 +845,20 @@ fn native_visitor<T: Write>(
                     "content" => {
                         // Extract text from content node
                         if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                            code_text = std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                .unwrap()
-                                .to_string();
+                            code_text = std::str::from_utf8(
+                                &input_bytes[range.start.offset..range.end.offset],
+                            )
+                            .unwrap()
+                            .to_string();
                         }
                     }
                     "code_span_delimiter" => {
                         // Check if delimiter includes spaces
                         if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                            let text =
-                                std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                                    .unwrap();
+                            let text = std::str::from_utf8(
+                                &input_bytes[range.start.offset..range.end.offset],
+                            )
+                            .unwrap();
                             if first_delimiter {
                                 // Opening delimiter - check for leading space
                                 has_leading_space = text.starts_with(char::is_whitespace);
@@ -831,7 +871,8 @@ fn native_visitor<T: Write>(
                     }
                     "attribute_specifier" => {
                         // Process attributes if present
-                        if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child {
+                        if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child
+                        {
                             attr = attrs.clone();
                             attr_source = attrs_src.clone();
                         }
