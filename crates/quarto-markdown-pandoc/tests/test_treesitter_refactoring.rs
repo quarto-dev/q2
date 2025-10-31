@@ -143,3 +143,213 @@ fn test_soft_break() {
         result
     );
 }
+
+/// Test basic single-word emphasis with asterisk
+#[test]
+fn test_pandoc_emph_basic_asterisk() {
+    let input = "*hello*";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Emph [ Str "hello" ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+}
+
+/// Test basic single-word emphasis with underscore
+#[test]
+fn test_pandoc_emph_basic_underscore() {
+    let input = "_hello_";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Emph [ Str "hello" ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+}
+
+/// Test multi-word emphasis
+#[test]
+fn test_pandoc_emph_multiple_words() {
+    let input = "*hello world*";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Emph [ Str "hello" , Space , Str "world" ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"world\""),
+        "Should contain Str \"world\": {}",
+        result
+    );
+}
+
+/// Test emphasis within text
+#[test]
+fn test_pandoc_emph_within_text() {
+    let input = "before *hello* after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "before" , Space , Emph [ Str "hello" ] , Space , Str "after" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain Str \"before\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain Str \"after\": {}",
+        result
+    );
+    // Check for Space nodes around emphasis
+    assert!(
+        result.contains("Space"),
+        "Should contain Space nodes: {}",
+        result
+    );
+    let space_count = result.matches("Space").count();
+    assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
+}
+
+/// Test multiple emphasis in one paragraph
+#[test]
+fn test_pandoc_emph_multiple() {
+    let input = "*hello* and *world*";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Emph [ Str "hello" ] , Space , Str "and" , Space , Emph [ Str "world" ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+
+    // Count occurrences of "Emph" - should appear twice
+    let emph_count = result.matches("Emph").count();
+    assert_eq!(emph_count, 2, "Should contain 2 Emph nodes: {}", result);
+
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"world\""),
+        "Should contain Str \"world\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"and\""),
+        "Should contain Str \"and\": {}",
+        result
+    );
+    // Check for Space nodes (should be 2: after first emph, around "and", before second emph)
+    assert!(
+        result.contains("Space"),
+        "Should contain Space nodes: {}",
+        result
+    );
+    let space_count = result.matches("Space").count();
+    assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
+}
+
+/// Test emphasis with newline (soft break)
+#[test]
+fn test_pandoc_emph_with_softbreak() {
+    let input = "*hello\nworld*";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Emph [ Str "hello" , SoftBreak , Str "world" ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("SoftBreak"),
+        "Should contain SoftBreak: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"world\""),
+        "Should contain Str \"world\": {}",
+        result
+    );
+}
+
+/// Test emphasis with no spaces around it
+#[test]
+fn test_pandoc_emph_no_spaces() {
+    let input = "x*y*z";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "x" , Emph [ Str "y" ] , Str "z" ]
+    // No Space nodes should be present around the emphasis
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(result.contains("Str \"x\""), "Should contain x: {}", result);
+    assert!(result.contains("Str \"y\""), "Should contain y: {}", result);
+    assert!(result.contains("Str \"z\""), "Should contain z: {}", result);
+    // Should NOT have Space nodes injected
+    assert!(
+        !result.contains("Space"),
+        "Should NOT contain Space nodes: {}",
+        result
+    );
+}
+
+/// Test emphasis with space only before
+#[test]
+fn test_pandoc_emph_space_before_only() {
+    let input = "x *y*z";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "x" , Space , Emph [ Str "y" ] , Str "z" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(result.contains("Space"), "Should contain Space: {}", result);
+    // Should have exactly 1 Space node
+    let space_count = result.matches("Space").count();
+    assert_eq!(
+        space_count, 1,
+        "Should have exactly 1 Space node: {}",
+        result
+    );
+}
+
+/// Test emphasis with space only after
+#[test]
+fn test_pandoc_emph_space_after_only() {
+    let input = "x*y* z";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "x" , Emph [ Str "y" ] , Space , Str "z" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(result.contains("Space"), "Should contain Space: {}", result);
+    // Should have exactly 1 Space node
+    let space_count = result.matches("Space").count();
+    assert_eq!(
+        space_count, 1,
+        "Should have exactly 1 Space node: {}",
+        result
+    );
+}

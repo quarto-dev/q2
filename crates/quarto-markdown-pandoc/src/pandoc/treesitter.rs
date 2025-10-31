@@ -543,6 +543,63 @@ fn native_visitor<T: Write>(
                 source_info: node_source_info_with_context(node, context),
             }))
         }
+        "emphasis_delimiter" => {
+            // This is a marker node, we don't need to process it
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "pandoc_emph" => {
+            // Scan delimiters to check for captured spaces
+            let mut has_leading_space = false;
+            let mut has_trailing_space = false;
+            let mut first_delimiter = true;
+
+            for (node_name, child) in &children {
+                if node_name == "emphasis_delimiter" {
+                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
+                        let text =
+                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
+                                .unwrap();
+
+                        if first_delimiter {
+                            // Opening delimiter - check for leading space
+                            has_leading_space = text.starts_with(char::is_whitespace);
+                            first_delimiter = false;
+                        } else {
+                            // Closing delimiter - check for trailing space
+                            has_trailing_space = text.ends_with(char::is_whitespace);
+                        }
+                    }
+                }
+            }
+
+            // Build the Emph inline using existing helper
+            let inlines =
+                process_emphasis_like_inline(children, "emphasis_delimiter", native_inline);
+
+            let emph = Inline::Emph(Emph {
+                content: inlines,
+                source_info: node_source_info_with_context(node, context),
+            });
+
+            // Build result with injected Space nodes as needed
+            let mut result = Vec::new();
+
+            if has_leading_space {
+                result.push(Inline::Space(Space {
+                    source_info: node_source_info_with_context(node, context),
+                }));
+            }
+
+            result.push(emph);
+
+            if has_trailing_space {
+                result.push(Inline::Space(Space {
+                    source_info: node_source_info_with_context(node, context),
+                }));
+            }
+
+            PandocNativeIntermediate::IntermediateInlines(result)
+        }
         // "indented_code_block" => {
         //     process_indented_code_block(node, children, input_bytes, &indent_re, context)
         // }
