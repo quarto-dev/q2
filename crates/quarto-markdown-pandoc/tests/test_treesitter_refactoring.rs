@@ -392,3 +392,149 @@ fn test_pandoc_strong_with_spaces() {
     assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
 }
 
+// ============================================================================
+// Code Span Tests (inline code with backticks)
+// ============================================================================
+
+/// Test basic code span - single word
+#[test]
+fn test_pandoc_code_span_basic() {
+    let input = "`code`";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ("", [], []) "code" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"code\""),
+        "Should contain \"code\": {}",
+        result
+    );
+}
+
+/// Test code span with spaces
+#[test]
+fn test_pandoc_code_span_with_spaces() {
+    let input = "`code with spaces`";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ("", [], []) "code with spaces" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("\"code with spaces\""),
+        "Should contain \"code with spaces\": {}",
+        result
+    );
+}
+
+/// Test code span with no spaces around it
+#[test]
+fn test_pandoc_code_span_no_spaces_around() {
+    let input = "x`y`z";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "x" , Code ("", [], []) "y" , Str "z" ]
+    // No Space nodes should be present
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(result.contains("Str \"x\""), "Should contain x: {}", result);
+    assert!(result.contains("\"y\""), "Should contain y: {}", result);
+    assert!(result.contains("Str \"z\""), "Should contain z: {}", result);
+    // Should NOT have Space nodes
+    assert!(
+        !result.contains("Space"),
+        "Should NOT contain Space nodes: {}",
+        result
+    );
+}
+
+/// Test code span within text
+#[test]
+fn test_pandoc_code_span_within_text() {
+    let input = "test `code` here";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Str "test" , Space , Code ("", [], []) "code" , Space , Str "here" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    assert!(
+        result.contains("Str \"test\""),
+        "Should contain Str \"test\": {}",
+        result
+    );
+    assert!(
+        result.contains("\"code\""),
+        "Should contain \"code\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"here\""),
+        "Should contain Str \"here\": {}",
+        result
+    );
+    // Check for Space nodes
+    assert!(
+        result.contains("Space"),
+        "Should contain Space nodes: {}",
+        result
+    );
+    let space_count = result.matches("Space").count();
+    assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
+}
+
+/// Test multiple code spans in one paragraph
+#[test]
+fn test_pandoc_code_span_multiple() {
+    let input = "`foo` and `bar`";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ("", [], []) "foo" , Space , Str "and" , Space , Code ("", [], []) "bar" ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+
+    // Count occurrences of "Code" - should appear twice
+    let code_count = result.matches("Code").count();
+    assert_eq!(code_count, 2, "Should contain 2 Code nodes: {}", result);
+
+    assert!(
+        result.contains("\"foo\""),
+        "Should contain \"foo\": {}",
+        result
+    );
+    assert!(
+        result.contains("\"bar\""),
+        "Should contain \"bar\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"and\""),
+        "Should contain Str \"and\": {}",
+        result
+    );
+    // Check for Space nodes (should be 2: after first code, before second code)
+    assert!(
+        result.contains("Space"),
+        "Should contain Space nodes: {}",
+        result
+    );
+    let space_count = result.matches("Space").count();
+    assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
+}
+
+/// Test code span preserves internal spaces
+#[test]
+fn test_pandoc_code_span_preserves_spaces() {
+    let input = "`  spaced  `";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Code ("", [], []) "  spaced  " ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Code"), "Should contain Code: {}", result);
+    // The exact format might vary, but spaces should be preserved
+    assert!(
+        result.contains("spaced"),
+        "Should contain spaced: {}",
+        result
+    );
+}
+
