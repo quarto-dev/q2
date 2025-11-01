@@ -2440,6 +2440,628 @@ fn test_citation_complex_id() {
 }
 
 // ============================================================================
+// Citation Whitespace Tests
+// ============================================================================
+
+/// Test citation WITH leading space (should inject Space node)
+#[test]
+fn test_citation_with_leading_space() {
+    let input = "Hi @cite";
+    let result = parse_qmd_to_json(input);
+
+    // Should have a Space node between "Hi" and the Cite
+    assert!(
+        result.contains("\"t\":\"Space\""),
+        "Should contain Space node: {}",
+        result
+    );
+    assert!(
+        result.contains("\"t\":\"Cite\""),
+        "Should contain Cite: {}",
+        result
+    );
+
+    // The Cite content should NOT have leading space
+    assert!(
+        result.contains("\"@cite\""),
+        "Should contain '@cite' without leading space: {}",
+        result
+    );
+    assert!(
+        !result.contains("\" @cite\""),
+        "Should NOT contain ' @cite' with leading space: {}",
+        result
+    );
+
+    // Verify the Space comes before the Cite in the JSON
+    let space_pos = result.find("\"t\":\"Space\"").unwrap();
+    let cite_pos = result.find("\"t\":\"Cite\"").unwrap();
+    assert!(
+        space_pos < cite_pos,
+        "Space should appear before Cite in output: {}",
+        result
+    );
+}
+
+/// Test citation WITHOUT leading space (should NOT inject Space node)
+#[test]
+fn test_citation_without_leading_space() {
+    let input = "Hi@cite";
+    let result = parse_qmd_to_json(input);
+
+    // Should NOT have a Space node
+    assert!(
+        !result.contains("\"t\":\"Space\""),
+        "Should NOT contain Space node: {}",
+        result
+    );
+    assert!(
+        result.contains("\"t\":\"Cite\""),
+        "Should contain Cite: {}",
+        result
+    );
+    assert!(
+        result.contains("\"Hi\""),
+        "Should contain 'Hi' text: {}",
+        result
+    );
+    assert!(
+        result.contains("\"@cite\""),
+        "Should contain '@cite': {}",
+        result
+    );
+}
+
+/// Test citation with leading AND trailing space
+#[test]
+fn test_citation_leading_and_trailing_space() {
+    let input = "Hi @cite bye";
+    let result = parse_qmd_to_json(input);
+
+    // Should have TWO Space nodes (one injected for leading, one from tree-sitter for trailing)
+    let space_count = result.matches("\"t\":\"Space\"").count();
+    assert_eq!(
+        space_count, 2,
+        "Should have exactly 2 Space nodes: {}",
+        result
+    );
+    assert!(
+        result.contains("\"t\":\"Cite\""),
+        "Should contain Cite: {}",
+        result
+    );
+}
+
+/// Test citation at start of paragraph (no leading space possible)
+#[test]
+fn test_citation_paragraph_start() {
+    let input = "@cite word";
+    let result = parse_qmd_to_json(input);
+
+    // Should have exactly one Space node (trailing space from tree-sitter)
+    let space_count = result.matches("\"t\":\"Space\"").count();
+    assert_eq!(
+        space_count, 1,
+        "Should have exactly 1 Space node (trailing): {}",
+        result
+    );
+    assert!(
+        result.contains("\"t\":\"Cite\""),
+        "Should contain Cite: {}",
+        result
+    );
+
+    // Verify the Cite comes before the Space in the JSON
+    let cite_pos = result.find("\"t\":\"Cite\"").unwrap();
+    let space_pos = result.find("\"t\":\"Space\"").unwrap();
+    assert!(
+        cite_pos < space_pos,
+        "Cite should appear before Space in output: {}",
+        result
+    );
+}
+
+/// Test multiple citations with different spacing patterns
+#[test]
+fn test_citation_multiple_spacing_patterns() {
+    let input = "A@cite1 B @cite2C@cite3 D";
+    let result = parse_qmd_to_json(input);
+
+    // Expected pattern: A, @cite1, Space, B, Space, @cite2, C, @cite3, Space, D
+    // Space count: 1 (after cite1) + 1 (injected before cite2) + 1 (after cite3) = 3
+    let space_count = result.matches("\"t\":\"Space\"").count();
+    assert_eq!(
+        space_count, 3,
+        "Should have exactly 3 Space nodes: {}",
+        result
+    );
+
+    // Verify all three citations are present
+    let cite_count = result.matches("\"t\":\"Cite\"").count();
+    assert_eq!(cite_count, 3, "Should have exactly 3 citations: {}", result);
+}
+
+/// Test suppress author citation with leading space
+#[test]
+fn test_citation_suppress_author_with_leading_space() {
+    let input = "Hi [-@cite]";
+    let result = parse_qmd_to_json(input);
+
+    // Should have a Space node
+    assert!(
+        result.contains("\"t\":\"Space\""),
+        "Should contain Space node: {}",
+        result
+    );
+    assert!(
+        result.contains("\"t\":\"Cite\""),
+        "Should contain Cite: {}",
+        result
+    );
+    assert!(
+        result.contains("\"SuppressAuthor\""),
+        "Should be SuppressAuthor citation: {}",
+        result
+    );
+
+    // The Cite content should NOT have leading space
+    assert!(
+        !result.contains("\" [-@cite\""),
+        "Should NOT contain leading space in citation content: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Block Quote Tests
+// ============================================================================
+
+/// Test basic single-line block quote
+#[test]
+fn test_block_quote_basic() {
+    let input = "> quote";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"BlockQuote\""),
+        "Should contain BlockQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quote\""),
+        "Should contain quoted text: {}",
+        result
+    );
+}
+
+/// Test multi-line block quote
+#[test]
+fn test_block_quote_multiline() {
+    let input = "> first line\n> second line";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"BlockQuote\""),
+        "Should contain BlockQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("\"first\""),
+        "Should contain first line: {}",
+        result
+    );
+    assert!(
+        result.contains("\"second\""),
+        "Should contain second line: {}",
+        result
+    );
+}
+
+/// Test block quote with paragraph continuation (no > on next line)
+#[test]
+fn test_block_quote_lazy_continuation() {
+    let input = "> first line\ncontinued";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"BlockQuote\""),
+        "Should contain BlockQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("\"first\""),
+        "Should contain first line: {}",
+        result
+    );
+    assert!(
+        result.contains("\"continued\""),
+        "Should contain continued line: {}",
+        result
+    );
+}
+
+/// Test nested block quotes
+#[test]
+fn test_block_quote_nested() {
+    let input = "> outer\n>> inner";
+    let result = parse_qmd_to_json(input);
+
+    // Should have two BlockQuote nodes
+    let quote_count = result.matches("\"t\":\"BlockQuote\"").count();
+    assert!(
+        quote_count >= 2,
+        "Should have at least 2 BlockQuote nodes (nested): {}",
+        result
+    );
+    assert!(
+        result.contains("\"outer\""),
+        "Should contain outer quote: {}",
+        result
+    );
+    assert!(
+        result.contains("\"inner\""),
+        "Should contain inner quote: {}",
+        result
+    );
+}
+
+/// Test block quote in context (between paragraphs)
+#[test]
+fn test_block_quote_in_context() {
+    let input = "before\n\n> quote\n\nafter";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"BlockQuote\""),
+        "Should contain BlockQuote: {}",
+        result
+    );
+    assert!(
+        result.contains("\"before\""),
+        "Should contain before text: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quote\""),
+        "Should contain quoted text: {}",
+        result
+    );
+    assert!(
+        result.contains("\"after\""),
+        "Should contain after text: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Horizontal Rule Tests
+// ============================================================================
+
+/// Test basic horizontal rule
+#[test]
+fn test_horizontal_rule_basic() {
+    let input = "---\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"HorizontalRule\""),
+        "Should contain HorizontalRule: {}",
+        result
+    );
+}
+
+/// Test horizontal rule between paragraphs
+#[test]
+fn test_horizontal_rule_in_context() {
+    let input = "before\n\n---\n\nafter";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"HorizontalRule\""),
+        "Should contain HorizontalRule: {}",
+        result
+    );
+    assert!(
+        result.contains("\"before\""),
+        "Should contain before text: {}",
+        result
+    );
+    assert!(
+        result.contains("\"after\""),
+        "Should contain after text: {}",
+        result
+    );
+}
+
+/// Test multiple horizontal rules
+#[test]
+fn test_horizontal_rule_multiple() {
+    let input = "---\n\ntext\n\n---\n";
+    let result = parse_qmd_to_json(input);
+
+    let rule_count = result.matches("\"t\":\"HorizontalRule\"").count();
+    assert_eq!(
+        rule_count, 2,
+        "Should have exactly 2 HorizontalRule nodes: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Code Block Tests
+// ============================================================================
+
+/// Test basic code block without language
+#[test]
+fn test_code_block_basic() {
+    let input = "```\ncode here\n```\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"CodeBlock\""),
+        "Should contain CodeBlock: {}",
+        result
+    );
+    assert!(
+        result.contains("code here"),
+        "Should contain code text: {}",
+        result
+    );
+}
+
+/// Test code block with language
+#[test]
+fn test_code_block_with_language() {
+    let input = "```python\nprint('hello')\n```\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"CodeBlock\""),
+        "Should contain CodeBlock: {}",
+        result
+    );
+    assert!(
+        result.contains("python"),
+        "Should contain language: {}",
+        result
+    );
+    assert!(
+        result.contains("print('hello')"),
+        "Should contain code text: {}",
+        result
+    );
+}
+
+/// Test empty code block
+#[test]
+fn test_code_block_empty() {
+    let input = "```\n```\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"CodeBlock\""),
+        "Should contain CodeBlock: {}",
+        result
+    );
+}
+
+/// Test code block with attributes
+/// NOTE: Skipped - complex attribute syntax `{python #id .class}` not yet supported by grammar
+#[test]
+#[ignore]
+fn test_code_block_with_attributes() {
+    let input = "```{python #my-code .class}\ncode\n```\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"CodeBlock\""),
+        "Should contain CodeBlock: {}",
+        result
+    );
+    assert!(
+        result.contains("my-code"),
+        "Should contain id: {}",
+        result
+    );
+    assert!(
+        result.contains("class"),
+        "Should contain class: {}",
+        result
+    );
+}
+
+/// Test multi-line code block
+#[test]
+fn test_code_block_multiline() {
+    let input = "```\nline 1\nline 2\nline 3\n```\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"CodeBlock\""),
+        "Should contain CodeBlock: {}",
+        result
+    );
+    assert!(
+        result.contains("line 1"),
+        "Should contain first line: {}",
+        result
+    );
+    assert!(
+        result.contains("line 3"),
+        "Should contain last line: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Div Tests
+// ============================================================================
+
+/// Test basic div with info string (naked value)
+#[test]
+fn test_div_basic() {
+    let input = "::: note\nContent inside div\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"Div\""),
+        "Should contain Div: {}",
+        result
+    );
+    assert!(
+        result.contains("Content") && result.contains("inside") && result.contains("div"),
+        "Should contain content: {}",
+        result
+    );
+    assert!(
+        result.contains("note"),
+        "Should contain info string: {}",
+        result
+    );
+}
+
+/// Test div with classes
+#[test]
+fn test_div_with_class() {
+    let input = "::: {.callout-note}\nThis is a note\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"Div\""),
+        "Should contain Div: {}",
+        result
+    );
+    assert!(
+        result.contains("callout-note"),
+        "Should contain class: {}",
+        result
+    );
+}
+
+/// Test div with id
+#[test]
+fn test_div_with_id() {
+    let input = "::: {#my-div}\nContent\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"Div\""),
+        "Should contain Div: {}",
+        result
+    );
+    assert!(
+        result.contains("my-div"),
+        "Should contain id: {}",
+        result
+    );
+}
+
+/// Test empty div (with info string)
+#[test]
+fn test_div_empty() {
+    let input = "::: empty\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"Div\""),
+        "Should contain Div: {}",
+        result
+    );
+}
+
+/// Test nested divs
+#[test]
+fn test_div_nested() {
+    let input = "::: {.outer}\n::: {.inner}\nNested content\n:::\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    let div_count = result.matches("\"t\":\"Div\"").count();
+    assert_eq!(
+        div_count, 2,
+        "Should have exactly 2 Div nodes: {}",
+        result
+    );
+    assert!(
+        result.contains("outer"),
+        "Should contain outer class: {}",
+        result
+    );
+    assert!(
+        result.contains("inner"),
+        "Should contain inner class: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Fenced Note Definition Tests
+// ============================================================================
+
+/// Test basic single-block fenced note definition
+#[test]
+fn test_note_def_fenced_basic() {
+    let input = "::: ^mynote\nThis is a note.\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("^mynote") || result.contains("mynote"),
+        "Should contain note id: {}",
+        result
+    );
+    assert!(
+        result.contains("This") && result.contains("note"),
+        "Should contain note content: {}",
+        result
+    );
+}
+
+/// Test multi-block fenced note definition
+#[test]
+fn test_note_def_fenced_multiblock() {
+    let input = "::: ^note2\nFirst paragraph.\n\nSecond paragraph.\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("note2"),
+        "Should contain note id: {}",
+        result
+    );
+    assert!(
+        result.contains("First") && result.contains("paragraph"),
+        "Should contain first paragraph: {}",
+        result
+    );
+    assert!(
+        result.contains("Second"),
+        "Should contain second paragraph: {}",
+        result
+    );
+}
+
+/// Test fenced note with complex content
+#[test]
+fn test_note_def_fenced_complex() {
+    let input = "::: ^complex\nA paragraph.\n\n> A quote\n:::\n";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("complex"),
+        "Should contain note id: {}",
+        result
+    );
+    assert!(
+        result.contains("paragraph"),
+        "Should contain paragraph: {}",
+        result
+    );
+    assert!(
+        result.contains("BlockQuote") || result.contains("quote"),
+        "Should contain quote: {}",
+        result
+    );
+}
+
+// ============================================================================
 // Inline Note Tests
 // ============================================================================
 
@@ -2663,6 +3285,411 @@ fn test_note_definition_with_formatting() {
     assert!(
         result.contains("\"bold\""),
         "Should contain formatted text: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Inline Note Reference Tests (footnote references like [^id])
+// ============================================================================
+
+/// Test basic inline note reference
+#[test]
+fn test_inline_note_reference_basic() {
+    let input = "this [^ref]";
+    let result = parse_qmd_to_json(input);
+
+    // Should produce: Para [ Str "this", Span with class "quarto-note-reference" and reference-id="ref" ]
+    assert!(
+        result.contains("\"t\":\"Span\""),
+        "Should contain Span: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"reference-id\""),
+        "Should contain reference-id key: {}",
+        result
+    );
+    assert!(
+        result.contains("\"ref\""),
+        "Should contain note ID 'ref': {}",
+        result
+    );
+    assert!(
+        result.contains("\"this\""),
+        "Should contain 'this' text: {}",
+        result
+    );
+}
+
+/// Test inline note reference with numeric ID
+#[test]
+fn test_inline_note_reference_numeric() {
+    let input = "test [^123]";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"reference-id\""),
+        "Should contain reference-id key: {}",
+        result
+    );
+    assert!(
+        result.contains("\"123\""),
+        "Should contain numeric note ID '123': {}",
+        result
+    );
+}
+
+/// Test inline note reference with alphanumeric ID
+#[test]
+fn test_inline_note_reference_alphanumeric() {
+    let input = "test [^note1]";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note1\""),
+        "Should contain alphanumeric note ID 'note1': {}",
+        result
+    );
+}
+
+/// Test inline note reference with hyphenated ID
+#[test]
+fn test_inline_note_reference_hyphenated() {
+    let input = "test [^my-note]";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"my-note\""),
+        "Should contain hyphenated note ID 'my-note': {}",
+        result
+    );
+}
+
+/// Test inline note reference with underscore ID
+#[test]
+fn test_inline_note_reference_underscore() {
+    let input = "test [^my_note]";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"my_note\""),
+        "Should contain underscore note ID 'my_note': {}",
+        result
+    );
+}
+
+/// Test inline note reference in context
+#[test]
+fn test_inline_note_reference_in_context() {
+    let input = "before [^note] after";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"before\""),
+        "Should contain 'before' text: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note\""),
+        "Should contain note ID 'note': {}",
+        result
+    );
+    assert!(
+        result.contains("\"after\""),
+        "Should contain 'after' text: {}",
+        result
+    );
+}
+
+/// Test multiple inline note references
+#[test]
+fn test_multiple_inline_note_references() {
+    let input = "test [^foo] and [^bar]";
+    let result = parse_qmd_to_json(input);
+
+    // Count Span occurrences - should appear twice (once for each note reference)
+    let span_count = result.matches("\"t\":\"Span\"").count();
+    assert!(
+        span_count >= 2,
+        "Should have at least 2 Span nodes (one per note reference): {}",
+        result
+    );
+
+    assert!(
+        result.contains("\"foo\""),
+        "Should contain first note ID 'foo': {}",
+        result
+    );
+    assert!(
+        result.contains("\"bar\""),
+        "Should contain second note ID 'bar': {}",
+        result
+    );
+    assert!(
+        result.contains("\"and\""),
+        "Should contain 'and' text: {}",
+        result
+    );
+}
+
+/// Test inline note reference with no space before
+#[test]
+fn test_inline_note_reference_no_space_before() {
+    let input = "test[^note]";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note\""),
+        "Should contain note ID 'note': {}",
+        result
+    );
+    assert!(
+        result.contains("\"test\""),
+        "Should contain 'test' text: {}",
+        result
+    );
+}
+
+/// Test inline note reference with no space after
+#[test]
+fn test_inline_note_reference_no_space_after() {
+    let input = "[^note]test";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note\""),
+        "Should contain note ID 'note': {}",
+        result
+    );
+    assert!(
+        result.contains("\"test\""),
+        "Should contain 'test' text: {}",
+        result
+    );
+}
+
+/// Test inline note reference at start of paragraph
+#[test]
+fn test_inline_note_reference_at_start() {
+    let input = "[^note] at start";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note\""),
+        "Should contain note ID 'note': {}",
+        result
+    );
+    assert!(
+        result.contains("\"start\""),
+        "Should contain 'start' text: {}",
+        result
+    );
+}
+
+/// Test inline note reference at end of paragraph
+#[test]
+fn test_inline_note_reference_at_end() {
+    let input = "at end [^note]";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note\""),
+        "Should contain note ID 'note': {}",
+        result
+    );
+    assert!(
+        result.contains("\"end\""),
+        "Should contain 'end' text: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Inline Note Reference Whitespace Tests
+// ============================================================================
+
+/// Test inline note reference WITH leading space (should inject Space node)
+#[test]
+fn test_inline_note_reference_with_leading_space() {
+    let input = "Hi [^ref]";
+    let result = parse_qmd_to_json(input);
+
+    // Should have a Space node between "Hi" and the Span
+    assert!(
+        result.contains("\"t\":\"Space\""),
+        "Should contain Space node: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"ref\""),
+        "Should contain note ID 'ref': {}",
+        result
+    );
+
+    // Verify the Space comes before the Span in the JSON
+    let space_pos = result.find("\"t\":\"Space\"").unwrap();
+    let span_pos = result.find("\"t\":\"Span\"").unwrap();
+    assert!(
+        space_pos < span_pos,
+        "Space should appear before Span in output: {}",
+        result
+    );
+}
+
+/// Test inline note reference WITHOUT leading space (should NOT inject Space node)
+#[test]
+fn test_inline_note_reference_without_leading_space() {
+    let input = "Hi[^ref]";
+    let result = parse_qmd_to_json(input);
+
+    // Should NOT have a Space node
+    assert!(
+        !result.contains("\"t\":\"Space\""),
+        "Should NOT contain Space node: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"Hi\""),
+        "Should contain 'Hi' text: {}",
+        result
+    );
+    assert!(
+        result.contains("\"ref\""),
+        "Should contain note ID 'ref': {}",
+        result
+    );
+}
+
+/// Test inline note reference with leading AND trailing space
+#[test]
+fn test_inline_note_reference_leading_and_trailing_space() {
+    let input = "Hi [^ref] bye";
+    let result = parse_qmd_to_json(input);
+
+    // Should have TWO Space nodes (one injected for leading, one from tree-sitter for trailing)
+    let space_count = result.matches("\"t\":\"Space\"").count();
+    assert_eq!(
+        space_count, 2,
+        "Should have exactly 2 Space nodes: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+}
+
+/// Test inline note reference at start of paragraph (no leading space possible)
+#[test]
+fn test_inline_note_reference_paragraph_start() {
+    let input = "[^ref] word";
+    let result = parse_qmd_to_json(input);
+
+    // Should have exactly one Space node (trailing space from tree-sitter, after the ref)
+    let space_count = result.matches("\"t\":\"Space\"").count();
+    assert_eq!(
+        space_count, 1,
+        "Should have exactly 1 Space node (trailing): {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-note-reference\""),
+        "Should contain quarto-note-reference class: {}",
+        result
+    );
+
+    // Verify the Span comes before the Space in the JSON (ref, then space, then "word")
+    let span_pos = result.find("\"t\":\"Span\"").unwrap();
+    let space_pos = result.find("\"t\":\"Space\"").unwrap();
+    assert!(
+        span_pos < space_pos,
+        "Span should appear before Space in output: {}",
+        result
+    );
+}
+
+/// Test multiple consecutive note references with different spacing
+#[test]
+fn test_inline_note_reference_multiple_spacing_patterns() {
+    let input = "A[^1] B [^2]C[^3] D";
+    let result = parse_qmd_to_json(input);
+
+    // Expected pattern: A, [^1], Space, B, Space, [^2], C, [^3], Space, D
+    // Space count: 1 (after [^1]) + 1 (injected before [^2]) + 1 (after [^3]) = 3
+    let space_count = result.matches("\"t\":\"Space\"").count();
+    assert_eq!(
+        space_count, 3,
+        "Should have exactly 3 Space nodes: {}",
+        result
+    );
+
+    // Verify all three note references are present
+    let span_count = result.matches("\"quarto-note-reference\"").count();
+    assert_eq!(
+        span_count, 3,
+        "Should have exactly 3 note references: {}",
         result
     );
 }
