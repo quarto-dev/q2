@@ -407,8 +407,6 @@ typedef struct {
     uint8_t code_span_delimiter_length;
     // The delimiter length of the currently open latex span (for pipe table cells)
     uint8_t latex_span_delimiter_length;
-    // Whether we're inside a latex span (for pipe table cells)
-    uint8_t inside_latex_span;
 
     bool simulate;
 } Scanner;
@@ -456,7 +454,6 @@ static unsigned serialize(Scanner *s, char *buffer) {
     buffer[size++] = (char)s->fenced_code_block_delimiter_length;
     buffer[size++] = (char)s->code_span_delimiter_length;
     buffer[size++] = (char)s->latex_span_delimiter_length;
-    buffer[size++] = (char)s->inside_latex_span;
     size_t blocks_count = s->open_blocks.size;
     if (blocks_count > 0) {
         memcpy(&buffer[size], s->open_blocks.items,
@@ -480,7 +477,6 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
     s->fenced_code_block_delimiter_length = 0;
     s->code_span_delimiter_length = 0;
     s->latex_span_delimiter_length = 0;
-    s->inside_latex_span = 0;
     if (length > 0) {
         size_t size = 0;
         s->own_size = length;
@@ -492,7 +488,6 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         s->fenced_code_block_delimiter_length = (uint8_t)buffer[size++];
         s->code_span_delimiter_length = (uint8_t)buffer[size++];
         s->latex_span_delimiter_length = (uint8_t)buffer[size++];
-        s->inside_latex_span = (uint8_t)buffer[size++];
         size_t blocks_size = length - size;
         if (blocks_size > 0) {
             size_t blocks_count = blocks_size / sizeof(Block);
@@ -1635,7 +1630,6 @@ static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbo
     // Try to close an open latex span
     if (level == s->latex_span_delimiter_length && valid_symbols[LATEX_SPAN_CLOSE]) {
         s->latex_span_delimiter_length = 0;
-        s->inside_latex_span = 0;
         lexer->result_symbol = LATEX_SPAN_CLOSE;
         return true;
     }
@@ -1660,7 +1654,6 @@ static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbo
         if (close_level == level) {
             // Found matching closing delimiter
             s->latex_span_delimiter_length = level;
-            s->inside_latex_span = 1;
             lexer->result_symbol = LATEX_SPAN_START;
             return true;
         }
