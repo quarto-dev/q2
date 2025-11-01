@@ -1114,14 +1114,14 @@ fn native_visitor<T: Write>(
         //     )
         // }
         // "uri_autolink" => process_uri_autolink(node, input_bytes, context),
-        // "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
-        // "pipe_table_header" | "pipe_table_row" => {
-        //     process_pipe_table_header_or_row(node, children, context)
-        // }
-        // "pipe_table_delimiter_row" => process_pipe_table_delimiter_row(children, context),
-        // "pipe_table_cell" => process_pipe_table_cell(node, children, context),
+        "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
+        "pipe_table_header" | "pipe_table_row" => {
+            process_pipe_table_header_or_row(node, children, context)
+        }
+        "pipe_table_delimiter_row" => process_pipe_table_delimiter_row(children, context),
+        "pipe_table_cell" => process_pipe_table_cell(node, children, context),
         // "caption" => process_caption(node, children, context),
-        // "pipe_table" => process_pipe_table(node, children, context),
+        "pipe_table" => process_pipe_table(node, children, context),
         // "setext_h1_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(1),
         // "setext_h2_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(2),
         // "setext_heading" => process_setext_heading(buf, node, children, context),

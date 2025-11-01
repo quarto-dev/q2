@@ -115,19 +115,17 @@ pub fn process_pipe_table_cell(
         source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     };
-    for (node, child) in children {
-        if node == "inline" {
-            match child {
-                PandocNativeIntermediate::IntermediateInlines(inlines) => {
-                    plain_content.extend(inlines);
-                }
-                _ => panic!("Expected Inlines in pipe_table_cell, got {:?}", child),
+    for (_node, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateInline(inline) => {
+                plain_content.push(inline);
             }
-        } else {
-            panic!(
-                "Expected Inlines in pipe_table_cell, got {:?} {:?}",
-                node, child
-            );
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                plain_content.extend(inlines);
+            }
+            _ => {
+                // Skip other intermediate types (e.g., markers)
+            }
         }
     }
 

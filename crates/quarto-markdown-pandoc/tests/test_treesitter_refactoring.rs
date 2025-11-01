@@ -3891,3 +3891,256 @@ fn test_inline_note_reference_multiple_spacing_patterns() {
         result
     );
 }
+
+// =============================================================================
+// Pipe Table Tests
+// =============================================================================
+
+/// Test basic 2x2 pipe table with headers
+#[test]
+fn test_pipe_table_basic() {
+    let input = "| Header 1 | Header 2 |\n\
+                 |----------|----------|\n\
+                 | Cell 1   | Cell 2   |\n\
+                 | Cell 3   | Cell 4   |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce a Table element
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+
+    // Should contain TableHead (header row)
+    assert!(
+        result.contains("TableHead"),
+        "Should contain TableHead: {}",
+        result
+    );
+
+    // Should contain header content (as separate Str nodes)
+    assert!(
+        result.contains("Str \"Header\""),
+        "Should contain 'Header' text: {}",
+        result
+    );
+
+    // Should contain cell content
+    assert!(
+        result.contains("Str \"Cell\""),
+        "Should contain 'Cell' text: {}",
+        result
+    );
+
+    // Should have 2 columns (2 ColWidth specs)
+    assert_eq!(
+        result.matches("ColWidthDefault").count(),
+        2,
+        "Should have 2 columns: {}",
+        result
+    );
+
+    // Should have proper structure: TableHead and TableBody
+    assert!(
+        result.contains("TableBody"),
+        "Should contain TableBody: {}",
+        result
+    );
+}
+
+/// Test pipe table with left alignment
+#[test]
+fn test_pipe_table_alignment_left() {
+    let input = "| Left |\n\
+                 |:-----|\n\
+                 | L1   |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignLeft"),
+        "Should contain AlignLeft: {}",
+        result
+    );
+}
+
+/// Test pipe table with center alignment
+#[test]
+fn test_pipe_table_alignment_center() {
+    let input = "| Center |\n\
+                 |:------:|\n\
+                 | C1     |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignCenter"),
+        "Should contain AlignCenter: {}",
+        result
+    );
+}
+
+/// Test pipe table with right alignment
+#[test]
+fn test_pipe_table_alignment_right() {
+    let input = "| Right |\n\
+                 |------:|\n\
+                 | R1    |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignRight"),
+        "Should contain AlignRight: {}",
+        result
+    );
+}
+
+/// Test pipe table with mixed alignment
+#[test]
+fn test_pipe_table_alignment_mixed() {
+    let input = "| Left | Center | Right | Default |\n\
+                 |:-----|:------:|------:|---------|\n\
+                 | L1   | C1     | R1    | D1      |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignLeft"),
+        "Should contain AlignLeft: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignCenter"),
+        "Should contain AlignCenter: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignRight"),
+        "Should contain AlignRight: {}",
+        result
+    );
+    assert!(
+        result.contains("AlignDefault"),
+        "Should contain AlignDefault: {}",
+        result
+    );
+    // Should have 4 columns
+    assert_eq!(
+        result.matches("ColWidthDefault").count(),
+        4,
+        "Should have 4 columns: {}",
+        result
+    );
+}
+
+/// Test pipe table with empty cells
+#[test]
+fn test_pipe_table_empty_cells() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 |      | Data |\n\
+                 | Data |      |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    // Empty cells should still create Cell structures
+    assert!(
+        result.contains("Cell"),
+        "Should contain Cell elements: {}",
+        result
+    );
+}
+
+/// Test pipe table with single column
+#[test]
+fn test_pipe_table_single_column() {
+    let input = "| Only |\n\
+                 |------|\n\
+                 | One  |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    // Should have exactly 1 column
+    assert_eq!(
+        result.matches("ColWidthDefault").count(),
+        1,
+        "Should have 1 column: {}",
+        result
+    );
+}
+
+/// Test pipe table with formatted cells (bold, code, etc.)
+#[test]
+fn test_pipe_table_formatted_cells() {
+    let input = "| Header |\n\
+                 |--------|\n\
+                 | **bold** |\n\
+                 | `code` |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    // Should contain Strong (bold)
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong element: {}",
+        result
+    );
+    // Should contain Code
+    assert!(
+        result.contains("Code"),
+        "Should contain Code element: {}",
+        result
+    );
+}
+
+/// Test pipe table with many columns (wide table)
+#[test]
+fn test_pipe_table_wide() {
+    let input = "| C1 | C2 | C3 | C4 | C5 | C6 |\n\
+                 |----|----|----|----|----|----|\n\
+                 | D1 | D2 | D3 | D4 | D5 | D6 |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    // Should have exactly 6 columns
+    assert_eq!(
+        result.matches("ColWidthDefault").count(),
+        6,
+        "Should have 6 columns: {}",
+        result
+    );
+}
