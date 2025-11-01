@@ -38,6 +38,33 @@ fn parse_qmd_to_pandoc_ast(input: &str) -> String {
     String::from_utf8(buf).expect("Invalid UTF-8 in output")
 }
 
+/// Helper function to parse QMD input and convert to JSON
+/// Use this for testing blocks that are not represented in Pandoc's native format
+/// (e.g., NoteDefinitionPara, which Quarto keeps separate but Pandoc inlines)
+fn parse_qmd_to_json(input: &str) -> String {
+    let mut parser = MarkdownParser::default();
+    let input_bytes = input.as_bytes();
+    let tree = parser
+        .parse(input_bytes, None)
+        .expect("Failed to parse input");
+
+    let mut buf = Vec::new();
+    let mut error_collector = DiagnosticCollector::new();
+    let context = ASTContext::anonymous();
+
+    let pandoc = treesitter_to_pandoc(
+        &mut std::io::sink(),
+        &tree,
+        &input_bytes,
+        &context,
+        &mut error_collector,
+    )
+    .unwrap();
+
+    writers::json::write(&pandoc, &context, &mut buf).unwrap();
+    String::from_utf8(buf).expect("Invalid UTF-8 in output")
+}
+
 /// Test basic pandoc_str node - single word
 #[test]
 fn test_pandoc_str_single_word() {
@@ -2408,6 +2435,234 @@ fn test_citation_complex_id() {
     assert!(
         result.contains("\"smith_jones_2020\""),
         "Should contain complex citation id: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Inline Note Tests
+// ============================================================================
+
+/// Test basic inline note
+#[test]
+fn test_inline_note_basic() {
+    let input = "^[note text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Note [ Para [ Str "note" , Space , Str "text" ] ] ]
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Note"), "Should contain Note: {}", result);
+    assert!(
+        result.contains("Str \"note\""),
+        "Should contain note text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain note text: {}",
+        result
+    );
+}
+
+/// Test inline note in context
+#[test]
+fn test_inline_note_in_context() {
+    let input = "Some text^[with a note] here.";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should contain the surrounding text and the note
+    assert!(
+        result.contains("Str \"Some\""),
+        "Should contain 'Some': {}",
+        result
+    );
+    assert!(result.contains("Note"), "Should contain Note: {}", result);
+    assert!(
+        result.contains("Str \"with\""),
+        "Should contain note content: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"here.\""),
+        "Should contain trailing text: {}",
+        result
+    );
+}
+
+/// Test inline note with single word
+#[test]
+fn test_inline_note_single_word() {
+    let input = "text^[note]more";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Note"), "Should contain Note: {}", result);
+    assert!(
+        result.contains("Str \"note\""),
+        "Should contain note text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain leading text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"more\""),
+        "Should contain trailing text: {}",
+        result
+    );
+}
+
+/// Test inline note with formatting
+#[test]
+fn test_inline_note_with_formatting() {
+    let input = "^[**bold** text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Note"), "Should contain Note: {}", result);
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"bold\""),
+        "Should contain bold text: {}",
+        result
+    );
+}
+
+/// Test multiple inline notes
+#[test]
+fn test_multiple_inline_notes() {
+    let input = "First^[note one] and second^[note two].";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Count Note occurrences - should appear twice
+    let note_count = result.matches("Note").count();
+    assert_eq!(note_count, 2, "Should have 2 Note nodes: {}", result);
+
+    assert!(
+        result.contains("Str \"one\""),
+        "Should contain first note: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"two\""),
+        "Should contain second note: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Note Definition Tests (footnote definitions like [^id]: content)
+// ============================================================================
+
+/// Test basic note definition
+#[test]
+fn test_note_definition_basic() {
+    let input = "[^note1]: This is the note content.";
+    let result = parse_qmd_to_json(input);
+
+    // Should produce: NoteDefinitionPara with id "note1" and content
+    // JSON format: {"t":"NoteDefinitionPara","c":["note1",[...inlines...]]}
+    assert!(
+        result.contains("\"t\":\"NoteDefinitionPara\""),
+        "Should contain NoteDefinitionPara: {}",
+        result
+    );
+    assert!(
+        result.contains("\"note1\""),
+        "Should contain note ID: {}",
+        result
+    );
+    assert!(
+        result.contains("\"This\""),
+        "Should contain note content: {}",
+        result
+    );
+    assert!(
+        result.contains("\"content.\""),
+        "Should contain note content: {}",
+        result
+    );
+}
+
+/// Test note definition with simple ID
+#[test]
+fn test_note_definition_numeric() {
+    let input = "[^1]: First note.";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"NoteDefinitionPara\""),
+        "Should contain NoteDefinitionPara: {}",
+        result
+    );
+    assert!(
+        result.contains("\"1\""),
+        "Should contain numeric note ID: {}",
+        result
+    );
+    assert!(
+        result.contains("\"First\""),
+        "Should contain note content: {}",
+        result
+    );
+}
+
+/// Test note definition with multiword content
+#[test]
+fn test_note_definition_multiword() {
+    let input = "[^ref]: This is a longer note with multiple words.";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"NoteDefinitionPara\""),
+        "Should contain NoteDefinitionPara: {}",
+        result
+    );
+    assert!(
+        result.contains("\"ref\""),
+        "Should contain note ID: {}",
+        result
+    );
+    assert!(
+        result.contains("\"longer\""),
+        "Should contain note content: {}",
+        result
+    );
+    assert!(
+        result.contains("\"multiple\""),
+        "Should contain note content: {}",
+        result
+    );
+}
+
+/// Test note definition with formatting
+#[test]
+fn test_note_definition_with_formatting() {
+    let input = "[^fmt]: This has **bold** text.";
+    let result = parse_qmd_to_json(input);
+
+    assert!(
+        result.contains("\"t\":\"NoteDefinitionPara\""),
+        "Should contain NoteDefinitionPara: {}",
+        result
+    );
+    assert!(
+        result.contains("\"fmt\""),
+        "Should contain note ID: {}",
+        result
+    );
+    assert!(
+        result.contains("\"t\":\"Strong\""),
+        "Should contain Strong formatting: {}",
+        result
+    );
+    assert!(
+        result.contains("\"bold\""),
+        "Should contain formatted text: {}",
         result
     );
 }

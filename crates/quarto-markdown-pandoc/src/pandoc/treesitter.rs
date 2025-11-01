@@ -733,6 +733,43 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
         "pandoc_code_span" => process_pandoc_code_span(node, children, input_bytes, context),
+        // Inline note nodes
+        "inline_note_delimiter" => {
+            // Marker node, no processing needed
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "inline_note" => {
+            // Collect inline content from children (excluding delimiters)
+            let mut inlines: Vec<Inline> = Vec::new();
+            for (node_name, child) in children {
+                if node_name == "inline_note_delimiter" {
+                    continue; // Skip delimiter markers
+                }
+                match child {
+                    PandocNativeIntermediate::IntermediateInline(inline) => inlines.push(inline),
+                    PandocNativeIntermediate::IntermediateInlines(mut inner_inlines) => {
+                        inlines.append(&mut inner_inlines);
+                    }
+                    _ => {} // Ignore other types
+                }
+            }
+
+            // Wrap inlines in a Paragraph block, then wrap in Note inline
+            PandocNativeIntermediate::IntermediateInline(Inline::Note(Note {
+                content: vec![Block::Paragraph(Paragraph {
+                    content: inlines,
+                    source_info: node_source_info_with_context(node, context),
+                })],
+                source_info: node_source_info_with_context(node, context),
+            }))
+        }
+        // Note definition nodes
+        "ref_id_specifier" => {
+            // Extract the ref ID specifier text (e.g., "[^id]:")
+            let text = node.utf8_text(input_bytes).unwrap().to_string();
+            PandocNativeIntermediate::IntermediateBaseText(text, node_location(node))
+        }
+        "inline_ref_def" => process_note_definition_para(node, children, context),
         // Quote-related nodes
         "single_quote" | "double_quote" => {
             // Delimiter nodes for quotes - marker only
