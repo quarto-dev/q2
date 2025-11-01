@@ -2395,6 +2395,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "inline_note_reference"
+        },
+        {
+          "type": "SYMBOL",
           "name": "_prose_punctuation"
         },
         {
@@ -4322,6 +4326,10 @@
     {
       "type": "SYMBOL",
       "name": "_emphasis_close_underscore"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "inline_note_reference"
     }
   ],
   "inline": [],

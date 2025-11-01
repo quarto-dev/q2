@@ -91,6 +91,10 @@
           "named": true
         },
         {
+          "type": "inline_note_reference",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -272,6 +276,10 @@
         },
         {
           "type": "inline_note",
+          "named": true
+        },
+        {
+          "type": "inline_note_reference",
           "named": true
         },
         {
@@ -496,6 +504,10 @@
         },
         {
           "type": "inline_note_delimiter",
+          "named": true
+        },
+        {
+          "type": "inline_note_reference",
           "named": true
         },
         {
@@ -1121,6 +1133,10 @@
           "named": true
         },
         {
+          "type": "inline_note_reference",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -1302,6 +1318,10 @@
           "named": true
         },
         {
+          "type": "inline_note_reference",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -1478,6 +1498,10 @@
           "named": true
         },
         {
+          "type": "inline_note_reference",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -1598,6 +1622,10 @@
         },
         {
           "type": "inline_note",
+          "named": true
+        },
+        {
+          "type": "inline_note_reference",
           "named": true
         },
         {
@@ -1724,6 +1752,10 @@
           "named": true
         },
         {
+          "type": "inline_note_reference",
+          "named": true
+        },
+        {
           "type": "insert",
           "named": true
         },
@@ -1844,6 +1876,10 @@
         },
         {
           "type": "inline_note",
+          "named": true
+        },
+        {
+          "type": "inline_note_reference",
           "named": true
         },
         {
@@ -1994,6 +2030,10 @@
         },
         {
           "type": "inline_note",
+          "named": true
+        },
+        {
+          "type": "inline_note_reference",
           "named": true
         },
         {
@@ -2443,6 +2483,10 @@
   },
   {
     "type": "inline_note_delimiter",
+    "named": true
+  },
+  {
+    "type": "inline_note_reference",
     "named": true
   },
   {

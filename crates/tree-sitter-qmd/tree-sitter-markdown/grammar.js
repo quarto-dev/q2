@@ -400,6 +400,7 @@ module.exports = grammar({
 
             $.entity_reference,
             $.numeric_character_reference,
+            $.inline_note_reference,
 
             $._prose_punctuation,
             $.attribute_specifier
@@ -857,6 +858,8 @@ module.exports = grammar({
         $._emphasis_close_star,
         $._emphasis_open_underscore,
         $._emphasis_close_underscore,
+        
+        $.inline_note_reference, // we just send this token directly through
     ],
     precedences: $ => [],
     extras: $ => [],

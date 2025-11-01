@@ -37,9 +37,15 @@ Footnote reference
 A note[^another-note] [^2].
 
 --------------------------------------------------------------------------------
-
-ERROR: tree-sitter parse failed
-
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (inline_note_reference)
+          (inline_note_reference)
+          (pandoc_str))))
 ================================================================================
 Insert markers
 ================================================================================

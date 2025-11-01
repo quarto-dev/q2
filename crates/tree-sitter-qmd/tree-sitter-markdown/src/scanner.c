@@ -121,6 +121,8 @@ typedef enum {
     EMPHASIS_CLOSE_STAR,
     EMPHASIS_OPEN_UNDERSCORE,
     EMPHASIS_CLOSE_UNDERSCORE,
+
+    INLINE_NOTE_REFERENCE,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -224,6 +226,7 @@ static char* token_names[] = {
     "EMPHASIS_CLOSE_STAR",
     "EMPHASIS_OPEN_UNDERSCORE",
     "EMPHASIS_CLOSE_UNDERSCORE",
+    "INLINE_NOTE_REFERENCE",
 };
 
 #endif
@@ -363,6 +366,7 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // EMPHASIS_CLOSE_STAR,
     false, // EMPHASIS_OPEN_UNDERSCORE,
     false, // EMPHASIS_CLOSE_UNDERSCORE,
+    false, // INLINE_NOTE_REFERENCE,
 };
 
 static const bool paragraph_interrupt_symbols[] = {
@@ -454,6 +458,7 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // EMPHASIS_CLOSE_STAR,
     false, // EMPHASIS_OPEN_UNDERSCORE,
     false, // EMPHASIS_CLOSE_UNDERSCORE,
+    false, // INLINE_NOTE_REFERENCE,
 };
 
 // State bitflags used with `Scanner.state`
@@ -1664,12 +1669,17 @@ static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid
         return false;
     }
     lexer->advance(lexer, false);
-    if (lexer->lookahead != ':') {
+    if (lexer->lookahead == ':' && valid_symbols[REF_ID_SPECIFIER]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        lexer->result_symbol = REF_ID_SPECIFIER;
+        return true;
+    }
+    if (!valid_symbols[INLINE_NOTE_REFERENCE]) {
         return false;
     }
-    lexer->advance(lexer, false);
     lexer->mark_end(lexer);
-    lexer->result_symbol = REF_ID_SPECIFIER;
+    lexer->result_symbol = INLINE_NOTE_REFERENCE;
     return true;
 }
 
@@ -1981,7 +1991,7 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
     }
     lexer->advance(lexer, false);
     
-    if (valid_symbols[REF_ID_SPECIFIER] && lexer->lookahead == '^') {
+    if ((valid_symbols[REF_ID_SPECIFIER] || valid_symbols[INLINE_NOTE_REFERENCE]) && lexer->lookahead == '^') {
         return parse_ref_id_specifier(s, lexer, valid_symbols);
     }
 
@@ -2450,6 +2460,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     valid_symbols[INSERT_SPAN_START] || 
                     valid_symbols[DELETE_SPAN_START] || 
                     valid_symbols[COMMENT_SPAN_START] || 
+                    valid_symbols[INLINE_NOTE_REFERENCE] ||
                     valid_symbols[REF_ID_SPECIFIER]) {
                     return parse_open_square_brace(s, lexer, valid_symbols);
                 }
