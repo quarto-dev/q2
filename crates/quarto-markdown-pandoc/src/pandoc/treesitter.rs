@@ -849,13 +849,15 @@ fn native_visitor<T: Write>(
             process_commonmark_attribute(children, context)
         }
         "attribute_specifier" => {
-            // Filter out delimiter nodes and pass through the commonmark_specifier result
+            // Filter out delimiter nodes and pass through the commonmark_specifier or raw_specifier result
             for (node_name, child) in children {
                 if node_name == "commonmark_specifier" {
                     return child; // Should be IntermediateAttr
+                } else if node_name == "raw_specifier" {
+                    return child; // Should be IntermediateRawFormat
                 }
             }
-            // If no commonmark_specifier found, return empty attr
+            // If no commonmark_specifier or raw_specifier found, return empty attr
             use std::collections::HashMap;
             PandocNativeIntermediate::IntermediateAttr(
                 ("".to_string(), vec![], HashMap::new()),
@@ -900,6 +902,20 @@ fn native_visitor<T: Write>(
         "info_string" => process_info_string(node, input_bytes, context),
         "language_attribute" => process_language_attribute(children, context),
         "raw_attribute" => process_raw_attribute(node, children, context),
+        "raw_specifier" => {
+            // Extract raw format from raw_specifier node (e.g., "=html")
+            let text = std::str::from_utf8(&input_bytes[node.byte_range()])
+                .unwrap()
+                .to_string();
+            // Remove the leading '=' to get the format name
+            let format = text.strip_prefix('=').unwrap_or(&text).to_string();
+            let source_info = node_source_info_with_context(node, context);
+            let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                &source_info,
+                context,
+            );
+            PandocNativeIntermediate::IntermediateRawFormat(format, range)
+        }
         "block_continuation" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "pandoc_block_quote" => process_block_quote(buf, node, children, context),
         "pandoc_horizontal_rule" => process_thematic_break(node, context),

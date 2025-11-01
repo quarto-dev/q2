@@ -79,6 +79,15 @@ pub fn process_atx_heading<T: Write>(
         }
     }
 
+    // Strip trailing Space nodes from content (Pandoc strips spaces before attributes)
+    while let Some(last) = content.last() {
+        if matches!(last, Inline::Space(_)) {
+            content.pop();
+        } else {
+            break;
+        }
+    }
+
     PandocNativeIntermediate::IntermediateBlock(Block::Header(Header {
         level,
         attr,

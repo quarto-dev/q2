@@ -144,7 +144,32 @@ pub fn process_pandoc_span(
             target_source: TargetSourceInfo::empty(),
         }))
     } else {
-        // No target → SPAN (even if attributes are empty)
+        // No target → Check for special Span classes that map to specific inline types
+
+        // Special case: [text]{.underline} or [text]{.ul} → Underline
+        if attr.0.is_empty()
+            && (attr.1 == vec!["underline"] || attr.1 == vec!["ul"])
+            && attr.2.is_empty()
+        {
+            return PandocNativeIntermediate::IntermediateInline(Inline::Underline(
+                crate::pandoc::inline::Underline {
+                    content: content_inlines,
+                    source_info: node_source_info_with_context(node, context),
+                },
+            ));
+        }
+
+        // Special case: [text]{.smallcaps} → SmallCaps
+        if attr.0.is_empty() && attr.1 == vec!["smallcaps"] && attr.2.is_empty() {
+            return PandocNativeIntermediate::IntermediateInline(Inline::SmallCaps(
+                crate::pandoc::inline::SmallCaps {
+                    content: content_inlines,
+                    source_info: node_source_info_with_context(node, context),
+                },
+            ));
+        }
+
+        // Default: SPAN (even if attributes are empty)
         // QMD design choice: [text] becomes Span, not literal brackets
         PandocNativeIntermediate::IntermediateInline(Inline::Span(Span {
             attr,

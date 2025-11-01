@@ -1,0 +1,6 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+assertion_line: 293
+expression: output
+---
+[ Para [Span ( "" , [] , [] ) [Str "prefix", Space, Cite [Citation { citationId = "c1", citationPrefix = [], citationSuffix = [], citationMode = AuthorInText, citationNoteNum = 1, citationHash = 0 }] [Str "@c1"], Space, Str "suffix;", Space, Cite [Citation { citationId = "c2", citationPrefix = [], citationSuffix = [], citationMode = AuthorInText, citationNoteNum = 2, citationHash = 0 }] [Str "@c2"], Str ";", Space, Cite [Citation { citationId = "c3", citationPrefix = [], citationSuffix = [], citationMode = AuthorInText, citationNoteNum = 3, citationHash = 0 }] [Str "@c3"]]] ]

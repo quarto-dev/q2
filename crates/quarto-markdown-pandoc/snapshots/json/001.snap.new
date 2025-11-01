@@ -1,0 +1,6 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+assertion_line: 293
+expression: output
+---
+{"astContext":{"files":[{"line_breaks":[24],"name":"tests/snapshots/json/001.qmd","total_length":25}],"sourceInfoPool":[{"d":0,"r":[0,4],"t":0},{"d":0,"r":[4,5],"t":0},{"d":0,"r":[5,7],"t":0},{"d":0,"r":[7,8],"t":0},{"d":0,"r":[8,9],"t":0},{"d":0,"r":[9,19],"t":0},{"d":0,"r":[12,16],"t":0},{"d":0,"r":[9,19],"t":0},{"d":0,"r":[9,19],"t":0},{"d":0,"r":[19,24],"t":0},{"d":0,"r":[0,25],"t":0}]},"blocks":[{"c":[{"c":"This","s":0,"t":"Str"},{"s":1,"t":"Space"},{"c":"is","s":2,"t":"Str"},{"s":3,"t":"Space"},{"c":"a","s":4,"t":"Str"},{"s":5,"t":"Space"},{"c":[{"c":"bold","s":6,"t":"Str"}],"s":7,"t":"Strong"},{"s":8,"t":"Space"},{"c":"test.","s":9,"t":"Str"}],"s":10,"t":"Para"}],"meta":{},"pandoc-api-version":[1,23,1]}

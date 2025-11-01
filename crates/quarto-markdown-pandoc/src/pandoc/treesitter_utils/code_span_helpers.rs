@@ -24,6 +24,7 @@ pub fn process_pandoc_code_span(
     let mut code_text = String::new();
     let mut attr: Attr = empty_attr();
     let mut attr_source = AttrSourceInfo::empty();
+    let mut raw_format: Option<String> = None;
     let mut has_leading_space = false;
     let mut has_trailing_space = false;
     let mut first_delimiter = true;
@@ -56,23 +57,46 @@ pub fn process_pandoc_code_span(
                 }
             }
             "attribute_specifier" => {
-                // Process attributes if present
-                if let PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) = child {
-                    attr = attrs.clone();
-                    attr_source = attrs_src.clone();
+                // Process attributes or raw format if present
+                match child {
+                    PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) => {
+                        attr = attrs.clone();
+                        attr_source = attrs_src.clone();
+                    }
+                    PandocNativeIntermediate::IntermediateRawFormat(format, _) => {
+                        raw_format = Some(format.clone());
+                    }
+                    _ => {}
+                }
+            }
+            "raw_attribute" => {
+                // Extract raw format (e.g., {=html}) - legacy path
+                if let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child {
+                    raw_format = Some(format.clone());
                 }
             }
             _ => {}
         }
     }
 
-    // Create Code inline
-    let code = Inline::Code(Code {
-        attr,
-        text: code_text,
-        source_info: node_source_info_with_context(node, context),
-        attr_source,
-    });
+    // Trim whitespace from code text (Pandoc behavior)
+    let trimmed_code_text = code_text.trim().to_string();
+
+    // Create Code or RawInline based on presence of raw format
+    let code = if let Some(format) = raw_format {
+        Inline::RawInline(crate::pandoc::inline::RawInline {
+            format,
+            text: trimmed_code_text,
+            source_info: node_source_info_with_context(node, context),
+        })
+    } else {
+        Inline::Code(Code {
+            attr,
+            text: trimmed_code_text,
+            source_info: node_source_info_with_context(node, context),
+            attr_source,
+        })
+    };
 
     // Build result with injected Space nodes as needed
     let mut result = Vec::new();

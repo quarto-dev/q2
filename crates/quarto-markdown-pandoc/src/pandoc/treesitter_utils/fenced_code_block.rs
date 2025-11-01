@@ -31,6 +31,20 @@ pub fn process_fenced_code_block(
                 panic!("Expected BaseText in code_fence_content, got {:?}", child)
             };
             content = text;
+        } else if node == "attribute_specifier" {
+            // Handle attribute_specifier which can contain either IntermediateAttr or IntermediateRawFormat
+            match child {
+                PandocNativeIntermediate::IntermediateAttr(a, as_) => {
+                    attr = a;
+                    attr_source = as_;
+                }
+                PandocNativeIntermediate::IntermediateRawFormat(format, _) => {
+                    raw_format = Some(format);
+                }
+                _ => {
+                    panic!("Expected Attr or RawFormat in attribute_specifier, got {:?}", child)
+                }
+            }
         } else if node == "commonmark_attribute" {
             let PandocNativeIntermediate::IntermediateAttr(a, as_) = child else {
                 panic!("Expected Attr in commonmark_attribute, got {:?}", child)
