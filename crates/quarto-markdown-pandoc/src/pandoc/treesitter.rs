@@ -4,14 +4,11 @@
  */
 
 use crate::pandoc::treesitter_utils;
-use crate::pandoc::treesitter_utils::attribute::process_attribute;
 use crate::pandoc::treesitter_utils::atx_heading::process_atx_heading;
-use crate::pandoc::treesitter_utils::backslash_escape::process_backslash_escape;
 use crate::pandoc::treesitter_utils::block_quote::process_block_quote;
 use crate::pandoc::treesitter_utils::caption::process_caption;
 use crate::pandoc::treesitter_utils::citation::process_citation;
 use crate::pandoc::treesitter_utils::code_fence_content::process_code_fence_content;
-use crate::pandoc::treesitter_utils::code_span::process_code_span;
 use crate::pandoc::treesitter_utils::code_span_helpers::process_pandoc_code_span;
 use crate::pandoc::treesitter_utils::commonmark_attribute::process_commonmark_attribute;
 use crate::pandoc::treesitter_utils::document::process_document;
@@ -20,19 +17,11 @@ use crate::pandoc::treesitter_utils::editorial_marks::{
 };
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
-use crate::pandoc::treesitter_utils::html_comment::process_html_comment;
-use crate::pandoc::treesitter_utils::indented_code_block::process_indented_code_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
-use crate::pandoc::treesitter_utils::inline_link::process_inline_link;
-use crate::pandoc::treesitter_utils::key_value_specifier::process_key_value_specifier;
 use crate::pandoc::treesitter_utils::language_attribute::process_language_attribute;
-use crate::pandoc::treesitter_utils::latex_span::process_latex_span;
-use crate::pandoc::treesitter_utils::link_title::process_link_title;
 use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
 use crate::pandoc::treesitter_utils::note_definition_fenced_block::process_note_definition_fenced_block;
 use crate::pandoc::treesitter_utils::note_definition_para::process_note_definition_para;
-use crate::pandoc::treesitter_utils::note_reference::process_note_reference;
-use crate::pandoc::treesitter_utils::numeric_character_reference::process_numeric_character_reference;
 use crate::pandoc::treesitter_utils::paragraph::process_paragraph;
 use crate::pandoc::treesitter_utils::pipe_table::{
     process_pipe_table, process_pipe_table_cell, process_pipe_table_delimiter_cell,
@@ -40,11 +29,8 @@ use crate::pandoc::treesitter_utils::pipe_table::{
 };
 use crate::pandoc::treesitter_utils::postprocess::{merge_strs, postprocess};
 use crate::pandoc::treesitter_utils::quote_helpers::process_quoted;
-use crate::pandoc::treesitter_utils::quoted_span::process_quoted_span;
 use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
-use crate::pandoc::treesitter_utils::raw_specifier::process_raw_specifier;
 use crate::pandoc::treesitter_utils::section::process_section;
-use crate::pandoc::treesitter_utils::setext_heading::process_setext_heading;
 use crate::pandoc::treesitter_utils::shortcode::{
     process_shortcode, process_shortcode_boolean, process_shortcode_keyword_param,
     process_shortcode_number, process_shortcode_string, process_shortcode_string_arg,
@@ -54,17 +40,16 @@ use crate::pandoc::treesitter_utils::span_link_helpers::{
 };
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
-use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
+use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Code, Emph, Image, Inline, Link, Math, MathType, Note, NoteReference, QuoteType, Quoted,
-    RawInline, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript,
+    Emph, Inline, Math, MathType, Note, NoteReference, QuoteType, RawInline, SoftBreak, Space, Str,
+    Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::pandoc::location::{node_location, node_source_info, node_source_info_with_context};
+use crate::pandoc::location::{node_location, node_source_info_with_context};
 use crate::pandoc::pandoc::Pandoc;
 use core::panic;
 use once_cell::sync::Lazy;
@@ -345,24 +330,6 @@ fn process_list_item(
     )
 }
 
-// Macro for simple emphasis-like inline processing
-macro_rules! emphasis_inline {
-    ($node:expr, $children:expr, $delimiter:expr, $native_inline:expr, $inline_type:ident, $context:expr) => {
-        process_emphasis_inline(
-            $node,
-            $children,
-            $delimiter,
-            $native_inline,
-            |inlines, node| {
-                Inline::$inline_type($inline_type {
-                    content: inlines,
-                    source_info: node_source_info_with_context(node, $context),
-                })
-            },
-        )
-    };
-}
-
 // Standalone function to process intermediate inline elements into Inline objects
 fn process_native_inline<T: Write>(
     node_name: String,
@@ -488,20 +455,12 @@ fn native_visitor<T: Write>(
     // TODO What sounded like a good idea with two buffers
     // is becoming annoying now...
     let mut inline_buf = Vec::<u8>::new();
-    let mut inlines_buf = Vec::<u8>::new();
-    let mut link_buf = Vec::<u8>::new();
-    let mut image_buf = Vec::<u8>::new();
+    let link_buf = Vec::<u8>::new();
+    let image_buf = Vec::<u8>::new();
 
     let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
-    let indent_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"[ \t]+").unwrap());
-
     let node_text = || node.utf8_text(input_bytes).unwrap().to_string();
 
-    let string_as_base_text = || {
-        let location = node_location(node);
-        let value = node_text();
-        PandocNativeIntermediate::IntermediateBaseText(extract_quoted_text(&value), location)
-    };
     let node_source_info_fn = || node_source_info_with_context(node, context);
     let native_inline = |(node_name, child)| {
         process_native_inline(
@@ -514,25 +473,9 @@ fn native_visitor<T: Write>(
             context,
         )
     };
-    let mut native_inlines =
-        |children| process_native_inlines(children, &whitespace_re, &mut inlines_buf, context);
 
     let result = match node.kind() {
-        // "numeric_character_reference" => {
-        //     process_numeric_character_reference(node, input_bytes, context)
-        // }
-        // "language"
-        // | "note_reference_id"
-        // | "ref_id_specifier"
-        "fenced_div_note_id"
-        // | "citation_id_suppress_author"
-        // | "citation_id_author_in_text"
-        // | "link_destination"
-        // | "key_value_key"
-        // | "code_content"
-        // | "latex_content"
-        // | "text_base"
-         => create_base_text_from_node_text(node, input_bytes),
+        "fenced_div_note_id" => create_base_text_from_node_text(node, input_bytes),
         "document" => process_document(node, children, context),
         "section" => process_section(node, children, context),
         "pandoc_paragraph" => process_paragraph(node, children, context),
@@ -938,182 +881,30 @@ fn native_visitor<T: Write>(
         "target" => process_target(children),
         "pandoc_span" => process_pandoc_span(node, children, context),
         "pandoc_image" => process_pandoc_image(node, children, context),
-        // "indented_code_block" => {
-        //     process_indented_code_block(node, children, input_bytes, &indent_re, context)
-        // }
-        // "fenced_code_block" => process_fenced_code_block(node, children, context),
-        // "attribute" => process_attribute(children, context),
-        // "commonmark_attribute" => process_commonmark_attribute(children, context),
-        // "class_specifier" | "id_specifier" => create_specifier_base_text(node, input_bytes),
-        // "shortcode_naked_string" | "shortcode_name" | "shortcode_key_name_and_equals" => {
-        //     process_shortcode_string_arg(node, input_bytes, context)
-        // }
-        // "shortcode_string" => process_shortcode_string(&string_as_base_text, node, context),
-        // "key_value_value" => string_as_base_text(),
-        // "link_title" => process_link_title(node, input_bytes, context),
-        // "link_text" => PandocNativeIntermediate::IntermediateInlines(native_inlines(children)),
-        // "image" => treesitter_utils::image::process_image(
-        //     node,
-        //     &mut image_buf,
-        //     node_text,
-        //     children,
-        //     context,
-        // ),
-        // "image_description" => {
-        //     PandocNativeIntermediate::IntermediateInlines(native_inlines(children))
-        // }
-        // "inline_link" => process_inline_link(node, &mut link_buf, node_text, children, context),
-        // "key_value_specifier" => process_key_value_specifier(buf, children, context),
-        // "raw_specifier" => process_raw_specifier(node, input_bytes, context),
-        // "emphasis" => emphasis_inline!(
-        //     node,
-        //     children,
-        //     "emphasis_delimiter",
-        //     native_inline,
-        //     Emph,
-        //     context
-        // ),
-        // "strong_emphasis" => {
-        //     emphasis_inline!(
-        //         node,
-        //         children,
-        //         "emphasis_delimiter",
-        //         native_inline,
-        //         Strong,
-        //         context
-        //     )
-        // }
-        // "inline" => {
-        //     let inlines: Vec<Inline> = children.into_iter().map(native_inline).collect();
-        //     PandocNativeIntermediate::IntermediateInlines(inlines)
-        // }
-        // "citation" => process_citation(node, node_text, children, context),
-        // "note_reference" => process_note_reference(node, children, context),
-        // "inline_ref_def" => process_note_definition_para(node, children, context),
         "note_definition_fenced_block" => {
             process_note_definition_fenced_block(node, children, context)
         }
-        // "shortcode" | "shortcode_escaped" => process_shortcode(node, children, context),
-        // "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children, context),
-        // "shortcode_boolean" => process_shortcode_boolean(node, input_bytes, context),
-        // "shortcode_number" => process_shortcode_number(node, input_bytes, context),
         "code_fence_content" => process_code_fence_content(node, children, input_bytes, context),
-        "fenced_code_block_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "fenced_code_block_delimiter" => {
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
         "list_marker_parenthesis" | "list_marker_dot" | "list_marker_example" => {
             process_list_marker(node, input_bytes, context)
         }
         // These are marker nodes, we don't need to do anything with them
-        "block_quote_marker"
-        | "list_marker_minus"
-        | "list_marker_star"
-        | "list_marker_plus" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        // | "block_continuation"
-        // | "fenced_code_block_delimiter"
-        // | "note_reference_delimiter"
-        // | "shortcode_delimiter"
-        // | "citation_delimiter"
-        // | "code_span_delimiter"
-        // | "single_quoted_span_delimiter"
-        // | "double_quoted_span_delimiter"
-        // | "superscript_delimiter"
-        // | "subscript_delimiter"
-        // | "strikeout_delimiter"
-        // | "emphasis_delimiter"
-        // | "insert_delimiter"
-        // | "delete_delimiter"
-        // | "highlight_delimiter"
-        // | "edit_comment_delimiter" => {
-        //     PandocNativeIntermediate::IntermediateUnknown(node_location(node))
-        // }
-        // "soft_line_break" => create_line_break_inline(node, false),
-        // "hard_line_break" => create_line_break_inline(node, true),
-        // "latex_span_delimiter" => {
-        //     let str = node.utf8_text(input_bytes).unwrap();
-        //     let range = node_location(node);
-        //     if str == "$" {
-        //         PandocNativeIntermediate::IntermediateLatexInlineDelimiter(range)
-        //     } else if str == "$$" {
-        //         PandocNativeIntermediate::IntermediateLatexDisplayDelimiter(range)
-        //     } else {
-        //         writeln!(
-        //             buf,
-        //             "Warning: Unrecognized latex_span_delimiter: {} Will assume inline delimiter",
-        //             str
-        //         )
-        //         .unwrap();
-        //         PandocNativeIntermediate::IntermediateLatexInlineDelimiter(range)
-        //     }
-        // }
-        // "inline_note" => process_emphasis_inline_with_node(
-        //     node,
-        //     children,
-        //     "inline_note_delimiter",
-        //     native_inline,
-        //     |inlines, node| {
-        //         Inline::Note(Note {
-        //             content: vec![Block::Paragraph(Paragraph {
-        //                 content: inlines,
-        //                 source_info: node_source_info(node),
-        //             })],
-        //             source_info: node_source_info(node),
-        //         })
-        //     },
-        // ),
-        // "superscript" => emphasis_inline!(
-        //     node,
-        //     children,
-        //     "superscript_delimiter",
-        //     native_inline,
-        //     Superscript,
-        //     context
-        // ),
-        // "subscript" => emphasis_inline!(
-        //     node,
-        //     children,
-        //     "subscript_delimiter",
-        //     native_inline,
-        //     Subscript,
-        //     context
-        // ),
-        // "strikeout" => emphasis_inline!(
-        //     node,
-        //     children,
-        //     "strikeout_delimiter",
-        //     native_inline,
-        //     Strikeout,
-        //     context
-        // ),
-        // "insert" => process_insert(buf, node, children, context),
-        // "delete" => process_delete(buf, node, children, context),
-        // "highlight" => process_highlight(buf, node, children, context),
-        // "edit_comment" => process_editcomment(buf, node, children, context),
-
-        // "quoted_span" => process_quoted_span(node, children, native_inline, context),
-        // "code_span" => process_code_span(buf, node, children, context),
-        // "latex_span" => process_latex_span(node, children, context),
-        // "html_comment" => process_html_comment(node, input_bytes, context),
+        "block_quote_marker" | "list_marker_minus" | "list_marker_star" | "list_marker_plus" => {
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
         "pandoc_list" => process_list(node, children, context),
         "list_item" => process_list_item(node, children, context),
         "info_string" => process_info_string(node, input_bytes, context),
         "language_attribute" => process_language_attribute(children, context),
         "raw_attribute" => process_raw_attribute(node, children, context),
         "block_continuation" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "block_quote_marker" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "pandoc_block_quote" => process_block_quote(buf, node, children, context),
         "pandoc_horizontal_rule" => process_thematic_break(node, context),
         "pandoc_code_block" => process_fenced_code_block(node, children, context),
         "pandoc_div" => process_fenced_div_block(buf, node, children, context),
-        // "fenced_div_block" => process_fenced_div_block(buf, node, children, context),
-        // "atx_heading" => process_atx_heading(buf, node, children, context),
-        // "backslash_escape" => process_backslash_escape(node, input_bytes, context),
-        // "minus_metadata" => {
-        //     let text = node.utf8_text(input_bytes).unwrap();
-        //     PandocNativeIntermediate::IntermediateMetadataString(
-        //         text.to_string(),
-        //         node_location(node),
-        //     )
-        // }
-        // "uri_autolink" => process_uri_autolink(node, input_bytes, context),
         "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
         "pipe_table_header" | "pipe_table_row" => {
             process_pipe_table_header_or_row(node, children, context)
@@ -1122,9 +913,6 @@ fn native_visitor<T: Write>(
         "pipe_table_cell" => process_pipe_table_cell(node, children, context),
         "caption" => process_caption(node, children, context),
         "pipe_table" => process_pipe_table(node, children, context),
-        // "setext_h1_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(1),
-        // "setext_h2_underline" => PandocNativeIntermediate::IntermediateSetextHeadingLevel(2),
-        // "setext_heading" => process_setext_heading(buf, node, children, context),
         _ => {
             writeln!(
                 buf,
@@ -1137,7 +925,6 @@ fn native_visitor<T: Write>(
         }
     };
     buf.write_all(&inline_buf).unwrap();
-    buf.write_all(&inlines_buf).unwrap();
     buf.write_all(&link_buf).unwrap();
     buf.write_all(&image_buf).unwrap();
     result
