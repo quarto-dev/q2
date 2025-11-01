@@ -920,26 +920,6 @@ static bool parse_atx_heading(Scanner *s, TSLexer *lexer,
     return false;
 }
 
-static bool parse_setext_underline(Scanner *s, TSLexer *lexer,
-                                   const bool *valid_symbols) {
-    if (valid_symbols[SETEXT_H1_UNDERLINE] &&
-        s->matched == s->open_blocks.size) {
-        mark_end(s, lexer);
-        while (lexer->lookahead == '=') {
-            advance(s, lexer);
-        }
-        while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
-            advance(s, lexer);
-        }
-        if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
-            lexer->result_symbol = SETEXT_H1_UNDERLINE;
-            mark_end(s, lexer);
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (s->indentation <= 3 &&
         (valid_symbols[LIST_MARKER_PLUS] ||
@@ -2131,32 +2111,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return error(lexer);
     }
 
-    // Handle HTML comments, raw_specifiers, autolinks - must consume atomically to prevent block structure
-    // recognition inside comments (e.g., list markers, headings)
-    // But NOT inside fenced code blocks where they should be literal
-    if (!s->simulate && !(s->state & STATE_MATCHING) && 
-        lexer->lookahead == '<' && !inside_fenced_code && 
-        (valid_symbols[HTML_COMMENT] || valid_symbols[AUTOLINK] || valid_symbols[RAW_SPECIFIER])) {
-        return parse_open_angle_brace(lexer, valid_symbols);
-    }
-    if (!s->simulate && !(s->state & STATE_MATCHING) && 
-        lexer->lookahead == '=' && // this needs to be allowed inside_fenced_code because we're actually inside fenced code..
-        (valid_symbols[RAW_SPECIFIER])) {
-        #ifdef SCAN_DEBUG
-        printf("Attempting to lex RAW_SPECIFIER\n");
-        #endif
-        return parse_raw_specifier(lexer, valid_symbols);
-    }
-
-    // Handle code spans for pipe table cells
-    if (lexer->lookahead == '`' && !valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
-        valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
-        #ifdef SCAN_DEBUG
-        printf("Trying to scan a code span\n");
-        #endif
-        return parse_code_span(s, lexer, valid_symbols);
-    }
-
     // Close the inner most block after the next line break as requested. See
     // `$._close_block` in grammar.js
     if (valid_symbols[CLOSE_BLOCK]) {
@@ -2199,6 +2153,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         #endif
 
         switch (lexer->lookahead) {
+            case '<':
+                // Handle HTML comments, raw_specifiers (qmd's raw reader extension), autolinks
+                if (valid_symbols[HTML_COMMENT] || 
+                    valid_symbols[AUTOLINK] || 
+                    valid_symbols[RAW_SPECIFIER]) {
+                    return parse_open_angle_brace(lexer, valid_symbols);
+                }
             case '\r':
             case '\n':
                 if (valid_symbols[BLANK_LINE_START]) {
@@ -2216,12 +2177,19 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             case ':':
                 return parse_fenced_div_marker(s, lexer, valid_symbols);
             case '`':
-                // A backtick could mark the beginning or ending of a fenced
-                // code block.
-                #ifdef SCAN_DEBUG
-                printf("Trying to parse fenced code block\n");
-                #endif
-                return parse_fenced_code_block(s, '`', lexer, valid_symbols);
+                // Handle code spans for pipe table cells
+                if (!valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
+                    valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
+                    #ifdef SCAN_DEBUG
+                    printf("Trying to scan a code span\n");
+                    #endif
+                    return parse_code_span(s, lexer, valid_symbols);
+                } else {
+                    #ifdef SCAN_DEBUG
+                    printf("Trying to parse fenced code block\n");
+                    #endif
+                    return parse_fenced_code_block(s, '`', lexer, valid_symbols);
+                }
             case '~':
                 // A tilde could be strikeout or subscript.
                 return parse_tilde(s, lexer, valid_symbols);
@@ -2242,8 +2210,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 // A '#' could mark a atx heading
                 return parse_atx_heading(s, lexer, valid_symbols);
             case '=':
-                // A '=' could mark a setext underline
-                return parse_setext_underline(s, lexer, valid_symbols);
+                if (valid_symbols[RAW_SPECIFIER]) {
+                    #ifdef SCAN_DEBUG
+                    printf("Attempting to lex RAW_SPECIFIER\n");
+                    #endif
+                    return parse_raw_specifier(lexer, valid_symbols);
+                }
             case '+':
                 // A '+' could be a list marker
                 return parse_plus(s, lexer, valid_symbols);
