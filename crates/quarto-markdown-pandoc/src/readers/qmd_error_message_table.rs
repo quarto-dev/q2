@@ -23,6 +23,7 @@ pub struct ErrorNote {
     pub note_type: &'static str,
     pub label_begin: Option<&'static str>,
     pub label_end: Option<&'static str>,
+    pub trim_leading_space: Option<bool>,
 }
 
 #[derive(Debug)]
