@@ -161,7 +161,8 @@ b
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str)))
+          (pandoc_str)
+          (block_continuation)))
       (list_item
         (list_marker_minus)
         (pandoc_paragraph

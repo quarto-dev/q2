@@ -24,7 +24,6 @@ typedef enum {
     BLOCK_CLOSE,
     BLOCK_CONTINUATION,
     BLOCK_QUOTE_START,
-    INDENTED_CHUNK_START,
     ATX_H1_MARKER,
     ATX_H2_MARKER,
     ATX_H3_MARKER,
@@ -52,7 +51,6 @@ typedef enum {
     FENCED_CODE_BLOCK_END_BACKTICK,
     FENCED_CODE_BLOCK_END_TILDE,
     CLOSE_BLOCK,
-    NO_INDENTED_CHUNK,
     ERROR,
     TRIGGER_ERROR,
     TOKEN_EOF,
@@ -65,9 +63,6 @@ typedef enum {
     REF_ID_SPECIFIER,
     FENCED_DIV_NOTE_ID,
 
-    // special tokens to trigger serialization to track in-display-math mode
-    DISPLAY_MATH_STATE_TRACK_MARKER,
-    INLINE_MATH_STATE_TRACK_MARKER,
     // code span delimiters for parsing pipe table cells
     CODE_SPAN_START,
     CODE_SPAN_CLOSE,
@@ -133,7 +128,6 @@ static char* token_names[] = {
     "BLOCK_CLOSE",
     "BLOCK_CONTINUATION",
     "BLOCK_QUOTE_START",
-    "INDENTED_CHUNK_START",
     "ATX_H1_MARKER",
     "ATX_H2_MARKER",
     "ATX_H3_MARKER",
@@ -161,7 +155,6 @@ static char* token_names[] = {
     "FENCED_CODE_BLOCK_END_BACKTICK",
     "FENCED_CODE_BLOCK_END_TILDE",
     "CLOSE_BLOCK",
-    "NO_INDENTED_CHUNK",
     "ERROR",
     "TRIGGER_ERROR",
     "TOKEN_EOF",
@@ -173,9 +166,6 @@ static char* token_names[] = {
     "FENCED_DIV_END",
     "REF_ID_SPECIFIER",
     "FENCED_DIV_NOTE_ID",
-    // special tokens to trigger serialization to track in-display-math mode
-    "DISPLAY_MATH_STATE_TRACK_MARKER",
-    "INLINE_MATH_STATE_TRACK_MARKER",
     // code span delimiters for parsing pipe table cells
     "CODE_SPAN_START",
     "CODE_SPAN_CLOSE",
@@ -241,7 +231,6 @@ static char* token_names[] = {
 // external s.
 typedef enum {
     BLOCK_QUOTE,
-    INDENTED_CODE_BLOCK,
     LIST_ITEM,
     LIST_ITEM_1_INDENTATION,
     LIST_ITEM_2_INDENTATION,
@@ -283,7 +272,6 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // BLOCK_CLOSE,
     false, // BLOCK_CONTINUATION,
     true,  // BLOCK_QUOTE_START,
-    false, // INDENTED_CHUNK_START,
     true,  // ATX_H1_MARKER,
     true,  // ATX_H2_MARKER,
     true,  // ATX_H3_MARKER,
@@ -311,7 +299,6 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     false, // FENCED_CODE_BLOCK_END_BACKTICK,
     false, // FENCED_CODE_BLOCK_END_TILDE,
     false, // CLOSE_BLOCK,
-    false, // NO_INDENTED_CHUNK,
     false, // ERROR,
     false, // TRIGGER_ERROR,
     false, // EOF,
@@ -323,8 +310,6 @@ static const bool display_math_paragraph_interrupt_symbols[] = {
     true,  // FENCED_DIV_END,
     false, // REF_ID_SPECIFIER,
     false, // FENCED_DIV_NOTE_ID,
-    false, // DISPLAY_MATH_STATE_TRACK_MARKER
-    false, // INLINE_MATH_STATE_TRACK_MARKER
     false, // CODE_SPAN_START
     false, // CODE_SPAN_CLOSE
     false, // LATEX_SPAN_START
@@ -375,7 +360,6 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // BLOCK_CLOSE,
     false, // BLOCK_CONTINUATION,
     true,  // BLOCK_QUOTE_START,
-    false, // INDENTED_CHUNK_START,
     true,  // ATX_H1_MARKER,
     true,  // ATX_H2_MARKER,
     true,  // ATX_H3_MARKER,
@@ -403,7 +387,6 @@ static const bool paragraph_interrupt_symbols[] = {
     false, // FENCED_CODE_BLOCK_END_BACKTICK,
     false, // FENCED_CODE_BLOCK_END_TILDE,
     false, // CLOSE_BLOCK,
-    false, // NO_INDENTED_CHUNK,
     false, // ERROR,
     false, // TRIGGER_ERROR,
     false, // EOF,
@@ -415,8 +398,6 @@ static const bool paragraph_interrupt_symbols[] = {
     true,  // FENCED_DIV_END,
     false, // REF_ID_SPECIFIER,
     false, // FENCED_DIV_NOTE_ID,
-    false, // DISPLAY_MATH_STATE_TRACK_MARKER
-    false, // INLINE_MATH_STATE_TRACK_MARKER
     false, // CODE_SPAN_START
     false, // CODE_SPAN_CLOSE
     false, // LATEX_SPAN_START
@@ -673,20 +654,6 @@ static size_t advance(Scanner *s, TSLexer *lexer) {
 // Returns true if the block is matched and false otherwise
 static bool match(Scanner *s, TSLexer *lexer, Block block) {
     switch (block) {
-        case INDENTED_CODE_BLOCK:
-            while (s->indentation < 4) {
-                if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
-                    s->indentation += advance(s, lexer);
-                } else {
-                    break;
-                }
-            }
-            if (s->indentation >= 4 && lexer->lookahead != '\n' &&
-                lexer->lookahead != '\r') {
-                s->indentation -= 4;
-                return true;
-            }
-            break;
         case LIST_ITEM:
         case LIST_ITEM_1_INDENTATION:
         case LIST_ITEM_2_INDENTATION:
@@ -2298,30 +2265,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // token.
     //
 
-    // IMPORTANT: Don't process DISPLAY_MATH_STATE_TRACK_MARKER when we're in STATE_MATCHING mode.
-    // When matching block continuations (e.g., inside a fenced div), we need to let the block
-    // continuation logic run first. Otherwise, we'll consume the $$ before checking if we need
-    // to match the block structure, causing a parse error.
-    if (!s->simulate && !(s->state & STATE_MATCHING) && lexer->lookahead == '$' &&
-        !inside_fenced_code &&
-        !s->inside_code_span &&
-        valid_symbols[DISPLAY_MATH_STATE_TRACK_MARKER]) {
-        advance(s, lexer);
-        if (lexer->lookahead == '$') {
-            advance(s, lexer);
-            s->state ^= STATE_IN_DISPLAY_MATH;
-            // printf("-- TOGGLED! it's now %d\n", s->state);
-            lexer->mark_end(lexer);
-            lexer->result_symbol = DISPLAY_MATH_STATE_TRACK_MARKER;
-            return true;
-        }
-        // this token isn't really used anywhere, but it's here because
-        // we can no longer backtrack after advancing the lexer to see if we had a $$.
-        lexer->mark_end(lexer);
-        lexer->result_symbol = INLINE_MATH_STATE_TRACK_MARKER;
-        return true;
-    }
-
     // Handle code spans for pipe table cells
     if (lexer->lookahead == '`' && !valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
         valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
@@ -2364,24 +2307,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->indentation += advance(s, lexer);
             } else {
                 break;
-            }
-        }
-        // We are not matching. This is where the parsing logic for most
-        // "normal" token is. Most importantly parsing logic for the start of
-        // new blocks.
-        if (valid_symbols[INDENTED_CHUNK_START] &&
-            !valid_symbols[NO_INDENTED_CHUNK]) {
-            if (s->indentation >= 4 && lexer->lookahead != '\n' &&
-                lexer->lookahead != '\r') {
-                lexer->result_symbol = INDENTED_CHUNK_START;
-                if (!s->simulate) {
-                    if (!can_push_block(s)) {
-                        return error(lexer);
-                    }
-                    push_block(s, INDENTED_CODE_BLOCK);
-                }
-                s->indentation -= 4;
-                return true;
             }
         }
         // Decide which tokens to consider based on the first non-whitespace

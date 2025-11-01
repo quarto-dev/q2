@@ -736,7 +736,6 @@ module.exports = grammar({
         // always span one line are marked as such.
 
         $._block_quote_start,
-        $._indented_chunk_start,
         $.atx_h1_marker, // atx headings do not need a `$._block_close`
         $.atx_h2_marker,
         $.atx_h3_marker,
@@ -774,10 +773,6 @@ module.exports = grammar({
         // `$._block_close` can also get emitted if the parent block closes.
         $._close_block,
 
-        // This is a workaround so the external parser does not try to open indented blocks when
-        // parsing a link reference definition.
-        $._no_indented_chunk,
-
         // An `$._error` token is never valid  and gets emmited to kill invalid parse branches. Concretely
         // this is used to decide wether a newline closes a paragraph and together and it gets emitted
         // when trying to parse the `$._trigger_error` token in `$.link_title`.
@@ -796,10 +791,6 @@ module.exports = grammar({
 
         $.ref_id_specifier,
         $.fenced_div_note_id,
-
-        // special tokens to allow external scanner serialization to happen
-        $._display_math_state_track_marker,
-        $._inline_math_state_track_marker,
 
         // code span delimiters for parsing pipe table cells
         $._code_span_start,

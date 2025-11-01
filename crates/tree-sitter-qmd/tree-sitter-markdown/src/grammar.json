@@ -3997,10 +3997,6 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_indented_chunk_start"
-    },
-    {
-      "type": "SYMBOL",
       "name": "atx_h1_marker"
     },
     {
@@ -4109,10 +4105,6 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_no_indented_chunk"
-    },
-    {
-      "type": "SYMBOL",
       "name": "_error"
     },
     {
@@ -4154,14 +4146,6 @@
     {
       "type": "SYMBOL",
       "name": "fenced_div_note_id"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_display_math_state_track_marker"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_inline_math_state_track_marker"
     },
     {
       "type": "SYMBOL",
