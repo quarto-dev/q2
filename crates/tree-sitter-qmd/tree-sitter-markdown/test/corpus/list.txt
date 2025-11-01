@@ -96,4 +96,74 @@
             (list_marker_dot)
             (pandoc_paragraph
               (pandoc_str))))))
-        
+================================================================================
+5 (list should end after blank line when followed by non-indented content)
+================================================================================
+- a
+
+b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+6 (list with blank line followed by indented content - two paragraphs in one item)
+================================================================================
+- a
+
+  b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+7 (list with indented blank line followed by indented content)
+================================================================================
+- a
+  
+  b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (block_continuation)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+8 (list with blank line followed by new list marker - should be one list with two items)
+================================================================================
+- a
+
+- b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+
