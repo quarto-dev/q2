@@ -4144,3 +4144,197 @@ fn test_pipe_table_wide() {
         result
     );
 }
+
+// =============================================================================
+// Pipe Table Caption Tests
+// =============================================================================
+
+/// Test pipe table with immediate caption (no empty line)
+#[test]
+fn test_pipe_table_caption_immediate() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 | Data | Data |\n\
+                 : Immediate caption";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    assert!(
+        result.contains("Caption"),
+        "Should contain Caption: {}",
+        result
+    );
+    assert!(
+        result.contains("Immediate"),
+        "Should contain caption text 'Immediate': {}",
+        result
+    );
+    assert!(
+        result.contains("caption"),
+        "Should contain caption text 'caption': {}",
+        result
+    );
+    // Should NOT have standalone CaptionBlock
+    assert!(
+        !result.contains("CaptionBlock"),
+        "Should not contain standalone CaptionBlock: {}",
+        result
+    );
+}
+
+/// Test pipe table with separated caption (with empty line) - tests post-processing
+#[test]
+fn test_pipe_table_caption_separated() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 | Data | Data |\n\
+                 \n\
+                 : Separated caption";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    assert!(
+        result.contains("Caption"),
+        "Should contain Caption: {}",
+        result
+    );
+    assert!(
+        result.contains("Separated"),
+        "Should contain caption text 'Separated': {}",
+        result
+    );
+    // Should NOT have standalone CaptionBlock (post-processing should have attached it)
+    assert!(
+        !result.contains("CaptionBlock"),
+        "Should not contain standalone CaptionBlock after post-processing: {}",
+        result
+    );
+}
+
+/// Test pipe table with multi-line caption
+#[test]
+fn test_pipe_table_caption_multiline() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 | Data | Data |\n\
+                 : Multi-line caption with more text";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Caption"),
+        "Should contain Caption: {}",
+        result
+    );
+    assert!(
+        result.contains("Multi-line"),
+        "Should contain 'Multi-line': {}",
+        result
+    );
+    assert!(result.contains("text"), "Should contain 'text': {}", result);
+}
+
+/// Test pipe table with formatted caption (bold, code)
+#[test]
+fn test_pipe_table_caption_formatted() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 | Data | Data |\n\
+                 : Caption with **bold** and `code`";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Caption"),
+        "Should contain Caption: {}",
+        result
+    );
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong (bold) in caption: {}",
+        result
+    );
+    assert!(
+        result.contains("Code"),
+        "Should contain Code in caption: {}",
+        result
+    );
+}
+
+/// Test pipe table with empty caption (just colon)
+#[test]
+fn test_pipe_table_caption_empty() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 | Data | Data |\n\
+                 :";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    // Empty caption should still create Caption structure (just with empty content)
+    assert!(
+        result.contains("Caption"),
+        "Should contain Caption structure: {}",
+        result
+    );
+}
+
+/// Test pipe table without caption (regression test)
+#[test]
+fn test_pipe_table_no_caption_regression() {
+    let input = "| Col1 | Col2 |\n\
+                 |------|------|\n\
+                 | Data | Data |";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Table"),
+        "Should contain Table element: {}",
+        result
+    );
+    // Should have Caption structure (but with None for long)
+    assert!(
+        result.contains("Caption"),
+        "Should contain Caption structure: {}",
+        result
+    );
+}
+
+/// Test standalone caption without table (edge case - should be removed with warning)
+#[test]
+fn test_standalone_caption_no_table() {
+    let input = "Some paragraph.\n\
+                 \n\
+                 : Standalone caption";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Standalone captions are intentionally removed by postprocess.rs with a warning
+    // The output should only contain the paragraph
+    assert!(
+        result.contains("Para"),
+        "Should contain paragraph: {}",
+        result
+    );
+    assert!(
+        result.contains("paragraph"),
+        "Should contain paragraph text: {}",
+        result
+    );
+    // Should NOT contain the standalone caption (it's removed)
+    assert!(
+        !result.contains("Standalone"),
+        "Should not contain standalone caption text (removed by postprocess): {}",
+        result
+    );
+    // Note: A warning "Caption found without a preceding table" is emitted (not tested here)
+}

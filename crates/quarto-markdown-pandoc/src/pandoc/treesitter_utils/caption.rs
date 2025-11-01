@@ -20,16 +20,18 @@ pub fn process_caption(
 ) -> PandocNativeIntermediate {
     let mut caption_inlines: Inlines = Vec::new();
 
-    for (node_name, child) in children {
-        if node_name == "inline" {
-            match child {
-                PandocNativeIntermediate::IntermediateInlines(inlines) => {
-                    caption_inlines.extend(inlines);
-                }
-                _ => panic!("Expected Inlines in caption, got {:?}", child),
+    for (_node_name, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateInline(inline) => {
+                caption_inlines.push(inline);
+            }
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                caption_inlines.extend(inlines);
+            }
+            _ => {
+                // Skip other nodes (colon marker, whitespace markers, etc.)
             }
         }
-        // Skip other nodes like ":", blank_line, etc.
     }
 
     PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(CaptionBlock {
