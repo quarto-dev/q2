@@ -2858,16 +2858,8 @@ fn test_code_block_with_attributes() {
         "Should contain CodeBlock: {}",
         result
     );
-    assert!(
-        result.contains("my-code"),
-        "Should contain id: {}",
-        result
-    );
-    assert!(
-        result.contains("class"),
-        "Should contain class: {}",
-        result
-    );
+    assert!(result.contains("my-code"), "Should contain id: {}", result);
+    assert!(result.contains("class"), "Should contain class: {}", result);
 }
 
 /// Test multi-line code block
@@ -2949,11 +2941,7 @@ fn test_div_with_id() {
         "Should contain Div: {}",
         result
     );
-    assert!(
-        result.contains("my-div"),
-        "Should contain id: {}",
-        result
-    );
+    assert!(result.contains("my-div"), "Should contain id: {}", result);
 }
 
 /// Test empty div (with info string)
@@ -2976,11 +2964,7 @@ fn test_div_nested() {
     let result = parse_qmd_to_json(input);
 
     let div_count = result.matches("\"t\":\"Div\"").count();
-    assert_eq!(
-        div_count, 2,
-        "Should have exactly 2 Div nodes: {}",
-        result
-    );
+    assert_eq!(div_count, 2, "Should have exactly 2 Div nodes: {}", result);
     assert!(
         result.contains("outer"),
         "Should contain outer class: {}",
@@ -3057,6 +3041,220 @@ fn test_note_def_fenced_complex() {
     assert!(
         result.contains("BlockQuote") || result.contains("quote"),
         "Should contain quote: {}",
+        result
+    );
+}
+
+// ============================================================================
+// List Tests
+// ============================================================================
+
+/// Test simple bullet list with - marker
+#[test]
+fn test_bullet_list_simple() {
+    let input = "- Item 1\n- Item 2\n- Item 3\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("BulletList"),
+        "Should contain BulletList: {}",
+        result
+    );
+    assert!(
+        result.contains("Item") && result.contains("1"),
+        "Should contain first item: {}",
+        result
+    );
+    assert!(
+        result.contains("2") && result.contains("3"),
+        "Should contain other items: {}",
+        result
+    );
+}
+
+/// Test simple ordered list
+#[test]
+fn test_ordered_list_simple() {
+    let input = "1. First item\n2. Second item\n3. Third item\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("OrderedList"),
+        "Should contain OrderedList: {}",
+        result
+    );
+    assert!(
+        result.contains("First"),
+        "Should contain first item: {}",
+        result
+    );
+    assert!(
+        result.contains("Second") && result.contains("Third"),
+        "Should contain other items: {}",
+        result
+    );
+}
+
+/// Test nested bullet lists
+#[test]
+fn test_bullet_list_nested() {
+    let input = "- Outer 1\n  - Inner 1\n  - Inner 2\n- Outer 2\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should have 2 BulletList nodes (outer and inner)
+    let list_count = result.matches("BulletList").count();
+    assert!(
+        list_count >= 2,
+        "Should have at least 2 BulletList nodes for nesting: {}",
+        result
+    );
+    assert!(
+        result.contains("Outer"),
+        "Should contain outer items: {}",
+        result
+    );
+    assert!(
+        result.contains("Inner"),
+        "Should contain inner items: {}",
+        result
+    );
+}
+
+/// Test nested ordered lists
+#[test]
+fn test_ordered_list_nested() {
+    let input = "1. First\n   1. Nested first\n   2. Nested second\n2. Second\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should have 2 OrderedList nodes (outer and inner)
+    let list_count = result.matches("OrderedList").count();
+    assert!(
+        list_count >= 2,
+        "Should have at least 2 OrderedList nodes for nesting: {}",
+        result
+    );
+    assert!(
+        result.contains("First") && result.contains("Second"),
+        "Should contain outer items: {}",
+        result
+    );
+    assert!(
+        result.contains("Nested"),
+        "Should contain nested items: {}",
+        result
+    );
+}
+
+/// Test tight vs loose lists
+/// A tight list has no blank lines between items
+#[test]
+fn test_list_tight() {
+    let input = "- Item 1\n- Item 2\n- Item 3\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // In a tight list, items should be Plain, not Para
+    assert!(
+        result.contains("Plain"),
+        "Tight list should contain Plain nodes: {}",
+        result
+    );
+}
+
+/// Test loose list (item with multiple paragraphs makes list loose)
+#[test]
+fn test_list_loose() {
+    let input = "- First paragraph in item 1\n\n  Second paragraph in item 1\n\n- Item 2\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // A list with an item containing multiple paragraphs is loose
+    assert!(
+        result.contains("Para"),
+        "Loose list should contain Para nodes: {}",
+        result
+    );
+    // Should have multiple Para nodes
+    let para_count = result.matches("Para").count();
+    assert!(
+        para_count >= 2,
+        "Loose list should have multiple Para nodes: {}",
+        result
+    );
+}
+
+/// Test list with complex content (multiple paragraphs)
+#[test]
+fn test_list_complex_content() {
+    let input = "- First paragraph\n\n  Second paragraph\n\n- Another item\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("BulletList"),
+        "Should contain BulletList: {}",
+        result
+    );
+    // Should have multiple Para nodes for the paragraphs
+    let para_count = result.matches("Para").count();
+    assert!(
+        para_count >= 2,
+        "Should have multiple Para nodes for complex content: {}",
+        result
+    );
+}
+
+/// Test ordered list with custom start number
+#[test]
+fn test_ordered_list_start_number() {
+    let input = "5. Fifth item\n6. Sixth item\n7. Seventh item\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("OrderedList"),
+        "Should contain OrderedList: {}",
+        result
+    );
+    // The start number should be 5
+    assert!(
+        result.contains("(5,") || result.contains("( 5,") || result.contains("( 5 ,"),
+        "Should have start number 5: {}",
+        result
+    );
+}
+
+/// Test bullet list with + marker
+#[test]
+fn test_bullet_list_plus() {
+    let input = "+ Item 1\n+ Item 2\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("BulletList"),
+        "Should contain BulletList with + marker: {}",
+        result
+    );
+}
+
+/// Test bullet list with * marker
+#[test]
+fn test_bullet_list_star() {
+    let input = "* Item 1\n* Item 2\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("BulletList"),
+        "Should contain BulletList with * marker: {}",
+        result
+    );
+}
+
+/// Test ordered list with ) delimiter
+#[test]
+fn test_ordered_list_paren() {
+    let input = "1) First\n2) Second\n";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("OrderedList"),
+        "Should contain OrderedList with ) delimiter: {}",
         result
     );
 }

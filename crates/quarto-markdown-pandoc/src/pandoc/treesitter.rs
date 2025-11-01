@@ -999,14 +999,14 @@ fn native_visitor<T: Write>(
         // "shortcode_number" => process_shortcode_number(node, input_bytes, context),
         "code_fence_content" => process_code_fence_content(node, children, input_bytes, context),
         "fenced_code_block_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        // "list_marker_parenthesis" | "list_marker_dot" | "list_marker_example" => {
-        //     process_list_marker(node, input_bytes, context)
-        // }
-        // // These are marker nodes, we don't need to do anything with it
-        // "block_quote_marker"
-        // | "list_marker_minus"
-        // | "list_marker_star"
-        // | "list_marker_plus"
+        "list_marker_parenthesis" | "list_marker_dot" | "list_marker_example" => {
+            process_list_marker(node, input_bytes, context)
+        }
+        // These are marker nodes, we don't need to do anything with them
+        "block_quote_marker"
+        | "list_marker_minus"
+        | "list_marker_star"
+        | "list_marker_plus" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         // | "block_continuation"
         // | "fenced_code_block_delimiter"
         // | "note_reference_delimiter"
@@ -1092,8 +1092,8 @@ fn native_visitor<T: Write>(
         // "code_span" => process_code_span(buf, node, children, context),
         // "latex_span" => process_latex_span(node, children, context),
         // "html_comment" => process_html_comment(node, input_bytes, context),
-        // "list" => process_list(node, children, context),
-        // "list_item" => process_list_item(node, children, context),
+        "pandoc_list" => process_list(node, children, context),
+        "list_item" => process_list_item(node, children, context),
         "info_string" => process_info_string(node, input_bytes, context),
         "language_attribute" => process_language_attribute(children, context),
         "raw_attribute" => process_raw_attribute(node, children, context),
