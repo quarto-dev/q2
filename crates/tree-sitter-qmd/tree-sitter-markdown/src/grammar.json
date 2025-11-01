@@ -2216,11 +2216,11 @@
     },
     "_commonmark_single_quote_string": {
       "type": "PATTERN",
-      "value": "[']([^']|\\\\')*[']"
+      "value": "[']([^ ']|\\\\')([^']|\\\\')*[']"
     },
     "_commonmark_double_quote_string": {
       "type": "PATTERN",
-      "value": "[\"]([^\"]|\\\\\")*[\"]"
+      "value": "[\"]([^ \"]|\\\\\")([^\"]|\\\\\")*[\"]"
     },
     "_line": {
       "type": "PREC_RIGHT",
@@ -3044,8 +3044,21 @@
       ]
     },
     "pandoc_str": {
-      "type": "PATTERN",
-      "value": "(?:[0-9A-Za-z%&()+-/]|\\\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\\\.)*"
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "PATTERN",
+          "value": "[']"
+        },
+        {
+          "type": "PATTERN",
+          "value": "[\"]"
+        },
+        {
+          "type": "PATTERN",
+          "value": "(?:[0-9A-Za-z%&()+-/]|\\\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\\\.|['][0-9A-Za-z])*"
+        }
+      ]
     },
     "_prose_punctuation": {
       "type": "ALIAS",

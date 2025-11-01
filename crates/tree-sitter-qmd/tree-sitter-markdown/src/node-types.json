@@ -1458,6 +1458,11 @@
     }
   },
   {
+    "type": "pandoc_str",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "pandoc_strikeout",
     "named": true,
     "fields": {},
@@ -2507,10 +2512,6 @@
   },
   {
     "type": "pandoc_space",
-    "named": true
-  },
-  {
-    "type": "pandoc_str",
     "named": true
   },
   {

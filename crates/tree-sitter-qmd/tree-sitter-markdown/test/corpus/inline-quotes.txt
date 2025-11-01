@@ -60,9 +60,18 @@ nested through emphasis
 ================================================================================
 single quotes spacing 1
 ================================================================================
-' hello world '
+\' hello world \'
 --------------------------------------------------------------------------------
-ERROR: tree-sitter parse failed
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
 ================================================================================
 single quotes spacing 2
 ================================================================================

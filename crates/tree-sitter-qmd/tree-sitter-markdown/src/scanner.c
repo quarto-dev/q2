@@ -2229,19 +2229,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     printf("   inside_fenced_code: %s\n", inside_fenced_code ? "true": "false");
     printf("   lookahead: %c (%d)\n", lexer->lookahead, (int)lexer->lookahead);
     #endif
+
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
     if (valid_symbols[TRIGGER_ERROR]) {
         return error(lexer);
     }
-
-    // Handle latex spans for pipe table cells
-    // This must come BEFORE the display math state tracking below, so that
-    // latex spans in pipe table cells are parsed correctly
-    if (lexer->lookahead == '$' && (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE])) {
-        return parse_latex_span(s, lexer, valid_symbols);
-    }
-
 
     // Handle HTML comments, raw_specifiers, autolinks - must consume atomically to prevent block structure
     // recognition inside comments (e.g., list markers, headings)
@@ -2314,6 +2307,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         #ifdef SCAN_DEBUG
         printf("before main lookahead switch\n");
         #endif
+        // Handle latex spans for pipe table cells
+        // This must come BEFORE the display math state tracking below, so that
+        // latex spans in pipe table cells are parsed correctly
+        if (lexer->lookahead == '$' && (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE])) {
+            return parse_latex_span(s, lexer, valid_symbols);
+        }
+
         switch (lexer->lookahead) {
             case '\r':
             case '\n':

@@ -362,8 +362,8 @@ module.exports = grammar({
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
-        _commonmark_single_quote_string: $ => /[']([^']|\\')*[']/,
-        _commonmark_double_quote_string: $ => /["]([^"]|\\")*["]/,
+        _commonmark_single_quote_string: $ => /[']([^ ']|\\')([^']|\\')*[']/,
+        _commonmark_double_quote_string: $ => /["]([^ "]|\\")([^"]|\\")*["]/,
 
         _line: $ => prec.right(seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element)))),
         _line_with_maybe_spaces: $ => prec.right(repeat1(choice(alias($._whitespace, $.pandoc_space), $._inline_element))),
@@ -529,7 +529,9 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.)*/,
+        pandoc_str: $ => choice(
+            /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.|['][0-9A-Za-z])*/
+        ),
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // A blank line including the following newline.
