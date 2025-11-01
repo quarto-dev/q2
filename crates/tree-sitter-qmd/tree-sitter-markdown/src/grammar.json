@@ -3044,21 +3044,8 @@
       ]
     },
     "pandoc_str": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "PATTERN",
-          "value": "[']"
-        },
-        {
-          "type": "PATTERN",
-          "value": "[\"]"
-        },
-        {
-          "type": "PATTERN",
-          "value": "(?:[0-9A-Za-z%&()+-/]|\\\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\\\.|['][0-9A-Za-z])*"
-        }
-      ]
+      "type": "PATTERN",
+      "value": "(?:[0-9A-Za-z%&()+-/]|\\\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\\\.|['][0-9A-Za-z])*"
     },
     "_prose_punctuation": {
       "type": "ALIAS",

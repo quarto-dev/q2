@@ -529,9 +529,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => choice(
-            /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.|['][0-9A-Za-z])*/
-        ),
+        pandoc_str: $ => /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.|['][0-9A-Za-z])*/,
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // A blank line including the following newline.

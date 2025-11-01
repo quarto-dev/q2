@@ -266,94 +266,6 @@ static uint8_t list_item_indentation(Block block) {
 }
 
 // For explanation of the tokens see grammar.js
-static const bool display_math_paragraph_interrupt_symbols[] = {
-    false, // LINE_ENDING,
-    false, // SOFT_LINE_ENDING,
-    false, // BLOCK_CLOSE,
-    false, // BLOCK_CONTINUATION,
-    true,  // BLOCK_QUOTE_START,
-    true,  // ATX_H1_MARKER,
-    true,  // ATX_H2_MARKER,
-    true,  // ATX_H3_MARKER,
-    true,  // ATX_H4_MARKER,
-    true,  // ATX_H5_MARKER,
-    true,  // ATX_H6_MARKER,
-    true,  // SETEXT_H1_UNDERLINE,
-    true,  // SETEXT_H2_UNDERLINE,
-    true,  // THEMATIC_BREAK,
-    false,  // LIST_MARKER_MINUS,
-    false,  // LIST_MARKER_PLUS,
-    false,  // LIST_MARKER_STAR,
-    false,  // LIST_MARKER_PARENTHESIS,
-    false,  // LIST_MARKER_DOT,
-    false, // LIST_MARKER_MINUS_DONT_INTERRUPT,
-    false, // LIST_MARKER_PLUS_DONT_INTERRUPT,
-    false, // LIST_MARKER_STAR_DONT_INTERRUPT,
-    false, // LIST_MARKER_PARENTHESIS_DONT_INTERRUPT,
-    false, // LIST_MARKER_DOT_DONT_INTERRUPT,
-    false, // LIST_MARKER_EXAMPLE,
-    false, // LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
-    true,  // FENCED_CODE_BLOCK_START_BACKTICK,
-    true,  // FENCED_CODE_BLOCK_START_TILDE,
-    true,  // BLANK_LINE_START,
-    false, // FENCED_CODE_BLOCK_END_BACKTICK,
-    false, // FENCED_CODE_BLOCK_END_TILDE,
-    false, // CLOSE_BLOCK,
-    false, // ERROR,
-    false, // TRIGGER_ERROR,
-    false, // EOF,
-    false, // MINUS_METADATA,
-    false, // PLUS_METADATA,
-    true,  // PIPE_TABLE_START,
-    false, // PIPE_TABLE_LINE_ENDING,
-    true,  // FENCED_DIV_START,
-    true,  // FENCED_DIV_END,
-    false, // REF_ID_SPECIFIER,
-    false, // FENCED_DIV_NOTE_ID,
-    false, // CODE_SPAN_START
-    false, // CODE_SPAN_CLOSE
-    false, // LATEX_SPAN_START
-    false, // LATEX_SPAN_CLOSE
-    false, // HTML_COMMENT
-    false, // RAW_SPECIFIER
-    false, // AUTOLINK
-    false, // LANGUAGE_SPECIFIER
-    false, // KEY_SPECIFIER
-    false, // NAKED_VALUE_SPECIFIER
-    false, // HIGHLIGHT_SPAN_START
-    false, // INSERT_SPAN_START
-    false, // DELETE_SPAN_START
-    false, // COMMENT_SPAN_START
-    false, // SINGLE_QUOTE_OPEN
-    false, // SINGLE_QUOTE_CLOSE
-    false, // DOUBLE_QUOTE_OPEN
-    false, // DOUBLE_QUOTE_CLOSE
-    false, // SHORTCODE_OPEN_ESCAPED,
-    false, // SHORTCODE_CLOSE_ESCAPED,
-    false, // SHORTCODE_OPEN,
-    false, // SHORTCODE_CLOSE,
-    false, // CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET,
-    false, // CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
-    false, // CITE_AUTHOR_IN_TEXT,
-    false, // CITE_SUPPRESS_AUTHOR,
-    false, // STRIKEOUT_OPEN
-    false, // STRIKEOUT_CLOSE
-    false, // SUBSCRIPT_OPEN
-    false, // SUBSCRIPT_CLOSE
-    false, // SUPERSCRIPT_OPEN,
-    false, // SUPERSCRIPT_CLOSE,
-    false, // INLINE_NOTE_START_TOKEN,
-    false, // STRONG_EMPHASIS_OPEN_STAR,
-    false, // STRONG_EMPHASIS_CLOSE_STAR,
-    false, // STRONG_EMPHASIS_OPEN_UNDERSCORE,
-    false, // STRONG_EMPHASIS_CLOSE_UNDERSCORE,
-    false, // EMPHASIS_OPEN_STAR,
-    false, // EMPHASIS_CLOSE_STAR,
-    false, // EMPHASIS_OPEN_UNDERSCORE,
-    false, // EMPHASIS_CLOSE_UNDERSCORE,
-    false, // INLINE_NOTE_REFERENCE,
-};
-
 static const bool paragraph_interrupt_symbols[] = {
     false, // LINE_ENDING,
     false, // SOFT_LINE_ENDING,
@@ -450,8 +362,6 @@ static const uint8_t STATE_MATCHING = 0x1 << 0;
 static const uint8_t STATE_WAS_SOFT_LINE_BREAK = 0x1 << 1;
 // Block should be closed after next line break
 static const uint8_t STATE_CLOSE_BLOCK = 0x1 << 4;
-// Currently inside display math ($$...$$)
-static const uint8_t STATE_IN_DISPLAY_MATH = 0x1 << 5;
 
 static size_t roundup_32(size_t x) {
     x--;
@@ -495,8 +405,6 @@ typedef struct {
     uint8_t fenced_code_block_delimiter_length;
     // The delimiter length of the currently open code span (for pipe table cells)
     uint8_t code_span_delimiter_length;
-    // Whether we're inside a code span (for pipe table cells)
-    uint8_t inside_code_span;
     // The delimiter length of the currently open latex span (for pipe table cells)
     uint8_t latex_span_delimiter_length;
     // Whether we're inside a latex span (for pipe table cells)
@@ -547,7 +455,6 @@ static unsigned serialize(Scanner *s, char *buffer) {
     buffer[size++] = (char)s->column;
     buffer[size++] = (char)s->fenced_code_block_delimiter_length;
     buffer[size++] = (char)s->code_span_delimiter_length;
-    buffer[size++] = (char)s->inside_code_span;
     buffer[size++] = (char)s->latex_span_delimiter_length;
     buffer[size++] = (char)s->inside_latex_span;
     size_t blocks_count = s->open_blocks.size;
@@ -572,7 +479,6 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
     s->column = 0;
     s->fenced_code_block_delimiter_length = 0;
     s->code_span_delimiter_length = 0;
-    s->inside_code_span = 0;
     s->latex_span_delimiter_length = 0;
     s->inside_latex_span = 0;
     if (length > 0) {
@@ -585,7 +491,6 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         s->column = (uint8_t)buffer[size++];
         s->fenced_code_block_delimiter_length = (uint8_t)buffer[size++];
         s->code_span_delimiter_length = (uint8_t)buffer[size++];
-        s->inside_code_span = (uint8_t)buffer[size++];
         s->latex_span_delimiter_length = (uint8_t)buffer[size++];
         s->inside_latex_span = (uint8_t)buffer[size++];
         size_t blocks_size = length - size;
@@ -768,7 +673,6 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
     if (valid_symbols[CODE_SPAN_START] && delimiter == '`' && level < 3) {
         lexer->result_symbol = CODE_SPAN_START;
         s->code_span_delimiter_length = level;
-        s->inside_code_span = 1;
         return true;
     }
     // If this is able to close a fenced code block then that is the only valid
@@ -1685,7 +1589,6 @@ static bool parse_code_span(Scanner *s, TSLexer *lexer, const bool *valid_symbol
     // Try to close an open code span
     if (level == s->code_span_delimiter_length && valid_symbols[CODE_SPAN_CLOSE]) {
         s->code_span_delimiter_length = 0;
-        s->inside_code_span = 0;
         lexer->result_symbol = CODE_SPAN_CLOSE;
         return true;
     }
@@ -1710,7 +1613,6 @@ static bool parse_code_span(Scanner *s, TSLexer *lexer, const bool *valid_symbol
         if (close_level == level) {
             // Found matching closing delimiter
             s->code_span_delimiter_length = level;
-            s->inside_code_span = 1;
             lexer->result_symbol = CODE_SPAN_START;
             return true;
         }
@@ -2253,11 +2155,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return parse_raw_specifier(lexer, valid_symbols);
     }
 
-    // the logic here is tricky. We're trying to see a $$, mark STATE_IN_DISPLAY_MATH
-    // and go on. But we can only serialize state if we successfully return an external
-    // token.
-    //
-
     // Handle code spans for pipe table cells
     if (lexer->lookahead == '`' && !valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
         valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
@@ -2307,12 +2204,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         #ifdef SCAN_DEBUG
         printf("before main lookahead switch\n");
         #endif
-        // Handle latex spans for pipe table cells
-        // This must come BEFORE the display math state tracking below, so that
-        // latex spans in pipe table cells are parsed correctly
-        if (lexer->lookahead == '$' && (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE])) {
-            return parse_latex_span(s, lexer, valid_symbols);
-        }
 
         switch (lexer->lookahead) {
             case '\r':
@@ -2322,6 +2213,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     // consume the characters
                     lexer->result_symbol = BLANK_LINE_START;
                     return true;
+                }
+                break;
+            case '$':
+                if (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE]) {
+                    return parse_latex_span(s, lexer, valid_symbols);
                 }
                 break;
             case ':':
@@ -2504,9 +2400,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
             bool all_will_be_matched = s->matched == s->open_blocks.size;
-            const bool *symbols = s->state & STATE_IN_DISPLAY_MATH ?
-                display_math_paragraph_interrupt_symbols :
-                paragraph_interrupt_symbols;
+            const bool *symbols = paragraph_interrupt_symbols;
             // printf("-- recursive call to scan for closing line. State: %d\n", s->state);
             if (!lexer->eof(lexer) &&
                 !scan(s, lexer, symbols)) {
