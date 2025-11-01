@@ -108,6 +108,30 @@ pub fn process_pandoc_span(
         }
     }
 
+    // Special handling: Check if this span contains ONLY a citation
+    // If so, this is a bracketed citation like [@cite] or [-@cite]
+    // We need to unwrap it and potentially change the mode
+    if content_inlines.len() == 1
+        && target.is_none()
+        && attr.0.is_empty()
+        && attr.1.is_empty()
+        && attr.2.is_empty()
+    {
+        // Check if the single inline is a Cite (without consuming it yet)
+        if matches!(content_inlines.first(), Some(Inline::Cite(_))) {
+            if let Some(Inline::Cite(mut cite)) = content_inlines.pop() {
+                // If the citation is AuthorInText mode (from @cite), change it to NormalCitation
+                // because it's wrapped in brackets [@cite]
+                for citation in &mut cite.citations {
+                    if citation.mode == crate::pandoc::inline::CitationMode::AuthorInText {
+                        citation.mode = crate::pandoc::inline::CitationMode::NormalCitation;
+                    }
+                }
+                return PandocNativeIntermediate::IntermediateInline(Inline::Cite(cite));
+            }
+        }
+    }
+
     // Decide what to create based on presence of target
     if let Some((url, title)) = target {
         // This is a LINK

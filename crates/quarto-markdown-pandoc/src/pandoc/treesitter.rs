@@ -671,6 +671,63 @@ fn native_visitor<T: Write>(
                 })
             },
         ),
+        // Editorial marks
+        "insert_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "insert" => process_insert(buf, node, children, context),
+        "delete_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "delete" => process_delete(buf, node, children, context),
+        "highlight_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "highlight" => process_highlight(buf, node, children, context),
+        "edit_comment_delimiter" => {
+            PandocNativeIntermediate::IntermediateUnknown(node_location(node))
+        }
+        "edit_comment" => process_editcomment(buf, node, children, context),
+        // Shortcode nodes
+        "shortcode_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "shortcode_name" => process_shortcode_string_arg(node, input_bytes, context),
+        "shortcode_naked_string" => process_shortcode_string_arg(node, input_bytes, context),
+        "shortcode_string" => {
+            // Extract the quoted text from the child
+            let extract_quoted_text = || {
+                if let Some(child) = node.child(0) {
+                    let text = child.utf8_text(input_bytes).unwrap().to_string();
+                    let range =
+                        crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                            &node_source_info_with_context(&child, context),
+                            context,
+                        );
+                    PandocNativeIntermediate::IntermediateBaseText(text, range)
+                } else {
+                    let range =
+                        crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                            &node_source_info_with_context(node, context),
+                            context,
+                        );
+                    PandocNativeIntermediate::IntermediateBaseText(String::new(), range)
+                }
+            };
+            process_shortcode_string(&extract_quoted_text, node, context)
+        }
+        "shortcode_number" => process_shortcode_number(node, input_bytes, context),
+        "shortcode_boolean" => process_shortcode_boolean(node, input_bytes, context),
+        "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children, context),
+        "shortcode" | "shortcode_escaped" => process_shortcode(node, children, context),
+        // Citation nodes
+        "citation_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
+        "citation_id_author_in_text" => {
+            let id = node.utf8_text(input_bytes).unwrap().to_string();
+            let range = node_location(node);
+            PandocNativeIntermediate::IntermediateBaseText(id, range)
+        }
+        "citation_id_suppress_author" => {
+            let id = node.utf8_text(input_bytes).unwrap().to_string();
+            let range = node_location(node);
+            PandocNativeIntermediate::IntermediateBaseText(id, range)
+        }
+        "citation" => {
+            let node_text = || node.utf8_text(input_bytes).unwrap().to_string();
+            process_citation(node, node_text, children, context)
+        }
         "code_span_delimiter" => {
             // Marker node, no processing needed
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))

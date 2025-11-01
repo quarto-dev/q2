@@ -1625,3 +1625,789 @@ fn test_empty_quotes() {
         result_double
     );
 }
+
+// ============================================================================
+// Strikeout tests
+// ============================================================================
+
+/// Test basic strikeout
+#[test]
+fn test_strikeout_basic() {
+    let input = "~~strikeout~~";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Strikeout"),
+        "Should contain Strikeout: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"strikeout\""),
+        "Should contain text: {}",
+        result
+    );
+}
+
+/// Test strikeout in context
+#[test]
+fn test_strikeout_in_context() {
+    let input = "before ~~strikeout~~ after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("Strikeout"),
+        "Should contain Strikeout: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"strikeout\""),
+        "Should contain strikeout text: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test strikeout with multiple words
+#[test]
+fn test_strikeout_multiple_words() {
+    let input = "~~multiple words~~";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Strikeout"),
+        "Should contain Strikeout: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"multiple\""),
+        "Should contain 'multiple': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"words\""),
+        "Should contain 'words': {}",
+        result
+    );
+}
+
+/// Test strikeout with formatting (NOTE: Currently fails - nested formatting in strikeout not fully supported)
+#[test]
+#[ignore]
+fn test_strikeout_with_formatting() {
+    let input = "~~**bold** text~~";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Strikeout"),
+        "Should contain Strikeout: {}",
+        result
+    );
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"bold\""),
+        "Should contain 'bold': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain 'text': {}",
+        result
+    );
+}
+
+// ============================================================================
+// Editorial Marks Tests
+// ============================================================================
+
+/// Test insert - basic
+#[test]
+fn test_insert_basic() {
+    let input = "[++ inserted text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Span"), "Should contain Span: {}", result);
+    assert!(
+        result.contains("\"quarto-insert\""),
+        "Should contain 'quarto-insert' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"inserted\""),
+        "Should contain 'inserted': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain 'text': {}",
+        result
+    );
+}
+
+/// Test insert in context
+#[test]
+fn test_insert_in_context() {
+    let input = "before [++ inserted] after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-insert\""),
+        "Should contain 'quarto-insert' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"inserted\""),
+        "Should contain 'inserted': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test insert with attributes
+#[test]
+fn test_insert_with_attributes() {
+    let input = "[++ inserted text]{.insert-class}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-insert\""),
+        "Should contain 'quarto-insert' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"inserted\""),
+        "Should contain 'inserted': {}",
+        result
+    );
+    assert!(
+        result.contains("\"insert-class\""),
+        "Should contain class: {}",
+        result
+    );
+}
+
+/// Test delete - basic
+#[test]
+fn test_delete_basic() {
+    let input = "[-- deleted text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-delete\""),
+        "Should contain 'quarto-delete' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"deleted\""),
+        "Should contain 'deleted': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain 'text': {}",
+        result
+    );
+}
+
+/// Test delete in context
+#[test]
+fn test_delete_in_context() {
+    let input = "before [-- deleted] after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-delete\""),
+        "Should contain 'quarto-delete' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"deleted\""),
+        "Should contain 'deleted': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test delete with attributes
+#[test]
+fn test_delete_with_attributes() {
+    let input = "[-- deleted text]{key=\"value\"}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-delete\""),
+        "Should contain 'quarto-delete' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"deleted\""),
+        "Should contain 'deleted': {}",
+        result
+    );
+    assert!(result.contains("\"key\""), "Should contain key: {}", result);
+    assert!(
+        result.contains("\"value\""),
+        "Should contain value: {}",
+        result
+    );
+}
+
+/// Test highlight - basic
+#[test]
+fn test_highlight_basic() {
+    let input = "[!! highlighted text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-highlight\""),
+        "Should contain 'quarto-highlight' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"highlighted\""),
+        "Should contain 'highlighted': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain 'text': {}",
+        result
+    );
+}
+
+/// Test highlight in context
+#[test]
+fn test_highlight_in_context() {
+    let input = "before [!! highlighted] after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-highlight\""),
+        "Should contain 'quarto-highlight' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"highlighted\""),
+        "Should contain 'highlighted': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test highlight with attributes
+#[test]
+fn test_highlight_with_attributes() {
+    let input = "[!! highlighted text]{#my-id .myclass}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-highlight\""),
+        "Should contain 'quarto-highlight' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"highlighted\""),
+        "Should contain 'highlighted': {}",
+        result
+    );
+    assert!(
+        result.contains("\"my-id\""),
+        "Should contain id: {}",
+        result
+    );
+    assert!(
+        result.contains("\"myclass\""),
+        "Should contain class: {}",
+        result
+    );
+}
+
+/// Test edit comment - basic
+#[test]
+fn test_edit_comment_basic() {
+    let input = "[>> comment text]";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-edit-comment\""),
+        "Should contain 'quarto-edit-comment' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"comment\""),
+        "Should contain 'comment': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"text\""),
+        "Should contain 'text': {}",
+        result
+    );
+}
+
+/// Test edit comment in context
+#[test]
+fn test_edit_comment_in_context() {
+    let input = "before [>> comment] after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-edit-comment\""),
+        "Should contain 'quarto-edit-comment' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"comment\""),
+        "Should contain 'comment': {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test edit comment with attributes
+#[test]
+fn test_edit_comment_with_attributes() {
+    let input = "[>> comment text]{#comment-id .comment-class key=\"value\"}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-edit-comment\""),
+        "Should contain 'quarto-edit-comment' class: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"comment\""),
+        "Should contain 'comment': {}",
+        result
+    );
+    assert!(
+        result.contains("\"comment-id\""),
+        "Should contain id: {}",
+        result
+    );
+    assert!(
+        result.contains("\"comment-class\""),
+        "Should contain class: {}",
+        result
+    );
+    assert!(result.contains("\"key\""), "Should contain key: {}", result);
+    assert!(
+        result.contains("\"value\""),
+        "Should contain value: {}",
+        result
+    );
+}
+
+/// Test all editorial marks together
+#[test]
+fn test_editorial_marks_combined() {
+    let input = "Text with [++ insert], [-- delete], [!! highlight], and [>> comment].";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-insert\""),
+        "Should contain 'quarto-insert' class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-delete\""),
+        "Should contain 'quarto-delete' class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-highlight\""),
+        "Should contain 'quarto-highlight' class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-edit-comment\""),
+        "Should contain 'quarto-edit-comment' class: {}",
+        result
+    );
+}
+
+// ============================================================================
+// Shortcode Tests
+// ============================================================================
+
+/// Test basic shortcode - name only
+#[test]
+fn test_shortcode_basic() {
+    let input = "{{< myshortcode >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"myshortcode\""),
+        "Should contain shortcode name: {}",
+        result
+    );
+}
+
+/// Test shortcode in context
+#[test]
+fn test_shortcode_in_context() {
+    let input = "before {{< name >}} after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"name\""),
+        "Should contain shortcode name: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test shortcode with single positional argument
+#[test]
+fn test_shortcode_with_positional_arg() {
+    let input = "{{< name arg1 >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"name\""),
+        "Should contain shortcode name: {}",
+        result
+    );
+    assert!(
+        result.contains("\"arg1\""),
+        "Should contain positional arg: {}",
+        result
+    );
+}
+
+/// Test shortcode with multiple positional arguments
+#[test]
+fn test_shortcode_with_multiple_args() {
+    let input = "{{< name arg1 arg2 arg3 >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"arg1\""),
+        "Should contain arg1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"arg2\""),
+        "Should contain arg2: {}",
+        result
+    );
+    assert!(
+        result.contains("\"arg3\""),
+        "Should contain arg3: {}",
+        result
+    );
+}
+
+/// Test shortcode with keyword argument
+#[test]
+fn test_shortcode_with_keyword_arg() {
+    let input = "{{< name key=\"value\" >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"name\""),
+        "Should contain shortcode name: {}",
+        result
+    );
+    assert!(
+        result.contains("\"key\""),
+        "Should contain keyword name: {}",
+        result
+    );
+    assert!(
+        result.contains("\"value\""),
+        "Should contain keyword value: {}",
+        result
+    );
+}
+
+/// Test shortcode with mixed arguments
+/// Note: positional args must come before keyword args (grammar restriction)
+#[test]
+fn test_shortcode_with_mixed_args() {
+    let input = "{{< name pos1 pos2 key1=\"val1\" key2=\"val2\" >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"pos1\""),
+        "Should contain pos1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"pos2\""),
+        "Should contain pos2: {}",
+        result
+    );
+    assert!(
+        result.contains("\"key1\""),
+        "Should contain key1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"val1\""),
+        "Should contain val1: {}",
+        result
+    );
+    assert!(
+        result.contains("\"key2\""),
+        "Should contain key2: {}",
+        result
+    );
+    assert!(
+        result.contains("\"val2\""),
+        "Should contain val2: {}",
+        result
+    );
+}
+
+/// Test shortcode with boolean argument
+#[test]
+fn test_shortcode_with_boolean() {
+    let input = "{{< name flag=true >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"flag\""),
+        "Should contain flag name: {}",
+        result
+    );
+    assert!(
+        result.contains("true"),
+        "Should contain boolean value: {}",
+        result
+    );
+}
+
+/// Test shortcode with number argument
+#[test]
+fn test_shortcode_with_number() {
+    let input = "{{< name count=42 >}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"count\""),
+        "Should contain count name: {}",
+        result
+    );
+    assert!(
+        result.contains("42"),
+        "Should contain number value: {}",
+        result
+    );
+}
+
+/// Test escaped shortcode
+#[test]
+fn test_shortcode_escaped() {
+    let input = "{{{< name >}}}";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("\"quarto-shortcode__\""),
+        "Should contain shortcode class: {}",
+        result
+    );
+    assert!(
+        result.contains("\"name\""),
+        "Should contain shortcode name: {}",
+        result
+    );
+    // The escaped shortcode should have is_escaped = true
+    // but the native output format may not show this explicitly
+}
+
+// ============================================================================
+// Citation Tests
+// ============================================================================
+
+/// Test basic author-in-text citation
+#[test]
+fn test_citation_author_in_text() {
+    let input = "See @smith2020 for details";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Cite"), "Should contain Cite: {}", result);
+    assert!(
+        result.contains("\"smith2020\""),
+        "Should contain citation id: {}",
+        result
+    );
+    assert!(
+        result.contains("AuthorInText"),
+        "Should contain AuthorInText mode: {}",
+        result
+    );
+}
+
+/// Test normal bracketed citation
+#[test]
+fn test_citation_normal() {
+    let input = "See [@smith2020] for details";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Cite"), "Should contain Cite: {}", result);
+    assert!(
+        result.contains("\"smith2020\""),
+        "Should contain citation id: {}",
+        result
+    );
+    assert!(
+        result.contains("NormalCitation"),
+        "Should contain NormalCitation mode: {}",
+        result
+    );
+}
+
+/// Test suppress author citation
+#[test]
+fn test_citation_suppress_author() {
+    let input = "See [-@smith2020] for details";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Cite"), "Should contain Cite: {}", result);
+    assert!(
+        result.contains("\"smith2020\""),
+        "Should contain citation id: {}",
+        result
+    );
+    assert!(
+        result.contains("SuppressAuthor"),
+        "Should contain SuppressAuthor mode: {}",
+        result
+    );
+}
+
+/// Test citation in context
+#[test]
+fn test_citation_in_context() {
+    let input = "before @citekey after";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(
+        result.contains("Str \"before\""),
+        "Should contain 'before': {}",
+        result
+    );
+    assert!(result.contains("Cite"), "Should contain Cite: {}", result);
+    assert!(
+        result.contains("\"citekey\""),
+        "Should contain citation id: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"after\""),
+        "Should contain 'after': {}",
+        result
+    );
+}
+
+/// Test citation with underscore and numbers
+#[test]
+fn test_citation_complex_id() {
+    let input = "@smith_jones_2020 is cited";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    assert!(result.contains("Cite"), "Should contain Cite: {}", result);
+    assert!(
+        result.contains("\"smith_jones_2020\""),
+        "Should contain complex citation id: {}",
+        result
+    );
+}

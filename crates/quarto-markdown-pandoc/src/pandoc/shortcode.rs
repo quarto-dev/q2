@@ -119,6 +119,35 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
             }
         }
     }
+    // Process keyword arguments from the keyword_args HashMap
+    for (key, value) in shortcode.keyword_args {
+        match value {
+            ShortcodeArg::String(text) => {
+                content.push(shortcode_key_value_span(key, text));
+            }
+            ShortcodeArg::Number(num) => {
+                content.push(shortcode_key_value_span(key, num.to_string()));
+            }
+            ShortcodeArg::Boolean(b) => {
+                content.push(shortcode_key_value_span(
+                    key,
+                    if b {
+                        "true".to_string()
+                    } else {
+                        "false".to_string()
+                    },
+                ));
+            }
+            ShortcodeArg::Shortcode(_) => {
+                eprintln!("PANIC - Quarto doesn't support nested shortcodes in keyword args");
+                std::process::exit(1);
+            }
+            ShortcodeArg::KeyValue(_) => {
+                eprintln!("PANIC - KeyValue shouldn't appear in keyword_args HashMap");
+                std::process::exit(1);
+            }
+        }
+    }
     attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
     Span {
         attr: (
