@@ -774,7 +774,6 @@ module.exports = grammar({
         $._eof,
 
         $.minus_metadata,
-        $.plus_metadata,
 
         $._pipe_table_start,
         $._pipe_table_line_ending,

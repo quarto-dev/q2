@@ -4113,10 +4113,6 @@
     },
     {
       "type": "SYMBOL",
-      "name": "plus_metadata"
-    },
-    {
-      "type": "SYMBOL",
       "name": "_pipe_table_start"
     },
     {
