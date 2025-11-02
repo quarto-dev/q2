@@ -3056,28 +3056,6 @@
       "named": true,
       "value": "pandoc_str"
     },
-    "_blank_line": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "SYMBOL",
-          "name": "_blank_line_start"
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_newline"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_eof"
-            }
-          ]
-        }
-      ]
-    },
     "pandoc_block_quote": {
       "type": "SEQ",
       "members": [
@@ -3908,6 +3886,28 @@
         {
           "type": "SYMBOL",
           "name": "_block_close"
+        }
+      ]
+    },
+    "_blank_line": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_blank_line_start"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_newline"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_eof"
+            }
+          ]
         }
       ]
     },

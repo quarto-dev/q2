@@ -532,11 +532,6 @@ module.exports = grammar({
         pandoc_str: $ => /(?:[0-9A-Za-z%&()+-/]|\\.)(?:[0-9A-Za-z!%&()+,./;?:-]|\\.|['][0-9A-Za-z])*/,
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
-        // A blank line including the following newline.
-        //
-        // https://github.github.com/gfm/#blank-lines
-        _blank_line: $ => seq($._blank_line_start, choice($._newline, $._eof)),
-
         // CONTAINER BLOCKS
 
         ///////////////////////////////////////////////////////////////////////////////////////////
@@ -691,10 +686,19 @@ module.exports = grammar({
         ///////////////////////////////////////////////////////////////////////////////////////////
         // Newlines as in the spec. Parsing a newline triggers the matching process by making
         // the external parser emit a `$._line_ending`.
+
+        // A blank line including the following newline.
+        // https://github.github.com/gfm/#blank-lines
+        _blank_line: $ => seq(
+            $._blank_line_start, 
+            choice($._newline, $._eof)
+        ),
+
         _newline: $ => seq(
             $._line_ending,
             optional($.block_continuation)
         ),
+
         _soft_line_break: $ => seq(
             $._soft_line_ending,
             optional($.block_continuation)
