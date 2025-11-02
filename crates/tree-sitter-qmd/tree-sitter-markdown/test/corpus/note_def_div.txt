@@ -23,7 +23,6 @@ With many paras, even.
             (pandoc_space)
             (pandoc_str)
             (block_continuation))
-          (block_continuation)
           (pandoc_paragraph
             (pandoc_str)
             (pandoc_space)
@@ -31,8 +30,7 @@ With many paras, even.
             (pandoc_space)
             (pandoc_str)
             (pandoc_space)
-            (pandoc_str)
-            (block_continuation)))))
+            (pandoc_str)))))
 ================================================================================
 2
 ================================================================================
@@ -53,10 +51,8 @@ They nest nice.
             (commonmark_specifier
               (attribute_id)))
           (block_continuation)
-          (block_continuation)
           (note_definition_fenced_block
             (fenced_div_note_id)
-            (block_continuation)
             (block_continuation)
             (pandoc_paragraph
               (pandoc_str)
@@ -65,7 +61,5 @@ They nest nice.
               (pandoc_space)
               (pandoc_str)
               (block_continuation))
-            (block_continuation)
-            (block_continuation))
-          (block_continuation))))
+            (block_continuation)))))
           

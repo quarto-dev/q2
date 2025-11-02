@@ -76,13 +76,11 @@ Hello, world
         (pandoc_div
           (attribute_specifier)
           (block_continuation)
-          (block_continuation)
           (pandoc_paragraph
             (pandoc_str)
             (pandoc_space)
             (pandoc_str)
-            (block_continuation))
-          (block_continuation))))
+            (block_continuation)))))
 ================================================================================
 Fenced divs with a space at the closing fence
 ================================================================================
@@ -98,13 +96,11 @@ Hello, world
         (pandoc_div
           (attribute_specifier)
           (block_continuation)
-          (block_continuation)
           (pandoc_paragraph
             (pandoc_str)
             (pandoc_space)
             (pandoc_str)
-            (block_continuation))
-          (block_continuation))))
+            (block_continuation)))))
 ================================================================================
 Code block with a colon inside
 ================================================================================
@@ -208,7 +204,6 @@ Empty fenced div 1
           (attribute_specifier
             (commonmark_specifier
               (attribute_id)))
-          (block_continuation)
           (block_continuation))))
 ================================================================================
 Empty fenced div 2
@@ -262,8 +257,7 @@ A fenced div with a paragraph inside a bulleted list
               (block_continuation)
               (pandoc_paragraph
                 (pandoc_str)
-                (block_continuation))
-              (block_continuation))))))
+                (block_continuation)))))))
 ================================================================================
 A code block with a single one-character class specifier
 ================================================================================
@@ -346,7 +340,6 @@ Another paragraph in the note.
             (pandoc_space)
             (pandoc_str)
             (block_continuation))
-          (block_continuation)
           (pandoc_paragraph
             (pandoc_str)
             (pandoc_space)
@@ -356,8 +349,7 @@ Another paragraph in the note.
             (pandoc_space)
             (pandoc_str)
             (pandoc_space)
-            (pandoc_str)
-            (block_continuation)))))
+            (pandoc_str)))))
 ================================================================================
 Example list with (@) syntax
 ================================================================================
@@ -375,15 +367,13 @@ Example list with (@) syntax
             (pandoc_paragraph
               (pandoc_str)
               (pandoc_space)
-              (pandoc_str)
-              (block_continuation)))
+              (pandoc_str)))
           (list_item
             (list_marker_example)
             (pandoc_paragraph
               (pandoc_str)
               (pandoc_space)
-              (pandoc_str)
-              (block_continuation)))
+              (pandoc_str)))
           (list_item
             (list_marker_example)
             (pandoc_paragraph
@@ -403,45 +393,42 @@ Some text in between.
 
 (@) Fourth item
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_list
-          (list_item
-            (list_marker_example)
-            (pandoc_paragraph
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str)
-              (block_continuation)))
-          (list_item
-            (list_marker_example)
-            (pandoc_paragraph
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str)
-              (block_continuation))
-            (pandoc_paragraph
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str)
-              (block_continuation)))
-          (list_item
-            (list_marker_example)
-            (pandoc_paragraph
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str)
-              (block_continuation)))
-          (list_item
-            (list_marker_example)
-            (pandoc_paragraph
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str))))))
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_example)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)))
+      (list_item
+        (list_marker_example)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
+      (list_item
+        (list_marker_example)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)))
+      (list_item
+        (list_marker_example)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
 ================================================================================
 Horizontal rules with blank lines should not be parsed as metadata
 ================================================================================
