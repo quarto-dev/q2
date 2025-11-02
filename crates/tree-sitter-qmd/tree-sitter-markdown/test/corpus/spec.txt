@@ -1,9 +1,9 @@
 ================================================================================
-Example 4 - https://github.github.com/gfm/#example-4
+Example 4 - https://github.github.com/gfm/#example-4 (qmd: don't mix tabs and spaces what's wrong with you)
 ================================================================================
   - foo
 
-	bar
+  bar
 
 --------------------------------------------------------------------------------
     (document
@@ -12,11 +12,9 @@ Example 4 - https://github.github.com/gfm/#example-4
           (list_item
             (list_marker_minus)
             (pandoc_paragraph
-              (pandoc_str)
-              (block_continuation))
-            (block_continuation)
-            (pandoc_paragraph
-              (pandoc_str))))))
+              (pandoc_str))))
+        (pandoc_paragraph
+          (pandoc_str))))
 ================================================================================
 Example 9 - https://github.github.com/gfm/#example-9
 ================================================================================
@@ -25,8 +23,14 @@ Example 9 - https://github.github.com/gfm/#example-9
 	 - baz
 
 --------------------------------------------------------------------------------
-    (document
-      (section
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
         (pandoc_list
           (list_item
             (list_marker_minus)
@@ -37,13 +41,7 @@ Example 9 - https://github.github.com/gfm/#example-9
               (list_item
                 (list_marker_minus)
                 (pandoc_paragraph
-                  (pandoc_str)
-                  (block_continuation))
-                (pandoc_list
-                  (list_item
-                    (list_marker_minus)
-                    (pandoc_paragraph
-                      (pandoc_str))))))))))
+                  (pandoc_str))))))))))
 ================================================================================
 Example 10 - https://github.github.com/gfm/#example-10
 ================================================================================
@@ -217,22 +215,23 @@ Example 30 - https://github.github.com/gfm/#example-30
             (pandoc_paragraph
               (pandoc_str))))))
 ================================================================================
-Example 31 - https://github.github.com/gfm/#example-31
+Example 31 - https://github.github.com/gfm/#example-31 (qmd: just use * ---)
 ================================================================================
-- Foo
-- * * *
+* Foo
+* ---
 
 --------------------------------------------------------------------------------
-    (document
-      (section
-        (pandoc_list
-          (list_item
-            (list_marker_minus)
-            (pandoc_paragraph
-              (pandoc_str)))
-          (list_item
-            (list_marker_minus)
-            (pandoc_horizontal_rule)))))
+
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_star)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_star)
+        (pandoc_horizontal_rule)))))
 ================================================================================
 Example 32 - https://github.github.com/gfm/#example-32
 ================================================================================

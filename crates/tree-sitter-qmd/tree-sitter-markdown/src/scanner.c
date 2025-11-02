@@ -5,7 +5,7 @@
 #include <wctype.h>
 
 // set this define to turn on debugging printouts
-// #define SCAN_DEBUG 1
+#define SCAN_DEBUG 1
 
 #ifdef SCAN_DEBUG
 #include <stdio.h>
@@ -2266,12 +2266,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
             uint8_t matched_temp = s->matched;
             s->matched = 0;
-            // allow ':' to interrupt blocks.
-            if (lexer->lookahead == ':') {
+            // allow these characters to interrupt blocks.
+            if (lexer->lookahead == ':' || lexer->lookahead == '#') {
                 lexer->mark_end(lexer);
                 EMIT_TOKEN(LINE_ENDING);
             }
-            if (lexer->lookahead != '*' && lexer->lookahead != '>' && lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+            if (lexer->lookahead != '*' && lexer->lookahead != '-' && lexer->lookahead != '>' && lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
                 lexer->mark_end(lexer);
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
@@ -2297,68 +2297,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
             if (lexer->eof(lexer)) {
                 EMIT_TOKEN(TOKEN_EOF);
-            }
-                    
-            // reset some state variables
-            // s->state |= STATE_WAS_SOFT_LINE_BREAK;
-            // DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
-            // EMIT_TOKEN(SOFT_LINE_ENDING);
-            // bool one_will_be_matched = false;
-            // while (s->matched < (uint8_t)s->open_blocks.size) {
-            //     if (match(s, lexer, s->open_blocks.items[s->matched])) {
-            //         s->matched++;
-            //         one_will_be_matched = true;
-            //     } else {
-            //         break;
-            //     }
-            // }
-            // bool all_will_be_matched = s->matched == s->open_blocks.size;
-            // const bool *symbols = paragraph_interrupt_symbols;
-            // DEBUG_PRINT("All will be matched: %d\n", (int) all_will_be_matched);
-            // DEBUG_PRINT("One will be matched: %d\n", (int) one_will_be_matched);
-            // DEBUG_PRINT("-- recursive call to scan for closing line. State: %d\n", s->state);
-            // DEBUG_LOOKAHEAD;
-            // if (old_lookahead > ' ') {
-            //     s->state |= STATE_WAS_SOFT_LINE_BREAK;
-            //     lexer->mark_end(lexer);
-            //     DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
-            //     EMIT_TOKEN(SOFT_LINE_ENDING);
-            // }
-            // if (!lexer->eof(lexer) && !scan(s, lexer, symbols)) {
-            //     DEBUG_PRINT("Recursive call returned false\n");
-            //     DEBUG_LOOKAHEAD;
-            //     s->matched = matched_temp;
-            //     // If the last line break ended a paragraph and no new block
-            //     // opened, the last line break should have been a soft line
-            //     // break Reset the counter for matched blocks
-            //     s->matched = 0;
-            //     s->indentation = 0;
-            //     s->column = 0;
-            //     // If there is at least one open block, we should be in the
-            //     // matching state. 
-            //     if (one_will_be_matched) {
-            //         s->state |= STATE_MATCHING;
-            //     } else {
-            //         s->state &= (~STATE_MATCHING);
-            //     }
-            //     if (valid_symbols[PIPE_TABLE_LINE_ENDING]) {
-            //         if (all_will_be_matched) {
-            //             EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
-            //         }
-            //     } else {
-            //         if (lexer->lookahead == '\r' || lexer->lookahead == '\n') {
-            //             EMIT_TOKEN(LINE_ENDING);
-            //         } else {
-            //             // reset some state variables
-            //             s->state |= STATE_WAS_SOFT_LINE_BREAK;
-            //             DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
-            //             EMIT_TOKEN(SOFT_LINE_ENDING);
-            //         }
-            //     }
-            // } else {
-            //     DEBUG_PRINT("Recursive call returned true, matched set to %d\n", (int)matched_temp);
-            //     s->matched = matched_temp;
-            // }
+            }                    
         }
         if (valid_symbols[LINE_ENDING]) {
             s->indentation = 0;

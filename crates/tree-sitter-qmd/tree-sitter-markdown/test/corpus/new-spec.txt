@@ -1,5 +1,5 @@
 ================================================================================
-Example 9 - https://github.github.com/gfm/#example-9
+Example 9 - https://github.github.com/gfm/#example-9 (if you mix tabs and spaces, you deserve a glitter bomb)
 ================================================================================
  - foo
    - bar
@@ -13,8 +13,7 @@ Example 9 - https://github.github.com/gfm/#example-9
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation))
+          (pandoc_str))
         (pandoc_list
           (list_item
             (list_marker_minus)
@@ -228,10 +227,10 @@ Example 30 - https://github.github.com/gfm/#example-30
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
-Example 31 - https://github.github.com/gfm/#example-31
+Example 31 - https://github.github.com/gfm/#example-31 (qmd: just use * ---)
 ================================================================================
-- Foo
-- * * *
+* Foo
+* ---
 
 --------------------------------------------------------------------------------
 
@@ -239,11 +238,11 @@ Example 31 - https://github.github.com/gfm/#example-31
   (section
     (pandoc_list
       (list_item
-        (list_marker_minus)
+        (list_marker_star)
         (pandoc_paragraph
           (pandoc_str)))
       (list_item
-        (list_marker_minus)
+        (list_marker_star)
         (pandoc_horizontal_rule)))))
 ================================================================================
 Example 32 - https://github.github.com/gfm/#example-32
