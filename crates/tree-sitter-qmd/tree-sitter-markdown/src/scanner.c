@@ -633,14 +633,13 @@ static bool parse_fenced_div_marker(Scanner *s, TSLexer *lexer,
     }
     if (!lexer->eof(lexer)) {
         if (valid_symbols[FENCED_DIV_START]) {
-            lexer->result_symbol = FENCED_DIV_START;
             if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
                 }
                 push_block(s, FENCED_DIV);
             }
-            return true;
+            EMIT_TOKEN(FENCED_DIV_START);
         }
     }
     return false;
@@ -694,7 +693,6 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
         // If it does not then choose to interpret this as the start of a fenced
         // code block.
         if (!info_string_has_backtick) {
-            lexer->result_symbol = FENCED_CODE_BLOCK_START_BACKTICK;
             if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
@@ -705,7 +703,7 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
             // to decide whether a sequence of backticks can close the block.
             s->fenced_code_block_delimiter_length = level;
             s->indentation = 0;
-            return true;
+            EMIT_TOKEN(FENCED_CODE_BLOCK_START_BACKTICK);
         }
     }
     return false;
@@ -1156,10 +1154,11 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 push_block(s, (Block)(LIST_ITEM + extra_indentation));
             }
-            lexer->result_symbol = dont_interrupt
-                                       ? LIST_MARKER_MINUS_DONT_INTERRUPT
-                                       : LIST_MARKER_MINUS;
-            return true;
+            if (dont_interrupt) {
+                EMIT_TOKEN(LIST_MARKER_MINUS_DONT_INTERRUPT);
+            } else {
+                EMIT_TOKEN(LIST_MARKER_MINUS);
+            }
         }
         if (minus_count == 3 && (!minus_after_whitespace) && line_end &&
             valid_symbols[MINUS_METADATA]) {
@@ -1233,8 +1232,7 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                             advance(s, lexer);
                         }
                         mark_end(s, lexer);
-                        lexer->result_symbol = MINUS_METADATA;
-                        return true;
+                        EMIT_TOKEN(MINUS_METADATA);
                     }
                 }
                 // otherwise consume rest of line
@@ -1390,8 +1388,7 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
         return false;
     }
 
-    lexer->result_symbol = PIPE_TABLE_START;
-    return true;
+    EMIT_TOKEN(PIPE_TABLE_START);
 }
 
 // parse_open_square_brace has already advanced the '['
@@ -1419,15 +1416,13 @@ static bool parse_ref_id_specifier(Scanner *s, TSLexer *lexer, const bool *valid
     if (lexer->lookahead == ':' && valid_symbols[REF_ID_SPECIFIER]) {
         lexer->advance(lexer, false);
         lexer->mark_end(lexer);
-        lexer->result_symbol = REF_ID_SPECIFIER;
-        return true;
+        EMIT_TOKEN(REF_ID_SPECIFIER);
     }
     if (!valid_symbols[INLINE_NOTE_REFERENCE]) {
         return false;
     }
     lexer->mark_end(lexer);
-    lexer->result_symbol = INLINE_NOTE_REFERENCE;
-    return true;
+    EMIT_TOKEN(INLINE_NOTE_REFERENCE);
 }
 
 static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
@@ -1446,8 +1441,7 @@ static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
         advance(s, lexer);
     }
     lexer->mark_end(lexer);
-    lexer->result_symbol = FENCED_DIV_NOTE_ID;
-    return true;
+    EMIT_TOKEN(FENCED_DIV_NOTE_ID);
 }
 
 // Parse code span delimiters for pipe table cells
@@ -1465,8 +1459,7 @@ static bool parse_code_span(Scanner *s, TSLexer *lexer, const bool *valid_symbol
     // Try to close an open code span
     if (level == s->code_span_delimiter_length && valid_symbols[CODE_SPAN_CLOSE]) {
         s->code_span_delimiter_length = 0;
-        lexer->result_symbol = CODE_SPAN_CLOSE;
-        return true;
+        EMIT_TOKEN(CODE_SPAN_CLOSE);
     }
 
     // Try to open a new code span by looking ahead for a matching closing delimiter
@@ -1489,8 +1482,7 @@ static bool parse_code_span(Scanner *s, TSLexer *lexer, const bool *valid_symbol
         if (close_level == level) {
             // Found matching closing delimiter
             s->code_span_delimiter_length = level;
-            lexer->result_symbol = CODE_SPAN_START;
-            return true;
+            EMIT_TOKEN(CODE_SPAN_START);
         }
     }
 
@@ -1511,8 +1503,7 @@ static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbo
     // Try to close an open latex span
     if (level == s->latex_span_delimiter_length && valid_symbols[LATEX_SPAN_CLOSE]) {
         s->latex_span_delimiter_length = 0;
-        lexer->result_symbol = LATEX_SPAN_CLOSE;
-        return true;
+        EMIT_TOKEN(LATEX_SPAN_CLOSE);
     }
 
     // Try to open a new latex span by looking ahead for a matching closing delimiter
@@ -1535,8 +1526,7 @@ static bool parse_latex_span(Scanner *s, TSLexer *lexer, const bool *valid_symbo
         if (close_level == level) {
             // Found matching closing delimiter
             s->latex_span_delimiter_length = level;
-            lexer->result_symbol = LATEX_SPAN_START;
-            return true;
+            EMIT_TOKEN(LATEX_SPAN_START);
         }
     }
 
@@ -1578,8 +1568,7 @@ static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
                 if (lexer->lookahead == '>') {
                     lexer->advance(lexer, false);
                     lexer->mark_end(lexer);
-                    lexer->result_symbol = HTML_COMMENT;
-                    return true;
+                    EMIT_TOKEN(HTML_COMMENT);
                 }
                 // Not the end, continue consuming
             }
@@ -1591,8 +1580,7 @@ static bool parse_html_comment(TSLexer *lexer, const bool *valid_symbols) {
 
     // Unclosed comment - consumed until EOF
     lexer->mark_end(lexer);
-    lexer->result_symbol = HTML_COMMENT;
-    return true;
+    EMIT_TOKEN(HTML_COMMENT);
 }
 
 static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
@@ -1618,12 +1606,10 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     while (!lexer->eof(lexer) && lexer->lookahead != ' ' && lexer->lookahead != '\t') {
         if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
             lexer->mark_end(lexer);
-            lexer->result_symbol = RAW_SPECIFIER;
-            return true;
+            EMIT_TOKEN(RAW_SPECIFIER);
         } else if (valid_symbols[AUTOLINK] && lexer->lookahead == '>') {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
-            lexer->result_symbol = AUTOLINK;
-            return true;
+            EMIT_TOKEN(AUTOLINK);
         }
         lexer->advance(lexer, false);
     }
@@ -1647,8 +1633,7 @@ static bool parse_raw_specifier(TSLexer *lexer, const bool *valid_symbols) {
     while (!lexer->eof(lexer) && lexer->lookahead != ' ' && lexer->lookahead != '\t') {
         if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
             lexer->mark_end(lexer);
-            lexer->result_symbol = RAW_SPECIFIER;
-            return true;
+            EMIT_TOKEN(RAW_SPECIFIER);
         }
         lexer->advance(lexer, false);
     }
@@ -1690,16 +1675,14 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
         if (lexer->lookahead == '}') {
             lexer->mark_end(lexer);
             if (valid_symbols[NAKED_VALUE_SPECIFIER]) {
-                lexer->result_symbol = NAKED_VALUE_SPECIFIER;
+                EMIT_TOKEN(NAKED_VALUE_SPECIFIER);
             } else {
-                lexer->result_symbol = LANGUAGE_SPECIFIER;
+                EMIT_TOKEN(LANGUAGE_SPECIFIER);
             }
-            return true;
         }
         if (lexer->lookahead == '=') {
             lexer->mark_end(lexer);
-            lexer->result_symbol = KEY_SPECIFIER;
-            return true;
+            EMIT_TOKEN(KEY_SPECIFIER);
         }
         if ((lexer->lookahead == ' ') || (lexer->lookahead == '\t')) {
             lexer->mark_end(lexer);
@@ -1707,25 +1690,19 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
                 lexer->advance(lexer, false);
             }
             if (lexer->eof(lexer)) {
-                lexer->result_symbol = LANGUAGE_SPECIFIER;
-                return true;
+                EMIT_TOKEN(LANGUAGE_SPECIFIER);
             }
             if (lexer->lookahead == '=') {
-                lexer->result_symbol = KEY_SPECIFIER;
-                return true;
-            } else {
-                if (valid_symbols[NAKED_VALUE_SPECIFIER]) {
-                    lexer->result_symbol = NAKED_VALUE_SPECIFIER;
-                } else {
-                    lexer->result_symbol = LANGUAGE_SPECIFIER;
-                }
-                return true;
+                EMIT_TOKEN(KEY_SPECIFIER);
             }
+            if (valid_symbols[NAKED_VALUE_SPECIFIER]) {
+                EMIT_TOKEN(NAKED_VALUE_SPECIFIER);
+            } 
+            EMIT_TOKEN(LANGUAGE_SPECIFIER);
         }
         return false;
     } while (!lexer->eof(lexer));
-    lexer->result_symbol = LANGUAGE_SPECIFIER;
-    return true;
+    EMIT_TOKEN(LANGUAGE_SPECIFIER);
 }
 
 static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
@@ -1748,8 +1725,7 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
         while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
             lexer->advance(lexer, false);
         }
-        lexer->result_symbol = HIGHLIGHT_SPAN_START;
-        return true;
+        EMIT_TOKEN(HIGHLIGHT_SPAN_START);
     }
 
     if (valid_symbols[INSERT_SPAN_START] && lexer->lookahead == '+') {
@@ -1762,8 +1738,7 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
         while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
             lexer->advance(lexer, false);
         }
-        lexer->result_symbol = INSERT_SPAN_START;
-        return true;
+        EMIT_TOKEN(INSERT_SPAN_START);
     }
 
     if (valid_symbols[DELETE_SPAN_START] && lexer->lookahead == '-') {
@@ -1776,8 +1751,7 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
         while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
             lexer->advance(lexer, false);
         }
-        lexer->result_symbol = DELETE_SPAN_START;
-        return true;
+        EMIT_TOKEN(DELETE_SPAN_START);
     }
 
     if (valid_symbols[COMMENT_SPAN_START] && lexer->lookahead == '>') {
@@ -1790,8 +1764,7 @@ static bool parse_open_square_brace(Scanner *s, TSLexer *lexer, const bool *vali
         while (!lexer->eof(lexer) && (lexer->lookahead == ' ' || lexer->lookahead == '\t')) {
             lexer->advance(lexer, false);
         }
-        lexer->result_symbol = COMMENT_SPAN_START;
-        return true;
+        EMIT_TOKEN(COMMENT_SPAN_START);
     }
 
     
@@ -1809,13 +1782,11 @@ static bool parse_single_quote(Scanner *s, TSLexer *lexer, const bool *valid_sym
     // prioritize close over open so 'word' works as expected.
     if (valid_symbols[SINGLE_QUOTE_CLOSE]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = SINGLE_QUOTE_CLOSE;
-        return true;
+        EMIT_TOKEN(SINGLE_QUOTE_CLOSE);
     }
     if (valid_symbols[SINGLE_QUOTE_OPEN]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = SINGLE_QUOTE_OPEN;
-        return true;
+        EMIT_TOKEN(SINGLE_QUOTE_OPEN);
     }
     return false;
 }
@@ -1831,13 +1802,11 @@ static bool parse_double_quote(Scanner *s, TSLexer *lexer, const bool *valid_sym
     // prioritize close over open so 'word' works as expected.
     if (valid_symbols[DOUBLE_QUOTE_CLOSE]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = DOUBLE_QUOTE_CLOSE;
-        return true;
+        EMIT_TOKEN(DOUBLE_QUOTE_CLOSE);
     }
     if (valid_symbols[DOUBLE_QUOTE_OPEN]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = DOUBLE_QUOTE_OPEN;
-        return true;
+        EMIT_TOKEN(DOUBLE_QUOTE_OPEN);
     }
     return false;
 }
@@ -1864,15 +1833,13 @@ static bool parse_shortcode_close(Scanner *s, TSLexer *lexer, const bool *valid_
     if (!lexer->eof(lexer) && lexer->lookahead == '}' && valid_symbols[SHORTCODE_CLOSE_ESCAPED]) {
         lexer->advance(lexer, false);
         lexer->mark_end(lexer);
-        lexer->result_symbol = SHORTCODE_CLOSE_ESCAPED;
-        return true;
+        EMIT_TOKEN(SHORTCODE_CLOSE_ESCAPED);
     }
     if (!valid_symbols[SHORTCODE_CLOSE]) {
         return false;
     }
     lexer->mark_end(lexer);
-    lexer->result_symbol = SHORTCODE_CLOSE;
-    return true;
+    EMIT_TOKEN(SHORTCODE_CLOSE);
 }
 
 static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
@@ -1893,8 +1860,7 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
     if (!lexer->eof(lexer) && lexer->lookahead == '<' && valid_symbols[SHORTCODE_OPEN]) {
         lexer->advance(lexer, false);
         lexer->mark_end(lexer);
-        lexer->result_symbol = SHORTCODE_OPEN;
-        return true;
+        EMIT_TOKEN(SHORTCODE_OPEN);
     }
 
     if (lexer->eof(lexer) || lexer->lookahead != '{' || !valid_symbols[SHORTCODE_OPEN_ESCAPED]) {
@@ -1907,8 +1873,7 @@ static bool parse_shortcode_open(Scanner *s, TSLexer *lexer, const bool *valid_s
     }
     lexer->advance(lexer, false);
     lexer->mark_end(lexer);
-    lexer->result_symbol = SHORTCODE_OPEN_ESCAPED;
-    return true;
+    EMIT_TOKEN(SHORTCODE_OPEN_ESCAPED);
 }
 
 static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
@@ -1921,13 +1886,11 @@ static bool parse_cite_author_in_text(Scanner *s, TSLexer *lexer,
         lexer->advance(lexer, false);
         // We have an opening bracket, so we can parse the author in text with
         // brackets.
-        lexer->result_symbol = CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET;
         lexer->mark_end(lexer);
-        return true;
+        EMIT_TOKEN(CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET);
     } else if (valid_symbols[CITE_AUTHOR_IN_TEXT]) {
-        lexer->result_symbol = CITE_AUTHOR_IN_TEXT;
         lexer->mark_end(lexer);
-        return true;
+        EMIT_TOKEN(CITE_AUTHOR_IN_TEXT);
     }
     return false;
 }
@@ -1940,24 +1903,20 @@ static bool parse_tilde(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (lexer->lookahead == '~' && valid_symbols[STRIKEOUT_CLOSE]) {
         lexer->advance(lexer, false);
         lexer->mark_end(lexer);
-        lexer->result_symbol = STRIKEOUT_CLOSE;
-        return true;
+        EMIT_TOKEN(STRIKEOUT_CLOSE);
     }
     if (lexer->lookahead == '~' && valid_symbols[STRIKEOUT_OPEN]) {
         lexer->advance(lexer, false);
         lexer->mark_end(lexer);
-        lexer->result_symbol = STRIKEOUT_OPEN;
-        return true;
+        EMIT_TOKEN(STRIKEOUT_OPEN);
     }
     if (valid_symbols[SUBSCRIPT_CLOSE]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = SUBSCRIPT_CLOSE;
-        return true;
+        EMIT_TOKEN(SUBSCRIPT_CLOSE);
     }
     if (valid_symbols[SUBSCRIPT_OPEN]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = SUBSCRIPT_OPEN;
-        return true;
+        EMIT_TOKEN(SUBSCRIPT_OPEN);
     }
     return false;
 }
@@ -1970,19 +1929,16 @@ static bool parse_caret(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (lexer->lookahead == '[' && valid_symbols[INLINE_NOTE_START_TOKEN]) {
         lexer->advance(lexer, false);
         lexer->mark_end(lexer);
-        lexer->result_symbol = INLINE_NOTE_START_TOKEN;
-        return true;
+        EMIT_TOKEN(INLINE_NOTE_START_TOKEN);
 
     }
     if (valid_symbols[SUPERSCRIPT_CLOSE]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = SUPERSCRIPT_CLOSE;
-        return true;
+        EMIT_TOKEN(SUPERSCRIPT_CLOSE);
     }
     if (valid_symbols[SUPERSCRIPT_OPEN]) {
         lexer->mark_end(lexer);
-        lexer->result_symbol = SUPERSCRIPT_OPEN;
-        return true;
+        EMIT_TOKEN(SUPERSCRIPT_OPEN);
     }
     return false;
 }
@@ -2015,23 +1971,20 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // `$._close_block` in grammar.js
     if (valid_symbols[CLOSE_BLOCK]) {
         s->state |= STATE_CLOSE_BLOCK;
-        lexer->result_symbol = CLOSE_BLOCK;
-        return true;
+        EMIT_TOKEN(CLOSE_BLOCK);
     }
 
     // if we are at the end of the file and there are still open blocks close
     // them all
     if (lexer->eof(lexer)) {
         if (valid_symbols[TOKEN_EOF]) {
-            lexer->result_symbol = TOKEN_EOF;
-            return true;
+            EMIT_TOKEN(TOKEN_EOF);
         }
         if (s->open_blocks.size > 0) {
             DEBUG_PRINT("EOF block close\n");
-            lexer->result_symbol = BLOCK_CLOSE;
             if (!s->simulate)
                 pop_block(s);
-            return true;
+            EMIT_TOKEN(BLOCK_CLOSE);
         }
         return false;
     }
@@ -2063,8 +2016,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 if (valid_symbols[BLANK_LINE_START]) {
                     // A blank line token is actually just 0 width, so do not
                     // consume the characters
-                    lexer->result_symbol = BLANK_LINE_START;
-                    return true;
+                    EMIT_TOKEN(BLANK_LINE_START);
                 }
                 break;
             case '$':
@@ -2210,19 +2162,17 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->state &= (~STATE_MATCHING);
             }
             DEBUG_PRINT("STATE_WAS_SOFT_LINE_BREAK: %s\n", (s->state & STATE_WAS_SOFT_LINE_BREAK) ? "true": "false");
-            lexer->result_symbol = BLOCK_CONTINUATION;
-            return true;
+            EMIT_TOKEN(BLOCK_CONTINUATION);
         }
 
         if (!(s->state & STATE_WAS_SOFT_LINE_BREAK)) {
             DEBUG_PRINT("STATE_WAS_SOFT_LINE_BREAK: %s\n", (s->state & STATE_WAS_SOFT_LINE_BREAK) ? "true": "false");
             DEBUG_PRINT("BLOCK_CLOSE in matching\n");
-            lexer->result_symbol = BLOCK_CLOSE;
             pop_block(s);
             if (s->matched == s->open_blocks.size) {
                 s->state &= (~STATE_MATCHING);
             }
-            return true;
+            EMIT_TOKEN(BLOCK_CLOSE);
         }
 
         DEBUG_PRINT("scan while STATE_MATCHING fallthrough\n");
@@ -2291,14 +2241,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 if (valid_symbols[PIPE_TABLE_LINE_ENDING]) {
                     if (all_will_be_matched) {
-                        lexer->result_symbol = PIPE_TABLE_LINE_ENDING;
-                        return true;
+                        EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
                     }
                 } else {
-                    lexer->result_symbol = SOFT_LINE_ENDING;
                     // reset some state variables
                     s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                    return true;
+                    EMIT_TOKEN(SOFT_LINE_ENDING);
                 }
             } else {
                 DEBUG_PRINT("Recursive call returned true, matched set to %d\n", (int)matched_temp);
@@ -2322,8 +2270,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             DEBUG_PRINT("reset STATE_WAS_SOFT_LINE_BREAK\n");
             s->state &= (~STATE_WAS_SOFT_LINE_BREAK);
-            lexer->result_symbol = LINE_ENDING;
-            return true;
+            EMIT_TOKEN(LINE_ENDING);
         }
     }
     return false;
