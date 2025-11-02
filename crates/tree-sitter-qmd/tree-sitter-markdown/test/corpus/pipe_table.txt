@@ -163,6 +163,7 @@ Example 201 - https://github.github.com/gfm/#example-201
 | abc | def |
 | --- | --- |
 | bar | baz |
+
 > bar
 --------------------------------------------------------------------------------
     (document
@@ -296,3 +297,82 @@ Pipe table with latex span containing pipe
             (pipe_table_cell
               (pandoc_str)
               (pandoc_space))))))
+================================================================================
+Pipe table can precede content
+================================================================================
+|1|
+|-|
+|a|
+
+hi
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Pipe table can follow content
+================================================================================
+hi
+
+|1|
+|-|
+|a|
+
+hi
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Pipe table can precede content
+================================================================================
+|1|
+|-|
+|a|
+
+::: {.foo}
+
+bar
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)))
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)))))
