@@ -2271,7 +2271,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 lexer->mark_end(lexer);
                 EMIT_TOKEN(LINE_ENDING);
             }
-            if (lexer->lookahead != '*' && lexer->lookahead != '-' && lexer->lookahead != '>' && lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+            if (lexer->lookahead != '*' && lexer->lookahead != '-' && lexer->lookahead != '+' && lexer->lookahead != '>' && lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
                 lexer->mark_end(lexer);
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");

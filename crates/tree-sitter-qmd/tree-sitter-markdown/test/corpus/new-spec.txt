@@ -1452,12 +1452,14 @@ Example 229 - https://github.github.com/gfm/#example-229
           (block_quote_marker)
           (pandoc_paragraph
             (pandoc_str)
-            (pandoc_soft_break
-              (block_continuation))
-            (pandoc_str)
-            (pandoc_soft_break
-              (block_continuation))
-            (pandoc_str)))))))
+            (block_continuation))))
+      (pandoc_paragraph
+        (pandoc_str)
+        (block_continuation))
+      (pandoc_block_quote
+        (block_quote_marker)
+        (pandoc_paragraph
+          (pandoc_str))))))
 ================================================================================
 Example 234 - https://github.github.com/gfm/#example-234
 ================================================================================
@@ -1475,7 +1477,6 @@ Example 234 - https://github.github.com/gfm/#example-234
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -1495,7 +1496,6 @@ Example 236 - https://github.github.com/gfm/#example-236
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -1531,8 +1531,6 @@ Example 240 - https://github.github.com/gfm/#example-240
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -1558,7 +1556,6 @@ Example 241 - https://github.github.com/gfm/#example-241
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_code_block
           (fenced_code_block_delimiter)
           (block_continuation)
@@ -1566,11 +1563,9 @@ Example 241 - https://github.github.com/gfm/#example-241
             (block_continuation))
           (fenced_code_block_delimiter)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_block_quote
           (block_quote_marker)
           (pandoc_paragraph
@@ -1664,7 +1659,6 @@ Example 255 - https://github.github.com/gfm/#example-255
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -1766,11 +1760,11 @@ Example 271 - https://github.github.com/gfm/#example-271
             (block_quote_marker)
             (pandoc_paragraph
               (pandoc_str)
-              (pandoc_soft_break
-                (block_continuation))
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str))))))))
+                (block_continuation)))))
+      (pandoc_paragraph
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))))
 ================================================================================
 Example 272 - https://github.github.com/gfm/#example-272
 ================================================================================
@@ -2014,10 +2008,10 @@ Foo
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
-Example 284 - https://github.github.com/gfm/#example-284
+Example 284 - https://github.github.com/gfm/#example-284 (qmd: start your soft breaks with \1, i'm sorry.)
 ================================================================================
 The number of windows in my house is
-14.  The number of doors is 6.
+\14.  The number of doors is 6.
 
 --------------------------------------------------------------------------------
 
@@ -2112,14 +2106,11 @@ Example 286 - https://github.github.com/gfm/#example-286
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation)))
+          (pandoc_str)))
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation))
-        (block_continuation))
+          (pandoc_str)))
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
@@ -2156,8 +2147,6 @@ Example 287 - https://github.github.com/gfm/#example-287
                 (pandoc_paragraph
                   (pandoc_str)
                   (block_continuation))
-                (block_continuation)
-                (block_continuation)
                 (pandoc_paragraph
                   (pandoc_str))))))))))
 ================================================================================
@@ -2258,13 +2247,11 @@ Example 291 - https://github.github.com/gfm/#example-291
       (list_item
         (list_marker_dot)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation)))
+          (pandoc_str)))
       (list_item
         (list_marker_dot)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation)))
+          (pandoc_str)))
       (list_item
         (list_marker_dot)
         (pandoc_paragraph
@@ -2289,8 +2276,7 @@ Example 294 - https://github.github.com/gfm/#example-294
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation)))
+          (pandoc_str)))
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
@@ -2342,7 +2328,6 @@ Example 296 - https://github.github.com/gfm/#example-296
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str)))
       (list_item
@@ -2375,8 +2360,6 @@ Example 298 - https://github.github.com/gfm/#example-298
           (fenced_code_block_delimiter)
           (block_continuation)
           (code_fence_content
-            (block_continuation)
-            (block_continuation)
             (block_continuation))
           (fenced_code_block_delimiter)))
       (list_item
@@ -2408,7 +2391,6 @@ Example 299 - https://github.github.com/gfm/#example-299
             (pandoc_paragraph
               (pandoc_str)
               (block_continuation))
-            (block_continuation)
             (pandoc_paragraph
               (pandoc_str)))))
       (list_item
@@ -2535,7 +2517,6 @@ Example 304 - https://github.github.com/gfm/#example-304
             (block_continuation))
           (fenced_code_block_delimiter)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -2561,10 +2542,9 @@ Example 305 - https://github.github.com/gfm/#example-305
             (list_marker_star)
             (pandoc_paragraph
               (pandoc_str)
-              (block_continuation))
-            (block_continuation)
-            (pandoc_paragraph
-              (pandoc_str))))))))
+              (block_continuation))))
+          (pandoc_paragraph
+            (pandoc_str))))))
 ================================================================================
 Example 306 - https://github.github.com/gfm/#example-306
 ================================================================================
@@ -2595,8 +2575,7 @@ Example 306 - https://github.github.com/gfm/#example-306
           (list_item
             (list_marker_minus)
             (pandoc_paragraph
-              (pandoc_str)
-              (block_continuation)))))
+              (pandoc_str)))))
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
