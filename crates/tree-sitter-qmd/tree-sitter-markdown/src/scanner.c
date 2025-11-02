@@ -9,16 +9,18 @@
 
 #ifdef SCAN_DEBUG
 #include <stdio.h>
-#define DEBUG_HERE printf("(%d)\n", __LINE__);
+#define DEBUG_HERE printf("(%d) <trace>\n", __LINE__);
 #define DEBUG_PRINT(...) do {  \
     printf("(%d) ", __LINE__); \
     printf(__VA_ARGS__);       \
 } while (0)
-#define DEBUG_EXP(FMT, EXPRESSION) DEBUG_PRINT(#EXPRESSION ": " FMT "\n", EXPRESSION)
 #else
 #define DEBUG_HERE
 #define DEBUG_PRINT(...)
 #endif
+
+#define DEBUG_EXP(FMT, EXPRESSION) DEBUG_PRINT(#EXPRESSION ": " FMT "\n", EXPRESSION)
+#define DEBUG_LOOKAHEAD DEBUG_PRINT("   lookahead: (%d) (%c)\n", (int)lexer->lookahead, lexer->lookahead >= 32 ? lexer->lookahead : ' ')
 
 // For explanation of the tokens see grammar.js
 typedef enum {
@@ -496,9 +498,9 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
 }
 
 static void mark_end(Scanner *s, TSLexer *lexer) {
-    if (!s->simulate) {
+    // if (!s->simulate) {
         lexer->mark_end(lexer);
-    }
+    // }
 }
 
 #define EMIT_TOKEN(TOKEN) \
@@ -546,7 +548,9 @@ static size_t advance(Scanner *s, TSLexer *lexer) {
 // 1. indentation for list items
 // 2. '>' for block quotes
 // Returns true if the block is matched and false otherwise
-static bool match(Scanner *s, TSLexer *lexer, Block block) {
+static int match(Scanner *s, TSLexer *lexer, Block block) {
+    // DEBUG_EXP("%d", block);
+    // DEBUG_EXP("%d", list_item_indentation(block));
     switch (block) {
         case LIST_ITEM:
         case LIST_ITEM_1_INDENTATION:
@@ -573,11 +577,11 @@ static bool match(Scanner *s, TSLexer *lexer, Block block) {
             }
             if (s->indentation >= list_item_indentation(block)) {
                 s->indentation -= list_item_indentation(block);
-                return true;
+                return 1;
             }
             if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
                 s->indentation = 0;
-                return true;
+                return 2;
             }            
             /* PREVIOUS BROKEN CODE:
                 if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
@@ -601,15 +605,15 @@ static bool match(Scanner *s, TSLexer *lexer, Block block) {
                 if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
                     s->indentation += advance(s, lexer) - 1;
                 }
-                return true;
+                return 1;
             }
             break;
         case FENCED_DIV:
         case FENCED_CODE_BLOCK:
         case ANONYMOUS:
-            return true;
+            return 1;
     }
-    return false;
+    return 0;
 }
 
 static bool parse_fenced_div_note_id(Scanner *s, TSLexer *lexer,
@@ -645,12 +649,12 @@ static bool parse_fenced_div_marker(Scanner *s, TSLexer *lexer,
     }
     if (!lexer->eof(lexer)) {
         if (valid_symbols[FENCED_DIV_START]) {
-            if (!s->simulate) {
+            // if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
                 }
                 push_block(s, FENCED_DIV);
-            }
+            // }
             EMIT_TOKEN(FENCED_DIV_START);
         }
     }
@@ -705,12 +709,12 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
         // If it does not then choose to interpret this as the start of a fenced
         // code block.
         if (!info_string_has_backtick) {
-            if (!s->simulate) {
+            // if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
                 }
                 push_block(s, FENCED_CODE_BLOCK);
-            }
+            // }
             // Remember the length of the delimiter for later, since we need it
             // to decide whether a sequence of backticks can close the block.
             s->fenced_code_block_delimiter_length = level;
@@ -794,12 +798,12 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             s->indentation = extra_indentation;
             extra_indentation = temp;
         }
-        if (!s->simulate) {
+        // if (!s->simulate) {
             if (!can_push_block(s)) {
                 return error(lexer);
             }
             push_block(s, (Block)(LIST_ITEM + extra_indentation));
-        }
+        // }
         if (dont_interrupt) {
             EMIT_TOKEN(LIST_MARKER_STAR_DONT_INTERRUPT);
         } else {
@@ -875,12 +879,12 @@ static bool parse_block_quote(Scanner *s, TSLexer *lexer,
         if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
             s->indentation += advance(s, lexer) - 1;
         }
-        if (!s->simulate) {
+        // if (!s->simulate) {
             if (!can_push_block(s)) {
                 return error(lexer);
             }
             push_block(s, BLOCK_QUOTE);
-        }
+        // }
         EMIT_TOKEN(BLOCK_QUOTE_START);
     }
     return false;
@@ -934,12 +938,12 @@ static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->indentation = extra_indentation;
                 extra_indentation = temp;
             }
-            if (!s->simulate) {
+            // if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
                 }
                 push_block(s, (Block)(LIST_ITEM + extra_indentation));
-            }
+            // }
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_PLUS_DONT_INTERRUPT);
             } else {
@@ -1005,13 +1009,13 @@ static bool parse_ordered_list_marker(Scanner *s, TSLexer *lexer,
                         s->indentation = extra_indentation;
                         extra_indentation = temp;
                     }
-                    if (!s->simulate) {
+                    // if (!s->simulate) {
                         if (!can_push_block(s)) {
                             return error(lexer);
                         }
                         push_block(
                             s, (Block)(LIST_ITEM + extra_indentation + digits));
-                    }
+                    // }
                     if (dot) {
                         EMIT_TOKEN(LIST_MARKER_DOT);
                     } else {
@@ -1066,13 +1070,13 @@ static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
                 s->indentation = extra_indentation;
                 extra_indentation = temp;
             }
-            if (!s->simulate) {
+            // if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
                 }
                 // Use 3 as the indentation offset (length of "(@)")
                 push_block(s, (Block)(LIST_ITEM + extra_indentation + 3));
-            }
+            // }
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_EXAMPLE_DONT_INTERRUPT);
             } else {
@@ -1162,12 +1166,12 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->indentation = extra_indentation;
                 extra_indentation = temp;
             }
-            if (!s->simulate) {
+            // if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
                 }
                 push_block(s, (Block)(LIST_ITEM + extra_indentation));
-            }
+            // }
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_MINUS_DONT_INTERRUPT);
             } else {
@@ -1334,7 +1338,7 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
             break;
         }
     }
-    s->simulate = true;
+    // s->simulate = true;
     uint8_t matched_temp = 0;
     while (matched_temp < (uint8_t)s->open_blocks.size) {
         if (match(s, lexer, s->open_blocks.items[matched_temp])) {
@@ -1954,7 +1958,11 @@ static bool parse_caret(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     return false;
 }
 
-static bool match_line(Scanner *s, TSLexer *lexer) {
+static int match_line(Scanner *s, TSLexer *lexer) {
+    // DEBUG_PRINT("in match_line\n");
+    // DEBUG_EXP("%d", (int)s->indentation);
+    // DEBUG_EXP("%d", (int)s->open_blocks.size);
+    bool might_be_soft_break = true;
     bool partial_success = false;
     while (s->matched < (uint8_t)s->open_blocks.size) {
         if (s->matched == (uint8_t)s->open_blocks.size - 1 &&
@@ -1965,18 +1973,32 @@ static bool match_line(Scanner *s, TSLexer *lexer) {
             }
             break;
         }
-        if (match(s, lexer, s->open_blocks.items[s->matched])) {
-            partial_success = true;
-            s->matched++;
-        } else {
-            if (s->state & STATE_WAS_SOFT_LINE_BREAK) {
-                DEBUG_PRINT("unset STATE_MATCHING\n");
-                s->state &= (~STATE_MATCHING);
-            }
-            break;
+        int result = match(s, lexer, s->open_blocks.items[s->matched]);
+        DEBUG_EXP("%d", result);
+        switch (result) {
+            case 0:
+                if (s->state & STATE_WAS_SOFT_LINE_BREAK) {
+                    DEBUG_PRINT("unset STATE_MATCHING\n");
+                    s->state &= (~STATE_MATCHING);
+                }
+                DEBUG_EXP("%d", partial_success);
+                DEBUG_EXP("%d", might_be_soft_break);
+                return partial_success | (might_be_soft_break << 1);
+            case 1:
+                partial_success = true;
+                s->matched++;
+                break;
+            case 2:
+                might_be_soft_break = false;
+                advance(s, lexer);
+                s->matched = 0;
+                partial_success = false;
+                break;
         }
     }
-    return partial_success;
+    DEBUG_EXP("%d", partial_success);
+    DEBUG_EXP("%d", might_be_soft_break);
+    return partial_success | (might_be_soft_break << 1);
 }
 
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
@@ -1994,7 +2016,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // }
     DEBUG_PRINT("-- scan() state=%d\n", s->state);
     DEBUG_PRINT("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
-    DEBUG_PRINT("   lookahead: (%d) (%c)\n", (int)lexer->lookahead, lexer->lookahead >= 32 ? lexer->lookahead : ' ');
+    DEBUG_LOOKAHEAD;
     #endif
 
     // A normal tree-sitter rule decided that the current branch is invalid and
@@ -2018,7 +2040,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
         if (s->open_blocks.size > 0) {
             DEBUG_PRINT("EOF block close\n");
-            if (!s->simulate)
+            // if (!s->simulate)
                 pop_block(s);
             EMIT_TOKEN(BLOCK_CLOSE);
         }
@@ -2170,11 +2192,21 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
     } else { // we are in the state of trying to match all currently open blocks
         DEBUG_PRINT("scan() while STATE_MATCHING\n");
-        bool partial_success = match_line(s, lexer);
+        int match_line_return = match_line(s, lexer);
+        bool might_be_soft_break = match_line_return & 2;
+        bool partial_success = match_line_return & 1;
+        bool all_will_be_matched = s->matched == s->open_blocks.size;
+        DEBUG_EXP("%d", match_line_return);
+        DEBUG_EXP("%d", (int) might_be_soft_break);
+        DEBUG_EXP("%d", (int) partial_success);
+        DEBUG_EXP("%d", (int) all_will_be_matched);
+        DEBUG_EXP("%d", s->matched);
+        DEBUG_LOOKAHEAD;
+        
         if (partial_success) {
             DEBUG_PRINT("in partial_success\n");
             DEBUG_EXP("%d", s->matched);
-            DEBUG_EXP("%d", s->open_blocks.size);
+            DEBUG_EXP("%zu", s->open_blocks.size);
 
             if (s->matched == s->open_blocks.size) {
                 DEBUG_PRINT("unset STATE_MATCHING\n");
@@ -2215,6 +2247,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         if (!(s->state & STATE_CLOSE_BLOCK) &&
             (valid_symbols[SOFT_LINE_ENDING] ||
              valid_symbols[PIPE_TABLE_LINE_ENDING])) {
+            DEBUG_PRINT("will mark lexer end\n");
             lexer->mark_end(lexer);
             for (;;) {
                 if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
@@ -2223,58 +2256,101 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     break;
                 }
             }
-            s->simulate = true;
+            // s->simulate = true;
             uint8_t matched_temp = s->matched;
             s->matched = 0;
-            bool one_will_be_matched = false;
-            while (s->matched < (uint8_t)s->open_blocks.size) {
-                if (match(s, lexer, s->open_blocks.items[s->matched])) {
-                    s->matched++;
-                    one_will_be_matched = true;
-                } else {
-                    break;
-                }
+            if (lexer->lookahead > ' ') {
+                s->state |= STATE_WAS_SOFT_LINE_BREAK;
+                lexer->mark_end(lexer);
+                DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
+                EMIT_TOKEN(SOFT_LINE_ENDING);
             }
-            bool all_will_be_matched = s->matched == s->open_blocks.size;
-            const bool *symbols = paragraph_interrupt_symbols;
-            DEBUG_PRINT("All with be matched: %d\n", (int) all_will_be_matched);
-            DEBUG_PRINT("One with be matched: %d\n", (int) one_will_be_matched);
-            DEBUG_PRINT("-- recursive call to scan for closing line. State: %d\n", s->state);
-            if (!lexer->eof(lexer) &&
-                !scan(s, lexer, symbols)) {
-                DEBUG_PRINT("Recursive call returned false\n");
 
-                s->matched = matched_temp;
-                // If the last line break ended a paragraph and no new block
-                // opened, the last line break should have been a soft line
-                // break Reset the counter for matched blocks
-                s->matched = 0;
-                s->indentation = 0;
-                s->column = 0;
-                // If there is at least one open block, we should be in the
-                // matching state. 
-                if (one_will_be_matched) {
-                    s->state |= STATE_MATCHING;
-                } else {
-                    s->state &= (~STATE_MATCHING);
-                }
+            int match_line_return = match_line(s, lexer);
+            bool might_be_soft_break = match_line_return & 2;
+            bool one_will_be_matched = match_line_return & 1;
+            bool all_will_be_matched = s->matched == s->open_blocks.size;
+            DEBUG_EXP("%d", match_line_return);
+            DEBUG_EXP("%d", (int) might_be_soft_break);
+            DEBUG_EXP("%d", (int) one_will_be_matched);
+            DEBUG_EXP("%d", (int) all_will_be_matched);
+            DEBUG_EXP("%d", s->matched);
+            DEBUG_LOOKAHEAD;
+
+            if (all_will_be_matched) {
                 if (valid_symbols[PIPE_TABLE_LINE_ENDING]) {
-                    if (all_will_be_matched) {
-                        EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
-                    }
-                } else {
-                    // reset some state variables
-                    s->state |= STATE_WAS_SOFT_LINE_BREAK;
-                    EMIT_TOKEN(SOFT_LINE_ENDING);
+                    EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
                 }
-            } else {
-                DEBUG_PRINT("Recursive call returned true, matched set to %d\n", (int)matched_temp);
-                s->matched = matched_temp;
             }
-            s->indentation = 0;
-            s->column = 0;
+
+            if (lexer->eof(lexer)) {
+                EMIT_TOKEN(TOKEN_EOF);
+            }
+                    
+            // reset some state variables
+            // s->state |= STATE_WAS_SOFT_LINE_BREAK;
+            // DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
+            // EMIT_TOKEN(SOFT_LINE_ENDING);
+            // bool one_will_be_matched = false;
+            // while (s->matched < (uint8_t)s->open_blocks.size) {
+            //     if (match(s, lexer, s->open_blocks.items[s->matched])) {
+            //         s->matched++;
+            //         one_will_be_matched = true;
+            //     } else {
+            //         break;
+            //     }
+            // }
+            // bool all_will_be_matched = s->matched == s->open_blocks.size;
+            // const bool *symbols = paragraph_interrupt_symbols;
+            // DEBUG_PRINT("All will be matched: %d\n", (int) all_will_be_matched);
+            // DEBUG_PRINT("One will be matched: %d\n", (int) one_will_be_matched);
+            // DEBUG_PRINT("-- recursive call to scan for closing line. State: %d\n", s->state);
+            // DEBUG_LOOKAHEAD;
+            // if (old_lookahead > ' ') {
+            //     s->state |= STATE_WAS_SOFT_LINE_BREAK;
+            //     lexer->mark_end(lexer);
+            //     DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
+            //     EMIT_TOKEN(SOFT_LINE_ENDING);
+            // }
+            // if (!lexer->eof(lexer) && !scan(s, lexer, symbols)) {
+            //     DEBUG_PRINT("Recursive call returned false\n");
+            //     DEBUG_LOOKAHEAD;
+            //     s->matched = matched_temp;
+            //     // If the last line break ended a paragraph and no new block
+            //     // opened, the last line break should have been a soft line
+            //     // break Reset the counter for matched blocks
+            //     s->matched = 0;
+            //     s->indentation = 0;
+            //     s->column = 0;
+            //     // If there is at least one open block, we should be in the
+            //     // matching state. 
+            //     if (one_will_be_matched) {
+            //         s->state |= STATE_MATCHING;
+            //     } else {
+            //         s->state &= (~STATE_MATCHING);
+            //     }
+            //     if (valid_symbols[PIPE_TABLE_LINE_ENDING]) {
+            //         if (all_will_be_matched) {
+            //             EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
+            //         }
+            //     } else {
+            //         if (lexer->lookahead == '\r' || lexer->lookahead == '\n') {
+            //             EMIT_TOKEN(LINE_ENDING);
+            //         } else {
+            //             // reset some state variables
+            //             s->state |= STATE_WAS_SOFT_LINE_BREAK;
+            //             DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
+            //             EMIT_TOKEN(SOFT_LINE_ENDING);
+            //         }
+            //     }
+            // } else {
+            //     DEBUG_PRINT("Recursive call returned true, matched set to %d\n", (int)matched_temp);
+            //     s->matched = matched_temp;
+            // }
         }
         if (valid_symbols[LINE_ENDING]) {
+            s->indentation = 0;
+            s->column = 0;
             // If the last line break ended a paragraph and no new block opened,
             // the last line break should have been a soft line break Reset the
             // counter for matched blocks
