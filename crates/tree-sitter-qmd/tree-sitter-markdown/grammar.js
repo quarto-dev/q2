@@ -709,10 +709,6 @@ module.exports = grammar({
         // QMD CHANGES NOTE:
         // Do not change anything here, even if these external tokens are not used in the grammar.
         // they need to match the external c scanner.
-        // 
-        // Quite a few of these tokens could maybe be implemented without use of the external parser.
-        // For this the `$._open_block` and `$._close_block` tokens should be used to tell the external
-        // parser to put a new anonymous block on the block stack.
 
         // Block structure gets parsed as follows: After every newline (`$._line_ending`) we try to match
         // as many open blocks as possible. For example if the last line was part of a block quote we look
@@ -721,9 +717,8 @@ module.exports = grammar({
         //
         // If we are not able to match all blocks that does not necessarily mean that all unmatched blocks
         // have to be closed. It could also mean that the line is a lazy continuation line
-        // (https://github.github.com/gfm/#lazy-continuation-line, see also `$._split_token` and
-        // `$._soft_line_break_marker` below)
-        //
+        // (https://github.github.com/gfm/#lazy-continuation-line
+        
         // If a block does get closed (because it was not matched or because some closing token was
         // encountered) we emit a `$._block_close` token
 
@@ -758,15 +753,13 @@ module.exports = grammar({
         $._list_marker_example,
         $._list_marker_example_dont_interrupt,
         $._fenced_code_block_start_backtick,
-        $._fenced_code_block_start_tilde,
         $._blank_line_start, // Does not contain the newline characters. Blank lines do not need a `$._block_close`
 
         // Special tokens for block structure
 
-        // Closing backticks or tildas for a fenced code block. They are used to trigger a `$._close_block`
+        // Closing backticks for a fenced code block. They are used to trigger a `$._close_block`
         // which in turn will trigger a `$._block_close` at the beginning the following line.
         $._fenced_code_block_end_backtick,
-        $._fenced_code_block_end_tilde,
 
         // Similarly this is used if the closing of a block is not decided by the external parser.
         // A `$._block_close` will be emitted at the beginning of the next line. Notice that a

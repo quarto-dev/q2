@@ -1,5 +1,5 @@
 ================================================================================
-1
+1 (note the comment chomps the leading space)
 ================================================================================
 A comment <!-- can appear anywhere --> in the text.
 --------------------------------------------------------------------------------
@@ -9,7 +9,6 @@ A comment <!-- can appear anywhere --> in the text.
           (pandoc_str)
           (pandoc_space)
           (pandoc_str)
-          (pandoc_space)
           (comment)
           (pandoc_space)
           (pandoc_str)
@@ -18,7 +17,7 @@ A comment <!-- can appear anywhere --> in the text.
           (pandoc_space)
           (pandoc_str))))
 ================================================================================
-2 - note the single paragraph
+2 - note the single paragraph and chomping the leading space
 ================================================================================
 It can span <!--
 
@@ -34,7 +33,6 @@ many lines
           (pandoc_str)
           (pandoc_space)
           (pandoc_str)
-          (pandoc_space)
           (comment)
           (pandoc_space)
           (pandoc_str)
@@ -48,4 +46,23 @@ many lines
           (pandoc_str)
           (pandoc_space)
           (pandoc_str))))
-          
+================================================================================
+3
+================================================================================
+Also works without<!-- leading or trailing space
+spaces.
+
+-->, hopefully
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (comment)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))

@@ -46,10 +46,8 @@ typedef enum {
     LIST_MARKER_EXAMPLE,
     LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
     FENCED_CODE_BLOCK_START_BACKTICK,
-    FENCED_CODE_BLOCK_START_TILDE,
     BLANK_LINE_START,
     FENCED_CODE_BLOCK_END_BACKTICK,
-    FENCED_CODE_BLOCK_END_TILDE,
     CLOSE_BLOCK,
     ERROR,
     TRIGGER_ERROR,
@@ -150,10 +148,8 @@ static char* token_names[] = {
     "LIST_MARKER_EXAMPLE",
     "LIST_MARKER_EXAMPLE_DONT_INTERRUPT",
     "FENCED_CODE_BLOCK_START_BACKTICK",
-    "FENCED_CODE_BLOCK_START_TILDE",
     "BLANK_LINE_START",
     "FENCED_CODE_BLOCK_END_BACKTICK",
-    "FENCED_CODE_BLOCK_END_TILDE",
     "CLOSE_BLOCK",
     "ERROR",
     "TRIGGER_ERROR",
@@ -294,10 +290,8 @@ static const bool paragraph_interrupt_symbols[] = {
     true,  // LIST_MARKER_EXAMPLE,
     false, // LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
     true,  // FENCED_CODE_BLOCK_START_BACKTICK,
-    true,  // FENCED_CODE_BLOCK_START_TILDE,
     true,  // BLANK_LINE_START,
     false, // FENCED_CODE_BLOCK_END_BACKTICK,
-    false, // FENCED_CODE_BLOCK_END_TILDE,
     false, // CLOSE_BLOCK,
     false, // ERROR,
     false, // TRIGGER_ERROR,
@@ -674,24 +668,21 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
     // interpretation. It can only close a fenced code block if the number of
     // backticks is at least the number of backticks of the opening delimiter.
     // Also it cannot be indented more than 3 spaces.
-    if ((delimiter == '`' ? valid_symbols[FENCED_CODE_BLOCK_END_BACKTICK]
-                          : valid_symbols[FENCED_CODE_BLOCK_END_TILDE]) &&
+    if ((delimiter == '`' && valid_symbols[FENCED_CODE_BLOCK_END_BACKTICK]) &&
         s->indentation < 4 && level >= s->fenced_code_block_delimiter_length) {
         while (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
             advance(s, lexer);
         }
         if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
             s->fenced_code_block_delimiter_length = 0;
-            lexer->result_symbol = delimiter == '`'
-                                       ? FENCED_CODE_BLOCK_END_BACKTICK
-                                       : FENCED_CODE_BLOCK_END_TILDE;
+            lexer->result_symbol = FENCED_CODE_BLOCK_END_BACKTICK;
             return true;
         }
     }
     // If this could be the start of a fenced code block, check if the info
     // string contains any backticks.
-    if ((delimiter == '`' ? valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK]
-                          : valid_symbols[FENCED_CODE_BLOCK_START_TILDE]) &&
+    if (delimiter == '`' && 
+        valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] &&
         level >= 3) {
         bool info_string_has_backtick = false;
         if (delimiter == '`') {
@@ -707,9 +698,7 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
         // If it does not then choose to interpret this as the start of a fenced
         // code block.
         if (!info_string_has_backtick) {
-            lexer->result_symbol = delimiter == '`'
-                                       ? FENCED_CODE_BLOCK_START_BACKTICK
-                                       : FENCED_CODE_BLOCK_START_TILDE;
+            lexer->result_symbol = FENCED_CODE_BLOCK_START_BACKTICK;
             if (!s->simulate) {
                 if (!can_push_block(s)) {
                     return error(lexer);
@@ -2101,7 +2090,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     }
     printf("-- scan() state=%d\n", s->state);
     printf("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
-    printf("   inside_fenced_code: %s\n", inside_fenced_code ? "true": "false");
     printf("   lookahead: %c (%d)\n", lexer->lookahead, (int)lexer->lookahead);
     #endif
 
@@ -2331,6 +2319,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if ((valid_symbols[LINE_ENDING] || valid_symbols[SOFT_LINE_ENDING] ||
          valid_symbols[PIPE_TABLE_LINE_ENDING]) &&
         (lexer->lookahead == '\n' || lexer->lookahead == '\r')) {
+        #ifdef SCAN_DEBUG
+        printf("Starting to process line break\n");
+        #endif
         if (lexer->lookahead == '\r') {
             advance(s, lexer);
             if (lexer->lookahead == '\n') {
@@ -2366,9 +2357,17 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             bool all_will_be_matched = s->matched == s->open_blocks.size;
             const bool *symbols = paragraph_interrupt_symbols;
-            // printf("-- recursive call to scan for closing line. State: %d\n", s->state);
+            #ifdef SCAN_DEBUG
+            printf("All with be matched: %d\n", (int) all_will_be_matched);
+            printf("One with be matched: %d\n", (int) one_will_be_matched);
+            printf("-- recursive call to scan for closing line. State: %d\n", s->state);
+            #endif
             if (!lexer->eof(lexer) &&
                 !scan(s, lexer, symbols)) {
+                #ifdef SCAN_DEBUG
+                printf("Recursive call returned false");
+                #endif
+
                 s->matched = matched_temp;
                 // If the last line break ended a paragraph and no new block
                 // opened, the last line break should have been a soft line
@@ -2377,9 +2376,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->indentation = 0;
                 s->column = 0;
                 // If there is at least one open block, we should be in the
-                // matching state. Also set the matching flag if a
-                // `$._soft_line_break_marker` can be emitted so it does get
-                // emitted.
+                // matching state. 
                 if (one_will_be_matched) {
                     s->state |= STATE_MATCHING;
                 } else {
@@ -2397,6 +2394,9 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     return true;
                 }
             } else {
+                #ifdef SCAN_DEBUG
+                printf("Recursive call returned true, matched set to %d\n", (int)matched_temp);
+                #endif
                 s->matched = matched_temp;
             }
             s->indentation = 0;
@@ -2408,12 +2408,16 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             // counter for matched blocks
             s->matched = 0;
             // If there is at least one open block, we should be in the matching
-            // state. Also set the matching flag if a
-            // `$._soft_line_break_marker` can be emitted so it does get
-            // emitted.
+            // state.
             if (s->open_blocks.size > 0) {
+                #ifdef SCAN_DEBUG
+                printf("will set STATE_MATCHING\n");
+                #endif
                 s->state |= STATE_MATCHING;
             } else {
+                #ifdef SCAN_DEBUG
+                printf("will set STATE_MATCHING\n");
+                #endif
                 s->state &= (~STATE_MATCHING);
             }
             // reset some state variables

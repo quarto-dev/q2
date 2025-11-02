@@ -4085,19 +4085,11 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_fenced_code_block_start_tilde"
-    },
-    {
-      "type": "SYMBOL",
       "name": "_blank_line_start"
     },
     {
       "type": "SYMBOL",
       "name": "_fenced_code_block_end_backtick"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_fenced_code_block_end_tilde"
     },
     {
       "type": "SYMBOL",
