@@ -737,8 +737,6 @@ module.exports = grammar({
         $.atx_h4_marker,
         $.atx_h5_marker,
         $.atx_h6_marker,
-        $.setext_h1_underline, // setext headings do not need a `$._block_close`
-        $.setext_h2_underline,
         $._thematic_break, // thematic breaks do not need a `$._block_close`
         $._list_marker_minus,
         $._list_marker_plus,

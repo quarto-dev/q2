@@ -32,8 +32,6 @@ typedef enum {
     ATX_H4_MARKER,
     ATX_H5_MARKER,
     ATX_H6_MARKER,
-    SETEXT_H1_UNDERLINE,
-    SETEXT_H2_UNDERLINE,
     THEMATIC_BREAK,
     LIST_MARKER_MINUS,
     LIST_MARKER_PLUS,
@@ -133,8 +131,6 @@ static char* token_names[] = {
     "ATX_H4_MARKER",
     "ATX_H5_MARKER",
     "ATX_H6_MARKER",
-    "SETEXT_H1_UNDERLINE",
-    "SETEXT_H2_UNDERLINE",
     "THEMATIC_BREAK",
     "LIST_MARKER_MINUS",
     "LIST_MARKER_PLUS",
@@ -274,8 +270,6 @@ static const bool paragraph_interrupt_symbols[] = {
     true,  // ATX_H4_MARKER,
     true,  // ATX_H5_MARKER,
     true,  // ATX_H6_MARKER,
-    true,  // SETEXT_H1_UNDERLINE,
-    true,  // SETEXT_H2_UNDERLINE,
     true,  // THEMATIC_BREAK,
     true,  // LIST_MARKER_MINUS,
     true,  // LIST_MARKER_PLUS,
@@ -1083,13 +1077,11 @@ static bool parse_cite_suppress_author(Scanner *_, TSLexer *lexer,
         lexer->advance(lexer, false);
         if (lexer->lookahead == '{' && valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET]) {
             lexer->advance(lexer, false);
-            lexer->result_symbol = CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET;
             lexer->mark_end(lexer);
-            return true;
+            EMIT_TOKEN(CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET);
         } else if (valid_symbols[CITE_SUPPRESS_AUTHOR]) {
-            lexer->result_symbol = CITE_SUPPRESS_AUTHOR;
             lexer->mark_end(lexer);
-            return true;
+            EMIT_TOKEN(CITE_SUPPRESS_AUTHOR);
         }
     }
     return false;
@@ -1099,7 +1091,7 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     if (s->indentation <= 3 &&
         (valid_symbols[LIST_MARKER_MINUS] ||
          valid_symbols[LIST_MARKER_MINUS_DONT_INTERRUPT] ||
-         valid_symbols[SETEXT_H2_UNDERLINE] || valid_symbols[THEMATIC_BREAK] ||
+         valid_symbols[THEMATIC_BREAK] ||
          valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET] || 
          valid_symbols[MINUS_METADATA])) {
         mark_end(s, lexer);
@@ -1135,21 +1127,9 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
         dont_interrupt = dont_interrupt && s->matched == s->open_blocks.size;
         bool thematic_break = minus_count >= 3 && line_end;
-        bool underline =
-            minus_count >= 1 && !minus_after_whitespace && line_end &&
-            s->matched ==
-                s->open_blocks
-                    .size; // setext heading can not break lazy continuation
         bool list_marker_minus = minus_count >= 1 && extra_indentation >= 1;
         bool success = false;
-        if (valid_symbols[SETEXT_H2_UNDERLINE] && underline) {
-            lexer->result_symbol = SETEXT_H2_UNDERLINE;
-            mark_end(s, lexer);
-            s->indentation = 0;
-            success = true;
-        } else if (valid_symbols[THEMATIC_BREAK] &&
-                   thematic_break) { // underline is false if list_marker_minus
-                                     // is true
+        if (valid_symbols[THEMATIC_BREAK] && thematic_break) {
             lexer->result_symbol = THEMATIC_BREAK;
             mark_end(s, lexer);
             s->indentation = 0;
@@ -2150,8 +2130,8 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
                 break;
             case '-':
-                // A minus could mark a list marker, a thematic break, a
-                // setext underline, or a cite_suppress_author
+                // A minus could mark a list marker, a thematic break,
+                // or a cite_suppress_author
                 return parse_minus(s, lexer, valid_symbols);
             case '[':
                 if (valid_symbols[HIGHLIGHT_SPAN_START] || 

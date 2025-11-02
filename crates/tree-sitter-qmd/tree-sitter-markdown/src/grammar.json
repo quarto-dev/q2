@@ -4021,14 +4021,6 @@
     },
     {
       "type": "SYMBOL",
-      "name": "setext_h1_underline"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "setext_h2_underline"
-    },
-    {
-      "type": "SYMBOL",
       "name": "_thematic_break"
     },
     {
