@@ -26,12 +26,13 @@ Example 492 - https://github.github.com/gfm/#example-492 (qmd issues error)
 This ~~has a
 
 --------------------------------------------------------------------------------
-
     (document
-      (ERROR
-        (pandoc_str)
-        (strikeout_delimiter)
-        (pandoc_str)
-        (pandoc_space)
-        (pandoc_str)
-        (UNEXPECTED '\n')))
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_strikeout
+            (strikeout_delimiter)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (MISSING strikeout_delimiter)))))

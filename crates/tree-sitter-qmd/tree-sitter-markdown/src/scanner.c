@@ -5,7 +5,7 @@
 #include <wctype.h>
 
 // set this define to turn on debugging printouts
-#define SCAN_DEBUG 1
+// #define SCAN_DEBUG 1
 
 #ifdef SCAN_DEBUG
 #include <stdio.h>
@@ -2256,10 +2256,15 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     break;
                 }
             }
-            // s->simulate = true;
+
             uint8_t matched_temp = s->matched;
             s->matched = 0;
-            if (lexer->lookahead > ' ') {
+            // allow ':' to interrupt blocks.
+            if (lexer->lookahead == ':') {
+                lexer->mark_end(lexer);
+                EMIT_TOKEN(LINE_ENDING);
+            }
+            if (lexer->lookahead != '*' && lexer->lookahead != '>' && lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
                 lexer->mark_end(lexer);
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");

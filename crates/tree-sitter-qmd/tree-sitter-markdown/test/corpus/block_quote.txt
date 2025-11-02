@@ -48,10 +48,10 @@
       (pandoc_paragraph
         (pandoc_str)))))
 ================================================================================
-4 (softbreaks ignore block structure)
+4 (softbreaks ignore block structure; but don't start continuation line with 1)
 ================================================================================
 > 2
-1
+\\1
 --------------------------------------------------------------------------------
 (document
   (section

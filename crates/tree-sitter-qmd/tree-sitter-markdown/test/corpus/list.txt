@@ -127,7 +127,6 @@ b
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -145,7 +144,6 @@ b
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -161,10 +159,41 @@ b
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str)
-          (block_continuation)))
+          (pandoc_str)))
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
           (pandoc_str))))))
+================================================================================
+9
+================================================================================
+1. a
 
+2. b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+10
+================================================================================
+1. a
+   b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_soft_break)
+              (pandoc_str))))))

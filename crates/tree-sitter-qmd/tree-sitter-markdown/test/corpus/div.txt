@@ -2,7 +2,9 @@
 1
 ================================================================================
 ::: {}
-hello world
+
+hello
+
 :::
 --------------------------------------------------------------------------------
     (document
@@ -11,8 +13,6 @@ hello world
           (attribute_specifier)
           (block_continuation)
           (pandoc_paragraph
-            (pandoc_str)
-            (pandoc_space)
             (pandoc_str)
             (block_continuation)))))
 ================================================================================
@@ -35,13 +35,23 @@ More stuff.
             (commonmark_specifier
               (attribute_id)))
           (block_continuation)
-          (block_continuation)
           (metadata)
-          (block_continuation)
           (pandoc_paragraph
             (pandoc_str)
             (pandoc_space)
             (pandoc_str)
-            (block_continuation))
-          (block_continuation))))
-          
+            (block_continuation)))))
+================================================================================
+3
+================================================================================
+::: {}
+h
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)))))

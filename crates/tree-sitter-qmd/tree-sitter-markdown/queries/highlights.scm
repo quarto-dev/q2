@@ -1,6 +1,6 @@
 ;From nvim-treesitter/nvim-treesitter
-(atx_heading (inline) @text.title)
-(setext_heading (paragraph) @text.title)
+;(atx_heading (inline) @text.title)
+;(setext_heading (paragraph) @text.title)
 
 [
   (atx_h1_marker)
@@ -12,7 +12,7 @@
 ] @punctuation.special
 
 [
-  (fenced_code_block)
+  (pandoc_code_block)
 ] @text.literal
 
 [
@@ -27,7 +27,7 @@
   (list_marker_star)
   (list_marker_dot)
   (list_marker_parenthesis)
-  (thematic_break)
+  (pandoc_horizontal_rule)
 ] @punctuation.special
 
 [

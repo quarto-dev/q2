@@ -1,9 +1,9 @@
 ================================================================================
-#17 - Titles not detected after an empty inner list item (bullet point)
+#17 - Titles not detected after an empty inner list item (bullet point) (qmd will disallow empty list items)
 ================================================================================
 * a
   * b
-  *
+  * []
 
 
 # C
@@ -25,8 +25,8 @@
                   (block_continuation)))
               (list_item
                 (list_marker_star)
-                (block_continuation)
-                (block_continuation))))))
+                (pandoc_paragraph
+                  (pandoc_span)))))))
       (section
         (atx_heading
           (atx_h1_marker)
@@ -80,8 +80,7 @@
             (list_marker_dot)
             (pandoc_paragraph
               (pandoc_str)
-              (pandoc_soft_break
-                (block_continuation))
+              (pandoc_soft_break)
               (pandoc_str)))
           (list_item
             (list_marker_dot)
@@ -165,8 +164,6 @@ $$hello$$
         (pandoc_div
           (attribute_specifier)
           (block_continuation)
-          (block_continuation)
           (pandoc_paragraph
             (pandoc_display_math)
-            (block_continuation))
-          (block_continuation))))
+            (block_continuation)))))
