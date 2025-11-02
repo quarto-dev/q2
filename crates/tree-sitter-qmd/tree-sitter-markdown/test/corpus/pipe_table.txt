@@ -375,4 +375,5 @@ bar
               (attribute_class)))
           (block_continuation)
           (pandoc_paragraph
-            (pandoc_str)))))
+            (pandoc_str)
+            (block_continuation)))))
