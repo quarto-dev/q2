@@ -1649,61 +1649,102 @@ Example 255 - https://github.github.com/gfm/#example-255
           (pandoc_str))))))
 ================================================================================
 Example 257 - https://github.github.com/gfm/#example-257 (NEEDS FIXING)
-:skip
 ================================================================================
--
+- []
   foo
 
 --------------------------------------------------------------------------------
-
-ERROR: tree-sitter parse failed
-
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_span)
+              (pandoc_soft_break)
+              (pandoc_str))))))
 ================================================================================
 Example 259 - https://github.github.com/gfm/#example-259 (NEEDS FIXING)
-:skip
 ================================================================================
 - foo
--
+- []
 - bar
 
 --------------------------------------------------------------------------------
-
-ERROR: tree-sitter parse failed
-
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_span)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))
 ================================================================================
 Example 260 - https://github.github.com/gfm/#example-260 (NEEDS FIXING)
-:skip
 ================================================================================
 - foo
--
+- []
 - bar
 
 --------------------------------------------------------------------------------
-
-ERROR: tree-sitter parse failed
-
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_span)))
+          (list_item
+            (list_marker_minus)
+            (pandoc_paragraph
+              (pandoc_str))))))
 ================================================================================
 Example 261 - https://github.github.com/gfm/#example-261 (NEEDS FIXING)
-:skip
 ================================================================================
 1. foo
-2.
+2. []
 3. bar
 
 --------------------------------------------------------------------------------
-
-ERROR: tree-sitter parse failed
-
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_span)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
 ================================================================================
 Example 262 - https://github.github.com/gfm/#example-262 (NEEDS FIXING)
-:skip
 ================================================================================
-*
+* []
 
 --------------------------------------------------------------------------------
-
-ERROR: tree-sitter parse failed
-
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_span))))))
 ================================================================================
 Example 270 - https://github.github.com/gfm/#example-270
 ================================================================================
