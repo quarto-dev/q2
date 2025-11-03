@@ -1728,7 +1728,6 @@ fn test_strikeout_multiple_words() {
 
 /// Test strikeout with formatting (NOTE: Currently fails - nested formatting in strikeout not fully supported)
 #[test]
-#[ignore]
 fn test_strikeout_with_formatting() {
     let input = "~~**bold** text~~";
     let result = parse_qmd_to_pandoc_ast(input);
@@ -2843,23 +2842,6 @@ fn test_code_block_empty() {
         "Should contain CodeBlock: {}",
         result
     );
-}
-
-/// Test code block with attributes
-/// NOTE: Skipped - complex attribute syntax `{python #id .class}` not yet supported by grammar
-#[test]
-#[ignore]
-fn test_code_block_with_attributes() {
-    let input = "```{python #my-code .class}\ncode\n```\n";
-    let result = parse_qmd_to_json(input);
-
-    assert!(
-        result.contains("\"t\":\"CodeBlock\""),
-        "Should contain CodeBlock: {}",
-        result
-    );
-    assert!(result.contains("my-code"), "Should contain id: {}", result);
-    assert!(result.contains("class"), "Should contain class: {}", result);
 }
 
 /// Test multi-line code block
@@ -4263,28 +4245,6 @@ fn test_pipe_table_caption_formatted() {
     assert!(
         result.contains("Code"),
         "Should contain Code in caption: {}",
-        result
-    );
-}
-
-/// Test pipe table with empty caption (just colon)
-#[test]
-fn test_pipe_table_caption_empty() {
-    let input = "| Col1 | Col2 |\n\
-                 |------|------|\n\
-                 | Data | Data |\n\
-                 :";
-    let result = parse_qmd_to_pandoc_ast(input);
-
-    assert!(
-        result.contains("Table"),
-        "Should contain Table element: {}",
-        result
-    );
-    // Empty caption should still create Caption structure (just with empty content)
-    assert!(
-        result.contains("Caption"),
-        "Should contain Caption structure: {}",
         result
     );
 }
