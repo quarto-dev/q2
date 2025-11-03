@@ -59,6 +59,10 @@
           "named": true
         },
         {
+          "type": "autolink",
+          "named": true
+        },
+        {
           "type": "block_continuation",
           "named": true
         },
@@ -183,6 +187,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -375,6 +383,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -599,6 +611,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -1244,6 +1260,10 @@
           "named": true
         },
         {
+          "type": "autolink",
+          "named": true
+        },
+        {
           "type": "citation",
           "named": true
         },
@@ -1426,6 +1446,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -1613,6 +1637,10 @@
           "named": true
         },
         {
+          "type": "autolink",
+          "named": true
+        },
+        {
           "type": "citation",
           "named": true
         },
@@ -1737,6 +1765,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -1867,6 +1899,10 @@
           "named": true
         },
         {
+          "type": "autolink",
+          "named": true
+        },
+        {
           "type": "citation",
           "named": true
         },
@@ -1991,6 +2027,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -2149,6 +2189,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "autolink",
           "named": true
         },
         {
@@ -2570,6 +2614,10 @@
   },
   {
     "type": "atx_h6_marker",
+    "named": true
+  },
+  {
+    "type": "autolink",
     "named": true
   },
   {

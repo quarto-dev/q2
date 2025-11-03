@@ -427,6 +427,8 @@ module.exports = grammar({
             $.numeric_character_reference,
             $.inline_note_reference,
 
+            alias($._autolink, $.autolink),
+
             $._prose_punctuation,
             alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),

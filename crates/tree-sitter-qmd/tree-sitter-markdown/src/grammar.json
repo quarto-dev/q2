@@ -2531,6 +2531,15 @@
           "name": "inline_note_reference"
         },
         {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_autolink"
+          },
+          "named": true,
+          "value": "autolink"
+        },
+        {
           "type": "SYMBOL",
           "name": "_prose_punctuation"
         },
