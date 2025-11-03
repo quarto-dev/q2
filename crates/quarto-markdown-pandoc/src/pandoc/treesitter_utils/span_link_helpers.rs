@@ -82,7 +82,7 @@ pub fn process_pandoc_span(
 ) -> PandocNativeIntermediate {
     let mut content_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
-    let mut attr = ("".to_string(), vec![], std::collections::HashMap::new());
+    let mut attr = ("".to_string(), vec![], hashlink::LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {
@@ -212,7 +212,7 @@ pub fn process_pandoc_image(
 ) -> PandocNativeIntermediate {
     let mut alt_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
-    let mut attr = ("".to_string(), vec![], std::collections::HashMap::new());
+    let mut attr = ("".to_string(), vec![], hashlink::LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {

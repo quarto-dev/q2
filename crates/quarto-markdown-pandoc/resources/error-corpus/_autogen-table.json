@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 979,
+    "state": 1116,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 525,
+          "lrState": 539,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2382,
+    "state": 2429,
     "sym": "shortcode_naked_string_token1",
     "errorInfo": {
       "code": "Q-2-3",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2136,
+          "lrState": 2231,
           "row": 0,
           "size": 3,
           "sym": "key_value_key",
@@ -48,7 +48,7 @@
         },
         {
           "column": 14,
-          "lrState": 2229,
+          "lrState": 2279,
           "row": 0,
           "size": 5,
           "sym": "key_value_value",
@@ -69,7 +69,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 1980,
+    "state": 2127,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-2",
@@ -78,7 +78,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 1980,
+          "lrState": 2127,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -98,7 +98,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 550,
+    "state": 568,
     "sym": "ERROR",
     "errorInfo": {
       "code": "Q-2-5",
@@ -107,7 +107,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 674,
+          "lrState": 695,
           "row": 0,
           "size": 2,
           "sym": "emphasis_delimiter",
@@ -126,10 +126,10 @@
     "name": "005"
   },
   {
-    "column": 3,
-    "row": 0,
-    "state": 2936,
-    "sym": "{",
+    "column": 0,
+    "row": 5,
+    "state": 66,
+    "sym": "_block_close",
     "errorInfo": {
       "code": "Q-2-4",
       "title": "Missing Space After Div Fence",
@@ -137,7 +137,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 2936,
+          "lrState": 2940,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",
@@ -145,7 +145,7 @@
         },
         {
           "column": 3,
-          "lrState": 1980,
+          "lrState": 2127,
           "row": 0,
           "size": 1,
           "sym": "{",

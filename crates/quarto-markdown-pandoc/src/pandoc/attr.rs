@@ -5,13 +5,13 @@
 
 use quarto_source_map::SourceInfo;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 
 pub fn empty_attr() -> Attr {
-    ("".to_string(), vec![], HashMap::new())
+    ("".to_string(), vec![], LinkedHashMap::new())
 }
 
-pub type Attr = (String, Vec<String>, HashMap<String, String>);
+pub type Attr = (String, Vec<String>, LinkedHashMap<String, String>);
 
 pub fn is_empty_attr(attr: &Attr) -> bool {
     attr.0.is_empty() && attr.1.is_empty() && attr.2.is_empty()

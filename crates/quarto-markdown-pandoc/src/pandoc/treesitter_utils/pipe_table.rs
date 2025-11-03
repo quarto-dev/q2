@@ -15,7 +15,7 @@ use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 use super::postprocess::trim_inlines;
@@ -111,7 +111,7 @@ pub fn process_pipe_table_cell(
         alignment: Alignment::Default,
         col_span: 1,
         row_span: 1,
-        attr: ("".to_string(), vec![], HashMap::new()),
+        attr: ("".to_string(), vec![], LinkedHashMap::new()),
         content: vec![],
         source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),

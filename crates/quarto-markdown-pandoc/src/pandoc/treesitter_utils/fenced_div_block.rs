@@ -10,7 +10,7 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::Attr;
 use crate::pandoc::block::{Block, Div, RawBlock};
 use crate::pandoc::location::node_source_info_with_context;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -21,7 +21,7 @@ pub fn process_fenced_div_block<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr: Attr = ("".to_string(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut content: Vec<Block> = Vec::new();
     for (node, child) in children {

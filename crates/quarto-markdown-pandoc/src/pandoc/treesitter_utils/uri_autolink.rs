@@ -9,7 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, Link, Str};
 use crate::pandoc::source_map_compat;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -25,7 +25,7 @@ pub fn process_uri_autolink(
         panic!("Invalid URI autolink: {}", text);
     }
     let content = &text[1..text.len() - 1]; // remove the angle brackets
-    let mut attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
     // pandoc adds the class "uri" to autolinks
     attr.1.push("uri".to_string());
     PandocNativeIntermediate::IntermediateInline(Inline::Link(Link {

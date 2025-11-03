@@ -4,6 +4,23 @@ expression: json_string
 ---
 [
   {
+    "code": "Q-2-3",
+    "details": [
+      {
+        "content": {
+          "content": "This key-value pair cannot appear before the class specifier.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 19,
+            "file_id": 0,
+            "start_offset": 10
+          }
+        }
+      }
+    ],
     "kind": "error",
     "location": {
       "Original": {
@@ -13,9 +30,9 @@ expression: json_string
       }
     },
     "problem": {
-      "content": "unexpected character or token here",
+      "content": "This class specifier appears after the key-value pair.",
       "type": "markdown"
     },
-    "title": "Parse error"
+    "title": "Key-value Pair Before Class Specifier in Attribute"
   }
 ]

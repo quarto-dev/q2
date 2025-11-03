@@ -531,6 +531,7 @@ fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hashlink::LinkedHashMap;
 
     fn dummy_source_info() -> quarto_source_map::SourceInfo {
         quarto_source_map::SourceInfo::from_range(
@@ -604,7 +605,7 @@ mod tests {
         let content = vec![make_str("see"), make_space(), multi_cite];
 
         let result = make_cite_inline(
-            ("".to_string(), vec![], std::collections::HashMap::new()),
+            ("".to_string(), vec![], LinkedHashMap::new()),
             ("".to_string(), "".to_string()),
             content,
             dummy_source_info(),
@@ -653,7 +654,7 @@ mod tests {
         ];
 
         let result = make_cite_inline(
-            ("".to_string(), vec![], std::collections::HashMap::new()),
+            ("".to_string(), vec![], LinkedHashMap::new()),
             ("".to_string(), "".to_string()),
             content,
             dummy_source_info(),

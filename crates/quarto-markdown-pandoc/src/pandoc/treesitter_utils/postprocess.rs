@@ -17,6 +17,7 @@ use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 
 /// Trim leading and trailing spaces from inlines
 pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {
@@ -344,7 +345,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 if image.content.is_empty() {
                     return Unchanged(para);
                 }
-                let figure_attr: Attr = (image.attr.0.clone(), vec![], HashMap::new());
+                let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new());
                 let image_attr: Attr = ("".to_string(), image.attr.1.clone(), image.attr.2.clone());
 
                 // Split attr_source between figure and image
@@ -494,7 +495,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
             })
             .with_note_reference(|note_ref| {
-                let mut kv = HashMap::new();
+                let mut kv = LinkedHashMap::new();
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
                     vec![Inline::Span(Span {

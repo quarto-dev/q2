@@ -9,7 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Code, Inline, RawInline};
 use crate::pandoc::location::node_source_info_with_context;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -21,7 +21,7 @@ pub fn process_code_span<T: Write>(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut is_raw: Option<String> = None;
-    let mut attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut language_attribute: Option<String> = None;
     let mut inlines: Vec<_> = children

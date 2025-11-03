@@ -8,7 +8,7 @@ use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::location::node_location;
 use crate::pandoc::source_map_compat::range_to_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 use tree_sitter::Node;
 
 /// Process info_string to extract language as an attribute
@@ -29,7 +29,7 @@ pub fn process_info_string(
     attr_source.classes.push(Some(lang_source));
 
     PandocNativeIntermediate::IntermediateAttr(
-        ("".to_string(), vec![lang_text], HashMap::new()),
+        ("".to_string(), vec![lang_text], LinkedHashMap::new()),
         attr_source,
     )
 }

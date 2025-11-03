@@ -7,7 +7,7 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use quarto_source_map::SourceInfo;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 
 /// Process a commonmark attribute (id, classes, key-value pairs)
 /// Returns both the Attr and AttrSourceInfo with source locations for each component
@@ -15,7 +15,7 @@ pub fn process_commonmark_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let mut attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
     children.into_iter().for_each(|(node, child)| match child {

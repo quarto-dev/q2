@@ -13,5 +13,7 @@ expression: error_output
 Error: Parse error
 unexpected character or token here
 
-Error: Parse error
-unexpected character or token here
+Error [Q-2-4]: Missing Space After Div Fence
+A space is required after ':::' when specifying div attributes.
+ℹ This div fence needs a space before the attribute.
+ℹ Add a space here before the attribute.

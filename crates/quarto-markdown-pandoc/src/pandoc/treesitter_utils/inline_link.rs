@@ -9,7 +9,7 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::{Attr, is_empty_attr};
 use crate::pandoc::inline::{Inline, is_empty_target, make_cite_inline, make_span_inline};
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -24,7 +24,7 @@ pub fn process_inline_link<T: Write, F>(
 where
     F: Fn() -> String,
 {
-    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr: Attr = ("".to_string(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut target = ("".to_string(), "".to_string());
     let mut target_source = crate::pandoc::attr::TargetSourceInfo::empty();

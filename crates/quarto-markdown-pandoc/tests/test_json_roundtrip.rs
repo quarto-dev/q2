@@ -3,12 +3,12 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use hashlink::LinkedHashMap;
 use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
 use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
 use quarto_markdown_pandoc::readers;
 use quarto_markdown_pandoc::writers::json;
 use quarto_source_map::{FileId, Location, Range, SourceInfo};
-use std::collections::HashMap;
 
 #[test]
 fn test_json_roundtrip_simple_paragraph() {
@@ -189,7 +189,7 @@ fn test_json_roundtrip_complex_document() {
                 ),
             }),
             Block::CodeBlock(quarto_markdown_pandoc::pandoc::CodeBlock {
-                attr: ("".to_string(), vec![], HashMap::new()),
+                attr: ("".to_string(), vec![], LinkedHashMap::new()),
                 text: "print('Hello, world!')".to_string(),
                 source_info: SourceInfo::from_range(
                     FileId(0),

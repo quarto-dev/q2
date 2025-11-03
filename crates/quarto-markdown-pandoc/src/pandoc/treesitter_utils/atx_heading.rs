@@ -11,7 +11,7 @@ use crate::pandoc::attr::{Attr, AttrSourceInfo};
 use crate::pandoc::block::{Block, Header};
 use crate::pandoc::inline::Inline;
 use crate::pandoc::location::node_source_info_with_context;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -24,7 +24,7 @@ pub fn process_atx_heading<T: Write>(
 ) -> PandocNativeIntermediate {
     let mut level = 0;
     let mut content: Vec<Inline> = Vec::new();
-    let mut attr: Attr = ("".to_string(), vec![], HashMap::new());
+    let mut attr: Attr = ("".to_string(), vec![], LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_kind, child) in children {
