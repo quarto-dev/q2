@@ -151,6 +151,7 @@ pub fn process_pipe_table(
     let mut colspec: Vec<ColSpec> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
     let mut caption_inlines: Option<Inlines> = None;
+    let mut caption_source_info: Option<quarto_source_map::SourceInfo> = None;
     for (node, child) in children {
         if node == "block_continuation" {
             continue; // skip block continuation nodes
@@ -183,6 +184,8 @@ pub fn process_pipe_table(
             match child {
                 PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(caption_block)) => {
                     let mut inlines = caption_block.content;
+                    // Store the caption's source info to extend the table's range
+                    caption_source_info = Some(caption_block.source_info.clone());
 
                     // Extract Inline::Attr if present at the end (for soft-break captions)
                     if let Some(crate::pandoc::inline::Inline::Attr(
@@ -247,6 +250,44 @@ pub fn process_pipe_table(
         }
     };
 
+    // Calculate the table's source_info: if there's a caption, extend to include it
+    let table_source_info = if let Some(ref cap_info) = caption_source_info {
+        // Extend from start of table node to end of caption
+        let table_start = node_source_info_with_context(node, context);
+        let start_offset = table_start.start_offset();
+        let end_offset = cap_info.end_offset();
+        // Extract file_id from the table's source info
+        let file_id = match &table_start {
+            quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
+            quarto_source_map::SourceInfo::Substring { parent, .. } => {
+                // Recursively extract from parent (should always reach Original eventually)
+                match **parent {
+                    quarto_source_map::SourceInfo::Original { file_id, .. } => file_id,
+                    _ => quarto_source_map::FileId(0), // Fallback
+                }
+            }
+            quarto_source_map::SourceInfo::Concat { pieces } => {
+                // Use first piece's file_id
+                if let Some(piece) = pieces.first() {
+                    match &piece.source_info {
+                        quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
+                        _ => quarto_source_map::FileId(0), // Fallback
+                    }
+                } else {
+                    quarto_source_map::FileId(0) // Fallback
+                }
+            }
+        };
+        // Create a new SourceInfo spanning from table start to caption end
+        quarto_source_map::SourceInfo::original(
+            file_id,
+            start_offset,
+            end_offset,
+        )
+    } else {
+        node_source_info_with_context(node, context)
+    };
+
     PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
         attr,
         caption,
@@ -271,7 +312,7 @@ pub fn process_pipe_table(
             source_info: node_source_info_with_context(node, context),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
-        source_info: node_source_info_with_context(node, context),
+        source_info: table_source_info,
         attr_source,
     }))
 }
