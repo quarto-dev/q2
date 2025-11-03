@@ -1054,11 +1054,9 @@ Example 206 - https://github.github.com/gfm/#example-206
         (atx_heading
           (atx_h1_marker)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str))))))
 ================================================================================
 Example 207 - https://github.github.com/gfm/#example-207
@@ -1077,11 +1075,9 @@ Example 207 - https://github.github.com/gfm/#example-207
         (atx_heading
           (atx_h1_marker)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str))))))
 ================================================================================
 Example 208 - https://github.github.com/gfm/#example-208
@@ -1100,11 +1096,9 @@ Example 208 - https://github.github.com/gfm/#example-208
         (atx_heading
           (atx_h1_marker)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str))))))
 ================================================================================
 Example 209 - https://github.github.com/gfm/#example-209
@@ -1123,11 +1117,9 @@ Example 209 - https://github.github.com/gfm/#example-209
         (atx_heading
           (atx_h1_marker)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str))))))
 ================================================================================
 Example 210 - https://github.github.com/gfm/#example-210
@@ -1146,8 +1138,7 @@ baz
         (atx_heading
           (atx_h1_marker)
           (pandoc_str)
-          (pandoc_soft_break
-            (block_continuation))
+          (pandoc_soft_break)
           (pandoc_str)
           (pandoc_soft_break)
           (pandoc_str))))))
@@ -1168,8 +1159,7 @@ baz
         (pandoc_str)
         (pandoc_soft_break)
         (pandoc_str)
-        (pandoc_soft_break
-          (block_continuation))
+        (pandoc_soft_break)
         (pandoc_str)))))
 ================================================================================
 Example 212 - https://github.github.com/gfm/#example-212
@@ -1266,7 +1256,6 @@ Example 219 - https://github.github.com/gfm/#example-219
   (section
     (pandoc_block_quote
       (block_quote_marker)
-      (block_continuation)
       (pandoc_paragraph
         (pandoc_str)
         (block_continuation)))))
@@ -1303,8 +1292,7 @@ Example 221 - https://github.github.com/gfm/#example-221
       (block_quote_marker)
       (pandoc_paragraph
         (pandoc_str)
-        (pandoc_soft_break
-          (block_continuation))
+        (pandoc_soft_break)
         (pandoc_str)))))
 ================================================================================
 Example 222 - https://github.github.com/gfm/#example-222
@@ -1322,7 +1310,6 @@ Example 222 - https://github.github.com/gfm/#example-222
       (pandoc_paragraph
         (pandoc_str)
         (block_continuation))
-      (block_continuation)
       (pandoc_paragraph
         (pandoc_str)))))
 ================================================================================
@@ -2281,10 +2268,10 @@ Example 294 - https://github.github.com/gfm/#example-294
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
-Example 295 - https://github.github.com/gfm/#example-295
+Example 295 - https://github.github.com/gfm/#example-295 (qmd: we won't do empty list items for now)
 ================================================================================
 * a
-*
+* []
 
 * c
 
@@ -2299,7 +2286,8 @@ Example 295 - https://github.github.com/gfm/#example-295
           (pandoc_str)))
       (list_item
         (list_marker_star)
-        (block_continuation))
+          (pandoc_paragraph
+            (pandoc_span)))
       (list_item
         (list_marker_star)
         (pandoc_paragraph
@@ -2424,10 +2412,12 @@ Example 300 - https://github.github.com/gfm/#example-300
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
-Example 301 - https://github.github.com/gfm/#example-301
+Example 301 - https://github.github.com/gfm/#example-301 (qmd: please, no, i'm tired)
 ================================================================================
 - a
+
   > b
+
   ```
   c
   ```

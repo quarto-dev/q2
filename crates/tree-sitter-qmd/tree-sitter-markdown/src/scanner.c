@@ -2277,7 +2277,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 lexer->mark_end(lexer);
                 EMIT_TOKEN(LINE_ENDING);
             }
-            if (lexer->lookahead != '*' && lexer->lookahead != '-' && lexer->lookahead != '+' && lexer->lookahead != '>' && lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+            if (lexer->lookahead != '*' && lexer->lookahead != '-' && 
+                lexer->lookahead != '+' && lexer->lookahead != '>' && 
+                lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && 
+                lexer->lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
                 lexer->mark_end(lexer);
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
@@ -2300,11 +2303,29 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
                 }
             }
-
-            // if (lexer->eof(lexer)) {
-            //     print_valid_symbols(valid_symbols);
-            //     EMIT_TOKEN(TOKEN_EOF);
-            // }                    
+            if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched && (lexer->lookahead != '*' && lexer->lookahead != '-' && 
+                lexer->lookahead != '+' && lexer->lookahead != '>' && 
+                lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && 
+                lexer->lookahead <= '9'))) {
+                s->indentation = 0;
+                s->column = 0;
+                // If the last line break ended a paragraph and no new block opened,
+                // the last line break should have been a soft line break Reset the
+                // counter for matched blocks
+                s->matched = 0;
+                // If there is at least one open block, go to matching mode.
+                if (s->open_blocks.size > 0) {
+                    DEBUG_PRINT("set STATE_MATCHING\n");
+                    s->state |= STATE_MATCHING;
+                } else {
+                    DEBUG_PRINT("reset STATE_MATCHING\n");
+                    s->state &= (~STATE_MATCHING);
+                }
+                DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
+                s->state |= STATE_WAS_SOFT_LINE_BREAK;
+                lexer->mark_end(lexer);
+                EMIT_TOKEN(SOFT_LINE_ENDING);
+            }
         }
         if (valid_symbols[LINE_ENDING]) {
             s->indentation = 0;
@@ -2323,6 +2344,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             DEBUG_PRINT("reset STATE_WAS_SOFT_LINE_BREAK\n");
             s->state &= (~STATE_WAS_SOFT_LINE_BREAK);
+            print_valid_symbols(valid_symbols);
             EMIT_TOKEN(LINE_ENDING);
         }
     }
