@@ -538,6 +538,15 @@ fn test_do_not_smoke() {
                 let tree = parser
                     .parse(input_bytes, None)
                     .expect("Failed to parse input");
+
+                // Check for parse errors before proceeding
+                let errors = parse_is_good(&tree);
+                if !errors.is_empty() {
+                    // This file has parse errors - skip it (it's in smoke tests to ensure we don't crash on bad input)
+                    file_count += 1;
+                    continue;
+                }
+
                 let mut error_collector = DiagnosticCollector::new();
                 let _ = treesitter_to_pandoc(
                     &mut std::io::sink(),

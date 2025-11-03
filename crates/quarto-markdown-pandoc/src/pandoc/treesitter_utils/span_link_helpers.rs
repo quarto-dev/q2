@@ -8,8 +8,8 @@
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
-use crate::pandoc::inline::{Image, Inline, Link, Span};
+use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo, is_empty_attr};
+use crate::pandoc::inline::{Image, Inline, Link, Span, make_cite_inline};
 use crate::pandoc::location::{node_location, node_source_info_with_context};
 
 /// Extract target (URL and title) from children
@@ -108,27 +108,51 @@ pub fn process_pandoc_span(
         }
     }
 
-    // Special handling: Check if this span contains ONLY a citation
-    // If so, this is a bracketed citation like [@cite] or [-@cite]
-    // We need to unwrap it and potentially change the mode
-    if content_inlines.len() == 1
-        && target.is_none()
-        && attr.0.is_empty()
-        && attr.1.is_empty()
-        && attr.2.is_empty()
-    {
-        // Check if the single inline is a Cite (without consuming it yet)
-        if matches!(content_inlines.first(), Some(Inline::Cite(_))) {
-            if let Some(Inline::Cite(mut cite)) = content_inlines.pop() {
-                // If the citation is AuthorInText mode (from @cite), change it to NormalCitation
-                // because it's wrapped in brackets [@cite]
-                for citation in &mut cite.citations {
-                    if citation.mode == crate::pandoc::inline::CitationMode::AuthorInText {
-                        citation.mode = crate::pandoc::inline::CitationMode::NormalCitation;
+    // Check if this looks like a citation pattern (no target, no attributes, contains citations)
+    // This handles both single citations [@cite] and multi-citations [prefix @c1 suffix; @c2; @c3]
+    if target.is_none() && is_empty_attr(&attr) {
+        // Check if content contains any citations
+        let has_citations = content_inlines
+            .iter()
+            .any(|inline| matches!(inline, Inline::Cite(_)));
+
+        if has_citations {
+            // Preprocess content_inlines to split Str nodes that end with ";"
+            // The tree-sitter grammar produces "suffix;" as a single token, but make_cite_inline
+            // expects semicolons to be separate Str ";" nodes for proper citation splitting
+            let mut preprocessed_inlines = Vec::new();
+            for inline in content_inlines {
+                match inline {
+                    Inline::Str(ref s) if s.text.ends_with(';') && s.text.len() > 1 => {
+                        // Split "suffix;" into "suffix" and ";"
+                        let text_without_semicolon = s.text[..s.text.len() - 1].to_string();
+                        preprocessed_inlines.push(Inline::Str(crate::pandoc::inline::Str {
+                            text: text_without_semicolon,
+                            source_info: s.source_info.clone(),
+                        }));
+                        preprocessed_inlines.push(Inline::Str(crate::pandoc::inline::Str {
+                            text: ";".to_string(),
+                            source_info: s.source_info.clone(),
+                        }));
                     }
+                    _ => preprocessed_inlines.push(inline),
                 }
-                return PandocNativeIntermediate::IntermediateInline(Inline::Cite(cite));
             }
+
+            // Use make_cite_inline to handle both single and multi-citation cases
+            // This function will:
+            // - Split content by semicolons
+            // - Distribute prefix/suffix to citations
+            // - Change AuthorInText mode to NormalCitation
+            // - Backtrack to Span if content isn't citation-worthy
+            return PandocNativeIntermediate::IntermediateInline(make_cite_inline(
+                attr,
+                ("".to_string(), "".to_string()), // empty target
+                preprocessed_inlines,
+                node_source_info_with_context(node, context),
+                attr_source,
+                TargetSourceInfo::empty(),
+            ));
         }
     }
 

@@ -1,0 +1,6 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+assertion_line: 293
+expression: output
+---
+[ CodeBlock ( "" , [] , [] ) "# a language block\ncat(\"hello, world\")" ]
