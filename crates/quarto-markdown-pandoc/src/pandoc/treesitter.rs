@@ -45,8 +45,8 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::block::{Block, Blocks, BulletList, OrderedList, Paragraph, Plain, RawBlock};
 use crate::pandoc::inline::{
-    Emph, Inline, Math, MathType, Note, NoteReference, QuoteType, RawInline, SoftBreak, Space, Str,
-    Strikeout, Strong, Subscript, Superscript,
+    Emph, Inline, LineBreak, Math, MathType, Note, NoteReference, QuoteType, RawInline, SoftBreak,
+    Space, Str, Strikeout, Strong, Subscript, Superscript,
 };
 use crate::pandoc::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::pandoc::location::{node_location, node_source_info_with_context};
@@ -190,6 +190,17 @@ fn process_list(
             });
             list_items.push(blocks);
             continue;
+        }
+
+        // Check if this item has multiple blocks
+        // According to CommonMark/Pandoc, any item with multiple blocks makes the list loose
+        // (regardless of whether there are blank lines between the blocks)
+        if blocks.len() > 1
+            && blocks
+                .iter()
+                .any(|block| matches!(block, Block::Paragraph(_)))
+        {
+            has_loose_item = true;
         }
 
         // is this item possibly loose?
@@ -342,6 +353,29 @@ fn process_native_inline<T: Write>(
 ) -> Inline {
     match child {
         PandocNativeIntermediate::IntermediateInline(inline) => inline,
+        // Handle nested formatting elements that return multiple inlines
+        // For example: strikeout nested inside subscript
+        // We need to wrap them in a Span to return a single Inline
+        PandocNativeIntermediate::IntermediateInlines(inlines) => {
+            // If it's a single inline, just return it directly
+            if inlines.len() == 1 {
+                inlines.into_iter().next().unwrap()
+            } else {
+                // Multiple inlines need to be wrapped in a Span
+                // This shouldn't normally happen in practice, but handle it gracefully
+                use crate::pandoc::attr::{empty_attr, AttrSourceInfo};
+                Inline::Span(crate::pandoc::inline::Span {
+                    attr: empty_attr(),
+                    attr_source: AttrSourceInfo {
+                        id: None,
+                        classes: Vec::new(),
+                        attributes: Vec::new(),
+                    },
+                    content: inlines,
+                    source_info: node_source_info_fn(),
+                })
+            }
+        }
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if let Some(_) = whitespace_re.find(&text) {
                 Inline::Space(Space {
@@ -533,9 +567,31 @@ fn native_visitor<T: Write>(
             source_info: node_source_info_with_context(node, context),
         })),
         "pandoc_soft_break" => {
-            PandocNativeIntermediate::IntermediateInline(Inline::SoftBreak(SoftBreak {
-                source_info: node_source_info_with_context(node, context),
-            }))
+            // Check if this is a hard line break (2+ trailing spaces before newline)
+            // The soft_break node contains the spaces (if any) + the newline
+            let start_byte = node.start_byte();
+            let end_byte = node.end_byte();
+
+            // Count consecutive spaces from the start of the node
+            let mut trailing_spaces = 0;
+            for i in start_byte..end_byte {
+                if input_bytes[i] == b' ' {
+                    trailing_spaces += 1;
+                } else {
+                    break; // Stop at newline or other character
+                }
+            }
+
+            // Hard line break requires 2+ trailing spaces
+            if trailing_spaces >= 2 {
+                PandocNativeIntermediate::IntermediateInline(Inline::LineBreak(LineBreak {
+                    source_info: node_source_info_with_context(node, context),
+                }))
+            } else {
+                PandocNativeIntermediate::IntermediateInline(Inline::SoftBreak(SoftBreak {
+                    source_info: node_source_info_with_context(node, context),
+                }))
+            }
         }
         "emphasis_delimiter" => {
             // This is a marker node, we don't need to process it
@@ -548,10 +604,10 @@ fn native_visitor<T: Write>(
             input_bytes,
             context,
             native_inline,
-            |inlines| {
+            |inlines, source_info| {
                 Inline::Emph(Emph {
                     content: inlines,
-                    source_info: node_source_info_with_context(node, context),
+                    source_info,
                 })
             },
         ),
@@ -566,10 +622,10 @@ fn native_visitor<T: Write>(
             input_bytes,
             context,
             native_inline,
-            |inlines| {
+            |inlines, source_info| {
                 Inline::Strong(Strong {
                     content: inlines,
-                    source_info: node_source_info_with_context(node, context),
+                    source_info,
                 })
             },
         ),
@@ -581,10 +637,10 @@ fn native_visitor<T: Write>(
             input_bytes,
             context,
             native_inline,
-            |inlines| {
+            |inlines, source_info| {
                 Inline::Strikeout(Strikeout {
                     content: inlines,
-                    source_info: node_source_info_with_context(node, context),
+                    source_info,
                 })
             },
         ),
@@ -598,10 +654,10 @@ fn native_visitor<T: Write>(
             input_bytes,
             context,
             native_inline,
-            |inlines| {
+            |inlines, source_info| {
                 Inline::Superscript(Superscript {
                     content: inlines,
-                    source_info: node_source_info_with_context(node, context),
+                    source_info,
                 })
             },
         ),
@@ -613,10 +669,10 @@ fn native_visitor<T: Write>(
             input_bytes,
             context,
             native_inline,
-            |inlines| {
+            |inlines, source_info| {
                 Inline::Subscript(Subscript {
                     content: inlines,
-                    source_info: node_source_info_with_context(node, context),
+                    source_info,
                 })
             },
         ),

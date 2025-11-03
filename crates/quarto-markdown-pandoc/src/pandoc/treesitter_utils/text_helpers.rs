@@ -5,7 +5,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Inline, LineBreak, SoftBreak, Space};
-use crate::pandoc::location::{node_location, node_source_info_with_context};
+use crate::pandoc::location::node_location;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -224,7 +224,7 @@ pub fn create_line_break_inline(
 /// # Returns
 /// IntermediateInlines containing the inline element, potentially wrapped with Space nodes
 pub fn process_inline_with_delimiter_spaces<F, G>(
-    node: &tree_sitter::Node,
+    _node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     delimiter_name: &str,
     input_bytes: &[u8],
@@ -234,11 +234,15 @@ pub fn process_inline_with_delimiter_spaces<F, G>(
 ) -> PandocNativeIntermediate
 where
     F: FnMut((String, PandocNativeIntermediate)) -> Inline,
-    G: FnOnce(Vec<Inline>) -> Inline,
+    G: FnOnce(Vec<Inline>, quarto_source_map::SourceInfo) -> Inline,
 {
-    // Scan delimiters to check for captured spaces
-    let mut has_leading_space = false;
-    let mut has_trailing_space = false;
+    // Scan delimiters to check for captured spaces and save their ranges
+    let mut leading_space_range: Option<quarto_source_map::Range> = None;
+    let mut trailing_space_range: Option<quarto_source_map::Range> = None;
+    let mut first_delimiter_range: Option<quarto_source_map::Range> = None;
+    let mut last_delimiter_range: Option<quarto_source_map::Range> = None;
+    let mut leading_ws_count = 0;
+    let mut trailing_ws_count = 0;
     let mut first_delimiter = true;
 
     for (node_name, child) in &children {
@@ -248,35 +252,102 @@ where
                     .unwrap();
 
                 if first_delimiter {
+                    first_delimiter_range = Some(range.clone());
                     // Opening delimiter - check for leading space
-                    has_leading_space = text.starts_with(char::is_whitespace);
+                    if text.starts_with(char::is_whitespace) {
+                        // Count leading whitespace characters
+                        leading_ws_count = text.chars().take_while(|c| c.is_whitespace()).count();
+                        // Calculate the range for just the leading whitespace
+                        let ws_end_offset = range.start.offset + leading_ws_count;
+                        leading_space_range = Some(quarto_source_map::Range {
+                            start: quarto_source_map::Location {
+                                offset: range.start.offset,
+                                row: range.start.row,
+                                column: range.start.column,
+                            },
+                            end: quarto_source_map::Location {
+                                offset: ws_end_offset,
+                                row: range.start.row,
+                                column: range.start.column + leading_ws_count,
+                            },
+                        });
+                    }
                     first_delimiter = false;
                 } else {
+                    last_delimiter_range = Some(range.clone());
                     // Closing delimiter - check for trailing space
-                    has_trailing_space = text.ends_with(char::is_whitespace);
+                    if text.ends_with(char::is_whitespace) {
+                        // Count trailing whitespace characters
+                        trailing_ws_count = text.chars().rev().take_while(|c| c.is_whitespace()).count();
+                        // Calculate the range for just the trailing whitespace
+                        let ws_start_offset = range.end.offset - trailing_ws_count;
+                        trailing_space_range = Some(quarto_source_map::Range {
+                            start: quarto_source_map::Location {
+                                offset: ws_start_offset,
+                                row: range.end.row,
+                                column: range.end.column - trailing_ws_count,
+                            },
+                            end: quarto_source_map::Location {
+                                offset: range.end.offset,
+                                row: range.end.row,
+                                column: range.end.column,
+                            },
+                        });
+                    }
                 }
             }
         }
     }
 
+    // Calculate the adjusted range for the inline element (excluding delimiter spaces)
+    let adjusted_range = if let (Some(first_delim), Some(last_delim)) =
+        (&first_delimiter_range, &last_delimiter_range)
+    {
+        quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: first_delim.start.offset + leading_ws_count,
+                row: first_delim.start.row,
+                column: first_delim.start.column + leading_ws_count,
+            },
+            end: quarto_source_map::Location {
+                offset: last_delim.end.offset - trailing_ws_count,
+                row: last_delim.end.row,
+                column: last_delim.end.column - trailing_ws_count,
+            },
+        }
+    } else {
+        // Fallback to node range if we don't have delimiter ranges
+        crate::pandoc::location::node_location(_node)
+    };
+
     // Build the inline element using existing helper
     let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
-    let inline = create_inline(inlines);
+    let adjusted_source_info = quarto_source_map::SourceInfo::from_range(
+        context.current_file_id(),
+        adjusted_range,
+    );
+    let inline = create_inline(inlines, adjusted_source_info);
 
     // Build result with injected Space nodes as needed
     let mut result = Vec::new();
 
-    if has_leading_space {
+    if let Some(space_range) = leading_space_range {
         result.push(Inline::Space(Space {
-            source_info: node_source_info_with_context(node, context),
+            source_info: quarto_source_map::SourceInfo::from_range(
+                context.current_file_id(),
+                space_range,
+            ),
         }));
     }
 
     result.push(inline);
 
-    if has_trailing_space {
+    if let Some(space_range) = trailing_space_range {
         result.push(Inline::Space(Space {
-            source_info: node_source_info_with_context(node, context),
+            source_info: quarto_source_map::SourceInfo::from_range(
+                context.current_file_id(),
+                space_range,
+            ),
         }));
     }
 
