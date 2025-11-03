@@ -13,7 +13,8 @@ Example 9 - https://github.github.com/gfm/#example-9 (if you mix tabs and spaces
       (list_item
         (list_marker_minus)
         (pandoc_paragraph
-          (pandoc_str))
+          (pandoc_str)
+          (block_continuation))
         (pandoc_list
           (list_item
             (list_marker_minus)
@@ -621,7 +622,6 @@ Example 78 - https://github.github.com/gfm/#example-78
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_paragraph
           (pandoc_str))))))
 ================================================================================
@@ -641,7 +641,6 @@ Example 79 - https://github.github.com/gfm/#example-79
         (pandoc_paragraph
           (pandoc_str)
           (block_continuation))
-        (block_continuation)
         (pandoc_list
           (list_item
             (list_marker_minus)

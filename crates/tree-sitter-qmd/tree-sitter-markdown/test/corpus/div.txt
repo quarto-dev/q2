@@ -35,6 +35,7 @@ More stuff.
             (commonmark_specifier
               (attribute_id)))
           (block_continuation)
+          (block_continuation)
           (metadata)
           (pandoc_paragraph
             (pandoc_str)

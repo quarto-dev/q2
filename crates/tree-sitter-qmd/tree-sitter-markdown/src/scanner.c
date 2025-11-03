@@ -247,6 +247,18 @@ typedef enum {
     FENCED_DIV,
 } Block;
 
+static void print_valid_symbols(const bool *valid_symbols)
+{
+    #ifdef SCAN_DEBUG
+    printf("valid symbols:\n");    
+    for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
+        if (valid_symbols[i]) {
+            printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
+        }
+    }
+    #endif
+}
+
 // Determines if a character is punctuation as defined by the markdown spec.
 static bool is_punctuation(char chr) {
     return (chr >= '!' && chr <= '/') || (chr >= ':' && chr <= '@') ||
@@ -2008,12 +2020,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                               s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
 
     #ifdef SCAN_DEBUG
-    // printf("valid symbols:\n");    
-    // for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
-    //     if (valid_symbols[i]) {
-    //         printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
-    //     }
-    // }
     DEBUG_PRINT("-- scan() state=%d\n", s->state);
     DEBUG_PRINT("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
     DEBUG_LOOKAHEAD;
@@ -2267,7 +2273,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             uint8_t matched_temp = s->matched;
             s->matched = 0;
             // allow these characters to interrupt blocks.
-            if (lexer->lookahead == ':' || lexer->lookahead == '#') {
+            if (lexer->lookahead == ':' || lexer->lookahead == '#' || lexer->lookahead == '`') {
                 lexer->mark_end(lexer);
                 EMIT_TOKEN(LINE_ENDING);
             }
@@ -2295,9 +2301,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 }
             }
 
-            if (lexer->eof(lexer)) {
-                EMIT_TOKEN(TOKEN_EOF);
-            }                    
+            // if (lexer->eof(lexer)) {
+            //     print_valid_symbols(valid_symbols);
+            //     EMIT_TOKEN(TOKEN_EOF);
+            // }                    
         }
         if (valid_symbols[LINE_ENDING]) {
             s->indentation = 0;
