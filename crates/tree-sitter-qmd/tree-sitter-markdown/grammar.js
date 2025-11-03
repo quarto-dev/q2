@@ -236,7 +236,7 @@ module.exports = grammar({
                 $.target,
                 ']',
             ),
-            optional($.attribute_specifier)
+            optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         target: $ => seq(
@@ -287,7 +287,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             prec(3, alias(/[ ]*\]/, $.insert_delimiter)),
-            optional($.attribute_specifier)
+            optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         delete: $ => prec.right(seq(
@@ -295,7 +295,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             prec(3, alias(/[ ]*\]/, $.delete_delimiter)),
-            optional($.attribute_specifier)
+            optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         edit_comment: $ => prec.right(seq(
@@ -303,7 +303,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             prec(3, alias(/[ ]*\]/, $.edit_comment_delimiter)),
-            optional($.attribute_specifier)
+            optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         highlight: $ => prec.right(seq(
@@ -311,7 +311,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             prec(3, alias(/[ ]*\]/, $.highlight_delimiter)),
-            optional($.attribute_specifier)
+            optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
        
         attribute_specifier: $ => seq(
@@ -413,7 +413,7 @@ module.exports = grammar({
             $.inline_note_reference,
 
             $._prose_punctuation,
-            $.attribute_specifier
+            alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
         // shortcodes
@@ -667,7 +667,7 @@ module.exports = grammar({
         pandoc_div: $ => seq(
           $._fenced_div_start,
           $._whitespace,
-          choice(alias($._commonmark_naked_value, $.info_string), $.attribute_specifier),
+          choice(alias($._commonmark_naked_value, $.info_string), alias($._pandoc_attr_specifier, $.attribute_specifier)),
           $._newline,
           repeat($._block),
           optional(seq($._fenced_div_end, $._close_block, choice($._newline, $._eof))),

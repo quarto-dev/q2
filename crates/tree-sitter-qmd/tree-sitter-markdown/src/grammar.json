@@ -1341,8 +1341,13 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute_specifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_pandoc_attr_specifier"
+                },
+                "named": true,
+                "value": "attribute_specifier"
               },
               {
                 "type": "BLANK"
@@ -1647,8 +1652,13 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute_specifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_pandoc_attr_specifier"
+                },
+                "named": true,
+                "value": "attribute_specifier"
               },
               {
                 "type": "BLANK"
@@ -1723,8 +1733,13 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute_specifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_pandoc_attr_specifier"
+                },
+                "named": true,
+                "value": "attribute_specifier"
               },
               {
                 "type": "BLANK"
@@ -1799,8 +1814,13 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute_specifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_pandoc_attr_specifier"
+                },
+                "named": true,
+                "value": "attribute_specifier"
               },
               {
                 "type": "BLANK"
@@ -1875,8 +1895,13 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute_specifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_pandoc_attr_specifier"
+                },
+                "named": true,
+                "value": "attribute_specifier"
               },
               {
                 "type": "BLANK"
@@ -2455,8 +2480,13 @@
           "name": "_prose_punctuation"
         },
         {
-          "type": "SYMBOL",
-          "name": "attribute_specifier"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_pandoc_attr_specifier"
+          },
+          "named": true,
+          "value": "attribute_specifier"
         }
       ]
     },
@@ -3820,8 +3850,13 @@
               "value": "info_string"
             },
             {
-              "type": "SYMBOL",
-              "name": "attribute_specifier"
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_pandoc_attr_specifier"
+              },
+              "named": true,
+              "value": "attribute_specifier"
             }
           ]
         },

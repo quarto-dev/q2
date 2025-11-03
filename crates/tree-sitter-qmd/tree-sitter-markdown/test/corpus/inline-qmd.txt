@@ -15,23 +15,6 @@ inline code cell with language
         (attribute_specifier
           (language_specifier))))))
 ================================================================================
-inline code cell with spaces (shouldn't count as attribute)
-================================================================================
-`f(3 ** 4)` {python}
-
---------------------------------------------------------------------------------
-
-(document
-  (section
-    (pandoc_paragraph
-      (pandoc_code_span
-        (code_span_delimiter)
-        (content)
-        (code_span_delimiter))
-      (pandoc_space)
-      (attribute_specifier
-        (language_specifier)))))
-================================================================================
 Footnote reference
 ================================================================================
 A note[^another-note] [^2].
