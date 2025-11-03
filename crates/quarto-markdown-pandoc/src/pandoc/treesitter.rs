@@ -1074,7 +1074,12 @@ pub fn treesitter_to_pandoc<T: Write>(
         context,
     );
     let (_, PandocNativeIntermediate::IntermediatePandoc(pandoc)) = result else {
-        panic!("Expected Pandoc, got {:?}", result)
+        // Top-level parse produced something other than a document
+        // This happens when the entire input is malformed
+        let diagnostic = quarto_error_reporting::generic_error!(
+            "Failed to parse document: top-level parse error".to_string()
+        );
+        return Err(vec![diagnostic]);
     };
     let result = match postprocess(pandoc, error_collector) {
         Ok(doc) => doc,
