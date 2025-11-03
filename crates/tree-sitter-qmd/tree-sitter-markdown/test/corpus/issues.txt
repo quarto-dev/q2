@@ -166,4 +166,5 @@ $$hello$$
           (block_continuation)
           (pandoc_paragraph
             (pandoc_display_math)
-            (block_continuation)))))
+            (block_continuation))
+          (block_continuation))))

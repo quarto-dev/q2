@@ -376,7 +376,8 @@ bar
           (block_continuation)
           (pandoc_paragraph
             (pandoc_str)
-            (block_continuation)))))
+            (block_continuation))
+          (block_continuation))))
 ================================================================================
 Pipe table with "soft-break caption"
 ================================================================================

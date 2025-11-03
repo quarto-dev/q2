@@ -80,7 +80,8 @@ Hello, world
             (pandoc_str)
             (pandoc_space)
             (pandoc_str)
-            (block_continuation)))))
+            (block_continuation))
+          (block_continuation))))
 ================================================================================
 Fenced divs with a space at the closing fence
 ================================================================================
@@ -100,7 +101,8 @@ Hello, world
             (pandoc_str)
             (pandoc_space)
             (pandoc_str)
-            (block_continuation)))))
+            (block_continuation))
+          (block_continuation))))
 ================================================================================
 Code block with a colon inside
 ================================================================================
@@ -204,6 +206,7 @@ Empty fenced div 1
           (attribute_specifier
             (commonmark_specifier
               (attribute_id)))
+          (block_continuation)
           (block_continuation))))
 ================================================================================
 Empty fenced div 2
@@ -349,7 +352,8 @@ Another paragraph in the note.
             (pandoc_space)
             (pandoc_str)
             (pandoc_space)
-            (pandoc_str)))))
+            (pandoc_str)
+            (block_continuation)))))
 ================================================================================
 Example list with (@) syntax
 ================================================================================

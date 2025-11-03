@@ -2184,23 +2184,17 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 EMIT_TOKEN(LINE_ENDING);
             }
 
-            // uint8_t matched_temp = s->matched;
-            s->matched = 0;
-            // allow these characters to interrupt blocks.
-            if (lexer->lookahead == ':' || lexer->lookahead == '#' || lexer->lookahead == '`') {
-                lexer->mark_end(lexer);
-                EMIT_TOKEN(LINE_ENDING);
-            }
             if (lexer->lookahead != '*' && lexer->lookahead != '-' && 
                 lexer->lookahead != '+' && lexer->lookahead != '>' && 
-                lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && 
-                lexer->lookahead <= '9')) {
+                lexer->lookahead != ':' && lexer->lookahead != '#' && lexer->lookahead != '`' &&
+                lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
                 s->state |= STATE_WAS_SOFT_LINE_BREAK;
                 lexer->mark_end(lexer);
                 DEBUG_PRINT("set STATE_WAS_SOFT_LINE_BREAK\n");
                 EMIT_TOKEN(SOFT_LINE_ENDING);
             }
 
+            s->matched = 0;
             int match_line_return = match_line(s, lexer);
             bool might_be_soft_break = match_line_return & 2;
             // bool one_will_be_matched = match_line_return & 1;
@@ -2217,10 +2211,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                     EMIT_TOKEN(PIPE_TABLE_LINE_ENDING);
                 }
             }
-            if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched && (lexer->lookahead != '*' && lexer->lookahead != '-' && 
-                lexer->lookahead != '+' && lexer->lookahead != '>' && 
-                lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && 
-                lexer->lookahead <= '9'))) {
+            // allow these characters to interrupt blocks.
+            if (valid_symbols[SOFT_LINE_ENDING] && might_be_soft_break && all_will_be_matched && 
+                (lexer->lookahead != '*' && lexer->lookahead != '-' && 
+                 lexer->lookahead != '+' && lexer->lookahead != '>' && 
+                 lexer->lookahead != ':' && lexer->lookahead != '#' && lexer->lookahead != '`' &&
+                 lexer->lookahead > ' ' && !(lexer->lookahead >= '0' && 
+                 lexer->lookahead <= '9'))) {
                 s->indentation = 0;
                 s->column = 0;
                 // If the last line break ended a paragraph and no new block opened,
