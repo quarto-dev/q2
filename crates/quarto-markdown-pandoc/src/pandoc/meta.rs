@@ -9,7 +9,6 @@ use crate::pandoc::location::empty_source_info;
 use crate::readers;
 use crate::{pandoc::RawBlock, utils::output::VerboseOutput};
 use hashlink::LinkedHashMap;
-use std::collections::HashMap;
 use std::{io, mem};
 use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser};
 
