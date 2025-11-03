@@ -68,7 +68,7 @@ expression: json_string
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 44,
+        "end_offset": 43,
         "file_id": 0,
         "start_offset": 43
       }

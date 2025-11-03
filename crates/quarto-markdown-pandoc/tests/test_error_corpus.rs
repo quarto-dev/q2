@@ -252,8 +252,13 @@ fn test_error_corpus_text_snapshots() {
             Ok(path) => {
                 eprintln!("Testing error snapshot (text): {}", path.display());
 
-                let content = fs::read_to_string(&path)
+                let mut content = fs::read_to_string(&path)
                     .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e));
+
+                // Ensure content ends with newline (matching what main.rs does)
+                if !content.ends_with('\n') {
+                    content.push('\n');
+                }
 
                 // Parse the file - we expect it to fail with diagnostics
                 let result = quarto_markdown_pandoc::readers::qmd::read(

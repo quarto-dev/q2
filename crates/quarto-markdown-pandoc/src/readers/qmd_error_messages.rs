@@ -41,6 +41,14 @@ pub fn produce_diagnostic_messages(
         }
     }
 
+    // Sort diagnostics by file position (start offset)
+    result.sort_by_key(|diag| {
+        diag.location
+            .as_ref()
+            .map(|loc| loc.start_offset())
+            .unwrap_or(0)
+    });
+
     return result;
 }
 
@@ -223,7 +231,8 @@ fn error_diagnostic_from_parse_state(
 
     // Calculate byte offset and create proper locations using quarto-source-map utilities
     let byte_offset = calculate_byte_offset(&input_str, parse_state.row, parse_state.column);
-    let span_end = byte_offset + parse_state.size.max(1);
+    // Clamp span_end to not exceed input length (can happen with EOF errors)
+    let span_end = (byte_offset + parse_state.size.max(1)).min(input_str.len());
 
     // Use quarto_source_map::utils::offset_to_location to properly calculate locations
     let start_location = quarto_source_map::utils::offset_to_location(&input_str, byte_offset)
