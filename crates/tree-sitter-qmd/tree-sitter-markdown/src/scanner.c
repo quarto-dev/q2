@@ -249,6 +249,8 @@ typedef enum {
 
 static void print_valid_symbols(const bool *valid_symbols)
 {
+    // unused
+    (void)(valid_symbols);
     #ifdef SCAN_DEBUG
     printf("valid symbols:\n");    
     for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
@@ -271,90 +273,6 @@ static bool is_punctuation(char chr) {
 static uint8_t list_item_indentation(Block block) {
     return (uint8_t)(block - LIST_ITEM + 2);
 }
-
-// For explanation of the tokens see grammar.js
-static const bool paragraph_interrupt_symbols[] = {
-    false, // LINE_ENDING,
-    false, // SOFT_LINE_ENDING,
-    false, // BLOCK_CLOSE,
-    false, // BLOCK_CONTINUATION,
-    true,  // BLOCK_QUOTE_START,
-    true,  // ATX_H1_MARKER,
-    true,  // ATX_H2_MARKER,
-    true,  // ATX_H3_MARKER,
-    true,  // ATX_H4_MARKER,
-    true,  // ATX_H5_MARKER,
-    true,  // ATX_H6_MARKER,
-    true,  // THEMATIC_BREAK,
-    true,  // LIST_MARKER_MINUS,
-    true,  // LIST_MARKER_PLUS,
-    true,  // LIST_MARKER_STAR,
-    true,  // LIST_MARKER_PARENTHESIS,
-    true,  // LIST_MARKER_DOT,
-    false, // LIST_MARKER_MINUS_DONT_INTERRUPT,
-    false, // LIST_MARKER_PLUS_DONT_INTERRUPT,
-    false, // LIST_MARKER_STAR_DONT_INTERRUPT,
-    false, // LIST_MARKER_PARENTHESIS_DONT_INTERRUPT,
-    false, // LIST_MARKER_DOT_DONT_INTERRUPT,
-    true,  // LIST_MARKER_EXAMPLE,
-    false, // LIST_MARKER_EXAMPLE_DONT_INTERRUPT,
-    true,  // FENCED_CODE_BLOCK_START_BACKTICK,
-    true,  // BLANK_LINE_START,
-    false, // FENCED_CODE_BLOCK_END_BACKTICK,
-    false, // CLOSE_BLOCK,
-    false, // ERROR,
-    false, // TRIGGER_ERROR,
-    false, // EOF,
-    false, // MINUS_METADATA,
-    true,  // PIPE_TABLE_START,
-    false, // PIPE_TABLE_LINE_ENDING,
-    true,  // FENCED_DIV_START,
-    true,  // FENCED_DIV_END,
-    false, // REF_ID_SPECIFIER,
-    false, // FENCED_DIV_NOTE_ID,
-    false, // CODE_SPAN_START
-    false, // CODE_SPAN_CLOSE
-    false, // LATEX_SPAN_START
-    false, // LATEX_SPAN_CLOSE
-    false, // HTML_COMMENT
-    false, // RAW_SPECIFIER
-    false, // AUTOLINK
-    false, // LANGUAGE_SPECIFIER
-    false, // KEY_SPECIFIER
-    false, // NAKED_VALUE_SPECIFIER
-    false, // HIGHLIGHT_SPAN_START
-    false, // INSERT_SPAN_START
-    false, // DELETE_SPAN_START
-    false, // COMMENT_SPAN_START
-    false, // SINGLE_QUOTE_OPEN
-    false, // SINGLE_QUOTE_CLOSE
-    false, // DOUBLE_QUOTE_OPEN
-    false, // DOUBLE_QUOTE_CLOSE
-    false, // SHORTCODE_OPEN_ESCAPED,
-    false, // SHORTCODE_CLOSE_ESCAPED,
-    false, // SHORTCODE_OPEN,
-    false, // SHORTCODE_CLOSE,
-    false, // CITE_AUTHOR_IN_TEXT_WITH_OPEN_BRACKET,
-    false, // CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET,
-    false, // CITE_AUTHOR_IN_TEXT,
-    false, // CITE_SUPPRESS_AUTHOR,
-    false, // STRIKEOUT_OPEN
-    false, // STRIKEOUT_CLOSE
-    false, // SUBSCRIPT_OPEN
-    false, // SUBSCRIPT_CLOSE
-    false, // SUPERSCRIPT_OPEN,
-    false, // SUPERSCRIPT_CLOSE,
-    false, // INLINE_NOTE_START_TOKEN,
-    false, // STRONG_EMPHASIS_OPEN_STAR,
-    false, // STRONG_EMPHASIS_CLOSE_STAR,
-    false, // STRONG_EMPHASIS_OPEN_UNDERSCORE,
-    false, // STRONG_EMPHASIS_CLOSE_UNDERSCORE,
-    false, // EMPHASIS_OPEN_STAR,
-    false, // EMPHASIS_CLOSE_STAR,
-    false, // EMPHASIS_OPEN_UNDERSCORE,
-    false, // EMPHASIS_CLOSE_UNDERSCORE,
-    false, // INLINE_NOTE_REFERENCE,
-};
 
 // State bitflags used with `Scanner.state`
 
@@ -510,6 +428,7 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
 }
 
 static void mark_end(Scanner *s, TSLexer *lexer) {
+    (void)(s);
     // if (!s->simulate) {
         lexer->mark_end(lexer);
     // }
@@ -1351,14 +1270,14 @@ static bool parse_pipe_table(Scanner *s, TSLexer *lexer,
         }
     }
     // s->simulate = true;
-    uint8_t matched_temp = 0;
-    while (matched_temp < (uint8_t)s->open_blocks.size) {
-        if (match(s, lexer, s->open_blocks.items[matched_temp])) {
-            matched_temp++;
-        } else {
-            return false;
-        }
-    }
+    // uint8_t matched_temp = 0;
+    // while (matched_temp < (uint8_t)s->open_blocks.size) {
+    //     if (match(s, lexer, s->open_blocks.items[matched_temp])) {
+    //         matched_temp++;
+    //     } else {
+    //         return false;
+    //     }
+    // }
 
     // check if delimiter row has the same number of cells and at least one pipe
     size_t delimiter_cell_count = 0;
@@ -2014,11 +1933,6 @@ static int match_line(Scanner *s, TSLexer *lexer) {
 }
 
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
-    // Don't parse HTML comments or track math state when inside a fenced code block -
-    // these characters should be literal
-    bool inside_fenced_code = s->open_blocks.size > 0 &&
-                              s->open_blocks.items[s->open_blocks.size - 1] == FENCED_CODE_BLOCK;
-
     #ifdef SCAN_DEBUG
     DEBUG_PRINT("-- scan() state=%d\n", s->state);
     DEBUG_PRINT("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
@@ -2199,13 +2113,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     } else { // we are in the state of trying to match all currently open blocks
         DEBUG_PRINT("scan() while STATE_MATCHING\n");
         int match_line_return = match_line(s, lexer);
-        bool might_be_soft_break = match_line_return & 2;
+        // bool might_be_soft_break = match_line_return & 2;
         bool partial_success = match_line_return & 1;
-        bool all_will_be_matched = s->matched == s->open_blocks.size;
+        // bool all_will_be_matched = s->matched == s->open_blocks.size;
         DEBUG_EXP("%d", match_line_return);
         DEBUG_EXP("%d", (int) might_be_soft_break);
         DEBUG_EXP("%d", (int) partial_success);
-        DEBUG_EXP("%d", (int) all_will_be_matched);
+        // DEBUG_EXP("%d", (int) all_will_be_matched);
         DEBUG_EXP("%d", s->matched);
         DEBUG_LOOKAHEAD;
         
@@ -2270,7 +2184,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 EMIT_TOKEN(LINE_ENDING);
             }
 
-            uint8_t matched_temp = s->matched;
+            // uint8_t matched_temp = s->matched;
             s->matched = 0;
             // allow these characters to interrupt blocks.
             if (lexer->lookahead == ':' || lexer->lookahead == '#' || lexer->lookahead == '`') {
@@ -2289,12 +2203,12 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
 
             int match_line_return = match_line(s, lexer);
             bool might_be_soft_break = match_line_return & 2;
-            bool one_will_be_matched = match_line_return & 1;
+            // bool one_will_be_matched = match_line_return & 1;
             bool all_will_be_matched = s->matched == s->open_blocks.size;
             DEBUG_EXP("%d", match_line_return);
             DEBUG_EXP("%d", (int) might_be_soft_break);
             DEBUG_EXP("%d", (int) one_will_be_matched);
-            DEBUG_EXP("%d", (int) all_will_be_matched);
+            // DEBUG_EXP("%d", (int) all_will_be_matched);
             DEBUG_EXP("%d", s->matched);
             DEBUG_LOOKAHEAD;
 

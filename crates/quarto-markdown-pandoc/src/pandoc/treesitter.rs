@@ -477,6 +477,11 @@ fn native_visitor<T: Write>(
     let result = match node.kind() {
         "fenced_div_note_id" => create_base_text_from_node_text(node, input_bytes),
         "document" => process_document(node, children, context),
+        "metadata" => {
+            // Extract YAML frontmatter text
+            let text = node.utf8_text(input_bytes).unwrap().to_string();
+            PandocNativeIntermediate::IntermediateMetadataString(text, node_location(node))
+        }
         "section" => process_section(node, children, context),
         "pandoc_paragraph" => process_paragraph(node, children, context),
         "atx_heading" => process_atx_heading(buf, node, children, context),

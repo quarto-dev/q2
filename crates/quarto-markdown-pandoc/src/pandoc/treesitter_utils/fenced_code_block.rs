@@ -42,7 +42,10 @@ pub fn process_fenced_code_block(
                     raw_format = Some(format);
                 }
                 _ => {
-                    panic!("Expected Attr or RawFormat in attribute_specifier, got {:?}", child)
+                    panic!(
+                        "Expected Attr or RawFormat in attribute_specifier, got {:?}",
+                        child
+                    )
                 }
             }
         } else if node == "commonmark_attribute" {
