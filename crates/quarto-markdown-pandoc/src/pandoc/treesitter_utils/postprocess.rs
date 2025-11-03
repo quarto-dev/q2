@@ -797,6 +797,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 caption_attr = Some(attr.clone());
                                 caption_attr_source = Some(attr_source.clone());
                                 caption_content.pop(); // Remove the Attr from caption content
+
+                                // Trim trailing space before the attribute
+                                caption_content = trim_inlines(caption_content).0;
                             }
 
                             // If we found attributes in the caption, merge them with the table's attr

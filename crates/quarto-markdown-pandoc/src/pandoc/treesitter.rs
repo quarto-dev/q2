@@ -22,6 +22,7 @@ use crate::pandoc::treesitter_utils::language_attribute::process_language_attrib
 use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
 use crate::pandoc::treesitter_utils::note_definition_fenced_block::process_note_definition_fenced_block;
 use crate::pandoc::treesitter_utils::note_definition_para::process_note_definition_para;
+use crate::pandoc::treesitter_utils::numeric_character_reference::process_numeric_character_reference;
 use crate::pandoc::treesitter_utils::paragraph::process_paragraph;
 use crate::pandoc::treesitter_utils::pipe_table::{
     process_pipe_table, process_pipe_table_cell, process_pipe_table_delimiter_cell,
@@ -563,6 +564,9 @@ fn native_visitor<T: Write>(
                 source_info: node_source_info_with_context(node, context),
             }))
         }
+        "numeric_character_reference" => {
+            process_numeric_character_reference(node, input_bytes, context)
+        }
         "pandoc_space" => PandocNativeIntermediate::IntermediateInline(Inline::Space(Space {
             source_info: node_source_info_with_context(node, context),
         })),
@@ -913,11 +917,14 @@ fn native_visitor<T: Write>(
         }
         "attribute_specifier" => {
             // Filter out delimiter nodes and pass through the commonmark_specifier or raw_specifier result
+            // For language_specifier, we pass it through as-is (IntermediateBaseText)
             for (node_name, child) in children {
                 if node_name == "commonmark_specifier" {
                     return child; // Should be IntermediateAttr
                 } else if node_name == "raw_specifier" {
                     return child; // Should be IntermediateRawFormat
+                } else if node_name == "language_specifier" {
+                    return child; // Should be IntermediateBaseText - let the parent handle it
                 }
             }
             // If no commonmark_specifier or raw_specifier found, return empty attr
@@ -964,6 +971,7 @@ fn native_visitor<T: Write>(
         "list_item" => process_list_item(node, children, context),
         "info_string" => process_info_string(node, input_bytes, context),
         "language_attribute" => process_language_attribute(children, context),
+        "language_specifier" => create_base_text_from_node_text(node, input_bytes),
         "raw_attribute" => process_raw_attribute(node, children, context),
         "raw_specifier" => {
             // Extract raw format from raw_specifier node (e.g., "=html")

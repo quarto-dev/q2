@@ -1,2 +1,4 @@
-    $ quarto pandoc -o custom-reference-doc.docx \
-       --print-default-data-file reference.docx
+```
+$ quarto pandoc -o custom-reference-doc.docx \
+   --print-default-data-file reference.docx
+```

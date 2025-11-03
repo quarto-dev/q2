@@ -25,6 +25,7 @@ pub fn process_pandoc_code_span(
     let mut attr: Attr = empty_attr();
     let mut attr_source = AttrSourceInfo::empty();
     let mut raw_format: Option<String> = None;
+    let mut language_specifier: Option<String> = None;
     let mut has_leading_space = false;
     let mut has_trailing_space = false;
     let mut first_delimiter = true;
@@ -57,7 +58,7 @@ pub fn process_pandoc_code_span(
                 }
             }
             "attribute_specifier" => {
-                // Process attributes or raw format if present
+                // Process attributes, raw format, or language specifier if present
                 match child {
                     PandocNativeIntermediate::IntermediateAttr(attrs, attrs_src) => {
                         attr = attrs.clone();
@@ -65,6 +66,10 @@ pub fn process_pandoc_code_span(
                     }
                     PandocNativeIntermediate::IntermediateRawFormat(format, _) => {
                         raw_format = Some(format.clone());
+                    }
+                    PandocNativeIntermediate::IntermediateBaseText(lang, _) => {
+                        // This is a language specifier (e.g., "r" which we'll wrap as "{r}")
+                        language_specifier = Some(format!("{{{}}}", lang));
                     }
                     _ => {}
                 }
@@ -80,7 +85,12 @@ pub fn process_pandoc_code_span(
     }
 
     // Trim whitespace from code text (Pandoc behavior)
-    let trimmed_code_text = code_text.trim().to_string();
+    let mut trimmed_code_text = code_text.trim().to_string();
+
+    // If there's a language specifier, prepend it to the code text
+    if let Some(lang) = language_specifier {
+        trimmed_code_text = format!("{} {}", lang, trimmed_code_text);
+    }
 
     // Create Code or RawInline based on presence of raw format
     let code = if let Some(format) = raw_format {

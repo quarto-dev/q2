@@ -2,4 +2,4 @@
 source: crates/quarto-markdown-pandoc/tests/test.rs
 expression: output
 ---
-[ CodeBlock ( "" , [] , [] ) "# a language block\ncat(\"hello, world\")" ]
+[ CodeBlock ( "" , ["{r}"] , [] ) "# a language block\ncat(\"hello, world\")" ]

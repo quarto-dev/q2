@@ -145,7 +145,8 @@ pub fn process_pipe_table(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let attr = empty_attr();
+    let mut attr = empty_attr();
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut header: Option<Row> = None;
     let mut colspec: Vec<ColSpec> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
@@ -181,7 +182,19 @@ pub fn process_pipe_table(
         } else if node == "caption" {
             match child {
                 PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(caption_block)) => {
-                    caption_inlines = Some(caption_block.content);
+                    let mut inlines = caption_block.content;
+
+                    // Extract Inline::Attr if present at the end (for soft-break captions)
+                    if let Some(crate::pandoc::inline::Inline::Attr(caption_attr, caption_attr_source)) = inlines.last() {
+                        attr = caption_attr.clone();
+                        attr_source = caption_attr_source.clone();
+                        inlines.pop();
+
+                        // Trim trailing space before the attribute
+                        inlines = trim_inlines(inlines).0;
+                    }
+
+                    caption_inlines = Some(inlines);
                 }
                 _ => panic!("Expected CaptionBlock in caption, got {:?}", child),
             }
@@ -255,6 +268,6 @@ pub fn process_pipe_table(
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
         source_info: node_source_info_with_context(node, context),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        attr_source,
     }))
 }

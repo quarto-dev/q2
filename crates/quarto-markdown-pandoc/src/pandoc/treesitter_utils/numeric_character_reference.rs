@@ -4,6 +4,7 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
+use crate::pandoc::inline::{Inline, Str};
 use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -32,10 +33,8 @@ pub fn process_numeric_character_reference(
         None => text, // If we can't parse it, return the original text
     };
 
-    let source_info = node_source_info_with_context(node, context);
-    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
-        &source_info,
-        context,
-    );
-    PandocNativeIntermediate::IntermediateBaseText(result_text, range)
+    PandocNativeIntermediate::IntermediateInline(Inline::Str(Str {
+        text: result_text,
+        source_info: node_source_info_with_context(node, context),
+    }))
 }

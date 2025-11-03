@@ -1,5 +1,0 @@
----
-source: crates/quarto-markdown-pandoc/tests/test.rs
-expression: output
----
-[ Para [Superscript [Str "hello"]] ]

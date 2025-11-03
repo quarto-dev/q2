@@ -55,17 +55,59 @@ pub fn process_section(
 
             if should_attach {
                 // Extract caption data before modifying blocks
-                let caption_inlines;
+                let mut caption_inlines;
                 let caption_source_info;
+                let mut caption_attr: Option<crate::pandoc::attr::Attr> = None;
+                let mut caption_attr_source: Option<crate::pandoc::attr::AttrSourceInfo> = None;
+
                 if let Block::CaptionBlock(caption_block) = &blocks[i] {
                     caption_inlines = caption_block.content.clone();
                     caption_source_info = caption_block.source_info.clone();
+
+                    // Extract Inline::Attr if present at the end
+                    if let Some(crate::pandoc::inline::Inline::Attr(attr, attr_source)) = caption_inlines.last() {
+                        caption_attr = Some(attr.clone());
+                        caption_attr_source = Some(attr_source.clone());
+                        caption_inlines.pop();
+
+                        // Trim trailing space before the attribute
+                        caption_inlines = super::postprocess::trim_inlines(caption_inlines).0;
+                    }
                 } else {
                     unreachable!()
                 }
 
                 // Now modify the table
                 if let Block::Table(ref mut table) = blocks[i - 1] {
+                    // Apply caption attributes to table if present
+                    if let Some(attr) = caption_attr {
+                        // Merge attributes: caption attributes override table attributes
+                        for (key, value) in &attr.2 {
+                            table.attr.2.insert(key.clone(), value.clone());
+                        }
+                        for class in &attr.1 {
+                            if !table.attr.1.contains(class) {
+                                table.attr.1.push(class.clone());
+                            }
+                        }
+                        if table.attr.0.is_empty() && !attr.0.is_empty() {
+                            table.attr.0 = attr.0.clone();
+                        }
+
+                        // Merge attr_source if present
+                        if let Some(attr_source) = caption_attr_source {
+                            for (key_source, value_source) in attr_source.attributes {
+                                table.attr_source.attributes.push((key_source, value_source));
+                            }
+                            for class_source in attr_source.classes {
+                                table.attr_source.classes.push(class_source);
+                            }
+                            if table.attr_source.id.is_none() && attr_source.id.is_some() {
+                                table.attr_source.id = attr_source.id;
+                            }
+                        }
+                    }
+
                     table.caption = Caption {
                         short: None,
                         long: Some(vec![Block::Plain(Plain {
