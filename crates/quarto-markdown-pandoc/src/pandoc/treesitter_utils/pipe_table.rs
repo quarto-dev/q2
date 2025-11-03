@@ -18,6 +18,7 @@ use crate::pandoc::table::{
 use std::collections::HashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
+use super::postprocess::trim_inlines;
 
 pub fn process_pipe_table_delimiter_cell(
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -129,14 +130,8 @@ pub fn process_pipe_table_cell(
         }
     }
 
-    // Trim trailing spaces from cell content to match Pandoc behavior
-    while let Some(last) = plain_content.last() {
-        if matches!(last, crate::pandoc::inline::Inline::Space(_)) {
-            plain_content.pop();
-        } else {
-            break;
-        }
-    }
+    // Trim leading and trailing spaces from cell content to match Pandoc behavior
+    plain_content = trim_inlines(plain_content).0;
 
     table_cell.content.push(Block::Plain(Plain {
         content: plain_content,

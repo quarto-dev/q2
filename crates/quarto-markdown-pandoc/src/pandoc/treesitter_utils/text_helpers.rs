@@ -278,7 +278,8 @@ where
                     // Closing delimiter - check for trailing space
                     if text.ends_with(char::is_whitespace) {
                         // Count trailing whitespace characters
-                        trailing_ws_count = text.chars().rev().take_while(|c| c.is_whitespace()).count();
+                        trailing_ws_count =
+                            text.chars().rev().take_while(|c| c.is_whitespace()).count();
                         // Calculate the range for just the trailing whitespace
                         let ws_start_offset = range.end.offset - trailing_ws_count;
                         trailing_space_range = Some(quarto_source_map::Range {
@@ -322,10 +323,8 @@ where
 
     // Build the inline element using existing helper
     let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
-    let adjusted_source_info = quarto_source_map::SourceInfo::from_range(
-        context.current_file_id(),
-        adjusted_range,
-    );
+    let adjusted_source_info =
+        quarto_source_map::SourceInfo::from_range(context.current_file_id(), adjusted_range);
     let inline = create_inline(inlines, adjusted_source_info);
 
     // Build result with injected Space nodes as needed

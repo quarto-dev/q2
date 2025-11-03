@@ -363,7 +363,7 @@ fn process_native_inline<T: Write>(
             } else {
                 // Multiple inlines need to be wrapped in a Span
                 // This shouldn't normally happen in practice, but handle it gracefully
-                use crate::pandoc::attr::{empty_attr, AttrSourceInfo};
+                use crate::pandoc::attr::{AttrSourceInfo, empty_attr};
                 Inline::Span(crate::pandoc::inline::Span {
                     attr: empty_attr(),
                     attr_source: AttrSourceInfo {
@@ -826,6 +826,7 @@ fn native_visitor<T: Write>(
             children,
             QuoteType::SingleQuote,
             "single_quote",
+            input_bytes,
             context,
         ),
         "pandoc_double_quote" => process_quoted(
@@ -833,6 +834,7 @@ fn native_visitor<T: Write>(
             children,
             QuoteType::DoubleQuote,
             "double_quote",
+            input_bytes,
             context,
         ),
         "content" => process_content_node(node, children),
