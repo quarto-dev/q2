@@ -5,9 +5,9 @@
 
 use crate::pandoc::inline::{Inline, Inlines, Span};
 use crate::pandoc::location::empty_source_info;
+use hashlink::LinkedHashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use hashlink::LinkedHashMap;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ShortcodeArg {

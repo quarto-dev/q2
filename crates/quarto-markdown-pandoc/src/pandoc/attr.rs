@@ -3,9 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use hashlink::LinkedHashMap;
 use quarto_source_map::SourceInfo;
 use serde::{Deserialize, Serialize};
-use hashlink::LinkedHashMap;
 
 pub fn empty_attr() -> Attr {
     ("".to_string(), vec![], LinkedHashMap::new())

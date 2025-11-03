@@ -1,7 +1,11 @@
 ---
 source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+assertion_line: 292
 expression: error_output
 ---
+Error: Parse error
+unexpected character or token here
+
 [31mError:[0m [Q-2-4] Missing Space After Div Fence
    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/004.qmd:1:4[38;5;246m][0m
    [38;5;246m│[0m
@@ -13,9 +17,6 @@ expression: error_output
  [38;5;240m  │[0m    [36m│[0m  
  [38;5;240m  │[0m    [36m╰[0m[36m─[0m[36m─[0m Add a space here before the attribute.
 [38;5;246m───╯[0m
-
-Error: Parse error
-unexpected character or token here
 
 Error: Parse error
 unexpected character or token here

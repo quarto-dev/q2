@@ -15,9 +15,9 @@ use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
+use hashlink::LinkedHashMap;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use hashlink::LinkedHashMap;
 
 /// Trim leading and trailing spaces from inlines
 pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {

@@ -65,7 +65,9 @@ pub fn process_section(
                     caption_source_info = caption_block.source_info.clone();
 
                     // Extract Inline::Attr if present at the end
-                    if let Some(crate::pandoc::inline::Inline::Attr(attr, attr_source)) = caption_inlines.last() {
+                    if let Some(crate::pandoc::inline::Inline::Attr(attr, attr_source)) =
+                        caption_inlines.last()
+                    {
                         caption_attr = Some(attr.clone());
                         caption_attr_source = Some(attr_source.clone());
                         caption_inlines.pop();
@@ -97,7 +99,10 @@ pub fn process_section(
                         // Merge attr_source if present
                         if let Some(attr_source) = caption_attr_source {
                             for (key_source, value_source) in attr_source.attributes {
-                                table.attr_source.attributes.push((key_source, value_source));
+                                table
+                                    .attr_source
+                                    .attributes
+                                    .push((key_source, value_source));
                             }
                             for class_source in attr_source.classes {
                                 table.attr_source.classes.push(class_source);

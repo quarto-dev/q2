@@ -6,8 +6,8 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
-use quarto_source_map::SourceInfo;
 use hashlink::LinkedHashMap;
+use quarto_source_map::SourceInfo;
 
 /// Process a commonmark attribute (id, classes, key-value pairs)
 /// Returns both the Attr and AttrSourceInfo with source locations for each component

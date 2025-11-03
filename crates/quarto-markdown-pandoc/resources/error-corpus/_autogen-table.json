@@ -126,10 +126,10 @@
     "name": "005"
   },
   {
-    "column": 0,
-    "row": 5,
-    "state": 66,
-    "sym": "_block_close",
+    "column": 3,
+    "row": 0,
+    "state": 2940,
+    "sym": "{",
     "errorInfo": {
       "code": "Q-2-4",
       "title": "Missing Space After Div Fence",

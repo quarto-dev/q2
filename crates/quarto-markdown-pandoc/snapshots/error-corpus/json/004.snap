@@ -38,9 +38,9 @@ expression: json_string
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 44,
+        "end_offset": 4,
         "file_id": 0,
-        "start_offset": 43
+        "start_offset": 3
       }
     },
     "problem": {
@@ -53,9 +53,9 @@ expression: json_string
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 4,
+        "end_offset": 43,
         "file_id": 0,
-        "start_offset": 3
+        "start_offset": 42
       }
     },
     "problem": {
@@ -68,9 +68,9 @@ expression: json_string
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 43,
+        "end_offset": 44,
         "file_id": 0,
-        "start_offset": 42
+        "start_offset": 43
       }
     },
     "problem": {

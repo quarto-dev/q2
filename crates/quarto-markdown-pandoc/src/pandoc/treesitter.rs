@@ -24,7 +24,6 @@ use crate::pandoc::treesitter_utils::note_definition_fenced_block::process_note_
 use crate::pandoc::treesitter_utils::note_definition_para::process_note_definition_para;
 use crate::pandoc::treesitter_utils::numeric_character_reference::process_numeric_character_reference;
 use crate::pandoc::treesitter_utils::paragraph::process_paragraph;
-use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 use crate::pandoc::treesitter_utils::pipe_table::{
     process_pipe_table, process_pipe_table_cell, process_pipe_table_delimiter_cell,
     process_pipe_table_delimiter_row, process_pipe_table_header_or_row,
@@ -42,6 +41,7 @@ use crate::pandoc::treesitter_utils::span_link_helpers::{
 };
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
+use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
@@ -789,17 +789,56 @@ fn native_visitor<T: Write>(
             // Verify format and extract ID
             if trimmed.starts_with("[^") && trimmed.ends_with("]") {
                 let id = trimmed[2..trimmed.len() - 1].to_string();
+
+                // Calculate the adjusted source range for the note reference
+                // If there's leading space, the note ref should start after the space
+                let space_len = text.len() - trimmed.len();
+                let note_ref_start_byte = node.start_byte() + space_len;
+                let note_ref_start_pos = node.start_position();
+
+                let note_ref_range = quarto_source_map::Range {
+                    start: quarto_source_map::Location {
+                        offset: note_ref_start_byte,
+                        row: note_ref_start_pos.row,
+                        column: note_ref_start_pos.column + space_len,
+                    },
+                    end: quarto_source_map::Location {
+                        offset: node.end_byte(),
+                        row: node.end_position().row,
+                        column: node.end_position().column,
+                    },
+                };
+
                 let note_ref = Inline::NoteReference(NoteReference {
                     id,
-                    source_info: node_source_info_with_context(node, context),
+                    source_info: quarto_source_map::SourceInfo::from_range(
+                        context.current_file_id(),
+                        note_ref_range,
+                    ),
                 });
 
                 // Build result with leading Space if needed to distinguish
                 // "Hi [^ref]" from "Hi[^ref]"
                 if has_leading_space {
+                    // Calculate space range (from node start to note ref start)
+                    let space_range = quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: node.start_byte(),
+                            row: node.start_position().row,
+                            column: node.start_position().column,
+                        },
+                        end: quarto_source_map::Location {
+                            offset: note_ref_start_byte,
+                            row: note_ref_start_pos.row,
+                            column: note_ref_start_pos.column + space_len,
+                        },
+                    };
                     PandocNativeIntermediate::IntermediateInlines(vec![
                         Inline::Space(Space {
-                            source_info: node_source_info_with_context(node, context),
+                            source_info: quarto_source_map::SourceInfo::from_range(
+                                context.current_file_id(),
+                                space_range,
+                            ),
                         }),
                         note_ref,
                     ])

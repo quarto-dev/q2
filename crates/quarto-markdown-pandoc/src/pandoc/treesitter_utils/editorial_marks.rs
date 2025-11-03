@@ -9,9 +9,9 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Delete, EditComment, Highlight, Inline, Inlines, Insert, Space, Str};
 use crate::pandoc::location::node_source_info_with_context;
+use hashlink::LinkedHashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use hashlink::LinkedHashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;

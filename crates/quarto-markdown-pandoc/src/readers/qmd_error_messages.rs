@@ -50,7 +50,6 @@ pub fn json_error_message_from_parse_state(
     consumed_tokens: &[ConsumedToken],
     filename: &str,
 ) -> serde_json::Value {
-    eprintln!("lord are we even here");
     // Look up the error entry from the table
     let error_entry = crate::readers::qmd_error_message_table::lookup_error_entry(parse_state);
 

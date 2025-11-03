@@ -18,7 +18,7 @@ pub fn process_target(
 ) -> PandocNativeIntermediate {
     let mut url = String::new();
     let mut title = String::new();
-    let mut range = quarto_source_map::Range {
+    let empty_range = quarto_source_map::Range {
         start: quarto_source_map::Location {
             offset: 0,
             row: 0,
@@ -30,18 +30,21 @@ pub fn process_target(
             column: 0,
         },
     };
+    let mut url_range = empty_range.clone();
+    let mut title_range = empty_range.clone();
 
     for (node_name, child) in children {
         match node_name.as_str() {
             "url" => {
                 if let PandocNativeIntermediate::IntermediateBaseText(text, r) = child {
                     url = text;
-                    range = r;
+                    url_range = r;
                 }
             }
             "title" => {
-                if let PandocNativeIntermediate::IntermediateBaseText(text, _) = child {
+                if let PandocNativeIntermediate::IntermediateBaseText(text, r) = child {
                     title = text;
+                    title_range = r;
                 }
             }
             "](" | ")" => {} // Ignore delimiters
@@ -49,7 +52,7 @@ pub fn process_target(
         }
     }
 
-    PandocNativeIntermediate::IntermediateTarget(url, title, range)
+    PandocNativeIntermediate::IntermediateTarget(url, title, url_range, title_range)
 }
 
 /// Process content node (context-aware for code_span vs links/spans/images)
@@ -82,6 +85,7 @@ pub fn process_pandoc_span(
 ) -> PandocNativeIntermediate {
     let mut content_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
+    let mut target_source = TargetSourceInfo::empty();
     let mut attr = ("".to_string(), vec![], hashlink::LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
@@ -93,8 +97,36 @@ pub fn process_pandoc_span(
                 }
             }
             "target" => {
-                if let PandocNativeIntermediate::IntermediateTarget(url, title, _) = child {
-                    target = Some((url, title));
+                if let PandocNativeIntermediate::IntermediateTarget(
+                    url,
+                    title,
+                    url_range,
+                    title_range,
+                ) = child
+                {
+                    target = Some((url.clone(), title.clone()));
+                    // Populate target_source with the ranges
+                    target_source = TargetSourceInfo {
+                        url: if !url.is_empty() {
+                            Some(
+                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                    &url_range, context,
+                                ),
+                            )
+                        } else {
+                            None
+                        },
+                        title: if !title.is_empty() {
+                            Some(
+                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                    &title_range,
+                                    context,
+                                ),
+                            )
+                        } else {
+                            None
+                        },
+                    };
                 }
             }
             "attribute_specifier" => {
@@ -165,7 +197,7 @@ pub fn process_pandoc_span(
             target: (url, title),
             source_info: node_source_info_with_context(node, context),
             attr_source,
-            target_source: TargetSourceInfo::empty(),
+            target_source,
         }))
     } else {
         // No target → Check for special Span classes that map to specific inline types
@@ -212,6 +244,7 @@ pub fn process_pandoc_image(
 ) -> PandocNativeIntermediate {
     let mut alt_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
+    let mut target_source = TargetSourceInfo::empty();
     let mut attr = ("".to_string(), vec![], hashlink::LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
@@ -223,8 +256,36 @@ pub fn process_pandoc_image(
                 }
             }
             "target" => {
-                if let PandocNativeIntermediate::IntermediateTarget(url, title, _) = child {
-                    target = Some((url, title));
+                if let PandocNativeIntermediate::IntermediateTarget(
+                    url,
+                    title,
+                    url_range,
+                    title_range,
+                ) = child
+                {
+                    target = Some((url.clone(), title.clone()));
+                    // Populate target_source with the ranges
+                    target_source = TargetSourceInfo {
+                        url: if !url.is_empty() {
+                            Some(
+                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                    &url_range, context,
+                                ),
+                            )
+                        } else {
+                            None
+                        },
+                        title: if !title.is_empty() {
+                            Some(
+                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                    &title_range,
+                                    context,
+                                ),
+                            )
+                        } else {
+                            None
+                        },
+                    };
                 }
             }
             "attribute_specifier" => {
@@ -246,6 +307,6 @@ pub fn process_pandoc_image(
         target: (url, title),
         source_info: node_source_info_with_context(node, context),
         attr_source,
-        target_source: TargetSourceInfo::empty(),
+        target_source,
     }))
 }
