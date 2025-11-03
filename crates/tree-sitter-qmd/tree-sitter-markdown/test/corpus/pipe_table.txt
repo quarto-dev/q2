@@ -377,3 +377,47 @@ bar
           (pandoc_paragraph
             (pandoc_str)
             (block_continuation)))))
+================================================================================
+Pipe table with "soft-break caption"
+================================================================================
+|1|
+|-|
+|a|
+: caption
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)))
+          (caption
+            (pandoc_str)))))
+================================================================================
+Pipe table with "blank-line caption" (NB it's a separate block)
+================================================================================
+|1|
+|-|
+|a|
+
+: caption
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (caption
+          (pandoc_str))))
+          

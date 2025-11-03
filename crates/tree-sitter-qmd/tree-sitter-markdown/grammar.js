@@ -29,6 +29,7 @@ module.exports = grammar({
             $.pandoc_div,
             $.pandoc_horizontal_rule,
             $.pipe_table,
+            $.caption,
 
             prec(-1, alias($.minus_metadata, $.metadata)),
 
@@ -132,6 +133,18 @@ module.exports = grammar({
             $._whitespace,
             $.pandoc_paragraph),
 
+        // ideally caption would _only_ be a field in the pipe table, but
+        // it would make parsing the blank lines hard. So we allow it
+        // anywhere where we have blocks and then lift it into pipe_tables.
+        // This is the same principle we use for attributes in headings and equations.
+
+        caption: $ => seq(
+            ":",
+            $._inline_whitespace,
+            $._inlines,
+            choice($._newline, $._eof)
+        ),            
+
         ///////////////////////////////////////////////////////////////////////////////////////////
         // pipe tables
         
@@ -141,6 +154,7 @@ module.exports = grammar({
             $._newline,
             $.pipe_table_delimiter_row,
             repeat(seq($._pipe_table_newline, optional($.pipe_table_row))),
+            optional(seq($._pipe_table_newline, $.caption)),
             choice($._newline, $._eof),
         )),
 
@@ -206,6 +220,7 @@ module.exports = grammar({
         )),
 
         pipe_table_cell: $ => $._line_with_maybe_spaces,
+
         
         ///////////////////////////////////////////////////////////////////////////////////////////
         // inline nodes
