@@ -226,7 +226,7 @@ module.exports = grammar({
                 $.target,
                 ']',
             ),
-            optional($.attribute_specifier)
+            optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         pandoc_image: $ => prec.right(seq(
@@ -319,6 +319,16 @@ module.exports = grammar({
             optional(choice(
                 $.raw_specifier,
                 $.language_specifier,
+                $.commonmark_specifier,
+                alias($._commonmark_specifier_start_with_class, $.commonmark_specifier),
+                alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier)
+            )),
+            '}'
+        ),
+
+        _pandoc_attr_specifier: $ => seq(
+            '{',
+            optional(choice(
                 $.commonmark_specifier,
                 alias($._commonmark_specifier_start_with_class, $.commonmark_specifier),
                 alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier)

@@ -15,77 +15,72 @@
 ================================================================================
 2 (raw specifier)
 ================================================================================
-[a span]{=latex}
+`a span`{=latex}
 --------------------------------------------------------------------------------
     (document
       (section
         (pandoc_paragraph
-          (pandoc_span
-            (content
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str))
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)
             (attribute_specifier
               (raw_specifier))))))
 ================================================================================
 3 (raw reader syntax, qmd extension)
 ================================================================================
-[a span]{<pandoc}
+`a span`{<pandoc}
 --------------------------------------------------------------------------------
     (document
       (section
         (pandoc_paragraph
-          (pandoc_span
-            (content
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str))
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)
             (attribute_specifier
               (raw_specifier))))))
 ================================================================================
-4 (technically a type mismatch but syntax allows)
+4 executable code spans
 ================================================================================
-[a span]{r}
+`a span`{r}
 --------------------------------------------------------------------------------
     (document
       (section
         (pandoc_paragraph
-          (pandoc_span
-            (content
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str))
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)
             (attribute_specifier
               (language_specifier))))))
 ================================================================================
 5 - fenced language specifiers
 ================================================================================
-[a span]{{r}}
+`a span`{{r}}
 --------------------------------------------------------------------------------
     (document
       (section
         (pandoc_paragraph
-          (pandoc_span
-            (content
-              (pandoc_str)
-              (pandoc_space)
-              (pandoc_str))
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)
             (attribute_specifier
               (language_specifier
                 (language_specifier)))))))
 ================================================================================
 6 - deeply nested language specifiers
 ================================================================================
-[a span]{{{{r}}}}
+`a span`{{{{r}}}}
 --------------------------------------------------------------------------------
 (document
   (section
     (pandoc_paragraph
-      (pandoc_span
-        (content
-          (pandoc_str)
-          (pandoc_space)
-          (pandoc_str))
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)
         (attribute_specifier
           (language_specifier
             (language_specifier

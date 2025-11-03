@@ -1281,8 +1281,13 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "attribute_specifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_pandoc_attr_specifier"
+                },
+                "named": true,
+                "value": "attribute_specifier"
               },
               {
                 "type": "BLANK"
@@ -1902,6 +1907,54 @@
                   "type": "SYMBOL",
                   "name": "language_specifier"
                 },
+                {
+                  "type": "SYMBOL",
+                  "name": "commonmark_specifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_commonmark_specifier_start_with_class"
+                  },
+                  "named": true,
+                  "value": "commonmark_specifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_commonmark_specifier_start_with_kv"
+                  },
+                  "named": true,
+                  "value": "commonmark_specifier"
+                }
+              ]
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": "}"
+        }
+      ]
+    },
+    "_pandoc_attr_specifier": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "{"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
                 {
                   "type": "SYMBOL",
                   "name": "commonmark_specifier"
