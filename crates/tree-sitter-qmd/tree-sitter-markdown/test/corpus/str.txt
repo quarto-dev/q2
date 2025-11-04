@@ -20,3 +20,21 @@ b \| az
       (pandoc_str)
       (pandoc_space)
       (pandoc_str))))
+================================================================================
+Unicode non-ascii letters
+================================================================================
+Москва Αθήνα العربية 東京 café
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+          

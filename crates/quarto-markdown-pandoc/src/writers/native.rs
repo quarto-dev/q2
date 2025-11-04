@@ -98,24 +98,31 @@ fn write_native_colwidth<T: std::io::Write>(
 
 fn write_native_table_body<T: std::io::Write>(
     table_body: &crate::pandoc::TableBody,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     write!(buf, "TableBody ")?;
     write_native_attr(&table_body.attr, buf)?;
     write!(buf, " (RowHeadColumns {}) ", table_body.rowhead_columns)?;
-    write_native_rows(&table_body.head, buf)?;
+    write_native_rows(&table_body.head, context, buf, errors)?;
     write!(buf, " ")?;
-    write_native_rows(&table_body.body, buf)?;
+    write_native_rows(&table_body.body, context, buf, errors)?;
     Ok(())
 }
 
-fn write_inlines<T: std::io::Write>(inlines: &[Inline], buf: &mut T) -> std::io::Result<()> {
+fn write_inlines<T: std::io::Write>(
+    inlines: &[Inline],
+    context: &crate::pandoc::ast_context::ASTContext,
+    buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     write!(buf, "[")?;
     for (i, inline) in inlines.iter().enumerate() {
         if i > 0 {
             write!(buf, ", ")?;
         }
-        write_inline(inline, buf)?;
+        write_inline(inline, context, buf, errors)?;
     }
     write!(buf, "]")?;
     Ok(())
@@ -130,7 +137,9 @@ fn write_citation_mode<T: std::io::Write>(mode: &CitationMode, buf: &mut T) -> s
 }
 fn write_native_cell<T: std::io::Write>(
     cell: &crate::pandoc::Cell,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     write!(buf, "Cell ")?;
     write_native_attr(&cell.attr, buf)?;
@@ -146,7 +155,7 @@ fn write_native_cell<T: std::io::Write>(
         if i > 0 {
             write!(buf, ", ")?;
         }
-        write_block(block, buf)?;
+        write_block(block, context, buf, errors)?;
     }
     write!(buf, "] ")?;
     Ok(())
@@ -154,7 +163,9 @@ fn write_native_cell<T: std::io::Write>(
 
 fn write_native_row<T: std::io::Write>(
     row: &crate::pandoc::Row,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     write!(buf, "Row ")?;
     write_native_attr(&row.attr, buf)?;
@@ -163,7 +174,7 @@ fn write_native_row<T: std::io::Write>(
         if i > 0 {
             write!(buf, ", ")?;
         }
-        write_native_cell(cell, buf)?;
+        write_native_cell(cell, context, buf, errors)?;
     }
     write!(buf, "] ")?;
     Ok(())
@@ -171,14 +182,16 @@ fn write_native_row<T: std::io::Write>(
 
 fn write_native_rows<T: std::io::Write>(
     rows: &Vec<crate::pandoc::Row>,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     write!(buf, "[")?;
     for (i, row) in rows.iter().enumerate() {
         if i > 0 {
             write!(buf, ", ")?;
         }
-        write_native_row(row, buf)?;
+        write_native_row(row, context, buf, errors)?;
     }
     write!(buf, "]")?;
     Ok(())
@@ -186,17 +199,24 @@ fn write_native_rows<T: std::io::Write>(
 
 fn write_native_table_foot<T: std::io::Write>(
     foot: &crate::pandoc::TableFoot,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     write!(buf, "(TableFoot ")?;
     write_native_attr(&foot.attr, buf)?;
     write!(buf, " ")?;
-    write_native_rows(&foot.rows, buf)?;
+    write_native_rows(&foot.rows, context, buf, errors)?;
     write!(buf, " )")?;
     Ok(())
 }
 
-fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Result<()> {
+fn write_inline<T: std::io::Write>(
+    text: &Inline,
+    context: &crate::pandoc::ast_context::ASTContext,
+    buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     match text {
         Inline::Math(math_struct) => {
             write!(buf, "Math ")?;
@@ -213,36 +233,36 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
         }
         Inline::Emph(emph_struct) => {
             write!(buf, "Emph ")?;
-            write_inlines(&emph_struct.content, buf)?;
+            write_inlines(&emph_struct.content, context, buf, errors)?;
         }
         Inline::Underline(underline_struct) => {
             write!(buf, "Underline ")?;
-            write_inlines(&underline_struct.content, buf)?;
+            write_inlines(&underline_struct.content, context, buf, errors)?;
         }
         Inline::SmallCaps(smallcaps_struct) => {
             write!(buf, "SmallCaps ")?;
-            write_inlines(&smallcaps_struct.content, buf)?;
+            write_inlines(&smallcaps_struct.content, context, buf, errors)?;
         }
         Inline::Superscript(superscript_struct) => {
             write!(buf, "Superscript ")?;
-            write_inlines(&superscript_struct.content, buf)?;
+            write_inlines(&superscript_struct.content, context, buf, errors)?;
         }
         Inline::Strong(strong_struct) => {
             write!(buf, "Strong ")?;
-            write_inlines(&strong_struct.content, buf)?;
+            write_inlines(&strong_struct.content, context, buf, errors)?;
         }
         Inline::Span(span_struct) => {
             write!(buf, "Span ")?;
             write_native_attr(&span_struct.attr, buf)?;
             write!(buf, " ")?;
-            write_inlines(&span_struct.content, buf)?;
+            write_inlines(&span_struct.content, context, buf, errors)?;
         }
         Inline::Link(link_struct) => {
             let (url, title) = &link_struct.target;
             write!(buf, "Link ")?;
             write_native_attr(&link_struct.attr, buf)?;
             write!(buf, " ")?;
-            write_inlines(&link_struct.content, buf)?;
+            write_inlines(&link_struct.content, context, buf, errors)?;
             write!(buf, " (")?;
             write_safe_string(url, buf)?;
             write!(buf, " , ")?;
@@ -265,7 +285,7 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
             write!(buf, "Quoted ")?;
             write_native_quote_type(&quoted_struct.quote_type, buf)?;
             write!(buf, " ")?;
-            write_inlines(&quoted_struct.content, buf)?;
+            write_inlines(&quoted_struct.content, context, buf, errors)?;
         }
         Inline::Note(note_struct) => {
             write!(buf, "Note [")?;
@@ -273,7 +293,7 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
                 if i > 0 {
                     write!(buf, ", ")?;
                 }
-                write_block(block, buf)?;
+                write_block(block, context, buf, errors)?;
             }
             write!(buf, "]")?;
         }
@@ -282,7 +302,7 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
             write!(buf, "Image ")?;
             write_native_attr(&image_struct.attr, buf)?;
             write!(buf, " ")?;
-            write_inlines(&image_struct.content, buf)?;
+            write_inlines(&image_struct.content, context, buf, errors)?;
             write!(buf, " (")?;
             write_safe_string(url, buf)?;
             write!(buf, " , ")?;
@@ -291,11 +311,11 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
         }
         Inline::Subscript(subscript_struct) => {
             write!(buf, "Subscript ")?;
-            write_inlines(&subscript_struct.content, buf)?;
+            write_inlines(&subscript_struct.content, context, buf, errors)?;
         }
         Inline::Strikeout(strikeout_struct) => {
             write!(buf, "Strikeout ")?;
-            write_inlines(&strikeout_struct.content, buf)?;
+            write_inlines(&strikeout_struct.content, context, buf, errors)?;
         }
         Inline::Cite(cite_struct) => {
             write!(buf, "Cite [")?;
@@ -318,9 +338,9 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
                 write!(buf, "Citation {{ citationId = ")?;
                 write_safe_string(id, buf)?;
                 write!(buf, ", citationPrefix = ")?;
-                write_inlines(prefix, buf)?;
+                write_inlines(prefix, context, buf, errors)?;
                 write!(buf, ", citationSuffix = ")?;
-                write_inlines(suffix, buf)?;
+                write_inlines(suffix, context, buf, errors)?;
                 write!(buf, ", citationMode = ")?;
                 write_citation_mode(mode, buf)?;
                 write!(
@@ -330,7 +350,7 @@ fn write_inline<T: std::io::Write>(text: &Inline, buf: &mut T) -> std::io::Resul
                 )?;
             }
             write!(buf, "] ")?;
-            write_inlines(&cite_struct.content, buf)?;
+            write_inlines(&cite_struct.content, context, buf, errors)?;
         }
         _ => panic!("Unsupported inline type: {:?}", text),
     }
@@ -366,17 +386,21 @@ fn write_list_number_style<T: std::io::Write>(
 
 fn write_short_caption<T: std::io::Write>(
     caption: &Option<Vec<Inline>>,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     match caption {
-        Some(text) => write_inlines(text, buf),
+        Some(text) => write_inlines(text, context, buf, errors),
         None => write!(buf, "Nothing"),
     }
 }
 
 fn write_long_caption<T: std::io::Write>(
     caption: &Option<Vec<Block>>,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     match caption {
         Some(blocks) => {
@@ -385,7 +409,7 @@ fn write_long_caption<T: std::io::Write>(
                 if i > 0 {
                     write!(buf, ", ")?;
                 }
-                write_block(block, buf)?;
+                write_block(block, context, buf, errors)?;
             }
             write!(buf, " ]")?;
         }
@@ -396,25 +420,32 @@ fn write_long_caption<T: std::io::Write>(
 
 fn write_caption<T: std::io::Write>(
     caption: &crate::pandoc::Caption,
+    context: &crate::pandoc::ast_context::ASTContext,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     write!(buf, "(Caption ")?;
-    write_short_caption(&caption.short, buf)?;
+    write_short_caption(&caption.short, context, buf, errors)?;
     write!(buf, " ")?;
-    write_long_caption(&caption.long, buf)?;
+    write_long_caption(&caption.long, context, buf, errors)?;
     write!(buf, ")")?;
     Ok(())
 }
 
-fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result<()> {
+fn write_block<T: std::io::Write>(
+    block: &Block,
+    context: &crate::pandoc::ast_context::ASTContext,
+    buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     match block {
         Block::Plain(crate::pandoc::Plain { content, .. }) => {
             write!(buf, "Plain ")?;
-            write_inlines(content, buf)?;
+            write_inlines(content, context, buf, errors)?;
         }
         Block::Paragraph(crate::pandoc::Paragraph { content, .. }) => {
             write!(buf, "Para ")?;
-            write_inlines(content, buf)?;
+            write_inlines(content, context, buf, errors)?;
         }
         Block::CodeBlock(crate::pandoc::CodeBlock {
             attr,
@@ -444,7 +475,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
                     if j > 0 {
                         write!(buf, ", ")?;
                     }
-                    write_block(block, buf)?;
+                    write_block(block, context, buf, errors)?;
                 }
                 write!(buf, "]")?;
             }
@@ -466,7 +497,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
                     if j > 0 {
                         write!(buf, ", ")?;
                     }
-                    write_block(block, buf)?;
+                    write_block(block, context, buf, errors)?;
                 }
                 write!(buf, "]")?;
             }
@@ -478,7 +509,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
                 if i > 0 {
                     write!(buf, ", ")?;
                 }
-                write_block(block, buf)?;
+                write_block(block, context, buf, errors)?;
             }
             write!(buf, "]")?;
         }
@@ -490,7 +521,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
                 if i > 0 {
                     write!(buf, ", ")?;
                 }
-                write_block(block, buf)?;
+                write_block(block, context, buf, errors)?;
             }
             write!(buf, "]")?;
         }
@@ -503,13 +534,13 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write!(buf, "Figure ")?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;
-            write_caption(caption, buf)?;
+            write_caption(caption, context, buf, errors)?;
             write!(buf, " [")?;
             for (i, block) in content.iter().enumerate() {
                 if i > 0 {
                     write!(buf, ", ")?;
                 }
-                write_block(block, buf)?;
+                write_block(block, context, buf, errors)?;
             }
             write!(buf, "]")?;
         }
@@ -522,7 +553,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write!(buf, "Header {} ", level)?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;
-            write_inlines(content, buf)?;
+            write_inlines(content, context, buf, errors)?;
         }
         Block::HorizontalRule(crate::pandoc::HorizontalRule { .. }) => {
             write!(buf, "HorizontalRule")?
@@ -539,7 +570,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write!(buf, "Table ")?;
             write_native_attr(attr, buf)?;
             write!(buf, " ")?;
-            write_caption(caption, buf)?;
+            write_caption(caption, context, buf, errors)?;
             write!(buf, " [")?;
             for (i, spec) in colspec.iter().enumerate() {
                 if i > 0 {
@@ -554,16 +585,16 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write!(buf, "] (TableHead ")?;
             write_native_attr(&head.attr, buf)?;
             write!(buf, " ")?;
-            write_native_rows(&head.rows, buf)?;
+            write_native_rows(&head.rows, context, buf, errors)?;
             write!(buf, ") [")?;
             for (i, table_body) in bodies.iter().enumerate() {
                 if i > 0 {
                     write!(buf, ", ")?;
                 }
-                write_native_table_body(table_body, buf)?;
+                write_native_table_body(table_body, context, buf, errors)?;
             }
             write!(buf, "] ")?;
-            write_native_table_foot(foot, buf)?;
+            write_native_table_foot(foot, context, buf, errors)?;
         }
         Block::DefinitionList(crate::pandoc::DefinitionList { content, .. }) => {
             write!(buf, "DefinitionList [")?;
@@ -572,7 +603,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
                     write!(buf, ", ")?;
                 }
                 write!(buf, "(")?;
-                write_inlines(term, buf)?;
+                write_inlines(term, context, buf, errors)?;
                 write!(buf, ", [")?;
                 for (j, def_blocks) in definitions.iter().enumerate() {
                     if j > 0 {
@@ -583,7 +614,7 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
                         if k > 0 {
                             write!(buf, ", ")?;
                         }
-                        write_block(block, buf)?;
+                        write_block(block, context, buf, errors)?;
                     }
                     write!(buf, "]")?;
                 }
@@ -591,23 +622,91 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             }
             write!(buf, "]")?;
         }
-        Block::NoteDefinitionPara(_) | Block::NoteDefinitionFencedBlock(_) => {
-            // Note definitions are not represented as separate blocks in Pandoc's native format.
-            // The content is coalesced into Note inline elements where referenced.
-            // Skip output for native writer.
+        Block::NoteDefinitionPara(note_def) => {
+            // Feature error - accumulate and continue
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Inline note definitions not supported",
+                )
+                .with_code("Q-3-10")
+                .problem(format!(
+                    "Cannot render inline note definition `[^{}]` in native format",
+                    note_def.id
+                ))
+                .with_location(note_def.source_info.clone())
+                .add_detail(
+                    "Inline note definitions require the note content to be coalesced \
+                         into the reference location, which is not yet implemented",
+                )
+                .add_hint("Use inline footnote syntax instead: `^[your note content here]`")
+                .build(),
+            );
+            // Skip this block - don't write anything
+        }
+        Block::NoteDefinitionFencedBlock(note_def) => {
+            // Feature error - accumulate and continue
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Fenced note definitions not supported",
+                )
+                .with_code("Q-3-11")
+                .problem(format!(
+                    "Cannot render fenced note definition `[^{}]` in native format",
+                    note_def.id
+                ))
+                .with_location(note_def.source_info.clone())
+                .add_detail(
+                    "Fenced note definitions require the note content to be coalesced \
+                         into the reference location, which is not yet implemented",
+                )
+                .add_hint("Use inline footnote syntax instead: `^[your note content here]`")
+                .build(),
+            );
+            // Skip this block
         }
         _ => panic!("Unsupported block type in native writer: {:?}", block),
     }
     Ok(())
 }
 
-pub fn write<T: std::io::Write>(pandoc: &Pandoc, mut buf: &mut T) -> std::io::Result<()> {
+pub fn write<T: std::io::Write>(
+    pandoc: &Pandoc,
+    context: &crate::pandoc::ast_context::ASTContext,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut errors = Vec::new();
+
+    // Try to write - IO errors are fatal
+    if let Err(e) = write_impl(pandoc, context, buf, &mut errors) {
+        // IO error - wrap and return
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write output: {}", e))
+                .build(),
+        ]);
+    }
+
+    // Check for accumulated feature errors
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(())
+}
+
+fn write_impl<T: std::io::Write>(
+    pandoc: &Pandoc,
+    context: &crate::pandoc::ast_context::ASTContext,
+    buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     write!(buf, "[ ")?;
     for (i, block) in pandoc.blocks.iter().enumerate() {
         if i > 0 {
             write!(buf, ", ")?;
         }
-        write_block(block, &mut buf)?;
+        write_block(block, context, buf, errors)?;
     }
     write!(buf, " ]")?;
     Ok(())

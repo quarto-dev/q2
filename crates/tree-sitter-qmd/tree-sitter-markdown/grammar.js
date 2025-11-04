@@ -556,7 +556,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z%&()+-/]|\\.)(?:[\u{00A0}0-9A-Za-z!%&()+,./;?:-]|\\.|['][0-9A-Za-z])*/,
+        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z\p{L}%&()+-/]|\\.)(?:[\u{00A0}0-9A-Za-z\p{L}!%&()+,./;?:-]|\\.|['][0-9A-Za-z\p{L}])*/,
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS

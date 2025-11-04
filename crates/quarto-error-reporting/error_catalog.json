@@ -117,5 +117,33 @@
     "message_template": "I reached the end of the block before finding a closing '_' for the emphasis.",
     "docs_url": "https://quarto.org/docs/errors/Q-2-5",
     "since_version": "99.9.9"
+  },
+  "Q-3-1": {
+    "subsystem": "writer",
+    "title": "IO Error During Write",
+    "message_template": "An I/O error occurred while writing output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-1",
+    "since_version": "99.9.9"
+  },
+  "Q-3-10": {
+    "subsystem": "writer",
+    "title": "Inline Note Definition Not Supported",
+    "message_template": "Inline note definitions ([^id]: content) cannot be rendered in this output format because they require content coalescing, which is not yet implemented.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-10",
+    "since_version": "99.9.9"
+  },
+  "Q-3-11": {
+    "subsystem": "writer",
+    "title": "Fenced Note Definition Not Supported",
+    "message_template": "Fenced note definitions cannot be rendered in this output format because they require content coalescing, which is not yet implemented.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-11",
+    "since_version": "99.9.9"
+  },
+  "Q-3-12": {
+    "subsystem": "writer",
+    "title": "Unresolved Note Reference",
+    "message_template": "A note reference was not converted to a Span during postprocessing. This is a bug in the postprocessor.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-12",
+    "since_version": "99.9.9"
   }
 }

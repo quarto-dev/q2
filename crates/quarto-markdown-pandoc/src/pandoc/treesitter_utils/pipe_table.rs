@@ -279,11 +279,7 @@ pub fn process_pipe_table(
             }
         };
         // Create a new SourceInfo spanning from table start to caption end
-        quarto_source_map::SourceInfo::original(
-            file_id,
-            start_offset,
-            end_offset,
-        )
+        quarto_source_map::SourceInfo::original(file_id, start_offset, end_offset)
     } else {
         node_source_info_with_context(node, context)
     };

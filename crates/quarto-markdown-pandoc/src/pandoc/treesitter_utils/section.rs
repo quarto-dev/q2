@@ -137,7 +137,9 @@ pub fn process_section(
                         quarto_source_map::SourceInfo::Concat { pieces } => {
                             if let Some(piece) = pieces.first() {
                                 match &piece.source_info {
-                                    quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
+                                    quarto_source_map::SourceInfo::Original { file_id, .. } => {
+                                        *file_id
+                                    }
                                     _ => quarto_source_map::FileId(0), // Fallback
                                 }
                             } else {
