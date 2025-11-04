@@ -95,3 +95,14 @@ We try to parse but do not allow <a href="foo">html elements</a>.
           (pandoc_str)
           (html_element)
           (pandoc_str))))
+================================================================================
+comment.txt Comments v autolinks
+================================================================================
+<a> <https://> <br/>
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (html_element)
+          (autolink)
+          (html_element))))

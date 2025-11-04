@@ -42,6 +42,7 @@ use crate::pandoc::treesitter_utils::span_link_helpers::{
 use crate::pandoc::treesitter_utils::text_helpers::*;
 use crate::pandoc::treesitter_utils::thematic_break::process_thematic_break;
 use crate::pandoc::treesitter_utils::uri_autolink::process_uri_autolink;
+use quarto_error_reporting::DiagnosticMessageBuilder;
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
@@ -487,6 +488,7 @@ fn native_visitor<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
     input_bytes: &[u8],
     context: &ASTContext,
+    error_collector: &mut crate::utils::diagnostic_collector::DiagnosticCollector,
 ) -> PandocNativeIntermediate {
     // TODO What sounded like a good idea with two buffers
     // is becoming annoying now...
@@ -1041,6 +1043,34 @@ fn native_visitor<T: Write>(
         "pipe_table_cell" => process_pipe_table_cell(node, children, context),
         "caption" => process_caption(node, children, context),
         "pipe_table" => process_pipe_table(node, children, context),
+        "comment" => {
+            let range = node_location(node);
+            PandocNativeIntermediate::IntermediateUnknown(range)
+        }
+        "html_element" => {
+            let range = node_location(node);
+            let mut start = range.start.offset;
+            while start < input_bytes.len() && input_bytes[start].is_ascii_whitespace() {
+                start += 1;
+            }
+            let mut end = range.end.offset;
+            while end > 0 && input_bytes[end].is_ascii_whitespace() {
+                end -= 1;
+            }
+
+            let location = quarto_source_map::SourceInfo::original(
+                context.current_file_id(),
+                start,
+                end + 1, // End of "line 2"
+            );
+            let msg = DiagnosticMessageBuilder::error("HTML elements are not allowed")
+                .with_code("Q-2-6")
+                .with_location(location)
+                .add_info("Consider wrapping the element in raw inline syntax: `...`{=html}")
+                .build();
+            error_collector.add(msg);
+            PandocNativeIntermediate::IntermediateUnknown(range)
+        }
         _ => {
             writeln!(
                 buf,
@@ -1068,7 +1098,7 @@ pub fn treesitter_to_pandoc<T: Write>(
     let result = bottomup_traverse_concrete_tree(
         &mut tree.walk(),
         &mut |node, children, input_bytes, context| {
-            native_visitor(buf, node, children, input_bytes, context)
+            native_visitor(buf, node, children, input_bytes, context, error_collector)
         },
         &input_bytes,
         context,

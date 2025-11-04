@@ -1555,13 +1555,8 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
 
     bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
     bool had_url_like_character = false;
-    bool is_start = true;
     while (!lexer->eof(lexer)) {
-        if (lexer->lookahead == '/') {
-            if (!is_start) {
-                had_url_like_character = true;
-            }
-        } else if (lexer->lookahead == ':' || lexer->lookahead == '%') {
+        if (lexer->lookahead == ':' || lexer->lookahead == '%') {
             had_url_like_character = true;
         } else if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
             could_be_autolink = false;
@@ -1576,7 +1571,6 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
             lexer->advance(lexer, false);
             EMIT_TOKEN(HTML_ELEMENT);
         }
-        is_start = false;
         lexer->advance(lexer, false);
     }
     return false;
