@@ -1,0 +1,5 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+expression: output
+---
+[ Para [Str "Colons", Space, Str "should", Space, Str "be", Space, Str "allowed", Space, Str "in", Space, Str "the", Space, Str "middle", Space, Str "of", Space, Emph [Str "paragraphs"], Str ":", Space, Str "this", Space, Str "makes", Space, Str "sense."] ]

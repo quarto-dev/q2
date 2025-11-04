@@ -34,7 +34,7 @@ fn parse_qmd_to_pandoc_ast(input: &str) -> String {
     )
     .unwrap();
 
-    writers::native::write(&pandoc, &mut buf).unwrap();
+    writers::native::write(&pandoc, &ASTContext::anonymous(), &mut buf).unwrap();
     String::from_utf8(buf).expect("Invalid UTF-8 in output")
 }
 
