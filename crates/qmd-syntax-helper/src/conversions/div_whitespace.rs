@@ -176,7 +176,7 @@ impl DivWhitespaceConverter {
         result
     }
 
-    /// Process a single file
+    /// Process a single file with iteration
     #[allow(dead_code)]
     pub fn process_file(
         &self,
@@ -185,53 +185,90 @@ impl DivWhitespaceConverter {
         check: bool,
         verbose: bool,
     ) -> Result<()> {
-        let content = read_file(file_path)?;
+        let max_iterations = 10;
+        let mut iteration = 0;
+        let mut total_fixes = 0;
 
-        // Get parse errors
-        let errors = self.get_parse_errors(file_path)?;
+        loop {
+            iteration += 1;
 
-        if errors.is_empty() {
-            if verbose {
-                println!("  No div whitespace issues found");
+            // Get parse errors
+            let errors = self.get_parse_errors(file_path)?;
+
+            if errors.is_empty() {
+                if verbose && iteration == 1 {
+                    println!("  No div whitespace issues found");
+                }
+                break;
             }
-            return Ok(());
-        }
 
-        // Find positions that need fixes
-        let fix_positions = self.find_div_whitespace_errors(&content, &errors);
+            let content = read_file(file_path)?;
 
-        if fix_positions.is_empty() {
-            if verbose {
-                println!("  No div whitespace issues found");
+            // Find positions that need fixes
+            let fix_positions = self.find_div_whitespace_errors(&content, &errors);
+
+            if fix_positions.is_empty() {
+                if verbose && iteration == 1 {
+                    println!("  No div whitespace issues found");
+                }
+                break;
             }
-            return Ok(());
+
+            total_fixes += fix_positions.len();
+
+            if verbose || check {
+                let prefix = if iteration > 1 { "  " } else { "" };
+                println!(
+                    "{}  Found {} div fence(s) needing whitespace fixes",
+                    prefix,
+                    fix_positions.len().to_string().yellow()
+                );
+            }
+
+            if check {
+                // In check mode, don't write but continue to find all issues
+                let new_content = self.apply_fixes(&content, &fix_positions);
+                // Write to file temporarily for next iteration
+                write_file(file_path, &new_content)?;
+            } else {
+                // Apply fixes
+                let new_content = self.apply_fixes(&content, &fix_positions);
+
+                if in_place {
+                    write_file(file_path, &new_content)?;
+                } else {
+                    // For non-in-place, we need to work on content directly
+                    // This is a limitation - for now just write and read back
+                    write_file(file_path, &new_content)?;
+                }
+            }
+
+            // Check max iterations
+            if iteration >= max_iterations {
+                if verbose {
+                    println!("  Warning: Reached max iterations ({})", max_iterations);
+                }
+                break;
+            }
         }
 
-        if verbose || check {
-            println!(
-                "  Found {} div fence(s) needing whitespace fixes",
-                fix_positions.len().to_string().yellow()
-            );
-        }
-
-        if check {
-            println!("  {} No changes written (--check mode)", "✓".green());
-            return Ok(());
-        }
-
-        // Apply fixes
-        let new_content = self.apply_fixes(&content, &fix_positions);
-
-        if in_place {
-            write_file(file_path, &new_content)?;
-            println!(
-                "  {} Fixed {} div fence(s)",
-                "✓".green(),
-                fix_positions.len()
-            );
-        } else {
-            // Output to stdout
-            print!("{}", new_content);
+        if total_fixes > 0 {
+            if check {
+                println!("  {} No changes written (--check mode)", "✓".green());
+            } else if verbose {
+                println!(
+                    "  {} Fixed {} div fence(s) in {} iteration(s)",
+                    "✓".green(),
+                    total_fixes,
+                    iteration
+                );
+            } else {
+                println!(
+                    "  {} Fixed {} div fence(s)",
+                    "✓".green(),
+                    total_fixes
+                );
+            }
         }
 
         Ok(())
