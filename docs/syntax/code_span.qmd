@@ -68,8 +68,8 @@ For content with three consecutive backticks, use four backticks as delimiters:
 
 In Pandoc, you could use delimiters with a *different* count from the content:
 
-- Pandoc allows: `` ``` `` to represent triple backticks (1 backtick differs from 3)
-- Pandoc allows: ```` ` ```` to represent a single backtick (4 backticks differs from 1)
+- Pandoc allows: ```` `` ``` `` ```` to represent triple backticks (1 backtick differs from 3)
+- Pandoc allows: ````` ```` ` ```` ````` to represent a single backtick (4 backticks differs from 1)
 
 In `quarto-markdown`, the delimiter count must be *greater*:
 
