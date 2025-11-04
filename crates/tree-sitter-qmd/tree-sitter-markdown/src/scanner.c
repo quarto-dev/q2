@@ -668,6 +668,12 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // Also remember how many stars there are before the first whitespace...
     // ...and how many spaces follow the first star.
     uint8_t extra_indentation = 0;
+    // very ugly hack: we need to prioritize EMPHASIS_CLOSE_STAR while
+    // reading this
+    if (valid_symbols[EMPHASIS_CLOSE_STAR]) {
+        EMIT_TOKEN(EMPHASIS_CLOSE_STAR);
+    }
+    bool could_be_close_strong_emphasis = valid_symbols[STRONG_EMPHASIS_CLOSE_STAR];
     for (;;) {
         if (lexer->lookahead == '*') {
             if (star_count == 1 && extra_indentation >= 1 &&
@@ -679,7 +685,12 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             star_count++;
             advance(s, lexer);
+            if (star_count == 2 && could_be_close_strong_emphasis) {
+                mark_end(s, lexer);
+                EMIT_TOKEN(STRONG_EMPHASIS_CLOSE_STAR);
+            }
         } else if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            could_be_close_strong_emphasis = false;
             if (star_count == 1) {
                 extra_indentation += advance(s, lexer);
             } else {

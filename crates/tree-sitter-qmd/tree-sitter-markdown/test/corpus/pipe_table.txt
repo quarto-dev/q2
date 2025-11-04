@@ -155,6 +155,7 @@ Example 200 - https://github.github.com/gfm/#example-200
                 (strong_emphasis_delimiter)
                 (pandoc_str)
                 (strong_emphasis_delimiter))
+              (pandoc_space)
               (pandoc_str)
               (pandoc_space))))))
 ================================================================================

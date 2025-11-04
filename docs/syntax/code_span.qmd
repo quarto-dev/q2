@@ -1,0 +1,85 @@
+---
+title: "Code Spans"
+---
+
+## Overview
+
+Code spans in `quarto-markdown` use a simplified delimiter rule compared to Pandoc. In Pandoc, the number of backticks in the delimiters must differ from any backtick sequence in the content. In `quarto-markdown`, the delimiters must have *more* backticks than any sequence in the content, matching the behavior of code blocks.
+
+## Syntax
+
+Code spans are delimited by backticks:
+
+```markdown
+`code`
+```
+
+When the content contains backticks, use more backticks in the delimiters:
+
+```markdown
+``code with ` backtick``
+```
+
+The delimiter must have strictly more backticks than the longest backtick sequence in the content.
+
+## Examples
+
+### Basic Code Span
+
+Use single backticks for simple code:
+
+`variable_name`
+
+```markdown
+`variable_name`
+```
+
+### Code with Backticks
+
+To include a single backtick in the code, use two backticks as delimiters:
+
+``function(`param`)``
+
+```markdown
+``function(`param`)``
+```
+
+### Code with Multiple Backticks
+
+For content with two consecutive backticks, use three backticks as delimiters:
+
+```code with `` inside```
+
+```markdown
+```code with `` inside```
+```
+
+### Code with Three Backticks
+
+For content with three consecutive backticks, use four backticks as delimiters:
+
+````markdown code block: ```js````
+
+```markdown
+````markdown code block: ```js````
+```
+
+## Difference from Pandoc
+
+In Pandoc, you could use delimiters with a *different* count from the content:
+
+- Pandoc allows: `` ``` `` to represent triple backticks (1 backtick differs from 3)
+- Pandoc allows: ```` ` ```` to represent a single backtick (4 backticks differs from 1)
+
+In `quarto-markdown`, the delimiter count must be *greater*:
+
+- To represent `` ` ``, use at least ``` `` ```
+- To represent ``` `` ```, use at least ```` ``` ````
+- To represent ```` ``` ````, use at least ````` ```` `````
+
+This matches the fenced code block rule: three backticks can contain up to two backticks, four can contain up to three, and so on.
+
+## Limitations
+
+- Delimiter backticks must strictly exceed the content's longest backtick sequence
+- Unlike Pandoc, you cannot use fewer delimiters just because the count differs

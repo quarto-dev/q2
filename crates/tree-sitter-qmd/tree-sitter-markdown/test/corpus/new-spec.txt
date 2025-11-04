@@ -298,6 +298,7 @@ Example 36 - https://github.github.com/gfm/#example-36
         (emphasis_delimiter)
         (pandoc_str)
         (emphasis_delimiter))
+      (pandoc_space)
       (pandoc_str))))
 ================================================================================
 Example 38 - https://github.github.com/gfm/#example-38

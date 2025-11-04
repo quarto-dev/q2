@@ -295,3 +295,19 @@ see @fig-1
       (citation
         (citation_delimiter)
         (citation_id_author_in_text)))))
+================================================================================
+back-to-back star emphases
+================================================================================
+**a** **b**
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter))
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter)))))

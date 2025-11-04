@@ -10,6 +10,7 @@ The features documented here are currently under development. The syntax and beh
 
 ## Available Features
 
+- [Code Spans](code_span.qmd) - Code span delimiters require more backticks than content (differs from Pandoc)
 - [Definition Lists](definition-lists.qmd) - Create definition lists using an embedded markdown DSL
 - [Editorial Marks](editorial-marks.qmd) - Annotate text with highlights, insertions, deletions, and comments
 - [Footnotes](footnotes.qmd) - Add footnotes with inline or fenced block syntax
