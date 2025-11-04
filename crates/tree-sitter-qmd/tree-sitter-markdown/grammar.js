@@ -430,6 +430,7 @@ module.exports = grammar({
             alias($._autolink, $.autolink),
 
             $._prose_punctuation,
+            $.html_element,
             alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
@@ -556,7 +557,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z\p{L}%&()+-/]|\\.)(?:[\u{00A0}0-9A-Za-z\p{L}!%&()+,./;?:-]|\\.|['][0-9A-Za-z\p{L}])*/,
+        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z\p{L}%&()/:+-]|\\.)(?:[\u{00A0}0-9A-Za-z\p{L}!%&()+,./;?:-]|\\.|['\u{2018}\u{2019}][0-9A-Za-z\p{L}])*/,
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
@@ -871,6 +872,8 @@ module.exports = grammar({
         $._emphasis_close_underscore,
         
         $.inline_note_reference, // we just send this token directly through
+
+        $.html_element, // best-effort lexing of HTML elements simply for error reporting.
     ],
     precedences: $ => [],
     extras: $ => [],

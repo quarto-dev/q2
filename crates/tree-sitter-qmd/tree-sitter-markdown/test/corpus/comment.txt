@@ -1,5 +1,5 @@
 ================================================================================
-1 (note the comment chomps the leading space)
+comment.txt 1 (note the comment chomps the leading space)
 ================================================================================
 A comment <!-- can appear anywhere --> in the text.
 --------------------------------------------------------------------------------
@@ -17,7 +17,7 @@ A comment <!-- can appear anywhere --> in the text.
           (pandoc_space)
           (pandoc_str))))
 ================================================================================
-2 - note the single paragraph and chomping the leading space
+comment.txt 2 - note the single paragraph and chomping the leading space
 ================================================================================
 It can span <!--
 
@@ -47,7 +47,7 @@ many lines
           (pandoc_space)
           (pandoc_str))))
 ================================================================================
-3
+comment.txt 3
 ================================================================================
 Also works without<!-- leading or trailing space
 spaces.
@@ -65,4 +65,33 @@ spaces.
           (comment)
           (pandoc_str)
           (pandoc_space)
+          (pandoc_str))))
+================================================================================
+comment.txt 4 HTML element
+================================================================================
+We try to parse but do not allow <a href="foo">html elements</a>.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (html_element)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (html_element)
           (pandoc_str))))

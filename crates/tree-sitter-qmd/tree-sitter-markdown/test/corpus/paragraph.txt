@@ -1,5 +1,5 @@
 ================================================================================
-1
+paragraph.txt 1
 ================================================================================
 Hello
 
@@ -11,3 +11,30 @@ World
       (pandoc_str))
     (pandoc_paragraph
       (pandoc_str))))
+================================================================================
+paragraph.txt 2: colons in the middle of the paragraph should be ok.
+================================================================================
+Yes: this. And `this`: and _that_: too.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))

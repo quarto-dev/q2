@@ -91,6 +91,10 @@
           "named": true
         },
         {
+          "type": "html_element",
+          "named": true
+        },
+        {
           "type": "inline_note",
           "named": true
         },
@@ -219,6 +223,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "html_element",
           "named": true
         },
         {
@@ -411,6 +419,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "html_element",
           "named": true
         },
         {
@@ -639,6 +651,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "html_element",
           "named": true
         },
         {
@@ -1292,6 +1308,10 @@
           "named": true
         },
         {
+          "type": "html_element",
+          "named": true
+        },
+        {
           "type": "inline_note",
           "named": true
         },
@@ -1481,6 +1501,10 @@
           "named": true
         },
         {
+          "type": "html_element",
+          "named": true
+        },
+        {
           "type": "inline_note",
           "named": true
         },
@@ -1665,6 +1689,10 @@
           "named": true
         },
         {
+          "type": "html_element",
+          "named": true
+        },
+        {
           "type": "inline_note",
           "named": true
         },
@@ -1793,6 +1821,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "html_element",
           "named": true
         },
         {
@@ -1927,6 +1959,10 @@
           "named": true
         },
         {
+          "type": "html_element",
+          "named": true
+        },
+        {
           "type": "inline_note",
           "named": true
         },
@@ -2055,6 +2091,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "html_element",
           "named": true
         },
         {
@@ -2217,6 +2257,10 @@
         },
         {
           "type": "highlight",
+          "named": true
+        },
+        {
+          "type": "html_element",
           "named": true
         },
         {
@@ -2678,6 +2722,10 @@
   },
   {
     "type": "highlight_delimiter",
+    "named": true
+  },
+  {
+    "type": "html_element",
     "named": true
   },
   {

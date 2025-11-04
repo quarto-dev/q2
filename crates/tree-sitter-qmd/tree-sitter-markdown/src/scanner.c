@@ -118,6 +118,8 @@ typedef enum {
     EMPHASIS_CLOSE_UNDERSCORE,
 
     INLINE_NOTE_REFERENCE,
+
+    HTML_ELEMENT, // simply for good error reporting
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -212,6 +214,8 @@ static char* token_names[] = {
     "EMPHASIS_OPEN_UNDERSCORE",
     "EMPHASIS_CLOSE_UNDERSCORE",
     "INLINE_NOTE_REFERENCE",
+
+    "HTML_ELEMENT", // simply for good error reporting
 };
 
 #endif
@@ -1549,14 +1553,30 @@ static bool parse_open_angle_brace(TSLexer *lexer, const bool *valid_symbols) {
     // - '>': that was an autolink
     // - ' ', '\t', EOF: that was a bad lex
 
-    while (!lexer->eof(lexer) && lexer->lookahead != ' ' && lexer->lookahead != '\t') {
-        if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
+    bool could_be_autolink = lexer->lookahead != '/'; // very first character can't be '/' in autolinks.
+    bool had_url_like_character = false;
+    bool is_start = true;
+    while (!lexer->eof(lexer)) {
+        if (lexer->lookahead == '/') {
+            if (!is_start) {
+                had_url_like_character = true;
+            }
+        } else if (lexer->lookahead == ':' || lexer->lookahead == '%') {
+            had_url_like_character = true;
+        } else if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            could_be_autolink = false;
+        } else if (valid_symbols[RAW_SPECIFIER] && lexer->lookahead == '}') {
             lexer->mark_end(lexer);
             EMIT_TOKEN(RAW_SPECIFIER);
-        } else if (valid_symbols[AUTOLINK] && lexer->lookahead == '>') {
+        } else if (valid_symbols[AUTOLINK] && could_be_autolink && had_url_like_character && lexer->lookahead == '>') {
             lexer->advance(lexer, false); // we want to consume '>' for autolinks
             EMIT_TOKEN(AUTOLINK);
+        } else if (lexer->lookahead == '>') {
+            // this token is never valid, but we emit it for error messages
+            lexer->advance(lexer, false);
+            EMIT_TOKEN(HTML_ELEMENT);
         }
+        is_start = false;
         lexer->advance(lexer, false);
     }
     return false;

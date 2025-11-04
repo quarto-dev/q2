@@ -2544,6 +2544,10 @@
           "name": "_prose_punctuation"
         },
         {
+          "type": "SYMBOL",
+          "name": "html_element"
+        },
+        {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
@@ -3192,7 +3196,7 @@
     },
     "pandoc_str": {
       "type": "PATTERN",
-      "value": "(?:[\\u{00A0}0-9A-Za-z\\p{L}%&()+-/]|\\\\.)(?:[\\u{00A0}0-9A-Za-z\\p{L}!%&()+,./;?:-]|\\\\.|['][0-9A-Za-z\\p{L}])*"
+      "value": "(?:[\\u{00A0}0-9A-Za-z\\p{L}%&()/:+-]|\\\\.)(?:[\\u{00A0}0-9A-Za-z\\p{L}!%&()+,./;?:-]|\\\\.|['\\u{2018}\\u{2019}][0-9A-Za-z\\p{L}])*"
     },
     "_prose_punctuation": {
       "type": "ALIAS",
@@ -4446,6 +4450,10 @@
     {
       "type": "SYMBOL",
       "name": "inline_note_reference"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "html_element"
     }
   ],
   "inline": [],
