@@ -173,32 +173,40 @@ fn main() {
 
     let mut buf = Vec::new();
     let writer_result = match args.to.as_str() {
-        "json" => writers::json::write(&pandoc, &context, &mut buf).map_err(|e| vec![
-            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                .with_code("Q-3-1")
-                .problem(format!("Failed to write JSON output: {}", e))
-                .build()
-        ]),
+        "json" => writers::json::write(&pandoc, &context, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write JSON output: {}", e))
+                    .build(),
+            ]
+        }),
         "native" => writers::native::write(&pandoc, &context, &mut buf),
-        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf).map_err(|e| vec![
-            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                .with_code("Q-3-1")
-                .problem(format!("Failed to write QMD output: {}", e))
-                .build()
-        ]),
-        "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| vec![
-            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                .with_code("Q-3-1")
-                .problem(format!("Failed to write HTML output: {}", e))
-                .build()
-        ]),
+        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write QMD output: {}", e))
+                    .build(),
+            ]
+        }),
+        "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write HTML output: {}", e))
+                    .build(),
+            ]
+        }),
         #[cfg(feature = "terminal-support")]
-        "ansi" => writers::ansi::write(&pandoc, &mut buf).map_err(|e| vec![
-            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                .with_code("Q-3-1")
-                .problem(format!("Failed to write ANSI output: {}", e))
-                .build()
-        ]),
+        "ansi" => writers::ansi::write(&pandoc, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write ANSI output: {}", e))
+                    .build(),
+            ]
+        }),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             std::process::exit(1);

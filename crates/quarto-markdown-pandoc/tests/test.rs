@@ -229,9 +229,8 @@ fn unit_test_corpus_matches_pandoc_commonmark() {
 #[test]
 fn unit_test_snapshots_native() {
     test_snapshots_for_format("native", |pandoc, context, buffer| {
-        writers::native::write(pandoc, context, buffer).map_err(|e| {
-            format!("Native writer errors: {:?}", e).into()
-        })
+        writers::native::write(pandoc, context, buffer)
+            .map_err(|e| format!("Native writer errors: {:?}", e).into())
     });
 }
 

@@ -398,6 +398,51 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     Unchanged(div)
                 }
             })
+            // Remove single empty spans from bullet list items
+            // This allows `* []` to create truly empty list items in the AST
+            .with_bullet_list(|mut bullet_list| {
+                let mut changed = false;
+                for item in &mut bullet_list.content {
+                    // Check if item has exactly one block
+                    if item.len() == 1 {
+                        // Check if that block is Plain or Paragraph with single empty Span
+                        let should_clear = match &item[0] {
+                            Block::Plain(plain) => {
+                                plain.content.len() == 1
+                                    && matches!(&plain.content[0], Inline::Span(span)
+                                        if span.content.is_empty() && is_empty_attr(&span.attr))
+                            }
+                            Block::Paragraph(para) => {
+                                para.content.len() == 1
+                                    && matches!(&para.content[0], Inline::Span(span)
+                                        if span.content.is_empty() && is_empty_attr(&span.attr))
+                            }
+                            _ => false,
+                        };
+
+                        if should_clear {
+                            // Clear the content to make it truly empty
+                            match &mut item[0] {
+                                Block::Plain(plain) => {
+                                    plain.content.clear();
+                                    changed = true;
+                                }
+                                Block::Paragraph(para) => {
+                                    para.content.clear();
+                                    changed = true;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+
+                if changed {
+                    FilterResult(vec![Block::BulletList(bullet_list)], true)
+                } else {
+                    Unchanged(bullet_list)
+                }
+            })
             // Fix table captions that were parsed as last row (no blank line before caption)
             .with_table(|mut table| {
                 // Check if caption is empty

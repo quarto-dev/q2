@@ -346,13 +346,27 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
             // Add blank line between items in loose lists
             writeln!(buf)?;
         }
-        let mut item_writer = BulletListContext::new(buf);
-        for (j, block) in item.iter().enumerate() {
-            if j > 0 && !is_tight {
-                // Add a blank line between blocks within a list item in loose lists
-                writeln!(&mut item_writer)?;
+
+        // Check if this is an empty list item (single Plain/Para block with empty content)
+        let is_empty_item = item.len() == 1
+            && match &item[0] {
+                Block::Plain(plain) => plain.content.is_empty(),
+                Block::Paragraph(para) => para.content.is_empty(),
+                _ => false,
+            };
+
+        if is_empty_item {
+            // Write "* []" for empty list items
+            writeln!(buf, "* []")?;
+        } else {
+            let mut item_writer = BulletListContext::new(buf);
+            for (j, block) in item.iter().enumerate() {
+                if j > 0 && !is_tight {
+                    // Add a blank line between blocks within a list item in loose lists
+                    writeln!(&mut item_writer)?;
+                }
+                write_block(block, &mut item_writer)?;
             }
-            write_block(block, &mut item_writer)?;
         }
     }
     Ok(())
