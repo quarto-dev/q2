@@ -557,7 +557,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z\p{L}%&()/:+-]|\\.)(?:[\u{00A0}0-9A-Za-z\p{L}!%&()+,./;?:-]|\\.|['\u{2018}\u{2019}][0-9A-Za-z\p{L}])*/,
+        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z\p{L}\p{N}\p{Pd}%&()/:+\u{2026}-]|\\.)(?:[\u{00A0}0-9A-Za-z\p{L}\p{N}\p{Pd}!%&()+,./;?:\u{2026}-]|\\.|['\u{2018}\u{2019}][\p{L}\p{N}])*/,
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
