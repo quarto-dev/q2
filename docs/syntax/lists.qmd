@@ -1,0 +1,122 @@
+---
+title: "Lists"
+---
+
+## Overview
+
+Lists in `quarto-markdown` support both bullet (unordered) and ordered lists with standard Markdown syntax. However, empty list items require special syntax due to a parser limitation.
+
+## Syntax
+
+### Bullet Lists
+
+Bullet lists use `*`, `-`, or `+` as markers:
+
+```markdown
+* First item
+* Second item
+* Third item
+```
+
+### Ordered Lists
+
+Ordered lists use numbers followed by `.` or `)`:
+
+```markdown
+1. First item
+2. Second item
+3. Third item
+```
+
+### Nested Lists
+
+Lists can be nested by indenting:
+
+```markdown
+* Top level
+  * Nested item
+  * Another nested item
+* Back to top level
+```
+
+## Empty List Items
+
+### The Limitation
+
+Unlike some Markdown parsers, `quarto-markdown` cannot parse truly empty list items with just a bullet marker:
+
+```markdown
+* Item with content
+*
+* Another item
+```
+
+The empty marker on the second line will cause a parse error.
+
+### The Workaround
+
+To create an empty list item, use square brackets `[]` after the bullet:
+
+* Item with content
+* []
+* Another item
+
+```markdown
+* Item with content
+* []
+* Another item
+```
+
+The `[]` syntax creates an empty span that is removed during processing, resulting in a genuinely empty list item in the AST while maintaining Pandoc AST compatibility.
+
+## Examples
+
+### Mixed Content and Empty Items
+
+* First item with text
+* []
+* Third item with more text
+* []
+
+```markdown
+* First item with text
+* []
+* Third item with more text
+* []
+```
+
+### Empty Items in Nested Lists
+
+* Top level item
+  * Nested item
+  * []
+  * Another nested item
+* []
+
+```markdown
+* Top level item
+  * Nested item
+  * []
+  * Another nested item
+* []
+```
+
+## Technical Details
+
+### AST Representation
+
+The `[]` syntax is parsed as an empty span, which is then removed during post-processing. The result is a list item containing a block with no inline content, matching Pandoc's representation of empty list items.
+
+### Roundtripping
+
+Documents are written back with `* []` for empty items, ensuring that:
+
+1. The syntax is preserved through parse → AST → write cycles
+2. The AST contains truly empty list items (no span)
+3. The document remains valid `quarto-markdown`
+
+## Limitations
+
+- Empty list items require the `[]` syntax (`[]{}` is also supported, but is written back out as `[]`); a bare bullet marker is invalid
+- The `[]` must be empty (no spaces or content inside)
+- This applies to both bullet and ordered lists

@@ -14,6 +14,7 @@ The features documented here are currently under development. The syntax and beh
 - [Definition Lists](definition-lists.qmd) - Create definition lists using an embedded markdown DSL
 - [Editorial Marks](editorial-marks.qmd) - Annotate text with highlights, insertions, deletions, and comments
 - [Footnotes](footnotes.qmd) - Add footnotes with inline or fenced block syntax
+- [Lists](lists.qmd) - Empty list items require special `[]` syntax
 - [YAML Metadata](yaml-metadata.qmd) - Control markdown parsing in metadata with YAML tags
 
 ## Advanced Topics
