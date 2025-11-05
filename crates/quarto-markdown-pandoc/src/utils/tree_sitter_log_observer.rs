@@ -9,6 +9,7 @@ use std::collections::HashMap; // Still needed for TreeSitterParseLog::processes
 pub enum TreeSitterLogState {
     Idle,
     InParse,
+    JustReduced,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -36,6 +37,7 @@ pub struct TreeSitterParseLog {
     pub current_process: Option<usize>,
     pub current_lookahead: Option<(String, usize)>,
     pub processes: HashMap<usize, TreeSitterProcessLog>,
+    pub all_tokens: Vec<ConsumedToken>,
     pub consumed_tokens: Vec<ConsumedToken>, // row, column, size, LR state
 }
 
@@ -99,6 +101,7 @@ impl TreeSitterLogObserver {
         let mut col: Option<usize> = None;
         let mut sym: Option<&str> = None;
         let mut size: Option<usize> = None;
+        let mut child_count: Option<usize> = None;
 
         // Single pass through parameters
         for pair in &words[1..] {
@@ -111,6 +114,7 @@ impl TreeSitterLogObserver {
                     "col" => col = value.parse().ok(),
                     "sym" => sym = Some(value),
                     "size" => size = value.parse().ok(),
+                    "child_count" => child_count = value.parse().ok(),
                     _ => {} // Ignore unknown parameters
                 }
             }
@@ -127,13 +131,41 @@ impl TreeSitterLogObserver {
                     current_process: None,
                     current_lookahead: None,
                     consumed_tokens: vec![],
+                    all_tokens: vec![],
                 });
             }
             "done" => {
-                if self.state != TreeSitterLogState::InParse {
-                    panic!("Received 'done' while not in parse");
+                if self.state == TreeSitterLogState::Idle {
+                    panic!("Received 'done' while idle");
                 }
                 self.state = TreeSitterLogState::Idle;
+            }
+            "reduce" => {
+                let child_count = child_count.unwrap();
+                if child_count > 0 {
+                    let current_parse = self
+                        .parses
+                        .last_mut()
+                        .expect("No current parse to log process to");
+                    // after error correction we might have a completely messed up tree, but it should be good for the first error.
+                    if current_parse.consumed_tokens.len() >= child_count {
+                        let popped_tokens = current_parse
+                            .consumed_tokens
+                            .split_off(current_parse.consumed_tokens.len() - child_count);
+                        let row = popped_tokens.get(0).unwrap().row;
+                        let column = popped_tokens.get(0).unwrap().column;
+                        let size = popped_tokens.iter().map(|x| x.size).sum();
+                        current_parse.consumed_tokens.push(ConsumedToken {
+                            row,
+                            column,
+                            size,
+                            lr_state: 0,
+                            sym: sym.unwrap().to_string().clone(),
+                        });
+                        current_parse.all_tokens.extend(popped_tokens);
+                    }
+                    self.state = TreeSitterLogState::JustReduced;
+                }
             }
             "resume" => {
                 let version = version.expect("Missing 'version' in process log");
@@ -230,13 +262,26 @@ impl TreeSitterLogObserver {
                     .as_ref()
                     .map(|(_, s)| *s)
                     .unwrap_or(0);
-                current_parse.consumed_tokens.push(ConsumedToken {
-                    lr_state: state_val,
-                    row: current_process_message.row,
-                    column: current_process_message.column,
-                    size,
-                    sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
-                })
+                match self.state {
+                    TreeSitterLogState::InParse => {
+                        current_parse.consumed_tokens.push(ConsumedToken {
+                            lr_state: state_val,
+                            row: current_process_message.row,
+                            column: current_process_message.column,
+                            size,
+                            sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
+                        })
+                    }
+                    TreeSitterLogState::JustReduced => {
+                        let last: &mut ConsumedToken =
+                            current_parse.consumed_tokens.last_mut().unwrap();
+                        last.lr_state = state_val;
+                        self.state = TreeSitterLogState::InParse;
+                    }
+                    _ => {
+                        eprintln!("Shouldn't be here!");
+                    }
+                }
             }
             "skip_token" | "recover_to_previous" => {
                 // we want to mark these processes as bad, but we don't want to record the state here
@@ -251,7 +296,7 @@ impl TreeSitterLogObserver {
                     .expect("No current process message");
                 current_process.found_bad_message = true;
             }
-            "lex_external" | "lex_internal" | "reduce" => {}
+            "lex_external" | "lex_internal" => {}
             "accept" => {
                 let current_parse = self
                     .parses
@@ -264,7 +309,7 @@ impl TreeSitterLogObserver {
                 current_process.found_accept = true;
             }
             _ => {
-                if self.state != TreeSitterLogState::InParse {
+                if self.state == TreeSitterLogState::Idle {
                     return;
                 }
             }

@@ -40,27 +40,18 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2291,
+          "lrState": 2404,
           "row": 0,
-          "size": 3,
-          "sym": "key_value_key",
-          "label": "key-value-begin"
-        },
-        {
-          "column": 14,
-          "lrState": 2317,
-          "row": 0,
-          "size": 5,
-          "sym": "key_value_value",
-          "label": "key-value-end"
+          "size": 9,
+          "sym": "key_value_specifier",
+          "label": "key-value"
         }
       ],
       "notes": [
         {
           "message": "This key-value pair cannot appear before the class specifier.",
-          "noteType": "label-range",
-          "labelBegin": "key-value-begin",
-          "labelEnd": "key-value-end"
+          "noteType": "simple",
+          "label": "key-value"
         }
       ]
     },

@@ -4,24 +4,17 @@
     "message": "This class specifier appears after the key-value pair.",
     "captures": [
         {
-            "label": "key-value-begin",
+            "label": "key-value",
             "row": 0,
             "column": 10,
-            "size": 3
-        },
-        {
-            "label": "key-value-end",
-            "row": 0,
-            "column": 14,
-            "size": 5
+            "size": 9
         }
     ],
     "notes": [
         {
             "message": "This key-value pair cannot appear before the class specifier.",
-            "noteType": "label-range",
-            "labelBegin": "key-value-begin",
-            "labelEnd": "key-value-end"
+            "noteType": "simple",
+            "label": "key-value"
         }
     ]
 }
