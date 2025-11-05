@@ -1638,6 +1638,7 @@ static bool parse_language_specifier(TSLexer *lexer, const bool *valid_symbols) 
             (lexer->lookahead >= 'a' && lexer->lookahead <= 'z') ||
             (lexer->lookahead >= '0' && lexer->lookahead <= '9') ||
             (lexer->lookahead == '_') ||
+            (lexer->lookahead == '%') ||
             (lexer->lookahead == '-')
         ) {
             lexer->advance(lexer, false);
