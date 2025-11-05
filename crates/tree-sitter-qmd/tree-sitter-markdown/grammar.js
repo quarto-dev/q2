@@ -219,13 +219,13 @@ module.exports = grammar({
         pipe_table_delimiter_row: $ => seq(
             optional(seq(
                 optional($._whitespace),
-                '|',
+                $._pipe_table_delimiter,
             )),
             repeat1(prec.right(seq(
                 optional($._whitespace),
                 $.pipe_table_delimiter_cell,
                 optional($._whitespace),
-                '|',
+                $._pipe_table_delimiter,
             ))),
             optional($._whitespace),
             optional(seq(
@@ -243,7 +243,7 @@ module.exports = grammar({
         pipe_table_row: $ => prec(2, seq(
             optional(seq(
                 optional($._whitespace),
-                '|',
+                $._pipe_table_delimiter,
             )),
             choice(
                 seq(
@@ -256,7 +256,7 @@ module.exports = grammar({
                             ),
                             alias($._whitespace, $.pipe_table_cell)
                         ),
-                        '|',
+                        $._pipe_table_delimiter,
                     )))),
                     optional($._whitespace),
                     optional(seq(
@@ -611,7 +611,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => new RegExp(PANDOC_REGEX_STR, 'u'),
+        pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|'),
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
@@ -930,6 +930,8 @@ module.exports = grammar({
         $.inline_note_reference, // we just send this token directly through
 
         $.html_element, // best-effort lexing of HTML elements simply for error reporting.
+
+        $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
     ],
     precedences: $ => [],
     extras: $ => [],

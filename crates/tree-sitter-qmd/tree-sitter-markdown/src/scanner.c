@@ -120,6 +120,8 @@ typedef enum {
     INLINE_NOTE_REFERENCE,
 
     HTML_ELEMENT, // simply for good error reporting
+
+    PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -216,6 +218,8 @@ static char* token_names[] = {
     "INLINE_NOTE_REFERENCE",
 
     "HTML_ELEMENT", // simply for good error reporting
+
+    "PIPE_TABLE_DELIMITER",
 };
 
 #endif
@@ -2119,6 +2123,11 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 return parse_cite_author_in_text(s, lexer, valid_symbols);
         }
         DEBUG_HERE;
+        if (lexer->lookahead == '|' && valid_symbols[PIPE_TABLE_DELIMITER]) {
+            lexer->advance(lexer, false);
+            lexer->mark_end(lexer);
+            EMIT_TOKEN(PIPE_TABLE_DELIMITER);
+        }
         if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
             valid_symbols[PIPE_TABLE_START]) {
             return parse_pipe_table(s, lexer, valid_symbols);
