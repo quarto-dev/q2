@@ -34,10 +34,24 @@ const PANDOC_VALID_SYMBOLS =
 
 const PANDOC_ALPHA_NUM = "0-9A-Za-z\\p{L}\\p{N}";
 const PANDOC_PUNCTUATION = "\\p{Pd}#%&()/:+\\u{2026}";
+// Smart quotes that are allowed in pandoc_str
+// U+2018 = ' (left single quotation mark)
+// U+2019 = ' (right single quotation mark / apostrophe)
+// U+201A = ‚ (single low-9 quotation mark, German)
+// U+201B = ‛ (single high-reversed-9 quotation mark)
+// U+201C = " (left double quotation mark)
+// U+201D = " (right double quotation mark)
+// U+201E = „ (double low-9 quotation mark, German)
+// U+201F = ‟ (double high-reversed-9 quotation mark)
+// U+2039 = ‹ (single left-pointing angle quotation mark)
+// U+203A = › (single right-pointing angle quotation mark)
+// U+00AB = « (left-pointing double angle quotation mark / guillemet)
+// U+00BB = » (right-pointing double angle quotation mark / guillemet)
+const PANDOC_SMART_QUOTES = "\\u{2018}\\u{2019}\\u{201A}\\u{201B}\\u{201C}\\u{201D}\\u{201E}\\u{201F}\\u{2039}\\u{203A}\\u{00AB}\\u{00BB}";
 
-const PANDOC_REGEX_STR = 
-         "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" + 
-    "(?:[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "]|['\\u{2018}\\u{2019}][\\p{L}\\p{N}])*";
+const PANDOC_REGEX_STR =
+         "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" +
+    "(?:[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "]|['\\u{2018}\\u{2019}][\\p{L}\\p{N}])*";
 
 module.exports = grammar({
     name: 'markdown',

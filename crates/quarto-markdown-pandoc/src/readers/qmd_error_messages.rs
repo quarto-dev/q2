@@ -84,8 +84,25 @@ fn error_diagnostic_from_parse_state(
 
     // Calculate byte offset and create proper locations using quarto-source-map utilities
     let byte_offset = calculate_byte_offset(&input_str, parse_state.row, parse_state.column);
-    // Clamp span_end to not exceed input length (can happen with EOF errors)
-    let span_end = (byte_offset + parse_state.size.max(1)).min(input_str.len());
+
+    // Calculate span_end by advancing parse_state.size characters (not bytes!) from byte_offset
+    // This is critical for handling multi-byte UTF-8 characters correctly
+    let span_end = {
+        let size = parse_state.size.max(1);
+        let substring = &input_str[byte_offset..];
+        let mut char_count = 0;
+        let mut byte_count = 0;
+
+        for ch in substring.chars() {
+            if char_count >= size {
+                break;
+            }
+            byte_count += ch.len_utf8();
+            char_count += 1;
+        }
+
+        (byte_offset + byte_count).min(input_str.len())
+    };
 
     // Use quarto_source_map::utils::offset_to_location to properly calculate locations
     let start_location = quarto_source_map::utils::offset_to_location(&input_str, byte_offset)
@@ -140,7 +157,25 @@ fn error_diagnostic_from_parse_state(
                             // Calculate the byte offset for this token
                             let mut token_byte_offset =
                                 calculate_byte_offset(&input_str, token.row, token.column);
-                            let token_span_end = token_byte_offset + token.size.max(1);
+
+                            // Calculate token_span_end by advancing token.size characters (not bytes!)
+                            // This is critical for handling multi-byte UTF-8 characters correctly
+                            let token_span_end = {
+                                let size = token.size.max(1);
+                                let substring = &input_str[token_byte_offset..];
+                                let mut char_count = 0;
+                                let mut byte_count = 0;
+
+                                for ch in substring.chars() {
+                                    if char_count >= size {
+                                        break;
+                                    }
+                                    byte_count += ch.len_utf8();
+                                    char_count += 1;
+                                }
+
+                                (token_byte_offset + byte_count).min(input_str.len())
+                            };
 
                             // Create SourceInfo for this token location
                             // Use from_range to create an Original SourceInfo since the token
@@ -219,33 +254,54 @@ fn error_diagnostic_from_parse_state(
 }
 
 fn calculate_byte_offset(input: &str, row: usize, column: usize) -> usize {
+    // Tree-sitter reports column as a BYTE offset within the line, not a character offset
     let mut current_row = 0;
-    let mut current_col = 0;
+    let mut byte_offset = 0;
 
-    for (i, ch) in input.char_indices() {
-        if current_row == row && current_col == column {
-            return i;
+    for ch in input.chars() {
+        // Check if we've reached the target position
+        if current_row == row && byte_offset >= column {
+            // column is a byte offset within the current line
+            // We need to find the exact byte position
+            break;
         }
 
         if ch == '\n' {
-            current_col += 1;
-            // Check if the target is at the newline position (end of line)
-            if current_row == row && current_col == column {
-                return i;
+            byte_offset += ch.len_utf8();
+            // Check if target is at newline
+            if current_row == row && byte_offset >= column {
+                break;
             }
             current_row += 1;
-            current_col = 0;
+            // Reset byte offset to 0 for the new line... but wait, tree-sitter
+            // columns are within-line offsets, so we need to track line starts
         } else {
-            current_col += 1;
+            byte_offset += ch.len_utf8();
         }
     }
 
-    // If we're looking for EOF position, return the length
-    if current_row == row && current_col == column {
-        return input.len();
+    // Actually, let's reconsider: tree-sitter column is byte offset WITHIN THE LINE
+    // So we need to find the start of the target row, then add column bytes
+    let mut current_row = 0;
+    let mut line_start_offset = 0;
+
+    for (i, ch) in input.char_indices() {
+        if ch == '\n' {
+            if current_row == row {
+                // Found the target row, column is byte offset from line_start_offset
+                return (line_start_offset + column).min(i);
+            }
+            current_row += 1;
+            line_start_offset = i + ch.len_utf8();
+        }
     }
 
-    // If we couldn't find the position, clamp to EOF
+    // If we're on the last line (no trailing newline) or at EOF
+    if current_row == row {
+        return (line_start_offset + column).min(input.len());
+    }
+
+    // Couldn't find the position, clamp to EOF
     input.len()
 }
 
