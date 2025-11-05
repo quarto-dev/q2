@@ -3,6 +3,8 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use std::collections::HashSet;
+
 use crate::utils::tree_sitter_log_observer::ConsumedToken;
 use quarto_source_map::Location;
 use serde_json::json;
@@ -488,44 +490,53 @@ pub fn produce_json_error_messages(
 pub fn produce_error_message_json(
     tree_sitter_log: &crate::utils::tree_sitter_log_observer::TreeSitterLogObserver,
 ) -> Vec<String> {
+    let mut seen_errors: HashSet<(String, usize)> = HashSet::new();
+
     for parse in &tree_sitter_log.parses {
-        for (_, process_log) in &parse.processes {
-            if process_log.is_good() {
+        let process_log = parse.processes.get(&0).unwrap();
+        // for (_, process_log) in &parse.processes {
+        if process_log.is_good() {
+            continue;
+        }
+        let mut tokens: Vec<serde_json::Value> = vec![];
+        let mut error_states: Vec<serde_json::Value> = vec![];
+        for token in &parse.consumed_tokens {
+            tokens.push(serde_json::json!({
+                "row": token.row,
+                "column": token.column,
+                "size": token.size,
+                "lrState": token.lr_state,
+                "sym": token.sym,
+            }));
+        }
+        for state in process_log.error_states.iter() {
+            let parser_state = (state.sym.clone(), state.state);
+
+            if seen_errors.contains(&parser_state) && state.sym == "ERROR" {
                 continue;
             }
-            let mut tokens: Vec<serde_json::Value> = vec![];
-            let mut error_states: Vec<serde_json::Value> = vec![];
-            for token in &parse.consumed_tokens {
-                tokens.push(serde_json::json!({
-                    "row": token.row,
-                    "column": token.column,
-                    "size": token.size,
-                    "lrState": token.lr_state,
-                    "sym": token.sym,
-                }));
+            if state.sym != "ERROR" {
+                seen_errors.insert(parser_state);
             }
-            for state in process_log.error_states.iter() {
-                error_states.push(serde_json::json!({
-                    "state": state.state,
-                    "sym": state.sym,
-                    "row": state.row,
-                    "column": state.column,
-                }));
-            }
-
-            if error_states.len() > 0 {
-                // when erroring, produce the errors only for the
-                // first failing state.
-                return serde_json::to_string_pretty(&serde_json::json!({
-                    "tokens": tokens,
-                    "errorStates": error_states,
-                }))
-                .unwrap()
-                .lines()
-                .map(|s| s.to_string())
-                .collect();
-            }
+            error_states.push(serde_json::json!({
+                "state": state.state,
+                "sym": state.sym,
+                "row": state.row,
+                "column": state.column,
+            }));
         }
+
+        if error_states.len() == 0 {
+            panic!("We should have found an error");
+        }
+        return serde_json::to_string_pretty(&serde_json::json!({
+            "tokens": tokens,
+            "errorStates": error_states,
+        }))
+        .unwrap()
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
     }
     vec![]
 }

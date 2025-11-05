@@ -131,6 +131,10 @@
           "named": true
         },
         {
+          "type": "pandoc_line_break",
+          "named": true
+        },
+        {
           "type": "pandoc_math",
           "named": true
         },
@@ -263,6 +267,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {
@@ -459,6 +467,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {
@@ -695,6 +707,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {
@@ -1348,6 +1364,10 @@
           "named": true
         },
         {
+          "type": "pandoc_line_break",
+          "named": true
+        },
+        {
           "type": "pandoc_math",
           "named": true
         },
@@ -1431,6 +1451,21 @@
         },
         {
           "type": "target",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pandoc_line_break",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "block_continuation",
           "named": true
         }
       ]
@@ -1538,6 +1573,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {
@@ -1729,6 +1768,10 @@
           "named": true
         },
         {
+          "type": "pandoc_line_break",
+          "named": true
+        },
+        {
           "type": "pandoc_math",
           "named": true
         },
@@ -1861,6 +1904,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {
@@ -1999,6 +2046,10 @@
           "named": true
         },
         {
+          "type": "pandoc_line_break",
+          "named": true
+        },
+        {
           "type": "pandoc_math",
           "named": true
         },
@@ -2131,6 +2182,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {
@@ -2297,6 +2352,10 @@
         },
         {
           "type": "pandoc_image",
+          "named": true
+        },
+        {
+          "type": "pandoc_line_break",
           "named": true
         },
         {

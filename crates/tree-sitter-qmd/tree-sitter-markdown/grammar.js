@@ -1,11 +1,6 @@
 const common = require('../common/common');
 
-// obtained by a Python script that 'import unicodedata' and filtered out non-dollar signs from
-// \p{Sc}
-// const PANDOC_VALID_CURRENCY_SYMBOLS = "\\u{00A2}\\u{00A3}\\u{00A4}\\u{00A5}\\u{058F}\\u{060B}\\u{07FE}\\u{07FF}\\u{09F2}\\u{09F3}\\u{09FB}\\u{0AF1}\\u{0BF9}\\u{0E3F}\\u{17DB}\\u{20A0}-\\u{20C0}\\u{A838}\\u{FDFC}\\u{FE69}\\u{FF04}\\u{FFE0}\\u{FFE1}\\u{FFE5}\\u{FFE6}\\u{11FDD}-\\u{11FE0}\\u{1E2FF}\\u{1ECB0}";
-
-// Then we do the same thing for '|'
-
+// see tree-sitter-markdown/scripts/unicode-ranges.py
 // Sm (Math Symbol) - excluding <, >, |, and ~
 const PANDOC_VALID_MATH_SYMBOLS =
     "\u{002B}\u{003D}\u{00AC}\u{00B1}\u{00D7}\u{00F7}\u{03F6}\u{0606}-\u{0608}\u{2044}\u{2052}"
@@ -38,7 +33,7 @@ const PANDOC_VALID_SYMBOLS =
     PANDOC_VALID_CURRENCY_SYMBOLS;
 
 const PANDOC_ALPHA_NUM = "0-9A-Za-z\\p{L}\\p{N}";
-const PANDOC_PUNCTUATION = "\\p{Pd}%&()/:+\\u{2026}";
+const PANDOC_PUNCTUATION = "\\p{Pd}#%&()/:+\\u{2026}";
 
 const PANDOC_REGEX_STR = 
          "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" + 
@@ -270,7 +265,7 @@ module.exports = grammar({
         // inline nodes
 
         entity_reference: $ => common.html_entity_regex(),
-        numeric_character_reference: $ => /&#([0-9]{1,7}|[xX][0-9a-fA-F]{1,6});/,
+        numeric_character_reference: $ => token(prec(2, /&#([0-9]{1,7}|[xX][0-9a-fA-F]{1,6});/)),
 
         _inlines: $ => prec.right(seq(
             $._line,
@@ -475,6 +470,7 @@ module.exports = grammar({
 
             $._prose_punctuation,
             $.html_element,
+            $.pandoc_line_break,
             alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
@@ -775,6 +771,8 @@ module.exports = grammar({
             $._soft_line_ending,
             optional($.block_continuation)
         ),
+
+        pandoc_line_break: $ => seq(/\\/, choice($._newline, $._eof)),
 
         _inline_whitespace: $ => choice($._whitespace, $._soft_line_break),
         _whitespace: $ => /[ \t]+/,

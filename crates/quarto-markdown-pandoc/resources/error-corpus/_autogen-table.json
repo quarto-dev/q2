@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1069,
+    "state": 1188,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 539,
+          "lrState": 530,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2430,
+    "state": 2404,
     "sym": "shortcode_naked_string_token1",
     "errorInfo": {
       "code": "Q-2-3",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2209,
+          "lrState": 2291,
           "row": 0,
           "size": 3,
           "sym": "key_value_key",
@@ -48,7 +48,7 @@
         },
         {
           "column": 14,
-          "lrState": 2281,
+          "lrState": 2317,
           "row": 0,
           "size": 5,
           "sym": "key_value_value",
@@ -69,7 +69,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2129,
+    "state": 2179,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-2",
@@ -78,7 +78,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2129,
+          "lrState": 2179,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -98,7 +98,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 568,
+    "state": 556,
     "sym": "ERROR",
     "errorInfo": {
       "code": "Q-2-5",
@@ -107,7 +107,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 696,
+          "lrState": 698,
           "row": 0,
           "size": 2,
           "sym": "emphasis_delimiter",
@@ -128,7 +128,7 @@
   {
     "column": 3,
     "row": 0,
-    "state": 2933,
+    "state": 3168,
     "sym": "{",
     "errorInfo": {
       "code": "Q-2-4",
@@ -137,7 +137,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 2933,
+          "lrState": 3168,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",
@@ -145,7 +145,7 @@
         },
         {
           "column": 3,
-          "lrState": 2129,
+          "lrState": 2179,
           "row": 0,
           "size": 1,
           "sym": "{",

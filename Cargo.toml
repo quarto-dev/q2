@@ -2,7 +2,7 @@
 members = [
     "crates/*",
     "crates/quarto-markdown-pandoc/fuzz",
-    "private-crates/*", "test-unicode",
+    "private-crates/*",
 ]
 resolver = "2"
 

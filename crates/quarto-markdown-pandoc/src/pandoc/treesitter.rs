@@ -601,6 +601,12 @@ fn native_visitor<T: Write>(
                 }))
             }
         }
+        "pandoc_line_break" => {
+            // Explicit backslash-newline line break
+            PandocNativeIntermediate::IntermediateInline(Inline::LineBreak(LineBreak {
+                source_info: node_source_info_with_context(node, context),
+            }))
+        }
         "emphasis_delimiter" => {
             // This is a marker node, we don't need to process it
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))

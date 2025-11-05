@@ -38,3 +38,15 @@ Yes: this. And `this`: and _that_: too.
           (pandoc_str)
           (pandoc_space)
           (pandoc_str))))
+================================================================================
+paragraph.txt 3: hard line breaks
+================================================================================
+Hello\
+World
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_line_break)
+          (pandoc_str))))

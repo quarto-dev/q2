@@ -1,6 +1,8 @@
 To create a new reference doc based on the Pandoc default, execute the following command:
 
+```
     $ quarto pandoc -o custom-reference-doc.docx \
        --print-default-data-file reference.docx
+```
 
 Then, open `custom-reference-doc.docx` in MS Word and modify styles as you wish:

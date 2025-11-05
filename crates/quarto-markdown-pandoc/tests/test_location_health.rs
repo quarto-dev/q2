@@ -1022,6 +1022,7 @@ mod tests {
         for entry in fs::read_dir(smoke_dir).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
+            eprintln!("{}", path.to_str().unwrap());
 
             if path.extension().and_then(|s| s.to_str()) == Some("qmd") {
                 file_count += 1;
