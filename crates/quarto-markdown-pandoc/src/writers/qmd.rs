@@ -459,14 +459,13 @@ fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::
 
     // Write language/attributes if they exist
     let (id, classes, keyvals) = &codeblock.attr;
-    if !classes.is_empty() {
-        // First class is typically the language
+
+    // Only write language as bare word if it's a single class with no other attributes
+    if classes.len() == 1 && id.is_empty() && keyvals.is_empty() {
+        // Single class, no other attributes: write as bare word
         write!(buf, "{}", classes[0])?;
-        // Additional classes and attributes could be added here
-    }
-    if !id.is_empty() || classes.len() > 1 || !keyvals.is_empty() {
-        // If there are additional attributes, write them
-        write!(buf, " ")?;
+    } else if !id.is_empty() || !classes.is_empty() || !keyvals.is_empty() {
+        // Has attributes: write full attribute block (no space before it)
         write_attr(&codeblock.attr, buf)?;
     }
 
