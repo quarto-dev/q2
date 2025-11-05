@@ -35,6 +35,10 @@ pub fn process_document(
                     ),
                 }));
             }
+            PandocNativeIntermediate::IntermediateUnknown(_) => {
+                // Skip unknown nodes - these occur when tree-sitter encounters parse errors
+                // The parse errors are already reported via the log observer
+            }
             _ => panic!("Expected Block or Section, got {:?}", child),
         }
     });

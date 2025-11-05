@@ -1,0 +1,199 @@
+================================================================================
+1
+================================================================================
+* hello
+* world
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+2
+================================================================================
+* hello
+  * nested
+  * world
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation)))
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str))))))))
+================================================================================
+3
+================================================================================
+* hello
+  * a $$display math with a
+      * b$$
+  * and then more lists
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_display_math)
+                  (block_continuation)))
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str)
+                  (pandoc_space)
+                  (pandoc_str))))))))
+================================================================================
+4
+================================================================================
+1. item
+2. item
+3. item
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+5 (list should end after blank line when followed by non-indented content)
+================================================================================
+- a
+
+b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+6 (list with blank line followed by indented content - two paragraphs in one item)
+================================================================================
+- a
+
+  b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+7 (list with indented blank line followed by indented content)
+================================================================================
+- a
+  
+  b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)
+          (block_continuation))
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+8 (list with blank line followed by new list marker - should be one list with two items)
+================================================================================
+- a
+
+- b
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_list
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str)))
+      (list_item
+        (list_marker_minus)
+        (pandoc_paragraph
+          (pandoc_str))))))
+================================================================================
+9
+================================================================================
+1. a
+
+2. b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
+================================================================================
+10
+================================================================================
+1. a
+   b
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_soft_break)
+              (pandoc_str))))))

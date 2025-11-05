@@ -33,7 +33,7 @@ pub fn process_note_definition_para(
             } else {
                 panic!("Expected BaseText in ref_id_specifier, got {:?}", child);
             }
-        } else if node_name == "paragraph" {
+        } else if node_name == "pandoc_paragraph" {
             if let PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(para)) = child {
                 content = para.content;
             } else {

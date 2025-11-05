@@ -1,0 +1,1 @@
+Colons should be allowed in the middle of _paragraphs_: this makes sense.

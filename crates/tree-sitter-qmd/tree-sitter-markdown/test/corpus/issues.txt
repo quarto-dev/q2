@@ -1,38 +1,36 @@
 ================================================================================
-#17 - Titles not detected after an empty inner list item (bullet point)
+#17 - Titles not detected after an empty inner list item (bullet point) (qmd will disallow empty list items)
 ================================================================================
 * a
   * b
-  *
+  * []
 
 
 # C
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (list
-      (list_item
-        (list_marker_star)
-        (paragraph
-          (inline)
-          (block_continuation))
-        (list
+    (document
+      (section
+        (pandoc_list
           (list_item
             (list_marker_star)
-            (paragraph
-              (inline)
-              (block_continuation)))
-          (list_item
-            (list_marker_star)
-            (block_continuation)
-            (block_continuation))))))
-  (section
-    (atx_heading
-      (atx_h1_marker)
-      (inline))))
-
+            (pandoc_paragraph
+              (pandoc_str)
+              (block_continuation))
+            (pandoc_list
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_str)
+                  (block_continuation)))
+              (list_item
+                (list_marker_star)
+                (pandoc_paragraph
+                  (pandoc_span)))))))
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str))))
 ================================================================================
 #33 - Fenced code block attributes
 ================================================================================
@@ -45,25 +43,23 @@
 ```
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (language_attribute
-        (language))
-      (block_continuation)
-      (code_fence_content
-        (block_continuation))
-      (fenced_code_block_delimiter))
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (commonmark_attribute)
-      (block_continuation)
-      (code_fence_content
-        (block_continuation))
-      (fenced_code_block_delimiter))))
-
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))))
 ================================================================================
 #72 -  Can't create list item after a list item with a newline and indent
 ================================================================================
@@ -73,24 +69,23 @@
 2. d
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (list
-      (list_item
-        (list_marker_dot)
-        (paragraph
-          (inline)))
-      (list_item
-        (list_marker_dot)
-        (paragraph
-          (inline
-            (block_continuation))))
-      (list_item
-        (list_marker_dot)
-        (paragraph
-          (inline))))))
-
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_soft_break)
+              (pandoc_str)))
+          (list_item
+            (list_marker_dot)
+            (pandoc_paragraph
+              (pandoc_str))))))
 ================================================================================
 #135 - Closing code block fence not recognized when it has trailing space
 ================================================================================
@@ -102,19 +97,19 @@ globalNS.method1(5, 10);
 @example
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (block_continuation)
-      (code_fence_content
-        (block_continuation)
-        (block_continuation))
-      (fenced_code_block_delimiter))
-    (paragraph
-      (inline))))
-
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)
+            (block_continuation))
+          (fenced_code_block_delimiter))
+        (pandoc_paragraph
+          (citation
+            (citation_delimiter)
+            (citation_id_author_in_text)))))
 ================================================================================
 Display math with list markers should remain a single paragraph
 ================================================================================
@@ -124,12 +119,10 @@ $$
 $$
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (paragraph
-      (inline))))
-
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))
 ================================================================================
 Display math with minus list marker should remain a single paragraph
 ================================================================================
@@ -139,12 +132,10 @@ a
 $$
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (paragraph
-      (inline))))
-
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))
 ================================================================================
 Display math with ordered list marker should remain a single paragraph
 ================================================================================
@@ -154,12 +145,10 @@ x
 $$
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (paragraph
-      (inline))))
-
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))
 ================================================================================
 Display math inside fenced div should parse correctly
 ================================================================================
@@ -170,13 +159,12 @@ $$hello$$
 :::
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (fenced_div_block
-      (block_continuation)
-      (block_continuation)
-      (paragraph
-        (inline)
-        (block_continuation))
-      (block_continuation))))
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_display_math)
+            (block_continuation))
+          (block_continuation))))

@@ -589,7 +589,7 @@ fn test_header_with_classes_has_attr_source() {
 
 #[test]
 fn test_div_with_id_has_attr_source() {
-    let input = ":::{#div-id}\nContent\n:::";
+    let input = "::: {#div-id}\nContent\n:::";
     let pandoc = parse_qmd(input);
 
     let Block::Div(div) = &pandoc.blocks[0] else {
@@ -614,7 +614,7 @@ fn test_div_with_id_has_attr_source() {
 
 #[test]
 fn test_div_with_classes_has_attr_source() {
-    let input = ":::{.callout .callout-note}\nContent\n:::";
+    let input = "::: {.callout .callout-note}\nContent\n:::";
     let pandoc = parse_qmd(input);
 
     let Block::Div(div) = &pandoc.blocks[0] else {

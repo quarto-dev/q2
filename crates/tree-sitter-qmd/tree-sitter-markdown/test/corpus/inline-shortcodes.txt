@@ -1,0 +1,236 @@
+================================================================================
+Simple 1
+================================================================================
+{{< call >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_delimiter)))))
+================================================================================
+Simple 2
+================================================================================
+{{< call 123 true "false" 'hello' >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_number)
+        (shortcode_naked_string)
+        (shortcode_string)
+        (shortcode_string)
+        (shortcode_delimiter)))))
+================================================================================
+Nested shortcode
+================================================================================
+{{< call {{< call >}} >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode
+          (shortcode_delimiter)
+          (shortcode_name)
+          (shortcode_delimiter))
+        (shortcode_delimiter)))))
+================================================================================
+Key-value
+================================================================================
+{{< call key=value >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (key_value_specifier
+          (key_value_key)
+          (key_value_value
+            (shortcode_naked_string)))
+        (shortcode_delimiter)))))
+================================================================================
+single-quoted string with single quotes inside
+================================================================================
+{{< video 'https://yo\'utube.to' >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_string)
+        (shortcode_delimiter)))))
+================================================================================
+double-quoted string with single quotes inside
+================================================================================
+{{< video "single 'quotes'" >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_string)
+        (shortcode_delimiter)))))
+================================================================================
+double-quoted string with double quotes inside
+================================================================================
+{{< video "https://yo\"utube.to" >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_string)
+        (shortcode_delimiter)))))
+================================================================================
+escaped shortcodes
+================================================================================
+{{{< call >}}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode_escaped
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_delimiter)))))
+================================================================================
+naked URL strings as positional parameters
+================================================================================
+{{< video https://youtube.to/q?k=v >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_naked_string)
+        (shortcode_delimiter)))))
+================================================================================
+unquoted identifier as positional parameter
+================================================================================
+{{< meta my-key >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_naked_string)
+        (shortcode_delimiter)))))
+================================================================================
+multiple unquoted identifiers as positional parameters
+================================================================================
+{{< include file.qmd section >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_naked_string)
+        (shortcode_naked_string)
+        (shortcode_delimiter)))))
+================================================================================
+key-value with whitespace before equals
+================================================================================
+{{< video src ="url" >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (key_value_specifier
+          (key_value_key)
+          (key_value_value
+            (shortcode_string)))
+        (shortcode_delimiter)))))
+================================================================================
+multiple key-value parameters
+================================================================================
+{{< video src="url" width=500 >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (key_value_specifier
+          (key_value_key)
+          (key_value_value
+            (shortcode_string)))
+        (key_value_specifier
+          (key_value_key)
+          (key_value_value
+            (shortcode_number)))
+        (shortcode_delimiter)))))
+================================================================================
+mixed positional and keyword parameters
+================================================================================
+{{< video "url" width=500 autoplay=true >}}
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (shortcode
+        (shortcode_delimiter)
+        (shortcode_name)
+        (shortcode_string)
+        (key_value_specifier
+          (key_value_key)
+          (key_value_value
+            (shortcode_number)))
+        (key_value_specifier
+          (key_value_key)
+          (key_value_value
+            (shortcode_naked_string)))
+        (shortcode_delimiter)))))

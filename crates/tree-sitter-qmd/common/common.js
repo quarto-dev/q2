@@ -179,3 +179,5 @@ function html_entity_regex() {
     s += ');';
     return new RegExp(s);
 }
+
+module.exports.html_entity_regex = html_entity_regex;

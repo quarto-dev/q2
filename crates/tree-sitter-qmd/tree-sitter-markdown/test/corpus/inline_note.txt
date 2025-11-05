@@ -1,0 +1,18 @@
+================================================================================
+1
+================================================================================
+A note^[A footnote.].
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (inline_note
+            (inline_note_delimiter)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (inline_note_delimiter))
+          (pandoc_str))))

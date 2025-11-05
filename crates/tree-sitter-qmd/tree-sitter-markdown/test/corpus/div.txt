@@ -1,0 +1,103 @@
+================================================================================
+div.txt: 1
+================================================================================
+::: {}
+
+hello
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
+================================================================================
+div.txt: 2
+================================================================================
+::: {#id}
+
+---
+inner_for_real: now
+---
+
+More stuff.
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (block_continuation)
+          (metadata)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
+================================================================================
+div.txt: 3
+================================================================================
+::: {}
+h
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation)))))
+================================================================================
+div.txt: 4 Interruption closes blocks
+================================================================================
+::: {}
+- hello
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_list
+            (list_item
+              (list_marker_minus)
+              (pandoc_paragraph
+                (pandoc_str)
+                (block_continuation)))))))
+================================================================================
+div.txt: 5 Interruption closes many many blocks
+================================================================================
+::: {}
+- - - hello
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_list
+            (list_item
+              (list_marker_minus)
+              (pandoc_list
+                (list_item
+                  (list_marker_minus)
+                  (pandoc_list
+                    (list_item
+                      (list_marker_minus)
+                      (pandoc_paragraph
+                        (pandoc_str)
+                        (block_continuation)))))))))))

@@ -3,15 +3,13 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-//! This crate provides Markdown language support for the [tree-sitter][] parsing library.
+//! This crate provides Quarto Markdown language support for the [tree-sitter][] parsing library.
 //!
-//! It contains two grammars: [`LANGUAGE`] to parse the block structure of markdown documents and
-//! [`INLINE_LANGUAGE`] to parse inline content.
+//! It contains a unified grammar ([`LANGUAGE`]) that parses both the block structure and inline
+//! content of markdown documents in a single parse tree.
 //!
-//! It also supplies [`MarkdownParser`] as a convenience wrapper around the two grammars.
-//! [`MarkdownParser::parse`] returns a [`MarkdownTree`] instread of a [`Tree`][Tree]. This struct
-//! contains a block tree and an inline tree for each node in the block tree that has inline
-//! content.
+//! It supplies [`MarkdownParser`] as a convenience wrapper around the grammar.
+//! [`MarkdownParser::parse`] returns a [`MarkdownTree`] which contains the parsed syntax tree.
 //!
 //! [LanguageFn]: https://docs.rs/tree-sitter-language/*/tree_sitter_language/struct.LanguageFn.html
 //! [Tree]: https://docs.rs/tree-sitter/*/tree_sitter/struct.Tree.html
@@ -23,42 +21,23 @@ use tree_sitter_language::LanguageFn;
 
 unsafe extern "C" {
     fn tree_sitter_markdown() -> *const ();
-    fn tree_sitter_markdown_inline() -> *const ();
 }
 
-/// The tree-sitter [`LanguageFn`][LanguageFn] for the block grammar.
+/// The tree-sitter [`LanguageFn`][LanguageFn] for the unified markdown grammar.
+///
+/// This grammar handles both block structure and inline content in a single parse tree.
 pub const LANGUAGE: LanguageFn = unsafe { LanguageFn::from_raw(tree_sitter_markdown) };
 
-/// The tree-sitter [`LanguageFn`][LanguageFn] for the inline grammar.
-pub const INLINE_LANGUAGE: LanguageFn =
-    unsafe { LanguageFn::from_raw(tree_sitter_markdown_inline) };
+/// The syntax highlighting queries for the markdown grammar.
+pub const HIGHLIGHT_QUERY: &str = include_str!("../../tree-sitter-markdown/queries/highlights.scm");
 
-/// The syntax highlighting queries for the block grammar.
-pub const HIGHLIGHT_QUERY_BLOCK: &str =
-    include_str!("../../tree-sitter-markdown/queries/highlights.scm");
+/// The language injection queries for the markdown grammar.
+pub const INJECTION_QUERY: &str = include_str!("../../tree-sitter-markdown/queries/injections.scm");
 
-/// The language injection queries for the block grammar.
-pub const INJECTION_QUERY_BLOCK: &str =
-    include_str!("../../tree-sitter-markdown/queries/injections.scm");
-
-/// The syntax highlighting queries for the inline grammar.
-pub const HIGHLIGHT_QUERY_INLINE: &str =
-    include_str!("../../tree-sitter-markdown-inline/queries/highlights.scm");
-
-/// The language injection queries for the inline grammar.
-pub const INJECTION_QUERY_INLINE: &str =
-    include_str!("../../tree-sitter-markdown-inline/queries/injections.scm");
-
-/// The content of the [`node-types.json`][] file for the block grammar.
+/// The content of the [`node-types.json`][] file for the markdown grammar.
 ///
 /// [`node-types.json`]: https://tree-sitter.github.io/tree-sitter/using-parsers#static-node-types
-pub const NODE_TYPES_BLOCK: &str = include_str!("../../tree-sitter-markdown/src/node-types.json");
-
-/// The content of the [`node-types.json`][] file for the inline grammar.
-///
-/// [`node-types.json`]: https://tree-sitter.github.io/tree-sitter/using-parsers#static-node-types
-pub const NODE_TYPES_INLINE: &str =
-    include_str!("../../tree-sitter-markdown-inline/src/node-types.json");
+pub const NODE_TYPES: &str = include_str!("../../tree-sitter-markdown/src/node-types.json");
 
 mod parser;
 
@@ -69,18 +48,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn can_load_block_grammar() {
+    fn can_load_grammar() {
         let mut parser = tree_sitter::Parser::new();
         parser
             .set_language(&LANGUAGE.into())
-            .expect("Error loading Markdown block grammar");
-    }
-
-    #[test]
-    fn can_load_inline_grammar() {
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&INLINE_LANGUAGE.into())
-            .expect("Error loading Markdown inline grammar");
+            .expect("Error loading Markdown grammar");
     }
 }

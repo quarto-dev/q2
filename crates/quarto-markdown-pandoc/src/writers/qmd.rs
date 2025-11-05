@@ -346,13 +346,27 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
             // Add blank line between items in loose lists
             writeln!(buf)?;
         }
-        let mut item_writer = BulletListContext::new(buf);
-        for (j, block) in item.iter().enumerate() {
-            if j > 0 && !is_tight {
-                // Add a blank line between blocks within a list item in loose lists
-                writeln!(&mut item_writer)?;
+
+        // Check if this is an empty list item (single Plain/Para block with empty content)
+        let is_empty_item = item.len() == 1
+            && match &item[0] {
+                Block::Plain(plain) => plain.content.is_empty(),
+                Block::Paragraph(para) => para.content.is_empty(),
+                _ => false,
+            };
+
+        if is_empty_item {
+            // Write "* []" for empty list items
+            writeln!(buf, "* []")?;
+        } else {
+            let mut item_writer = BulletListContext::new(buf);
+            for (j, block) in item.iter().enumerate() {
+                if j > 0 && !is_tight {
+                    // Add a blank line between blocks within a list item in loose lists
+                    writeln!(&mut item_writer)?;
+                }
+                write_block(block, &mut item_writer)?;
             }
-            write_block(block, &mut item_writer)?;
         }
     }
     Ok(())
@@ -745,21 +759,32 @@ fn reverse_smart_quotes(text: &str) -> String {
 }
 
 // Helper function to escape special markdown characters
-// This follows Pandoc's escaping rules for text strings
+// This follows Pandoc's escaping strategy: escape characters that have special
+// markdown meaning to ensure proper roundtripping (qmd -> AST -> qmd).
+// We escape characters defensively when they could trigger markdown syntax.
 fn escape_markdown(text: &str) -> String {
     let mut result = String::new();
     for ch in text.chars() {
         match ch {
-            // Backslash must be escaped first (conceptually)
-            // But since we're processing char by char, we just escape it when we see it
-            '\\' => result.push_str("\\\\"),
-            // Greater-than sign must be escaped to avoid blockquote interpretation
-            '>' => result.push_str("\\>"),
-            // Less-than sign must be escaped to avoid html comment, raw specifier etc interpretation
-            '<' => result.push_str("\\<"),
-            // Hash must be escaped to avoid header interpretation
-            '#' => result.push_str("\\#"),
-            // Other characters pass through unchanged
+            // Characters that must be escaped to avoid triggering markdown syntax:
+            '\\' => result.push_str("\\\\"), // Escape character itself
+            '<' => result.push_str("\\<"),   // HTML tags, autolinks
+            '>' => result.push_str("\\>"),   // Blockquotes (at line start)
+            '#' => result.push_str("\\#"),   // Headers (at line start)
+            '$' => result.push_str("\\$"),   // Math delimiters
+            '*' => result.push_str("\\*"),   // Emphasis, strong, lists
+            '_' => result.push_str("\\_"),   // Emphasis, strong
+            '[' => result.push_str("\\["),   // Links
+            ']' => result.push_str("\\]"),   // Links
+            '`' => result.push_str("\\`"),   // Code spans
+            '|' => result.push_str("\\|"),   // Tables
+            '~' => result.push_str("\\~"),   // Subscript, strikeout
+            '^' => result.push_str("\\^"),   // Superscript
+
+            // Characters that don't need escaping in most contexts:
+            // . , - + ! ? @ = : ; / ( ) { } % & ' "
+            // These are only special in very specific contexts and escaping them
+            // everywhere would make output unnecessarily verbose.
             _ => result.push(ch),
         }
     }

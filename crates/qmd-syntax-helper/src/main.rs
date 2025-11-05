@@ -1,7 +1,8 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use tempfile::NamedTempFile;
 
 mod conversions;
 mod diagnostics;
@@ -66,6 +67,14 @@ enum Commands {
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
+
+        /// Maximum iterations for fixing (default: 10)
+        #[arg(long, default_value = "10")]
+        max_iterations: usize,
+
+        /// Disable iterative fixing (run each rule once, like old behavior)
+        #[arg(long)]
+        no_iteration: bool,
     },
 
     /// List all available rules
@@ -182,42 +191,116 @@ fn main() -> Result<()> {
             in_place,
             check: check_mode,
             verbose,
+            max_iterations,
+            no_iteration,
         } => {
             let file_paths = expand_globs(&files)?;
             let rules = resolve_rules(&registry, &rule_names)?;
+            let max_iter = if no_iteration { 1 } else { max_iterations };
 
             for file_path in file_paths {
                 if verbose {
                     println!("Processing: {}", file_path.display());
                 }
 
-                // Apply fixes sequentially, reparsing between each rule
-                for rule in &rules {
-                    match rule.convert(&file_path, in_place, check_mode, verbose) {
-                        Ok(result) => {
-                            if result.fixes_applied > 0 {
-                                if verbose || check_mode {
-                                    println!(
-                                        "  {} {} - {}",
-                                        if check_mode { "Would fix" } else { "Fixed" },
-                                        rule.name(),
-                                        result.message.clone().unwrap_or_default()
-                                    );
-                                }
+                // Create temporary working copy
+                let temp_file = create_temp_copy(&file_path)?;
+                let temp_path = temp_file.path().to_path_buf();
 
-                                if !in_place && !check_mode && result.message.is_some() {
-                                    // Output to stdout if not in-place
-                                    print!("{}", result.message.unwrap());
+                // Iteration loop
+                let mut iteration = 0;
+                let mut total_fixes_for_file = 0;
+                let mut prev_fixes = 0;
+                let mut oscillation_count = 0;
+                let mut show_iteration_details = false;
+
+                loop {
+                    iteration += 1;
+                    let mut fixes_this_iteration = 0;
+
+                    // Show iteration header if we're showing details
+                    if show_iteration_details && verbose {
+                        println!("  Iteration {}:", iteration);
+                    }
+
+                    // Apply all rules to temp file (always in_place=true, check_mode=false on temp)
+                    // We always write to temp since it's temporary; finalize_temp_file handles check_mode
+                    for rule in &rules {
+                        match rule.convert(&temp_path, true, false, verbose) {
+                            Ok(mut result) => {
+                                if result.fixes_applied > 0 {
+                                    fixes_this_iteration += result.fixes_applied;
+                                    total_fixes_for_file += result.fixes_applied;
+
+                                    // Override file_path in result for user-facing reporting
+                                    result.file_path = file_path.to_string_lossy().to_string();
+
+                                    // Show rule progress
+                                    if verbose || check_mode {
+                                        let prefix = if show_iteration_details { "    " } else { "  " };
+                                        println!(
+                                            "{}{} {} - {}",
+                                            prefix,
+                                            if check_mode { "Would fix" } else { "Fixed" },
+                                            rule.name(),
+                                            result.message.clone().unwrap_or_default()
+                                        );
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            eprintln!("  {} Error converting {}: {}", "✗".red(), rule.name(), e);
-                            // Stop on first error (transactional)
-                            return Err(e);
+                            Err(e) => {
+                                eprintln!("  {} Error converting {}: {}", "✗".red(), rule.name(), e);
+                                drop(temp_file); // Clean up temp
+                                return Err(e);
+                            }
                         }
                     }
+
+                    // Check for convergence
+                    if fixes_this_iteration == 0 {
+                        if verbose && show_iteration_details {
+                            println!("  Converged after {} iteration(s) ({} total fixes)",
+                                     iteration, total_fixes_for_file);
+                        }
+                        break;
+                    }
+
+                    // Oscillation detection - only trigger if we've been stuck for many iterations
+                    // Making steady progress (same # of fixes each time) is OK
+                    if fixes_this_iteration == prev_fixes && iteration > 5 {
+                        oscillation_count += 1;
+                        if oscillation_count >= 3 {
+                            eprintln!(
+                                "  {} Warning: Possible oscillation detected (same fix count for {} consecutive iterations)",
+                                "⚠".yellow(), oscillation_count + 1
+                            );
+                            eprintln!("  Stopping iteration to prevent infinite loop");
+                            break;
+                        }
+                    } else {
+                        oscillation_count = 0;
+                    }
+                    prev_fixes = fixes_this_iteration;
+
+                    // Check max iterations
+                    if iteration >= max_iter {
+                        if !no_iteration {
+                            eprintln!(
+                                "  {} Warning: Reached max iterations ({}), but file may still have issues",
+                                "⚠".yellow(), max_iter
+                            );
+                        }
+                        break;
+                    }
+
+                    // From iteration 2 onwards, show detailed iteration info
+                    if iteration == 1 && !no_iteration && fixes_this_iteration > 0 {
+                        show_iteration_details = true;
+                    }
                 }
+
+                // Finalize: copy temp to original or print to stdout
+                finalize_temp_file(temp_file, &file_path, in_place, check_mode)?;
             }
 
             Ok(())
@@ -247,6 +330,55 @@ fn resolve_rules(
         }
         Ok(rules)
     }
+}
+
+/// Create a temporary copy of a file in the same directory
+fn create_temp_copy(file_path: &Path) -> Result<NamedTempFile> {
+    // Create temp file in same directory as original (enables atomic rename)
+    let parent = file_path.parent().unwrap_or(Path::new("."));
+    let temp = tempfile::Builder::new()
+        .prefix(".qmd-syntax-helper.")
+        .suffix(".tmp")
+        .tempfile_in(parent)?;
+
+    // Copy original content to temp
+    let original_content = std::fs::read_to_string(file_path)?;
+    std::fs::write(temp.path(), original_content)?;
+
+    Ok(temp)
+}
+
+/// Finalize the temp file based on mode
+fn finalize_temp_file(
+    temp: NamedTempFile,
+    original_path: &Path,
+    in_place: bool,
+    check_mode: bool,
+) -> Result<()> {
+    if check_mode {
+        // Check mode: just drop temp (auto-deleted)
+        drop(temp);
+        return Ok(());
+    }
+
+    if in_place {
+        // Preserve original permissions before persisting
+        let metadata = std::fs::metadata(original_path)?;
+        let permissions = metadata.permissions();
+        std::fs::set_permissions(temp.path(), permissions)?;
+
+        // Atomic rename temp → original
+        temp.persist(original_path)?;
+    } else {
+        // Print final content to stdout
+        let final_content = std::fs::read_to_string(temp.path())?;
+        print!("{}", final_content);
+
+        // Temp auto-deleted on drop
+        drop(temp);
+    }
+
+    Ok(())
 }
 
 fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {

@@ -1,0 +1,313 @@
+================================================================================
+Just text
+================================================================================
+Hello world
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+Code span
+================================================================================
+`Hello world`
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+================================================================================
+star emphasis
+================================================================================
+*Hello world*
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+================================================================================
+star strong emphasis
+================================================================================
+**Hello world**
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_strong
+        (strong_emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (strong_emphasis_delimiter)))))
+================================================================================
+underline emphasis
+================================================================================
+_Hello world_
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+================================================================================
+superscript
+================================================================================
+Hello^world^
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (superscript_delimiter)))))
+================================================================================
+subscript
+================================================================================
+Hello~world~
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_subscript
+        (subscript_delimiter)
+        (pandoc_str)
+        (subscript_delimiter)))))
+================================================================================
+strikethrough
+================================================================================
+Hello ~~world~~
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_strikeout
+        (strikeout_delimiter)
+        (pandoc_str)
+        (strikeout_delimiter)))))
+================================================================================
+link
+================================================================================
+[Hello world](https://example.com)
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_span
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (target
+          (url))))))
+================================================================================
+image
+================================================================================
+![Hello world](https://example.com/image.png)
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_image
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (target
+          (url))))))
+================================================================================
+quotes
+================================================================================
+'Hello world'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (single_quote)))))
+================================================================================
+double quotes
+================================================================================
+"Hello world"
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_double_quote
+        (double_quote)
+        (content
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (double_quote)))))
+================================================================================
+Nested quotes 1
+================================================================================
+'Hello "world"'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str)
+          (pandoc_double_quote
+            (double_quote)
+            (content
+              (pandoc_str))
+            (double_quote)))
+        (single_quote)))))
+================================================================================
+Nested quotes 2
+================================================================================
+"Hello 'world'"
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_double_quote
+        (double_quote)
+        (content
+          (pandoc_str)
+          (pandoc_single_quote
+            (single_quote)
+            (content
+              (pandoc_str))
+            (single_quote)))
+        (double_quote)))))
+================================================================================
+code span with braces inside, inline-executable style
+================================================================================
+`{r} cat("Hello world")`
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter)))))
+================================================================================
+nested spans
+================================================================================
+[a nested [span]{.plox}]{.no}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_span
+                (content
+                  (pandoc_str))
+                (attribute_specifier
+                  (commonmark_specifier
+                    (attribute_class)))))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_class)))))))
+================================================================================
+Mixed nested spans
+================================================================================
+`hel*lo` and *emph*
+
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_code_span
+        (code_span_delimiter)
+        (content)
+        (code_span_delimiter))
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_emph
+        (emphasis_delimiter)
+        (pandoc_str)
+        (emphasis_delimiter)))))
+================================================================================
+cites with dashes
+================================================================================
+see @fig-1
+
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (citation
+        (citation_delimiter)
+        (citation_id_author_in_text)))))
+================================================================================
+back-to-back star emphases
+================================================================================
+**a** **b**
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter))
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter)))))

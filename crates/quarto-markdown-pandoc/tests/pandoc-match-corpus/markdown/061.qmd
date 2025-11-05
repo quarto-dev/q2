@@ -1,0 +1,6 @@
+This is line one\
+and this is line two.
+
+Another paragraph with\
+explicit line\
+breaks.

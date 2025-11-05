@@ -1,0 +1,32 @@
+================================================================================
+basic inline footnote
+================================================================================
+^[note]
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (inline_note
+        (inline_note_delimiter)
+        (pandoc_str)
+        (inline_note_delimiter)))))
+================================================================================
+nested inline footnotes
+================================================================================
+^[note^[nested]]
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (inline_note
+        (inline_note_delimiter)
+        (pandoc_str)
+        (inline_note
+          (inline_note_delimiter)
+          (pandoc_str)
+          (inline_note_delimiter))
+        (inline_note_delimiter)))))

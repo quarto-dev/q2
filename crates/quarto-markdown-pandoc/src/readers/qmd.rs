@@ -3,8 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::errors;
-use crate::errors::parse_is_good;
+// Note: parse_is_good no longer used - log_observer.had_errors() handles parse errors
 use crate::filters::FilterReturn::Unchanged;
 use crate::filters::topdown_traverse;
 use crate::filters::{Filter, FilterReturn};
@@ -126,18 +125,11 @@ pub fn read<T: Write>(
         return Err(vec![diagnostic]);
     }
 
-    let errors = parse_is_good(&tree);
+    // Note: We no longer need to check parse_is_good(&tree) here because
+    // the log_observer.had_errors() check above already catches parse errors
+    // and produces better formatted diagnostics via produce_diagnostic_messages.
+    // The old parse_is_good check was causing duplicate error messages.
     print_whole_tree(&mut tree.walk(), &mut output_stream);
-    if !errors.is_empty() {
-        let mut cursor = tree.walk();
-        let mut diagnostics = Vec::new();
-        for error in errors {
-            cursor.goto_id(error);
-            let error_msg = errors::error_message(&mut cursor, &input_bytes);
-            diagnostics.push(quarto_error_reporting::generic_error!(error_msg));
-        }
-        return Err(diagnostics);
-    }
 
     // Create diagnostic collector and convert to Pandoc AST
     let mut error_collector = DiagnosticCollector::new();

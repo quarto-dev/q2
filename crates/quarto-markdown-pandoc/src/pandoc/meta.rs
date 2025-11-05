@@ -9,7 +9,6 @@ use crate::pandoc::location::empty_source_info;
 use crate::readers;
 use crate::{pandoc::RawBlock, utils::output::VerboseOutput};
 use hashlink::LinkedHashMap;
-use std::collections::HashMap;
 use std::{io, mem};
 use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser};
 
@@ -288,7 +287,7 @@ fn parse_yaml_string_as_markdown(
                     attr: (
                         String::new(),
                         vec!["yaml-markdown-syntax-error".to_string()],
-                        HashMap::new(),
+                        LinkedHashMap::new(),
                     ),
                     content: vec![Inline::Str(Str {
                         text: value.to_string(),
@@ -318,7 +317,7 @@ fn parse_yaml_string_as_markdown(
                     attr: (
                         String::new(),
                         vec!["yaml-markdown-syntax-error".to_string()],
-                        HashMap::new(),
+                        LinkedHashMap::new(),
                     ),
                     content: vec![Inline::Str(Str {
                         text: value.to_string(),
@@ -424,7 +423,7 @@ pub fn yaml_to_meta_with_source_info(
                     _ => {
                         // Other tags (!glob, !expr, etc.): Keep current behavior
                         // Wrap in Span with class "yaml-tagged-string" and tag attribute
-                        let mut attributes = HashMap::new();
+                        let mut attributes = LinkedHashMap::new();
                         attributes.insert("tag".to_string(), tag_suffix.clone());
 
                         let span = Span {
@@ -556,7 +555,7 @@ impl YamlEventHandler {
         // Check if this scalar has a YAML tag (like !path, !glob, !str)
         if let Some(t) = tag {
             // Tagged strings bypass markdown parsing - wrap in Span immediately
-            let mut attributes = HashMap::new();
+            let mut attributes = LinkedHashMap::new();
             attributes.insert("tag".to_string(), t.suffix.clone());
 
             let span = Span {
@@ -749,7 +748,7 @@ pub fn parse_metadata_strings_with_source_info(
                         attr: (
                             String::new(),
                             vec!["yaml-markdown-syntax-error".to_string()],
-                            HashMap::new(),
+                            LinkedHashMap::new(),
                         ),
                         content: vec![Inline::Str(Str {
                             text: value.clone(),
@@ -835,7 +834,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
                         attr: (
                             String::new(),
                             vec!["yaml-markdown-syntax-error".to_string()],
-                            HashMap::new(),
+                            LinkedHashMap::new(),
                         ),
                         content: vec![Inline::Str(Str {
                             text: s.clone(),

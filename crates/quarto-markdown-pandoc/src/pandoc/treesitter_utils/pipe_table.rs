@@ -15,9 +15,10 @@ use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
+use super::postprocess::trim_inlines;
 
 pub fn process_pipe_table_delimiter_cell(
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -110,35 +111,27 @@ pub fn process_pipe_table_cell(
         alignment: Alignment::Default,
         col_span: 1,
         row_span: 1,
-        attr: ("".to_string(), vec![], HashMap::new()),
+        attr: ("".to_string(), vec![], LinkedHashMap::new()),
         content: vec![],
         source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
     };
-    for (node, child) in children {
-        if node == "inline" {
-            match child {
-                PandocNativeIntermediate::IntermediateInlines(inlines) => {
-                    plain_content.extend(inlines);
-                }
-                _ => panic!("Expected Inlines in pipe_table_cell, got {:?}", child),
+    for (_node, child) in children {
+        match child {
+            PandocNativeIntermediate::IntermediateInline(inline) => {
+                plain_content.push(inline);
             }
-        } else {
-            panic!(
-                "Expected Inlines in pipe_table_cell, got {:?} {:?}",
-                node, child
-            );
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                plain_content.extend(inlines);
+            }
+            _ => {
+                // Skip other intermediate types (e.g., markers)
+            }
         }
     }
 
-    // Trim trailing spaces from cell content to match Pandoc behavior
-    while let Some(last) = plain_content.last() {
-        if matches!(last, crate::pandoc::inline::Inline::Space(_)) {
-            plain_content.pop();
-        } else {
-            break;
-        }
-    }
+    // Trim leading and trailing spaces from cell content to match Pandoc behavior
+    plain_content = trim_inlines(plain_content).0;
 
     table_cell.content.push(Block::Plain(Plain {
         content: plain_content,
@@ -152,11 +145,13 @@ pub fn process_pipe_table(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let attr = empty_attr();
+    let mut attr = empty_attr();
+    let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut header: Option<Row> = None;
     let mut colspec: Vec<ColSpec> = Vec::new();
     let mut rows: Vec<Row> = Vec::new();
     let mut caption_inlines: Option<Inlines> = None;
+    let mut caption_source_info: Option<quarto_source_map::SourceInfo> = None;
     for (node, child) in children {
         if node == "block_continuation" {
             continue; // skip block continuation nodes
@@ -188,7 +183,25 @@ pub fn process_pipe_table(
         } else if node == "caption" {
             match child {
                 PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(caption_block)) => {
-                    caption_inlines = Some(caption_block.content);
+                    let mut inlines = caption_block.content;
+                    // Store the caption's source info to extend the table's range
+                    caption_source_info = Some(caption_block.source_info.clone());
+
+                    // Extract Inline::Attr if present at the end (for soft-break captions)
+                    if let Some(crate::pandoc::inline::Inline::Attr(
+                        caption_attr,
+                        caption_attr_source,
+                    )) = inlines.last()
+                    {
+                        attr = caption_attr.clone();
+                        attr_source = caption_attr_source.clone();
+                        inlines.pop();
+
+                        // Trim trailing space before the attribute
+                        inlines = trim_inlines(inlines).0;
+                    }
+
+                    caption_inlines = Some(inlines);
                 }
                 _ => panic!("Expected CaptionBlock in caption, got {:?}", child),
             }
@@ -237,6 +250,40 @@ pub fn process_pipe_table(
         }
     };
 
+    // Calculate the table's source_info: if there's a caption, extend to include it
+    let table_source_info = if let Some(ref cap_info) = caption_source_info {
+        // Extend from start of table node to end of caption
+        let table_start = node_source_info_with_context(node, context);
+        let start_offset = table_start.start_offset();
+        let end_offset = cap_info.end_offset();
+        // Extract file_id from the table's source info
+        let file_id = match &table_start {
+            quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
+            quarto_source_map::SourceInfo::Substring { parent, .. } => {
+                // Recursively extract from parent (should always reach Original eventually)
+                match **parent {
+                    quarto_source_map::SourceInfo::Original { file_id, .. } => file_id,
+                    _ => quarto_source_map::FileId(0), // Fallback
+                }
+            }
+            quarto_source_map::SourceInfo::Concat { pieces } => {
+                // Use first piece's file_id
+                if let Some(piece) = pieces.first() {
+                    match &piece.source_info {
+                        quarto_source_map::SourceInfo::Original { file_id, .. } => *file_id,
+                        _ => quarto_source_map::FileId(0), // Fallback
+                    }
+                } else {
+                    quarto_source_map::FileId(0) // Fallback
+                }
+            }
+        };
+        // Create a new SourceInfo spanning from table start to caption end
+        quarto_source_map::SourceInfo::original(file_id, start_offset, end_offset)
+    } else {
+        node_source_info_with_context(node, context)
+    };
+
     PandocNativeIntermediate::IntermediateBlock(Block::Table(Table {
         attr,
         caption,
@@ -261,7 +308,7 @@ pub fn process_pipe_table(
             source_info: node_source_info_with_context(node, context),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
         },
-        source_info: node_source_info_with_context(node, context),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        source_info: table_source_info,
+        attr_source,
     }))
 }

@@ -19,17 +19,34 @@ pub fn process_caption(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut caption_inlines: Inlines = Vec::new();
+    let mut caption_attr: Option<(
+        crate::pandoc::attr::Attr,
+        crate::pandoc::attr::AttrSourceInfo,
+    )> = None;
 
     for (node_name, child) in children {
-        if node_name == "inline" {
-            match child {
-                PandocNativeIntermediate::IntermediateInlines(inlines) => {
-                    caption_inlines.extend(inlines);
+        match child {
+            PandocNativeIntermediate::IntermediateInline(inline) => {
+                caption_inlines.push(inline);
+            }
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                caption_inlines.extend(inlines);
+            }
+            PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
+                // Attributes from attribute_specifier nodes
+                if node_name == "attribute_specifier" {
+                    caption_attr = Some((attr, attr_source));
                 }
-                _ => panic!("Expected Inlines in caption, got {:?}", child),
+            }
+            _ => {
+                // Skip other nodes (colon marker, whitespace markers, etc.)
             }
         }
-        // Skip other nodes like ":", blank_line, etc.
+    }
+
+    // If we found an attribute, append it as Inline::Attr
+    if let Some((attr, attr_source)) = caption_attr {
+        caption_inlines.push(crate::pandoc::inline::Inline::Attr(attr, attr_source));
     }
 
     PandocNativeIntermediate::IntermediateBlock(Block::CaptionBlock(CaptionBlock {

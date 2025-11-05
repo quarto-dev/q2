@@ -82,7 +82,14 @@ impl DiagnosticCollector {
     }
 
     /// Consume the collector and return the diagnostics
-    pub fn into_diagnostics(self) -> Vec<DiagnosticMessage> {
+    pub fn into_diagnostics(mut self) -> Vec<DiagnosticMessage> {
+        // Sort diagnostics by file position (start offset)
+        self.diagnostics.sort_by_key(|diag| {
+            diag.location
+                .as_ref()
+                .map(|loc| loc.start_offset())
+                .unwrap_or(0)
+        });
         self.diagnostics
     }
 }

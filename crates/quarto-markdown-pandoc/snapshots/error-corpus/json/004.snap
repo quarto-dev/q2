@@ -63,5 +63,20 @@ expression: json_string
       "type": "markdown"
     },
     "title": "Parse error"
+  },
+  {
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 43,
+        "file_id": 0,
+        "start_offset": 43
+      }
+    },
+    "problem": {
+      "content": "unexpected character or token here",
+      "type": "markdown"
+    },
+    "title": "Parse error"
   }
 ]

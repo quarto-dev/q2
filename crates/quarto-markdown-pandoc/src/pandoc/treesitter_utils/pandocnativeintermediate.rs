@@ -28,6 +28,8 @@ pub enum PandocNativeIntermediate {
     IntermediateKeyValueSpec(Vec<(String, String, Range, Range)>),
     IntermediateRawFormat(String, Range),
     IntermediateShortcodeArg(ShortcodeArg, Range),
+    // Target for links and images: (url, title, url_range, title_range)
+    IntermediateTarget(String, String, Range, Range),
     IntermediateUnknown(Range),
     IntermediateListItem(Blocks, Range, Option<ListAttributes>),
     IntermediateOrderedListMarker(usize, Range),

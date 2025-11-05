@@ -15,6 +15,7 @@ use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
+use hashlink::LinkedHashMap;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -344,7 +345,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 if image.content.is_empty() {
                     return Unchanged(para);
                 }
-                let figure_attr: Attr = (image.attr.0.clone(), vec![], HashMap::new());
+                let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new());
                 let image_attr: Attr = ("".to_string(), image.attr.1.clone(), image.attr.2.clone());
 
                 // Split attr_source between figure and image
@@ -395,6 +396,51 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     FilterResult(vec![transform_definition_list_div(div)], false)
                 } else {
                     Unchanged(div)
+                }
+            })
+            // Remove single empty spans from bullet list items
+            // This allows `* []` to create truly empty list items in the AST
+            .with_bullet_list(|mut bullet_list| {
+                let mut changed = false;
+                for item in &mut bullet_list.content {
+                    // Check if item has exactly one block
+                    if item.len() == 1 {
+                        // Check if that block is Plain or Paragraph with single empty Span
+                        let should_clear = match &item[0] {
+                            Block::Plain(plain) => {
+                                plain.content.len() == 1
+                                    && matches!(&plain.content[0], Inline::Span(span)
+                                        if span.content.is_empty() && is_empty_attr(&span.attr))
+                            }
+                            Block::Paragraph(para) => {
+                                para.content.len() == 1
+                                    && matches!(&para.content[0], Inline::Span(span)
+                                        if span.content.is_empty() && is_empty_attr(&span.attr))
+                            }
+                            _ => false,
+                        };
+
+                        if should_clear {
+                            // Clear the content to make it truly empty
+                            match &mut item[0] {
+                                Block::Plain(plain) => {
+                                    plain.content.clear();
+                                    changed = true;
+                                }
+                                Block::Paragraph(para) => {
+                                    para.content.clear();
+                                    changed = true;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+
+                if changed {
+                    FilterResult(vec![Block::BulletList(bullet_list)], true)
+                } else {
+                    Unchanged(bullet_list)
                 }
             })
             // Fix table captions that were parsed as last row (no blank line before caption)
@@ -494,7 +540,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
             })
             .with_note_reference(|note_ref| {
-                let mut kv = HashMap::new();
+                let mut kv = LinkedHashMap::new();
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
                     vec![Inline::Span(Span {
@@ -797,6 +843,9 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 caption_attr = Some(attr.clone());
                                 caption_attr_source = Some(attr_source.clone());
                                 caption_content.pop(); // Remove the Attr from caption content
+
+                                // Trim trailing space before the attribute
+                                caption_content = trim_inlines(caption_content).0;
                             }
 
                             // If we found attributes in the caption, merge them with the table's attr

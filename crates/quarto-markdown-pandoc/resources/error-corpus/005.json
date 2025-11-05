@@ -6,15 +6,16 @@
         {
             "label": "emphasis-start",
             "row": 0,
-            "column": 11,
-            "size": 1
+            "column": 10,
+            "size": 2
         }
     ],
     "notes": [
         {
             "message": "This is the opening delimiter for the emphasis",
             "label": "emphasis-start",
-            "noteType": "simple"
+            "noteType": "simple",
+            "trimLeadingSpace": true
         }
     ]
 }

@@ -1,4 +1,24 @@
 ================================================================================
+Hello
+================================================================================
+Hello
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str))))
+================================================================================
+Hello World
+================================================================================
+Hello World
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
 Code blocks with language specifier
 ================================================================================
 
@@ -7,18 +27,16 @@ print(1)
 ```
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (language_attribute
-        (language))
-      (block_continuation)
-      (code_fence_content
-        (block_continuation))
-      (fenced_code_block_delimiter))))
-
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))))
 ================================================================================
 Code blocks with id, class and key-value pairs
 ================================================================================
@@ -28,22 +46,21 @@ print(1)
 ```
 
 --------------------------------------------------------------------------------
-
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (commonmark_attribute
-        (id_specifier)
-        (class_specifier)
-        (key_value_specifier
-          (key_value_key)
-          (key_value_value)))
-      (block_continuation)
-      (code_fence_content
-        (block_continuation))
-      (fenced_code_block_delimiter))))
-
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)
+              (attribute_class)
+              (key_value_specifier
+                (key_value_key)
+                (key_value_value))))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation))
+          (fenced_code_block_delimiter))))
 ================================================================================
 Fenced divs
 ================================================================================
@@ -54,15 +71,17 @@ Hello, world
 :::
 
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_div_block
-      (block_continuation)
-      (block_continuation)
-      (paragraph
-        (inline)
-        (block_continuation))
-      (block_continuation))))
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
 ================================================================================
 Fenced divs with a space at the closing fence
 ================================================================================
@@ -73,15 +92,17 @@ Hello, world
 ::: 
 
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_div_block
-      (block_continuation)
-      (block_continuation)
-      (paragraph
-        (inline)
-        (block_continuation))
-      (block_continuation))))
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
 ================================================================================
 Code block with a colon inside
 ================================================================================
@@ -89,26 +110,36 @@ Code block with a colon inside
 print(1:2)
 ```
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (language_attribute
-        (language))
-      (block_continuation)
-      (code_fence_content
-        (block_continuation)))))
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)))))
 ================================================================================
 A header with three colons inside
 ================================================================================
 # Header with three colons `:::`
 
 --------------------------------------------------------------------------------
-(document
-  (section
-    (atx_heading
-      (atx_h1_marker)
-      (inline))))
+    (document
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)))))
 ================================================================================
 A code cell with three colons at the beginning of a line
 ================================================================================
@@ -122,28 +153,46 @@ Your content
 :::
 ```
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (block_continuation)
-      (code_fence_content
-        (block_continuation)
-        (block_continuation)
-        (block_continuation)
-        (block_continuation)
-        (block_continuation)
-        (block_continuation)
-        (block_continuation)))))
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)
+            (block_continuation)))))
 ================================================================================
 A paragraph that starts with a colon
 ================================================================================
 \: This is a paragraph that starts with a colon.
 --------------------------------------------------------------------------------
-(document
-  (section
-    (paragraph
-      (inline))))
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
 ================================================================================
 Empty fenced div 1
 ================================================================================
@@ -151,25 +200,27 @@ Empty fenced div 1
 
 :::
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_div_block
-      (commonmark_attribute
-        (id_specifier))
-      (block_continuation)
-      (block_continuation))))
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (block_continuation))))
 ================================================================================
 Empty fenced div 2
 ================================================================================
 ::: {#hello}
 :::
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_div_block
-      (commonmark_attribute
-        (id_specifier))
-      (block_continuation))))
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation))))
 ================================================================================
 Nested empty fenced divs
 ================================================================================
@@ -178,17 +229,19 @@ Nested empty fenced divs
 :::
 :::
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_div_block
-      (commonmark_attribute
-        (id_specifier))
-      (block_continuation)
-      (fenced_div_block
-        (commonmark_attribute
-          (id_specifier))
-        (block_continuation)
-        (block_continuation)))))
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (pandoc_div
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)))
+            (block_continuation)
+            (block_continuation)))))
 ================================================================================
 A fenced div with a paragraph inside a bulleted list
 ================================================================================
@@ -197,17 +250,17 @@ A fenced div with a paragraph inside a bulleted list
 
   :::
 --------------------------------------------------------------------------------
-(document
-  (section
-    (list
-      (list_item
-        (list_marker_minus)
-        (fenced_div_block
-          (block_continuation)
-          (paragraph
-            (inline)
-            (block_continuation))
-          (block_continuation))))))
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_minus)
+            (pandoc_div
+              (attribute_specifier)
+              (block_continuation)
+              (pandoc_paragraph
+                (pandoc_str)
+                (block_continuation)))))))
 ================================================================================
 A code block with a single one-character class specifier
 ================================================================================
@@ -215,15 +268,16 @@ A code block with a single one-character class specifier
 printf("hello");
 ```
 --------------------------------------------------------------------------------
-(document
-  (section
-    (fenced_code_block
-      (fenced_code_block_delimiter)
-      (commonmark_attribute
-        (class_specifier))
-      (block_continuation)
-      (code_fence_content
-        (block_continuation)))))
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)))))
 ================================================================================
 Inline reference id definitions
 ================================================================================
@@ -232,14 +286,34 @@ Can we do soft breaks?
 
 And a new para?
 --------------------------------------------------------------------------------
-(document
-  (section
-    (inline_ref_def
-      (ref_id_specifier)
-      (paragraph
-        (inline)))
-    (paragraph
-      (inline))))
+    (document
+      (section
+        (inline_ref_def
+          (ref_id_specifier)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_soft_break)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
 ================================================================================
 Fenced block note definitions
 ================================================================================
@@ -249,18 +323,37 @@ This is a note with multiple blocks.
 Another paragraph in the note.
 :::
 --------------------------------------------------------------------------------
-(document
-  (section
-    (note_definition_fenced_block
-      (fenced_div_note_id)
-      (block_continuation)
-      (paragraph
-        (inline)
-        (block_continuation))
-      (block_continuation)
-      (paragraph
-        (inline)
-        (block_continuation)))))
+    (document
+      (section
+        (note_definition_fenced_block
+          (fenced_div_note_id)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation)))))
 ================================================================================
 Example list with (@) syntax
 ================================================================================
@@ -270,23 +363,27 @@ Example list with (@) syntax
 
 (@) Third item
 --------------------------------------------------------------------------------
-(document
-  (section
-    (list
-      (list_item
-        (list_marker_example)
-        (paragraph
-          (inline)
-          (block_continuation)))
-      (list_item
-        (list_marker_example)
-        (paragraph
-          (inline)
-          (block_continuation)))
-      (list_item
-        (list_marker_example)
-        (paragraph
-          (inline))))))
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)))
+          (list_item
+            (list_marker_example)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str))))))
 ================================================================================
 Multiple example lists separated by text
 ================================================================================
@@ -302,29 +399,40 @@ Some text in between.
 --------------------------------------------------------------------------------
 (document
   (section
-    (list
+    (pandoc_list
       (list_item
         (list_marker_example)
-        (paragraph
-          (inline)
-          (block_continuation)))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)))
       (list_item
         (list_marker_example)
-        (paragraph
-          (inline)
-          (block_continuation))))
-    (paragraph
-      (inline))
-    (list
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))
+    (pandoc_list
       (list_item
         (list_marker_example)
-        (paragraph
-          (inline)
-          (block_continuation)))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)))
       (list_item
         (list_marker_example)
-        (paragraph
-          (inline))))))
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))))
 ================================================================================
 Horizontal rules with blank lines should not be parsed as metadata
 ================================================================================
@@ -338,16 +446,22 @@ Second paragraph.
 
 Third paragraph.
 --------------------------------------------------------------------------------
-(document
-  (section
-    (paragraph
-      (inline))
-    (thematic_break)
-    (paragraph
-      (inline))
-    (thematic_break)
-    (paragraph
-      (inline))))
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pandoc_horizontal_rule)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (pandoc_horizontal_rule)
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
 ================================================================================
 YAML metadata block should still work
 ================================================================================
@@ -358,8 +472,10 @@ author: Someone
 
 Content paragraph.
 --------------------------------------------------------------------------------
-(document
-  (minus_metadata)
-  (section
-    (paragraph
-      (inline))))
+    (document
+      (metadata)
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))

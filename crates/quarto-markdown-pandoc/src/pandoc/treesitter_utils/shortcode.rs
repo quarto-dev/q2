@@ -160,6 +160,12 @@ pub fn process_shortcode(
             | ("shortcode_boolean", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _)) => {
                 positional_args.push(arg);
             }
+            ("key_value_specifier", PandocNativeIntermediate::IntermediateKeyValueSpec(specs)) => {
+                // Handle key-value pairs from key_value_specifier node
+                for (key, value, _, _) in specs {
+                    keyword_args.insert(key, ShortcodeArg::String(value));
+                }
+            }
             ("shortcode_delimiter", _) => {
                 // This is a marker node, we don't need to do anything with it
             }

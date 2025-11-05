@@ -172,19 +172,60 @@ fn main() {
     };
 
     let mut buf = Vec::new();
-    match args.to.as_str() {
-        "json" => writers::json::write(&pandoc, &context, &mut buf),
-        "native" => writers::native::write(&pandoc, &mut buf),
-        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
-        "html" => writers::html::write(&pandoc, &mut buf),
+    let writer_result = match args.to.as_str() {
+        "json" => writers::json::write(&pandoc, &context, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write JSON output: {}", e))
+                    .build(),
+            ]
+        }),
+        "native" => writers::native::write(&pandoc, &context, &mut buf),
+        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write QMD output: {}", e))
+                    .build(),
+            ]
+        }),
+        "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write HTML output: {}", e))
+                    .build(),
+            ]
+        }),
         #[cfg(feature = "terminal-support")]
-        "ansi" => writers::ansi::write(&pandoc, &mut buf),
+        "ansi" => writers::ansi::write(&pandoc, &mut buf).map_err(|e| {
+            vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write ANSI output: {}", e))
+                    .build(),
+            ]
+        }),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
-            return;
+            std::process::exit(1);
         }
+    };
+
+    if let Err(diagnostics) = writer_result {
+        // Format and output writer errors
+        if args.json_errors {
+            for diagnostic in diagnostics {
+                eprintln!("{}", diagnostic.to_json());
+            }
+        } else {
+            for diagnostic in diagnostics {
+                eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+            }
+        }
+        std::process::exit(1);
     }
-    .unwrap();
 
     // Write output to file or stdout
     if let Some(output_path) = args.output {

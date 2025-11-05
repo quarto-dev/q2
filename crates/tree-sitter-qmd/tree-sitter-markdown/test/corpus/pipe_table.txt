@@ -1,0 +1,425 @@
+================================================================================
+1
+================================================================================
+|a|b|
+|-|-|
+|c|d|
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str))
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))
+            (pipe_table_cell
+              (pandoc_str))))))
+================================================================================
+2 - note extra trailing spaces to be removed with postprocessor
+================================================================================
+| a |
+|---|
+| c |
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+3 - note extra trailing spaces to be removed with postprocessor
+================================================================================
+| a |
+|:-:|
+| c |
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell
+              (pipe_table_align_left)
+              (pipe_table_align_right)))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+Example 198 - https://github.github.com/gfm/#example-198
+================================================================================
+| foo | bar |
+| --- | --- |
+| baz | bim |
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+Example 199 - https://github.github.com/gfm/#example-199
+================================================================================
+| abc | defghi |
+:-: | -----------:
+bar | baz
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell
+              (pipe_table_align_left)
+              (pipe_table_align_right))
+            (pipe_table_delimiter_cell
+              (pipe_table_align_right)))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str))))))
+================================================================================
+Example 200 - https://github.github.com/gfm/#example-200
+================================================================================
+| f\|oo  |
+| ------ |
+| b `\|` az |
+| b **\|** im |
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_code_span
+                (code_span_delimiter)
+                (content)
+                (code_span_delimiter))
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_strong
+                (strong_emphasis_delimiter)
+                (pandoc_str)
+                (strong_emphasis_delimiter))
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+Example 201 - https://github.github.com/gfm/#example-201
+================================================================================
+| abc | def |
+| --- | --- |
+| bar | baz |
+
+> bar
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))))
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)))))
+================================================================================
+Example 205 - https://github.github.com/gfm/#example-205
+================================================================================
+| abc | def |
+| --- | --- |
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell)))))
+================================================================================
+#112 - Works with table cells that only contain whitespce
+================================================================================
+| foo | bar |
+| --- | --- |
+|     | bim |
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell)
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+#29 - Pipe table with backtick code containing pipe
+================================================================================
+| a | b |
+|---|---|
+| `|` | oh no |
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_code_span
+                (code_span_delimiter)
+                (content)
+                (code_span_delimiter))
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+Pipe table with latex span containing pipe
+================================================================================
+| a | b |
+|---|---|
+| $|$ | math |
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell)
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_math)
+              (pandoc_space))
+            (pipe_table_cell
+              (pandoc_str)
+              (pandoc_space))))))
+================================================================================
+Pipe table can precede content
+================================================================================
+|1|
+|-|
+|a|
+
+hi
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Pipe table can follow content
+================================================================================
+hi
+
+|1|
+|-|
+|a|
+
+hi
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Pipe table can precede content
+================================================================================
+|1|
+|-|
+|a|
+
+::: {.foo}
+
+bar
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_class)))
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (block_continuation))
+          (block_continuation))))
+================================================================================
+Pipe table with "soft-break caption"
+================================================================================
+|1|
+|-|
+|a|
+: caption
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str)))
+          (caption
+            (pandoc_str)))))
+================================================================================
+Pipe table with "blank-line caption" (NB it's a separate block)
+================================================================================
+|1|
+|-|
+|a|
+
+: caption
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pipe_table
+          (pipe_table_header
+            (pipe_table_cell
+              (pandoc_str)))
+          (pipe_table_delimiter_row
+            (pipe_table_delimiter_cell))
+          (pipe_table_row
+            (pipe_table_cell
+              (pandoc_str))))
+        (caption
+          (pandoc_str))))
+          

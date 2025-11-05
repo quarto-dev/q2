@@ -1,0 +1,58 @@
+================================================================================
+Basic
+================================================================================
+a^b^c
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (superscript_delimiter))
+      (pandoc_str))))
+================================================================================
+Simple nesting
+================================================================================
+a^b*c*d^e
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (pandoc_emph
+          (emphasis_delimiter)
+          (pandoc_str)
+          (emphasis_delimiter))
+        (pandoc_str)
+        (superscript_delimiter))
+      (pandoc_str))))
+================================================================================
+Alternation
+================================================================================
+a^b^c^d^e
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (superscript_delimiter))
+      (pandoc_str)
+      (pandoc_superscript
+        (superscript_delimiter)
+        (pandoc_str)
+        (superscript_delimiter))
+      (pandoc_str))))

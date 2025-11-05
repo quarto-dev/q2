@@ -5,6 +5,7 @@
 
 use crate::pandoc::inline::{Inline, Inlines, Span};
 use crate::pandoc::location::empty_source_info;
+use hashlink::LinkedHashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -26,7 +27,7 @@ pub struct Shortcode {
 }
 
 fn shortcode_value_span(str: String) -> Inline {
-    let mut attr_hash = HashMap::new();
+    let mut attr_hash = LinkedHashMap::new();
     attr_hash.insert("data-raw".to_string(), str.clone());
     attr_hash.insert("data-value".to_string(), str);
     attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
@@ -44,7 +45,7 @@ fn shortcode_value_span(str: String) -> Inline {
 }
 
 fn shortcode_key_value_span(key: String, value: String) -> Inline {
-    let mut attr_hash = HashMap::new();
+    let mut attr_hash = LinkedHashMap::new();
 
     // this needs to be fixed and needs to use the actual source. We'll do that when we have source mapping
     attr_hash.insert(
@@ -68,7 +69,7 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
 }
 
 pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
-    let mut attr_hash: HashMap<String, String> = HashMap::new();
+    let mut attr_hash = LinkedHashMap::new();
     let mut content: Inlines = vec![shortcode_value_span(shortcode.name)];
     for arg in shortcode.positional_args {
         match arg {
@@ -116,6 +117,35 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
                         }
                     }
                 }
+            }
+        }
+    }
+    // Process keyword arguments from the keyword_args HashMap
+    for (key, value) in shortcode.keyword_args {
+        match value {
+            ShortcodeArg::String(text) => {
+                content.push(shortcode_key_value_span(key, text));
+            }
+            ShortcodeArg::Number(num) => {
+                content.push(shortcode_key_value_span(key, num.to_string()));
+            }
+            ShortcodeArg::Boolean(b) => {
+                content.push(shortcode_key_value_span(
+                    key,
+                    if b {
+                        "true".to_string()
+                    } else {
+                        "false".to_string()
+                    },
+                ));
+            }
+            ShortcodeArg::Shortcode(_) => {
+                eprintln!("PANIC - Quarto doesn't support nested shortcodes in keyword args");
+                std::process::exit(1);
+            }
+            ShortcodeArg::KeyValue(_) => {
+                eprintln!("PANIC - KeyValue shouldn't appear in keyword_args HashMap");
+                std::process::exit(1);
             }
         }
     }

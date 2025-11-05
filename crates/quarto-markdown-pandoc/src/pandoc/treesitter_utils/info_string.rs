@@ -5,33 +5,31 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
+use crate::pandoc::location::node_location;
+use crate::pandoc::source_map_compat::range_to_source_info_with_context;
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
-use std::collections::HashMap;
+use hashlink::LinkedHashMap;
+use tree_sitter::Node;
 
 /// Process info_string to extract language as an attribute
+/// In the new grammar, info_string is a leaf node containing the language name directly
 pub fn process_info_string(
-    children: Vec<(String, PandocNativeIntermediate)>,
+    node: &Node,
+    input_bytes: &[u8],
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                // Track source location for the language specifier
-                let lang_source =
-                    crate::pandoc::source_map_compat::range_to_source_info_with_context(
-                        &range, context,
-                    );
+    // Extract the language name from the node text
+    let lang_text = node.utf8_text(input_bytes).unwrap().to_string();
 
-                let mut attr_source = AttrSourceInfo::empty();
-                attr_source.classes.push(Some(lang_source));
+    // Track source location for the language specifier
+    let range = node_location(node);
+    let lang_source = range_to_source_info_with_context(&range, context);
 
-                return PandocNativeIntermediate::IntermediateAttr(
-                    ("".to_string(), vec![text], HashMap::new()),
-                    attr_source,
-                );
-            }
-            _ => {}
-        }
-    }
-    panic!("Expected info_string to have a string, but found none");
+    let mut attr_source = AttrSourceInfo::empty();
+    attr_source.classes.push(Some(lang_source));
+
+    PandocNativeIntermediate::IntermediateAttr(
+        ("".to_string(), vec![lang_text], LinkedHashMap::new()),
+        attr_source,
+    )
 }

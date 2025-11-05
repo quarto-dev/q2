@@ -1,0 +1,98 @@
+================================================================================
+1 (note how code span delimiters eat leading spaces; needs postprocess)
+================================================================================
+Maybe like this `hello world` and stuff. and ``this one ` will work?`` yeah.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter))
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter))
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+2
+================================================================================
+A `code span with an attribute`{r}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)
+            (attribute_specifier
+              (language_specifier))))))
+================================================================================
+3
+================================================================================
+A `code span with an id`{#id .class key=value}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter)
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))
+================================================================================
+4
+================================================================================
+`start a paragraph` will this work?
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter))
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+5 thick code spans
+================================================================================
+``a thick ` code span`` should work.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_code_span
+            (code_span_delimiter)
+            (content)
+            (code_span_delimiter))
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))

@@ -9,9 +9,9 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Delete, EditComment, Highlight, Inline, Inlines, Insert, Space, Str};
 use crate::pandoc::location::node_source_info_with_context;
+use hashlink::LinkedHashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::collections::HashMap;
 use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -27,7 +27,7 @@ macro_rules! process_editorial_mark {
                 context: &ASTContext,
             ) -> PandocNativeIntermediate {
                 let whitespace_re: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
-                let mut attr = ("".to_string(), vec![], HashMap::new());
+                let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
                 let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
                 let mut content: Inlines = vec![];
 

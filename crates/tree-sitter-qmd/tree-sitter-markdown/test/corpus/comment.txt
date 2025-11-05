@@ -1,0 +1,108 @@
+================================================================================
+comment.txt 1 (note the comment chomps the leading space)
+================================================================================
+A comment <!-- can appear anywhere --> in the text.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (comment)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+comment.txt 2 - note the single paragraph and chomping the leading space
+================================================================================
+It can span <!--
+
+many lines
+
+--> and will override paragraph boundary checks.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (comment)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+comment.txt 3
+================================================================================
+Also works without<!-- leading or trailing space
+spaces.
+
+-->, hopefully
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (comment)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+comment.txt 4 HTML element
+================================================================================
+We try to parse but do not allow <a href="foo">html elements</a>.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (html_element)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (html_element)
+          (pandoc_str))))
+================================================================================
+comment.txt Comments v autolinks
+================================================================================
+<a> <https://> <br/>
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (html_element)
+          (autolink)
+          (html_element))))

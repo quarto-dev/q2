@@ -1,0 +1,127 @@
+================================================================================
+single quotes
+================================================================================
+'hello'
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote)))))
+================================================================================
+double quotes
+================================================================================
+"hello"
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_double_quote
+        (double_quote)
+        (content
+          (pandoc_str))
+        (double_quote)))))
+================================================================================
+nested through emphasis
+================================================================================
+"hello _wo 'r' ld_. Bad."
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_double_quote
+        (double_quote)
+        (content
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (pandoc_single_quote
+              (single_quote)
+              (content
+                (pandoc_str))
+              (single_quote))
+            (pandoc_space)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))
+        (double_quote)))))
+================================================================================
+single quotes spacing 1
+================================================================================
+\' hello world \'
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+single quotes spacing 2
+================================================================================
+What's the deal with John's car?
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str))))
+================================================================================
+single quotes spacing 3
+================================================================================
+These are 'quotes'.
+
+--------------------------------------------------------------------------------
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_str)
+      (pandoc_space)
+      (pandoc_str)
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote))
+      (pandoc_str))))
+================================================================================
+single quotes spacing 4
+================================================================================
+'quotes'.
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (pandoc_paragraph
+      (pandoc_single_quote
+        (single_quote)
+        (content
+          (pandoc_str))
+        (single_quote))
+      (pandoc_str))))

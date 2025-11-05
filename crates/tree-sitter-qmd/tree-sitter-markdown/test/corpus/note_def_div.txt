@@ -1,0 +1,69 @@
+================================================================================
+1
+================================================================================
+::: ^1
+A fancy note definition div.
+
+With many paras, even.
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (note_definition_fenced_block
+          (fenced_div_note_id)
+          (block_continuation)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation))
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (block_continuation)))))
+================================================================================
+2
+================================================================================
+::: {#id-2}
+
+::: ^1
+
+They nest nice.
+
+:::
+
+:::
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_div
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id)))
+          (block_continuation)
+          (block_continuation)
+          (note_definition_fenced_block
+            (fenced_div_note_id)
+            (block_continuation)
+            (pandoc_paragraph
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (pandoc_space)
+              (pandoc_str)
+              (block_continuation))
+            (block_continuation)
+            (block_continuation))
+          (block_continuation))))
+          

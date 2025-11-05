@@ -1,0 +1,101 @@
+================================================================================
+Basic LaTeX parsing. (parse error)
+================================================================================
+$$This$$ has $$an odd$$ number of instances of $$.
+
+-------------------------------------------------------------------------------
+    (document
+      (ERROR
+        (pandoc_display_math)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_display_math)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))
+================================================================================
+LaTeX and markup clashes.
+================================================================================
+$$This should prevent *this from parsing$$ the *emph.*
+
+-------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter)))))
+================================================================================
+Brackets inside LaTeX are fine and unparsed
+================================================================================
+$$Hello [there$$ outside
+-------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+LaTeX and link clashes (parse error)
+================================================================================
+$$This should prevent [this from parsing$$ the link](https://google.com)
+--------------------------------------------------------------------------------
+    (document
+      (ERROR
+        (pandoc_display_math)
+        (pandoc_space)
+        (pandoc_str)
+        (pandoc_space)
+        (pandoc_str)))
+================================================================================
+LaTeX inside markup
+================================================================================
+*This emphasis $$should still parse $$*.
+
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_str)
+            (pandoc_space)
+            (pandoc_display_math)
+            (emphasis_delimiter))
+          (pandoc_str))))
+================================================================================
+LaTeX within one paragraph
+================================================================================
+$$This should all be captured
+as one instance of LaTeX.$$ after
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+LaTeX with escaped dollar signs
+================================================================================
+$Hello\$th*er*e$ outside
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_math)
+          (pandoc_space)
+          (pandoc_str))))

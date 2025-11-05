@@ -1,0 +1,127 @@
+================================================================================
+1
+================================================================================
+{{< hello >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_delimiter)))))
+================================================================================
+2
+================================================================================
+{{< meta 'ke"y' >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_string)
+            (shortcode_delimiter)))))
+================================================================================
+3
+================================================================================
+{{< meta 'ke"y' >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_string)
+            (shortcode_delimiter)))))
+================================================================================
+4
+================================================================================
+{{< meta key >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+================================================================================
+5
+================================================================================
+{{< meta 12 >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_number)
+            (shortcode_delimiter)))))
+================================================================================
+6 (NB booleans become strings)
+================================================================================
+{{< meta true >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_naked_string)
+            (shortcode_delimiter)))))
+================================================================================
+7
+================================================================================
+{{{< meta 12 >}}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode_escaped
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode_number)
+            (shortcode_delimiter)))))
+================================================================================
+8
+================================================================================
+{{< meta {{< meta which_key >}} >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (shortcode
+              (shortcode_delimiter)
+              (shortcode_name)
+              (shortcode_naked_string)
+              (shortcode_delimiter))
+            (shortcode_delimiter)))))
+================================================================================
+9
+================================================================================
+{{< meta key = {{< meta which_key >}} >}}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (shortcode
+            (shortcode_delimiter)
+            (shortcode_name)
+            (key_value_specifier
+              (key_value_key)
+              (key_value_value
+                (shortcode
+                  (shortcode_delimiter)
+                  (shortcode_name)
+                  (shortcode_naked_string)
+                  (shortcode_delimiter))))
+            (shortcode_delimiter)))))
