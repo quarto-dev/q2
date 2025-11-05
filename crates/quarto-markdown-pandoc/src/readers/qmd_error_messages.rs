@@ -122,10 +122,6 @@ fn error_diagnostic_from_parse_state(
             builder = builder.with_code(code);
         }
 
-        eprintln!("{:?}", consumed_tokens);
-        eprintln!("{:?}", all_tokens);
-        eprintln!("{:?}", entry.error_info);
-
         // Add notes with their corresponding source locations
         for note in entry.error_info.notes {
             match note.note_type {
