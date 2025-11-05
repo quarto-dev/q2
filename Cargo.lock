@@ -84,6 +84,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ariadne"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36f5e3dca4e09a6f340a61a0e9c7b61e030c69fc27bf29d73218f7e5e3b7638f"
+dependencies = [
+ "unicode-width",
+ "yansi",
+]
+
+[[package]]
 name = "arraydeque"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -693,7 +703,7 @@ dependencies = [
 name = "quarto-error-reporting"
 version = "0.1.0"
 dependencies = [
- "ariadne",
+ "ariadne 0.4.1",
  "once_cell",
  "quarto-source-map",
  "serde",
@@ -705,7 +715,7 @@ dependencies = [
 name = "quarto-markdown-pandoc"
 version = "0.0.0"
 dependencies = [
- "ariadne",
+ "ariadne 0.4.1",
  "clap",
  "crossterm",
  "error-message-macros",
@@ -1035,6 +1045,13 @@ dependencies = [
  "once_cell",
  "rustix 1.1.2",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "test-ariadne-unicode"
+version = "0.1.0"
+dependencies = [
+ "ariadne 0.5.1",
 ]
 
 [[package]]

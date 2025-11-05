@@ -519,7 +519,7 @@ impl DiagnosticMessage {
         main_location: &quarto_source_map::SourceInfo,
         ctx: &quarto_source_map::SourceContext,
     ) -> Option<String> {
-        use ariadne::{Color, Label, Report, ReportKind, Source};
+        use ariadne::{Color, Config, IndexType, Label, Report, ReportKind, Source};
 
         // Extract file_id from the source mapping by traversing the chain
         let file_id = Self::extract_file_id(main_location)?;
@@ -550,8 +550,10 @@ impl DiagnosticMessage {
         };
 
         // Build the report using the mapped offset for proper line:column display
+        // IMPORTANT: Use IndexType::Byte because our offsets are byte offsets, not character offsets
         let mut report =
-            Report::build(report_kind, file.path.clone(), start_mapped.location.offset);
+            Report::build(report_kind, file.path.clone(), start_mapped.location.offset)
+                .with_config(Config::default().with_index_type(IndexType::Byte));
 
         // Add title with error code
         if let Some(code) = &self.code {
