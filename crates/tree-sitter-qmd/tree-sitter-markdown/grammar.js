@@ -1,5 +1,49 @@
 const common = require('../common/common');
 
+// obtained by a Python script that 'import unicodedata' and filtered out non-dollar signs from
+// \p{Sc}
+// const PANDOC_VALID_CURRENCY_SYMBOLS = "\\u{00A2}\\u{00A3}\\u{00A4}\\u{00A5}\\u{058F}\\u{060B}\\u{07FE}\\u{07FF}\\u{09F2}\\u{09F3}\\u{09FB}\\u{0AF1}\\u{0BF9}\\u{0E3F}\\u{17DB}\\u{20A0}-\\u{20C0}\\u{A838}\\u{FDFC}\\u{FE69}\\u{FF04}\\u{FFE0}\\u{FFE1}\\u{FFE5}\\u{FFE6}\\u{11FDD}-\\u{11FE0}\\u{1E2FF}\\u{1ECB0}";
+
+// Then we do the same thing for '|'
+
+// Sm (Math Symbol) - excluding <, >, |, and ~
+const PANDOC_VALID_MATH_SYMBOLS =
+    "\u{002B}\u{003D}\u{00AC}\u{00B1}\u{00D7}\u{00F7}\u{03F6}\u{0606}-\u{0608}\u{2044}\u{2052}"
+  + "\u{207A}-\u{207C}\u{208A}-\u{208C}\u{2118}\u{2140}-\u{2144}\u{214B}\u{2190}-\u{2194}\u{219A}-\u{219B}\u{21A0}\u{21A3}\u{21A6}"
+  + "\u{21AE}\u{21CE}-\u{21CF}\u{21D2}\u{21D4}\u{21F4}-\u{22FF}\u{2320}-\u{2321}\u{237C}\u{239B}-\u{23B3}\u{23DC}-\u{23E1}\u{25B7}"
+  + "\u{25C1}\u{25F8}-\u{25FF}\u{266F}\u{27C0}-\u{27C4}\u{27C7}-\u{27E5}\u{27F0}-\u{27FF}\u{2900}-\u{2982}\u{2999}-\u{29D7}\u{29DC}-\u{29FB}\u{29FE}-\u{2AFF}"
+  + "\u{2B30}-\u{2B44}\u{2B47}-\u{2B4C}\u{FB29}\u{FE62}\u{FE64}-\u{FE66}\u{FF0B}\u{FF1C}-\u{FF1E}\u{FF5C}\u{FF5E}\u{FFE2}"
+  + "\u{FFE9}-\u{FFEC}\u{1D6C1}\u{1D6DB}\u{1D6FB}\u{1D715}\u{1D735}\u{1D74F}\u{1D76F}\u{1D789}\u{1D7A9}"
+  + "\u{1D7C3}\u{1EEF0}-\u{1EEF1}";
+
+// Sk (Modifier Symbol) - excluding ^
+const PANDOC_VALID_MODIFIER_SYMBOLS =
+    "\u{0060}\u{00A8}\u{00AF}\u{00B4}\u{00B8}\u{02C2}-\u{02C5}\u{02D2}-\u{02DF}\u{02E5}-\u{02EB}\u{02ED}\u{02EF}-\u{02FF}"
+  + "\u{0375}\u{0384}-\u{0385}\u{0888}\u{1FBD}\u{1FBF}-\u{1FC1}\u{1FCD}-\u{1FCF}\u{1FDD}-\u{1FDF}\u{1FED}-\u{1FEF}\u{1FFD}-\u{1FFE}\u{309B}-\u{309C}"
+  + "\u{A700}-\u{A716}\u{A720}-\u{A721}\u{A789}-\u{A78A}\u{AB5B}\u{AB6A}-\u{AB6B}\u{FBB2}-\u{FBC2}\u{FF3E}\u{FF40}\u{FFE3}\u{1F3FB}-\u{1F3FF}";
+
+// Sc (Currency Symbol) - excluding $ and fullwidth variants
+const PANDOC_VALID_CURRENCY_SYMBOLS =
+    "\u{00A2}\u{00A3}\u{00A4}\u{00A5}\u{058F}\u{060B}\u{07FE}\u{07FF}\u{09F2}\u{09F3}\u{09FB}\u{0AF1}\u{0BF9}\u{0E3F}\u{17DB}"
+  + "\u{20A0}\u{20A1}\u{20A2}\u{20A3}\u{20A4}\u{20A5}\u{20A6}\u{20A7}\u{20A8}\u{20A9}\u{20AA}\u{20AB}\u{20AC}\u{20AD}\u{20AE}\u{20AF}\u{20B1}\u{20B2}\u{20B3}\u{20B4}\u{20B5}\u{20B6}\u{20B7}\u{20B8}\u{20B9}\u{20BA}\u{20BB}\u{20BC}\u{20BD}\u{20BE}\u{20BF}\u{20C0}"
+  + "\u{A838}\u{FDFC}\u{FE69}\u{FF04}\u{FFE0}\u{FFE1}\u{FFE5}\u{FFE6}"
+  + "\u{11FDD}\u{11FDE}\u{11FDF}\u{11FE0}\u{1E2FF}\u{1ECB0}";
+
+// So (Other Symbol) - can use as-is, no exclusions needed
+// Combined
+const PANDOC_VALID_SYMBOLS =
+    PANDOC_VALID_MATH_SYMBOLS +
+    PANDOC_VALID_MODIFIER_SYMBOLS +
+    "\\p{So}" +
+    PANDOC_VALID_CURRENCY_SYMBOLS;
+
+const PANDOC_ALPHA_NUM = "0-9A-Za-z\\p{L}\\p{N}";
+const PANDOC_PUNCTUATION = "\\p{Pd}%&()/:+\\u{2026}";
+
+const PANDOC_REGEX_STR = 
+         "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" + 
+    "(?:[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "]|['\\u{2018}\\u{2019}][\\p{L}\\p{N}])*";
+
 module.exports = grammar({
     name: 'markdown',
 
@@ -557,7 +601,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => /(?:[\u{00A0}0-9A-Za-z\p{L}\p{N}\p{Pd}%&()/:+\u{2026}-]|\\.)(?:[\u{00A0}0-9A-Za-z\p{L}\p{N}\p{Pd}!%&()+,./;?:\u{2026}-]|\\.|['\u{2018}\u{2019}][\p{L}\p{N}])*/,
+        pandoc_str: $ => new RegExp(PANDOC_REGEX_STR, 'u'),
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
