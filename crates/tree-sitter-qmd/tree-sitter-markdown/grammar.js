@@ -16,11 +16,11 @@ const PANDOC_VALID_MATH_SYMBOLS =
   + "\u{FFE9}-\u{FFEC}\u{1D6C1}\u{1D6DB}\u{1D6FB}\u{1D715}\u{1D735}\u{1D74F}\u{1D76F}\u{1D789}\u{1D7A9}"
   + "\u{1D7C3}\u{1EEF0}-\u{1EEF1}";
 
-// Sk (Modifier Symbol) - excluding ^
+// Sk (Modifier Symbol) - excluding ^ and `
 const PANDOC_VALID_MODIFIER_SYMBOLS =
-    "\u{0060}\u{00A8}\u{00AF}\u{00B4}\u{00B8}\u{02C2}-\u{02C5}\u{02D2}-\u{02DF}\u{02E5}-\u{02EB}\u{02ED}\u{02EF}-\u{02FF}"
-  + "\u{0375}\u{0384}-\u{0385}\u{0888}\u{1FBD}\u{1FBF}-\u{1FC1}\u{1FCD}-\u{1FCF}\u{1FDD}-\u{1FDF}\u{1FED}-\u{1FEF}\u{1FFD}-\u{1FFE}\u{309B}-\u{309C}"
-  + "\u{A700}-\u{A716}\u{A720}-\u{A721}\u{A789}-\u{A78A}\u{AB5B}\u{AB6A}-\u{AB6B}\u{FBB2}-\u{FBC2}\u{FF3E}\u{FF40}\u{FFE3}\u{1F3FB}-\u{1F3FF}";
+    "\u{00A8}\u{00AF}\u{00B4}\u{00B8}\u{02C2}-\u{02C5}\u{02D2}-\u{02DF}\u{02E5}-\u{02EB}\u{02ED}\u{02EF}-\u{02FF}\u{0375}"
+  + "\u{0384}-\u{0385}\u{0888}\u{1FBD}\u{1FBF}-\u{1FC1}\u{1FCD}-\u{1FCF}\u{1FDD}-\u{1FDF}\u{1FED}-\u{1FEF}\u{1FFD}-\u{1FFE}\u{309B}-\u{309C}\u{A700}-\u{A716}"
+  + "\u{A720}-\u{A721}\u{A789}-\u{A78A}\u{AB5B}\u{AB6A}-\u{AB6B}\u{FBB2}-\u{FBC2}\u{FF3E}\u{FF40}\u{FFE3}\u{1F3FB}-\u{1F3FF}";
 
 // Sc (Currency Symbol) - excluding $ and fullwidth variants
 const PANDOC_VALID_CURRENCY_SYMBOLS =

@@ -82,9 +82,9 @@ if __name__ == "__main__":
     sm_result = generate_ranges_excluding('Sm', [0x007C, 0x007E])
 
     print("\n" + "=" * 60)
-    print("Sk (Modifier Symbol) - excluding ^")
+    print("Sk (Modifier Symbol) - excluding ^ and `")
     print("=" * 60)
-    sk_result = generate_ranges_excluding('Sk', [0x005E])
+    sk_result = generate_ranges_excluding('Sk', [0x005E, 0x0060])
 
     print("\n" + "=" * 60)
     print("Sc (Currency Symbol) - excluding $, small $, fullwidth $")
