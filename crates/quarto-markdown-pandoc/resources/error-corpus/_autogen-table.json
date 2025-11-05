@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1196,
+    "state": 1195,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-1",
@@ -31,7 +31,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2611,
+    "state": 2600,
     "sym": "shortcode_naked_string_token1",
     "errorInfo": {
       "code": "Q-2-3",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2611,
+          "lrState": 2600,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -60,7 +60,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2202,
+    "state": 2186,
     "sym": "_error",
     "errorInfo": {
       "code": "Q-2-2",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2202,
+          "lrState": 2186,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -89,7 +89,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1683,
+    "state": 1687,
     "sym": "ERROR",
     "errorInfo": {
       "code": "Q-2-5",
@@ -119,7 +119,7 @@
   {
     "column": 3,
     "row": 0,
-    "state": 3494,
+    "state": 3257,
     "sym": "{",
     "errorInfo": {
       "code": "Q-2-4",
@@ -128,7 +128,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 3494,
+          "lrState": 3257,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",
@@ -136,7 +136,7 @@
         },
         {
           "column": 3,
-          "lrState": 2202,
+          "lrState": 2186,
           "row": 0,
           "size": 1,
           "sym": "{",

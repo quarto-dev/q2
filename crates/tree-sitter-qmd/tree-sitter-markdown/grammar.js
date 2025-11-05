@@ -436,7 +436,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             '=',
             optional($._inline_whitespace),
-            alias(choice($._value_specifier_token, $._commonmark_single_quote_string, $._commonmark_double_quote_string), $.key_value_value)
+            alias(choice($._value_specifier_token, $._commonmark_single_quote_string, "''", '""', $._commonmark_double_quote_string), $.key_value_value)
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,

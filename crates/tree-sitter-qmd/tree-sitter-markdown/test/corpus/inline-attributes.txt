@@ -165,3 +165,24 @@ naked attribute values can have % in them
                 (key_value_specifier
                   (key_value_key)
                   (key_value_value))))))))
+================================================================================
+empty attributes
+================================================================================
+[]{foo=""} []{bar=''}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value)))))
+          (pandoc_space)
+          (pandoc_span
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))

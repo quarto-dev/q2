@@ -38,7 +38,6 @@ for (const file of fs.globSync("resources/error-corpus/*.qmd")) {
   if (errorStates.length < 1) {
     throw new Error(`Expected at least one error state for ${file}`);
   }
-  console.log({errorInfo, matches});
   errorInfo.captures = errorInfo.captures.map((capture: any) => {
     const match = matches.find(([, b]) => b === capture);
     assert(match);

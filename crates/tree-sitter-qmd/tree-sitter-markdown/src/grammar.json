@@ -2340,6 +2340,14 @@
                 "name": "_commonmark_single_quote_string"
               },
               {
+                "type": "STRING",
+                "value": "''"
+              },
+              {
+                "type": "STRING",
+                "value": "\"\""
+              },
+              {
                 "type": "SYMBOL",
                 "name": "_commonmark_double_quote_string"
               }
