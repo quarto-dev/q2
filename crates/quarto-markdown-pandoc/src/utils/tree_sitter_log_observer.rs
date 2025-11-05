@@ -155,13 +155,14 @@ impl TreeSitterLogObserver {
                         let row = popped_tokens.get(0).unwrap().row;
                         let column = popped_tokens.get(0).unwrap().column;
                         let size = popped_tokens.iter().map(|x| x.size).sum();
-                        current_parse.consumed_tokens.push(ConsumedToken {
+                        let new_token = ConsumedToken {
                             row,
                             column,
                             size,
                             lr_state: 0,
                             sym: sym.unwrap().to_string().clone(),
-                        });
+                        };
+                        current_parse.consumed_tokens.push(new_token);
                         current_parse.all_tokens.extend(popped_tokens);
                     }
                     self.state = TreeSitterLogState::JustReduced;
@@ -264,19 +265,28 @@ impl TreeSitterLogObserver {
                     .unwrap_or(0);
                 match self.state {
                     TreeSitterLogState::InParse => {
-                        current_parse.consumed_tokens.push(ConsumedToken {
+                        let new_token = ConsumedToken {
                             lr_state: state_val,
                             row: current_process_message.row,
                             column: current_process_message.column,
                             size,
                             sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
-                        })
+                        };
+                        current_parse.consumed_tokens.push(new_token)
                     }
                     TreeSitterLogState::JustReduced => {
                         let last: &mut ConsumedToken =
                             current_parse.consumed_tokens.last_mut().unwrap();
                         last.lr_state = state_val;
                         self.state = TreeSitterLogState::InParse;
+                        let new_token = ConsumedToken {
+                            lr_state: state_val,
+                            row: current_process_message.row,
+                            column: current_process_message.column,
+                            size,
+                            sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
+                        };
+                        current_parse.consumed_tokens.push(new_token)
                     }
                     _ => {
                         eprintln!("Shouldn't be here!");

@@ -54,15 +54,25 @@ pub fn produce_diagnostic_messages(
     return result;
 }
 
+fn appears_not_after(
+    token: &ConsumedToken,
+    parse_state: &crate::utils::tree_sitter_log_observer::ProcessMessage,
+) -> bool {
+    token.row < parse_state.row
+        || (token.row == parse_state.row && token.column <= parse_state.column)
+}
+
 fn find_matching_token<'a>(
     consumed_tokens: &'a [ConsumedToken],
     capture: &crate::readers::qmd_error_message_table::ErrorCapture,
+    parse_state: &crate::utils::tree_sitter_log_observer::ProcessMessage,
 ) -> Option<&'a ConsumedToken> {
     // Find a token that matches both the lr_state and sym from the capture
-    consumed_tokens
-        .iter()
-        .rev()
-        .find(|token| token.lr_state == capture.lr_state && token.sym == capture.sym)
+    consumed_tokens.iter().rev().find(|token| {
+        token.lr_state == capture.lr_state
+            && token.sym == capture.sym
+            && appears_not_after(token, parse_state)
+    })
 }
 
 /// Convert a parse state error into a structured DiagnosticMessage
@@ -151,8 +161,9 @@ fn error_diagnostic_from_parse_state(
                         })
                     {
                         // Find the consumed token that matches this capture
-                        if let Some(token) = find_matching_token(consumed_tokens, capture)
-                            .or(find_matching_token(all_tokens, capture))
+                        if let Some(token) =
+                            find_matching_token(consumed_tokens, capture, parse_state)
+                                .or(find_matching_token(all_tokens, capture, parse_state))
                         {
                             // Calculate the byte offset for this token
                             let mut token_byte_offset =
