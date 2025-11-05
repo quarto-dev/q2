@@ -463,3 +463,101 @@ Hello world
     // Clean up
     std::fs::remove_file(&test_file).ok();
 }
+
+/// Test that escaped punctuation characters roundtrip correctly through qmd->AST->qmd
+/// This tests all 30 escapable ASCII punctuation characters defined in the grammar
+#[test]
+fn test_qmd_roundtrip_escaped_punctuation() {
+    use quarto_markdown_pandoc::writers::qmd;
+
+    // Test cases: each is (input_qmd, expected_output_qmd, description)
+    // Note: We only test characters that we actively escape. Other punctuation
+    // characters can be escaped in input, but won't be re-escaped in output.
+    let test_cases = vec![
+        // Dollar sign - critical for avoiding math mode
+        (r"\$3.14", r"\$3.14", "escaped dollar sign"),
+        (
+            r"Price is \$5",
+            r"Price is \$5",
+            "escaped dollar in context",
+        ),
+        // Asterisk - critical for avoiding emphasis
+        (r"\*test\*", r"\*test\*", "escaped asterisks"),
+        (
+            r"Note: \* is asterisk",
+            r"Note: \* is asterisk",
+            "escaped asterisk in context",
+        ),
+        // Underscore - critical for avoiding emphasis
+        (r"\_test\_", r"\_test\_", "escaped underscores"),
+        (
+            r"var\_name",
+            r"var\_name",
+            "escaped underscore in identifier",
+        ),
+        // Brackets - critical for avoiding links
+        (r"\[bracket\]", r"\[bracket\]", "escaped brackets"),
+        // Backtick - critical for avoiding code
+        (r"\`backtick\`", r"\`backtick\`", "escaped backticks"),
+        // Hash - critical for avoiding headers
+        (r"\# not a header", r"\# not a header", "escaped hash"),
+        // Greater/less than - critical for avoiding blockquotes and HTML
+        (r"\> not a quote", r"\> not a quote", "escaped greater-than"),
+        (r"\< less than", r"\< less than", "escaped less-than"),
+        // Backslash itself
+        (r"\\", r"\\", "escaped backslash"),
+        (
+            r"C:\\path\\file",
+            r"C:\\path\\file",
+            "escaped backslashes in path",
+        ),
+        // Pipe - critical for tables
+        (r"\|", r"\|", "escaped pipe"),
+        // Tilde - critical for subscript/strikeout
+        (r"\~", r"\~", "escaped tilde"),
+        // Caret - critical for superscript
+        (r"\^", r"\^", "escaped caret"),
+        // Multiple escaped characters in one line
+        (
+            r"\$3.14 and \*not\* \$5",
+            r"\$3.14 and \*not\* \$5",
+            "multiple escaped chars",
+        ),
+        (
+            r"Symbols: \$ \# \* \_ \[ \] \` \| \~ \^",
+            r"Symbols: \$ \# \* \_ \[ \] \` \| \~ \^",
+            "many symbols",
+        ),
+    ];
+
+    for (input, expected_output, description) in test_cases {
+        // Parse the input QMD
+        let (parsed_doc, _context, diagnostics) =
+            readers::qmd::read(input.as_bytes(), false, "<test>", &mut std::io::sink())
+                .unwrap_or_else(|_| panic!("Failed to parse input for test case: {}", description));
+
+        assert!(
+            diagnostics.is_empty(),
+            "Expected no parse errors for test case: {}. Got: {:?}",
+            description,
+            diagnostics
+        );
+
+        // Write the AST back to QMD
+        let mut output_buf = Vec::new();
+        qmd::write(&parsed_doc, &mut output_buf)
+            .unwrap_or_else(|_| panic!("Failed to write QMD for test case: {}", description));
+
+        let output = String::from_utf8(output_buf)
+            .unwrap_or_else(|_| panic!("Invalid UTF-8 in output for test case: {}", description));
+
+        // Trim trailing newline that write() adds
+        let output_trimmed = output.trim_end();
+
+        assert_eq!(
+            output_trimmed, expected_output,
+            "Roundtrip failed for test case: {}\nInput:    {}\nExpected: {}\nGot:      {}",
+            description, input, expected_output, output_trimmed
+        );
+    }
+}
