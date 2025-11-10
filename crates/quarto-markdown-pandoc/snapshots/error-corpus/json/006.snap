@@ -8,7 +8,7 @@ expression: json_string
     "details": [
       {
         "content": {
-          "content": "This is the opening delimiter for the quote. If you meant to use an apostrophe, escape it with a backslash.",
+          "content": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
           "type": "markdown"
         },
         "kind": "info",

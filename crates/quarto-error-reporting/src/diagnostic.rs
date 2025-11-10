@@ -510,6 +510,62 @@ impl DiagnosticMessage {
         }
     }
 
+    /// Wrap a file path with OSC 8 ANSI hyperlink codes for clickable terminal links.
+    ///
+    /// OSC 8 is a terminal escape sequence that creates clickable hyperlinks:
+    /// `\x1b]8;;URI\x1b\\TEXT\x1b\\`
+    ///
+    /// Only adds hyperlinks if:
+    /// - The file exists on disk (not an ephemeral in-memory file)
+    /// - The path can be converted to an absolute path
+    ///
+    /// The `url` crate handles:
+    /// - Platform differences (Windows drive letters vs Unix paths)
+    /// - Percent-encoding of special characters
+    /// - Proper file:// URL construction
+    ///
+    /// Line and column numbers are added to the URL as a fragment identifier
+    /// (e.g., `file:///path#line:column`), which is supported by iTerm2 3.4+
+    /// and other terminal emulators for opening files at specific positions.
+    ///
+    /// Returns the wrapped path if conditions are met, otherwise returns the original path.
+    fn wrap_path_with_hyperlink(
+        path: &str,
+        has_disk_file: bool,
+        line: Option<usize>,
+        column: Option<usize>,
+    ) -> String {
+        // Only add hyperlinks for real files on disk (not ephemeral in-memory files)
+        if !has_disk_file {
+            return path.to_string();
+        }
+
+        // Canonicalize to absolute path
+        let abs_path = match std::fs::canonicalize(path) {
+            Ok(p) => p,
+            Err(_) => return path.to_string(), // Can't canonicalize, skip hyperlink
+        };
+
+        // Convert to file:// URL (handles Windows/Unix + percent-encoding)
+        let mut file_url = match url::Url::from_file_path(&abs_path) {
+            Ok(url) => url.as_str().to_string(),
+            Err(_) => return path.to_string(), // Conversion failed, skip hyperlink
+        };
+
+        // Add line and column as fragment identifier (e.g., #line:column)
+        // This format is supported by iTerm2 3.4+ semantic history
+        if let Some(line_num) = line {
+            if let Some(col_num) = column {
+                file_url.push_str(&format!("#{}:{}", line_num, col_num));
+            } else {
+                file_url.push_str(&format!("#{}", line_num));
+            }
+        }
+
+        // Wrap with OSC 8 codes: \x1b]8;;URI\x1b\\TEXT\x1b]8;;\x1b\\
+        format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", file_url, path)
+    }
+
     /// Render source context using ariadne (private helper for to_text).
     ///
     /// This produces the visual source code snippet with highlighting.
@@ -541,6 +597,14 @@ impl DiagnosticMessage {
         let start_mapped = main_location.map_offset(0, ctx)?;
         let end_mapped = main_location.map_offset(main_location.length(), ctx)?;
 
+        // Create display path with OSC 8 hyperlink for clickable file paths
+        // Check if this path refers to a real file on disk (vs an ephemeral in-memory file)
+        let is_disk_file = std::path::Path::new(&file.path).exists();
+        // Line and column numbers are 1-indexed for display (start_mapped.location uses 0-indexed)
+        let line = Some(start_mapped.location.row + 1);
+        let column = Some(start_mapped.location.column + 1);
+        let display_path = Self::wrap_path_with_hyperlink(&file.path, is_disk_file, line, column);
+
         // Determine report kind and color
         let (report_kind, main_color) = match self.kind {
             DiagnosticKind::Error => (ReportKind::Error, Color::Red),
@@ -551,9 +615,12 @@ impl DiagnosticMessage {
 
         // Build the report using the mapped offset for proper line:column display
         // IMPORTANT: Use IndexType::Byte because our offsets are byte offsets, not character offsets
-        let mut report =
-            Report::build(report_kind, file.path.clone(), start_mapped.location.offset)
-                .with_config(Config::default().with_index_type(IndexType::Byte));
+        let mut report = Report::build(
+            report_kind,
+            display_path.clone(),
+            start_mapped.location.offset,
+        )
+        .with_config(Config::default().with_index_type(IndexType::Byte));
 
         // Add title with error code
         if let Some(code) = &self.code {
@@ -571,7 +638,7 @@ impl DiagnosticMessage {
         };
 
         report = report.with_label(
-            Label::new((file.path.clone(), main_span))
+            Label::new((display_path.clone(), main_span))
                 .with_message(main_message)
                 .with_color(main_color),
         );
@@ -600,7 +667,7 @@ impl DiagnosticMessage {
                         };
 
                         report = report.with_label(
-                            Label::new((file.path.clone(), detail_span))
+                            Label::new((display_path.clone(), detail_span))
                                 .with_message(detail.content.as_str())
                                 .with_color(detail_color),
                         );
@@ -614,12 +681,88 @@ impl DiagnosticMessage {
         let mut output = Vec::new();
         report
             .write(
-                (file.path.clone(), Source::from(content.as_str())),
+                (display_path.clone(), Source::from(content.as_str())),
                 &mut output,
             )
             .ok()?;
 
-        String::from_utf8(output).ok()
+        let output_str = String::from_utf8(output).ok()?;
+
+        // Post-process to extend hyperlinks to include line:column numbers
+        // Ariadne adds :line:column after our hyperlinked path, so we need to
+        // move the hyperlink end marker to include those numbers
+        if is_disk_file {
+            Some(Self::extend_hyperlink_to_include_line_column(
+                &output_str,
+                &file.path,
+            ))
+        } else {
+            Some(output_str)
+        }
+    }
+
+    /// Extend OSC 8 hyperlinks to include the :line:column suffix that ariadne adds.
+    ///
+    /// Ariadne formats file references as `path:line:column`, but since we wrap the path
+    /// with OSC 8 codes, the structure becomes: `[hyperlink:path]:line:column`
+    /// We want: `[hyperlink:path:line:column]`
+    ///
+    /// This function finds patterns like `path]8;;\:line:column` and moves the hyperlink
+    /// end marker to after the line:column part.
+    fn extend_hyperlink_to_include_line_column(output: &str, original_path: &str) -> String {
+        // Pattern: original_path followed by ]8;;\ then :numbers:numbers
+        // We want to move the ]8;;\ to after the :numbers:numbers part
+        let end_marker = "\x1b]8;;\x1b\\";
+        let search_pattern = format!("{}{}", original_path, end_marker);
+
+        let mut result = output.to_string();
+        while let Some(pos) = result.find(&search_pattern) {
+            let after_marker = pos + search_pattern.len();
+            // Check if what follows is :line:column pattern
+            if let Some(rest) = result.get(after_marker..) {
+                // Match :digits:digits pattern
+                if let Some(colon_end) = Self::find_line_column_end(rest) {
+                    // Move the end marker to after the :line:column
+                    let before = &result[..pos + original_path.len()];
+                    let line_col = &rest[..colon_end];
+                    let after = &rest[colon_end..];
+                    result = format!("{}{}{}{}", before, line_col, end_marker, after);
+                    continue;
+                }
+            }
+            break;
+        }
+        result
+    }
+
+    /// Find the end position of a :line:column pattern at the start of the string.
+    /// Returns None if the pattern doesn't match.
+    fn find_line_column_end(s: &str) -> Option<usize> {
+        let bytes = s.as_bytes();
+        if bytes.is_empty() || bytes[0] != b':' {
+            return None;
+        }
+
+        let mut pos = 1;
+        // Read digits for line number
+        while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+            pos += 1;
+        }
+        if pos == 1 || pos >= bytes.len() || bytes[pos] != b':' {
+            return None; // No digits or no second colon
+        }
+
+        pos += 1; // Skip second colon
+        let col_start = pos;
+        // Read digits for column number
+        while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+            pos += 1;
+        }
+        if pos == col_start {
+            return None; // No digits for column
+        }
+
+        Some(pos)
     }
 }
 

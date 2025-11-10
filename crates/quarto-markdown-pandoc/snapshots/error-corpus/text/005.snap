@@ -3,7 +3,7 @@ source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
 expression: error_output
 ---
 [31mError:[0m [Q-2-5] Unclosed Emphasis
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/005.qmd:1:18[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m]8;;file:///Users/cscheid/repos/github/cscheid/kyoto/crates/quarto-markdown-pandoc/resources/error-corpus/005.qmd#1:18\resources/error-corpus/005.qmd:1:18]8;;\[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249mU[0m[38;5;249mn[0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249mh[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m [0m[36m_[0m[38;5;249me[0m[38;5;249mm[0m[38;5;249mp[0m[38;5;249mh[0m[38;5;249m.[0m
  [38;5;240m  │[0m            [36m┬[0m     [31m┬[0m  

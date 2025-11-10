@@ -1,0 +1,53 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-8",
+    "details": [
+      {
+        "content": {
+          "content": "If you meant an underscore here, escape it with a backslash.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 5,
+            "file_id": 0,
+            "start_offset": 4
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 15,
+        "file_id": 0,
+        "start_offset": 13
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing _ for the emphasis.",
+      "type": "markdown"
+    },
+    "title": "Unclosed emphasis"
+  },
+  {
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 18,
+        "file_id": 0,
+        "start_offset": 17
+      }
+    },
+    "problem": {
+      "content": "unexpected character or token here",
+      "type": "markdown"
+    },
+    "title": "Parse error"
+  }
+]
