@@ -168,3 +168,33 @@ $$hello$$
             (pandoc_display_math)
             (block_continuation))
           (block_continuation))))
+================================================================================
+#92: externally-lexed token right after STATE_MATCHING fallthrough
+================================================================================
+> a
+> @c
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (citation
+              (citation_delimiter)
+              (citation_id_author_in_text))))))
+================================================================================
+#92: externally-lexed token right after STATE_MATCHING fallthrough
+================================================================================
+> a
+> <!-- comment -->
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)
+            (pandoc_soft_break)
+            (comment)))))

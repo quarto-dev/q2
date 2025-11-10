@@ -263,7 +263,7 @@ static void print_valid_symbols(const bool *valid_symbols)
     printf("valid symbols:\n");    
     for (int i = 0; i < sizeof(token_names) / sizeof(char *); ++i) {
         if (valid_symbols[i]) {
-            printf("  %s: %s\n", token_names[i], valid_symbols[i] ? "true" : "false");
+            printf("  %s\n", token_names[i]);
         }
     }
     #endif
@@ -463,9 +463,11 @@ do {                                                        \
 //
 // See also the `$._soft_line_break` and `$._paragraph_end_newline` tokens in
 // grammar.js
-static bool error(TSLexer *lexer) {
-    EMIT_TOKEN(ERROR);
-}
+// static bool error(TSLexer *lexer) {
+//     EMIT_TOKEN(ERROR);
+// }
+
+#define EMIT_ERROR EMIT_TOKEN(ERROR);
 
 // Advance the lexer one character
 // Also keeps track of the current column, counting tabs as spaces with tab stop
@@ -590,7 +592,7 @@ static bool parse_fenced_div_marker(Scanner *s, TSLexer *lexer,
         if (valid_symbols[FENCED_DIV_START]) {
             // if (!s->simulate) {
                 if (!can_push_block(s)) {
-                    return error(lexer);
+                    EMIT_ERROR;
                 }
                 push_block(s, FENCED_DIV);
             // }
@@ -650,7 +652,7 @@ static bool parse_fenced_code_block(Scanner *s, const char delimiter,
         if (!info_string_has_backtick) {
             // if (!s->simulate) {
                 if (!can_push_block(s)) {
-                    return error(lexer);
+                    EMIT_ERROR;
                 }
                 push_block(s, FENCED_CODE_BLOCK);
             // }
@@ -750,7 +752,7 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
         // if (!s->simulate) {
             if (!can_push_block(s)) {
-                return error(lexer);
+                EMIT_ERROR;
             }
             push_block(s, (Block)(LIST_ITEM + extra_indentation));
         // }
@@ -831,7 +833,7 @@ static bool parse_block_quote(Scanner *s, TSLexer *lexer,
         }
         // if (!s->simulate) {
             if (!can_push_block(s)) {
-                return error(lexer);
+                EMIT_ERROR;
             }
             push_block(s, BLOCK_QUOTE);
         // }
@@ -890,7 +892,7 @@ static bool parse_plus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             }
             // if (!s->simulate) {
                 if (!can_push_block(s)) {
-                    return error(lexer);
+                    EMIT_ERROR;
                 }
                 push_block(s, (Block)(LIST_ITEM + extra_indentation));
             // }
@@ -961,7 +963,7 @@ static bool parse_ordered_list_marker(Scanner *s, TSLexer *lexer,
                     }
                     // if (!s->simulate) {
                         if (!can_push_block(s)) {
-                            return error(lexer);
+                            EMIT_ERROR;
                         }
                         push_block(
                             s, (Block)(LIST_ITEM + extra_indentation + digits));
@@ -1020,13 +1022,11 @@ static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
                 s->indentation = extra_indentation;
                 extra_indentation = temp;
             }
-            // if (!s->simulate) {
-                if (!can_push_block(s)) {
-                    return error(lexer);
-                }
-                // Use 3 as the indentation offset (length of "(@)")
-                push_block(s, (Block)(LIST_ITEM + extra_indentation + 3));
-            // }
+            if (!can_push_block(s)) {
+                EMIT_ERROR;
+            }
+            // Use 3 as the indentation offset (length of "(@)")
+            push_block(s, (Block)(LIST_ITEM + extra_indentation + 3));
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_EXAMPLE_DONT_INTERRUPT);
             } else {
@@ -1116,12 +1116,10 @@ static bool parse_minus(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 s->indentation = extra_indentation;
                 extra_indentation = temp;
             }
-            // if (!s->simulate) {
-                if (!can_push_block(s)) {
-                    return error(lexer);
-                }
-                push_block(s, (Block)(LIST_ITEM + extra_indentation));
-            // }
+            if (!can_push_block(s)) {
+                EMIT_ERROR;
+            }
+            push_block(s, (Block)(LIST_ITEM + extra_indentation));
             if (dont_interrupt) {
                 EMIT_TOKEN(LIST_MARKER_MINUS_DONT_INTERRUPT);
             } else {
@@ -1943,7 +1941,6 @@ static int match_line(Scanner *s, TSLexer *lexer) {
                     s->state &= (~STATE_MATCHING);
                 }
                 DEBUG_EXP("%d", partial_success);
-                DEBUG_EXP("%d", might_be_soft_break);
                 return partial_success | (might_be_soft_break << 1);
             case 1:
                 partial_success = true;
@@ -1967,13 +1964,14 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     DEBUG_PRINT("-- scan() state=%d\n", s->state);
     DEBUG_PRINT("   matching: %s\n", (s->state & STATE_MATCHING) ? "true": "false");
     DEBUG_LOOKAHEAD;
+    print_valid_symbols(valid_symbols);
     #endif
 
     // A normal tree-sitter rule decided that the current branch is invalid and
     // now "requests" an error to stop the branch
-    if (valid_symbols[TRIGGER_ERROR]) {
-        return error(lexer);
-    }
+    // if (valid_symbols[TRIGGER_ERROR]) {
+    //     EMIT_ERROR;
+    // }
 
     // Close the inner most block after the next line break as requested. See
     // `$._close_block` in grammar.js
@@ -1997,162 +1995,13 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         return false;
     }
 
-    if (!(s->state & STATE_MATCHING)) {
-        // Parse any preceeding whitespace and remember its length. This makes a
-        // lot of parsing quite a bit easier.
-        for (;;) {
-            if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
-                s->indentation += advance(s, lexer);
-            } else {
-                break;
-            }
-        }
-        // Decide which tokens to consider based on the first non-whitespace
-        // character
-        DEBUG_PRINT("before main lookahead switch\n");
-
-        switch (lexer->lookahead) {
-            case '<':
-                // Handle HTML comments, raw_specifiers (qmd's raw reader extension), autolinks
-                if (valid_symbols[HTML_COMMENT] || 
-                    valid_symbols[AUTOLINK] || 
-                    valid_symbols[RAW_SPECIFIER]) {
-                    return parse_open_angle_brace(lexer, valid_symbols);
-                }
-            case '\r':
-            case '\n':
-                if (valid_symbols[BLANK_LINE_START]) {
-                    // A blank line token is 0 width. Do not consume characters
-                    EMIT_TOKEN(BLANK_LINE_START);
-                }
-                break;
-            case '$':
-                if (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE]) {
-                    return parse_latex_span(s, lexer, valid_symbols);
-                }
-                break;
-            case ':':
-                return parse_fenced_div_marker(s, lexer, valid_symbols);
-            case '`':
-                // Handle code spans for pipe table cells
-                if (!valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
-                    valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
-                    DEBUG_PRINT("Trying to scan a code span\n");
-                    return parse_code_span(s, lexer, valid_symbols);
-                } else {
-                    DEBUG_PRINT("Trying to parse fenced code block\n");
-                    return parse_fenced_code_block(s, '`', lexer, valid_symbols);
-                }
-            case '~':
-                // A tilde could be strikeout or subscript.
-                return parse_tilde(s, lexer, valid_symbols);
-            case '*':
-                // A star could either mark a list item or a thematic break.
-                // This code is similar to the code for '_' and '+'.
-                return parse_star(s, lexer, valid_symbols);
-            case '_':
-                return parse_thematic_break_underscore(s, lexer, valid_symbols);
-            case '>':
-                // A '>' could mark the closing of shortcodes or the beginning of a block quote 
-                if (valid_symbols[SHORTCODE_CLOSE] || valid_symbols[SHORTCODE_CLOSE_ESCAPED]) {
-                    return parse_shortcode_close(s, lexer, valid_symbols);
-                } else {
-                    return parse_block_quote(s, lexer, valid_symbols);
-                }
-            case '#':
-                // A '#' could mark a atx heading
-                return parse_atx_heading(s, lexer, valid_symbols);
-            case '=':
-                if (valid_symbols[RAW_SPECIFIER]) {
-                    DEBUG_PRINT("Attempting to lex RAW_SPECIFIER\n");
-                    return parse_raw_specifier(lexer, valid_symbols);
-                }
-            case '+':
-                // A '+' could be a list marker
-                return parse_plus(s, lexer, valid_symbols);
-            case '0':
-            case '1':
-            case '2':
-            case '3':
-            case '4':
-            case '5':
-            case '6':
-            case '7':
-            case '8':
-            case '9':
-                DEBUG_HERE;
-                // A number could be a list marker (if followed by a dot or a
-                // parenthesis)
-
-                if (!valid_symbols[NAKED_VALUE_SPECIFIER]) {
-                    return parse_ordered_list_marker(s, lexer, valid_symbols);
-                }
-                break;
-            case '-':
-                // A minus could mark a list marker, a thematic break,
-                // or a cite_suppress_author
-                return parse_minus(s, lexer, valid_symbols);
-            case '[':
-                if (valid_symbols[HIGHLIGHT_SPAN_START] || 
-                    valid_symbols[INSERT_SPAN_START] || 
-                    valid_symbols[DELETE_SPAN_START] || 
-                    valid_symbols[COMMENT_SPAN_START] || 
-                    valid_symbols[INLINE_NOTE_REFERENCE] ||
-                    valid_symbols[REF_ID_SPECIFIER]) {
-                    return parse_open_square_brace(s, lexer, valid_symbols);
-                }
-                break;
-            case '^':
-                if (valid_symbols[FENCED_DIV_NOTE_ID] || valid_symbols[SUPERSCRIPT_CLOSE] || valid_symbols[SUPERSCRIPT_OPEN]) {
-                    return parse_caret(s, lexer, valid_symbols);
-                }
-                break;
-            case '(':
-                // A '(' could be an example list marker (@)
-                return parse_example_list_marker(s, lexer, valid_symbols);
-            case '\'':
-                return parse_single_quote(s, lexer, valid_symbols);
-            case '"':
-                return parse_double_quote(s, lexer, valid_symbols);
-            case '{':
-                if (valid_symbols[SHORTCODE_OPEN] || valid_symbols[SHORTCODE_OPEN_ESCAPED]) {
-                    return parse_shortcode_open(s, lexer, valid_symbols);
-                }
-                break;
-            case '@':
-                return parse_cite_author_in_text(s, lexer, valid_symbols);
-        }
-        DEBUG_HERE;
-        if (lexer->lookahead == '|' && valid_symbols[PIPE_TABLE_DELIMITER]) {
-            lexer->advance(lexer, false);
-            lexer->mark_end(lexer);
-            EMIT_TOKEN(PIPE_TABLE_DELIMITER);
-        }
-        if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
-            valid_symbols[PIPE_TABLE_START]) {
-            return parse_pipe_table(s, lexer, valid_symbols);
-        }
-        if ((valid_symbols[LANGUAGE_SPECIFIER] || 
-             valid_symbols[KEY_SPECIFIER] || 
-             valid_symbols[NAKED_VALUE_SPECIFIER]) &&  
-            ((lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
-             (lexer->lookahead >= 'a' && lexer->lookahead <= 'z'))) {
-            DEBUG_HERE;
-            return parse_language_specifier(lexer, valid_symbols);
-        }
-        DEBUG_HERE;
-        if (valid_symbols[NAKED_VALUE_SPECIFIER] && (lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
-            DEBUG_HERE;
-            return parse_language_specifier(lexer, valid_symbols);
-        }
-    } else { // we are in the state of trying to match all currently open blocks
+    if (s->state & STATE_MATCHING) { // we are in the state of trying to match all currently open blocks
         DEBUG_PRINT("scan() while STATE_MATCHING\n");
         int match_line_return = match_line(s, lexer);
         // bool might_be_soft_break = match_line_return & 2;
         bool partial_success = match_line_return & 1;
         // bool all_will_be_matched = s->matched == s->open_blocks.size;
         DEBUG_EXP("%d", match_line_return);
-        DEBUG_EXP("%d", (int) might_be_soft_break);
         DEBUG_EXP("%d", (int) partial_success);
         // DEBUG_EXP("%d", (int) all_will_be_matched);
         DEBUG_EXP("%d", s->matched);
@@ -2182,6 +2031,154 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
 
         DEBUG_PRINT("scan while STATE_MATCHING fallthrough\n");
+    }
+
+    // Parse any preceeding whitespace and remember its length. This makes a
+    // lot of parsing quite a bit easier.
+    for (;;) {
+        if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            s->indentation += advance(s, lexer);
+        } else {
+            break;
+        }
+    }
+    // Decide which tokens to consider based on the first non-whitespace
+    // character
+    DEBUG_PRINT("before main lookahead switch\n");
+
+    switch (lexer->lookahead) {
+        case '<':
+            // Handle HTML comments, raw_specifiers (qmd's raw reader extension), autolinks
+            if (valid_symbols[HTML_COMMENT] || 
+                valid_symbols[AUTOLINK] || 
+                valid_symbols[RAW_SPECIFIER]) {
+                return parse_open_angle_brace(lexer, valid_symbols);
+            }
+        case '\r':
+        case '\n':
+            if (valid_symbols[BLANK_LINE_START]) {
+                // A blank line token is 0 width. Do not consume characters
+                EMIT_TOKEN(BLANK_LINE_START);
+            }
+            break;
+        case '$':
+            if (valid_symbols[LATEX_SPAN_START] || valid_symbols[LATEX_SPAN_CLOSE]) {
+                return parse_latex_span(s, lexer, valid_symbols);
+            }
+            break;
+        case ':':
+            return parse_fenced_div_marker(s, lexer, valid_symbols);
+        case '`':
+            // Handle code spans for pipe table cells
+            if (!valid_symbols[FENCED_CODE_BLOCK_START_BACKTICK] && (
+                valid_symbols[CODE_SPAN_START] || valid_symbols[CODE_SPAN_CLOSE])) {
+                DEBUG_PRINT("Trying to scan a code span\n");
+                return parse_code_span(s, lexer, valid_symbols);
+            } else {
+                DEBUG_PRINT("Trying to parse fenced code block\n");
+                return parse_fenced_code_block(s, '`', lexer, valid_symbols);
+            }
+        case '~':
+            // A tilde could be strikeout or subscript.
+            return parse_tilde(s, lexer, valid_symbols);
+        case '*':
+            // A star could either mark a list item or a thematic break.
+            // This code is similar to the code for '_' and '+'.
+            return parse_star(s, lexer, valid_symbols);
+        case '_':
+            return parse_thematic_break_underscore(s, lexer, valid_symbols);
+        case '>':
+            // A '>' could mark the closing of shortcodes or the beginning of a block quote 
+            if (valid_symbols[SHORTCODE_CLOSE] || valid_symbols[SHORTCODE_CLOSE_ESCAPED]) {
+                return parse_shortcode_close(s, lexer, valid_symbols);
+            } else {
+                return parse_block_quote(s, lexer, valid_symbols);
+            }
+        case '#':
+            // A '#' could mark a atx heading
+            return parse_atx_heading(s, lexer, valid_symbols);
+        case '=':
+            if (valid_symbols[RAW_SPECIFIER]) {
+                DEBUG_PRINT("Attempting to lex RAW_SPECIFIER\n");
+                return parse_raw_specifier(lexer, valid_symbols);
+            }
+        case '+':
+            // A '+' could be a list marker
+            return parse_plus(s, lexer, valid_symbols);
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            DEBUG_HERE;
+            // A number could be a list marker (if followed by a dot or a
+            // parenthesis)
+
+            if (!valid_symbols[NAKED_VALUE_SPECIFIER]) {
+                return parse_ordered_list_marker(s, lexer, valid_symbols);
+            }
+            break;
+        case '-':
+            // A minus could mark a list marker, a thematic break,
+            // or a cite_suppress_author
+            return parse_minus(s, lexer, valid_symbols);
+        case '[':
+            if (valid_symbols[HIGHLIGHT_SPAN_START] || 
+                valid_symbols[INSERT_SPAN_START] || 
+                valid_symbols[DELETE_SPAN_START] || 
+                valid_symbols[COMMENT_SPAN_START] || 
+                valid_symbols[INLINE_NOTE_REFERENCE] ||
+                valid_symbols[REF_ID_SPECIFIER]) {
+                return parse_open_square_brace(s, lexer, valid_symbols);
+            }
+            break;
+        case '^':
+            if (valid_symbols[FENCED_DIV_NOTE_ID] || valid_symbols[SUPERSCRIPT_CLOSE] || valid_symbols[SUPERSCRIPT_OPEN]) {
+                return parse_caret(s, lexer, valid_symbols);
+            }
+            break;
+        case '(':
+            // A '(' could be an example list marker (@)
+            return parse_example_list_marker(s, lexer, valid_symbols);
+        case '\'':
+            return parse_single_quote(s, lexer, valid_symbols);
+        case '"':
+            return parse_double_quote(s, lexer, valid_symbols);
+        case '{':
+            if (valid_symbols[SHORTCODE_OPEN] || valid_symbols[SHORTCODE_OPEN_ESCAPED]) {
+                return parse_shortcode_open(s, lexer, valid_symbols);
+            }
+            break;
+        case '@':
+            return parse_cite_author_in_text(s, lexer, valid_symbols);
+    }
+    DEBUG_HERE;
+    if (lexer->lookahead == '|' && valid_symbols[PIPE_TABLE_DELIMITER]) {
+        lexer->advance(lexer, false);
+        lexer->mark_end(lexer);
+        EMIT_TOKEN(PIPE_TABLE_DELIMITER);
+    }
+    if (lexer->lookahead != '\r' && lexer->lookahead != '\n' &&
+        valid_symbols[PIPE_TABLE_START]) {
+        return parse_pipe_table(s, lexer, valid_symbols);
+    }
+    if ((valid_symbols[LANGUAGE_SPECIFIER] || 
+            valid_symbols[KEY_SPECIFIER] || 
+            valid_symbols[NAKED_VALUE_SPECIFIER]) &&  
+        ((lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') ||
+            (lexer->lookahead >= 'a' && lexer->lookahead <= 'z'))) {
+        DEBUG_HERE;
+        return parse_language_specifier(lexer, valid_symbols);
+    }
+    DEBUG_HERE;
+    if (valid_symbols[NAKED_VALUE_SPECIFIER] && (lexer->lookahead >= '0' && lexer->lookahead <= '9')) {
+        DEBUG_HERE;
+        return parse_language_specifier(lexer, valid_symbols);
     }
 
     // The parser just encountered a line break. Setup the state correspondingly
@@ -2236,7 +2233,6 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             bool all_will_be_matched = s->matched == s->open_blocks.size;
             DEBUG_EXP("%d", match_line_return);
             DEBUG_EXP("%d", (int) might_be_soft_break);
-            DEBUG_EXP("%d", (int) one_will_be_matched);
             // DEBUG_EXP("%d", (int) all_will_be_matched);
             DEBUG_EXP("%d", s->matched);
             DEBUG_LOOKAHEAD;
