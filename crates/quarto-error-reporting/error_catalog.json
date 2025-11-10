@@ -125,6 +125,13 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-6",
     "since_version": "99.9.9"
   },
+  "Q-2-7": {
+    "subsystem": "markdown",
+    "title": "Unclosed Single Quote",
+    "message_template": "I reached the end of the block before finding a closing \"'\" for the quote.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-7",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",
