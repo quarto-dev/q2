@@ -658,3 +658,19 @@ Shortcodes in commonmark attribute kvs
                       (shortcode_name)
                       (shortcode_string)
                       (shortcode_delimiter))))))))))
+================================================================================
+key specifiers can have periods in them
+================================================================================
+[a]{b.c=d}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))

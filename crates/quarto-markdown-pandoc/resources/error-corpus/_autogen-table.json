@@ -217,5 +217,35 @@
       ]
     },
     "name": "007"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 2983,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-8",
+      "title": "Unsupported Code Block Syntax",
+      "message": "Quarto Markdown requires executable code block options in YAML.",
+      "captures": [
+        {
+          "column": 5,
+          "lrState": 2309,
+          "row": 0,
+          "size": 5,
+          "sym": "key_value_key",
+          "label": "invalid-attr"
+        }
+      ],
+      "notes": [
+        {
+          "message": "use a YAML block syntax in a comment with `|`.",
+          "label": "invalid-attr",
+          "noteType": "simple",
+          "trimLeadingSpace": true
+        }
+      ]
+    },
+    "name": "008"
   }
 ]
