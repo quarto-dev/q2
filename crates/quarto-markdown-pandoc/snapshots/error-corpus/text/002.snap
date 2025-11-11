@@ -3,7 +3,7 @@ source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
 expression: error_output
 ---
 [31mError:[0m [Q-2-2] Mismatched Delimiter in Attribute Specifier
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m]8;;file:///Users/cscheid/repos/github/cscheid/kyoto/crates/quarto-markdown-pandoc/resources/error-corpus/002.qmd#1:19\resources/error-corpus/002.qmd:1:19]8;;\[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/002.qmd:1:19[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249mA[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249ma[0m[38;5;249md[0m[38;5;249m [0m[38;5;249m[[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mb[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m][0m[36m{[0m[31m[[0m
  [38;5;240m  │[0m                  [36m┬[0m[31m┬[0m  
@@ -13,7 +13,7 @@ expression: error_output
 [38;5;246m───╯[0m
 
 [31mError:[0m Parse error
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m]8;;file:///Users/cscheid/repos/github/cscheid/kyoto/crates/quarto-markdown-pandoc/resources/error-corpus/002.qmd#1:20\resources/error-corpus/002.qmd:1:20]8;;\[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/002.qmd:1:20[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249mA[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249ma[0m[38;5;249md[0m[38;5;249m [0m[38;5;249m[[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mb[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m][0m[38;5;249m{[0m[38;5;249m[[0m
  [38;5;240m  │[0m                    [31m┬[0m  

@@ -3,7 +3,7 @@ source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
 expression: error_output
 ---
 [31mError:[0m [Q-2-4] Missing Space After Div Fence
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m]8;;file:///Users/cscheid/repos/github/cscheid/kyoto/crates/quarto-markdown-pandoc/resources/error-corpus/004.qmd#1:4\resources/error-corpus/004.qmd:1:4]8;;\[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/004.qmd:1:4[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [36m:[0m[36m:[0m[36m:[0m[31m{[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249mo[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m-[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249m}[0m
  [38;5;240m  │[0m [36m─[0m[36m┬[0m[36m─[0m[31m┬[0m  
@@ -15,7 +15,7 @@ expression: error_output
 [38;5;246m───╯[0m
 
 [31mError:[0m Parse error
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m]8;;file:///Users/cscheid/repos/github/cscheid/kyoto/crates/quarto-markdown-pandoc/resources/error-corpus/004.qmd#5:4\resources/error-corpus/004.qmd:5:4]8;;\[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/004.qmd:5:4[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m5 │[0m [38;5;249m:[0m[38;5;249m:[0m[38;5;249m:[0m
  [38;5;240m  │[0m    [31m┬[0m  
@@ -23,7 +23,7 @@ expression: error_output
 [38;5;246m───╯[0m
 
 [31mError:[0m Parse error
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m]8;;file:///Users/cscheid/repos/github/cscheid/kyoto/crates/quarto-markdown-pandoc/resources/error-corpus/004.qmd#6:1\resources/error-corpus/004.qmd:5:5]8;;\[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/004.qmd:5:5[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m5 │[0m [38;5;249m:[0m[38;5;249m:[0m[38;5;249m:[0m
  [38;5;240m  │[0m     [31m│[0m 

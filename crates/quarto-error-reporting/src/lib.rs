@@ -64,4 +64,4 @@ pub mod macros;
 // Re-export main types for convenience
 pub use builder::DiagnosticMessageBuilder;
 pub use catalog::{ERROR_CATALOG, ErrorCodeInfo, get_docs_url, get_error_info, get_subsystem};
-pub use diagnostic::{DetailItem, DetailKind, DiagnosticKind, DiagnosticMessage, MessageContent};
+pub use diagnostic::{DetailItem, DetailKind, DiagnosticKind, DiagnosticMessage, MessageContent, TextRenderOptions};

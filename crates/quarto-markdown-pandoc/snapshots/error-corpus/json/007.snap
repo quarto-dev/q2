@@ -4,11 +4,11 @@ expression: json_string
 ---
 [
   {
-    "code": "Q-2-8",
+    "code": "Q-2-5",
     "details": [
       {
         "content": {
-          "content": "If you meant an underscore here, escape it with a backslash.",
+          "content": "(Emphasis start) If you meant an underscore, escape it with a backslash.",
           "type": "markdown"
         },
         "kind": "info",

@@ -29,6 +29,28 @@ pub enum DetailKind {
     Note,
 }
 
+/// Options for rendering diagnostic messages to text.
+///
+/// This struct controls various aspects of text rendering, such as whether
+/// to include terminal hyperlinks for clickable file paths.
+#[derive(Debug, Clone)]
+pub struct TextRenderOptions {
+    /// Enable OSC 8 hyperlinks for clickable file paths in terminals.
+    ///
+    /// When enabled, file paths in error messages will include terminal
+    /// escape codes for clickable links (supported by iTerm2, VS Code, etc.).
+    /// Disable for snapshot testing to avoid absolute path differences.
+    pub enable_hyperlinks: bool,
+}
+
+impl Default for TextRenderOptions {
+    fn default() -> Self {
+        Self {
+            enable_hyperlinks: true,
+        }
+    }
+}
+
 /// The content of a message or detail item.
 ///
 /// This will eventually support Pandoc AST for rich formatting, but starts
@@ -263,17 +285,8 @@ impl DiagnosticMessage {
 
     /// Render this diagnostic message as text following tidyverse style.
     ///
-    /// Format:
-    /// ```text
-    /// Error: title
-    /// Problem statement here
-    /// ✖ Error detail 1
-    /// ✖ Error detail 2
-    /// ℹ Info detail
-    /// • Note detail
-    /// ? Hint 1
-    /// ? Hint 2
-    /// ```
+    /// This is a convenience method that uses default rendering options.
+    /// For more control over rendering, use [`to_text_with_options`].
     ///
     /// # Example
     ///
@@ -290,6 +303,44 @@ impl DiagnosticMessage {
     /// assert!(text.contains("Values must be numeric"));
     /// ```
     pub fn to_text(&self, ctx: Option<&quarto_source_map::SourceContext>) -> String {
+        self.to_text_with_options(ctx, &TextRenderOptions::default())
+    }
+
+    /// Render this diagnostic message as text following tidyverse style with custom options.
+    ///
+    /// Format:
+    /// ```text
+    /// Error: title
+    /// Problem statement here
+    /// ✖ Error detail 1
+    /// ✖ Error detail 2
+    /// ℹ Info detail
+    /// • Note detail
+    /// ? Hint 1
+    /// ? Hint 2
+    /// ```
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use quarto_error_reporting::{DiagnosticMessageBuilder, TextRenderOptions};
+    ///
+    /// let msg = DiagnosticMessageBuilder::error("Invalid input")
+    ///     .problem("Values must be numeric")
+    ///     .add_detail("Found text in column 3")
+    ///     .add_hint("Convert to numbers first?")
+    ///     .build();
+    ///
+    /// // Disable hyperlinks for snapshot testing
+    /// let options = TextRenderOptions { enable_hyperlinks: false };
+    /// let text = msg.to_text_with_options(None, &options);
+    /// assert!(text.contains("Error: Invalid input"));
+    /// ```
+    pub fn to_text_with_options(
+        &self,
+        ctx: Option<&quarto_source_map::SourceContext>,
+        options: &TextRenderOptions,
+    ) -> String {
         use std::fmt::Write;
 
         let mut result = String::new();
@@ -308,7 +359,7 @@ impl DiagnosticMessage {
                 .or_else(|| self.details.iter().find_map(|d| d.location.as_ref()));
 
             if let Some(loc) = location {
-                if let Some(ariadne_output) = self.render_ariadne_source_context(loc, ctx.unwrap())
+                if let Some(ariadne_output) = self.render_ariadne_source_context(loc, ctx.unwrap(), options.enable_hyperlinks)
                 {
                     result.push_str(&ariadne_output);
                     true
@@ -516,6 +567,7 @@ impl DiagnosticMessage {
     /// `\x1b]8;;URI\x1b\\TEXT\x1b\\`
     ///
     /// Only adds hyperlinks if:
+    /// - Hyperlinks are enabled via the `enable_hyperlinks` parameter
     /// - The file exists on disk (not an ephemeral in-memory file)
     /// - The path can be converted to an absolute path
     ///
@@ -534,7 +586,13 @@ impl DiagnosticMessage {
         has_disk_file: bool,
         line: Option<usize>,
         column: Option<usize>,
+        enable_hyperlinks: bool,
     ) -> String {
+        // Don't add hyperlinks if disabled (e.g., for snapshot testing)
+        if !enable_hyperlinks {
+            return path.to_string();
+        }
+
         // Only add hyperlinks for real files on disk (not ephemeral in-memory files)
         if !has_disk_file {
             return path.to_string();
@@ -574,6 +632,7 @@ impl DiagnosticMessage {
         &self,
         main_location: &quarto_source_map::SourceInfo,
         ctx: &quarto_source_map::SourceContext,
+        enable_hyperlinks: bool,
     ) -> Option<String> {
         use ariadne::{Color, Config, IndexType, Label, Report, ReportKind, Source};
 
@@ -603,7 +662,7 @@ impl DiagnosticMessage {
         // Line and column numbers are 1-indexed for display (start_mapped.location uses 0-indexed)
         let line = Some(start_mapped.location.row + 1);
         let column = Some(start_mapped.location.column + 1);
-        let display_path = Self::wrap_path_with_hyperlink(&file.path, is_disk_file, line, column);
+        let display_path = Self::wrap_path_with_hyperlink(&file.path, is_disk_file, line, column, enable_hyperlinks);
 
         // Determine report kind and color
         let (report_kind, main_color) = match self.kind {
@@ -691,7 +750,7 @@ impl DiagnosticMessage {
         // Post-process to extend hyperlinks to include line:column numbers
         // Ariadne adds :line:column after our hyperlinked path, so we need to
         // move the hyperlink end marker to include those numbers
-        if is_disk_file {
+        if is_disk_file && enable_hyperlinks {
             Some(Self::extend_hyperlink_to_include_line_column(
                 &output_str,
                 &file.path,
