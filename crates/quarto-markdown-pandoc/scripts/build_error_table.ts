@@ -18,7 +18,9 @@ const leftJoin = <T>(lst1: T[], lst2: T[], key: (item: T) => string) => {
   return result as [T, T][];
 };
 
-for (const file of fs.globSync("resources/error-corpus/*.qmd")) {
+const files = Array.from(fs.globSync("resources/error-corpus/*.qmd")).toSorted((a, b) => a.localeCompare(b));
+for (const file of files) {
+  console.log(`Processing ${file}`);
   const base = basename(file, ".qmd");
   const errorInfo = JSON.parse(
     Deno.readTextFileSync(`resources/error-corpus/${base}.json`),
