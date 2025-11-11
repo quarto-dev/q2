@@ -247,5 +247,34 @@
       ]
     },
     "name": "008"
+  },
+  {
+    "column": 6,
+    "row": 0,
+    "state": 1918,
+    "sym": "](",
+    "errorInfo": {
+      "code": "Q-2-7",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing \"'\" for the quote.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 628,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "009"
   }
 ]
