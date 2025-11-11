@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-7",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 5,
+            "file_id": 0,
+            "start_offset": 4
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 8,
+        "file_id": 0,
+        "start_offset": 6
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing \"'\" for the quote.",
+      "type": "markdown"
+    },
+    "title": "Unclosed Single Quote"
+  }
+]

@@ -15,6 +15,7 @@ use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
 use crate::readers::qmd_error_messages::{produce_diagnostic_messages, produce_error_message_json};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
+use crate::utils::tree_sitter_log_observer::TreeSitterLogObserverTrait;
 use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
@@ -63,13 +64,15 @@ pub fn read<T: Write>(
     Vec<quarto_error_reporting::DiagnosticMessage>,
 > {
     let mut parser = MarkdownParser::default();
-
+    let mut fast_log_observer =
+        crate::utils::tree_sitter_log_observer::TreeSitterLogObserverFast::default();
     let mut log_observer = crate::utils::tree_sitter_log_observer::TreeSitterLogObserver::default();
+
     parser
         .parser
         .set_logger(Some(Box::new(|log_type, message| match log_type {
             LogType::Parse => {
-                log_observer.log(log_type, message);
+                fast_log_observer.log(log_type, message);
             }
             _ => {}
         })));
@@ -95,23 +98,38 @@ pub fn read<T: Write>(
         .source_context
         .add_file(filename.to_string(), Some(input_str));
 
-    log_observer.parses.iter().for_each(|parse| {
-        writeln!(output_stream, "tree-sitter parse:").unwrap();
-        parse
-            .messages
-            .iter()
-            .for_each(|msg| writeln!(output_stream, "  {}", msg).unwrap());
-        writeln!(output_stream, "---").unwrap();
-    });
-    if log_observer.had_errors() {
-        // Produce structured DiagnosticMessage objects with proper source locations
-        let diagnostics = produce_diagnostic_messages(
-            input_bytes,
-            &log_observer,
-            filename,
-            &context.source_context,
-        );
-        return Err(diagnostics);
+    // if fast observer saw an error, reparse with full log observer to
+    // capture tokens and report good error
+    if fast_log_observer.had_errors() {
+        parser
+            .parser
+            .set_logger(Some(Box::new(|log_type, message| match log_type {
+                LogType::Parse => {
+                    log_observer.log(log_type, message);
+                }
+                _ => {}
+            })));
+        parser
+            .parse(&input_bytes, None)
+            .expect("Failed to parse input");
+        log_observer.parses.iter().for_each(|parse| {
+            writeln!(output_stream, "tree-sitter parse:").unwrap();
+            parse
+                .messages
+                .iter()
+                .for_each(|msg| writeln!(output_stream, "  {}", msg).unwrap());
+            writeln!(output_stream, "---").unwrap();
+        });
+        if log_observer.had_errors() {
+            // Produce structured DiagnosticMessage objects with proper source locations
+            let diagnostics = produce_diagnostic_messages(
+                input_bytes,
+                &log_observer,
+                filename,
+                &context.source_context,
+            );
+            return Err(diagnostics);
+        }
     }
 
     let depth = crate::utils::concrete_tree_depth::concrete_tree_depth(&tree);
