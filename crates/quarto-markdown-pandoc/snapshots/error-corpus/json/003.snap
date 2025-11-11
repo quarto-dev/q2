@@ -24,7 +24,7 @@ expression: json_string
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 26,
+        "end_offset": 21,
         "file_id": 0,
         "start_offset": 20
       }
@@ -34,5 +34,20 @@ expression: json_string
       "type": "markdown"
     },
     "title": "Key-value Pair Before Class Specifier in Attribute"
+  },
+  {
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 27,
+        "file_id": 0,
+        "start_offset": 26
+      }
+    },
+    "problem": {
+      "content": "unexpected character or token here",
+      "type": "markdown"
+    },
+    "title": "Parse error"
   }
 ]

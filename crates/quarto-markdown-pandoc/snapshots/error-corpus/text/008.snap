@@ -1,0 +1,13 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: error_output
+---
+[31mError:[0m [Q-2-8] Unsupported Code Block Syntax
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/008.qmd:1:6[38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;249m`[0m[38;5;249m`[0m[38;5;249m`[0m[38;5;249m{[0m[38;5;249mr[0m[31m [0m[36me[0m[36mv[0m[36ma[0m[36ml[0m[38;5;249m=[0m[38;5;249mF[0m[38;5;249mA[0m[38;5;249mL[0m[38;5;249mS[0m[38;5;249mE[0m[38;5;249m}[0m
+ [38;5;240m  │[0m      [31m┬[0m[36m─[0m[36m─[0m[36m┬[0m[36m─[0m  
+ [38;5;240m  │[0m      [31m╰[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m[31m─[0m Quarto Markdown requires executable code block options in YAML.
+ [38;5;240m  │[0m         [36m│[0m   
+ [38;5;240m  │[0m         [36m╰[0m[36m─[0m[36m─[0m[36m─[0m use a YAML block syntax in a comment with `|`.
+[38;5;246m───╯[0m

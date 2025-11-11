@@ -309,7 +309,7 @@ module.exports = grammar({
 
         target: $ => seq(
             '](', 
-            alias(/[^ \t)]+/, $.url),
+            alias(repeat1(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
             optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
             ')'
         ),
@@ -440,8 +440,8 @@ module.exports = grammar({
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
-        _commonmark_single_quote_string: $ => /[']([^ ']|\\')([^']|\\')*[']/,
-        _commonmark_double_quote_string: $ => /["]([^ "]|\\")([^"]|\\")*["]/,
+        _commonmark_single_quote_string: $ => seq(/[']/, choice(/([^ ']|\\')/, $.shortcode), repeat(choice(/[^']/, /\\'/, $.shortcode)), /[']/),
+        _commonmark_double_quote_string: $ => seq(/["]/, choice(/([^ "]|\\")/, $.shortcode), repeat(choice(/[^"]/, /\\"/, $.shortcode)), /["]/),
 
         _line: $ => prec.right(seq($._inline_element, repeat(seq(optional(alias($._whitespace, $.pandoc_space)), $._inline_element)))),
         _line_with_maybe_spaces: $ => prec.right(repeat1(choice(alias($._whitespace, $.pandoc_space), $._inline_element))),

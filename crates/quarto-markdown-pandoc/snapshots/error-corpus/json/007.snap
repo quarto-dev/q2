@@ -34,20 +34,5 @@ expression: json_string
       "type": "markdown"
     },
     "title": "Unclosed emphasis"
-  },
-  {
-    "kind": "error",
-    "location": {
-      "Original": {
-        "end_offset": 18,
-        "file_id": 0,
-        "start_offset": 17
-      }
-    },
-    "problem": {
-      "content": "unexpected character or token here",
-      "type": "markdown"
-    },
-    "title": "Parse error"
   }
 ]

@@ -838,7 +838,7 @@
     "named": true,
     "fields": {},
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
         {
@@ -2627,7 +2627,17 @@
   {
     "type": "shortcode_string",
     "named": true,
-    "fields": {}
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "shortcode",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "target",
@@ -2647,6 +2657,36 @@
         },
         {
           "type": "url",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "title",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "shortcode",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "url",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "shortcode",
           "named": true
         }
       ]
@@ -2870,14 +2910,6 @@
   },
   {
     "type": "superscript_delimiter",
-    "named": true
-  },
-  {
-    "type": "title",
-    "named": true
-  },
-  {
-    "type": "url",
     "named": true
   },
   {

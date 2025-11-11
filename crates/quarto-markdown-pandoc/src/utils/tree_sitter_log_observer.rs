@@ -68,11 +68,43 @@ impl TreeSitterParseLog {
     }
 }
 
+////////////////////////////////////////////////////////////////////////////////////////////////////
+pub trait TreeSitterLogObserverTrait {
+    fn had_errors(&self) -> bool;
+    fn log(&mut self, log_type: tree_sitter::LogType, message: &str);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+pub struct TreeSitterLogObserverFast {
+    pub saw_error: bool,
+}
+
+impl Default for TreeSitterLogObserverFast {
+    fn default() -> Self {
+        TreeSitterLogObserverFast { saw_error: false }
+    }
+}
+
+impl TreeSitterLogObserverTrait for TreeSitterLogObserverFast {
+    fn had_errors(&self) -> bool {
+        self.saw_error
+    }
+    fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
+        if message.starts_with("detect_error") {
+            self.saw_error = true
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
 pub struct TreeSitterLogObserver {
     pub parses: Vec<TreeSitterParseLog>,
     state: TreeSitterLogState,
 }
 
+// need both impl and trait? Smells like bad design :/
 impl TreeSitterLogObserver {
     pub fn had_errors(&self) -> bool {
         for parse in &self.parses {
@@ -82,7 +114,18 @@ impl TreeSitterLogObserver {
         }
         false
     }
-    pub fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
+}
+
+impl TreeSitterLogObserverTrait for TreeSitterLogObserver {
+    fn had_errors(&self) -> bool {
+        for parse in &self.parses {
+            if !parse.is_good() {
+                return true;
+            }
+        }
+        false
+    }
+    fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
         // Implement your logging logic here
         let words: Vec<&str> = message.split_whitespace().collect();
         if words.is_empty() {

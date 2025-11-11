@@ -479,3 +479,198 @@ Content paragraph.
           (pandoc_str)
           (pandoc_space)
           (pandoc_str))))
+================================================================================
+Shortcodes in target (URL)
+================================================================================
+[a]({{< b c >}})
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              (url
+                (shortcode
+                  (shortcode_delimiter)
+                  (shortcode_name)
+                  (shortcode_naked_string)
+                  (shortcode_delimiter))))))))
+================================================================================
+Shortcodes in target (title)
+================================================================================
+[a](foo.qmd "{{< b "c" >}}")
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              (url)
+              (title
+                (shortcode
+                  (shortcode_delimiter)
+                  (shortcode_name)
+                  (shortcode_string)
+                  (shortcode_delimiter))))))))
+================================================================================
+Shortcodes in commonmark attribute kvs
+================================================================================
+[a]{#id .class key='{{< meta 'val' >}}'}
+[a]{#id .class key='text {{< meta 'val' >}}'}
+[a]{#id .class key='{{< meta "val" >}}'}
+[a]{#id .class key='text {{< meta "val" >}}'}
+[a]{#id .class key="{{< meta 'val' >}}"}
+[a]{#id .class key="text {{< meta 'val' >}}"}
+[a]{#id .class key="{{< meta "val" >}}"}
+[a]{#id .class key="text {{< meta "val" >}}"}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter)))))))
+          (pandoc_soft_break)
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)
+                (attribute_class)
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value
+                    (shortcode
+                      (shortcode_delimiter)
+                      (shortcode_name)
+                      (shortcode_string)
+                      (shortcode_delimiter))))))))))
+================================================================================
+key specifiers can have periods in them
+================================================================================
+[a]{b.c=d}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (key_value_specifier
+                  (key_value_key)
+                  (key_value_value))))))))

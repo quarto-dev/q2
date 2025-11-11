@@ -1429,8 +1429,20 @@
         {
           "type": "ALIAS",
           "content": {
-            "type": "PATTERN",
-            "value": "[^ \\t)]+"
+            "type": "REPEAT1",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "PATTERN",
+                  "value": "[^ {\\t)]|(\\\\.)+"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "shortcode"
+                }
+              ]
+            }
           },
           "named": true,
           "value": "url"
@@ -2363,12 +2375,96 @@
       "value": "[A-Za-z0-9_-]+"
     },
     "_commonmark_single_quote_string": {
-      "type": "PATTERN",
-      "value": "[']([^ ']|\\\\')([^']|\\\\')*[']"
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "PATTERN",
+          "value": "[']"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PATTERN",
+              "value": "([^ ']|\\\\')"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "shortcode"
+            }
+          ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "PATTERN",
+                "value": "[^']"
+              },
+              {
+                "type": "PATTERN",
+                "value": "\\\\'"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "shortcode"
+              }
+            ]
+          }
+        },
+        {
+          "type": "PATTERN",
+          "value": "[']"
+        }
+      ]
     },
     "_commonmark_double_quote_string": {
-      "type": "PATTERN",
-      "value": "[\"]([^ \"]|\\\\\")([^\"]|\\\\\")*[\"]"
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "PATTERN",
+          "value": "[\"]"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PATTERN",
+              "value": "([^ \"]|\\\\\")"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "shortcode"
+            }
+          ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "PATTERN",
+                "value": "[^\"]"
+              },
+              {
+                "type": "PATTERN",
+                "value": "\\\\\""
+              },
+              {
+                "type": "SYMBOL",
+                "name": "shortcode"
+              }
+            ]
+          }
+        },
+        {
+          "type": "PATTERN",
+          "value": "[\"]"
+        }
+      ]
     },
     "_line": {
       "type": "PREC_RIGHT",

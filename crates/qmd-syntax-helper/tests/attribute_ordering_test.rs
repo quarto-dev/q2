@@ -36,7 +36,7 @@ fn test_converts_single_violation() {
 
     // Convert without in_place to get the result
     let result = rule.convert(&test_file, false, false, false).unwrap();
-    assert_eq!(result.fixes_applied, 2);
+    assert_eq!(result.fixes_applied, 1);
 
     let converted = result.message.unwrap();
     assert!(converted.contains("{#id .class key=\"value\"}"));
@@ -60,7 +60,7 @@ fn test_converts_multiple_violations() {
     let rule = registry.get("attribute-ordering").unwrap();
 
     let result = rule.convert(&test_file, false, false, false).unwrap();
-    assert_eq!(result.fixes_applied, 3);
+    assert_eq!(result.fixes_applied, 2);
 
     let converted = result.message.unwrap();
     assert!(converted.contains("{.class key=\"value\"}"));
@@ -80,7 +80,7 @@ fn test_in_place_conversion() {
 
     // Convert in place
     let result = rule.convert(&test_file, true, false, false).unwrap();
-    assert_eq!(result.fixes_applied, 2);
+    assert_eq!(result.fixes_applied, 1);
 
     // Verify file was modified
     let content = fs::read_to_string(&test_file).unwrap();
@@ -101,7 +101,7 @@ fn test_check_mode() {
 
     // Convert in check mode
     let result = rule.convert(&test_file, false, true, false).unwrap();
-    assert_eq!(result.fixes_applied, 2);
+    assert_eq!(result.fixes_applied, 1);
 
     // Verify file was NOT modified
     let content = fs::read_to_string(&test_file).unwrap();

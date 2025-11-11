@@ -32,5 +32,4 @@ This ~~has a
         (strikeout_delimiter)
         (pandoc_str)
         (pandoc_space)
-        (pandoc_str)
-        (UNEXPECTED '\n')))
+        (pandoc_str)))

@@ -1,0 +1,20 @@
+[package]
+name = "pico-quarto-render"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+quarto-markdown-pandoc = { workspace = true }
+anyhow.workspace = true
+clap = { version = "4.0", features = ["derive"] }
+walkdir = "2.5"
+
+[lints]
+workspace = true

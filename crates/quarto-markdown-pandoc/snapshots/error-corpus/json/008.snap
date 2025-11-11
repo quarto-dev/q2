@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-8",
+    "details": [
+      {
+        "content": {
+          "content": "use a YAML block syntax in a comment with `|`.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 10,
+            "file_id": 0,
+            "start_offset": 6
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 6,
+        "file_id": 0,
+        "start_offset": 5
+      }
+    },
+    "problem": {
+      "content": "Quarto Markdown requires executable code block options in YAML.",
+      "type": "markdown"
+    },
+    "title": "Unsupported Code Block Syntax"
+  }
+]

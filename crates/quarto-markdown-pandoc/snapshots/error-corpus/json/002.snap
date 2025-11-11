@@ -34,20 +34,5 @@ expression: json_string
       "type": "markdown"
     },
     "title": "Mismatched Delimiter in Attribute Specifier"
-  },
-  {
-    "kind": "error",
-    "location": {
-      "Original": {
-        "end_offset": 20,
-        "file_id": 0,
-        "start_offset": 19
-      }
-    },
-    "problem": {
-      "content": "unexpected character or token here",
-      "type": "markdown"
-    },
-    "title": "Parse error"
   }
 ]

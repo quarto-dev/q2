@@ -7,7 +7,7 @@ import { assert } from "jsr:/@std/testing@0.224.0/asserts";
 // deno-lint-ignore no-explicit-any
 const result: any = [];
 
-const leftJoin = <T>(lst1: T[], lst2: T[], key: (item: T) => string) => {
+const leftKeyJoin = <T>(lst1: T[], lst2: T[], key: (item: T) => string) => {
   const map = new Map<string, T>();
   for (const item of lst2) {
     map.set(key(item), item);
@@ -18,7 +18,21 @@ const leftJoin = <T>(lst1: T[], lst2: T[], key: (item: T) => string) => {
   return result as [T, T][];
 };
 
-for (const file of fs.globSync("resources/error-corpus/*.qmd")) {
+const leftJoin = <T1, T2>(lst1: T1[], lst2: T2[], match: (i1: T1, i2: T2) => boolean) => {
+  const result: [T1, T2][] = [];
+  for (const i1 of lst1) {
+    for (const i2 of lst2) {
+      if (match(i1, i2)) {
+        result.push([i1, i2]);
+      }
+    }
+  }
+  return result;
+};
+
+const files = Array.from(fs.globSync("resources/error-corpus/*.qmd")).toSorted((a, b) => a.localeCompare(b));
+for (const file of files) {
+  console.log(`Processing ${file}`);
   const base = basename(file, ".qmd");
   const errorInfo = JSON.parse(
     Deno.readTextFileSync(`resources/error-corpus/${base}.json`),
@@ -30,10 +44,19 @@ for (const file of fs.globSync("resources/error-corpus/*.qmd")) {
   const outputStdout = new TextDecoder().decode(output.stdout);
   const parseResultJson = JSON.parse(outputStdout);
   const { errorStates, tokens } = parseResultJson;
-  const matches = leftJoin(
+  
+  const looseMatching = (errorInfo.captures.some((e: any) => e.size === undefined));
+
+  const matches = looseMatching ? 
+    leftJoin(
+      tokens,
+      errorInfo.captures,
+      (tok: any, cap: any) => tok.row === cap.row && tok.column === cap.column && (cap.size !== undefined ? tok.size === cap.size : true)
+    )
+  : leftKeyJoin(
     tokens,
     errorInfo.captures,
-    (e: any) => `${e.row}:${e.column}:${e.size}`,
+    (e: any) => e.size ? `${e.row}:${e.column}:${e.size}` : `${e.row}:${e.column}`,
   );
   if (errorStates.length < 1) {
     throw new Error(`Expected at least one error state for ${file}`);
