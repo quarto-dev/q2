@@ -2,8 +2,8 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1188,
-    "sym": "_error",
+    "state": 1195,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-1",
       "title": "Unclosed Span",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 530,
+          "lrState": 376,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2404,
+    "state": 2600,
     "sym": "shortcode_naked_string_token1",
     "errorInfo": {
       "code": "Q-2-3",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2404,
+          "lrState": 2600,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -60,8 +60,8 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2179,
-    "sym": "_error",
+    "state": 2186,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-2",
       "title": "Mismatched Delimiter in Attribute Specifier",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2179,
+          "lrState": 2186,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -87,10 +87,70 @@
     "name": "002"
   },
   {
+    "column": 44,
+    "row": 0,
+    "state": 1804,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-7",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing \"'\" for the quote.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 619,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true
+        }
+      ]
+    },
+    "name": "006"
+  },
+  {
+    "column": 13,
+    "row": 0,
+    "state": 1687,
+    "sym": "](",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed emphasis",
+      "message": "I reached the end of the block before finding a closing _ for the emphasis.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 805,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emph-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "(Emphasis start) If you meant an underscore, escape it with a backslash.",
+          "label": "emph-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true
+        }
+      ]
+    },
+    "name": "007"
+  },
+  {
     "column": 17,
     "row": 0,
-    "state": 556,
-    "sym": "ERROR",
+    "state": 1687,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed Emphasis",
@@ -119,7 +179,7 @@
   {
     "column": 3,
     "row": 0,
-    "state": 3168,
+    "state": 3257,
     "sym": "{",
     "errorInfo": {
       "code": "Q-2-4",
@@ -128,7 +188,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 3168,
+          "lrState": 3257,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",
@@ -136,7 +196,7 @@
         },
         {
           "column": 3,
-          "lrState": 2179,
+          "lrState": 2186,
           "row": 0,
           "size": 1,
           "sym": "{",

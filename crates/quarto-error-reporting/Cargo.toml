@@ -20,5 +20,8 @@ once_cell = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# URL handling for file:// hyperlinks
+url = "2.5"
+
 [dev-dependencies]
 # No dev dependencies yet

@@ -34,10 +34,24 @@ const PANDOC_VALID_SYMBOLS =
 
 const PANDOC_ALPHA_NUM = "0-9A-Za-z\\p{L}\\p{N}";
 const PANDOC_PUNCTUATION = "\\p{Pd}#%&()/:+\\u{2026}";
+// Smart quotes that are allowed in pandoc_str
+// U+2018 = ' (left single quotation mark)
+// U+2019 = ' (right single quotation mark / apostrophe)
+// U+201A = ‚ (single low-9 quotation mark, German)
+// U+201B = ‛ (single high-reversed-9 quotation mark)
+// U+201C = " (left double quotation mark)
+// U+201D = " (right double quotation mark)
+// U+201E = „ (double low-9 quotation mark, German)
+// U+201F = ‟ (double high-reversed-9 quotation mark)
+// U+2039 = ‹ (single left-pointing angle quotation mark)
+// U+203A = › (single right-pointing angle quotation mark)
+// U+00AB = « (left-pointing double angle quotation mark / guillemet)
+// U+00BB = » (right-pointing double angle quotation mark / guillemet)
+const PANDOC_SMART_QUOTES = "\\u{2018}\\u{2019}\\u{201A}\\u{201B}\\u{201C}\\u{201D}\\u{201E}\\u{201F}\\u{2039}\\u{203A}\\u{00AB}\\u{00BB}";
 
-const PANDOC_REGEX_STR = 
-         "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" + 
-    "(?:[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "]|['\\u{2018}\\u{2019}][\\p{L}\\p{N}])*";
+const PANDOC_REGEX_STR =
+         "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" +
+    "(?:[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "]|['\\u{2018}\\u{2019}][\\p{L}\\p{N}])*";
 
 module.exports = grammar({
     name: 'markdown',
@@ -205,13 +219,13 @@ module.exports = grammar({
         pipe_table_delimiter_row: $ => seq(
             optional(seq(
                 optional($._whitespace),
-                '|',
+                $._pipe_table_delimiter,
             )),
             repeat1(prec.right(seq(
                 optional($._whitespace),
                 $.pipe_table_delimiter_cell,
                 optional($._whitespace),
-                '|',
+                $._pipe_table_delimiter,
             ))),
             optional($._whitespace),
             optional(seq(
@@ -229,7 +243,7 @@ module.exports = grammar({
         pipe_table_row: $ => prec(2, seq(
             optional(seq(
                 optional($._whitespace),
-                '|',
+                $._pipe_table_delimiter,
             )),
             choice(
                 seq(
@@ -242,7 +256,7 @@ module.exports = grammar({
                             ),
                             alias($._whitespace, $.pipe_table_cell)
                         ),
-                        '|',
+                        $._pipe_table_delimiter,
                     )))),
                     optional($._whitespace),
                     optional(seq(
@@ -422,7 +436,7 @@ module.exports = grammar({
             optional($._inline_whitespace),
             '=',
             optional($._inline_whitespace),
-            alias(choice($._value_specifier_token, $._commonmark_single_quote_string, $._commonmark_double_quote_string), $.key_value_value)
+            alias(choice($._value_specifier_token, $._commonmark_single_quote_string, "''", '""', $._commonmark_double_quote_string), $.key_value_value)
         ),
 
         _commonmark_naked_value: $ => /[A-Za-z0-9_-]+/,
@@ -597,7 +611,7 @@ module.exports = grammar({
         )),
 
         // Things that are parsed directly as a pandoc str
-        pandoc_str: $ => new RegExp(PANDOC_REGEX_STR, 'u'),
+        pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|'),
         _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
@@ -916,6 +930,8 @@ module.exports = grammar({
         $.inline_note_reference, // we just send this token directly through
 
         $.html_element, // best-effort lexing of HTML elements simply for error reporting.
+
+        $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
     ],
     precedences: $ => [],
     extras: $ => [],
