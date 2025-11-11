@@ -768,6 +768,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pico-quarto-render"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "quarto-markdown-pandoc",
+ "walkdir",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
