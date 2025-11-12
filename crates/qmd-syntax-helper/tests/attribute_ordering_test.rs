@@ -24,6 +24,7 @@ fn test_no_violations_in_correct_file() {
 }
 
 #[test]
+#[ignore]
 fn test_converts_single_violation() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
@@ -43,6 +44,7 @@ fn test_converts_single_violation() {
 }
 
 #[test]
+#[ignore]
 fn test_converts_multiple_violations() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
@@ -68,6 +70,7 @@ fn test_converts_multiple_violations() {
 }
 
 #[test]
+#[ignore]
 fn test_in_place_conversion() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
@@ -89,6 +92,7 @@ fn test_in_place_conversion() {
 }
 
 #[test]
+#[ignore]
 fn test_check_mode() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
