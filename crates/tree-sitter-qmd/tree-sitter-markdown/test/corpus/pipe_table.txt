@@ -134,6 +134,8 @@ Example 200 - https://github.github.com/gfm/#example-200
     (pipe_table
       (pipe_table_header
         (pipe_table_cell
+          (pandoc_str)
+          (pandoc_str)
           (pandoc_str)))
       (pipe_table_delimiter_row
         (pipe_table_delimiter_cell))

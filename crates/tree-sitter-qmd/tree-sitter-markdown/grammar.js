@@ -49,9 +49,26 @@ const PANDOC_PUNCTUATION = "\\p{Pd}#%&()/:+\\u{2026}";
 // U+00BB = » (right-pointing double angle quotation mark / guillemet)
 const PANDOC_SMART_QUOTES = "\\u{2018}\\u{2019}\\u{201A}\\u{201B}\\u{201C}\\u{201D}\\u{201E}\\u{201F}\\u{2039}\\u{203A}\\u{00AB}\\u{00BB}";
 
+const regexBracket = (str) => `(?:${str})`;
+const regexOr = (...groups) => regexBracket(groups.join("|"));
+
+const startStrRegex = regexOr(
+    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]",
+    // "\\\\.",
+    "[" + PANDOC_VALID_SYMBOLS + "]"); 
+const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
+
 const PANDOC_REGEX_STR =
-         "(?:[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "])" +
-    "(?:[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]|\\\\.|[" + PANDOC_VALID_SYMBOLS + "]|['\\u{2018}\\u{2019}][\\p{L}\\p{N}])*";
+        regexOr(
+            "\\\\.",
+            startStrRegex +
+            regexOr(
+                "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]",
+                // "\\\\.",
+                "[" + PANDOC_VALID_SYMBOLS + "]",
+                "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
+                regexBracket("[_]" + afterUnderscoreRegex)
+            ) + "*");
 
 module.exports = grammar({
     name: 'markdown',
@@ -409,27 +426,28 @@ module.exports = grammar({
             seq('{', $.language_specifier, '}')
         ),
 
-        commonmark_specifier: $ => seq(
+        commonmark_specifier: $ => prec.right(seq(
             optional($._inline_whitespace),
-            alias(/[#][_A-Za-z][A-Za-z0-9_-]*/, $.attribute_id),
+            alias(/[#][._A-Za-z0-9-]+/, $.attribute_id),
             optional(
                 seq($._inline_whitespace, 
                     choice(
                         $._commonmark_specifier_start_with_class, 
                         $._commonmark_specifier_start_with_kv))),
-        ),
+            optional($._inline_whitespace),
+        )),
 
-        _commonmark_specifier_start_with_class: $ => seq(
+        _commonmark_specifier_start_with_class: $ => prec.right(seq(
             alias(/[.][A-Za-z][A-Za-z0-9_.-]*/, $.attribute_class),
             optional(repeat(seq($._inline_whitespace, alias(/[.][A-Za-z][A-Za-z0-9_-]*/, $.attribute_class)))),
             optional(seq($._inline_whitespace, $._commonmark_specifier_start_with_kv)),
-        ),
+        )),
 
-        _commonmark_specifier_start_with_kv: $ => seq(
+        _commonmark_specifier_start_with_kv: $ => prec.right(seq(
             alias($._commonmark_key_value_specifier, $.key_value_specifier),
             optional(repeat(seq(optional($._inline_whitespace), alias($._commonmark_key_value_specifier, $.key_value_specifier)))),
             optional($._inline_whitespace)
-        ),
+        )),
 
         _commonmark_key_value_specifier: $ => seq(
             alias($._key_specifier_token, $.key_value_key),

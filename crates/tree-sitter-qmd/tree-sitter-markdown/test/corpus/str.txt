@@ -6,6 +6,8 @@ a\|b
     (document
       (section
         (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
           (pandoc_str))))
 ================================================================================
 2

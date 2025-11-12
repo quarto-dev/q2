@@ -299,6 +299,8 @@ Example 36 - https://github.github.com/gfm/#example-36
         (pandoc_str)
         (emphasis_delimiter))
       (pandoc_space)
+      (pandoc_str)
+      (pandoc_str)
       (pandoc_str))))
 ================================================================================
 Example 38 - https://github.github.com/gfm/#example-38
@@ -603,6 +605,7 @@ baz
       (pandoc_soft_break)
       (pandoc_str)
       (pandoc_soft_break)
+      (pandoc_str)
       (pandoc_str)
       (pandoc_soft_break)
       (pandoc_str))))
@@ -2062,6 +2065,7 @@ The number of windows in my house is
       (pandoc_space)
       (pandoc_str)
       (pandoc_soft_break)
+      (pandoc_str)
       (pandoc_str)
       (pandoc_space)
       (pandoc_str)

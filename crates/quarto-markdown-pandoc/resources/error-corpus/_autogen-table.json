@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1121,
+    "state": 1195,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 375,
+          "lrState": 376,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2208,
+    "state": 2202,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-2",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2208,
+          "lrState": 2202,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -60,7 +60,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2607,
+    "state": 2327,
     "sym": "pandoc_str",
     "errorInfo": {
       "code": "Q-2-3",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2607,
+          "lrState": 2327,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -89,7 +89,7 @@
   {
     "column": 3,
     "row": 0,
-    "state": 3277,
+    "state": 3213,
     "sym": "{",
     "errorInfo": {
       "code": "Q-2-4",
@@ -98,7 +98,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 3277,
+          "lrState": 3213,
           "row": 0,
           "size": 3,
           "sym": "_fenced_div_start",
@@ -106,7 +106,7 @@
         },
         {
           "column": 3,
-          "lrState": 2208,
+          "lrState": 2202,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -131,7 +131,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1397,
+    "state": 1692,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -140,7 +140,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 691,
+          "lrState": 698,
           "row": 0,
           "size": 2,
           "sym": "emphasis_delimiter",
@@ -161,7 +161,7 @@
   {
     "column": 44,
     "row": 0,
-    "state": 1918,
+    "state": 1834,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -170,7 +170,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 607,
+          "lrState": 594,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -189,9 +189,9 @@
     "name": "006"
   },
   {
-    "column": 13,
+    "column": 10,
     "row": 0,
-    "state": 1397,
+    "state": 1692,
     "sym": "](",
     "errorInfo": {
       "code": "Q-2-5",
@@ -199,8 +199,8 @@
       "message": "I reached the end of the block before finding a closing _ for the emphasis.",
       "captures": [
         {
-          "column": 4,
-          "lrState": 804,
+          "column": 1,
+          "lrState": 805,
           "row": 0,
           "size": 1,
           "sym": "emphasis_delimiter",
@@ -221,7 +221,7 @@
   {
     "column": 5,
     "row": 0,
-    "state": 2983,
+    "state": 3248,
     "sym": "_whitespace",
     "errorInfo": {
       "code": "Q-2-8",
@@ -230,7 +230,7 @@
       "captures": [
         {
           "column": 5,
-          "lrState": 2309,
+          "lrState": 2331,
           "row": 0,
           "size": 5,
           "sym": "key_value_key",
@@ -251,7 +251,7 @@
   {
     "column": 6,
     "row": 0,
-    "state": 1918,
+    "state": 1834,
     "sym": "](",
     "errorInfo": {
       "code": "Q-2-7",

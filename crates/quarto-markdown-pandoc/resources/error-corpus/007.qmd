@@ -1,1 +1,1 @@
-[pdf_document](a)
+[_document](a)

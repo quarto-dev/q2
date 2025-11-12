@@ -674,3 +674,17 @@ key specifiers can have periods in them
                 (key_value_specifier
                   (key_value_key)
                   (key_value_value))))))))
+================================================================================
+Weird commonmark attributes from py-shiny's website
+================================================================================
+# pytest.ScopeName { #shiny.pytest.ScopeName }
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (atx_heading
+          (atx_h1_marker)
+          (pandoc_str)
+          (pandoc_space)
+          (attribute_specifier
+            (commonmark_specifier
+              (attribute_id))))))

@@ -139,6 +139,13 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-8",
     "since_version": "99.9.9"
   },
+  "Q-2-9": {
+    "subsystem": "markdown",
+    "title": "HTML Element Auto-converted",
+    "message_template": "HTML elements are automatically converted to raw HTML inlines.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-9",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",
