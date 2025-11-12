@@ -2134,7 +2134,7 @@
           "type": "ALIAS",
           "content": {
             "type": "PATTERN",
-            "value": "[#][A-Za-z][A-Za-z0-9_-]*"
+            "value": "[#][_A-Za-z][A-Za-z0-9_-]*"
           },
           "named": true,
           "value": "attribute_id"

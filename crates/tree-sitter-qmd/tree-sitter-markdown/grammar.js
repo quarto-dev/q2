@@ -411,7 +411,7 @@ module.exports = grammar({
 
         commonmark_specifier: $ => seq(
             optional($._inline_whitespace),
-            alias(/[#][A-Za-z][A-Za-z0-9_-]*/, $.attribute_id),
+            alias(/[#][_A-Za-z][A-Za-z0-9_-]*/, $.attribute_id),
             optional(
                 seq($._inline_whitespace, 
                     choice(
