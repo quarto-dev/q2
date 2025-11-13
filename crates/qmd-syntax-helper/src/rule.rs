@@ -88,9 +88,6 @@ impl RuleRegistry {
             crate::conversions::grid_tables::GridTableConverter::new()?,
         ));
         registry.register(Arc::new(
-            crate::conversions::div_whitespace::DivWhitespaceConverter::new()?,
-        ));
-        registry.register(Arc::new(
             crate::conversions::definition_lists::DefinitionListConverter::new()?,
         ));
 

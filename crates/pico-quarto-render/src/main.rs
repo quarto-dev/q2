@@ -48,8 +48,10 @@ fn main() -> Result<()> {
     }
 
     // Create output directory if it doesn't exist
-    fs::create_dir_all(&args.output_dir)
-        .context(format!("Failed to create output directory: {:?}", args.output_dir))?;
+    fs::create_dir_all(&args.output_dir).context(format!(
+        "Failed to create output directory: {:?}",
+        args.output_dir
+    ))?;
 
     // Find all .qmd files
     let qmd_files: Vec<PathBuf> = WalkDir::new(&args.input_dir)
@@ -87,8 +89,12 @@ fn main() -> Result<()> {
         }
     }
 
-    eprintln!("\nProcessed {} files: {} succeeded, {} failed",
-              success_count + error_count, success_count, error_count);
+    eprintln!(
+        "\nProcessed {} files: {} succeeded, {} failed",
+        success_count + error_count,
+        success_count,
+        error_count
+    );
 
     if error_count > 0 {
         std::process::exit(1);
@@ -104,8 +110,8 @@ fn process_qmd_file(
     verbose: u8,
 ) -> Result<PathBuf> {
     // Read the input file
-    let input_content = fs::read(qmd_path)
-        .context(format!("Failed to read file: {:?}", qmd_path))?;
+    let input_content =
+        fs::read(qmd_path).context(format!("Failed to read file: {:?}", qmd_path))?;
 
     // Parse QMD to AST
     // Enable parser verbose mode at level 2+
@@ -120,6 +126,7 @@ fn process_qmd_file(
         false, // loose mode
         qmd_path.to_str().unwrap_or("<unknown>"),
         &mut output_stream,
+        true,
     )
     .map_err(|diagnostics| {
         // Format error messages using DiagnosticMessage API
