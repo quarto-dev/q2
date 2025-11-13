@@ -359,7 +359,8 @@ impl DiagnosticMessage {
                 .or_else(|| self.details.iter().find_map(|d| d.location.as_ref()));
 
             if let Some(loc) = location {
-                if let Some(ariadne_output) = self.render_ariadne_source_context(loc, ctx.unwrap(), options.enable_hyperlinks)
+                if let Some(ariadne_output) =
+                    self.render_ariadne_source_context(loc, ctx.unwrap(), options.enable_hyperlinks)
                 {
                     result.push_str(&ariadne_output);
                     true
@@ -581,6 +582,7 @@ impl DiagnosticMessage {
     /// and other terminal emulators for opening files at specific positions.
     ///
     /// Returns the wrapped path if conditions are met, otherwise returns the original path.
+    #[cfg(not(target_family = "wasm"))]
     fn wrap_path_with_hyperlink(
         path: &str,
         has_disk_file: bool,
@@ -624,6 +626,19 @@ impl DiagnosticMessage {
         format!("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", file_url, path)
     }
 
+    /// WASM version: hyperlinks don't make sense in WASM environments (no file system).
+    /// Just return the path unmodified.
+    #[cfg(target_family = "wasm")]
+    fn wrap_path_with_hyperlink(
+        path: &str,
+        _has_disk_file: bool,
+        _line: Option<usize>,
+        _column: Option<usize>,
+        _enable_hyperlinks: bool,
+    ) -> String {
+        path.to_string()
+    }
+
     /// Render source context using ariadne (private helper for to_text).
     ///
     /// This produces the visual source code snippet with highlighting.
@@ -662,7 +677,13 @@ impl DiagnosticMessage {
         // Line and column numbers are 1-indexed for display (start_mapped.location uses 0-indexed)
         let line = Some(start_mapped.location.row + 1);
         let column = Some(start_mapped.location.column + 1);
-        let display_path = Self::wrap_path_with_hyperlink(&file.path, is_disk_file, line, column, enable_hyperlinks);
+        let display_path = Self::wrap_path_with_hyperlink(
+            &file.path,
+            is_disk_file,
+            line,
+            column,
+            enable_hyperlinks,
+        );
 
         // Determine report kind and color
         let (report_kind, main_color) = match self.kind {
