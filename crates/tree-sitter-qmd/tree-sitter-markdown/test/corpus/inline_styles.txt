@@ -11,6 +11,7 @@ this is water: H~2~O.
           (pandoc_str)
           (pandoc_space)
           (pandoc_str)
+          (pandoc_str)
           (pandoc_space)
           (pandoc_str)
           (pandoc_subscript

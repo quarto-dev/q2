@@ -244,7 +244,13 @@ fn parse_yaml_string_as_markdown(
     use quarto_error_reporting::DiagnosticMessageBuilder;
 
     let mut output_stream = VerboseOutput::Sink(io::sink());
-    let result = readers::qmd::read(value.as_bytes(), false, "<metadata>", &mut output_stream);
+    let result = readers::qmd::read(
+        value.as_bytes(),
+        false,
+        "<metadata>",
+        &mut output_stream,
+        true,
+    );
 
     match result {
         Ok((mut pandoc, _, warnings)) => {
@@ -714,8 +720,13 @@ pub fn parse_metadata_strings_with_source_info(
     match meta {
         MetaValueWithSourceInfo::MetaString { value, source_info } => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
-            let result =
-                readers::qmd::read(value.as_bytes(), false, "<metadata>", &mut output_stream);
+            let result = readers::qmd::read(
+                value.as_bytes(),
+                false,
+                "<metadata>",
+                &mut output_stream,
+                true,
+            );
             match result {
                 Ok((mut pandoc, _context, warnings)) => {
                     // Propagate warnings from recursive parse
@@ -805,7 +816,8 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
     match meta {
         MetaValue::MetaString(s) => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
-            let result = readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream);
+            let result =
+                readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream, true);
             match result {
                 Ok((mut pandoc, _context, _warnings)) => {
                     // TODO: Handle warnings from recursive parse

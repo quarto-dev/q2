@@ -964,6 +964,23 @@ fn native_visitor<T: Write>(
             // Process commonmark attributes (id, classes, key-value pairs)
             process_commonmark_attribute(children, context)
         }
+        "unnumbered_specifier" => {
+            // Process {-} syntax as "unnumbered" class
+            use hashlink::LinkedHashMap;
+
+            let attr = (
+                "".to_string(),
+                vec!["unnumbered".to_string()],
+                LinkedHashMap::new(),
+            );
+
+            let mut attr_source = AttrSourceInfo::empty();
+            attr_source
+                .classes
+                .push(Some(node_source_info_with_context(node, context)));
+
+            PandocNativeIntermediate::IntermediateAttr(attr, attr_source)
+        }
         "attribute_specifier" => {
             // Filter out delimiter nodes and pass through the commonmark_specifier or raw_specifier result
             // For language_specifier, we pass it through as-is (IntermediateBaseText)
@@ -974,6 +991,8 @@ fn native_visitor<T: Write>(
                     return child; // Should be IntermediateRawFormat
                 } else if node_name == "language_specifier" {
                     return child; // Should be IntermediateBaseText - let the parent handle it
+                } else if node_name == "unnumbered_specifier" {
+                    return child; // Should be IntermediateAttr with "unnumbered" class
                 }
             }
             // If no commonmark_specifier or raw_specifier found, return empty attr
@@ -1054,28 +1073,26 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateUnknown(range)
         }
         "html_element" => {
-            let range = node_location(node);
-            let mut start = range.start.offset;
-            while start < input_bytes.len() && input_bytes[start].is_ascii_whitespace() {
-                start += 1;
-            }
-            let mut end = range.end.offset;
-            while end > 0 && input_bytes[end].is_ascii_whitespace() {
-                end -= 1;
-            }
+            // Extract the text from the HTML element node
+            // Tree-sitter may include leading/trailing whitespace, so we trim it
+            let raw_text = node.utf8_text(input_bytes).unwrap();
+            let text = raw_text.trim().to_string();
 
-            let location = quarto_source_map::SourceInfo::original(
-                context.current_file_id(),
-                start,
-                end + 1, // End of "line 2"
-            );
-            let msg = DiagnosticMessageBuilder::error("HTML elements are not allowed")
-                .with_code("Q-2-6")
-                .with_location(location)
-                .add_info("Consider wrapping the element in raw inline syntax: `...`{=html}")
+            // Create a warning (not error) about the auto-conversion
+            let msg = DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
+                .with_code("Q-2-9")
+                .with_location(node_source_info_with_context(node, context))
+                .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
+                .add_hint("To be explicit, use: `<element>`{=html}")
                 .build();
             error_collector.add(msg);
-            PandocNativeIntermediate::IntermediateUnknown(range)
+
+            // Convert to RawInline with format="html"
+            PandocNativeIntermediate::IntermediateInline(Inline::RawInline(RawInline {
+                format: "html".to_string(),
+                text,
+                source_info: node_source_info_with_context(node, context),
+            }))
         }
         _ => {
             writeln!(

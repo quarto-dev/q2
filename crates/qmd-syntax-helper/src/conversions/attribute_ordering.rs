@@ -15,16 +15,16 @@ pub struct AttributeOrderingConverter {
 
 #[derive(Debug, Clone)]
 struct AttributeOrderingViolation {
-    start_offset: usize,  // Offset of '{'
-    end_offset: usize,    // Offset of '}' + 1
-    original: String,     // Original attrs including braces
+    start_offset: usize,                    // Offset of '{'
+    end_offset: usize,                      // Offset of '}' + 1
+    original: String,                       // Original attrs including braces
     error_location: Option<SourceLocation>, // For reporting
 }
 
 impl AttributeOrderingConverter {
     pub fn new() -> Result<Self> {
-        let pandoc_output_regex = Regex::new(r"^\[\]\{(.+)\}\s*$")
-            .context("Failed to compile pandoc output regex")?;
+        let pandoc_output_regex =
+            Regex::new(r"^\[\]\{(.+)\}\s*$").context("Failed to compile pandoc output regex")?;
 
         Ok(Self {
             pandoc_output_regex,
@@ -48,6 +48,7 @@ impl AttributeOrderingConverter {
             false, // not loose mode
             &filename,
             &mut sink,
+            true,
         );
 
         let diagnostics = match result {
@@ -101,7 +102,11 @@ impl AttributeOrderingConverter {
         let bytes = content.as_bytes();
 
         if error_offset >= bytes.len() {
-            return Err(anyhow!("Error offset {} is beyond content length {}", error_offset, bytes.len()));
+            return Err(anyhow!(
+                "Error offset {} is beyond content length {}",
+                error_offset,
+                bytes.len()
+            ));
         }
 
         // Search backward for '{'
@@ -110,7 +115,10 @@ impl AttributeOrderingConverter {
             start -= 1;
         }
         if bytes[start] != b'{' {
-            return Err(anyhow!("Could not find opening brace before offset {}", error_offset));
+            return Err(anyhow!(
+                "Could not find opening brace before offset {}",
+                error_offset
+            ));
         }
 
         // Search forward for '}'
@@ -119,7 +127,10 @@ impl AttributeOrderingConverter {
             end += 1;
         }
         if end >= bytes.len() || bytes[end] != b'}' {
-            return Err(anyhow!("Could not find closing brace after offset {}", error_offset));
+            return Err(anyhow!(
+                "Could not find closing brace after offset {}",
+                error_offset
+            ));
         }
 
         Ok((start, end + 1)) // +1 to include the '}'
@@ -142,11 +153,13 @@ impl AttributeOrderingConverter {
             .context("Failed to spawn pandoc. Is pandoc installed?")?;
 
         if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(input.as_bytes())
+            stdin
+                .write_all(input.as_bytes())
                 .context("Failed to write to pandoc stdin")?;
         }
 
-        let output = child.wait_with_output()
+        let output = child
+            .wait_with_output()
             .context("Failed to wait for pandoc")?;
 
         if !output.status.success() {
@@ -154,8 +167,8 @@ impl AttributeOrderingConverter {
             return Err(anyhow!("Pandoc failed: {}", stderr));
         }
 
-        let stdout = String::from_utf8(output.stdout)
-            .context("Pandoc output is not valid UTF-8")?;
+        let stdout =
+            String::from_utf8(output.stdout).context("Pandoc output is not valid UTF-8")?;
 
         // Extract normalized attrs from "[]{...}"
         if let Some(caps) = self.pandoc_output_regex.captures(stdout.trim()) {
@@ -181,14 +194,14 @@ impl AttributeOrderingConverter {
         let mut result = content.to_string();
 
         for violation in violations {
-            let normalized = self.normalize_with_pandoc(&violation.original)
-                .with_context(|| format!("Failed to normalize attributes: {}", violation.original))?;
+            let normalized = self
+                .normalize_with_pandoc(&violation.original)
+                .with_context(|| {
+                    format!("Failed to normalize attributes: {}", violation.original)
+                })?;
 
             // Replace original with normalized
-            result.replace_range(
-                violation.start_offset..violation.end_offset,
-                &normalized
-            );
+            result.replace_range(violation.start_offset..violation.end_offset, &normalized);
         }
 
         Ok(result)
@@ -201,7 +214,10 @@ impl AttributeOrderingConverter {
 
     /// Convert byte offset to column number (0-indexed)
     fn offset_to_column(&self, content: &str, offset: usize) -> usize {
-        let line_start = content[..offset].rfind('\n').map(|pos| pos + 1).unwrap_or(0);
+        let line_start = content[..offset]
+            .rfind('\n')
+            .map(|pos| pos + 1)
+            .unwrap_or(0);
         offset - line_start
     }
 }
@@ -225,10 +241,7 @@ impl Rule for AttributeOrderingConverter {
                 file_path: file_path.to_string_lossy().to_string(),
                 has_issue: true,
                 issue_count: 1,
-                message: Some(format!(
-                    "Attribute ordering violation: {}",
-                    v.original
-                )),
+                message: Some(format!("Attribute ordering violation: {}", v.original)),
                 location: v.error_location,
                 error_code: None,
                 error_codes: None,

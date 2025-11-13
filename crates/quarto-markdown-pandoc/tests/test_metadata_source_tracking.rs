@@ -59,9 +59,14 @@ fn test_metadata_source_tracking_002_qmd() {
     // Step 1: Read QMD to PandocAST
     let mut output_stream =
         quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-    let (pandoc, context, _warnings) =
-        readers::qmd::read(content.as_bytes(), false, test_file, &mut output_stream)
-            .expect("Failed to parse QMD");
+    let (pandoc, context, _warnings) = readers::qmd::read(
+        content.as_bytes(),
+        false,
+        test_file,
+        &mut output_stream,
+        true,
+    )
+    .expect("Failed to parse QMD");
 
     // Verify document-level metadata: title: metadata1
     if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = pandoc.meta {
@@ -153,9 +158,14 @@ title: Simple title
 description: This is a description
 ---"#;
 
-    let (pandoc, _context, _warnings) =
-        readers::qmd::read(input.as_bytes(), false, "test.qmd", &mut std::io::sink())
-            .expect("Failed to parse");
+    let (pandoc, _context, _warnings) = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.qmd",
+        &mut std::io::sink(),
+        true,
+    )
+    .expect("Failed to parse");
 
     // Extract metadata
     let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta else {
@@ -250,9 +260,14 @@ author: Test Author
 Some content here.
 "#;
 
-    let (pandoc, _context, _warnings) =
-        readers::qmd::read(input.as_bytes(), false, "test.qmd", &mut std::io::sink())
-            .expect("Failed to parse");
+    let (pandoc, _context, _warnings) = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.qmd",
+        &mut std::io::sink(),
+        true,
+    )
+    .expect("Failed to parse");
 
     // Extract metadata
     let MetaValueWithSourceInfo::MetaMap {
@@ -328,9 +343,14 @@ fn test_yaml_tagged_value_source_tracking() {
     // Parse QMD
     let mut output_stream =
         quarto_markdown_pandoc::utils::output::VerboseOutput::Sink(std::io::sink());
-    let (pandoc, _context, _warnings) =
-        readers::qmd::read(qmd_content.as_bytes(), false, test_file, &mut output_stream)
-            .expect("Failed to parse QMD");
+    let (pandoc, _context, _warnings) = readers::qmd::read(
+        qmd_content.as_bytes(),
+        false,
+        test_file,
+        &mut output_stream,
+        true,
+    )
+    .expect("Failed to parse QMD");
 
     // Get metadata
     if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = pandoc.meta {

@@ -18,6 +18,10 @@
         {
           "type": "raw_specifier",
           "named": true
+        },
+        {
+          "type": "unnumbered_specifier",
+          "named": true
         }
       ]
     }
@@ -639,6 +643,10 @@
         },
         {
           "type": "autolink",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
           "named": true
         },
         {
@@ -1446,6 +1454,10 @@
           "named": true
         },
         {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
           "type": "content",
           "named": true
         },
@@ -1674,6 +1686,10 @@
       "types": [
         {
           "type": "attribute_specifier",
+          "named": true
+        },
+        {
+          "type": "block_continuation",
           "named": true
         },
         {
@@ -2678,6 +2694,11 @@
     }
   },
   {
+    "type": "unnumbered_specifier",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "url",
     "named": true,
     "fields": {},
@@ -2722,14 +2743,6 @@
   },
   {
     "type": "[",
-    "named": false
-  },
-  {
-    "type": "]",
-    "named": false
-  },
-  {
-    "type": "](",
     "named": false
   },
   {

@@ -280,9 +280,11 @@ Example 34 - https://github.github.com/gfm/#example-34 (qmd needs escaping on #)
       (section
         (pandoc_paragraph
           (pandoc_str)
+          (pandoc_str)
           (pandoc_space)
           (pandoc_str))
         (pandoc_paragraph
+          (pandoc_str)
           (pandoc_str))))
 ================================================================================
 Example 36 - https://github.github.com/gfm/#example-36
@@ -300,4 +302,6 @@ Example 36 - https://github.github.com/gfm/#example-36
             (pandoc_str)
             (emphasis_delimiter))
           (pandoc_space)
+          (pandoc_str)
+          (pandoc_str)
           (pandoc_str))))

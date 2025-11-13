@@ -6,6 +6,8 @@ a\|b
     (document
       (section
         (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
           (pandoc_str))))
 ================================================================================
 2
@@ -45,6 +47,7 @@ a… … ✓
     (document
       (section
         (pandoc_paragraph
+          (pandoc_str)
           (pandoc_str)
           (pandoc_space)
           (pandoc_str)

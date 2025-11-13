@@ -99,3 +99,12 @@ $Hello\$th*er*e$ outside
           (pandoc_math)
           (pandoc_space)
           (pandoc_str))))
+================================================================================
+LaTeX with multiple spaces in equations
+================================================================================
+$p\times  p$
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_math))))

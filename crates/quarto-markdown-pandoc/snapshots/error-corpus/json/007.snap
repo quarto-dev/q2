@@ -14,9 +14,9 @@ expression: json_string
         "kind": "info",
         "location": {
           "Original": {
-            "end_offset": 5,
+            "end_offset": 2,
             "file_id": 0,
-            "start_offset": 4
+            "start_offset": 1
           }
         }
       }
@@ -24,9 +24,9 @@ expression: json_string
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 15,
+        "end_offset": 11,
         "file_id": 0,
-        "start_offset": 13
+        "start_offset": 10
       }
     },
     "problem": {

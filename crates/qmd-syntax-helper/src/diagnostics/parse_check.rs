@@ -12,7 +12,10 @@ impl ParseChecker {
     }
 
     /// Check if a file parses successfully and return diagnostic messages if it fails
-    fn check_parse(&self, file_path: &Path) -> Result<Option<Vec<quarto_error_reporting::DiagnosticMessage>>> {
+    fn check_parse(
+        &self,
+        file_path: &Path,
+    ) -> Result<Option<Vec<quarto_error_reporting::DiagnosticMessage>>> {
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
@@ -24,6 +27,7 @@ impl ParseChecker {
             false,
             &filename,
             &mut sink,
+            true,
         );
 
         match result {
@@ -49,10 +53,8 @@ impl Rule for ParseChecker {
             None => Ok(vec![]),
             Some(diags) => {
                 // Extract error codes from all diagnostics
-                let error_codes: Vec<String> = diags
-                    .iter()
-                    .filter_map(|d| d.code.clone())
-                    .collect();
+                let error_codes: Vec<String> =
+                    diags.iter().filter_map(|d| d.code.clone()).collect();
 
                 // Create a message that includes information about all errors
                 let message = if diags.len() == 1 {

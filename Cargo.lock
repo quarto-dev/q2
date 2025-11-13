@@ -750,6 +750,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pico-quarto-render"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "quarto-markdown-pandoc",
+ "walkdir",
+]
+
+[[package]]
 name = "potential_utf"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,5 +1,0 @@
-:::hello
-
-qmd does not allow infostrings without a delimiting space
-
-:::

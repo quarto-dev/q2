@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1121,
+    "state": 1247,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 375,
+          "lrState": 137,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2208,
+    "state": 2459,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-2",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2208,
+          "lrState": 2459,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -60,7 +60,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2607,
+    "state": 2630,
     "sym": "pandoc_str",
     "errorInfo": {
       "code": "Q-2-3",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2607,
+          "lrState": 2630,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -87,51 +87,9 @@
     "name": "003"
   },
   {
-    "column": 3,
-    "row": 0,
-    "state": 3277,
-    "sym": "{",
-    "errorInfo": {
-      "code": "Q-2-4",
-      "title": "Missing Space After Div Fence",
-      "message": "A space is required after ':::' when specifying div attributes.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 3277,
-          "row": 0,
-          "size": 3,
-          "sym": "_fenced_div_start",
-          "label": "fence-start"
-        },
-        {
-          "column": 3,
-          "lrState": 2208,
-          "row": 0,
-          "size": 1,
-          "sym": "{",
-          "label": "attribute-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This div fence needs a space before the attribute.",
-          "label": "fence-start",
-          "noteType": "simple"
-        },
-        {
-          "message": "Add a space here before the attribute.",
-          "label": "attribute-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "004"
-  },
-  {
     "column": 17,
     "row": 0,
-    "state": 1397,
+    "state": 1621,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -140,7 +98,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 691,
+          "lrState": 755,
           "row": 0,
           "size": 2,
           "sym": "emphasis_delimiter",
@@ -161,7 +119,7 @@
   {
     "column": 44,
     "row": 0,
-    "state": 1918,
+    "state": 2025,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -170,7 +128,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 607,
+          "lrState": 662,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -189,18 +147,18 @@
     "name": "006"
   },
   {
-    "column": 13,
+    "column": 10,
     "row": 0,
-    "state": 1397,
-    "sym": "](",
+    "state": 1621,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed emphasis",
       "message": "I reached the end of the block before finding a closing _ for the emphasis.",
       "captures": [
         {
-          "column": 4,
-          "lrState": 804,
+          "column": 1,
+          "lrState": 864,
           "row": 0,
           "size": 1,
           "sym": "emphasis_delimiter",
@@ -221,7 +179,7 @@
   {
     "column": 5,
     "row": 0,
-    "state": 2983,
+    "state": 3402,
     "sym": "_whitespace",
     "errorInfo": {
       "code": "Q-2-8",
@@ -230,7 +188,7 @@
       "captures": [
         {
           "column": 5,
-          "lrState": 2309,
+          "lrState": 2631,
           "row": 0,
           "size": 5,
           "sym": "key_value_key",
@@ -251,8 +209,8 @@
   {
     "column": 6,
     "row": 0,
-    "state": 1918,
-    "sym": "](",
+    "state": 2025,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
       "title": "Unclosed Single Quote",
@@ -260,7 +218,7 @@
       "captures": [
         {
           "column": 4,
-          "lrState": 628,
+          "lrState": 667,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -276,5 +234,34 @@
       ]
     },
     "name": "009"
+  },
+  {
+    "column": 2,
+    "row": 0,
+    "state": 662,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 662,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "010"
   }
 ]

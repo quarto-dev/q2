@@ -146,9 +146,11 @@ normal text (or even nothing) `[index][]`
       (pandoc_str)
       (pandoc_space)
       (pandoc_str)
+      (pandoc_str)
       (pandoc_space)
       (pandoc_str)
       (pandoc_space)
+      (pandoc_str)
       (pandoc_str)
       (pandoc_code_span
         (code_span_delimiter)
