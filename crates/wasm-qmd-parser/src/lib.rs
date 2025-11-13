@@ -83,9 +83,10 @@ fn pandoc_to_qmd(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String,
 }
 
 #[wasm_bindgen]
-pub fn parse_qmd(input: JsValue) -> JsValue {
+pub fn parse_qmd(input: JsValue, include_resolved_locations: JsValue) -> JsValue {
     let input = as_string(&input, "input");
-    let json = wasm_entry_points::parse_qmd(input.as_bytes());
+    let include_resolved_locations = as_string(&include_resolved_locations, "input") == "true";
+    let json = wasm_entry_points::parse_qmd(input.as_bytes(), include_resolved_locations);
     JsValue::from_str(&json)
 }
 
