@@ -18,6 +18,10 @@
         {
           "type": "raw_specifier",
           "named": true
+        },
+        {
+          "type": "unnumbered_specifier",
+          "named": true
         }
       ]
     }
@@ -2688,6 +2692,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "unnumbered_specifier",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "url",

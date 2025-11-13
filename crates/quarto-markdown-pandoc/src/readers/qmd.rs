@@ -55,6 +55,7 @@ pub fn read<T: Write>(
     _loose: bool,
     filename: &str,
     mut output_stream: &mut T,
+    prune_errors: bool,
 ) -> Result<
     (
         pandoc::Pandoc,
@@ -82,7 +83,13 @@ pub fn read<T: Write>(
         let mut input_bytes_with_newline = Vec::with_capacity(input_bytes.len() + 1);
         input_bytes_with_newline.extend_from_slice(input_bytes);
         input_bytes_with_newline.push(b'\n');
-        return read(&input_bytes_with_newline, _loose, filename, output_stream);
+        return read(
+            &input_bytes_with_newline,
+            _loose,
+            filename,
+            output_stream,
+            prune_errors,
+        );
     }
 
     let tree = parser
@@ -122,12 +129,26 @@ pub fn read<T: Write>(
         });
         if log_observer.had_errors() {
             // Produce structured DiagnosticMessage objects with proper source locations
-            let diagnostics = produce_diagnostic_messages(
+            let mut diagnostics = produce_diagnostic_messages(
                 input_bytes,
                 &log_observer,
                 filename,
                 &context.source_context,
             );
+
+            // Prune diagnostics based on ERROR nodes if enabled
+            if prune_errors {
+                use crate::readers::qmd_error_messages::{
+                    collect_error_node_ranges, get_outer_error_nodes,
+                    prune_diagnostics_by_error_nodes,
+                };
+
+                let error_nodes = collect_error_node_ranges(&tree);
+                let outer_nodes = get_outer_error_nodes(&error_nodes);
+                diagnostics =
+                    prune_diagnostics_by_error_nodes(diagnostics, &error_nodes, &outer_nodes);
+            }
+
             return Err(diagnostics);
         }
     }

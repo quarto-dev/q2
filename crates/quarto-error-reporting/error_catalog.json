@@ -146,6 +146,13 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-9",
     "since_version": "99.9.9"
   },
+  "Q-2-10": {
+    "subsystem": "markdown",
+    "title": "Closing Quote Without Matching Open Quote",
+    "message_template": "A space is causing a quote mark to be interpreted as a quotation close.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-10",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",

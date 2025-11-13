@@ -964,6 +964,23 @@ fn native_visitor<T: Write>(
             // Process commonmark attributes (id, classes, key-value pairs)
             process_commonmark_attribute(children, context)
         }
+        "unnumbered_specifier" => {
+            // Process {-} syntax as "unnumbered" class
+            use hashlink::LinkedHashMap;
+
+            let attr = (
+                "".to_string(),
+                vec!["unnumbered".to_string()],
+                LinkedHashMap::new(),
+            );
+
+            let mut attr_source = AttrSourceInfo::empty();
+            attr_source
+                .classes
+                .push(Some(node_source_info_with_context(node, context)));
+
+            PandocNativeIntermediate::IntermediateAttr(attr, attr_source)
+        }
         "attribute_specifier" => {
             // Filter out delimiter nodes and pass through the commonmark_specifier or raw_specifier result
             // For language_specifier, we pass it through as-is (IntermediateBaseText)
@@ -974,6 +991,8 @@ fn native_visitor<T: Write>(
                     return child; // Should be IntermediateRawFormat
                 } else if node_name == "language_specifier" {
                     return child; // Should be IntermediateBaseText - let the parent handle it
+                } else if node_name == "unnumbered_specifier" {
+                    return child; // Should be IntermediateAttr with "unnumbered" class
                 }
             }
             // If no commonmark_specifier or raw_specifier found, return empty attr

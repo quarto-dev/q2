@@ -40,6 +40,9 @@ struct Args {
     #[arg(long = "json-errors")]
     json_errors: bool,
 
+    #[arg(long = "no-prune-errors")]
+    no_prune_errors: bool,
+
     #[arg(long = "json-source-location", value_parser = ["full"])]
     json_source_location: Option<String>,
 
@@ -121,6 +124,7 @@ fn main() {
                 args.loose,
                 input_filename,
                 &mut output_stream,
+                !args.no_prune_errors, // prune_errors = !no_prune_errors
             );
             match result {
                 Ok((pandoc, context, warnings)) => {

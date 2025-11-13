@@ -421,12 +421,15 @@ module.exports = grammar({
         _pandoc_attr_specifier: $ => seq(
             '{',
             optional(choice(
+                $.unnumbered_specifier,
                 $.commonmark_specifier,
                 alias($._commonmark_specifier_start_with_class, $.commonmark_specifier),
                 alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier)
             )),
             '}'
         ),
+
+        unnumbered_specifier: $ => "-",
 
         language_specifier: $ => choice(
             $._language_specifier_token,

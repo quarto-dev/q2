@@ -37,7 +37,7 @@ pub fn qmd_to_pandoc(
     Vec<String>,
 > {
     let mut output = VerboseOutput::Sink(io::sink());
-    match readers::qmd::read(input, false, "<input>", &mut output) {
+    match readers::qmd::read(input, false, "<input>", &mut output, true) {
         Ok((pandoc, context, _warnings)) => {
             // TODO: Decide how to handle warnings in WASM context
             Ok((pandoc, context))

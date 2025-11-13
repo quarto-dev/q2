@@ -2092,6 +2092,10 @@
               "members": [
                 {
                   "type": "SYMBOL",
+                  "name": "unnumbered_specifier"
+                },
+                {
+                  "type": "SYMBOL",
                   "name": "commonmark_specifier"
                 },
                 {
@@ -2124,6 +2128,10 @@
           "value": "}"
         }
       ]
+    },
+    "unnumbered_specifier": {
+      "type": "STRING",
+      "value": "-"
     },
     "language_specifier": {
       "type": "CHOICE",

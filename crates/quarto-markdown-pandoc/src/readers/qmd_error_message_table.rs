@@ -61,16 +61,12 @@ pub fn lookup_error_message(process_message: &ProcessMessage) -> Option<&'static
     None
 }
 
-pub fn lookup_error_entry(process_message: &ProcessMessage) -> Option<&'static ErrorTableEntry> {
+pub fn lookup_error_entry(process_message: &ProcessMessage) -> Vec<&'static ErrorTableEntry> {
     let table = get_error_table();
-
-    for entry in table {
-        if entry.state == process_message.state && entry.sym == process_message.sym {
-            return Some(entry);
-        }
-    }
-
-    None
+    table
+        .into_iter()
+        .filter(|entry| entry.state == process_message.state && entry.sym == process_message.sym)
+        .collect()
 }
 
 #[cfg(test)]

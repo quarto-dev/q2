@@ -12,7 +12,13 @@ Some content
 "#;
 
     // Parse the document
-    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     // Parsing should succeed (warnings are not errors)
     assert!(
@@ -39,7 +45,13 @@ fn test_caption_with_table_no_warning() {
 "#;
 
     // Parse the document
-    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     // Parsing should succeed and no warnings should be emitted
     assert!(
@@ -65,7 +77,13 @@ fn test_html_element_produces_warning_not_error() {
     let input = "<b>hello world</b>";
 
     // Parse the document
-    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     // Parsing should succeed (warnings are not errors)
     assert!(
@@ -136,7 +154,13 @@ fn test_multiple_html_elements() {
     // Multiple HTML elements should each produce warnings and be converted
     let input = "<i>italic</i> and <b>bold</b>";
 
-    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     assert!(result.is_ok(), "Document should parse successfully");
 
@@ -187,7 +211,13 @@ fn test_block_level_html_elements() {
     // Block-level HTML elements like <div> should also be converted to RawInline
     let input = "<div>content</div>";
 
-    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     assert!(result.is_ok(), "Document should parse successfully");
 
@@ -239,7 +269,13 @@ fn test_html_elements_source_locations() {
     // Verify that warnings have accurate source locations
     let input = "hello <b>world</b>";
 
-    let result = readers::qmd::read(input.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     assert!(result.is_ok(), "Document should parse successfully");
 
@@ -280,10 +316,20 @@ fn test_comparison_with_explicit_raw_inline_syntax() {
     let implicit = "<b>test</b>";
     let explicit = "`<b>`{=html}test`</b>`{=html}";
 
-    let result_implicit =
-        readers::qmd::read(implicit.as_bytes(), false, "test.md", &mut std::io::sink());
-    let result_explicit =
-        readers::qmd::read(explicit.as_bytes(), false, "test.md", &mut std::io::sink());
+    let result_implicit = readers::qmd::read(
+        implicit.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
+    let result_explicit = readers::qmd::read(
+        explicit.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+    );
 
     assert!(result_implicit.is_ok() && result_explicit.is_ok());
 

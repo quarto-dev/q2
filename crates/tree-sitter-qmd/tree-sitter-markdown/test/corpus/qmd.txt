@@ -784,3 +784,16 @@ Syntax after parenthesis
             (pandoc_str)
             (emphasis_delimiter))
           (pandoc_str))))
+================================================================================
+unnumbered section specifier
+================================================================================
+## Hello {-}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (atx_heading
+          (atx_h2_marker)
+          (pandoc_str)
+          (pandoc_space)
+          (attribute_specifier
+            (unnumbered_specifier)))))

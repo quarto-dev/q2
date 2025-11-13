@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1321,
+    "state": 1247,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 139,
+          "lrState": 137,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2452,
+    "state": 2459,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-2",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2452,
+          "lrState": 2459,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -60,7 +60,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2587,
+    "state": 2630,
     "sym": "pandoc_str",
     "errorInfo": {
       "code": "Q-2-3",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2587,
+          "lrState": 2630,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -89,7 +89,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1877,
+    "state": 1621,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -119,7 +119,7 @@
   {
     "column": 44,
     "row": 0,
-    "state": 1741,
+    "state": 2025,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -128,7 +128,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 693,
+          "lrState": 662,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -149,7 +149,7 @@
   {
     "column": 10,
     "row": 0,
-    "state": 1877,
+    "state": 1621,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -179,7 +179,7 @@
   {
     "column": 5,
     "row": 0,
-    "state": 3885,
+    "state": 3402,
     "sym": "_whitespace",
     "errorInfo": {
       "code": "Q-2-8",
@@ -188,7 +188,7 @@
       "captures": [
         {
           "column": 5,
-          "lrState": 2599,
+          "lrState": 2631,
           "row": 0,
           "size": 5,
           "sym": "key_value_key",
@@ -209,7 +209,7 @@
   {
     "column": 6,
     "row": 0,
-    "state": 1741,
+    "state": 2025,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -234,5 +234,34 @@
       ]
     },
     "name": "009"
+  },
+  {
+    "column": 2,
+    "row": 0,
+    "state": 662,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 662,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "010"
   }
 ]

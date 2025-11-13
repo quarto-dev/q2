@@ -1,5 +1,5 @@
 use quarto_markdown_pandoc::readers::qmd;
-use quarto_markdown_pandoc::writers::json::{write_with_config, JsonConfig};
+use quarto_markdown_pandoc::writers::json::{JsonConfig, write_with_config};
 use std::io;
 
 #[test]
@@ -7,13 +7,13 @@ fn test_json_location_disabled_by_default() {
     let input = "Hello *world*!";
     let mut output = io::sink();
 
-    let (pandoc, context, _errors) = qmd::read(input.as_bytes(), false, "test.qmd", &mut output)
-        .expect("Failed to parse QMD");
+    let (pandoc, context, _errors) =
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+            .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
     let config = JsonConfig::default();
-    write_with_config(&pandoc, &context, &mut buf, &config)
-        .expect("Failed to write JSON");
+    write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
     let json: serde_json::Value = serde_json::from_slice(&buf).expect("Invalid JSON");
 
@@ -30,15 +30,15 @@ fn test_json_location_enabled() {
     let input = "Hello *world*!";
     let mut output = io::sink();
 
-    let (pandoc, context, _errors) = qmd::read(input.as_bytes(), false, "test.qmd", &mut output)
-        .expect("Failed to parse QMD");
+    let (pandoc, context, _errors) =
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+            .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: true,
     };
-    write_with_config(&pandoc, &context, &mut buf, &config)
-        .expect("Failed to write JSON");
+    write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
     let json: serde_json::Value = serde_json::from_slice(&buf).expect("Invalid JSON");
 
@@ -73,15 +73,15 @@ fn test_json_location_multiline() {
     let input = "Line 1\n\nLine 3 with *emphasis*.";
     let mut output = io::sink();
 
-    let (pandoc, context, _errors) = qmd::read(input.as_bytes(), false, "test.qmd", &mut output)
-        .expect("Failed to parse QMD");
+    let (pandoc, context, _errors) =
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+            .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: true,
     };
-    write_with_config(&pandoc, &context, &mut buf, &config)
-        .expect("Failed to write JSON");
+    write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
     let json: serde_json::Value = serde_json::from_slice(&buf).expect("Invalid JSON");
 
@@ -106,15 +106,15 @@ fn test_json_location_1_indexed() {
     let input = "Test";
     let mut output = io::sink();
 
-    let (pandoc, context, _errors) = qmd::read(input.as_bytes(), false, "test.qmd", &mut output)
-        .expect("Failed to parse QMD");
+    let (pandoc, context, _errors) =
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+            .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
     let config = JsonConfig {
         include_inline_locations: true,
     };
-    write_with_config(&pandoc, &context, &mut buf, &config)
-        .expect("Failed to write JSON");
+    write_with_config(&pandoc, &context, &mut buf, &config).expect("Failed to write JSON");
 
     let json: serde_json::Value = serde_json::from_slice(&buf).expect("Invalid JSON");
 
