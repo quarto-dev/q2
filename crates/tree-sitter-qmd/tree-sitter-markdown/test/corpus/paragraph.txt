@@ -20,6 +20,7 @@ Yes: this. And `this`: and _that_: too.
       (section
         (pandoc_paragraph
           (pandoc_str)
+          (pandoc_str)
           (pandoc_space)
           (pandoc_str)
           (pandoc_space)

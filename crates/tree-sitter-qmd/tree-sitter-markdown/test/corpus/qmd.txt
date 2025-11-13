@@ -688,3 +688,99 @@ Weird commonmark attributes from py-shiny's website
           (attribute_specifier
             (commonmark_specifier
               (attribute_id))))))
+================================================================================
+Spaces in attributes, links, etc
+================================================================================
+[ spaces ]{#ok}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)))))))
+================================================================================
+Spaces in attributes, links, etc
+================================================================================
+[ spaces ](./foo){#ok}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target
+              (url))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)))))))
+================================================================================
+Spaces in attributes, links, etc
+================================================================================
+![ spaces ](./foo){#ok}
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_image
+            (content
+              (pandoc_str))
+            (target
+              (url))
+            (attribute_specifier
+              (commonmark_specifier
+                (attribute_id)))))))
+================================================================================
+Emojis
+================================================================================
+🗓️ 🖥️ 🤭 ♻️ 🍎 🤗 👍🏽 👨‍👩‍👧‍👦
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
+Footnotes with surrounding spaces
+================================================================================
+footnote^[ space ]
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (inline_note
+            (inline_note_delimiter)
+            (pandoc_str)
+            (inline_note_delimiter)))))
+================================================================================
+Syntax after parenthesis
+================================================================================
+(_hello_)
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter))
+          (pandoc_str))))

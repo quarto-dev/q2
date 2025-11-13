@@ -27,6 +27,7 @@ Math paragraph: $a b dc--[[]##$.
           (pandoc_str)
           (pandoc_space)
           (pandoc_str)
+          (pandoc_str)
           (pandoc_space)
           (pandoc_math)
           (pandoc_str))))
@@ -49,6 +50,7 @@ $$ And the rest of the paragraph
           (pandoc_str)
           (pandoc_space)
           (pandoc_str)
+          (pandoc_str)
           (pandoc_space)
           (pandoc_display_math)
           (pandoc_space)
@@ -63,4 +65,14 @@ $$ And the rest of the paragraph
           (pandoc_str)
           (pandoc_space)
           (pandoc_str))))
-          
+================================================================================
+5 - mixed math
+================================================================================
+$$
+\text{if $x> B$}
+$$
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_display_math))))

@@ -53,17 +53,21 @@ const regexBracket = (str) => `(?:${str})`;
 const regexOr = (...groups) => regexBracket(groups.join("|"));
 
 const startStrRegex = regexOr(
-    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]",
-    // "\\\\.",
+    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
     "[" + PANDOC_VALID_SYMBOLS + "]"); 
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
+
+// Thanks, Claude
+const EMOJI_REGEX = "(\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?(\u200D\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?)*)";
 
 const PANDOC_REGEX_STR =
         regexOr(
             "\\\\.",
+            EMOJI_REGEX,
+            "[" + PANDOC_PUNCTUATION + "]",
             startStrRegex +
             regexOr(
-                "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_PUNCTUATION + PANDOC_SMART_QUOTES + "-]",
+                "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
                 // "\\\\.",
                 "[" + PANDOC_VALID_SYMBOLS + "]",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
@@ -306,26 +310,29 @@ module.exports = grammar({
 
         pandoc_span: $ => prec.right(seq(
             '[',
+            optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             choice(
                 $.target,
-                ']',
+                /[ \t]*[\]]/,
             ),
             optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         pandoc_image: $ => prec.right(seq(
             '![',
+            optional($._inline_whitespace),
             optional(alias($._inlines, $.content)),
             choice(
                 $.target,
-                ']',
+                /[ \t]*[\]]/,
             ),
             optional(alias($._pandoc_attr_specifier, $.attribute_specifier))
         )),
 
         target: $ => seq(
-            '](', 
+            /[ \t]*[\]][(]/, 
+            optional($._inline_whitespace),
             alias(repeat1(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
             optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
             ')'
@@ -333,13 +340,13 @@ module.exports = grammar({
 
         pandoc_math: $ => seq(
             '$',
-            /[^$ \t\n]([ \t]?[^$ \t\n]+|\\\$)*/,
+            /[^$ \t\n]([ \t]*[^$ \t\n]+|\\\$)*/,
             '$',
         ),
 
         pandoc_display_math: $ => seq(
             '$$',
-            /([^$]|\\\$)+/,
+            /([^$]|[$][^$]|\\\$)+/,
             '$$'
         ),
 
@@ -586,8 +593,10 @@ module.exports = grammar({
 
         inline_note: $ => prec(2, seq(
             alias($._inline_note_start_token, $.inline_note_delimiter),
+            optional($._inline_whitespace),
             $._inlines,
-            alias("]", $.inline_note_delimiter),
+            optional($._inline_whitespace),
+            alias(/[\t ]*[\]]/, $.inline_note_delimiter),
         )),
 
         pandoc_superscript: $ => seq(
@@ -756,7 +765,7 @@ module.exports = grammar({
 
         pandoc_div: $ => seq(
           $._fenced_div_start,
-          $._whitespace,
+          optional($._whitespace),
           choice(alias($._commonmark_naked_value, $.info_string), alias($._pandoc_attr_specifier, $.attribute_specifier)),
           $._newline,
           repeat($._block),

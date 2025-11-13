@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1195,
+    "state": 1321,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 376,
+          "lrState": 139,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2202,
+    "state": 2452,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-2",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2202,
+          "lrState": 2452,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -60,7 +60,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2327,
+    "state": 2587,
     "sym": "pandoc_str",
     "errorInfo": {
       "code": "Q-2-3",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2327,
+          "lrState": 2587,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -87,51 +87,9 @@
     "name": "003"
   },
   {
-    "column": 3,
-    "row": 0,
-    "state": 3213,
-    "sym": "{",
-    "errorInfo": {
-      "code": "Q-2-4",
-      "title": "Missing Space After Div Fence",
-      "message": "A space is required after ':::' when specifying div attributes.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 3213,
-          "row": 0,
-          "size": 3,
-          "sym": "_fenced_div_start",
-          "label": "fence-start"
-        },
-        {
-          "column": 3,
-          "lrState": 2202,
-          "row": 0,
-          "size": 1,
-          "sym": "{",
-          "label": "attribute-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This div fence needs a space before the attribute.",
-          "label": "fence-start",
-          "noteType": "simple"
-        },
-        {
-          "message": "Add a space here before the attribute.",
-          "label": "attribute-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "004"
-  },
-  {
     "column": 17,
     "row": 0,
-    "state": 1692,
+    "state": 1877,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -140,7 +98,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 698,
+          "lrState": 755,
           "row": 0,
           "size": 2,
           "sym": "emphasis_delimiter",
@@ -161,7 +119,7 @@
   {
     "column": 44,
     "row": 0,
-    "state": 1834,
+    "state": 1741,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -170,7 +128,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 594,
+          "lrState": 693,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -191,8 +149,8 @@
   {
     "column": 10,
     "row": 0,
-    "state": 1692,
-    "sym": "](",
+    "state": 1877,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
       "title": "Unclosed emphasis",
@@ -200,7 +158,7 @@
       "captures": [
         {
           "column": 1,
-          "lrState": 805,
+          "lrState": 864,
           "row": 0,
           "size": 1,
           "sym": "emphasis_delimiter",
@@ -221,7 +179,7 @@
   {
     "column": 5,
     "row": 0,
-    "state": 3248,
+    "state": 3885,
     "sym": "_whitespace",
     "errorInfo": {
       "code": "Q-2-8",
@@ -230,7 +188,7 @@
       "captures": [
         {
           "column": 5,
-          "lrState": 2331,
+          "lrState": 2599,
           "row": 0,
           "size": 5,
           "sym": "key_value_key",
@@ -251,8 +209,8 @@
   {
     "column": 6,
     "row": 0,
-    "state": 1834,
-    "sym": "](",
+    "state": 1741,
+    "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
       "title": "Unclosed Single Quote",
@@ -260,7 +218,7 @@
       "captures": [
         {
           "column": 4,
-          "lrState": 628,
+          "lrState": 667,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
