@@ -727,5 +727,469 @@
       ]
     },
     "name": "026"
+  },
+  {
+    "column": 22,
+    "row": 0,
+    "state": 1732,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 691,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "027"
+  },
+  {
+    "column": 18,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 758,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "028"
+  },
+  {
+    "column": 26,
+    "row": 0,
+    "state": 2005,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 756,
+          "row": 0,
+          "size": 2,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark",
+          "label": "strong-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "029"
+  },
+  {
+    "column": 18,
+    "row": 0,
+    "state": 1565,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-14",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 759,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "030"
+  },
+  {
+    "column": 26,
+    "row": 0,
+    "state": 2139,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 757,
+          "row": 0,
+          "size": 2,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark",
+          "label": "strong-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "031"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 1784,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-16",
+      "title": "Unclosed Superscript",
+      "message": "I reached the end of the block before finding a closing '^' for the superscript.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 769,
+          "row": 0,
+          "size": 1,
+          "sym": "superscript_delimiter",
+          "label": "super-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '^' mark",
+          "label": "super-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "032"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1668,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-17",
+      "title": "Unclosed Subscript",
+      "message": "I reached the end of the block before finding a closing '~' for the subscript.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 760,
+          "row": 0,
+          "size": 1,
+          "sym": "subscript_delimiter",
+          "label": "sub-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '~' mark",
+          "label": "sub-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "033"
+  },
+  {
+    "column": 20,
+    "row": 0,
+    "state": 2151,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-18",
+      "title": "Unclosed Strikeout",
+      "message": "I reached the end of the block before finding a closing '~~' for the strikeout.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 753,
+          "row": 0,
+          "size": 2,
+          "sym": "strikeout_delimiter",
+          "label": "strike-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '~~' mark",
+          "label": "strike-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "034"
+  },
+  {
+    "column": 28,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-19",
+      "title": "Unclosed Editorial Insert",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial insert.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 219,
+          "row": 0,
+          "size": 3,
+          "sym": "insert_delimiter",
+          "label": "insert-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[++' mark",
+          "label": "insert-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "035"
+  },
+  {
+    "column": 28,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-20",
+      "title": "Unclosed Editorial Delete",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial delete.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 220,
+          "row": 0,
+          "size": 3,
+          "sym": "delete_delimiter",
+          "label": "delete-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[--' mark",
+          "label": "delete-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "036"
+  },
+  {
+    "column": 29,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-21",
+      "title": "Unclosed Editorial Comment",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial comment.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 221,
+          "row": 0,
+          "size": 3,
+          "sym": "edit_comment_delimiter",
+          "label": "comment-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[>>' mark",
+          "label": "comment-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "037"
+  },
+  {
+    "column": 31,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-22",
+      "title": "Unclosed Editorial Highlight",
+      "message": "I reached the end of the block before finding a closing '!!]' for the editorial highlight.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 218,
+          "row": 0,
+          "size": 3,
+          "sym": "highlight_delimiter",
+          "label": "highlight-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[!!' mark",
+          "label": "highlight-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "038"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 3407,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-23",
+      "title": "Unclosed Inline Math",
+      "message": "I reached the end of the block before finding a closing '$' for the inline math.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 3713,
+          "row": 0,
+          "size": 1,
+          "sym": "$",
+          "label": "math-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '$' mark",
+          "label": "math-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "039"
+  },
+  {
+    "column": 0,
+    "row": 1,
+    "state": 2944,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-24",
+      "title": "Unclosed Code Span",
+      "message": "I reached the end of the block before finding a closing '`' for the code span.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 2864,
+          "row": 0,
+          "size": 1,
+          "sym": "code_span_delimiter",
+          "label": "code-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '`' mark",
+          "label": "code-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "040"
+  },
+  {
+    "column": 16,
+    "row": 0,
+    "state": 1184,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-25",
+      "title": "Unclosed Image",
+      "message": "I reached the end of the block before finding a closing '](url)' for the image.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 135,
+          "row": 0,
+          "size": 2,
+          "sym": "![",
+          "label": "image-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '![' mark",
+          "label": "image-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "041"
+  },
+  {
+    "column": 26,
+    "row": 0,
+    "state": 1887,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-26",
+      "title": "Unclosed Inline Footnote",
+      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 350,
+          "row": 0,
+          "size": 2,
+          "sym": "inline_note_delimiter",
+          "label": "footnote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '^[' mark",
+          "label": "footnote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "042"
   }
 ]

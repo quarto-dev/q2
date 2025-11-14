@@ -108,17 +108,15 @@ impl ValidationDiagnostic {
     /// let error = ValidationError::new("Expected number, got string", path);
     /// let vd = ValidationDiagnostic::from_validation_error(&error, &source_ctx);
     /// ```
-    pub fn from_validation_error(
-        error: &ValidationError,
-        source_ctx: &SourceContext,
-    ) -> Self {
+    pub fn from_validation_error(error: &ValidationError, source_ctx: &SourceContext) -> Self {
         // Build the diagnostic message for text rendering
         let diagnostic = Self::build_diagnostic_message(error, source_ctx);
 
         // Extract source range with filename
-        let source_range = error.yaml_node.as_ref().and_then(|node| {
-            Self::extract_source_range(&node.source_info, source_ctx)
-        });
+        let source_range = error
+            .yaml_node
+            .as_ref()
+            .and_then(|node| Self::extract_source_range(&node.source_info, source_ctx));
 
         // Convert instance path segments
         let instance_path = error
@@ -202,10 +200,7 @@ impl ValidationDiagnostic {
 
         // Add human-readable details
         if !error.instance_path.is_empty() {
-            builder = builder.add_detail(format!(
-                "At document path: `{}`",
-                error.instance_path
-            ));
+            builder = builder.add_detail(format!("At document path: `{}`", error.instance_path));
         } else {
             builder = builder.add_detail("At document root");
         }
@@ -243,7 +238,7 @@ impl ValidationDiagnostic {
             filename: file.path.clone(),
             start_offset: source_info.start_offset(),
             end_offset: source_info.end_offset(),
-            start_line: start_mapped.location.row + 1,      // 1-indexed
+            start_line: start_mapped.location.row + 1, // 1-indexed
             start_column: start_mapped.location.column + 1, // 1-indexed
             end_line: end_mapped.location.row + 1,
             end_column: end_mapped.location.column + 1,
@@ -264,31 +259,29 @@ impl ValidationDiagnostic {
                     property
                 ));
             }
-            ValidationErrorKind::TypeMismatch { expected, .. } => {
-                match expected.as_str() {
-                    "boolean" => {
-                        hints.push("Use `true` or `false` (YAML 1.2 standard)?".to_string());
-                    }
-                    "number" => {
-                        hints.push("Use a numeric value without quotes?".to_string());
-                    }
-                    "string" => {
-                        hints.push(
-                            "Ensure the value is a string (quoted if it contains special characters)?"
-                                .to_string(),
-                        );
-                    }
-                    "array" => {
-                        hints.push(
-                            "Use YAML array syntax: `[item1, item2]` or list format?".to_string(),
-                        );
-                    }
-                    "object" => {
-                        hints.push("Use YAML mapping syntax with key-value pairs?".to_string());
-                    }
-                    _ => {}
+            ValidationErrorKind::TypeMismatch { expected, .. } => match expected.as_str() {
+                "boolean" => {
+                    hints.push("Use `true` or `false` (YAML 1.2 standard)?".to_string());
                 }
-            }
+                "number" => {
+                    hints.push("Use a numeric value without quotes?".to_string());
+                }
+                "string" => {
+                    hints.push(
+                        "Ensure the value is a string (quoted if it contains special characters)?"
+                            .to_string(),
+                    );
+                }
+                "array" => {
+                    hints.push(
+                        "Use YAML array syntax: `[item1, item2]` or list format?".to_string(),
+                    );
+                }
+                "object" => {
+                    hints.push("Use YAML mapping syntax with key-value pairs?".to_string());
+                }
+                _ => {}
+            },
             ValidationErrorKind::InvalidEnumValue { .. } => {
                 hints.push("Check the schema for allowed values?".to_string());
             }

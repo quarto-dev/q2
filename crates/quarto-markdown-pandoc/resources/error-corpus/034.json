@@ -1,0 +1,20 @@
+{
+    "code": "Q-2-18",
+    "title": "Unclosed Strikeout",
+    "message": "I reached the end of the block before finding a closing '~~' for the strikeout.",
+    "captures": [
+        {
+            "label": "strike-start",
+            "row": 0,
+            "column": 0,
+            "size": 2
+        }
+    ],
+    "notes": [
+        {
+            "message": "This is the opening '~~' mark",
+            "label": "strike-start",
+            "noteType": "simple"
+        }
+    ]
+}

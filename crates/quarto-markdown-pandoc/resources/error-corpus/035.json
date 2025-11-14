@@ -1,0 +1,20 @@
+{
+    "code": "Q-2-19",
+    "title": "Unclosed Editorial Insert",
+    "message": "I reached the end of the block before finding a closing ']' for the editorial insert.",
+    "captures": [
+        {
+            "label": "insert-start",
+            "row": 0,
+            "column": 0,
+            "size": 3
+        }
+    ],
+    "notes": [
+        {
+            "message": "This is the opening '[++' mark",
+            "label": "insert-start",
+            "noteType": "simple"
+        }
+    ]
+}

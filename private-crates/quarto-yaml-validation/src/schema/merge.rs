@@ -7,23 +7,21 @@
 //! base object schemas with a derived object schema according to quarto-cli's
 //! merging rules (from common.ts:221-403).
 
-use std::collections::HashMap;
 use crate::error::{SchemaError, SchemaResult};
+use crate::schema::types::{AllOfSchema, AnyOfSchema, ObjectSchema, SchemaAnnotations};
 use crate::schema::{Schema, SchemaRegistry};
-use crate::schema::types::{SchemaAnnotations, AllOfSchema, AnyOfSchema, ObjectSchema};
+use std::collections::HashMap;
 
 /// Resolve a base schema reference if it's an eager ref
 ///
 /// Returns the resolved schema if it's a Ref with eager=true,
 /// otherwise returns the schema as-is.
-fn resolve_base_schema(
-    schema: &Schema,
-    registry: &SchemaRegistry,
-) -> SchemaResult<Schema> {
+fn resolve_base_schema(schema: &Schema, registry: &SchemaRegistry) -> SchemaResult<Schema> {
     match schema {
         Schema::Ref(ref_schema) if ref_schema.eager => {
             // Eager resolution - look up in registry
-            registry.resolve(&ref_schema.reference)
+            registry
+                .resolve(&ref_schema.reference)
                 .cloned()
                 .ok_or_else(|| SchemaError::InvalidStructure {
                     message: format!(
@@ -77,10 +75,8 @@ pub fn merge_object_schemas(
     let resolved_bases = resolved_bases?;
 
     // Validate all are object schemas
-    let base_objects: SchemaResult<Vec<_>> = resolved_bases
-        .iter()
-        .map(expect_object_schema)
-        .collect();
+    let base_objects: SchemaResult<Vec<_>> =
+        resolved_bases.iter().map(expect_object_schema).collect();
     let base_objects = base_objects?;
 
     if base_objects.is_empty() {
@@ -102,7 +98,7 @@ pub fn merge_object_schemas(
         closed: false,
         property_names: None,
         naming_convention: None,
-        base_schema: None,  // Don't propagate base_schema (already merged)
+        base_schema: None, // Don't propagate base_schema (already merged)
     };
 
     // Apply remaining base schema annotations (later bases override earlier)
@@ -150,11 +146,15 @@ pub fn merge_object_schemas(
     // Merge patternProperties
     for base in &base_objects {
         for (key, schema) in &base.pattern_properties {
-            result.pattern_properties.insert(key.clone(), schema.clone());
+            result
+                .pattern_properties
+                .insert(key.clone(), schema.clone());
         }
     }
     for (key, schema) in &derived.pattern_properties {
-        result.pattern_properties.insert(key.clone(), schema.clone());
+        result
+            .pattern_properties
+            .insert(key.clone(), schema.clone());
     }
 
     // Merge required (flatten all)
@@ -177,7 +177,9 @@ pub fn merge_object_schemas(
     result.additional_properties = if additional_props_schemas.is_empty() {
         None
     } else if additional_props_schemas.len() == 1 {
-        Some(Box::new(additional_props_schemas.into_iter().next().unwrap()))
+        Some(Box::new(
+            additional_props_schemas.into_iter().next().unwrap(),
+        ))
     } else {
         // Combine with allOf
         Some(Box::new(Schema::AllOf(AllOfSchema {
@@ -192,7 +194,10 @@ pub fn merge_object_schemas(
         if let Some(ref pn) = base.property_names {
             // Check if this is a case-detection schema (has tags.case-detection)
             let is_case_detection = match pn.as_ref() {
-                Schema::String(s) => s.annotations.tags.as_ref()
+                Schema::String(s) => s
+                    .annotations
+                    .tags
+                    .as_ref()
                     .and_then(|tags| tags.get("case-detection"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false),
@@ -250,12 +255,15 @@ mod tests {
 
         // Create base schema
         let mut base_props = HashMap::new();
-        base_props.insert("id".to_string(), Schema::String(StringSchema {
-            annotations: Default::default(),
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }));
+        base_props.insert(
+            "id".to_string(),
+            Schema::String(StringSchema {
+                annotations: Default::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
 
         let base = ObjectSchema {
             annotations: Default::default(),
@@ -273,12 +281,15 @@ mod tests {
 
         // Create derived schema
         let mut derived_props = HashMap::new();
-        derived_props.insert("name".to_string(), Schema::String(StringSchema {
-            annotations: Default::default(),
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }));
+        derived_props.insert(
+            "name".to_string(),
+            Schema::String(StringSchema {
+                annotations: Default::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
 
         let derived = ObjectSchema {
             annotations: Default::default(),
@@ -295,11 +306,7 @@ mod tests {
         };
 
         // Merge
-        let merged = merge_object_schemas(
-            &[Schema::Object(base)],
-            &derived,
-            &registry,
-        ).unwrap();
+        let merged = merge_object_schemas(&[Schema::Object(base)], &derived, &registry).unwrap();
 
         // Verify merged has both properties
         assert!(merged.properties.contains_key("id"));
@@ -315,12 +322,15 @@ mod tests {
 
         // Register base schema
         let mut base_props = HashMap::new();
-        base_props.insert("base_field".to_string(), Schema::String(StringSchema {
-            annotations: Default::default(),
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }));
+        base_props.insert(
+            "base_field".to_string(),
+            Schema::String(StringSchema {
+                annotations: Default::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
 
         let base = Schema::Object(ObjectSchema {
             annotations: SchemaAnnotations {
@@ -350,9 +360,12 @@ mod tests {
 
         // Create derived
         let mut derived_props = HashMap::new();
-        derived_props.insert("derived_field".to_string(), Schema::Boolean(BooleanSchema {
-            annotations: Default::default(),
-        }));
+        derived_props.insert(
+            "derived_field".to_string(),
+            Schema::Boolean(BooleanSchema {
+                annotations: Default::default(),
+            }),
+        );
 
         let derived = ObjectSchema {
             annotations: Default::default(),
@@ -369,11 +382,7 @@ mod tests {
         };
 
         // Merge
-        let merged = merge_object_schemas(
-            &[base_ref],
-            &derived,
-            &registry,
-        ).unwrap();
+        let merged = merge_object_schemas(&[base_ref], &derived, &registry).unwrap();
 
         // Verify
         assert!(merged.properties.contains_key("base_field"));
@@ -388,15 +397,18 @@ mod tests {
 
         // Base has 'name' as string with no constraints
         let mut base_props = HashMap::new();
-        base_props.insert("name".to_string(), Schema::String(StringSchema {
-            annotations: SchemaAnnotations {
-                description: Some("Base description".to_string()),
-                ..Default::default()
-            },
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }));
+        base_props.insert(
+            "name".to_string(),
+            Schema::String(StringSchema {
+                annotations: SchemaAnnotations {
+                    description: Some("Base description".to_string()),
+                    ..Default::default()
+                },
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
 
         let base = ObjectSchema {
             annotations: Default::default(),
@@ -414,15 +426,18 @@ mod tests {
 
         // Derived overrides 'name' with pattern
         let mut derived_props = HashMap::new();
-        derived_props.insert("name".to_string(), Schema::String(StringSchema {
-            annotations: SchemaAnnotations {
-                description: Some("Derived description".to_string()),
-                ..Default::default()
-            },
-            min_length: None,
-            max_length: None,
-            pattern: Some("^[A-Z]".to_string()),
-        }));
+        derived_props.insert(
+            "name".to_string(),
+            Schema::String(StringSchema {
+                annotations: SchemaAnnotations {
+                    description: Some("Derived description".to_string()),
+                    ..Default::default()
+                },
+                min_length: None,
+                max_length: None,
+                pattern: Some("^[A-Z]".to_string()),
+            }),
+        );
 
         let derived = ObjectSchema {
             annotations: Default::default(),
@@ -439,17 +454,16 @@ mod tests {
         };
 
         // Merge
-        let merged = merge_object_schemas(
-            &[Schema::Object(base)],
-            &derived,
-            &registry,
-        ).unwrap();
+        let merged = merge_object_schemas(&[Schema::Object(base)], &derived, &registry).unwrap();
 
         // Derived should win
         match merged.properties.get("name") {
             Some(Schema::String(s)) => {
                 assert_eq!(s.pattern, Some("^[A-Z]".to_string()));
-                assert_eq!(s.annotations.description, Some("Derived description".to_string()));
+                assert_eq!(
+                    s.annotations.description,
+                    Some("Derived description".to_string())
+                );
             }
             _ => panic!("Expected string schema for name"),
         }
@@ -490,18 +504,14 @@ mod tests {
         };
 
         // Merge - should be closed
-        let merged = merge_object_schemas(
-            &[Schema::Object(base)],
-            &derived,
-            &registry,
-        ).unwrap();
+        let merged = merge_object_schemas(&[Schema::Object(base)], &derived, &registry).unwrap();
 
         assert!(merged.closed);
     }
 
     #[test]
     fn test_missing_reference_error() {
-        let registry = SchemaRegistry::new();  // Empty
+        let registry = SchemaRegistry::new(); // Empty
 
         let base_ref = Schema::Ref(RefSchema {
             annotations: Default::default(),
@@ -525,7 +535,12 @@ mod tests {
 
         let result = merge_object_schemas(&[base_ref], &derived, &registry);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found in registry"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("not found in registry")
+        );
     }
 
     #[test]
@@ -533,12 +548,15 @@ mod tests {
         let mut registry = SchemaRegistry::new();
 
         // Register a STRING schema (not object)
-        registry.register("not-object".to_string(), Schema::String(StringSchema {
-            annotations: Default::default(),
-            min_length: None,
-            max_length: None,
-            pattern: None,
-        }));
+        registry.register(
+            "not-object".to_string(),
+            Schema::String(StringSchema {
+                annotations: Default::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
 
         let base_ref = Schema::Ref(RefSchema {
             annotations: Default::default(),
@@ -562,7 +580,12 @@ mod tests {
 
         let result = merge_object_schemas(&[base_ref], &derived, &registry);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("must be an object schema"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must be an object schema")
+        );
     }
 
     #[test]
@@ -585,6 +608,11 @@ mod tests {
 
         let result = merge_object_schemas(&[], &derived, &registry);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("cannot be empty list"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("cannot be empty list")
+        );
     }
 }

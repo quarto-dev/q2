@@ -130,10 +130,7 @@ pub(in crate::schema) fn parse_maybe_arrayof_schema(
 
     // Add "complete-from" tag
     let mut tags = HashMap::new();
-    tags.insert(
-        "complete-from".to_string(),
-        serde_json::json!(["anyOf", 0]),
-    );
+    tags.insert("complete-from".to_string(), serde_json::json!(["anyOf", 0]));
 
     let annotations = SchemaAnnotations {
         tags: Some(tags),

@@ -125,9 +125,9 @@ fn parse_object_form(yaml: &YamlWithSourceInfo) -> SchemaResult<Schema> {
         "maybeArrayOf" => parse_maybe_arrayof_schema(&first_entry.value),
         "object" => parse_object_schema(&first_entry.value),
         "record" => parse_record_schema(&first_entry.value),
-        "schema" => parse_schema_wrapper(yaml),  // Note: pass whole yaml, not just value
-        "ref" | "$ref" => parse_ref_schema(&first_entry.value, false),  // Lazy reference
-        "resolveRef" => parse_ref_schema(&first_entry.value, true),  // Eager reference
+        "schema" => parse_schema_wrapper(yaml), // Note: pass whole yaml, not just value
+        "ref" | "$ref" => parse_ref_schema(&first_entry.value, false), // Lazy reference
+        "resolveRef" => parse_ref_schema(&first_entry.value, true), // Eager reference
         _ => Err(SchemaError::InvalidType(key.to_string())),
     }
 }

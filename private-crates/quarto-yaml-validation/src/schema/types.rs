@@ -50,7 +50,10 @@ pub struct SchemaAnnotations {
     pub completions: Option<Vec<String>>,
 
     /// Additional completions to merge with existing completions (Quarto extension)
-    #[serde(rename = "additionalCompletions", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "additionalCompletions",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub additional_completions: Option<Vec<String>>,
 
     /// Tags for categorization (e.g., "engine: knitr")

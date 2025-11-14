@@ -1,5 +1,5 @@
-use quarto_yaml_validation::{Schema, SchemaRegistry};
 use quarto_yaml;
+use quarto_yaml_validation::{Schema, SchemaRegistry};
 
 /// Test compiling a schema with inheritance
 #[test]
@@ -7,18 +7,22 @@ fn test_compile_with_inheritance() {
     let mut registry = SchemaRegistry::new();
 
     // Register base schema
-    let base_yaml = quarto_yaml::parse(r#"
+    let base_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     id: string
     created_at: string
   required: [id]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let base = Schema::from_yaml(&base_yaml).unwrap();
     registry.register("base".to_string(), base);
 
     // Parse derived schema with inheritance
-    let derived_yaml = quarto_yaml::parse(r#"
+    let derived_yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     resolveRef: base
@@ -26,7 +30,9 @@ object:
     name: string
     email: string
   required: [name]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let derived = Schema::from_yaml(&derived_yaml).unwrap();
 
     // Before compilation, derived has base_schema
@@ -62,22 +68,31 @@ fn test_compile_eager_vs_lazy_refs() {
     let mut registry = SchemaRegistry::new();
 
     // Register a schema
-    let target_yaml = quarto_yaml::parse(r#"
+    let target_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     value: string
-"#).unwrap();
-    registry.register("target".to_string(), Schema::from_yaml(&target_yaml).unwrap());
+"#,
+    )
+    .unwrap();
+    registry.register(
+        "target".to_string(),
+        Schema::from_yaml(&target_yaml).unwrap(),
+    );
 
     // Schema with both eager and lazy refs
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     eager_prop:
       resolveRef: target
     lazy_prop:
       ref: target
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&yaml).unwrap();
 
     // Compile
@@ -113,13 +128,20 @@ fn test_compile_nested_schemas() {
 
     // Register base schemas
     let string_schema_yaml = quarto_yaml::parse("string").unwrap();
-    registry.register("string-schema".to_string(), Schema::from_yaml(&string_schema_yaml).unwrap());
+    registry.register(
+        "string-schema".to_string(),
+        Schema::from_yaml(&string_schema_yaml).unwrap(),
+    );
 
     let number_schema_yaml = quarto_yaml::parse("number").unwrap();
-    registry.register("number-schema".to_string(), Schema::from_yaml(&number_schema_yaml).unwrap());
+    registry.register(
+        "number-schema".to_string(),
+        Schema::from_yaml(&number_schema_yaml).unwrap(),
+    );
 
     // Schema with nested eager refs
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     flexible:
@@ -130,7 +152,9 @@ object:
       array:
         items:
           resolveRef: string-schema
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&yaml).unwrap();
 
     // Compile
@@ -152,7 +176,10 @@ object:
             match obj.properties.get("list") {
                 Some(Schema::Array(arr)) => {
                     assert!(arr.items.is_some());
-                    assert!(matches!(arr.items.as_ref().unwrap().as_ref(), Schema::String(_)));
+                    assert!(matches!(
+                        arr.items.as_ref().unwrap().as_ref(),
+                        Schema::String(_)
+                    ));
                 }
                 _ => panic!("Expected Array schema"),
             }
@@ -166,13 +193,7 @@ object:
 fn test_compile_primitives() {
     let registry = SchemaRegistry::new();
 
-    let primitives = vec![
-        "boolean",
-        "string",
-        "number",
-        "null",
-        "any",
-    ];
+    let primitives = vec!["boolean", "string", "number", "null", "any"];
 
     for primitive in primitives {
         let yaml = quarto_yaml::parse(primitive).unwrap();
@@ -189,13 +210,16 @@ fn test_compile_primitives() {
 fn test_compile_error_missing_eager_ref() {
     let registry = SchemaRegistry::new(); // Empty registry
 
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     resolveRef: non-existent
   properties:
     name: string
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&yaml).unwrap();
 
     let result = schema.compile(&registry);
@@ -210,27 +234,28 @@ object:
 fn test_compile_preserves_lazy_ref_to_missing_target() {
     let registry = SchemaRegistry::new(); // Empty registry
 
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     person:
       ref: non-existent
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&yaml).unwrap();
 
     // Should NOT error - lazy refs are not resolved during compilation
     let compiled = schema.compile(&registry).unwrap();
 
     match compiled {
-        Schema::Object(obj) => {
-            match obj.properties.get("person") {
-                Some(Schema::Ref(r)) => {
-                    assert_eq!(r.reference, "non-existent");
-                    assert_eq!(r.eager, false);
-                }
-                _ => panic!("Expected Ref schema"),
+        Schema::Object(obj) => match obj.properties.get("person") {
+            Some(Schema::Ref(r)) => {
+                assert_eq!(r.reference, "non-existent");
+                assert_eq!(r.eager, false);
             }
-        }
+            _ => panic!("Expected Ref schema"),
+        },
         _ => panic!("Expected Object schema"),
     }
 }
@@ -241,13 +266,16 @@ fn test_compile_circular_lazy_refs() {
     let mut registry = SchemaRegistry::new();
 
     // Register person schema with circular reference to itself
-    let person_yaml = quarto_yaml::parse(r#"
+    let person_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     name: string
     parent:
       ref: person
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let person_schema = Schema::from_yaml(&person_yaml).unwrap();
     registry.register("person".to_string(), person_schema);
 
@@ -280,31 +308,40 @@ fn test_compile_multiple_inheritance() {
     let mut registry = SchemaRegistry::new();
 
     // Register base schemas
-    let base1_yaml = quarto_yaml::parse(r#"
+    let base1_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     field1: string
   required: [field1]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     registry.register("base1".to_string(), Schema::from_yaml(&base1_yaml).unwrap());
 
-    let base2_yaml = quarto_yaml::parse(r#"
+    let base2_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     field2: number
   required: [field2]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     registry.register("base2".to_string(), Schema::from_yaml(&base2_yaml).unwrap());
 
     // Derived with multiple bases
-    let derived_yaml = quarto_yaml::parse(r#"
+    let derived_yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     - resolveRef: base1
     - resolveRef: base2
   properties:
     field3: boolean
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let derived = Schema::from_yaml(&derived_yaml).unwrap();
 
     // Compile
@@ -329,13 +366,16 @@ object:
 fn test_compile_simple_schema() {
     let registry = SchemaRegistry::new();
 
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     name: string
     age: number
   required: [name]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&yaml).unwrap();
 
     let compiled = schema.compile(&registry).unwrap();
@@ -355,9 +395,12 @@ object:
 fn test_compile_enum() {
     let registry = SchemaRegistry::new();
 
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 enum: [option1, option2, option3]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&yaml).unwrap();
     let compiled = schema.compile(&registry).unwrap();
 

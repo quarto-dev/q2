@@ -1,5 +1,14 @@
 # Quarto Rust monorepo
 
+## **TERMINAL RESET**
+
+If the terminal output becomes corrupted (especially from truncated ANSI link sequences), reset it with:
+```bash
+printf '\033[0m' && printf '\033]8;;\007' && echo "Terminal reset"
+```
+
+When the user asks you to "reset the terminal", run this command.
+
 ## **WORK TRACKING**
 
 We use bd (beads) for issue tracking instead of Markdown TODOs or external tools.

@@ -81,26 +81,16 @@ pub enum ValidationErrorKind {
     SchemaFalse,
 
     /// Type mismatch
-    TypeMismatch {
-        expected: String,
-        got: String,
-    },
+    TypeMismatch { expected: String, got: String },
 
     /// Missing required property
-    MissingRequiredProperty {
-        property: String,
-    },
+    MissingRequiredProperty { property: String },
 
     /// Unknown property in closed object
-    UnknownProperty {
-        property: String,
-    },
+    UnknownProperty { property: String },
 
     /// Value not in enum
-    InvalidEnumValue {
-        value: String,
-        allowed: Vec<String>,
-    },
+    InvalidEnumValue { value: String, allowed: Vec<String> },
 
     /// Number out of range
     NumberOutOfRange {
@@ -112,10 +102,7 @@ pub enum ValidationErrorKind {
     },
 
     /// Number not a multiple of
-    NumberNotMultipleOf {
-        value: f64,
-        multiple_of: f64,
-    },
+    NumberNotMultipleOf { value: f64, multiple_of: f64 },
 
     /// String length invalid
     StringLengthInvalid {
@@ -125,10 +112,7 @@ pub enum ValidationErrorKind {
     },
 
     /// String doesn't match pattern
-    StringPatternMismatch {
-        value: String,
-        pattern: String,
-    },
+    StringPatternMismatch { value: String, pattern: String },
 
     /// Array length invalid
     ArrayLengthInvalid {
@@ -148,24 +132,16 @@ pub enum ValidationErrorKind {
     },
 
     /// Unresolved schema reference
-    UnresolvedReference {
-        ref_id: String,
-    },
+    UnresolvedReference { ref_id: String },
 
     /// AllOf validation failed
-    AllOfFailed {
-        failing_schemas: Vec<usize>,
-    },
+    AllOfFailed { failing_schemas: Vec<usize> },
 
     /// AnyOf validation failed (none matched)
-    AnyOfFailed {
-        attempted_schemas: usize,
-    },
+    AnyOfFailed { attempted_schemas: usize },
 
     /// OneOf validation failed (zero or multiple matched)
-    OneOfFailed {
-        matching_schemas: Vec<usize>,
-    },
+    OneOfFailed { matching_schemas: Vec<usize> },
 
     /// Other validation error
     ///
@@ -177,9 +153,7 @@ pub enum ValidationErrorKind {
     /// - They enable better error reporting and hints
     ///
     /// Only use `Other` for truly unexpected or edge-case errors.
-    Other {
-        message: String,
-    },
+    Other { message: String },
 }
 
 impl ValidationErrorKind {
@@ -191,7 +165,8 @@ impl ValidationErrorKind {
             ValidationErrorKind::InvalidEnumValue { .. } => "Q-1-12",
             ValidationErrorKind::ArrayLengthInvalid { .. } => "Q-1-13",
             ValidationErrorKind::StringPatternMismatch { .. } => "Q-1-14",
-            ValidationErrorKind::NumberOutOfRange { .. } | ValidationErrorKind::NumberNotMultipleOf { .. } => "Q-1-15",
+            ValidationErrorKind::NumberOutOfRange { .. }
+            | ValidationErrorKind::NumberNotMultipleOf { .. } => "Q-1-15",
             ValidationErrorKind::ObjectPropertyCountInvalid { .. } => "Q-1-16",
             ValidationErrorKind::UnresolvedReference { .. } => "Q-1-17",
             ValidationErrorKind::UnknownProperty { .. } => "Q-1-18",
@@ -221,9 +196,19 @@ impl ValidationErrorKind {
                 format!("Unknown property '{}'", property)
             }
             ValidationErrorKind::InvalidEnumValue { value, allowed } => {
-                format!("Value must be one of: {}, got '{}'", allowed.join(", "), value)
+                format!(
+                    "Value must be one of: {}, got '{}'",
+                    allowed.join(", "),
+                    value
+                )
             }
-            ValidationErrorKind::NumberOutOfRange { value, minimum, maximum, exclusive_minimum, exclusive_maximum } => {
+            ValidationErrorKind::NumberOutOfRange {
+                value,
+                minimum,
+                maximum,
+                exclusive_minimum,
+                exclusive_maximum,
+            } => {
                 if let Some(min) = minimum {
                     format!("Number {} is less than minimum {}", value, min)
                 } else if let Some(max) = maximum {
@@ -239,7 +224,11 @@ impl ValidationErrorKind {
             ValidationErrorKind::NumberNotMultipleOf { value, multiple_of } => {
                 format!("Number {} is not a multiple of {}", value, multiple_of)
             }
-            ValidationErrorKind::StringLengthInvalid { length, min_length, max_length } => {
+            ValidationErrorKind::StringLengthInvalid {
+                length,
+                min_length,
+                max_length,
+            } => {
                 if let Some(min) = min_length {
                     format!("String length {} is less than minimum {}", length, min)
                 } else if let Some(max) = max_length {
@@ -251,7 +240,11 @@ impl ValidationErrorKind {
             ValidationErrorKind::StringPatternMismatch { value, pattern } => {
                 format!("String '{}' does not match pattern '{}'", value, pattern)
             }
-            ValidationErrorKind::ArrayLengthInvalid { length, min_items, max_items } => {
+            ValidationErrorKind::ArrayLengthInvalid {
+                length,
+                min_items,
+                max_items,
+            } => {
                 if let Some(min) = min_items {
                     format!("Array length {} is less than minimum {}", length, min)
                 } else if let Some(max) = max_items {
@@ -260,14 +253,19 @@ impl ValidationErrorKind {
                     format!("Array length {} is invalid", length)
                 }
             }
-            ValidationErrorKind::ArrayItemsNotUnique => {
-                "Array items must be unique".to_string()
-            }
-            ValidationErrorKind::ObjectPropertyCountInvalid { count, min_properties, max_properties } => {
+            ValidationErrorKind::ArrayItemsNotUnique => "Array items must be unique".to_string(),
+            ValidationErrorKind::ObjectPropertyCountInvalid {
+                count,
+                min_properties,
+                max_properties,
+            } => {
                 if let Some(min) = min_properties {
                     format!("Object has {} properties, less than minimum {}", count, min)
                 } else if let Some(max) = max_properties {
-                    format!("Object has {} properties, greater than maximum {}", count, max)
+                    format!(
+                        "Object has {} properties, greater than maximum {}",
+                        count, max
+                    )
                 } else {
                     format!("Object has {} properties (invalid)", count)
                 }
@@ -279,13 +277,19 @@ impl ValidationErrorKind {
                 format!("AllOf validation failed for schemas: {:?}", failing_schemas)
             }
             ValidationErrorKind::AnyOfFailed { attempted_schemas } => {
-                format!("AnyOf validation failed (tried {} schemas, none matched)", attempted_schemas)
+                format!(
+                    "AnyOf validation failed (tried {} schemas, none matched)",
+                    attempted_schemas
+                )
             }
             ValidationErrorKind::OneOfFailed { matching_schemas } => {
                 if matching_schemas.is_empty() {
                     "OneOf validation failed (no schemas matched)".to_string()
                 } else {
-                    format!("OneOf validation failed (multiple schemas matched: {:?})", matching_schemas)
+                    format!(
+                        "OneOf validation failed (multiple schemas matched: {:?})",
+                        matching_schemas
+                    )
                 }
             }
             ValidationErrorKind::Other { message } => message.clone(),
@@ -318,11 +322,7 @@ impl fmt::Display for ValidationError {
                 loc.file, loc.line, loc.column, message
             )
         } else {
-            write!(
-                f,
-                "Validation error at {}: {}",
-                self.instance_path, message
-            )
+            write!(f, "Validation error at {}: {}", self.instance_path, message)
         }
     }
 }
@@ -356,14 +356,18 @@ impl ValidationError {
     }
 
     /// Set the YAML node for this error
-    pub fn with_yaml_node(mut self, node: YamlWithSourceInfo, ctx: &quarto_source_map::SourceContext) -> Self {
+    pub fn with_yaml_node(
+        mut self,
+        node: YamlWithSourceInfo,
+        ctx: &quarto_source_map::SourceContext,
+    ) -> Self {
         // Extract location from the node using SourceContext
         // Map the offset to get proper file/line/column information
         if let Some(mapped) = node.source_info.map_offset(0, ctx) {
             if let Some(file) = ctx.get_file(mapped.file_id) {
                 self.location = Some(SourceLocation {
                     file: file.path.clone(),
-                    line: mapped.location.row + 1,      // 1-indexed for display
+                    line: mapped.location.row + 1, // 1-indexed for display
                     column: mapped.location.column + 1, // 1-indexed for display
                 });
             }

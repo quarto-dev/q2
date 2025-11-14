@@ -18,7 +18,10 @@ arrayOf:
 "#,
     )
     .unwrap();
-    assert!(Schema::from_yaml(&yaml1).is_ok(), "Failed to parse pandoc-format-request-headers pattern");
+    assert!(
+        Schema::from_yaml(&yaml1).is_ok(),
+        "Failed to parse pandoc-format-request-headers pattern"
+    );
 
     // Test pandoc-shortcodes (simple arrayOf)
     let yaml2 = quarto_yaml::parse(
@@ -27,7 +30,10 @@ arrayOf: path
 "#,
     )
     .unwrap();
-    assert!(Schema::from_yaml(&yaml2).is_ok(), "Failed to parse pandoc-shortcodes pattern");
+    assert!(
+        Schema::from_yaml(&yaml2).is_ok(),
+        "Failed to parse pandoc-shortcodes pattern"
+    );
 
     // Test pandoc-format-filters (arrayOf with anyOf and record)
     let yaml3 = quarto_yaml::parse(
@@ -46,7 +52,10 @@ arrayOf:
 "#,
     )
     .unwrap();
-    assert!(Schema::from_yaml(&yaml3).is_ok(), "Failed to parse pandoc-format-filters pattern");
+    assert!(
+        Schema::from_yaml(&yaml3).is_ok(),
+        "Failed to parse pandoc-format-filters pattern"
+    );
 
     // Test contents-auto (maybeArrayOf)
     let yaml4 = quarto_yaml::parse(
@@ -55,7 +64,10 @@ maybeArrayOf: string
 "#,
     )
     .unwrap();
-    assert!(Schema::from_yaml(&yaml4).is_ok(), "Failed to parse contents-auto auto field pattern");
+    assert!(
+        Schema::from_yaml(&yaml4).is_ok(),
+        "Failed to parse contents-auto auto field pattern"
+    );
 
     // Test date-format (schema wrapper)
     let yaml5 = quarto_yaml::parse(
@@ -64,7 +76,10 @@ schema: string
 "#,
     )
     .unwrap();
-    assert!(Schema::from_yaml(&yaml5).is_ok(), "Failed to parse date-format pattern");
+    assert!(
+        Schema::from_yaml(&yaml5).is_ok(),
+        "Failed to parse date-format pattern"
+    );
 }
 
 /// Test parsing document-text.yml which contains many schema wrapper patterns

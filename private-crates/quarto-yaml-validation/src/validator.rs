@@ -1,6 +1,8 @@
 // YAML validation engine
 
-use crate::error::{InstancePath, PathSegment, SchemaPath, ValidationError, ValidationErrorKind, ValidationResult};
+use crate::error::{
+    InstancePath, PathSegment, SchemaPath, ValidationError, ValidationErrorKind, ValidationResult,
+};
 use crate::schema::{Schema, SchemaRegistry};
 use quarto_source_map::SourceContext;
 use quarto_yaml::YamlWithSourceInfo;
@@ -449,11 +451,7 @@ fn validate_enum(
     context.add_error(
         ValidationErrorKind::InvalidEnumValue {
             value: format!("{}", json_value),
-            allowed: schema
-                .values
-                .iter()
-                .map(|v| format!("{}", v))
-                .collect(),
+            allowed: schema.values.iter().map(|v| format!("{}", v)).collect(),
         },
         value,
     );

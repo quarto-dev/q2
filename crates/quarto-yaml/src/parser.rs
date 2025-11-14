@@ -380,11 +380,7 @@ impl<'a> YamlBuilder<'a> {
         } else {
             // We're parsing an original file - create an Original mapping
             // For row/column, we'd need to scan the source, but for now use approximations
-            SourceInfo::original(
-                quarto_source_map::FileId(0),
-                tag_start_offset,
-                end_offset,
-            )
+            SourceInfo::original(quarto_source_map::FileId(0), tag_start_offset, end_offset)
         }
     }
 }
@@ -1207,11 +1203,17 @@ We used the following approach...
 
         // The object should span from offset 0 (start of "title") to the end
         // NOT from offset 5 (the colon)
-        assert_eq!(source_info.start_offset(), 0,
-                   "Object should start at offset 0 (beginning of first key), not at the colon");
+        assert_eq!(
+            source_info.start_offset(),
+            0,
+            "Object should start at offset 0 (beginning of first key), not at the colon"
+        );
 
         // The end should be at the end of the content
-        assert_eq!(source_info.end_offset(), yaml_content.len(),
-                   "Object should end at end of content");
+        assert_eq!(
+            source_info.end_offset(),
+            yaml_content.len(),
+            "Object should end at end of content"
+        );
     }
 }

@@ -1,5 +1,5 @@
-use quarto_yaml_validation::{Schema, SchemaRegistry, merge_object_schemas};
 use quarto_yaml;
+use quarto_yaml_validation::{Schema, SchemaRegistry, merge_object_schemas};
 
 /// Test based on real quarto-cli definitions.yml schema
 /// social-metadata → twitter-card-config inheritance
@@ -8,7 +8,8 @@ fn test_twitter_card_inheritance() {
     let mut registry = SchemaRegistry::new();
 
     // Register base schema (social-metadata)
-    let base_yaml = quarto_yaml::parse(r#"
+    let base_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     title:
@@ -21,13 +22,16 @@ object:
       string:
         description: "Image URL"
   required: [title]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let base_schema = Schema::from_yaml(&base_yaml).unwrap();
     registry.register("social-metadata".to_string(), base_schema);
 
     // Parse derived schema (twitter-card-config)
-    let derived_yaml = quarto_yaml::parse(r#"
+    let derived_yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     resolveRef: social-metadata
@@ -35,7 +39,9 @@ object:
   properties:
     card-style:
       enum: [summary, summary_large_image]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let derived_schema = Schema::from_yaml(&derived_yaml).unwrap();
 
@@ -44,11 +50,8 @@ object:
         Schema::Object(ref obj) => {
             assert!(obj.base_schema.is_some());
 
-            let merged = merge_object_schemas(
-                obj.base_schema.as_ref().unwrap(),
-                obj,
-                &registry,
-            ).unwrap();
+            let merged =
+                merge_object_schemas(obj.base_schema.as_ref().unwrap(), obj, &registry).unwrap();
 
             // Verify merged schema has properties from both
             assert!(merged.properties.contains_key("title"));
@@ -72,42 +75,48 @@ fn test_multiple_inheritance() {
     let mut registry = SchemaRegistry::new();
 
     // Register base1
-    let base1_yaml = quarto_yaml::parse(r#"
+    let base1_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     field1: string
   required: [field1]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     registry.register("base1".to_string(), Schema::from_yaml(&base1_yaml).unwrap());
 
     // Register base2
-    let base2_yaml = quarto_yaml::parse(r#"
+    let base2_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     field2: number
   required: [field2]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     registry.register("base2".to_string(), Schema::from_yaml(&base2_yaml).unwrap());
 
     // Parse derived with multiple bases
-    let derived_yaml = quarto_yaml::parse(r#"
+    let derived_yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     - resolveRef: base1
     - resolveRef: base2
   properties:
     field3: boolean
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let derived_schema = Schema::from_yaml(&derived_yaml).unwrap();
 
     match derived_schema {
         Schema::Object(ref obj) => {
-            let merged = merge_object_schemas(
-                obj.base_schema.as_ref().unwrap(),
-                obj,
-                &registry,
-            ).unwrap();
+            let merged =
+                merge_object_schemas(obj.base_schema.as_ref().unwrap(), obj, &registry).unwrap();
 
             assert_eq!(merged.properties.len(), 3);
             assert!(merged.properties.contains_key("field1"));
@@ -128,17 +137,21 @@ fn test_property_override() {
     let mut registry = SchemaRegistry::new();
 
     // Base has 'name' as string
-    let base_yaml = quarto_yaml::parse(r#"
+    let base_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     name:
       string:
         description: "Base description"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     registry.register("base".to_string(), Schema::from_yaml(&base_yaml).unwrap());
 
     // Derived overrides 'name' with different constraints
-    let derived_yaml = quarto_yaml::parse(r#"
+    let derived_yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     resolveRef: base
@@ -147,23 +160,25 @@ object:
       string:
         pattern: "^[A-Z]"
         description: "Derived description"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let derived_schema = Schema::from_yaml(&derived_yaml).unwrap();
 
     match derived_schema {
         Schema::Object(ref obj) => {
-            let merged = merge_object_schemas(
-                obj.base_schema.as_ref().unwrap(),
-                obj,
-                &registry,
-            ).unwrap();
+            let merged =
+                merge_object_schemas(obj.base_schema.as_ref().unwrap(), obj, &registry).unwrap();
 
             // Derived should win
             match merged.properties.get("name") {
                 Some(Schema::String(s)) => {
                     assert_eq!(s.pattern, Some("^[A-Z]".to_string()));
-                    assert_eq!(s.annotations.description, Some("Derived description".to_string()));
+                    assert_eq!(
+                        s.annotations.description,
+                        Some("Derived description".to_string())
+                    );
                 }
                 _ => panic!("Expected string schema for name"),
             }
@@ -177,13 +192,16 @@ object:
 fn test_no_inheritance() {
     let _registry = SchemaRegistry::new();
 
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     name: string
     age: number
   required: [name]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let schema = Schema::from_yaml(&yaml).unwrap();
 
@@ -203,7 +221,8 @@ object:
 fn test_inline_super() {
     let registry = SchemaRegistry::new();
 
-    let yaml = quarto_yaml::parse(r#"
+    let yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     object:
@@ -212,7 +231,9 @@ object:
       required: [base_prop]
   properties:
     derived_prop: number
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let schema = Schema::from_yaml(&yaml).unwrap();
 
@@ -220,11 +241,8 @@ object:
         Schema::Object(ref obj) => {
             assert!(obj.base_schema.is_some());
 
-            let merged = merge_object_schemas(
-                obj.base_schema.as_ref().unwrap(),
-                obj,
-                &registry,
-            ).unwrap();
+            let merged =
+                merge_object_schemas(obj.base_schema.as_ref().unwrap(), obj, &registry).unwrap();
 
             assert!(merged.properties.contains_key("base_prop"));
             assert!(merged.properties.contains_key("derived_prop"));
@@ -239,16 +257,20 @@ object:
 fn test_required_all_with_inheritance() {
     let mut registry = SchemaRegistry::new();
 
-    let base_yaml = quarto_yaml::parse(r#"
+    let base_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     id: string
     name: string
   required: [id]
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     registry.register("base".to_string(), Schema::from_yaml(&base_yaml).unwrap());
 
-    let derived_yaml = quarto_yaml::parse(r#"
+    let derived_yaml = quarto_yaml::parse(
+        r#"
 object:
   super:
     resolveRef: base
@@ -256,7 +278,9 @@ object:
     email: string
     phone: string
   required: all
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let derived_schema = Schema::from_yaml(&derived_yaml).unwrap();
 
@@ -267,11 +291,8 @@ object:
             assert!(obj.required.contains(&"email".to_string()));
             assert!(obj.required.contains(&"phone".to_string()));
 
-            let merged = merge_object_schemas(
-                obj.base_schema.as_ref().unwrap(),
-                obj,
-                &registry,
-            ).unwrap();
+            let merged =
+                merge_object_schemas(obj.base_schema.as_ref().unwrap(), obj, &registry).unwrap();
 
             // After merge, should have all three required fields
             assert_eq!(merged.required.len(), 3);

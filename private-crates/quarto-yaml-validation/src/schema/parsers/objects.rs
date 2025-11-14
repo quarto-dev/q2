@@ -35,8 +35,12 @@ fn normalize_convention(input: &str, location: &quarto_yaml::SourceInfo) -> Sche
         "ignore" => Ok("ignore".to_string()),
 
         // camelCase / capitalizationCase variants
-        "camelCase" | "capitalizationCase" | "camel-case" | "camel_case"
-        | "capitalization-case" | "capitalization_case" => Ok("capitalizationCase".to_string()),
+        "camelCase"
+        | "capitalizationCase"
+        | "camel-case"
+        | "camel_case"
+        | "capitalization-case"
+        | "capitalization_case" => Ok("capitalizationCase".to_string()),
 
         // snake_case / underscoreCase variants
         "snakeCase" | "underscoreCase" | "snake-case" | "snake_case" | "underscore-case"
@@ -146,7 +150,10 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
                 properties.keys().cloned().collect()
             } else {
                 return Err(SchemaError::InvalidStructure {
-                    message: format!("Invalid required value: '{}' (expected 'all' or array)", req_str),
+                    message: format!(
+                        "Invalid required value: '{}' (expected 'all' or array)",
+                        req_str
+                    ),
                     location: required_yaml.source_info.clone(),
                 });
             }
@@ -224,10 +231,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
     let base_schema = if let Some(super_yaml) = yaml.get_hash_value("super") {
         if let Some(arr) = super_yaml.as_array() {
             // Array form: super: [schema1, schema2]
-            let schemas: SchemaResult<Vec<_>> = arr
-                .iter()
-                .map(|item| from_yaml(item))
-                .collect();
+            let schemas: SchemaResult<Vec<_>> = arr.iter().map(|item| from_yaml(item)).collect();
             Some(schemas?)
         } else {
             // Single schema form: super: { resolveRef: ... }
@@ -309,11 +313,12 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
             None
         };
 
-        let additional_properties = if let Some(value_schema_yaml) = yaml.get_hash_value("valueSchema") {
-            Some(Box::new(from_yaml(value_schema_yaml)?))
-        } else {
-            None
-        };
+        let additional_properties =
+            if let Some(value_schema_yaml) = yaml.get_hash_value("valueSchema") {
+                Some(Box::new(from_yaml(value_schema_yaml)?))
+            } else {
+                None
+            };
 
         return Ok(Schema::Object(ObjectSchema {
             annotations,
@@ -391,7 +396,7 @@ pub(in crate::schema) fn parse_record_schema(yaml: &YamlWithSourceInfo) -> Schem
         required,
         min_properties: None,
         max_properties: None,
-        closed: true,  // Records are always closed
+        closed: true, // Records are always closed
         property_names: None,
         naming_convention: None,
         base_schema: None,

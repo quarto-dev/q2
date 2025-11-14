@@ -2,8 +2,8 @@
 //!
 //! Tests JSON structure, text output, and overall integration.
 
-use quarto_yaml_validation::{Schema, ValidationDiagnostic, validate};
 use quarto_source_map::SourceContext;
+use quarto_yaml_validation::{Schema, ValidationDiagnostic, validate};
 use serde_json::Value;
 
 /// Helper to create a SourceContext with a test file
@@ -25,14 +25,17 @@ fn create_test_context(filename: &str, content: &str) -> SourceContext {
 #[test]
 fn test_json_structure_type_mismatch() {
     // Create a schema with nested object expecting age to be a number
-    let schema_yaml = quarto_yaml::parse(r#"
+    let schema_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     age:
       number:
         minimum: 0
         maximum: 100
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&schema_yaml).unwrap();
 
     // Create invalid document with string instead of number for age
@@ -55,8 +58,14 @@ object:
     let json = diagnostic.to_json();
 
     // Check error_kind is structured (not just a string)
-    assert!(json.get("error_kind").is_some(), "Should have error_kind field");
-    assert!(json["error_kind"].is_object(), "error_kind should be an object");
+    assert!(
+        json.get("error_kind").is_some(),
+        "Should have error_kind field"
+    );
+    assert!(
+        json["error_kind"].is_object(),
+        "error_kind should be an object"
+    );
     assert_eq!(json["error_kind"]["type"], "TypeMismatch");
     assert_eq!(json["error_kind"]["data"]["expected"], "number");
     assert_eq!(json["error_kind"]["data"]["got"], "string");
@@ -66,7 +75,12 @@ object:
 
     // Check message is present for convenience
     assert!(json.get("message").is_some());
-    assert!(json["message"].as_str().unwrap().contains("Expected number"));
+    assert!(
+        json["message"]
+            .as_str()
+            .unwrap()
+            .contains("Expected number")
+    );
 
     // Check instance_path points to "age" property
     assert!(json["instance_path"].is_array());
@@ -96,7 +110,8 @@ object:
 #[test]
 fn test_json_structure_missing_property() {
     // Schema requiring "name" property
-    let schema_yaml = quarto_yaml::parse(r#"
+    let schema_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     name:
@@ -105,7 +120,9 @@ object:
       number: {}
   required:
     - name
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&schema_yaml).unwrap();
 
     // Document missing "name"
@@ -139,7 +156,8 @@ object:
 #[test]
 fn test_json_structure_nested_path() {
     // Schema with nested structure
-    let schema_yaml = quarto_yaml::parse(r#"
+    let schema_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     user:
@@ -150,7 +168,9 @@ object:
           email:
             string:
               pattern: "^[^@]+@[^@]+\\.[^@]+$"
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&schema_yaml).unwrap();
 
     // Document with invalid email
@@ -189,11 +209,14 @@ user:
 #[test]
 fn test_text_output_has_ariadne() {
     // Create schema and invalid document
-    let schema_yaml = quarto_yaml::parse(r#"
+    let schema_yaml = quarto_yaml::parse(
+        r#"
 number:
   minimum: 1
   maximum: 100
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&schema_yaml).unwrap();
 
     let doc_content = r#"count: 500"#;
@@ -212,8 +235,10 @@ number:
     let text = diagnostic.to_text(&source_ctx);
 
     // Should have ariadne box-drawing characters
-    assert!(text.contains("─") || text.contains("│") || text.contains("╭") || text.contains("╯"),
-            "Should have ariadne box-drawing characters");
+    assert!(
+        text.contains("─") || text.contains("│") || text.contains("╭") || text.contains("╯"),
+        "Should have ariadne box-drawing characters"
+    );
 
     // Should have filename
     assert!(text.contains("data.yaml"), "Should contain filename");
@@ -228,10 +253,13 @@ number:
 #[test]
 fn test_json_round_trip_serialization() {
     // Test that JSON output is valid and can be parsed
-    let schema_yaml = quarto_yaml::parse(r#"
+    let schema_yaml = quarto_yaml::parse(
+        r#"
 string:
   minLength: 5
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&schema_yaml).unwrap();
 
     let doc_content = r#"name: "ab""#;
@@ -260,7 +288,8 @@ string:
 #[test]
 fn test_multiple_errors_same_file() {
     // Schema with multiple constraints
-    let schema_yaml = quarto_yaml::parse(r#"
+    let schema_yaml = quarto_yaml::parse(
+        r#"
 object:
   properties:
     name:
@@ -273,7 +302,9 @@ object:
   required:
     - name
     - age
-"#).unwrap();
+"#,
+    )
+    .unwrap();
     let schema = Schema::from_yaml(&schema_yaml).unwrap();
 
     // Document with only age (missing name)

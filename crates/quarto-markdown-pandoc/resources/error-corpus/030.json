@@ -1,0 +1,20 @@
+{
+    "code": "Q-2-14",
+    "title": "Unclosed Underscore Emphasis",
+    "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+    "captures": [
+        {
+            "label": "emphasis-start",
+            "row": 0,
+            "column": 0,
+            "size": 1
+        }
+    ],
+    "notes": [
+        {
+            "message": "This is the opening '_' mark",
+            "label": "emphasis-start",
+            "noteType": "simple"
+        }
+    ]
+}

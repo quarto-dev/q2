@@ -96,7 +96,10 @@ fn test_parse_key_definitions_schemas() {
 
     // Test arrayOf patterns
     let yaml1 = quarto_yaml::parse(r#"arrayOf: path"#).unwrap();
-    assert!(Schema::from_yaml(&yaml1).is_ok(), "pandoc-shortcodes pattern");
+    assert!(
+        Schema::from_yaml(&yaml1).is_ok(),
+        "pandoc-shortcodes pattern"
+    );
 
     let yaml2 = quarto_yaml::parse(
         r#"

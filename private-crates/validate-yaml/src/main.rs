@@ -90,13 +90,15 @@ fn run() -> Result<()> {
     let file_id = source_ctx.add_file_with_id(
         expected_file_id,
         args.input.to_string_lossy().to_string(),
-        Some(input_content.clone())
+        Some(input_content.clone()),
     );
 
     // Verify we got the expected file_id
-    debug_assert_eq!(file_id, expected_file_id,
+    debug_assert_eq!(
+        file_id, expected_file_id,
         "FileId mismatch: quarto-yaml will use {:?} but SourceContext has {:?}",
-        expected_file_id, file_id);
+        expected_file_id, file_id
+    );
 
     // Create a schema registry (empty for now, but needed for $ref resolution)
     let registry = SchemaRegistry::new();

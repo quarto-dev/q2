@@ -93,6 +93,22 @@ impl RuleRegistry {
         registry.register(Arc::new(
             crate::conversions::definition_lists::DefinitionListConverter::new()?,
         ));
+        registry.register(Arc::new(crate::conversions::q_2_11::Q211Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_12::Q212Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_13::Q213Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_14::Q214Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_15::Q215Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_16::Q216Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_17::Q217Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_18::Q218Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_19::Q219Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_20::Q220Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_21::Q221Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_22::Q222Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_23::Q223Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_24::Q224Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_25::Q225Converter::new()?));
+        registry.register(Arc::new(crate::conversions::q_2_26::Q226Converter::new()?));
 
         Ok(registry)
     }

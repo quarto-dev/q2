@@ -233,10 +233,8 @@ impl Schema {
             Schema::Object(obj) if obj.base_schema.is_some() => {
                 // Compile base schemas first (recursive)
                 let base_schemas = obj.base_schema.as_ref().unwrap();
-                let compiled_bases: SchemaResult<Vec<_>> = base_schemas
-                    .iter()
-                    .map(|s| s.compile(registry))
-                    .collect();
+                let compiled_bases: SchemaResult<Vec<_>> =
+                    base_schemas.iter().map(|s| s.compile(registry)).collect();
                 let compiled_bases = compiled_bases?;
 
                 // Merge with derived schema
@@ -248,14 +246,15 @@ impl Schema {
 
             // Eager reference - must resolve now
             Schema::Ref(r) if r.eager => {
-                let resolved = registry.resolve(&r.reference)
-                    .ok_or_else(|| crate::error::SchemaError::InvalidStructure {
+                let resolved = registry.resolve(&r.reference).ok_or_else(|| {
+                    crate::error::SchemaError::InvalidStructure {
                         message: format!(
                             "Cannot resolve eager reference '{}' - not found in registry",
                             r.reference
                         ),
                         location: quarto_yaml::SourceInfo::default(),
-                    })?;
+                    }
+                })?;
 
                 // Recursively compile the resolved schema
                 resolved.compile(registry)
@@ -266,10 +265,8 @@ impl Schema {
 
             // Recursively compile nested schemas in containers
             Schema::AnyOf(anyof) => {
-                let compiled_schemas: SchemaResult<Vec<_>> = anyof.schemas
-                    .iter()
-                    .map(|s| s.compile(registry))
-                    .collect();
+                let compiled_schemas: SchemaResult<Vec<_>> =
+                    anyof.schemas.iter().map(|s| s.compile(registry)).collect();
                 Ok(Schema::AnyOf(AnyOfSchema {
                     annotations: anyof.annotations.clone(),
                     schemas: compiled_schemas?,
@@ -277,10 +274,8 @@ impl Schema {
             }
 
             Schema::AllOf(allof) => {
-                let compiled_schemas: SchemaResult<Vec<_>> = allof.schemas
-                    .iter()
-                    .map(|s| s.compile(registry))
-                    .collect();
+                let compiled_schemas: SchemaResult<Vec<_>> =
+                    allof.schemas.iter().map(|s| s.compile(registry)).collect();
                 Ok(Schema::AllOf(AllOfSchema {
                     annotations: allof.annotations.clone(),
                     schemas: compiled_schemas?,
@@ -311,10 +306,8 @@ impl Schema {
 
                 let mut compiled_pattern_properties = HashMap::new();
                 for (pattern, prop_schema) in &obj.pattern_properties {
-                    compiled_pattern_properties.insert(
-                        pattern.clone(),
-                        prop_schema.compile(registry)?
-                    );
+                    compiled_pattern_properties
+                        .insert(pattern.clone(), prop_schema.compile(registry)?);
                 }
 
                 let compiled_additional = if let Some(ap) = &obj.additional_properties {
@@ -340,7 +333,7 @@ impl Schema {
                     closed: obj.closed,
                     property_names: compiled_property_names,
                     naming_convention: obj.naming_convention.clone(),
-                    base_schema: None,  // No inheritance at this level
+                    base_schema: None, // No inheritance at this level
                 }))
             }
 
@@ -1070,7 +1063,7 @@ string:
             Schema::Array(arr) => {
                 assert!(arr.items.is_some());
                 match arr.items.as_ref().unwrap().as_ref() {
-                    Schema::String(_) => {},
+                    Schema::String(_) => {}
                     _ => panic!("Expected String schema in items"),
                 }
             }
@@ -1099,7 +1092,7 @@ arrayOf:
                         assert_eq!(inner.min_items, Some(2));
                         assert_eq!(inner.max_items, Some(2));
                         match inner.items.as_ref().unwrap().as_ref() {
-                            Schema::String(_) => {},
+                            Schema::String(_) => {}
                             _ => panic!("Expected String schema in nested items"),
                         }
                     }
@@ -1126,7 +1119,7 @@ arrayOf:
                 assert_eq!(arr.min_items, Some(5));
                 assert_eq!(arr.max_items, Some(5));
                 match arr.items.as_ref().unwrap().as_ref() {
-                    Schema::String(_) => {},
+                    Schema::String(_) => {}
                     _ => panic!("Expected String schema"),
                 }
             }
@@ -1146,7 +1139,7 @@ arrayOf:
 
                 // First should be string
                 match &anyof.schemas[0] {
-                    Schema::String(_) => {},
+                    Schema::String(_) => {}
                     _ => panic!("Expected String schema as first option"),
                 }
 
@@ -1155,7 +1148,7 @@ arrayOf:
                     Schema::Array(arr) => {
                         assert!(arr.items.is_some());
                         match arr.items.as_ref().unwrap().as_ref() {
-                            Schema::String(_) => {},
+                            Schema::String(_) => {}
                             _ => panic!("Expected String schema in array"),
                         }
                     }
@@ -1233,11 +1226,11 @@ schema:
             Schema::AnyOf(anyof) => {
                 assert_eq!(anyof.schemas.len(), 2);
                 match &anyof.schemas[0] {
-                    Schema::Boolean(_) => {},
+                    Schema::Boolean(_) => {}
                     _ => panic!("Expected Boolean schema"),
                 }
                 match &anyof.schemas[1] {
-                    Schema::String(_) => {},
+                    Schema::String(_) => {}
                     _ => panic!("Expected String schema"),
                 }
             }
