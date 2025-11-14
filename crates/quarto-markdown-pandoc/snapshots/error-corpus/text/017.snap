@@ -1,0 +1,13 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: error_output
+---
+[31mError:[0m [Q-2-10] Closed Quote Without Matching Open Quote
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mresources/error-corpus/017.qmd:1:5[38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m1 │[0m [38;5;249m![0m[38;5;249m[[0m[38;5;249ma[0m[36m'[0m[31m [0m[38;5;249mb[0m[38;5;249m][0m[38;5;249m([0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m
+ [38;5;240m  │[0m    [36m┬[0m[31m┬[0m  
+ [38;5;240m  │[0m    [36m╰[0m[36m─[0m[36m─[0m[36m─[0m This is the opening quote. If you need an apostrophe, escape it with a backslash.
+ [38;5;240m  │[0m     [31m│[0m  
+ [38;5;240m  │[0m     [31m╰[0m[31m─[0m[31m─[0m A space is causing a quote mark to be interpreted as a quotation close.
+[38;5;246m───╯[0m

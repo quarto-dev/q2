@@ -2,7 +2,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1247,
+    "state": 1184,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-1",
@@ -11,7 +11,7 @@
       "captures": [
         {
           "column": 3,
-          "lrState": 137,
+          "lrState": 175,
           "row": 0,
           "size": 1,
           "sym": "[",
@@ -31,7 +31,7 @@
   {
     "column": 18,
     "row": 0,
-    "state": 2459,
+    "state": 2411,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-2",
@@ -40,7 +40,7 @@
       "captures": [
         {
           "column": 17,
-          "lrState": 2459,
+          "lrState": 2411,
           "row": 0,
           "size": 1,
           "sym": "{",
@@ -60,7 +60,7 @@
   {
     "column": 20,
     "row": 0,
-    "state": 2630,
+    "state": 2557,
     "sym": "pandoc_str",
     "errorInfo": {
       "code": "Q-2-3",
@@ -69,7 +69,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 2630,
+          "lrState": 2557,
           "row": 0,
           "size": 9,
           "sym": "key_value_specifier",
@@ -89,7 +89,7 @@
   {
     "column": 17,
     "row": 0,
-    "state": 1621,
+    "state": 1565,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -98,7 +98,7 @@
       "captures": [
         {
           "column": 10,
-          "lrState": 755,
+          "lrState": 759,
           "row": 0,
           "size": 2,
           "sym": "emphasis_delimiter",
@@ -119,7 +119,7 @@
   {
     "column": 44,
     "row": 0,
-    "state": 2025,
+    "state": 1787,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -128,7 +128,7 @@
       "captures": [
         {
           "column": 0,
-          "lrState": 662,
+          "lrState": 683,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -149,7 +149,7 @@
   {
     "column": 10,
     "row": 0,
-    "state": 1621,
+    "state": 1565,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-5",
@@ -179,7 +179,7 @@
   {
     "column": 5,
     "row": 0,
-    "state": 3402,
+    "state": 3897,
     "sym": "_whitespace",
     "errorInfo": {
       "code": "Q-2-8",
@@ -188,7 +188,7 @@
       "captures": [
         {
           "column": 5,
-          "lrState": 2631,
+          "lrState": 2597,
           "row": 0,
           "size": 5,
           "sym": "key_value_key",
@@ -209,7 +209,7 @@
   {
     "column": 6,
     "row": 0,
-    "state": 2025,
+    "state": 1787,
     "sym": "_close_block",
     "errorInfo": {
       "code": "Q-2-7",
@@ -218,7 +218,7 @@
       "captures": [
         {
           "column": 4,
-          "lrState": 667,
+          "lrState": 666,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -238,7 +238,7 @@
   {
     "column": 2,
     "row": 0,
-    "state": 662,
+    "state": 683,
     "sym": "_whitespace",
     "errorInfo": {
       "code": "Q-2-10",
@@ -247,7 +247,7 @@
       "captures": [
         {
           "column": 1,
-          "lrState": 662,
+          "lrState": 683,
           "row": 0,
           "size": 1,
           "sym": "single_quote",
@@ -263,5 +263,469 @@
       ]
     },
     "name": "010"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 735,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 735,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "011"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 736,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 736,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "012"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 666,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 666,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "013"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 678,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 678,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "014"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 654,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 654,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "015"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 719,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 719,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "016"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 666,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 666,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "017"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 728,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 728,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "018"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 708,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 708,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "019"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 708,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 708,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "020"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 708,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 708,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "021"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 666,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 666,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "022"
+  },
+  {
+    "column": 7,
+    "row": 0,
+    "state": 709,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 6,
+          "lrState": 709,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "023"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 652,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 652,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "024"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 682,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 682,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "025"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 683,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 683,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "026"
   }
 ]

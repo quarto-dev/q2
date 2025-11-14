@@ -613,22 +613,48 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 )
             })
             .with_inlines(|inlines| {
-                // Combined filter: Handle Math + Attr pattern, then citation suffix pattern
+                // Combined filter: Handle LineBreak + SoftBreak cleanup, Math + Attr pattern, then citation suffix pattern
 
-                // Step 1: Handle Math nodes followed by Attr
+                // Step 0: Remove SoftBreaks that immediately follow LineBreaks
+                // This fixes an issue where tree-sitter emits both break types when
+                // a hard break (backslash-newline) is present. Pandoc only emits LineBreak
+                // in this case, so we match that behavior by dropping the redundant SoftBreak.
+                let mut break_cleaned = vec![];
+                let mut i = 0;
+
+                while i < inlines.len() {
+                    let current = &inlines[i];
+
+                    // Check if current is LineBreak and next is SoftBreak
+                    if matches!(current, Inline::LineBreak(_))
+                        && i + 1 < inlines.len()
+                        && matches!(inlines[i + 1], Inline::SoftBreak(_))
+                    {
+                        // Keep the LineBreak
+                        break_cleaned.push(inlines[i].clone());
+                        // Skip the SoftBreak (i+1)
+                        i += 2;
+                    } else {
+                        // Keep the current inline
+                        break_cleaned.push(inlines[i].clone());
+                        i += 1;
+                    }
+                }
+
+                // Step 1: Handle Math nodes followed by Attr (process on break_cleaned)
                 // Pattern: Math, Space (optional), Attr -> Span with "quarto-math-with-attribute" class
                 let mut math_processed = vec![];
                 let mut i = 0;
 
-                while i < inlines.len() {
-                    if let Inline::Math(math) = &inlines[i] {
+                while i < break_cleaned.len() {
+                    if let Inline::Math(math) = &break_cleaned[i] {
                         // Check if followed by Space then Attr, or just Attr
-                        let has_space =
-                            i + 1 < inlines.len() && matches!(inlines[i + 1], Inline::Space(_));
+                        let has_space = i + 1 < break_cleaned.len()
+                            && matches!(break_cleaned[i + 1], Inline::Space(_));
                         let attr_idx = if has_space { i + 2 } else { i + 1 };
 
-                        if attr_idx < inlines.len() {
-                            if let Inline::Attr(attr, attr_source) = &inlines[attr_idx] {
+                        if attr_idx < break_cleaned.len() {
+                            if let Inline::Attr(attr, attr_source) = &break_cleaned[attr_idx] {
                                 // Found Math + (Space?) + Attr pattern
                                 // Wrap Math in a Span with the attribute
                                 let mut classes = vec!["quarto-math-with-attribute".to_string()];
@@ -650,7 +676,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     }
 
                     // Not a Math + Attr pattern, add as is
-                    math_processed.push(inlines[i].clone());
+                    math_processed.push(break_cleaned[i].clone());
                     i += 1;
                 }
 

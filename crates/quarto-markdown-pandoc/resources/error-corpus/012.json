@@ -1,0 +1,20 @@
+{
+    "code": "Q-2-10",
+    "title": "Closed Quote Without Matching Open Quote",
+    "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+    "captures": [
+        {
+            "label": "quote-start",
+            "row": 0,
+            "column": 2,
+            "size": 1
+        }
+    ],
+    "notes": [
+        {
+            "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+            "label": "quote-start",
+            "noteType": "simple"
+        }
+    ]
+}

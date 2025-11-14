@@ -82,6 +82,9 @@ impl RuleRegistry {
 
         // Register conversion rules
         registry.register(Arc::new(
+            crate::conversions::apostrophe_quotes::ApostropheQuotesConverter::new()?,
+        ));
+        registry.register(Arc::new(
             crate::conversions::attribute_ordering::AttributeOrderingConverter::new()?,
         ));
         registry.register(Arc::new(

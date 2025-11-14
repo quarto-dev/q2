@@ -122,6 +122,8 @@ typedef enum {
     HTML_ELEMENT, // simply for good error reporting
 
     PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
+
+    PANDOC_LINE_BREAK,
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -1918,6 +1920,24 @@ static bool parse_caret(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     return false;
 }
 
+static bool parse_line_break(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    // unused
+    (void)(s);
+    (void)(valid_symbols);
+    
+    // we've seen \, so now we need to decide if it's an escaped character or a line break
+
+    lexer->advance(lexer, false);
+    if (lexer->eof(lexer) || lexer->lookahead == '\r' || lexer->lookahead == '\n') {
+        // do not eat the newline (to allow blocks to end), but emit line break
+        lexer->mark_end(lexer);
+        EMIT_TOKEN(PANDOC_LINE_BREAK);
+    }
+    // we've advanced the lexer, so we can no longer try to match other tokens.
+    // return control to internal lexer
+    return false;
+}
+
 static int match_line(Scanner *s, TSLexer *lexer) {
     // DEBUG_PRINT("in match_line\n");
     // DEBUG_EXP("%d", (int)s->indentation);
@@ -2157,6 +2177,10 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             break;
         case '@':
             return parse_cite_author_in_text(s, lexer, valid_symbols);
+        case '\\':
+            if (valid_symbols[PANDOC_LINE_BREAK]) {
+                return parse_line_break(s, lexer, valid_symbols);
+            }
     }
     DEBUG_HERE;
     if (lexer->lookahead == '|' && valid_symbols[PIPE_TABLE_DELIMITER]) {

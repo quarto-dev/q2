@@ -30,6 +30,11 @@ const leftJoin = <T1, T2>(lst1: T1[], lst2: T2[], match: (i1: T1, i2: T2) => boo
   return result;
 };
 
+console.log("Building quarto-markdown-pandoc...");
+await (new Deno.Command("cargo", {
+  args: ["build"],
+})).output();
+
 const files = Array.from(fs.globSync("resources/error-corpus/*.qmd")).toSorted((a, b) => a.localeCompare(b));
 for (const file of files) {
   console.log(`Processing ${file}`);
@@ -37,8 +42,8 @@ for (const file of files) {
   const errorInfo = JSON.parse(
     Deno.readTextFileSync(`resources/error-corpus/${base}.json`),
   );
-  const parseResult = new Deno.Command("cargo", {
-    args: ["run", "--", "--_internal-report-error-state", "-i", file],
+  const parseResult = new Deno.Command("../../target/debug/quarto-markdown-pandoc", {
+    args: ["--_internal-report-error-state", "-i", file],
   });
   const output = await parseResult.output();
   const outputStdout = new TextDecoder().decode(output.stdout);
@@ -78,3 +83,8 @@ Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json", JSON.string
 const now = new Date();
 // Touch the source file so that cargo build rebuilds it.
 Deno.utimeSync("src/readers/qmd_error_message_table.rs", now, now);
+
+console.log("Rebuilding quarto-markdown-pandoc with new table...");
+await (new Deno.Command("cargo", {
+  args: ["build"],
+})).output();
