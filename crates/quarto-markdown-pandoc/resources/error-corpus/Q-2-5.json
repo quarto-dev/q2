@@ -1,0 +1,41 @@
+{
+  "code": "Q-2-5",
+  "title": "Unclosed Emphasis",
+  "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+  "notes": [
+    {
+      "message": "This is the opening delimiter for the emphasis",
+      "label": "emphasis-start",
+      "noteType": "simple",
+      "trimLeadingSpace": true
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "Unfinished _emph.\n",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 10,
+          "size": 2
+        }
+      ]
+    },
+    {
+      "name": "in-link",
+      "description": "Inside link",
+      "content": "[_document](a)",
+      "captures": [
+        {
+          "label": "emph-start",
+          "row": 0,
+          "column": 1,
+          "size": 1
+        }
+      ]
+    }
+  ]
+}

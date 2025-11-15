@@ -5,12 +5,28 @@ expression: json_string
 [
   {
     "code": "Q-2-5",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening delimiter for the emphasis",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 1,
+            "file_id": 0,
+            "start_offset": 0
+          }
+        }
+      }
+    ],
     "kind": "error",
     "location": {
       "Original": {
-        "end_offset": 11,
+        "end_offset": 19,
         "file_id": 0,
-        "start_offset": 10
+        "start_offset": 18
       }
     },
     "problem": {

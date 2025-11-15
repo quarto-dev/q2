@@ -1,0 +1,27 @@
+{
+  "code": "Q-2-25",
+  "title": "Unclosed Image",
+  "message": "I reached the end of the block before finding a closing '](url)' for the image.",
+  "notes": [
+    {
+      "message": "This is the opening '![' mark",
+      "label": "image-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "![Unclosed image\n",
+      "captures": [
+        {
+          "label": "image-start",
+          "row": 0,
+          "column": 0,
+          "size": 2
+        }
+      ]
+    }
+  ]
+}

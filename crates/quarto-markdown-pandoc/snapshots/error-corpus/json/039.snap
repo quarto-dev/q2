@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-23",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening '$' mark",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 1,
+            "file_id": 0,
+            "start_offset": 0
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 22,
+        "file_id": 0,
+        "start_offset": 21
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing '$' for the inline math.",
+      "type": "markdown"
+    },
+    "title": "Unclosed Inline Math"
+  }
+]

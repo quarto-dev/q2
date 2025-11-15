@@ -26,7 +26,1138 @@
         }
       ]
     },
-    "name": "001"
+    "name": "Q-2-1/simple"
+  },
+  {
+    "column": 2,
+    "row": 0,
+    "state": 683,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 683,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 735,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 735,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-1"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 736,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 736,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-2"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 666,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 666,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-3"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 678,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 678,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-4"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 654,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 654,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-5"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 719,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 719,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-6"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 666,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 666,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-7"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 728,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 728,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-8"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 708,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 708,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-9"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 708,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 708,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-10"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 708,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 708,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-11"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 666,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 666,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-12"
+  },
+  {
+    "column": 7,
+    "row": 0,
+    "state": 709,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 6,
+          "lrState": 709,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-13"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 652,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 652,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-14"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 682,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 682,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-15"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 683,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-10",
+      "title": "Closed Quote Without Matching Open Quote",
+      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 683,
+          "row": 0,
+          "size": 1,
+          "sym": "single_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-10/simple-16"
+  },
+  {
+    "column": 22,
+    "row": 0,
+    "state": 1732,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 691,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark",
+          "label": "quote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-11/simple"
+  },
+  {
+    "column": 18,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 758,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 863,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-1"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 855,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-2"
+  },
+  {
+    "column": 20,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 839,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-3"
+  },
+  {
+    "column": 20,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 863,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-4"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 776,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-5"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 776,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-6"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 776,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-7"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 776,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-8"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 815,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-9"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 807,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-10"
+  },
+  {
+    "column": 20,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 799,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-11"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 783,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-12"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1478,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 791,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-12/simple-13"
+  },
+  {
+    "column": 26,
+    "row": 0,
+    "state": 2005,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-13",
+      "title": "Unclosed Strong Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 756,
+          "row": 0,
+          "size": 2,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '**' mark",
+          "label": "strong-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-13/simple"
+  },
+  {
+    "column": 18,
+    "row": 0,
+    "state": 1565,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-14",
+      "title": "Unclosed Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 759,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '_' mark",
+          "label": "emphasis-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-14/simple"
+  },
+  {
+    "column": 26,
+    "row": 0,
+    "state": 2139,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-15",
+      "title": "Unclosed Strong Underscore Emphasis",
+      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 757,
+          "row": 0,
+          "size": 2,
+          "sym": "strong_emphasis_delimiter",
+          "label": "strong-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '__' mark",
+          "label": "strong-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-15/simple"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 1784,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-16",
+      "title": "Unclosed Superscript",
+      "message": "I reached the end of the block before finding a closing '^' for the superscript.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 769,
+          "row": 0,
+          "size": 1,
+          "sym": "superscript_delimiter",
+          "label": "super-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '^' mark",
+          "label": "super-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-16/simple"
+  },
+  {
+    "column": 19,
+    "row": 0,
+    "state": 1668,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-17",
+      "title": "Unclosed Subscript",
+      "message": "I reached the end of the block before finding a closing '~' for the subscript.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 760,
+          "row": 0,
+          "size": 1,
+          "sym": "subscript_delimiter",
+          "label": "sub-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '~' mark",
+          "label": "sub-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-17/simple"
+  },
+  {
+    "column": 20,
+    "row": 0,
+    "state": 2151,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-18",
+      "title": "Unclosed Strikeout",
+      "message": "I reached the end of the block before finding a closing '~~' for the strikeout.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 753,
+          "row": 0,
+          "size": 2,
+          "sym": "strikeout_delimiter",
+          "label": "strike-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '~~' mark",
+          "label": "strike-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-18/simple"
+  },
+  {
+    "column": 28,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-19",
+      "title": "Unclosed Editorial Insert",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial insert.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 219,
+          "row": 0,
+          "size": 3,
+          "sym": "insert_delimiter",
+          "label": "insert-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[++' mark",
+          "label": "insert-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-19/simple"
   },
   {
     "column": 18,
@@ -55,7 +1186,210 @@
         }
       ]
     },
-    "name": "002"
+    "name": "Q-2-2/simple"
+  },
+  {
+    "column": 28,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-20",
+      "title": "Unclosed Editorial Delete",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial delete.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 220,
+          "row": 0,
+          "size": 3,
+          "sym": "delete_delimiter",
+          "label": "delete-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[--' mark",
+          "label": "delete-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-20/simple"
+  },
+  {
+    "column": 29,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-21",
+      "title": "Unclosed Editorial Comment",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial comment.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 221,
+          "row": 0,
+          "size": 3,
+          "sym": "edit_comment_delimiter",
+          "label": "comment-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[>>' mark",
+          "label": "comment-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-21/simple"
+  },
+  {
+    "column": 31,
+    "row": 0,
+    "state": 1943,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-22",
+      "title": "Unclosed Editorial Highlight",
+      "message": "I reached the end of the block before finding a closing ']' for the editorial highlight.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 218,
+          "row": 0,
+          "size": 3,
+          "sym": "highlight_delimiter",
+          "label": "highlight-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '[!!' mark",
+          "label": "highlight-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-22/simple"
+  },
+  {
+    "column": 21,
+    "row": 0,
+    "state": 3407,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-23",
+      "title": "Unclosed Inline Math",
+      "message": "I reached the end of the block before finding a closing '$' for the inline math.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 3713,
+          "row": 0,
+          "size": 1,
+          "sym": "$",
+          "label": "math-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '$' mark",
+          "label": "math-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-23/simple"
+  },
+  {
+    "column": 0,
+    "row": 1,
+    "state": 2944,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-24",
+      "title": "Unclosed Code Span",
+      "message": "I reached the end of the block before finding a closing '`' for the code span.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 2864,
+          "row": 0,
+          "size": 1,
+          "sym": "code_span_delimiter",
+          "label": "code-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '`' mark",
+          "label": "code-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-24/simple"
+  },
+  {
+    "column": 16,
+    "row": 0,
+    "state": 1184,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-25",
+      "title": "Unclosed Image",
+      "message": "I reached the end of the block before finding a closing '](url)' for the image.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 135,
+          "row": 0,
+          "size": 2,
+          "sym": "![",
+          "label": "image-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '![' mark",
+          "label": "image-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-25/simple"
+  },
+  {
+    "column": 26,
+    "row": 0,
+    "state": 1887,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-26",
+      "title": "Unclosed Inline Footnote",
+      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
+      "captures": [
+        {
+          "column": 0,
+          "lrState": 350,
+          "row": 0,
+          "size": 2,
+          "sym": "inline_note_delimiter",
+          "label": "footnote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '^[' mark",
+          "label": "footnote-start",
+          "noteType": "simple"
+        }
+      ]
+    },
+    "name": "Q-2-26/simple"
   },
   {
     "column": 20,
@@ -84,7 +1418,7 @@
         }
       ]
     },
-    "name": "003"
+    "name": "Q-2-3/simple"
   },
   {
     "column": 17,
@@ -114,7 +1448,37 @@
         }
       ]
     },
-    "name": "005"
+    "name": "Q-2-5/simple"
+  },
+  {
+    "column": 10,
+    "row": 0,
+    "state": 1565,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-5",
+      "title": "Unclosed Emphasis",
+      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 864,
+          "row": 0,
+          "size": 1,
+          "sym": "emphasis_delimiter",
+          "label": "emph-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening delimiter for the emphasis",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true
+        }
+      ]
+    },
+    "name": "Q-2-5/in-link"
   },
   {
     "column": 44,
@@ -144,37 +1508,37 @@
         }
       ]
     },
-    "name": "006"
+    "name": "Q-2-7/simple"
   },
   {
-    "column": 10,
+    "column": 6,
     "row": 0,
-    "state": 1565,
+    "state": 1787,
     "sym": "_close_block",
     "errorInfo": {
-      "code": "Q-2-5",
-      "title": "Unclosed emphasis",
-      "message": "I reached the end of the block before finding a closing _ for the emphasis.",
+      "code": "Q-2-7",
+      "title": "Unclosed Single Quote",
+      "message": "I reached the end of the block before finding a closing \"'\" for the quote.",
       "captures": [
         {
-          "column": 1,
-          "lrState": 864,
+          "column": 4,
+          "lrState": 666,
           "row": 0,
           "size": 1,
-          "sym": "emphasis_delimiter",
-          "label": "emph-start"
+          "sym": "single_quote",
+          "label": "quote-start"
         }
       ],
       "notes": [
         {
-          "message": "(Emphasis start) If you meant an underscore, escape it with a backslash.",
-          "label": "emph-start",
+          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "label": "quote-start",
           "noteType": "simple",
           "trimLeadingSpace": true
         }
       ]
     },
-    "name": "007"
+    "name": "Q-2-7/in-link"
   },
   {
     "column": 5,
@@ -204,992 +1568,6 @@
         }
       ]
     },
-    "name": "008"
-  },
-  {
-    "column": 6,
-    "row": 0,
-    "state": 1787,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-7",
-      "title": "Unclosed Single Quote",
-      "message": "I reached the end of the block before finding a closing \"'\" for the quote.",
-      "captures": [
-        {
-          "column": 4,
-          "lrState": 666,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "009"
-  },
-  {
-    "column": 2,
-    "row": 0,
-    "state": 683,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 1,
-          "lrState": 683,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "010"
-  },
-  {
-    "column": 4,
-    "row": 0,
-    "state": 735,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 3,
-          "lrState": 735,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "011"
-  },
-  {
-    "column": 3,
-    "row": 0,
-    "state": 736,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 2,
-          "lrState": 736,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "012"
-  },
-  {
-    "column": 3,
-    "row": 0,
-    "state": 666,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 2,
-          "lrState": 666,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "013"
-  },
-  {
-    "column": 3,
-    "row": 0,
-    "state": 678,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 2,
-          "lrState": 678,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "014"
-  },
-  {
-    "column": 3,
-    "row": 0,
-    "state": 654,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 2,
-          "lrState": 654,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "015"
-  },
-  {
-    "column": 4,
-    "row": 0,
-    "state": 719,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 3,
-          "lrState": 719,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "016"
-  },
-  {
-    "column": 4,
-    "row": 0,
-    "state": 666,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 3,
-          "lrState": 666,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "017"
-  },
-  {
-    "column": 3,
-    "row": 0,
-    "state": 728,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 2,
-          "lrState": 728,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "018"
-  },
-  {
-    "column": 5,
-    "row": 0,
-    "state": 708,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 4,
-          "lrState": 708,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "019"
-  },
-  {
-    "column": 5,
-    "row": 0,
-    "state": 708,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 4,
-          "lrState": 708,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "020"
-  },
-  {
-    "column": 5,
-    "row": 0,
-    "state": 708,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 4,
-          "lrState": 708,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "021"
-  },
-  {
-    "column": 5,
-    "row": 0,
-    "state": 666,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 4,
-          "lrState": 666,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "022"
-  },
-  {
-    "column": 7,
-    "row": 0,
-    "state": 709,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 6,
-          "lrState": 709,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "023"
-  },
-  {
-    "column": 3,
-    "row": 0,
-    "state": 652,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 2,
-          "lrState": 652,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "024"
-  },
-  {
-    "column": 4,
-    "row": 0,
-    "state": 682,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 3,
-          "lrState": 682,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "025"
-  },
-  {
-    "column": 5,
-    "row": 0,
-    "state": 683,
-    "sym": "_whitespace",
-    "errorInfo": {
-      "code": "Q-2-10",
-      "title": "Closed Quote Without Matching Open Quote",
-      "message": "A space is causing a quote mark to be interpreted as a quotation close.",
-      "captures": [
-        {
-          "column": 4,
-          "lrState": 683,
-          "row": 0,
-          "size": 1,
-          "sym": "single_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "026"
-  },
-  {
-    "column": 22,
-    "row": 0,
-    "state": 1732,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-11",
-      "title": "Unclosed Double Quote",
-      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 691,
-          "row": 0,
-          "size": 1,
-          "sym": "double_quote",
-          "label": "quote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening quote mark",
-          "label": "quote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "027"
-  },
-  {
-    "column": 18,
-    "row": 0,
-    "state": 1478,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-12",
-      "title": "Unclosed Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 758,
-          "row": 0,
-          "size": 1,
-          "sym": "emphasis_delimiter",
-          "label": "emphasis-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '*' mark",
-          "label": "emphasis-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "028"
-  },
-  {
-    "column": 26,
-    "row": 0,
-    "state": 2005,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-13",
-      "title": "Unclosed Strong Star Emphasis",
-      "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 756,
-          "row": 0,
-          "size": 2,
-          "sym": "strong_emphasis_delimiter",
-          "label": "strong-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '**' mark",
-          "label": "strong-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "029"
-  },
-  {
-    "column": 18,
-    "row": 0,
-    "state": 1565,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-14",
-      "title": "Unclosed Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 759,
-          "row": 0,
-          "size": 1,
-          "sym": "emphasis_delimiter",
-          "label": "emphasis-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '_' mark",
-          "label": "emphasis-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "030"
-  },
-  {
-    "column": 26,
-    "row": 0,
-    "state": 2139,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-15",
-      "title": "Unclosed Strong Underscore Emphasis",
-      "message": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 757,
-          "row": 0,
-          "size": 2,
-          "sym": "strong_emphasis_delimiter",
-          "label": "strong-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '__' mark",
-          "label": "strong-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "031"
-  },
-  {
-    "column": 21,
-    "row": 0,
-    "state": 1784,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-16",
-      "title": "Unclosed Superscript",
-      "message": "I reached the end of the block before finding a closing '^' for the superscript.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 769,
-          "row": 0,
-          "size": 1,
-          "sym": "superscript_delimiter",
-          "label": "super-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '^' mark",
-          "label": "super-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "032"
-  },
-  {
-    "column": 19,
-    "row": 0,
-    "state": 1668,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-17",
-      "title": "Unclosed Subscript",
-      "message": "I reached the end of the block before finding a closing '~' for the subscript.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 760,
-          "row": 0,
-          "size": 1,
-          "sym": "subscript_delimiter",
-          "label": "sub-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '~' mark",
-          "label": "sub-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "033"
-  },
-  {
-    "column": 20,
-    "row": 0,
-    "state": 2151,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-18",
-      "title": "Unclosed Strikeout",
-      "message": "I reached the end of the block before finding a closing '~~' for the strikeout.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 753,
-          "row": 0,
-          "size": 2,
-          "sym": "strikeout_delimiter",
-          "label": "strike-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '~~' mark",
-          "label": "strike-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "034"
-  },
-  {
-    "column": 28,
-    "row": 0,
-    "state": 1943,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-19",
-      "title": "Unclosed Editorial Insert",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial insert.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 219,
-          "row": 0,
-          "size": 3,
-          "sym": "insert_delimiter",
-          "label": "insert-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[++' mark",
-          "label": "insert-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "035"
-  },
-  {
-    "column": 28,
-    "row": 0,
-    "state": 1943,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-20",
-      "title": "Unclosed Editorial Delete",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial delete.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 220,
-          "row": 0,
-          "size": 3,
-          "sym": "delete_delimiter",
-          "label": "delete-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[--' mark",
-          "label": "delete-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "036"
-  },
-  {
-    "column": 29,
-    "row": 0,
-    "state": 1943,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-21",
-      "title": "Unclosed Editorial Comment",
-      "message": "I reached the end of the block before finding a closing ']' for the editorial comment.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 221,
-          "row": 0,
-          "size": 3,
-          "sym": "edit_comment_delimiter",
-          "label": "comment-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[>>' mark",
-          "label": "comment-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "037"
-  },
-  {
-    "column": 31,
-    "row": 0,
-    "state": 1943,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-22",
-      "title": "Unclosed Editorial Highlight",
-      "message": "I reached the end of the block before finding a closing '!!]' for the editorial highlight.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 218,
-          "row": 0,
-          "size": 3,
-          "sym": "highlight_delimiter",
-          "label": "highlight-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '[!!' mark",
-          "label": "highlight-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "038"
-  },
-  {
-    "column": 21,
-    "row": 0,
-    "state": 3407,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-23",
-      "title": "Unclosed Inline Math",
-      "message": "I reached the end of the block before finding a closing '$' for the inline math.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 3713,
-          "row": 0,
-          "size": 1,
-          "sym": "$",
-          "label": "math-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '$' mark",
-          "label": "math-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "039"
-  },
-  {
-    "column": 0,
-    "row": 1,
-    "state": 2944,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-24",
-      "title": "Unclosed Code Span",
-      "message": "I reached the end of the block before finding a closing '`' for the code span.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 2864,
-          "row": 0,
-          "size": 1,
-          "sym": "code_span_delimiter",
-          "label": "code-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '`' mark",
-          "label": "code-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "040"
-  },
-  {
-    "column": 16,
-    "row": 0,
-    "state": 1184,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-25",
-      "title": "Unclosed Image",
-      "message": "I reached the end of the block before finding a closing '](url)' for the image.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 135,
-          "row": 0,
-          "size": 2,
-          "sym": "![",
-          "label": "image-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '![' mark",
-          "label": "image-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "041"
-  },
-  {
-    "column": 26,
-    "row": 0,
-    "state": 1887,
-    "sym": "_close_block",
-    "errorInfo": {
-      "code": "Q-2-26",
-      "title": "Unclosed Inline Footnote",
-      "message": "I reached the end of the block before finding a closing ']' for the inline footnote.",
-      "captures": [
-        {
-          "column": 0,
-          "lrState": 350,
-          "row": 0,
-          "size": 2,
-          "sym": "inline_note_delimiter",
-          "label": "footnote-start"
-        }
-      ],
-      "notes": [
-        {
-          "message": "This is the opening '^[' mark",
-          "label": "footnote-start",
-          "noteType": "simple"
-        }
-      ]
-    },
-    "name": "042"
+    "name": "Q-2-8/simple"
   }
 ]

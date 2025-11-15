@@ -1,0 +1,27 @@
+{
+  "code": "Q-2-11",
+  "title": "Unclosed Double Quote",
+  "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+  "notes": [
+    {
+      "message": "This is the opening quote mark",
+      "label": "quote-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "\"Unclosed quote at end",
+      "captures": [
+        {
+          "label": "quote-start",
+          "row": 0,
+          "column": 0,
+          "size": 1
+        }
+      ]
+    }
+  ]
+}

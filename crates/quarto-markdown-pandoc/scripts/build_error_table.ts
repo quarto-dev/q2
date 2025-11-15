@@ -35,47 +35,221 @@ await (new Deno.Command("cargo", {
   args: ["build"],
 })).output();
 
-const files = Array.from(fs.globSync("resources/error-corpus/*.qmd")).toSorted((a, b) => a.localeCompare(b));
-for (const file of files) {
-  console.log(`Processing ${file}`);
-  const base = basename(file, ".qmd");
-  const errorInfo = JSON.parse(
-    Deno.readTextFileSync(`resources/error-corpus/${base}.json`),
-  );
-  const parseResult = new Deno.Command("../../target/debug/quarto-markdown-pandoc", {
-    args: ["--_internal-report-error-state", "-i", file],
-  });
-  const output = await parseResult.output();
-  const outputStdout = new TextDecoder().decode(output.stdout);
-  const parseResultJson = JSON.parse(outputStdout);
-  const { errorStates, tokens } = parseResultJson;
-  
-  const looseMatching = (errorInfo.captures.some((e: any) => e.size === undefined));
+// Create case-files directory for generated test files
+const caseFilesDir = "resources/error-corpus/case-files";
+try {
+  await Deno.remove(caseFilesDir, { recursive: true });
+} catch {
+  // Directory doesn't exist, that's fine
+}
+await Deno.mkdir(caseFilesDir, { recursive: true });
+console.log(`Using case files directory: ${caseFilesDir}`);
 
-  const matches = looseMatching ? 
-    leftJoin(
-      tokens,
-      errorInfo.captures,
-      (tok: any, cap: any) => tok.row === cap.row && tok.column === cap.column && (cap.size !== undefined ? tok.size === cap.size : true)
-    )
-  : leftKeyJoin(
-    tokens,
-    errorInfo.captures,
-    (e: any) => e.size ? `${e.row}:${e.column}:${e.size}` : `${e.row}:${e.column}`,
-  );
-  if (errorStates.length < 1) {
-    throw new Error(`Expected at least one error state for ${file}`);
+try {
+  // Process both old format (.qmd files) and new format (.json files)
+  const qmdFiles = Array.from(fs.globSync("resources/error-corpus/*.qmd")).toSorted((a, b) => a.localeCompare(b));
+  const jsonFiles = Array.from(fs.globSync("resources/error-corpus/*.json"))
+    .filter(f => !f.endsWith("_autogen-table.json"))
+    .toSorted((a, b) => a.localeCompare(b));
+
+  // Process old format .qmd files
+  for (const file of qmdFiles) {
+    const base = basename(file, ".qmd");
+    const jsonPath = `resources/error-corpus/${base}.json`;
+
+    // Skip numbered files if we have a consolidated Q-*.json version
+    if (/^\d+$/.test(base)) {
+      const errorInfo = JSON.parse(Deno.readTextFileSync(jsonPath));
+      const consolidatedFile = `resources/error-corpus/${errorInfo.code}.json`;
+      if (jsonFiles.includes(consolidatedFile)) {
+        // Skip - will be processed from consolidated file
+        continue;
+      }
+    }
+
+    console.log(`Processing ${file}`);
+
+    // Process old format .qmd file
+    if (jsonFiles.some(jf => basename(jf, ".json") === base)) {
+      const errorInfo = JSON.parse(Deno.readTextFileSync(jsonPath));
+      const parseResult = new Deno.Command("../../target/debug/quarto-markdown-pandoc", {
+        args: ["--_internal-report-error-state", "-i", file],
+      });
+      const output = await parseResult.output();
+      const outputStdout = new TextDecoder().decode(output.stdout);
+      const parseResultJson = JSON.parse(outputStdout);
+      const { errorStates, tokens } = parseResultJson;
+
+      const looseMatching = (errorInfo.captures.some((e: any) => e.size === undefined));
+
+      const matches = looseMatching ?
+        leftJoin(
+          tokens,
+          errorInfo.captures,
+          (tok: any, cap: any) => tok.row === cap.row && tok.column === cap.column && (cap.size !== undefined ? tok.size === cap.size : true)
+        )
+      : leftKeyJoin(
+        tokens,
+        errorInfo.captures,
+        (e: any) => e.size ? `${e.row}:${e.column}:${e.size}` : `${e.row}:${e.column}`,
+      );
+      if (errorStates.length < 1) {
+        throw new Error(`Expected at least one error state for ${file}`);
+      }
+      errorInfo.captures = errorInfo.captures.map((capture: any) => {
+        const match = matches.find(([, b]) => b === capture);
+        assert(match);
+        return {...match[0], ...match[1]};
+      });
+      result.push({
+        ...errorStates[0],
+        errorInfo,
+        name: `${base}`,
+      });
+    }
   }
-  errorInfo.captures = errorInfo.captures.map((capture: any) => {
-    const match = matches.find(([, b]) => b === capture);
-    assert(match);
-    return {...match[0], ...match[1]};
-  });
-  result.push({
-    ...errorStates[0],
-    errorInfo,
-    name: `${base}`,
-  });
+
+  // Process new format .json files with cases
+  for (const jsonFile of jsonFiles) {
+    const base = basename(jsonFile, ".json");
+
+    // Skip if there's a .qmd file (old format)
+    if (qmdFiles.some(qf => basename(qf, ".qmd") === base)) {
+      continue;
+    }
+
+    console.log(`Processing ${jsonFile} (new format)`);
+    const errorSpec = JSON.parse(Deno.readTextFileSync(jsonFile));
+
+    // Check if this is new format (has cases array)
+    if (!errorSpec.cases || !Array.isArray(errorSpec.cases)) {
+      console.log(`  Skipping ${jsonFile} - not new format (no cases array)`);
+      continue;
+    }
+
+    const { code, title, message, notes, cases } = errorSpec;
+
+    // Process each case
+    for (const testCase of cases) {
+      const { name, content, captures, prefixes, prefixesAndSuffixes } = testCase;
+      console.log(`  Processing case: ${name}`);
+
+      // Track (lr_state, sym) pairs for this case to detect duplicates
+      const lrStateSyms = new Map<string, string>(); // key: "lrState:sym", value: variantName
+
+      // Helper function to process a single variant (base or prefixed)
+      const processVariant = async (
+        variantName: string,
+        variantContent: string,
+        variantCaptures: any[]
+      ) => {
+        // Write content to case-files directory
+        const caseFile = `${caseFilesDir}/${code}-${variantName}.qmd`;
+        await Deno.writeTextFile(caseFile, variantContent);
+
+        // Run parser with error state reporting
+        const parseResult = new Deno.Command("../../target/debug/quarto-markdown-pandoc", {
+          args: ["--_internal-report-error-state", "-i", caseFile],
+        });
+        const output = await parseResult.output();
+        const outputStdout = new TextDecoder().decode(output.stdout);
+        const parseResultJson = JSON.parse(outputStdout);
+        const { errorStates, tokens } = parseResultJson;
+
+        if (errorStates.length < 1) {
+          throw new Error(`Expected at least one error state for ${code}/${variantName}`);
+        }
+
+        // Match and augment captures
+        const looseMatching = variantCaptures.some((e: any) => e.size === undefined);
+        const matches = looseMatching ?
+          leftJoin(
+            tokens,
+            variantCaptures,
+            (tok: any, cap: any) => tok.row === cap.row && tok.column === cap.column &&
+              (cap.size !== undefined ? tok.size === cap.size : true)
+          )
+          : leftKeyJoin(
+            tokens,
+            variantCaptures,
+            (e: any) => e.size ? `${e.row}:${e.column}:${e.size}` : `${e.row}:${e.column}`
+          );
+
+        const augmentedCaptures = variantCaptures.map((capture: any) => {
+          const match = matches.find(([, b]) => b === capture);
+          assert(match, `Could not find match for capture in ${code}/${variantName}`);
+          return { ...match[0], ...match[1] };
+        });
+
+        // Check for duplicate (lr_state, sym) pairs within this case's captures
+        for (const cap of augmentedCaptures) {
+          const key = `${cap.lrState}:${cap.sym}`;
+          const existing = lrStateSyms.get(key);
+          if (existing) {
+            console.warn(
+              `⚠️  Warning: Duplicate (lr_state, sym) pair in ${code}/${name}:\n` +
+              `    (${cap.lrState}, "${cap.sym}") appears in both:\n` +
+              `      - ${existing}\n` +
+              `      - ${variantName}\n` +
+              `    This prefix does not currently generate a distinct parser state.\n` +
+              `    Future grammar changes may make this prefix useful.`
+            );
+          }
+          lrStateSyms.set(key, variantName);
+        }
+
+        // Create autogen table entry
+        result.push({
+          ...errorStates[0],
+          errorInfo: {
+            code,
+            title,
+            message,
+            captures: augmentedCaptures,
+            notes,
+          },
+          name: `${code}/${variantName}`,
+        });
+      };
+
+      // Always process base case
+      await processVariant(name, content, captures);
+
+      // Process prefixed variants if specified
+      if (prefixes && Array.isArray(prefixes) && prefixes.length > 0) {
+        for (let i = 0; i < prefixes.length; i++) {
+          const prefix = prefixes[i];
+          const variantName = `${name}-${i + 1}`;
+          const variantContent = prefix + content;
+          const variantCaptures = captures.map((cap: any) => ({
+            ...cap,
+            column: cap.column + prefix.length,
+          }));
+
+          console.log(`    Processing prefix variant: ${variantName} (prefix: "${prefix}")`);
+          await processVariant(variantName, variantContent, variantCaptures);
+        }
+      }
+
+      // Process prefixesAndSuffixes variants if specified
+      if (prefixesAndSuffixes && Array.isArray(prefixesAndSuffixes) && prefixesAndSuffixes.length > 0) {
+        for (let i = 0; i < prefixesAndSuffixes.length; i++) {
+          const [prefix, suffix] = prefixesAndSuffixes[i];
+          const variantName = `${name}-${i + 1}`;
+          const variantContent = prefix + content + suffix;
+          const variantCaptures = captures.map((cap: any) => ({
+            ...cap,
+            column: cap.column + prefix.length,
+          }));
+
+          console.log(`    Processing prefix+suffix variant: ${variantName} (prefix: "${prefix}", suffix: "${suffix}")`);
+          await processVariant(variantName, variantContent, variantCaptures);
+        }
+      }
+    }
+  }
+} finally {
+  // Nothing to clean up - case files are kept for tests
 }
 
 Deno.writeTextFileSync("resources/error-corpus/_autogen-table.json", JSON.stringify(result, null, 2) + "\n");
