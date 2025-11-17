@@ -102,7 +102,7 @@ Each error code has **one JSON file** with multiple test cases:
 
 ### Automatic Prefix Expansion
 
-Cases can include an optional `prefixes` field to automatically generate variant test cases. This solves the exponential growth problem when testing errors in different parser contexts:
+Cases can include an optional `prefixes` field to automatically generate variant test cases:
 
 ```json
 {
@@ -122,6 +122,32 @@ The build script automatically generates:
 **Column adjustment**: All capture column values are automatically shifted by `prefix.length` for variant cases.
 
 **Use case**: Different inline contexts (after `[`, `_`, `*`, etc.) produce different `lr_state` values for the same token. Prefixes allow comprehensive coverage without manually writing hundreds of test cases.
+
+### Automatic Prefix and Suffix Expansion (Nested)
+
+Cases can include both `prefixes` and `suffixes` fields to generate all combinations via nested loops:
+
+```json
+{
+  "name": "simple",
+  "content": "\"a",
+  "captures": [...],
+  "prefixes": ["[", "_", "**"],
+  "suffixes": [" *a*", " _a_", " `a`"]
+}
+```
+
+The build script generates variants using a **nested loop** (for each prefix, try all suffixes):
+- `Q-2-11-simple.qmd` - base case: `"a`
+- `Q-2-11-simple-1.qmd` - prefix `[`, suffix ` *a*`: `["a *a*`
+- `Q-2-11-simple-2.qmd` - prefix `[`, suffix ` _a_`: `["a _a_`
+- `Q-2-11-simple-3.qmd` - prefix `[`, suffix ` \`a\``: `["a \`a\``
+- `Q-2-11-simple-4.qmd` - prefix `_`, suffix ` *a*`: `_"a *a*`
+- ... (9 total: 3 prefixes × 3 suffixes)
+
+**Column adjustment**: All capture column values are automatically shifted by `prefix.length`.
+
+**Use case**: The capture's `lr_state` depends on the prefix (what comes before), while the error state depends on the suffix (what comes after and causes the parse to fail). Nested loops allow testing all combinations of contexts.
 
 ### Automatic Prefix and Suffix Expansion
 
@@ -150,7 +176,16 @@ The build script automatically generates:
 
 **Use case**: Testing the same error in different wrapping contexts (emphasis, strong, links, quotes, etc.) without duplicating the core error content.
 
-**Note**: `prefixes` and `prefixesAndSuffixes` are mutually exclusive - use one or the other for a given case, not both.
+### Feature Precedence
+
+The build script processes variants in this order (mutually exclusive):
+
+1. **`prefixesAndSuffixes`**: If present, generates one variant per `[prefix, suffix]` pair
+2. **`prefixes` + `suffixes`**: If both present, generates variants via nested loop (prefix × suffix combinations)
+3. **`prefixes` only**: If only prefixes present, generates one variant per prefix
+4. **None**: If none present, only the base case is generated
+
+**Important**: Don't mix `prefixesAndSuffixes` with `prefixes`/`suffixes` - the build script uses the first one it finds.
 
 ### Duplicate Detection
 
