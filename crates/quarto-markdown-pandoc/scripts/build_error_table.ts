@@ -131,7 +131,7 @@ try {
 
     // Process each case
     for (const testCase of cases) {
-      const { name, content, captures, prefixes, prefixesAndSuffixes } = testCase;
+      const { name, content, captures, prefixes, suffixes, prefixesAndSuffixes } = testCase;
       console.log(`  Processing case: ${name}`);
 
       // Track (lr_state, sym) pairs for this case to detect duplicates
@@ -215,24 +215,9 @@ try {
       // Always process base case
       await processVariant(name, content, captures);
 
-      // Process prefixed variants if specified
-      if (prefixes && Array.isArray(prefixes) && prefixes.length > 0) {
-        for (let i = 0; i < prefixes.length; i++) {
-          const prefix = prefixes[i];
-          const variantName = `${name}-${i + 1}`;
-          const variantContent = prefix + content;
-          const variantCaptures = captures.map((cap: any) => ({
-            ...cap,
-            column: cap.column + prefix.length,
-          }));
-
-          console.log(`    Processing prefix variant: ${variantName} (prefix: "${prefix}")`);
-          await processVariant(variantName, variantContent, variantCaptures);
-        }
-      }
-
-      // Process prefixesAndSuffixes variants if specified
+      // Process variants based on what's specified
       if (prefixesAndSuffixes && Array.isArray(prefixesAndSuffixes) && prefixesAndSuffixes.length > 0) {
+        // prefixesAndSuffixes: loop once over pairs
         for (let i = 0; i < prefixesAndSuffixes.length; i++) {
           const [prefix, suffix] = prefixesAndSuffixes[i];
           const variantName = `${name}-${i + 1}`;
@@ -243,6 +228,39 @@ try {
           }));
 
           console.log(`    Processing prefix+suffix variant: ${variantName} (prefix: "${prefix}", suffix: "${suffix}")`);
+          await processVariant(variantName, variantContent, variantCaptures);
+        }
+      } else if (prefixes && suffixes &&
+                 Array.isArray(prefixes) && prefixes.length > 0 &&
+                 Array.isArray(suffixes) && suffixes.length > 0) {
+        // prefixes + suffixes: nested loop over all combinations
+        let variantIndex = 0;
+        for (const prefix of prefixes) {
+          for (const suffix of suffixes) {
+            variantIndex++;
+            const variantName = `${name}-${variantIndex}`;
+            const variantContent = prefix + content + suffix;
+            const variantCaptures = captures.map((cap: any) => ({
+              ...cap,
+              column: cap.column + prefix.length,
+            }));
+
+            console.log(`    Processing prefix×suffix variant: ${variantName} (prefix: "${prefix}", suffix: "${suffix}")`);
+            await processVariant(variantName, variantContent, variantCaptures);
+          }
+        }
+      } else if (prefixes && Array.isArray(prefixes) && prefixes.length > 0) {
+        // prefixes only: simple loop
+        for (let i = 0; i < prefixes.length; i++) {
+          const prefix = prefixes[i];
+          const variantName = `${name}-${i + 1}`;
+          const variantContent = prefix + content;
+          const variantCaptures = captures.map((cap: any) => ({
+            ...cap,
+            column: cap.column + prefix.length,
+          }));
+
+          console.log(`    Processing prefix variant: ${variantName} (prefix: "${prefix}")`);
           await processVariant(variantName, variantContent, variantCaptures);
         }
       }

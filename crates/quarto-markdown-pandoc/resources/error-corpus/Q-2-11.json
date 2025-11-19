@@ -13,7 +13,7 @@
     {
       "name": "simple",
       "description": "Simple case",
-      "content": "\"Unclosed quote at end",
+      "content": "\"",
       "captures": [
         {
           "label": "quote-start",
@@ -21,6 +21,23 @@
           "column": 0,
           "size": 1
         }
+      ],
+      "prefixes": ["", "[", "_", "__", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "*", "**", "^["],
+      "suffixes": [
+        "",
+        "a a",
+        "a _a_", "a __a__", 
+        "a *a*", "a **a**", 
+        "a $a$", "a $$a$$", 
+        "a ~a~", "a ~~a~~",
+        "a `a`",
+        "a 'a'",
+        "a \"a\"",
+        "a ^a^",
+        "a [a]{}",
+        "a ![a]{}",
+        "a ^[a]",
+        "a "
       ]
     }
   ]
