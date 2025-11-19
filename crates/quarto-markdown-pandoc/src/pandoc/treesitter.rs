@@ -711,14 +711,14 @@ fn native_visitor<T: Write>(
                 if let Some(child) = node.child(0) {
                     let text = child.utf8_text(input_bytes).unwrap().to_string();
                     let range =
-                        crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                        crate::pandoc::location::source_info_to_qsm_range_or_fallback(
                             &node_source_info_with_context(&child, context),
                             context,
                         );
                     PandocNativeIntermediate::IntermediateBaseText(text, range)
                 } else {
                     let range =
-                        crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+                        crate::pandoc::location::source_info_to_qsm_range_or_fallback(
                             &node_source_info_with_context(node, context),
                             context,
                         );
@@ -1049,7 +1049,7 @@ fn native_visitor<T: Write>(
             // Remove the leading '=' to get the format name
             let format = text.strip_prefix('=').unwrap_or(&text).to_string();
             let source_info = node_source_info_with_context(node, context);
-            let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+            let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
                 &source_info,
                 context,
             );

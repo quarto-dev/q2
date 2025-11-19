@@ -14,7 +14,7 @@ pub fn process_raw_attribute(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let source_info = node_source_info_with_context(node, context);
-    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
         &source_info,
         context,
     );
