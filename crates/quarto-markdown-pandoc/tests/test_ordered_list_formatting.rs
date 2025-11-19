@@ -26,8 +26,7 @@ fn test_ordered_list_10plus_formatting() {
         false,
         "<test>",
         &mut std::io::sink(),
-        true,
-    )
+        true, None,    )
     .unwrap();
 
     // Write it back out
@@ -86,8 +85,7 @@ fn test_ordered_list_continuation_indentation() {
         false,
         "<test>",
         &mut std::io::sink(),
-        true,
-    )
+        true, None,    )
     .unwrap();
 
     // Write it back out

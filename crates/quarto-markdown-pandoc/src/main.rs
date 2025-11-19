@@ -125,6 +125,7 @@ fn main() {
                 input_filename,
                 &mut output_stream,
                 !args.no_prune_errors, // prune_errors = !no_prune_errors
+                None,
             );
             match result {
                 Ok((pandoc, context, warnings)) => {

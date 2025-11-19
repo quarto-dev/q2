@@ -17,6 +17,7 @@ fn resolve_source_ref(
     source_ref: &serde_json::Value,
     pool: &[serde_json::Value],
     file_info: &quarto_source_map::FileInformation,
+    content: &str,
 ) -> (usize, usize, usize, usize, usize, usize, usize) {
     let ref_id = source_ref
         .as_u64()
@@ -59,10 +60,10 @@ fn resolve_source_ref(
 
     // Compute row/column from absolute offsets using FileInformation
     let start_loc = file_info
-        .offset_to_location(absolute_start)
+        .offset_to_location(absolute_start, content)
         .expect("Failed to convert start offset to location");
     let end_loc = file_info
-        .offset_to_location(absolute_end)
+        .offset_to_location(absolute_end, content)
         .expect("Failed to convert end offset to location");
 
     (
@@ -121,7 +122,7 @@ fn test_inline_source_locations() {
     assert_eq!(hello_str["t"], "Str");
     assert_eq!(hello_str["c"], "hello");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _type) =
-        resolve_source_ref(&hello_str["s"], pool, &file_info);
+        resolve_source_ref(&hello_str["s"], pool, &file_info, input);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);
     assert_eq!(end_col, 5);
@@ -131,7 +132,7 @@ fn test_inline_source_locations() {
     let space = &inlines[1];
     assert_eq!(space["t"], "Space");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&space["s"], pool, &file_info);
+        resolve_source_ref(&space["s"], pool, &file_info, input);
     assert_eq!(start_col, 5);
     assert_eq!(start_off, 5);
     assert_eq!(end_col, 6);
@@ -141,7 +142,7 @@ fn test_inline_source_locations() {
     let emph = &inlines[2];
     assert_eq!(emph["t"], "Emph");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&emph["s"], pool, &file_info);
+        resolve_source_ref(&emph["s"], pool, &file_info, input);
     assert_eq!(start_col, 6);
     assert_eq!(start_off, 6);
     assert_eq!(end_col, 13);
@@ -153,7 +154,7 @@ fn test_inline_source_locations() {
     assert_eq!(world_str["t"], "Str");
     assert_eq!(world_str["c"], "world");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&world_str["s"], pool, &file_info);
+        resolve_source_ref(&world_str["s"], pool, &file_info, input);
     assert_eq!(start_col, 7);
     assert_eq!(start_off, 7);
     assert_eq!(end_col, 12);
@@ -164,7 +165,7 @@ fn test_inline_source_locations() {
     assert_eq!(period["t"], "Str");
     assert_eq!(period["c"], ".");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&period["s"], pool, &file_info);
+        resolve_source_ref(&period["s"], pool, &file_info, input);
     assert_eq!(start_col, 13);
     assert_eq!(start_off, 13);
     assert_eq!(end_col, 14);
@@ -221,7 +222,7 @@ fn test_merged_strings_preserve_location() {
     assert_eq!(hello["t"], "Str");
     assert_eq!(hello["c"], "hello");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&hello["s"], pool, &file_info);
+        resolve_source_ref(&hello["s"], pool, &file_info, input);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);
     assert_eq!(end_col, 5);
@@ -236,7 +237,7 @@ fn test_merged_strings_preserve_location() {
     assert_eq!(world["t"], "Str");
     assert_eq!(world["c"], "world");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&world["s"], pool, &file_info);
+        resolve_source_ref(&world["s"], pool, &file_info, input);
     assert_eq!(start_col, 6);
     assert_eq!(start_off, 6);
     assert_eq!(end_col, 11);
@@ -292,7 +293,7 @@ fn test_separate_strings_keep_separate_locations() {
     assert_eq!(a_str["t"], "Str");
     assert_eq!(a_str["c"], "a");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&a_str["s"], pool, &file_info);
+        resolve_source_ref(&a_str["s"], pool, &file_info, input);
     assert_eq!(start_col, 0);
     assert_eq!(start_off, 0);
     assert_eq!(end_col, 1);
@@ -302,7 +303,7 @@ fn test_separate_strings_keep_separate_locations() {
     let strong = &inlines[1];
     assert_eq!(strong["t"], "Strong");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&strong["s"], pool, &file_info);
+        resolve_source_ref(&strong["s"], pool, &file_info, input);
     assert_eq!(start_col, 1);
     assert_eq!(start_off, 1);
     assert_eq!(end_col, 6);
@@ -313,7 +314,7 @@ fn test_separate_strings_keep_separate_locations() {
     assert_eq!(c_str["t"], "Str");
     assert_eq!(c_str["c"], "c");
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&c_str["s"], pool, &file_info);
+        resolve_source_ref(&c_str["s"], pool, &file_info, input);
     assert_eq!(start_col, 6);
     assert_eq!(start_off, 6);
     assert_eq!(end_col, 7);
@@ -375,7 +376,7 @@ fn test_note_source_location() {
 
     // Check Note's source location spans the entire ^[note content]
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&note["s"], pool, &file_info);
+        resolve_source_ref(&note["s"], pool, &file_info, input);
     assert_eq!(start_col, 4);
     assert_eq!(start_off, 4);
     assert_eq!(end_col, 19);
@@ -391,7 +392,7 @@ fn test_note_source_location() {
     // CRITICAL: The Paragraph wrapper should have proper source location
     // not SourceInfo::default() which would be FileId(0) with offset 0
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&note_para["s"], pool, &file_info);
+        resolve_source_ref(&note_para["s"], pool, &file_info, input);
 
     // The paragraph wrapper should have the same source location as the Note itself
     // since it's a synthetic wrapper for the note's content
@@ -486,7 +487,7 @@ fn test_note_reference_source_location() {
     // CRITICAL: The Span should have proper source location from the NoteReference
     // not SourceInfo::default() which would be FileId(0) with offset 0
     let (start_off, _start_row, start_col, end_off, _end_row, end_col, _t) =
-        resolve_source_ref(&span["s"], pool, &file_info);
+        resolve_source_ref(&span["s"], pool, &file_info, input);
 
     // The [^note1] spans from column 10 to 18 (0-indexed)
     assert_eq!(start_col, 10);

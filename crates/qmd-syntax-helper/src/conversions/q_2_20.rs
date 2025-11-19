@@ -48,6 +48,7 @@ impl Q220Converter {
             &filename,
             &mut sink,
             true,
+            None,
         );
 
         let diagnostics = match result {

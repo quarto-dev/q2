@@ -38,6 +38,7 @@ impl Q215Converter {
             &filename,
             &mut sink,
             true,
+            None,
         );
 
         let diagnostics = match result {

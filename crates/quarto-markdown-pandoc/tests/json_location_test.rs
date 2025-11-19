@@ -8,7 +8,7 @@ fn test_json_location_disabled_by_default() {
     let mut output = io::sink();
 
     let (pandoc, context, _errors) =
-        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true, None)
             .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
@@ -31,7 +31,7 @@ fn test_json_location_enabled() {
     let mut output = io::sink();
 
     let (pandoc, context, _errors) =
-        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true, None)
             .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
@@ -74,7 +74,7 @@ fn test_json_location_multiline() {
     let mut output = io::sink();
 
     let (pandoc, context, _errors) =
-        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true, None)
             .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();
@@ -107,7 +107,7 @@ fn test_json_location_1_indexed() {
     let mut output = io::sink();
 
     let (pandoc, context, _errors) =
-        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true)
+        qmd::read(input.as_bytes(), false, "test.qmd", &mut output, true, None)
             .expect("Failed to parse QMD");
 
     let mut buf = Vec::new();

@@ -51,16 +51,32 @@ pub fn node_to_source_info(node: &Node, file_id: FileId) -> SourceInfo {
 /// This is the high-level conversion function that uses the context's primary file.
 /// Most parsing code should use this variant.
 ///
+/// When the context has a parent_source_info set (for recursive parses), the resulting
+/// SourceInfo is wrapped as a Substring of the parent, enabling correct location tracking
+/// through nested parse operations (e.g., YAML metadata values parsed as markdown).
+///
 /// # Arguments
 /// * `node` - The tree-sitter Node to convert
 /// * `ctx` - The ASTContext containing the source context
 ///
 /// # Returns
-/// A SourceInfo with Original mapping to the context's primary file.
-/// If the context has no primary file, uses FileId(0) as a fallback.
+/// A SourceInfo with Original mapping to the context's primary file, or wrapped as a
+/// Substring of parent_source_info if this is a recursive parse.
 pub fn node_to_source_info_with_context(node: &Node, ctx: &ASTContext) -> SourceInfo {
     let file_id = ctx.primary_file_id().unwrap_or(FileId(0));
-    node_to_source_info(node, file_id)
+    let base_info = node_to_source_info(node, file_id);
+
+    // If we're in a recursive parse (parent_source_info is set), wrap the SourceInfo
+    // as a Substring of the parent. This chains the location back to the original file.
+    if let Some(parent) = &ctx.parent_source_info {
+        SourceInfo::substring(
+            parent.clone(),
+            node.start_byte(),
+            node.end_byte(),
+        )
+    } else {
+        base_info
+    }
 }
 
 /// Convert a Range to SourceInfo using the context's primary file ID.

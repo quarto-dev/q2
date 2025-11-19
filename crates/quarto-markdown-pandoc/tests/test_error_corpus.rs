@@ -63,6 +63,7 @@ fn test_error_corpus_ariadne_output() {
             &qmd_file.to_string_lossy(),
             &mut std::io::sink(),
             true, // prune errors
+            None,
         );
 
         match result {
@@ -171,6 +172,7 @@ fn test_error_corpus_json_locations() {
             &qmd_file.to_string_lossy(),
             &mut std::io::sink(),
             true, // prune errors
+            None,
         );
 
         match result {
@@ -279,6 +281,7 @@ fn test_error_corpus_text_snapshots() {
                     &path.to_string_lossy(),
                     &mut std::io::sink(),
                     true, // prune errors
+            None,
                 );
 
                 match result {
@@ -355,6 +358,7 @@ fn test_error_corpus_json_snapshots() {
                     &path.to_string_lossy(),
                     &mut std::io::sink(),
                     true, // prune errors
+            None,
                 );
 
                 match result {
