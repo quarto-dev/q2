@@ -40,7 +40,7 @@ Yes: this. And `this`: and _that_: too.
           (pandoc_space)
           (pandoc_str))))
 ================================================================================
-paragraph.txt 3: hard line breaks
+paragraph.txt 3: hard line breaks (pandoc_soft_break cleaned up in postprocess)
 ================================================================================
 Hello\
 World
@@ -50,4 +50,5 @@ World
         (pandoc_paragraph
           (pandoc_str)
           (pandoc_line_break)
+          (pandoc_soft_break)          
           (pandoc_str))))
