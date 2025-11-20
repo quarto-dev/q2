@@ -279,6 +279,20 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-28",
     "since_version": "99.9.9"
   },
+  "Q-2-29": {
+    "subsystem": "markdown",
+    "title": "Indented Footnote Content Not Supported",
+    "message_template": "Quarto markdown does not support indented footnote content. Use the div syntax instead: `::: ^ref ... :::`",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-29",
+    "since_version": "99.9.9"
+  },
+  "Q-2-30": {
+    "subsystem": "markdown",
+    "title": "Multi-Paragraph Footnote Indentation Not Supported",
+    "message_template": "Indented paragraph following footnote definition suggests Pandoc multi-paragraph footnote syntax, which is not supported in quarto-markdown. Use the div syntax instead: `::: ^ref ... :::`",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-30",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",

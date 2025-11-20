@@ -60,9 +60,15 @@ const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
 // Thanks, Claude
 const EMOJI_REGEX = "(\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?(\u200D\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?)*)";
 
+// Keycap emojis: 0-9, # with variation selector and combining enclosing keycap
+// Unicode TR51: https://www.unicode.org/reports/tr51/
+// Note: * keycap emoji (*️⃣) conflicts with emphasis delimiter, use raw reader block instead
+const KEYCAP_EMOJI_REGEX = "([0-9#]\\uFE0F?\\u20E3)";
+
 const PANDOC_REGEX_STR =
         regexOr(
             "\\\\.",
+            KEYCAP_EMOJI_REGEX,
             EMOJI_REGEX,
             "[" + PANDOC_PUNCTUATION + "]",
             startStrRegex +
