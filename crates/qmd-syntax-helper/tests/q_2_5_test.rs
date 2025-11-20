@@ -15,7 +15,7 @@ fn test_no_violations_in_correct_file() {
     .unwrap();
 
     let registry = RuleRegistry::new().unwrap();
-    let rule = registry.get("q-2-14").unwrap();
+    let rule = registry.get("q-2-5").unwrap();
 
     let results = rule.check(&test_file, false).unwrap();
     assert_eq!(results.len(), 0, "Should not detect any violations");
@@ -29,10 +29,10 @@ fn test_detects_single_violation() {
     fs::write(&test_file, "_Unclosed emphasis\n").unwrap();
 
     let registry = RuleRegistry::new().unwrap();
-    let rule = registry.get("q-2-14").unwrap();
+    let rule = registry.get("q-2-5").unwrap();
 
     let results = rule.check(&test_file, false).unwrap();
-    assert_eq!(results.len(), 1, "Should detect one Q-2-14 violation");
+    assert_eq!(results.len(), 1, "Should detect one Q-2-5 violation");
     assert!(results[0].has_issue);
 }
 
@@ -45,7 +45,7 @@ fn test_converts_single_violation() {
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
-    let rule = registry.get("q-2-14").unwrap();
+    let rule = registry.get("q-2-5").unwrap();
 
     let result = rule.convert(&test_file, false, false, false).unwrap();
     assert_eq!(result.fixes_applied, 1);
@@ -66,7 +66,7 @@ fn test_in_place_conversion() {
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
-    let rule = registry.get("q-2-14").unwrap();
+    let rule = registry.get("q-2-5").unwrap();
 
     let result = rule.convert(&test_file, true, false, false).unwrap();
     assert_eq!(result.fixes_applied, 1);
@@ -84,7 +84,7 @@ fn test_check_mode() {
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
-    let rule = registry.get("q-2-14").unwrap();
+    let rule = registry.get("q-2-5").unwrap();
 
     let result = rule.convert(&test_file, false, true, false).unwrap();
     assert_eq!(result.fixes_applied, 1);
@@ -101,7 +101,7 @@ fn test_no_changes_when_all_correct() {
     fs::write(&test_file, "_Properly closed emphasis_\n").unwrap();
 
     let registry = RuleRegistry::new().unwrap();
-    let rule = registry.get("q-2-14").unwrap();
+    let rule = registry.get("q-2-5").unwrap();
 
     let result = rule.convert(&test_file, false, false, false).unwrap();
     assert_eq!(result.fixes_applied, 0);

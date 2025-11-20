@@ -1,10 +1,10 @@
-// Q-2-14: Unclosed Underscore Emphasis
+// Q-2-5: Unclosed Underscore Emphasis
 //
-// This conversion rule fixes Q-2-14 errors by adding closing '_' marks
+// This conversion rule fixes Q-2-5 errors by adding closing '_' marks
 // where they are missing at the end of blocks.
 //
 // Error catalog entry: crates/quarto-error-reporting/error_catalog.json
-// Error code: Q-2-14
+// Error code: Q-2-5
 // Title: "Unclosed Underscore Emphasis"
 // Message: "I reached the end of the block before finding a closing '_' for the emphasis."
 //
@@ -20,20 +20,20 @@ use std::path::Path;
 use crate::rule::{CheckResult, ConvertResult, Rule, SourceLocation};
 use crate::utils::file_io::read_file;
 
-pub struct Q214Converter {}
+pub struct Q25Converter {}
 
 #[derive(Debug, Clone)]
-struct Q214Violation {
+struct Q25Violation {
     offset: usize,
     error_location: Option<SourceLocation>,
 }
 
-impl Q214Converter {
+impl Q25Converter {
     pub fn new() -> Result<Self> {
         Ok(Self {})
     }
 
-    fn get_violations(&self, file_path: &Path) -> Result<Vec<Q214Violation>> {
+    fn get_violations(&self, file_path: &Path) -> Result<Vec<Q25Violation>> {
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
@@ -57,7 +57,7 @@ impl Q214Converter {
         let mut violations = Vec::new();
 
         for diagnostic in diagnostics {
-            if diagnostic.code.as_deref() != Some("Q-2-14") {
+            if diagnostic.code.as_deref() != Some("Q-2-5") {
                 continue;
             }
 
@@ -68,7 +68,7 @@ impl Q214Converter {
 
             let offset = location.as_ref().unwrap().start_offset();
 
-            violations.push(Q214Violation {
+            violations.push(Q25Violation {
                 offset,
                 error_location: Some(SourceLocation {
                     row: self.offset_to_row(&content, offset),
@@ -80,7 +80,7 @@ impl Q214Converter {
         Ok(violations)
     }
 
-    fn apply_fixes(&self, content: &str, mut violations: Vec<Q214Violation>) -> Result<String> {
+    fn apply_fixes(&self, content: &str, mut violations: Vec<Q25Violation>) -> Result<String> {
         if violations.is_empty() {
             return Ok(content.to_string());
         }
@@ -109,13 +109,13 @@ impl Q214Converter {
     }
 }
 
-impl Rule for Q214Converter {
+impl Rule for Q25Converter {
     fn name(&self) -> &str {
-        "q-2-14"
+        "q-2-5"
     }
 
     fn description(&self) -> &str {
-        "Fix Q-2-14: Add closing '_' for unclosed underscore emphasis"
+        "Fix Q-2-5: Add closing '_' for unclosed underscore emphasis"
     }
 
     fn check(&self, file_path: &Path, _verbose: bool) -> Result<Vec<CheckResult>> {
@@ -129,11 +129,11 @@ impl Rule for Q214Converter {
                 has_issue: true,
                 issue_count: 1,
                 message: Some(format!(
-                    "Q-2-14 unclosed underscore emphasis at offset {}",
+                    "Q-2-5 unclosed underscore emphasis at offset {}",
                     v.offset
                 )),
                 location: v.error_location,
-                error_code: Some("Q-2-14".to_string()),
+                error_code: Some("Q-2-5".to_string()),
                 error_codes: None,
             })
             .collect();
@@ -156,7 +156,7 @@ impl Rule for Q214Converter {
                 rule_name: self.name().to_string(),
                 file_path: file_path.to_string_lossy().to_string(),
                 fixes_applied: 0,
-                message: Some("No Q-2-14 unclosed underscore emphasis issues found".to_string()),
+                message: Some("No Q-2-5 unclosed underscore emphasis issues found".to_string()),
             });
         }
 
@@ -168,7 +168,7 @@ impl Rule for Q214Converter {
                 file_path: file_path.to_string_lossy().to_string(),
                 fixes_applied: violations.len(),
                 message: Some(format!(
-                    "Would fix {} Q-2-14 unclosed underscore emphasis violation(s)",
+                    "Would fix {} Q-2-5 unclosed underscore emphasis violation(s)",
                     violations.len()
                 )),
             });
@@ -181,7 +181,7 @@ impl Rule for Q214Converter {
                 file_path: file_path.to_string_lossy().to_string(),
                 fixes_applied: violations.len(),
                 message: Some(format!(
-                    "Fixed {} Q-2-14 unclosed underscore emphasis violation(s)",
+                    "Fixed {} Q-2-5 unclosed underscore emphasis violation(s)",
                     violations.len()
                 )),
             })

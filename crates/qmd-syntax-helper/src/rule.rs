@@ -93,10 +93,10 @@ impl RuleRegistry {
         registry.register(Arc::new(
             crate::conversions::definition_lists::DefinitionListConverter::new()?,
         ));
+        registry.register(Arc::new(crate::conversions::q_2_5::Q25Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_11::Q211Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_12::Q212Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_13::Q213Converter::new()?));
-        registry.register(Arc::new(crate::conversions::q_2_14::Q214Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_15::Q215Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_16::Q216Converter::new()?));
         registry.register(Arc::new(crate::conversions::q_2_17::Q217Converter::new()?));
