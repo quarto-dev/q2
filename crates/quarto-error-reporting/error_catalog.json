@@ -212,28 +212,28 @@
   "Q-2-19": {
     "subsystem": "markdown",
     "title": "Unclosed Editorial Insert",
-    "message_template": "I reached the end of the block before finding a closing '++]' for the editorial insert.",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial insert.",
     "docs_url": "https://quarto.org/docs/errors/Q-2-19",
     "since_version": "99.9.9"
   },
   "Q-2-20": {
     "subsystem": "markdown",
     "title": "Unclosed Editorial Delete",
-    "message_template": "I reached the end of the block before finding a closing '--]' for the editorial delete.",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial delete.",
     "docs_url": "https://quarto.org/docs/errors/Q-2-20",
     "since_version": "99.9.9"
   },
   "Q-2-21": {
     "subsystem": "markdown",
     "title": "Unclosed Editorial Comment",
-    "message_template": "I reached the end of the block before finding a closing '>>]' for the editorial comment.",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial comment.",
     "docs_url": "https://quarto.org/docs/errors/Q-2-21",
     "since_version": "99.9.9"
   },
   "Q-2-22": {
     "subsystem": "markdown",
     "title": "Unclosed Editorial Highlight",
-    "message_template": "I reached the end of the block before finding a closing '!!]' for the editorial highlight.",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial highlight.",
     "docs_url": "https://quarto.org/docs/errors/Q-2-22",
     "since_version": "99.9.9"
   },

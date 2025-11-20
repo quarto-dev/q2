@@ -1,16 +1,16 @@
 // Q-2-22: Unclosed Editorial Highlight
 //
-// This conversion rule fixes Q-2-22 errors by adding closing '<<]' marks
+// This conversion rule fixes Q-2-22 errors by adding closing ']' marks
 // where they are missing at the end of blocks.
 //
 // Error catalog entry: crates/quarto-error-reporting/error_catalog.json
 // Error code: Q-2-22
 // Title: "Unclosed Editorial Highlight"
-// Message: "I reached the end of the block before finding a closing '<<]' for the editorial highlight."
+// Message: "I reached the end of the block before finding a closing ']' for the editorial highlight."
 //
 // Example:
-//   Input:  [<<This is an unclosed highlight
-//   Output: [<<This is an unclosed highlight<<]
+//   Input:  [!!This is an unclosed highlight
+//   Output: [!!This is an unclosed highlight]
 //
 
 use anyhow::{Context, Result};
@@ -84,7 +84,7 @@ impl Q222Converter {
         Ok(violations)
     }
 
-    /// Apply fixes to the content by adding closing '<<]' marks
+    /// Apply fixes to the content by adding closing ']' marks
     fn apply_fixes(&self, content: &str, mut violations: Vec<Q222Violation>) -> Result<String> {
         if violations.is_empty() {
             return Ok(content.to_string());
@@ -96,8 +96,8 @@ impl Q222Converter {
         let mut result = content.to_string();
 
         for violation in violations {
-            // Insert closing <<] at the error location (end of block)
-            result.insert_str(violation.offset, "<<]");
+            // Insert closing ] at the error location (end of block)
+            result.insert(violation.offset, ']');
         }
 
         Ok(result)
@@ -124,7 +124,7 @@ impl Rule for Q222Converter {
     }
 
     fn description(&self) -> &str {
-        "Fix Q-2-22: Add closing '<<]' marks for unclosed editorial highlight"
+        "Fix Q-2-22: Add closing ']' for unclosed editorial highlight"
     }
 
     fn check(&self, file_path: &Path, _verbose: bool) -> Result<Vec<CheckResult>> {

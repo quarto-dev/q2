@@ -10,7 +10,7 @@ fn test_no_violations_in_correct_file() {
     // File with properly closed editorial highlight
     fs::write(
         &test_file,
-        r#"This has [<<properly closed highlight<<] in it.
+        r#"This has [!!properly closed highlight] in it.
 "#,
     )
     .unwrap();
@@ -27,7 +27,7 @@ fn test_detects_single_violation() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    fs::write(&test_file, "[<<Unclosed highlight\n").unwrap();
+    fs::write(&test_file, "[!!Unclosed highlight\n").unwrap();
 
     let registry = RuleRegistry::new().unwrap();
     let rule = registry.get("q-2-22").unwrap();
@@ -42,7 +42,7 @@ fn test_converts_single_violation() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "[<<Unclosed highlight\n";
+    let original = "[!!Unclosed highlight\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -54,7 +54,7 @@ fn test_converts_single_violation() {
 
     let converted = result.message.unwrap();
     assert_eq!(
-        converted, "[<<Unclosed highlight<<]\n",
-        "Should add closing <<]"
+        converted, "[!!Unclosed highlight]\n",
+        "Should add closing ]"
     );
 }

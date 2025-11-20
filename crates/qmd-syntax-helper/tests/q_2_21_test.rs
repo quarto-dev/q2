@@ -10,7 +10,7 @@ fn test_no_violations_in_correct_file() {
     // File with properly closed editorial comment
     fs::write(
         &test_file,
-        r#"This has [>>properly closed comment>>] in it.
+        r#"This has [>>properly closed comment] in it.
 "#,
     )
     .unwrap();
@@ -42,7 +42,7 @@ fn test_converts_single_violation() {
     let rm = ResourceManager::new().unwrap();
     let test_file = rm.temp_dir().join("test.qmd");
 
-    let original = "[!!Unclosed comment\n";
+    let original = "[>>Unclosed comment\n";
     fs::write(&test_file, original).unwrap();
 
     let registry = RuleRegistry::new().unwrap();
@@ -54,7 +54,7 @@ fn test_converts_single_violation() {
 
     let converted = result.message.unwrap();
     assert_eq!(
-        converted, "[!!Unclosed comment!!]\n",
-        "Should add closing !!]"
+        converted, "[>>Unclosed comment]\n",
+        "Should add closing ]"
     );
 }
