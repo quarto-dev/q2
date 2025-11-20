@@ -250,6 +250,7 @@ fn parse_yaml_string_as_markdown(
         "<metadata>",
         &mut output_stream,
         true,
+        Some(source_info.clone()),
     );
 
     match result {
@@ -726,6 +727,7 @@ pub fn parse_metadata_strings_with_source_info(
                 "<metadata>",
                 &mut output_stream,
                 true,
+                Some(source_info.clone()),
             );
             match result {
                 Ok((mut pandoc, _context, warnings)) => {
@@ -817,7 +819,7 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
         MetaValue::MetaString(s) => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
             let result =
-                readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream, true);
+                readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream, true, None);
             match result {
                 Ok((mut pandoc, _context, _warnings)) => {
                     // TODO: Handle warnings from recursive parse

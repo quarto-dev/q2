@@ -512,7 +512,7 @@ module.exports = grammar({
 
             $._prose_punctuation,
             $.html_element,
-            $.pandoc_line_break,
+            alias($._pandoc_line_break, $.pandoc_line_break),
             alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
@@ -816,7 +816,7 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
 
-        pandoc_line_break: $ => seq(/\\/, choice($._newline, $._eof)),
+        // pandoc_line_break: $ => seq(/\\/, choice($._newline, $._eof)),
 
         _inline_whitespace: $ => choice($._whitespace, $._soft_line_break),
         _whitespace: $ => /[ \t]+/,
@@ -962,6 +962,8 @@ module.exports = grammar({
         $.html_element, // best-effort lexing of HTML elements simply for error reporting.
 
         $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
+
+        $._pandoc_line_break, // we need to do this in the external lexer to avoid eating the actual newline.
     ],
     precedences: $ => [],
     extras: $ => [],

@@ -1,0 +1,27 @@
+{
+  "code": "Q-2-3",
+  "title": "Key-value Pair Before Class Specifier in Attribute",
+  "message": "This class specifier appears after the key-value pair.",
+  "notes": [
+    {
+      "message": "This key-value pair cannot appear before the class specifier.",
+      "noteType": "simple",
+      "label": "key-value"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "[foo]{#id key=value .class}\n",
+      "captures": [
+        {
+          "label": "key-value",
+          "row": 0,
+          "column": 10,
+          "size": 9
+        }
+      ]
+    }
+  ]
+}

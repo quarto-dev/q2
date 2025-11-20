@@ -1,0 +1,28 @@
+{
+  "code": "Q-2-23",
+  "title": "Unclosed Inline Math",
+  "message": "I reached the end of the block before finding a closing '$' for the inline math.",
+  "notes": [
+    {
+      "message": "This is the opening '$' mark",
+      "label": "math-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "$Unclosed inline math\n",
+      "captures": [
+        {
+          "label": "math-start",
+          "row": 0,
+          "column": 0,
+          "size": 1
+        }
+      ],
+      "prefixes": ["[", "_", "__", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "\"", "*", "**", "^["]
+    }
+  ]
+}

@@ -56,6 +56,7 @@ pub fn read<T: Write>(
     filename: &str,
     mut output_stream: &mut T,
     prune_errors: bool,
+    parent_source_info: Option<quarto_source_map::SourceInfo>,
 ) -> Result<
     (
         pandoc::Pandoc,
@@ -89,6 +90,7 @@ pub fn read<T: Write>(
             filename,
             output_stream,
             prune_errors,
+            parent_source_info,
         );
     }
 
@@ -98,6 +100,8 @@ pub fn read<T: Write>(
 
     // Create ASTContext early so we can use it for error diagnostics
     let mut context = ASTContext::with_filename(filename.to_string());
+    // Store parent source info for recursive parses
+    context.parent_source_info = parent_source_info;
     // Add the input content to the SourceContext for proper error rendering
     let input_str = String::from_utf8_lossy(input_bytes).to_string();
     context.source_context = quarto_source_map::SourceContext::new();

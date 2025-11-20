@@ -2727,8 +2727,13 @@
           "name": "html_element"
         },
         {
-          "type": "SYMBOL",
-          "name": "pandoc_line_break"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_pandoc_line_break"
+          },
+          "named": true,
+          "value": "pandoc_line_break"
         },
         {
           "type": "ALIAS",
@@ -4334,28 +4339,6 @@
         }
       ]
     },
-    "pandoc_line_break": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "PATTERN",
-          "value": "\\\\"
-        },
-        {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_newline"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_eof"
-            }
-          ]
-        }
-      ]
-    },
     "_inline_whitespace": {
       "type": "CHOICE",
       "members": [
@@ -4705,6 +4688,10 @@
     {
       "type": "SYMBOL",
       "name": "_pipe_table_delimiter"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_pandoc_line_break"
     }
   ],
   "inline": [],

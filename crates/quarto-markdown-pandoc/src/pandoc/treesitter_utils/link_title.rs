@@ -16,7 +16,7 @@ pub fn process_link_title(
     let title = node.utf8_text(input_bytes).unwrap().to_string();
     let title = title[1..title.len() - 1].to_string();
     let source_info = node_source_info_with_context(node, context);
-    let range = crate::pandoc::source_map_compat::source_info_to_qsm_range_or_fallback(
+    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
         &source_info,
         context,
     );

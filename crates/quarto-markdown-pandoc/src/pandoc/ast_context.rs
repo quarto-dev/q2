@@ -18,6 +18,11 @@ pub struct ASTContext {
     pub example_list_counter: Cell<usize>,
     /// Source context for tracking files and their content
     pub source_context: SourceContext,
+    /// Parent source info for recursive parses (e.g., metadata values)
+    /// When set, all SourceInfo instances created during parsing are wrapped
+    /// as Substrings of this parent, enabling correct location tracking through
+    /// nested parse operations.
+    pub parent_source_info: Option<quarto_source_map::SourceInfo>,
 }
 
 impl ASTContext {
@@ -30,6 +35,7 @@ impl ASTContext {
             filenames: vec!["<unknown>".to_string()],
             example_list_counter: Cell::new(1),
             source_context,
+            parent_source_info: None,
         }
     }
 
@@ -43,6 +49,7 @@ impl ASTContext {
             filenames: vec![filename_str],
             example_list_counter: Cell::new(1),
             source_context,
+            parent_source_info: None,
         }
     }
 
@@ -55,6 +62,7 @@ impl ASTContext {
             filenames: vec!["<anonymous>".to_string()],
             example_list_counter: Cell::new(1),
             source_context,
+            parent_source_info: None,
         }
     }
 

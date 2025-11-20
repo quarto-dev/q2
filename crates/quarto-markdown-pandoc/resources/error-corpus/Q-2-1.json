@@ -1,0 +1,27 @@
+{
+  "code": "Q-2-1",
+  "title": "Unclosed Span",
+  "message": "I reached the end of the block before finding a closing ']' for the span or link.",
+  "notes": [
+    {
+      "message": "This is the opening bracket for the span",
+      "label": "span-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "an [unclosed span\n",
+      "captures": [
+        {
+          "label": "span-start",
+          "row": 0,
+          "column": 3,
+          "size": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-10",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 5,
+            "file_id": 0,
+            "start_offset": 4
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 6,
+        "file_id": 0,
+        "start_offset": 5
+      }
+    },
+    "problem": {
+      "content": "A space is causing a quote mark to be interpreted as a quotation close.",
+      "type": "markdown"
+    },
+    "title": "Closed Quote Without Matching Open Quote"
+  }
+]

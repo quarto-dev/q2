@@ -127,6 +127,7 @@ fn process_qmd_file(
         qmd_path.to_str().unwrap_or("<unknown>"),
         &mut output_stream,
         true,
+        None,
     )
     .map_err(|diagnostics| {
         // Format error messages using DiagnosticMessage API

@@ -48,7 +48,7 @@ pub fn process_fenced_code_block(
 
                     // Track source location for the language specifier
                     let lang_source =
-                        crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                        crate::pandoc::location::range_to_source_info_with_context(
                             &range, context,
                         );
                     attr_source.classes.push(Some(lang_source));
@@ -78,7 +78,7 @@ pub fn process_fenced_code_block(
             attr.1.push(lang); // set the language
 
             // Track source location for the language specifier
-            let lang_source = crate::pandoc::source_map_compat::range_to_source_info_with_context(
+            let lang_source = crate::pandoc::location::range_to_source_info_with_context(
                 &range, context,
             );
             attr_source.classes.push(Some(lang_source));

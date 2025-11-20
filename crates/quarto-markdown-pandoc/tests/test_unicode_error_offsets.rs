@@ -17,7 +17,7 @@ fn test_unicode_error_position() {
     let input_bytes = input.as_bytes();
 
     let mut output = Vec::new();
-    let result = readers::qmd::read(input_bytes, false, "test.qmd", &mut output, true);
+    let result = readers::qmd::read(input_bytes, false, "test.qmd", &mut output, true, None);
 
     // Should have errors (the '}' is invalid)
     assert!(
@@ -73,7 +73,7 @@ fn test_ascii_error_position_baseline() {
     let input_bytes = input.as_bytes();
 
     let mut output = Vec::new();
-    let result = readers::qmd::read(input_bytes, false, "test.qmd", &mut output, true);
+    let result = readers::qmd::read(input_bytes, false, "test.qmd", &mut output, true, None);
 
     assert!(
         result.is_err(),

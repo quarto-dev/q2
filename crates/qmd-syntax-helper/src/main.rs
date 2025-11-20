@@ -237,7 +237,8 @@ fn main() -> Result<()> {
 
                                     // Show rule progress
                                     if verbose || check_mode {
-                                        let prefix = if show_iteration_details { "    " } else { "  " };
+                                        let prefix =
+                                            if show_iteration_details { "    " } else { "  " };
                                         println!(
                                             "{}{} {} - {}",
                                             prefix,
@@ -249,7 +250,12 @@ fn main() -> Result<()> {
                                 }
                             }
                             Err(e) => {
-                                eprintln!("  {} Error converting {}: {}", "✗".red(), rule.name(), e);
+                                eprintln!(
+                                    "  {} Error converting {}: {}",
+                                    "✗".red(),
+                                    rule.name(),
+                                    e
+                                );
                                 drop(temp_file); // Clean up temp
                                 return Err(e);
                             }
@@ -259,8 +265,10 @@ fn main() -> Result<()> {
                     // Check for convergence
                     if fixes_this_iteration == 0 {
                         if verbose && show_iteration_details {
-                            println!("  Converged after {} iteration(s) ({} total fixes)",
-                                     iteration, total_fixes_for_file);
+                            println!(
+                                "  Converged after {} iteration(s) ({} total fixes)",
+                                iteration, total_fixes_for_file
+                            );
                         }
                         break;
                     }
@@ -272,7 +280,8 @@ fn main() -> Result<()> {
                         if oscillation_count >= 3 {
                             eprintln!(
                                 "  {} Warning: Possible oscillation detected (same fix count for {} consecutive iterations)",
-                                "⚠".yellow(), oscillation_count + 1
+                                "⚠".yellow(),
+                                oscillation_count + 1
                             );
                             eprintln!("  Stopping iteration to prevent infinite loop");
                             break;
@@ -287,7 +296,8 @@ fn main() -> Result<()> {
                         if !no_iteration {
                             eprintln!(
                                 "  {} Warning: Reached max iterations ({}), but file may still have issues",
-                                "⚠".yellow(), max_iter
+                                "⚠".yellow(),
+                                max_iter
                             );
                         }
                         break;

@@ -28,6 +28,7 @@ impl ParseChecker {
             &filename,
             &mut sink,
             true,
+            None,
         );
 
         match result {

@@ -28,8 +28,14 @@ impl SourceInfo {
                 // Compute the absolute offset in the file
                 let absolute_offset = start_offset + offset;
 
+                // Get file content: use stored content for ephemeral files, or read from disk
+                let content = match &file.content {
+                    Some(c) => c.clone(),
+                    None => std::fs::read_to_string(&file.path).ok()?,
+                };
+
                 // Convert offset to Location with row/column using efficient binary search
-                let location = file_info.offset_to_location(absolute_offset)?;
+                let location = file_info.offset_to_location(absolute_offset, &content)?;
 
                 Some(MappedLocation {
                     file_id: *file_id,

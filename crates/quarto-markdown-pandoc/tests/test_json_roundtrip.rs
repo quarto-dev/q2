@@ -371,8 +371,7 @@ Hello world
         false,
         &test_file.to_string_lossy(),
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
     let (pandoc1, context1, diagnostics) = result.expect("Failed to parse QMD");
     assert!(diagnostics.is_empty(), "Expected no parse errors");
 
@@ -538,8 +537,7 @@ fn test_qmd_roundtrip_escaped_punctuation() {
             false,
             "<test>",
             &mut std::io::sink(),
-            true,
-        )
+            true, None,        )
         .unwrap_or_else(|_| panic!("Failed to parse input for test case: {}", description));
 
         assert!(

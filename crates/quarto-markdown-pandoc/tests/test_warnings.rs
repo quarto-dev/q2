@@ -17,8 +17,7 @@ Some content
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     // Parsing should succeed (warnings are not errors)
     assert!(
@@ -50,8 +49,7 @@ fn test_caption_with_table_no_warning() {
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     // Parsing should succeed and no warnings should be emitted
     assert!(
@@ -82,8 +80,7 @@ fn test_html_element_produces_warning_not_error() {
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     // Parsing should succeed (warnings are not errors)
     assert!(
@@ -159,8 +156,7 @@ fn test_multiple_html_elements() {
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     assert!(result.is_ok(), "Document should parse successfully");
 
@@ -216,8 +212,7 @@ fn test_block_level_html_elements() {
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     assert!(result.is_ok(), "Document should parse successfully");
 
@@ -274,8 +269,7 @@ fn test_html_elements_source_locations() {
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     assert!(result.is_ok(), "Document should parse successfully");
 
@@ -321,15 +315,13 @@ fn test_comparison_with_explicit_raw_inline_syntax() {
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
     let result_explicit = readers::qmd::read(
         explicit.as_bytes(),
         false,
         "test.md",
         &mut std::io::sink(),
-        true,
-    );
+        true, None,    );
 
     assert!(result_implicit.is_ok() && result_explicit.is_ok());
 

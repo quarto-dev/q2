@@ -1023,6 +1023,7 @@ fn read_ast_context(value: &Value) -> Result<ASTContext> {
         filenames,
         example_list_counter: std::cell::Cell::new(1),
         source_context,
+        parent_source_info: None,
     })
 }
 

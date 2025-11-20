@@ -48,14 +48,14 @@ where
                 if node == "link_destination" {
                     target.0 = text; // URL
                     target_source.url = Some(
-                        crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                        crate::pandoc::location::range_to_source_info_with_context(
                             &range, context,
                         ),
                     );
                 } else if node == "link_title" {
                     target.1 = text; // Title
                     target_source.title = Some(
-                        crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                        crate::pandoc::location::range_to_source_info_with_context(
                             &range, context,
                         ),
                     );
@@ -89,7 +89,7 @@ where
             attr,
             target,
             content,
-            crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
+            crate::pandoc::location::node_source_info_with_context(node, context),
             attr_source,
             target_source,
         )
@@ -98,7 +98,7 @@ where
             attr,
             target,
             content,
-            crate::pandoc::source_map_compat::node_to_source_info_with_context(node, context),
+            crate::pandoc::location::node_source_info_with_context(node, context),
             attr_source,
             target_source,
         )

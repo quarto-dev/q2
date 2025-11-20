@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-18",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening '~~' mark",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 2,
+            "file_id": 0,
+            "start_offset": 0
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 21,
+        "file_id": 0,
+        "start_offset": 20
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing '~~' for the strikeout.",
+      "type": "markdown"
+    },
+    "title": "Unclosed Strikeout"
+  }
+]

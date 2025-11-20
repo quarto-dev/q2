@@ -9,7 +9,6 @@
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::inline::{Citation, CitationMode, Cite, Inline, Space, Str};
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::source_map_compat;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -30,7 +29,7 @@ where
             citation_type = CitationMode::SuppressAuthor;
             if let PandocNativeIntermediate::IntermediateBaseText(id, range) = child {
                 citation_id = id;
-                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(
+                citation_id_source = Some(crate::pandoc::location::range_to_source_info_with_context(
                     &range, context,
                 ));
             } else {
@@ -43,7 +42,7 @@ where
             citation_type = CitationMode::AuthorInText;
             if let PandocNativeIntermediate::IntermediateBaseText(id, range) = child {
                 citation_id = id;
-                citation_id_source = Some(source_map_compat::range_to_source_info_with_context(
+                citation_id_source = Some(crate::pandoc::location::range_to_source_info_with_context(
                     &range, context,
                 ));
             } else {
@@ -72,9 +71,9 @@ where
         }],
         content: vec![Inline::Str(Str {
             text: trimmed_text,
-            source_info: source_map_compat::node_to_source_info_with_context(node, context),
+            source_info: crate::pandoc::location::node_source_info_with_context(node, context),
         })],
-        source_info: source_map_compat::node_to_source_info_with_context(node, context),
+        source_info: crate::pandoc::location::node_source_info_with_context(node, context),
     });
 
     // Build result with leading Space if needed to distinguish "Hi @cite" from "Hi@cite"

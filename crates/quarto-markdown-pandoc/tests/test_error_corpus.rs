@@ -9,20 +9,20 @@ use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
 
-/// Test that all files in resources/error-corpus/*.qmd produce ariadne-formatted errors
+/// Test that all files in resources/error-corpus/case-files/*.qmd produce ariadne-formatted errors
 /// with file:line:column information and source code snippets.
 #[test]
 fn test_error_corpus_ariadne_output() {
-    let corpus_dir = PathBuf::from("resources/error-corpus");
+    let corpus_dir = PathBuf::from("resources/error-corpus/case-files");
     assert!(
         corpus_dir.exists(),
-        "Error corpus directory should exist: {}",
+        "Error corpus case-files directory should exist: {}",
         corpus_dir.display()
     );
 
-    // Find all .qmd files in the error corpus
+    // Find all .qmd files in the case-files directory
     let mut qmd_files: Vec<PathBuf> = fs::read_dir(&corpus_dir)
-        .expect("Failed to read error corpus directory")
+        .expect("Failed to read error corpus case-files directory")
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
@@ -63,6 +63,7 @@ fn test_error_corpus_ariadne_output() {
             &qmd_file.to_string_lossy(),
             &mut std::io::sink(),
             true, // prune errors
+            None,
         );
 
         match result {
@@ -121,20 +122,20 @@ fn test_error_corpus_ariadne_output() {
     }
 }
 
-/// Test that all files in resources/error-corpus/*.qmd produce JSON errors
+/// Test that all files in resources/error-corpus/case-files/*.qmd produce JSON errors
 /// with proper source location information (file_id and offsets).
 #[test]
 fn test_error_corpus_json_locations() {
-    let corpus_dir = PathBuf::from("resources/error-corpus");
+    let corpus_dir = PathBuf::from("resources/error-corpus/case-files");
     assert!(
         corpus_dir.exists(),
-        "Error corpus directory should exist: {}",
+        "Error corpus case-files directory should exist: {}",
         corpus_dir.display()
     );
 
-    // Find all .qmd files in the error corpus
+    // Find all .qmd files in the case-files directory
     let mut qmd_files: Vec<PathBuf> = fs::read_dir(&corpus_dir)
-        .expect("Failed to read error corpus directory")
+        .expect("Failed to read error corpus case-files directory")
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();
@@ -171,6 +172,7 @@ fn test_error_corpus_json_locations() {
             &qmd_file.to_string_lossy(),
             &mut std::io::sink(),
             true, // prune errors
+            None,
         );
 
         match result {
@@ -279,6 +281,7 @@ fn test_error_corpus_text_snapshots() {
                     &path.to_string_lossy(),
                     &mut std::io::sink(),
                     true, // prune errors
+            None,
                 );
 
                 match result {
@@ -355,6 +358,7 @@ fn test_error_corpus_json_snapshots() {
                     &path.to_string_lossy(),
                     &mut std::io::sink(),
                     true, // prune errors
+            None,
                 );
 
                 match result {

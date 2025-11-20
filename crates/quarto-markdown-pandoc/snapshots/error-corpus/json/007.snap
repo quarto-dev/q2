@@ -8,7 +8,7 @@ expression: json_string
     "details": [
       {
         "content": {
-          "content": "(Emphasis start) If you meant an underscore, escape it with a backslash.",
+          "content": "This is the opening '_' mark",
           "type": "markdown"
         },
         "kind": "info",
@@ -30,9 +30,9 @@ expression: json_string
       }
     },
     "problem": {
-      "content": "I reached the end of the block before finding a closing _ for the emphasis.",
+      "content": "I reached the end of the block before finding a closing '_' for the emphasis.",
       "type": "markdown"
     },
-    "title": "Unclosed emphasis"
+    "title": "Unclosed Underscore Emphasis"
   }
 ]

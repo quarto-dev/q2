@@ -1469,21 +1469,6 @@
     }
   },
   {
-    "type": "pandoc_line_break",
-    "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "block_continuation",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "pandoc_list",
     "named": true,
     "fields": {},
@@ -2871,6 +2856,10 @@
   },
   {
     "type": "numeric_character_reference",
+    "named": true
+  },
+  {
+    "type": "pandoc_line_break",
     "named": true
   },
   {

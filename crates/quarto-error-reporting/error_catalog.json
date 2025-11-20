@@ -153,6 +153,118 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-10",
     "since_version": "99.9.9"
   },
+  "Q-2-11": {
+    "subsystem": "markdown",
+    "title": "Unclosed Double Quote",
+    "message_template": "I reached the end of the block before finding a closing '\"' for the quote.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-11",
+    "since_version": "99.9.9"
+  },
+  "Q-2-12": {
+    "subsystem": "markdown",
+    "title": "Unclosed Star Emphasis",
+    "message_template": "I reached the end of the block before finding a closing '*' for the emphasis.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-12",
+    "since_version": "99.9.9"
+  },
+  "Q-2-13": {
+    "subsystem": "markdown",
+    "title": "Unclosed Strong Star Emphasis",
+    "message_template": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-13",
+    "since_version": "99.9.9"
+  },
+  "Q-2-14": {
+    "subsystem": "markdown",
+    "title": "Unclosed Underscore Emphasis",
+    "message_template": "I reached the end of the block before finding a closing '_' for the emphasis.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-14",
+    "since_version": "99.9.9"
+  },
+  "Q-2-15": {
+    "subsystem": "markdown",
+    "title": "Unclosed Strong Underscore Emphasis",
+    "message_template": "I reached the end of the block before finding a closing '__' for the strong emphasis.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-15",
+    "since_version": "99.9.9"
+  },
+  "Q-2-16": {
+    "subsystem": "markdown",
+    "title": "Unclosed Superscript",
+    "message_template": "I reached the end of the block before finding a closing '^' for the superscript.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-16",
+    "since_version": "99.9.9"
+  },
+  "Q-2-17": {
+    "subsystem": "markdown",
+    "title": "Unclosed Subscript",
+    "message_template": "I reached the end of the block before finding a closing '~' for the subscript.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-17",
+    "since_version": "99.9.9"
+  },
+  "Q-2-18": {
+    "subsystem": "markdown",
+    "title": "Unclosed Strikeout",
+    "message_template": "I reached the end of the block before finding a closing '~~' for the strikeout.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-18",
+    "since_version": "99.9.9"
+  },
+  "Q-2-19": {
+    "subsystem": "markdown",
+    "title": "Unclosed Editorial Insert",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial insert.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-19",
+    "since_version": "99.9.9"
+  },
+  "Q-2-20": {
+    "subsystem": "markdown",
+    "title": "Unclosed Editorial Delete",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial delete.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-20",
+    "since_version": "99.9.9"
+  },
+  "Q-2-21": {
+    "subsystem": "markdown",
+    "title": "Unclosed Editorial Comment",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial comment.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-21",
+    "since_version": "99.9.9"
+  },
+  "Q-2-22": {
+    "subsystem": "markdown",
+    "title": "Unclosed Editorial Highlight",
+    "message_template": "I reached the end of the block before finding a closing ']' for the editorial highlight.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-22",
+    "since_version": "99.9.9"
+  },
+  "Q-2-23": {
+    "subsystem": "markdown",
+    "title": "Unclosed Inline Math",
+    "message_template": "I reached the end of the block before finding a closing '$' for the inline math.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-23",
+    "since_version": "99.9.9"
+  },
+  "Q-2-24": {
+    "subsystem": "markdown",
+    "title": "Unclosed Code Span",
+    "message_template": "I reached the end of the block before finding a closing '`' for the code span.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-24",
+    "since_version": "99.9.9"
+  },
+  "Q-2-25": {
+    "subsystem": "markdown",
+    "title": "Unclosed Image",
+    "message_template": "I reached the end of the block before finding a closing '](url)' for the image.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-25",
+    "since_version": "99.9.9"
+  },
+  "Q-2-26": {
+    "subsystem": "markdown",
+    "title": "Unclosed Inline Footnote",
+    "message_template": "I reached the end of the block before finding a closing ']' for the inline footnote.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-26",
+    "since_version": "99.9.9"
+  },
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",

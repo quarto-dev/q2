@@ -5,8 +5,7 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::attr::AttrSourceInfo;
-use crate::pandoc::location::node_location;
-use crate::pandoc::source_map_compat::range_to_source_info_with_context;
+use crate::pandoc::location::{node_location, range_to_source_info_with_context};
 use crate::pandoc::treesitter_utils::pandocnativeintermediate::PandocNativeIntermediate;
 use hashlink::LinkedHashMap;
 use tree_sitter::Node;

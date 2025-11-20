@@ -149,7 +149,71 @@ pub fn node_source_info_with_context(
     node: &tree_sitter::Node,
     context: &ASTContext,
 ) -> quarto_source_map::SourceInfo {
-    quarto_source_map::SourceInfo::from_range(context.current_file_id(), node_location(node))
+    // If we're in a recursive parse (parent_source_info is set), wrap the SourceInfo
+    // as a Substring of the parent. This chains the location back to the original file.
+    if let Some(parent) = &context.parent_source_info {
+        quarto_source_map::SourceInfo::substring(
+            parent.clone(),
+            node.start_byte(),
+            node.end_byte(),
+        )
+    } else {
+        quarto_source_map::SourceInfo::from_range(context.current_file_id(), node_location(node))
+    }
+}
+
+/// Convert a Range to SourceInfo using the context's primary file ID.
+///
+/// # Arguments
+/// * `range` - The Range to convert
+/// * `ctx` - The ASTContext to get the file ID from
+///
+/// # Returns
+/// A SourceInfo with Original mapping to the primary file
+pub fn range_to_source_info_with_context(
+    range: &quarto_source_map::Range,
+    ctx: &ASTContext,
+) -> quarto_source_map::SourceInfo {
+    let file_id = ctx.primary_file_id().unwrap_or(quarto_source_map::FileId(0));
+    quarto_source_map::SourceInfo::from_range(file_id, range.clone())
+}
+
+/// Convert quarto-source-map::SourceInfo to a quarto_source_map::Range, with a fallback if mapping fails.
+///
+/// This is for use with PandocNativeIntermediate which uses quarto_source_map::Range.
+/// Provides a fallback Range with zero row/column values if the mapping fails.
+///
+/// # Arguments
+/// * `source_info` - The SourceInfo to convert
+/// * `ctx` - The ASTContext containing the source context
+///
+/// # Returns
+/// A quarto_source_map::Range with row/column information if available, or a Range with offsets only
+pub fn source_info_to_qsm_range_or_fallback(
+    source_info: &quarto_source_map::SourceInfo,
+    ctx: &ASTContext,
+) -> quarto_source_map::Range {
+    let start_mapped = source_info.map_offset(0, &ctx.source_context);
+    let end_mapped = source_info.map_offset(source_info.length(), &ctx.source_context);
+
+    match (start_mapped, end_mapped) {
+        (Some(start), Some(end)) => quarto_source_map::Range {
+            start: start.location,
+            end: end.location,
+        },
+        _ => quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: source_info.start_offset(),
+                row: 0,
+                column: 0,
+            },
+            end: quarto_source_map::Location {
+                offset: source_info.end_offset(),
+                row: 0,
+                column: 0,
+            },
+        },
+    }
 }
 
 pub fn empty_range() -> Range {

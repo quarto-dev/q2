@@ -109,7 +109,7 @@ pub fn process_pandoc_span(
                     target_source = TargetSourceInfo {
                         url: if !url.is_empty() {
                             Some(
-                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                crate::pandoc::location::range_to_source_info_with_context(
                                     &url_range, context,
                                 ),
                             )
@@ -118,7 +118,7 @@ pub fn process_pandoc_span(
                         },
                         title: if !title.is_empty() {
                             Some(
-                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                crate::pandoc::location::range_to_source_info_with_context(
                                     &title_range,
                                     context,
                                 ),
@@ -268,7 +268,7 @@ pub fn process_pandoc_image(
                     target_source = TargetSourceInfo {
                         url: if !url.is_empty() {
                             Some(
-                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                crate::pandoc::location::range_to_source_info_with_context(
                                     &url_range, context,
                                 ),
                             )
@@ -277,7 +277,7 @@ pub fn process_pandoc_image(
                         },
                         title: if !title.is_empty() {
                             Some(
-                                crate::pandoc::source_map_compat::range_to_source_info_with_context(
+                                crate::pandoc::location::range_to_source_info_with_context(
                                     &title_range,
                                     context,
                                 ),

@@ -1,0 +1,28 @@
+{
+  "code": "Q-2-20",
+  "title": "Unclosed Editorial Delete",
+  "message": "I reached the end of the block before finding a closing ']' for the editorial delete.",
+  "notes": [
+    {
+      "message": "This is the opening '[--' mark",
+      "label": "delete-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "[--Unclosed editorial delete\n",
+      "captures": [
+        {
+          "label": "delete-start",
+          "row": 0,
+          "column": 0,
+          "size": 3
+        }
+      ],
+      "prefixes": ["[", "_", "__", "![", "[++", "[!!", "[>>", "~", "~~", "'", "\"", "*", "**", "^["]
+    }
+  ]
+}

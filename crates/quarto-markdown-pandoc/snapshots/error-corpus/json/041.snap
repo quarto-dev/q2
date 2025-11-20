@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-25",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening '![' mark",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 2,
+            "file_id": 0,
+            "start_offset": 0
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 17,
+        "file_id": 0,
+        "start_offset": 16
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing '](url)' for the image.",
+      "type": "markdown"
+    },
+    "title": "Unclosed Image"
+  }
+]

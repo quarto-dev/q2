@@ -1,0 +1,28 @@
+{
+  "code": "Q-2-13",
+  "title": "Unclosed Strong Star Emphasis",
+  "message": "I reached the end of the block before finding a closing '**' for the strong emphasis.",
+  "notes": [
+    {
+      "message": "This is the opening '**' mark",
+      "label": "strong-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "**Unclosed strong emphasis\n",
+      "captures": [
+        {
+          "label": "strong-start",
+          "row": 0,
+          "column": 0,
+          "size": 2
+        }
+      ],
+      "prefixes": ["[", "_", "__", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "\"", "^["]      
+    }
+  ]
+}

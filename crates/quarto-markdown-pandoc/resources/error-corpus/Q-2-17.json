@@ -1,0 +1,28 @@
+{
+  "code": "Q-2-17",
+  "title": "Unclosed Subscript",
+  "message": "I reached the end of the block before finding a closing '~' for the subscript.",
+  "notes": [
+    {
+      "message": "This is the opening '~' mark",
+      "label": "sub-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "~Unclosed subscript\n",
+      "captures": [
+        {
+          "label": "sub-start",
+          "row": 0,
+          "column": 0,
+          "size": 1
+        }
+      ],
+      "prefixes": ["[", "_", "__", "![", "[++", "[--", "[!!", "[>>", "^", "'", "\"", "*", "**", "^["]
+    }
+  ]
+}

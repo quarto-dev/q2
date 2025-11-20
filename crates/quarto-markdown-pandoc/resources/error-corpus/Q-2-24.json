@@ -1,0 +1,27 @@
+{
+  "code": "Q-2-24",
+  "title": "Unclosed Code Span",
+  "message": "I reached the end of the block before finding a closing '`' for the code span.",
+  "notes": [
+    {
+      "message": "This is the opening '`' mark",
+      "label": "code-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "`Unclosed code span\n",
+      "captures": [
+        {
+          "label": "code-start",
+          "row": 0,
+          "column": 0,
+          "size": 1
+        }
+      ]
+    }
+  ]
+}

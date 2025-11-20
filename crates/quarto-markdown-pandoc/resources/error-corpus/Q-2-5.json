@@ -1,0 +1,54 @@
+{
+  "code": "Q-2-5",
+  "title": "Unclosed Underscore Emphasis",
+  "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
+  "notes": [
+    {
+      "message": "This is the opening '_' mark",
+      "label": "emphasis-start",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Simple case",
+      "content": "Unfinished _emph.\n",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 10,
+          "size": 2
+        }
+      ]
+    },
+    {
+      "name": "in-link",
+      "description": "Inside link",
+      "content": "[_document](a)",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 1,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "at-start",
+      "description": "Unclosed emphasis at start of line",
+      "content": "_Unclosed emphasis\n",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 0,
+          "size": 1
+        }
+      ],
+      "prefixes": ["[", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "\"", "*", "**", "^["]
+    }
+  ]
+}

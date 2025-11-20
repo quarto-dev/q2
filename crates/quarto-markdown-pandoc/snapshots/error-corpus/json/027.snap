@@ -1,0 +1,38 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test_error_corpus.rs
+expression: json_string
+---
+[
+  {
+    "code": "Q-2-11",
+    "details": [
+      {
+        "content": {
+          "content": "This is the opening quote mark",
+          "type": "markdown"
+        },
+        "kind": "info",
+        "location": {
+          "Original": {
+            "end_offset": 1,
+            "file_id": 0,
+            "start_offset": 0
+          }
+        }
+      }
+    ],
+    "kind": "error",
+    "location": {
+      "Original": {
+        "end_offset": 23,
+        "file_id": 0,
+        "start_offset": 22
+      }
+    },
+    "problem": {
+      "content": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "type": "markdown"
+    },
+    "title": "Unclosed Double Quote"
+  }
+]
