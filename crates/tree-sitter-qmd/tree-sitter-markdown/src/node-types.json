@@ -2551,6 +2551,10 @@
       "required": true,
       "types": [
         {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
           "type": "key_value_specifier",
           "named": true
         },
@@ -2589,6 +2593,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
         {
           "type": "key_value_specifier",
           "named": true

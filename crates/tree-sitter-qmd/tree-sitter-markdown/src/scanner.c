@@ -2315,6 +2315,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             EMIT_TOKEN(LINE_ENDING);
         }
     }
+    DEBUG_PRINT("Fell through external scanner => return false;\n");
     return false;
 }
 

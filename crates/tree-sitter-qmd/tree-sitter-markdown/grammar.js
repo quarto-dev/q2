@@ -516,27 +516,26 @@ module.exports = grammar({
             alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
+        _shortcode_sep: $ => choice($._whitespace, $._soft_line_break, seq($._soft_line_break, $._whitespace), seq($._whitespace, $._soft_line_break)),
+
         // shortcodes
         shortcode_escaped: $ => seq(
             alias($._shortcode_open_escaped, $.shortcode_delimiter), // "{{{<",
-            $._whitespace,
+            $._shortcode_sep,
             $.shortcode_name,
-            repeat(seq($._whitespace, $._shortcode_value)),
-
-            repeat(seq($._whitespace, alias($._commonmark_key_value_specifier, $.key_value_specifier))),
-            $._whitespace,
+            repeat(seq($._shortcode_sep, $._shortcode_value)),
+            repeat(seq($._shortcode_sep, alias($._commonmark_key_value_specifier, $.key_value_specifier))),
+            $._shortcode_sep,
             alias($._shortcode_close_escaped, $.shortcode_delimiter), //">}}}",
         ),
 
         shortcode: $ => seq(
             alias($._shortcode_open, $.shortcode_delimiter), // "{{<",
-            $._whitespace,
+            $._shortcode_sep,
             $.shortcode_name,
-            repeat(seq($._whitespace, $._shortcode_value)),
-
-            repeat(seq($._whitespace, alias($._shortcode_key_value_specifier, $.key_value_specifier))),
-            $._whitespace,
-
+            repeat(seq($._shortcode_sep, $._shortcode_value)),
+            repeat(seq($._shortcode_sep, alias($._shortcode_key_value_specifier, $.key_value_specifier))),
+            $._shortcode_sep,
             alias($._shortcode_close, $.shortcode_delimiter), //">}}",
         ),
 
@@ -820,6 +819,7 @@ module.exports = grammar({
 
         _inline_whitespace: $ => choice($._whitespace, $._soft_line_break),
         _whitespace: $ => /[ \t]+/,
+        _linebreak: $ => /[\r\n]+/,
     },
 
     externals: $ => [

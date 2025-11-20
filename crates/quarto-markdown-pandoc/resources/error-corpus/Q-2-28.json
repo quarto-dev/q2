@@ -1,0 +1,45 @@
+{
+  "code": "Q-2-28",
+  "title": "Line Break Before Escaped Shortcode Close",
+  "message": "Line breaks are not allowed immediately before the escaped shortcode closing delimiter `>}}}`.",
+  "notes": [
+    {
+      "message": "This is the opening `{{{<` for the escaped shortcode",
+      "label": "shortcode-open",
+      "noteType": "simple"
+    }
+  ],
+  "cases": [
+    {
+      "name": "simple",
+      "description": "Line break before closing delimiter in various escaped shortcode forms",
+      "content": "{{{< hello",
+      "captures": [
+        {
+          "label": "shortcode-open",
+          "row": 0,
+          "column": 0,
+          "size": 4
+        }
+      ],
+      "prefixes": ["", "[", "_", "__", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "*", "**", "^["],
+      "suffixes": [
+        "\n   >}}}",
+        " key\n>}}}",
+        " 'value'\n>}}}",
+        " \"value\"\n>}}}",
+        " 42\n>}}}",
+        " param1 param2 param3\n>}}}",
+        " key=value\n>}}}",
+        " key='value'\n>}}}",
+        " key=\"value\"\n>}}}",
+        " key=42\n>}}}",
+        " key1=val1 key2=val2\n>}}}",
+        " param1 key=value\n>}}}",
+        " \"title\" 123 key1=value key2='quoted' enabled=true\n>}}}",
+        "\n    >}}}",
+        " key=value   \n>}}}"
+      ]
+    }
+  ]
+}
