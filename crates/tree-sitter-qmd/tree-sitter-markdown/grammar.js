@@ -333,7 +333,7 @@ module.exports = grammar({
         target: $ => seq(
             /[ \t]*[\]][(]/, 
             optional($._inline_whitespace),
-            alias(repeat1(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
+            alias(repeat(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
             optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
             ')'
         ),

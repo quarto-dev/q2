@@ -1465,7 +1465,7 @@
         {
           "type": "ALIAS",
           "content": {
-            "type": "REPEAT1",
+            "type": "REPEAT",
             "content": {
               "type": "CHOICE",
               "members": [
