@@ -124,6 +124,8 @@ typedef enum {
     PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
 
     PANDOC_LINE_BREAK,
+
+    TRIPLE_STAR, // simply for good error reporting
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -222,6 +224,10 @@ static char* token_names[] = {
     "HTML_ELEMENT", // simply for good error reporting
 
     "PIPE_TABLE_DELIMITER",
+
+    "PANDOC_LINE_BREAK",
+
+    "TRIPLE_STAR", // simply for good error reporting
 };
 
 #endif
@@ -682,6 +688,7 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         EMIT_TOKEN(EMPHASIS_CLOSE_STAR);
     }
     bool could_be_close_strong_emphasis = valid_symbols[STRONG_EMPHASIS_CLOSE_STAR];
+    bool no_spaces = true;
     for (;;) {
         if (lexer->lookahead == '*') {
             if (star_count == 1 && extra_indentation >= 1 &&
@@ -698,6 +705,7 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 EMIT_TOKEN(STRONG_EMPHASIS_CLOSE_STAR);
             }
         } else if (lexer->lookahead == ' ' || lexer->lookahead == '\t') {
+            no_spaces = false;
             could_be_close_strong_emphasis = false;
             if (star_count == 1) {
                 extra_indentation += advance(s, lexer);
@@ -714,6 +722,10 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         extra_indentation = 1;
         // line is empty so don't interrupt paragraphs if this is a list marker
         dont_interrupt = s->matched == s->open_blocks.size;
+    }
+    if (star_count == 3 && !line_end && no_spaces) {
+        mark_end(s, lexer);
+        EMIT_TOKEN(TRIPLE_STAR);
     }
     // If there were at least 3 stars then this could be a thematic break
     bool thematic_break = star_count >= 3 && line_end;
@@ -2315,6 +2327,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
             EMIT_TOKEN(LINE_ENDING);
         }
     }
+    DEBUG_PRINT("Fell through external scanner => return false;\n");
     return false;
 }
 

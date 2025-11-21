@@ -127,7 +127,7 @@ try {
       continue;
     }
 
-    const { code, title, message, notes, cases } = errorSpec;
+    const { code, title, message, notes, hints, cases } = errorSpec;
 
     // Process each case
     for (const testCase of cases) {
@@ -152,8 +152,15 @@ try {
           args: ["--_internal-report-error-state", "-i", caseFile],
         });
         const output = await parseResult.output();
+        
         const outputStdout = new TextDecoder().decode(output.stdout);
-        const parseResultJson = JSON.parse(outputStdout);
+        let parseResultJson;
+        try {
+          parseResultJson = JSON.parse(outputStdout);
+        } catch (e) {
+          console.log(`Case file: ${caseFile} didn't produce errors`);
+          throw e;
+        } 
         const { errorStates, tokens } = parseResultJson;
 
         if (errorStates.length < 1) {
@@ -207,6 +214,7 @@ try {
             message,
             captures: augmentedCaptures,
             notes,
+            hints: hints || [],
           },
           name: `${code}/${variantName}`,
         });

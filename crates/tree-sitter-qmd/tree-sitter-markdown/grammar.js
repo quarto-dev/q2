@@ -53,23 +53,29 @@ const regexBracket = (str) => `(?:${str})`;
 const regexOr = (...groups) => regexBracket(groups.join("|"));
 
 const startStrRegex = regexOr(
-    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
-    "[" + PANDOC_VALID_SYMBOLS + "]"); 
+    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]"); 
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
 
 // Thanks, Claude
 const EMOJI_REGEX = "(\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?(\u200D\\p{Extended_Pictographic}(\\p{Emoji_Modifier}|\uFE0F)?)*)";
 
+// Keycap emojis: 0-9, # with variation selector and combining enclosing keycap
+// Unicode TR51: https://www.unicode.org/reports/tr51/
+// Note: * keycap emoji (*️⃣) conflicts with emphasis delimiter, use raw reader block instead
+const KEYCAP_EMOJI_REGEX = "([0-9#]\\uFE0F?\\u20E3)";
+
 const PANDOC_REGEX_STR =
         regexOr(
             "\\\\.",
+            KEYCAP_EMOJI_REGEX,
             EMOJI_REGEX,
             "[" + PANDOC_PUNCTUATION + "]",
+            "[" + PANDOC_VALID_SYMBOLS + "]",
+            "[>.,;!?]",
             startStrRegex +
             regexOr(
                 "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
                 // "\\\\.",
-                "[" + PANDOC_VALID_SYMBOLS + "]",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
                 regexBracket("[_]" + afterUnderscoreRegex)
             ) + "*");
@@ -198,6 +204,7 @@ module.exports = grammar({
         pandoc_horizontal_rule: $ => seq($._thematic_break, choice($._newline, $._eof)),
 
         pandoc_paragraph: $ => seq(
+            optional($._inline_whitespace),
             $._inlines, 
             choice($._newline, $._eof)
         ),
@@ -333,7 +340,7 @@ module.exports = grammar({
         target: $ => seq(
             /[ \t]*[\]][(]/, 
             optional($._inline_whitespace),
-            alias(repeat1(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
+            alias(repeat(choice(/[^ {\t)]|(\\.)+/, $.shortcode)), $.url),
             optional(seq($._inline_whitespace, alias($._commonmark_double_quote_string, $.title))),
             ')'
         ),
@@ -510,33 +517,31 @@ module.exports = grammar({
 
             alias($._autolink, $.autolink),
 
-            $._prose_punctuation,
             $.html_element,
             alias($._pandoc_line_break, $.pandoc_line_break),
             alias($._pandoc_attr_specifier, $.attribute_specifier),
         ),
 
+        _shortcode_sep: $ => choice($._whitespace, $._soft_line_break, seq($._soft_line_break, $._whitespace), seq($._whitespace, $._soft_line_break)),
+
         // shortcodes
         shortcode_escaped: $ => seq(
             alias($._shortcode_open_escaped, $.shortcode_delimiter), // "{{{<",
-            $._whitespace,
+            $._shortcode_sep,
             $.shortcode_name,
-            repeat(seq($._whitespace, $._shortcode_value)),
-
-            repeat(seq($._whitespace, alias($._commonmark_key_value_specifier, $.key_value_specifier))),
-            $._whitespace,
+            repeat(seq($._shortcode_sep, $._shortcode_value)),
+            repeat(seq($._shortcode_sep, alias($._commonmark_key_value_specifier, $.key_value_specifier))),
+            $._shortcode_sep,
             alias($._shortcode_close_escaped, $.shortcode_delimiter), //">}}}",
         ),
 
         shortcode: $ => seq(
             alias($._shortcode_open, $.shortcode_delimiter), // "{{<",
-            $._whitespace,
+            $._shortcode_sep,
             $.shortcode_name,
-            repeat(seq($._whitespace, $._shortcode_value)),
-
-            repeat(seq($._whitespace, alias($._shortcode_key_value_specifier, $.key_value_specifier))),
-            $._whitespace,
-
+            repeat(seq($._shortcode_sep, $._shortcode_value)),
+            repeat(seq($._shortcode_sep, alias($._shortcode_key_value_specifier, $.key_value_specifier))),
+            $._shortcode_sep,
             alias($._shortcode_close, $.shortcode_delimiter), //">}}",
         ),
 
@@ -642,7 +647,6 @@ module.exports = grammar({
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|'),
-        _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
 
@@ -818,8 +822,9 @@ module.exports = grammar({
 
         // pandoc_line_break: $ => seq(/\\/, choice($._newline, $._eof)),
 
-        _inline_whitespace: $ => choice($._whitespace, $._soft_line_break),
+        _inline_whitespace: $ => prec(-1, choice($._whitespace, $._soft_line_break)),
         _whitespace: $ => /[ \t]+/,
+        _linebreak: $ => /[\r\n]+/,
     },
 
     externals: $ => [
@@ -964,6 +969,8 @@ module.exports = grammar({
         $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
 
         $._pandoc_line_break, // we need to do this in the external lexer to avoid eating the actual newline.
+
+        $._triple_star_error, // we do this simply to issue a good error message.
     ],
     precedences: $ => [],
     extras: $ => [],

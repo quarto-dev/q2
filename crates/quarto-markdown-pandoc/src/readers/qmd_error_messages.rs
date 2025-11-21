@@ -179,7 +179,7 @@ fn error_diagnostic_from_parse_state(
 
                                 // Calculate token_span_end by advancing token.size characters (not bytes!)
                                 // This is critical for handling multi-byte UTF-8 characters correctly
-                                let token_span_end = {
+                                let mut token_span_end = {
                                     let size = token.size.max(1);
                                     let substring = &input_str[token_byte_offset..];
                                     let mut char_count = 0;
@@ -211,7 +211,7 @@ fn error_diagnostic_from_parse_state(
                                             column: token.column,
                                         },
                                     );
-                                let token_location_end =
+                                let mut token_location_end =
                                     quarto_source_map::utils::offset_to_location(
                                         &input_str,
                                         token_span_end,
@@ -246,6 +246,35 @@ fn error_diagnostic_from_parse_state(
                                         }
                                     }
                                 }
+                                if note.trim_trailing_space.unwrap_or_default() {
+                                    // Move token_span_end backward while trimming trailing spaces
+                                    loop {
+                                        if token_span_end == 0
+                                            || token_span_end <= token_byte_offset
+                                        {
+                                            break;
+                                        }
+                                        // Get the character just before token_span_end
+                                        let slice_before_end =
+                                            input_str.get(..token_span_end).unwrap_or("");
+                                        let last_character =
+                                            slice_before_end.chars().last().unwrap_or('\0');
+                                        if last_character != ' ' {
+                                            break;
+                                        }
+                                        let this_offset = last_character.len_utf8();
+                                        token_location_end = Location {
+                                            offset: token_location_end
+                                                .offset
+                                                .saturating_sub(this_offset),
+                                            row: token_location_end.row,
+                                            column: token_location_end
+                                                .column
+                                                .saturating_sub(this_offset),
+                                        };
+                                        token_span_end = token_span_end.saturating_sub(this_offset);
+                                    }
+                                }
 
                                 let token_source_info = quarto_source_map::SourceInfo::from_range(
                                     quarto_source_map::FileId(0),
@@ -263,6 +292,11 @@ fn error_diagnostic_from_parse_state(
                     "label-range" => panic!("unsupported!"),
                     _ => {}
                 }
+            }
+
+            // Add hints
+            for hint in entry.error_info.hints {
+                builder = builder.add_hint(*hint);
             }
 
             builder.build()

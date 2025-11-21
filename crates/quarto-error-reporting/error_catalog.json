@@ -76,6 +76,13 @@
     "docs_url": "https://quarto.org/docs/errors/Q-1-19",
     "since_version": "99.9.9"
   },
+  "Q-1-20": {
+    "subsystem": "yaml",
+    "title": "Failed to parse metadata value as markdown",
+    "message_template": "Invalid markdown will be interpreted as a string. Consider adding a '!str' tag to the entry.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-20",
+    "since_version": "99.9.9"
+  },
   "Q-1-99": {
     "subsystem": "yaml",
     "title": "Generic Validation Error",
@@ -265,6 +272,63 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-26",
     "since_version": "99.9.9"
   },
+  "Q-2-27": {
+    "subsystem": "markdown",
+    "title": "Line Break Before Shortcode Close",
+    "message_template": "Line breaks are not allowed immediately before the shortcode closing delimiter `>}}`.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-27",
+    "since_version": "99.9.9"
+  },
+  "Q-2-28": {
+    "subsystem": "markdown",
+    "title": "Line Break Before Escaped Shortcode Close",
+    "message_template": "Line breaks are not allowed immediately before the escaped shortcode closing delimiter `>}}}`.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-28",
+    "since_version": "99.9.9"
+  },
+  "Q-2-29": {
+    "subsystem": "markdown",
+    "title": "Indented Footnote Content Not Supported",
+    "message_template": "Quarto markdown does not support indented footnote content. Use the div syntax instead: `::: ^ref ... :::`",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-29",
+    "since_version": "99.9.9"
+  },
+  "Q-2-30": {
+    "subsystem": "markdown",
+    "title": "Multi-Paragraph Footnote Indentation Not Supported",
+    "message_template": "Indented paragraph following footnote definition suggests Pandoc multi-paragraph footnote syntax, which is not supported in quarto-markdown. Use the div syntax instead: `::: ^ref ... :::`",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-30",
+    "since_version": "99.9.9"
+  },
+  "Q-2-31": {
+    "subsystem": "markdown",
+    "title": "Inline Code Execution Not Allowed in URLs",
+    "message_template": "Inline code execution syntax (`{language} ...) cannot be used inside image or link destinations.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-31",
+    "since_version": "99.9.9"
+  },
+  "Q-2-32": {
+    "subsystem": "markdown",
+    "title": "Triple Star Emphasis Not Allowed",
+    "message_template": "Quarto Markdown doesn't support `***`. Consider using `*__` instead.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-32",
+    "since_version": "99.9.9"
+  },
+  "Q-2-33": {
+    "subsystem": "markdown",
+    "title": "Spaces in Link Targets",
+    "message_template": "Link targets cannot contain spaces. Replace spaces with %20.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-33",
+    "since_version": "99.9.9"
+  },
+  "Q-2-34": {
+    "subsystem": "markdown",
+    "title": "Unquoted Shortcode Parameter Starting with Digit",
+    "message_template": "Shortcode parameter values starting with digits must be quoted.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-34",
+    "since_version": "99.9.9"
+  },
+
   "Q-3-1": {
     "subsystem": "writer",
     "title": "IO Error During Write",

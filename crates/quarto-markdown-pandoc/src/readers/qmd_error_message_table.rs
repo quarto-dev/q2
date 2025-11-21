@@ -24,6 +24,7 @@ pub struct ErrorNote {
     pub label_begin: Option<&'static str>,
     pub label_end: Option<&'static str>,
     pub trim_leading_space: Option<bool>,
+    pub trim_trailing_space: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -33,6 +34,7 @@ pub struct ErrorInfo {
     pub message: &'static str,
     pub captures: &'static [ErrorCapture],
     pub notes: &'static [ErrorNote],
+    pub hints: &'static [&'static str],
 }
 
 #[derive(Debug)]

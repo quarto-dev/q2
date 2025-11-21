@@ -1,1 +1,1 @@
-'__Unclosed strong emphasis
+*__

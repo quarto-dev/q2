@@ -1,1 +1,1 @@
-_$Unclosed inline math
+[$

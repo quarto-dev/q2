@@ -1,0 +1,4 @@
+Some text[^1].
+
+[^1]:
+    Indented content

@@ -28,6 +28,8 @@ struct Note {
     label_end: Option<String>,
     #[serde(rename = "trimLeadingSpace")]
     trim_leading_space: Option<bool>,
+    #[serde(rename = "trimTrailingSpace")]
+    trim_trailing_space: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -37,6 +39,8 @@ struct ErrorInfo {
     message: String,
     captures: Vec<Capture>,
     notes: Vec<Note>,
+    #[serde(default)]
+    hints: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +121,10 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                 Some(trim) => quote! { Some(#trim) },
                 None => quote! { None },
             };
+            let trim_trailing_space = match &note.trim_trailing_space {
+                Some(trim) => quote! { Some(#trim) },
+                None => quote! { None },
+            };
 
             quote! {
                 crate::readers::qmd_error_message_table::ErrorNote {
@@ -126,8 +134,13 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     label_begin: #note_label_begin,
                     label_end: #note_label_end,
                     trim_leading_space: #trim_leading_space,
+                    trim_trailing_space: #trim_trailing_space,
                 }
             }
+        });
+
+        let hints = entry.error_info.hints.iter().map(|hint| {
+            quote! { #hint }
         });
 
         quote! {
@@ -142,6 +155,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     message: #message,
                     captures: &[#(#captures),*],
                     notes: &[#(#notes),*],
+                    hints: &[#(#hints),*],
                 },
                 name: #name,
             }

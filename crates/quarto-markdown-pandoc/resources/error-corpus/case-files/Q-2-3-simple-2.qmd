@@ -1,0 +1,1 @@
+![Test image](test.png){fig-alt="Description" .lightbox}

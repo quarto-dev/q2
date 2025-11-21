@@ -5,22 +5,6 @@ expression: json_string
 [
   {
     "code": "Q-2-7",
-    "details": [
-      {
-        "content": {
-          "content": "This is the opening quote. If you need an apostrophe, escape it with a backslash.",
-          "type": "markdown"
-        },
-        "kind": "info",
-        "location": {
-          "Original": {
-            "end_offset": 5,
-            "file_id": 0,
-            "start_offset": 4
-          }
-        }
-      }
-    ],
     "kind": "error",
     "location": {
       "Original": {

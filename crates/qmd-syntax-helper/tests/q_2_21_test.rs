@@ -53,8 +53,5 @@ fn test_converts_single_violation() {
     assert_eq!(result.fixes_applied, 1);
 
     let converted = result.message.unwrap();
-    assert_eq!(
-        converted, "[>>Unclosed comment]\n",
-        "Should add closing ]"
-    );
+    assert_eq!(converted, "[>>Unclosed comment]\n", "Should add closing ]");
 }

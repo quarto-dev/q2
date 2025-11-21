@@ -4,7 +4,7 @@
   "message": "I reached the end of the block before finding a closing '_' for the emphasis.",
   "notes": [
     {
-      "message": "This is the opening '_' mark",
+      "message": "This is the opening '_' mark.",
       "label": "emphasis-start",
       "noteType": "simple"
     }
@@ -39,7 +39,7 @@
     {
       "name": "at-start",
       "description": "Unclosed emphasis at start of line",
-      "content": "_Unclosed emphasis\n",
+      "content": "_",
       "captures": [
         {
           "label": "emphasis-start",
@@ -48,7 +48,132 @@
           "size": 1
         }
       ],
-      "prefixes": ["[", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "\"", "*", "**", "^["]
+      "prefixesAndSuffixes": [
+        [
+          "",
+          ""
+        ],
+        [
+          "[",
+          ""
+        ],
+        [
+          "![",
+          ""
+        ],
+        [
+          "[>>",
+          ""
+        ],
+        [
+          "^",
+          ""
+        ],
+        [
+          "~",
+          ""
+        ],
+        [
+          "~~",
+          ""
+        ],
+        [
+          "'",
+          ""
+        ],
+        [
+          "\"",
+          ""
+        ],
+        [
+          "*",
+          ""
+        ],
+        [
+          "**",
+          ""
+        ],
+        [
+          "^[",
+          ""
+        ],
+        [
+          "##",
+          ""
+        ],
+        [
+          "",
+          "*a*"
+        ],
+        [
+          "",
+          "**a**"
+        ],
+        [
+          "",
+          "$a$"
+        ],
+        [
+          "",
+          "$$a$$"
+        ],
+        [
+          "",
+          "~a~"
+        ],
+        [
+          "",
+          "~~a~~"
+        ],
+        [
+          "",
+          "`a`"
+        ],
+        [
+          "",
+          "'a'"
+        ],
+        [
+          "",
+          "\"a\""
+        ],
+        [
+          "",
+          "^a^"
+        ],
+        [
+          "",
+          "[a]{}"
+        ],
+        [
+          "",
+          "![a]{}"
+        ],
+        [
+          "",
+          "^[a]"
+        ],
+        [
+          "",
+          "[++ a]"
+        ],
+        [
+          "",
+          "[-- a]"
+        ],
+        [
+          "",
+          "[>> a]"
+        ],
+        [
+          "",
+          "[!! a]"
+        ],
+        [
+          "",
+          "a"
+        ]
+      ]
     }
   ]
 }

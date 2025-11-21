@@ -1,1 +1,1 @@
-__$Unclosed inline math
+_$

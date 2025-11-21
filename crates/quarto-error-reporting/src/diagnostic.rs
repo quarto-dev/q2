@@ -434,7 +434,7 @@ impl DiagnosticMessage {
 
             // All hints
             for hint in &self.hints {
-                write!(result, "? {}\n", hint.as_str()).unwrap();
+                write!(result, "ℹ {}\n", hint.as_str()).unwrap();
             }
         } else {
             // Have ariadne - only show details without locations and hints
@@ -454,7 +454,7 @@ impl DiagnosticMessage {
 
             // All hints (ariadne doesn't show hints)
             for hint in &self.hints {
-                write!(result, "? {}\n", hint.as_str()).unwrap();
+                write!(result, "ℹ {}\n", hint.as_str()).unwrap();
             }
         }
 
@@ -939,7 +939,7 @@ mod tests {
         assert!(text.contains("Values must be numeric"));
         assert!(text.contains("✖ Found text in column 3"));
         assert!(text.contains("ℹ Columns should contain only numbers"));
-        assert!(text.contains("? Convert to numbers first?"));
+        assert!(text.contains("ℹ Convert to numbers first?"));
     }
 
     #[test]

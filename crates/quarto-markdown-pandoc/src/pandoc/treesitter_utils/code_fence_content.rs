@@ -45,9 +45,7 @@ pub fn process_code_fence_content(
         content.push_str(std::str::from_utf8(slice_after_continuation).unwrap());
     }
     let source_info = node_source_info_with_context(node, context);
-    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
-        &source_info,
-        context,
-    );
+    let range =
+        crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
     PandocNativeIntermediate::IntermediateBaseText(content, range)
 }

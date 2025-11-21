@@ -64,7 +64,9 @@ fn test_metadata_source_tracking_002_qmd() {
         false,
         test_file,
         &mut output_stream,
-        true, None,    )
+        true,
+        None,
+    )
     .expect("Failed to parse QMD");
 
     // Verify document-level metadata: title: metadata1
@@ -162,7 +164,9 @@ description: This is a description
         false,
         "test.qmd",
         &mut std::io::sink(),
-        true, None,    )
+        true,
+        None,
+    )
     .expect("Failed to parse");
 
     // Extract metadata
@@ -263,7 +267,9 @@ Some content here.
         false,
         "test.qmd",
         &mut std::io::sink(),
-        true, None,    )
+        true,
+        None,
+    )
     .expect("Failed to parse");
 
     // Extract metadata
@@ -345,7 +351,9 @@ fn test_yaml_tagged_value_source_tracking() {
         false,
         test_file,
         &mut output_stream,
-        true, None,    )
+        true,
+        None,
+    )
     .expect("Failed to parse QMD");
 
     // Get metadata

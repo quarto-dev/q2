@@ -310,7 +310,7 @@ fn parse_yaml_string_as_markdown(
             } else {
                 // Untagged: WARN on parse failure
                 let diagnostic = DiagnosticMessageBuilder::warning("Failed to parse metadata value as markdown")
-                    .with_code("Q-1-101")
+                    .with_code("Q-1-20")
                     .with_location(source_info.clone())
                     .problem(format!("Could not parse '{}' as markdown", value))
                     .add_hint("Add the `!str` tag to treat this as a plain string, or fix the markdown syntax")
@@ -818,8 +818,14 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
     match meta {
         MetaValue::MetaString(s) => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
-            let result =
-                readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream, true, None);
+            let result = readers::qmd::read(
+                s.as_bytes(),
+                false,
+                "<metadata>",
+                &mut output_stream,
+                true,
+                None,
+            );
             match result {
                 Ok((mut pandoc, _context, _warnings)) => {
                     // TODO: Handle warnings from recursive parse

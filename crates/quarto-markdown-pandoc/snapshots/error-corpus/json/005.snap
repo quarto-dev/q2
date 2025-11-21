@@ -8,7 +8,7 @@ expression: json_string
     "details": [
       {
         "content": {
-          "content": "This is the opening '_' mark",
+          "content": "This is the opening '_' mark.",
           "type": "markdown"
         },
         "kind": "info",

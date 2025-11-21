@@ -4,7 +4,7 @@
   "message": "I reached the end of the block before finding a closing '$' for the inline math.",
   "notes": [
     {
-      "message": "This is the opening '$' mark",
+      "message": "This is the opening '$' mark.",
       "label": "math-start",
       "noteType": "simple"
     }
@@ -13,7 +13,7 @@
     {
       "name": "simple",
       "description": "Simple case",
-      "content": "$Unclosed inline math\n",
+      "content": "$\n",
       "captures": [
         {
           "label": "math-start",
@@ -22,7 +22,84 @@
           "size": 1
         }
       ],
-      "prefixes": ["[", "_", "__", "![", "[++", "[--", "[!!", "[>>", "^", "~", "~~", "'", "\"", "*", "**", "^["]
+      "prefixesAndSuffixes": [
+        [
+          "",
+          ""
+        ],
+        [
+          "[",
+          ""
+        ],
+        [
+          "_",
+          ""
+        ],
+        [
+          "__",
+          ""
+        ],
+        [
+          "![",
+          ""
+        ],
+        [
+          "[>>",
+          ""
+        ],
+        [
+          "[!!",
+          ""
+        ],
+        [
+          "[--",
+          ""
+        ],
+        [
+          "[++",
+          ""
+        ],
+        [
+          "^",
+          ""
+        ],
+        [
+          "~",
+          ""
+        ],
+        [
+          "~~",
+          ""
+        ],
+        [
+          "'",
+          ""
+        ],
+        [
+          "\"",
+          ""
+        ],
+        [
+          "*",
+          ""
+        ],
+        [
+          "**",
+          ""
+        ],
+        [
+          "^[",
+          ""
+        ],
+        [
+          "##",
+          ""
+        ],
+        [
+          "",
+          "a"
+        ]
+      ]
     }
   ]
 }

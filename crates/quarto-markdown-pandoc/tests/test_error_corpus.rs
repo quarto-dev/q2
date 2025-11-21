@@ -281,7 +281,7 @@ fn test_error_corpus_text_snapshots() {
                     &path.to_string_lossy(),
                     &mut std::io::sink(),
                     true, // prune errors
-            None,
+                    None,
                 );
 
                 match result {
@@ -358,7 +358,7 @@ fn test_error_corpus_json_snapshots() {
                     &path.to_string_lossy(),
                     &mut std::io::sink(),
                     true, // prune errors
-            None,
+                    None,
                 );
 
                 match result {

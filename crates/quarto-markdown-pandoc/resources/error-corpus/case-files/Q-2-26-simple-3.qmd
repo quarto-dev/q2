@@ -1,1 +1,1 @@
-__^[Unclosed inline footnote
+_^[

@@ -1,0 +1,69 @@
+{
+  "code": "Q-2-31",
+  "title": "Inline Code Execution Not Allowed in URLs",
+  "message": "Inline code execution syntax (`{language} ...) cannot be used inside image or link destinations.",
+  "notes": [
+    {
+      "message": "This opening backtick begins an invalid code execution attempt.",
+      "label": "backtick-start",
+      "noteType": "simple"
+    }
+  ],
+  "hints": [
+    "Could you instead write an entire image or link as the code result?"
+  ],
+  "cases": [
+    {
+      "name": "image-simple",
+      "description": "Image with inline code execution in URL",
+      "content": "![](`{python} url_variable`)\n",
+      "captures": [
+        {
+          "label": "backtick-start",
+          "row": 0,
+          "column": 4,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "link-simple",
+      "description": "Link with inline code execution in URL",
+      "content": "[text](`{python} url_variable`)\n",
+      "captures": [
+        {
+          "label": "backtick-start",
+          "row": 0,
+          "column": 7,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "image-mixed",
+      "description": "Image with text before inline code",
+      "content": "![](prefix`{python} url_variable`)\n",
+      "captures": [
+        {
+          "label": "backtick-start",
+          "row": 0,
+          "column": 10,
+          "size": 1
+        }
+      ]
+    },
+    {
+      "name": "link-mixed",
+      "description": "Link with text before inline code",
+      "content": "[text](prefix`{python} url_variable`)\n",
+      "captures": [
+        {
+          "label": "backtick-start",
+          "row": 0,
+          "column": 13,
+          "size": 1
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+{{< icon name="star" size=2x >}}

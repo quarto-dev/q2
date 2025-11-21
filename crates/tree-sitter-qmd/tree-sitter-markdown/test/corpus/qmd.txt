@@ -758,6 +758,35 @@ Emojis
           (pandoc_space)
           (pandoc_str))))
 ================================================================================
+Keycap Emojis
+================================================================================
+0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ #️⃣
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str)
+          (pandoc_space)
+          (pandoc_str))))
+================================================================================
 Footnotes with surrounding spaces
 ================================================================================
 footnote^[ space ]
@@ -797,3 +826,87 @@ unnumbered section specifier
           (pandoc_space)
           (attribute_specifier
             (unnumbered_specifier)))))
+================================================================================
+empty link
+================================================================================
+[hello]()
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_span
+            (content
+              (pandoc_str))
+            (target)))))
+================================================================================
+Don't false-alarm triple-star
+================================================================================
+* **foo**
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_strong
+                (strong_emphasis_delimiter)
+                (pandoc_str)
+                (strong_emphasis_delimiter)))))))
+================================================================================
+Quotes around symbols 1
+================================================================================
+key='value'
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_single_quote
+            (single_quote)
+            (content
+              (pandoc_str))
+            (single_quote)))))
+================================================================================
+Quotes around symbols 2
+================================================================================
+"(key='value')."
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_double_quote
+            (double_quote)
+            (content
+              (pandoc_str)
+              (pandoc_str)
+              (pandoc_str)
+              (pandoc_single_quote
+                (single_quote)
+                (content
+                  (pandoc_str))
+                (single_quote))
+              (pandoc_str)
+              (pandoc_str))
+            (double_quote)))))
+================================================================================
+Spaces in para beginning
+================================================================================
+  hello.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str))))
+================================================================================
+Spaces in para start in blockquote
+================================================================================
+>  hello.
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_block_quote
+          (block_quote_marker)
+          (pandoc_paragraph
+            (pandoc_str)))))
