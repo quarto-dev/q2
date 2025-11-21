@@ -939,7 +939,7 @@ mod tests {
         assert!(text.contains("Values must be numeric"));
         assert!(text.contains("✖ Found text in column 3"));
         assert!(text.contains("ℹ Columns should contain only numbers"));
-        assert!(text.contains("? Convert to numbers first?"));
+        assert!(text.contains("ℹ Convert to numbers first?"));
     }
 
     #[test]

@@ -1,0 +1,26 @@
+{
+  "code": "Q-2-34",
+  "title": "Unquoted shortcode parameter starting with digit",
+  "message": "Shortcode parameter values starting with digits must be quoted.",
+  "notes": [],
+  "cases": [
+    {
+      "name": "basic",
+      "description": "Shortcode parameter value starts with digit followed by letter",
+      "content": "{{< a k=1b >}}",
+      "captures": []
+    },
+    {
+      "name": "real-world-example",
+      "description": "Font awesome size parameter",
+      "content": "{{< fa envelope size=1x >}}",
+      "captures": []
+    },
+    {
+      "name": "multiple-params",
+      "description": "Multiple parameters with unquoted digit-starting value",
+      "content": "{{< icon name=\"star\" size=2x >}}",
+      "captures": []
+    }
+  ]
+}

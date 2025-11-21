@@ -4,7 +4,7 @@
   "message": "Inline code execution syntax (`{language} ...) cannot be used inside image or link destinations.",
   "notes": [
     {
-      "message": "This opening backtick begins an invalid code execution attempt",
+      "message": "This opening backtick begins an invalid code execution attempt.",
       "label": "backtick-start",
       "noteType": "simple"
     }

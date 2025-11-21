@@ -4,7 +4,7 @@
   "message": "I reached the end of the block before finding a closing ']' for the span or link.",
   "notes": [
     {
-      "message": "This is the opening bracket for the span",
+      "message": "This is the opening bracket for the span.",
       "label": "span-start",
       "noteType": "simple"
     }

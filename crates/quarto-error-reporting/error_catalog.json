@@ -307,6 +307,20 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-32",
     "since_version": "99.9.9"
   },
+  "Q-2-33": {
+    "subsystem": "markdown",
+    "title": "Spaces in Link Targets",
+    "message_template": "Link targets cannot contain spaces. Replace spaces with %20.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-33",
+    "since_version": "99.9.9"
+  },
+  "Q-2-34": {
+    "subsystem": "markdown",
+    "title": "Unquoted Shortcode Parameter Starting with Digit",
+    "message_template": "Shortcode parameter values starting with digits must be quoted.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-34",
+    "since_version": "99.9.9"
+  },
 
   "Q-3-1": {
     "subsystem": "writer",

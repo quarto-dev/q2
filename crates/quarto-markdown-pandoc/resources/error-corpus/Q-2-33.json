@@ -1,0 +1,26 @@
+{
+  "code": "Q-2-33",
+  "title": "Spaces in link targets",
+  "message": "Link targets cannot contain spaces. Replace spaces with %20.",
+  "notes": [],
+  "cases": [
+    {
+      "name": "image-with-space",
+      "description": "Image link with space in filename",
+      "content": "![](image file.png)",
+      "captures": []
+    },
+    {
+      "name": "link-with-space",
+      "description": "Regular link with space in target",
+      "content": "[link](target file.html)",
+      "captures": []
+    },
+    {
+      "name": "image-with-multiple-spaces",
+      "description": "Image link with multiple spaces",
+      "content": "![](path/to/my image file.png)",
+      "captures": []
+    }
+  ]
+}

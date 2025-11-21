@@ -838,3 +838,18 @@ empty link
             (content
               (pandoc_str))
             (target)))))
+================================================================================
+Don't false-alarm triple-star
+================================================================================
+* **foo**
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_list
+          (list_item
+            (list_marker_star)
+            (pandoc_paragraph
+              (pandoc_strong
+                (strong_emphasis_delimiter)
+                (pandoc_str)
+                (strong_emphasis_delimiter)))))))

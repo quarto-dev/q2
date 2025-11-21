@@ -18,5 +18,6 @@ pub mod q_2_24;
 pub mod q_2_25;
 pub mod q_2_26;
 pub mod q_2_28;
+pub mod q_2_33;
 pub mod q_2_5;
 pub mod q_2_7;

@@ -1,7 +1,7 @@
 {
   "code": "Q-2-29",
   "title": "Indented Footnote Content Not Supported",
-  "message": "Quarto markdown does not support indented footnote content. Use the div syntax instead: `::: ^ref ... :::`",
+  "message": "Quarto markdown does not support indented footnote content. Use the div syntax instead: `::: ^ref ... :::`.",
   "notes": [
     {
       "message": "This footnote definition has indented content, which is not supported in quarto markdown.",
@@ -9,7 +9,7 @@
       "noteType": "simple"
     },
     {
-      "message": "For multi-paragraph footnotes, use the div syntax:\n\n::: ^ref\n\nFirst paragraph.\n\nSecond paragraph.\n\n:::",
+      "message": "For multi-paragraph footnotes, use the div syntax:\n\n::: ^ref\n\nFirst paragraph.\n\nSecond paragraph.\n\n:::.",
       "label": "suggestion",
       "noteType": "simple"
     }

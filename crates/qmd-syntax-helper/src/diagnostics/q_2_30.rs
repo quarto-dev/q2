@@ -61,7 +61,7 @@ impl Q230Checker {
             false, // not loose mode
             &filename,
             &mut sink,
-            true,  // prune errors
+            true, // prune errors
             None,
         );
 
@@ -191,12 +191,14 @@ impl Rule for Q230Checker {
     ) -> Result<ConvertResult> {
         let violations = match self.get_violations(file_path) {
             Ok(v) => v,
-            Err(_) => return Ok(ConvertResult {
-                rule_name: self.name().to_string(),
-                file_path: file_path.to_string_lossy().to_string(),
-                fixes_applied: 0,
-                message: Some("File does not parse - cannot check for Q-2-30".to_string()),
-            }),
+            Err(_) => {
+                return Ok(ConvertResult {
+                    rule_name: self.name().to_string(),
+                    file_path: file_path.to_string_lossy().to_string(),
+                    fixes_applied: 0,
+                    message: Some("File does not parse - cannot check for Q-2-30".to_string()),
+                });
+            }
         };
 
         // This is a linting diagnostic - no auto-fix available
