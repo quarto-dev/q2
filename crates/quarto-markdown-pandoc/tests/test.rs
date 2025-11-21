@@ -145,7 +145,10 @@ fn matches_pandoc_markdown_reader(input: &str) -> bool {
         input.as_bytes(),
         false,
         "<input>",
-        &mut std::io::sink(), true, None)
+        &mut std::io::sink(),
+        true,
+        None,
+    )
     .unwrap();
     writers::native::write(&doc, &context, &mut buf1).unwrap();
     let native_output = String::from_utf8(buf1).expect("Invalid UTF-8 in output");
@@ -329,7 +332,10 @@ where
                     input.as_bytes(),
                     false,
                     &path.to_string_lossy(),
-                    &mut output_stream, true, None)
+                    &mut output_stream,
+                    true,
+                    None,
+                )
                 .unwrap();
 
                 writer(&pandoc, &context, &mut buffer).unwrap();
@@ -631,7 +637,10 @@ fn test_markdown_writer_smoke() {
                         markdown.as_bytes(),
                         false,
                         path.to_str().unwrap(),
-                        &mut std::io::sink(), true, None);
+                        &mut std::io::sink(),
+                        true,
+                        None,
+                    );
 
                     match doc_result {
                         Ok((doc, _context, _warnings)) => {
@@ -678,7 +687,10 @@ fn test_qmd_roundtrip_consistency() {
                     original_qmd.as_bytes(),
                     false,
                     path.to_str().unwrap(),
-                    &mut std::io::sink(), true, None)
+                    &mut std::io::sink(),
+                    true,
+                    None,
+                )
                 .expect("Failed to parse original QMD");
 
                 let mut json_buf = Vec::new();
@@ -699,7 +711,10 @@ fn test_qmd_roundtrip_consistency() {
                     regenerated_qmd.as_bytes(),
                     false,
                     "<generated>",
-                    &mut std::io::sink(), true, None)
+                    &mut std::io::sink(),
+                    true,
+                    None,
+                )
                 .expect("Failed to parse regenerated QMD");
 
                 // Compare JSON representations (without location fields)
@@ -759,7 +774,10 @@ fn test_ansi_writer_smoke() {
                     markdown.as_bytes(),
                     false,
                     path.to_str().unwrap(),
-                    &mut std::io::sink(), true, None);
+                    &mut std::io::sink(),
+                    true,
+                    None,
+                );
 
                 match doc_result {
                     Ok((doc, _context, _warnings)) => {
@@ -805,7 +823,10 @@ fn test_empty_blockquote_roundtrip() {
         original_qmd.as_bytes(),
         false,
         test_file,
-        &mut std::io::sink(), true, None)
+        &mut std::io::sink(),
+        true,
+        None,
+    )
     .expect("Failed to parse original QMD");
 
     let mut json_buf = Vec::new();

@@ -37,7 +37,6 @@ pub struct Q230Checker {}
 #[derive(Debug, Clone)]
 struct Q230Violation {
     note_id: String,
-    para_offset: usize, // Location of the suspicious Para
     row: usize,
     column: usize,
 }
@@ -88,7 +87,6 @@ impl Q230Checker {
                         let offset = para.source_info.start_offset();
                         violations.push(Q230Violation {
                             note_id: note_def_para.id.clone(),
-                            para_offset: offset,
                             row: self.offset_to_row(&content, offset),
                             column: self.offset_to_column(&content, offset),
                         });

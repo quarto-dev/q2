@@ -6,10 +6,25 @@
     {
       "message": "This is the opening '*' mark.",
       "label": "emphasis-start",
-      "noteType": "simple"
+      "noteType": "simple",
+      "trimTrailingSpace": true,
+      "trimLeadingSpace": true
     }
   ],
   "cases": [
+    {
+      "name": "stray-ending-star",
+      "description": "Simple case",
+      "content": "foo* a ",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 3,
+          "size": 2
+        }
+      ]
+    },
     {
       "name": "simple",
       "description": "Simple case",

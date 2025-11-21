@@ -6,10 +6,57 @@
     {
       "message": "This is the opening quote mark.",
       "label": "quote-start",
-      "noteType": "simple"
+      "noteType": "simple",
+      "trimLeadingSpace": true,
+      "trimTrailingSpace": true
     }
   ],
   "cases": [
+    {
+      "name": "simple-wrapped",
+      "description": "Simple case and variants in different contexts",
+      "content": "a\" b.",
+      "captures": [
+        {
+          "label": "quote-start",
+          "row": 0,
+          "column": 1,
+          "size": 1
+        }
+      ],
+      "prefixesAndSuffixes": [
+        ["**", "**\n"],
+        ["*", "*\n"],
+        ["[", "](url)\n"],
+        ["^", "^\n"],
+        ["~", "~\n"],
+        ["~~", "~~\n"],
+        ["![", "](url)\n"],
+        ["\"", "\"\n"],
+        ["[++", "]\n"],
+        ["[--", "]\n"],
+        ["[>>", "]\n"],
+        ["[==", "]\n"],
+        ["foo^[", "]\n"],
+        ["_", "_\n"],
+        ["__", "__\n"],
+        ["'", "'\n"],
+        ["## ", "\n"]
+      ]
+    },
+    {
+      "name": "stray-ending-quote",
+      "description": "Simple case",
+      "content": "foo\" a ",
+      "captures": [
+        {
+          "label": "quote-start",
+          "row": 0,
+          "column": 3,
+          "size": 1
+        }
+      ]
+    },
     {
       "name": "simple",
       "description": "Simple case",

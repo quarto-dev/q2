@@ -53,8 +53,7 @@ const regexBracket = (str) => `(?:${str})`;
 const regexOr = (...groups) => regexBracket(groups.join("|"));
 
 const startStrRegex = regexOr(
-    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
-    "[" + PANDOC_VALID_SYMBOLS + "]"); 
+    "[\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]"); 
 const afterUnderscoreRegex = "[" + PANDOC_ALPHA_NUM + "]";
 
 // Thanks, Claude
@@ -71,12 +70,12 @@ const PANDOC_REGEX_STR =
             KEYCAP_EMOJI_REGEX,
             EMOJI_REGEX,
             "[" + PANDOC_PUNCTUATION + "]",
+            "[" + PANDOC_VALID_SYMBOLS + "]",
             "[>.,;!?]",
             startStrRegex +
             regexOr(
                 "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
                 // "\\\\.",
-                "[" + PANDOC_VALID_SYMBOLS + "]",
                 "['\\u{2018}\\u{2019}][\\p{L}\\p{N}]",
                 regexBracket("[_]" + afterUnderscoreRegex)
             ) + "*");

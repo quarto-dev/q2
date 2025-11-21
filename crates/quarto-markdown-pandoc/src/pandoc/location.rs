@@ -152,11 +152,7 @@ pub fn node_source_info_with_context(
     // If we're in a recursive parse (parent_source_info is set), wrap the SourceInfo
     // as a Substring of the parent. This chains the location back to the original file.
     if let Some(parent) = &context.parent_source_info {
-        quarto_source_map::SourceInfo::substring(
-            parent.clone(),
-            node.start_byte(),
-            node.end_byte(),
-        )
+        quarto_source_map::SourceInfo::substring(parent.clone(), node.start_byte(), node.end_byte())
     } else {
         quarto_source_map::SourceInfo::from_range(context.current_file_id(), node_location(node))
     }
@@ -174,7 +170,9 @@ pub fn range_to_source_info_with_context(
     range: &quarto_source_map::Range,
     ctx: &ASTContext,
 ) -> quarto_source_map::SourceInfo {
-    let file_id = ctx.primary_file_id().unwrap_or(quarto_source_map::FileId(0));
+    let file_id = ctx
+        .primary_file_id()
+        .unwrap_or(quarto_source_map::FileId(0));
     quarto_source_map::SourceInfo::from_range(file_id, range.clone())
 }
 

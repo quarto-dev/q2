@@ -853,3 +853,40 @@ Don't false-alarm triple-star
                 (strong_emphasis_delimiter)
                 (pandoc_str)
                 (strong_emphasis_delimiter)))))))
+================================================================================
+Quotes around symbols 1
+================================================================================
+key='value'
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
+          (pandoc_single_quote
+            (single_quote)
+            (content
+              (pandoc_str))
+            (single_quote)))))
+================================================================================
+Quotes around symbols 2
+================================================================================
+"(key='value')."
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_double_quote
+            (double_quote)
+            (content
+              (pandoc_str)
+              (pandoc_str)
+              (pandoc_str)
+              (pandoc_single_quote
+                (single_quote)
+                (content
+                  (pandoc_str))
+                (single_quote))
+              (pandoc_str)
+              (pandoc_str))
+            (double_quote)))))

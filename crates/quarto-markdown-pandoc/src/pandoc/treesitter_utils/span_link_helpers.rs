@@ -108,21 +108,17 @@ pub fn process_pandoc_span(
                     // Populate target_source with the ranges
                     target_source = TargetSourceInfo {
                         url: if !url.is_empty() {
-                            Some(
-                                crate::pandoc::location::range_to_source_info_with_context(
-                                    &url_range, context,
-                                ),
-                            )
+                            Some(crate::pandoc::location::range_to_source_info_with_context(
+                                &url_range, context,
+                            ))
                         } else {
                             None
                         },
                         title: if !title.is_empty() {
-                            Some(
-                                crate::pandoc::location::range_to_source_info_with_context(
-                                    &title_range,
-                                    context,
-                                ),
-                            )
+                            Some(crate::pandoc::location::range_to_source_info_with_context(
+                                &title_range,
+                                context,
+                            ))
                         } else {
                             None
                         },
@@ -267,21 +263,17 @@ pub fn process_pandoc_image(
                     // Populate target_source with the ranges
                     target_source = TargetSourceInfo {
                         url: if !url.is_empty() {
-                            Some(
-                                crate::pandoc::location::range_to_source_info_with_context(
-                                    &url_range, context,
-                                ),
-                            )
+                            Some(crate::pandoc::location::range_to_source_info_with_context(
+                                &url_range, context,
+                            ))
                         } else {
                             None
                         },
                         title: if !title.is_empty() {
-                            Some(
-                                crate::pandoc::location::range_to_source_info_with_context(
-                                    &title_range,
-                                    context,
-                                ),
-                            )
+                            Some(crate::pandoc::location::range_to_source_info_with_context(
+                                &title_range,
+                                context,
+                            ))
                         } else {
                             None
                         },

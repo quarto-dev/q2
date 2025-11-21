@@ -22,6 +22,19 @@
           "size": 9
         }
       ]
+    },
+    {
+      "name": "simple-2",
+      "description": "Another simple case",
+      "content": "![Test image](test.png){fig-alt=\"Description\" .lightbox}",
+      "captures": [
+        {
+          "label": "key-value",
+          "row": 0,
+          "column": 24,
+          "size": 21
+        }
+      ]
     }
   ]
 }

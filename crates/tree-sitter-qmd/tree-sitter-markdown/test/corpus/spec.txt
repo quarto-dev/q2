@@ -84,6 +84,8 @@ Example 14 - https://github.github.com/gfm/#example-14
     (document
       (section
         (pandoc_paragraph
+          (pandoc_str)
+          (pandoc_str)
           (pandoc_str))))
 ================================================================================
 Example 20 - https://github.github.com/gfm/#example-20

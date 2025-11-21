@@ -710,18 +710,16 @@ fn native_visitor<T: Write>(
             let extract_quoted_text = || {
                 if let Some(child) = node.child(0) {
                     let text = child.utf8_text(input_bytes).unwrap().to_string();
-                    let range =
-                        crate::pandoc::location::source_info_to_qsm_range_or_fallback(
-                            &node_source_info_with_context(&child, context),
-                            context,
-                        );
+                    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
+                        &node_source_info_with_context(&child, context),
+                        context,
+                    );
                     PandocNativeIntermediate::IntermediateBaseText(text, range)
                 } else {
-                    let range =
-                        crate::pandoc::location::source_info_to_qsm_range_or_fallback(
-                            &node_source_info_with_context(node, context),
-                            context,
-                        );
+                    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
+                        &node_source_info_with_context(node, context),
+                        context,
+                    );
                     PandocNativeIntermediate::IntermediateBaseText(String::new(), range)
                 }
             };

@@ -11,6 +11,37 @@
   ],
   "cases": [
     {
+      "name": "simple-wrapped",
+      "description": "Simple case and variants in different contexts",
+      "content": "a_ b.",
+      "captures": [
+        {
+          "label": "emphasis-start",
+          "row": 0,
+          "column": 1,
+          "size": 1
+        }
+      ],
+      "prefixesAndSuffixes": [
+        ["**", "**\n"],
+        ["*", "*\n"],
+        ["[", "](url)\n"],
+        ["^", "^\n"],
+        ["~", "~\n"],
+        ["~~", "~~\n"],
+        ["![", "](url)\n"],
+        ["\"", "\"\n"],
+        ["[++", "]\n"],
+        ["[--", "]\n"],
+        ["[>>", "]\n"],
+        ["[==", "]\n"],
+        ["foo^[", "]\n"],
+        ["'", "'\n"],
+        ["\"", "\"\n"],
+        ["## ", "\n"]
+      ]
+    },
+    {
       "name": "simple",
       "description": "Simple case",
       "content": "Unfinished _emph.\n",

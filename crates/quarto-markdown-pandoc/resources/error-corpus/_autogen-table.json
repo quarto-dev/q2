@@ -540,6 +540,614 @@
     "name": "Q-2-10/simple-16"
   },
   {
+    "column": 2,
+    "row": 0,
+    "state": 693,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 1,
+          "lrState": 693,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 684,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 684,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-1"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 730,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 730,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-2"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 668,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 668,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-3"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 717,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 717,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-4"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 703,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 703,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-5"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 677,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 677,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-6"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 668,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 668,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-7"
+  },
+  {
+    "column": 7,
+    "row": 0,
+    "state": 693,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 1402,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-8"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 694,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 694,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-9"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 694,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 694,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-10"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 694,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 694,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-11"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 668,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 668,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-12"
+  },
+  {
+    "column": 7,
+    "row": 0,
+    "state": 732,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 6,
+          "lrState": 732,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-13"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 654,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 654,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-14"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 669,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 669,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-15"
+  },
+  {
+    "column": 3,
+    "row": 0,
+    "state": 745,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 2,
+          "lrState": 745,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-16"
+  },
+  {
+    "column": 5,
+    "row": 0,
+    "state": 693,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 4,
+          "lrState": 693,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/simple-wrapped-17"
+  },
+  {
+    "column": 4,
+    "row": 0,
+    "state": 693,
+    "sym": "_whitespace",
+    "errorInfo": {
+      "code": "Q-2-11",
+      "title": "Unclosed Double Quote",
+      "message": "I reached the end of the block before finding a closing '\"' for the quote.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 693,
+          "row": 0,
+          "size": 1,
+          "sym": "double_quote",
+          "label": "quote-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening quote mark.",
+          "label": "quote-start",
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-11/stray-ending-quote"
+  },
+  {
     "column": 1,
     "row": 0,
     "state": 693,
@@ -562,7 +1170,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -592,7 +1202,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -622,7 +1234,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -652,7 +1266,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -682,7 +1298,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -712,7 +1330,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -742,7 +1362,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -772,7 +1394,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -802,7 +1426,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -832,7 +1458,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -862,7 +1490,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -892,7 +1522,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -922,7 +1554,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -952,7 +1586,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -982,7 +1618,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1012,7 +1650,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1042,7 +1682,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1072,7 +1714,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1102,7 +1746,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1132,7 +1778,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1162,7 +1810,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1192,7 +1842,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1222,7 +1874,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1252,7 +1906,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1282,7 +1938,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1312,7 +1970,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1342,7 +2002,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1372,7 +2034,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1402,7 +2066,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1432,7 +2098,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1462,7 +2130,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1492,7 +2162,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1522,7 +2194,9 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
@@ -1552,12 +2226,46 @@
         {
           "message": "This is the opening quote mark.",
           "label": "quote-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimLeadingSpace": true,
+          "trimTrailingSpace": true
         }
       ],
       "hints": []
     },
     "name": "Q-2-11/simple-33"
+  },
+  {
+    "column": 7,
+    "row": 0,
+    "state": 896,
+    "sym": "_close_block",
+    "errorInfo": {
+      "code": "Q-2-12",
+      "title": "Unclosed Star Emphasis",
+      "message": "I reached the end of the block before finding a closing '*' for the emphasis.",
+      "captures": [
+        {
+          "column": 3,
+          "lrState": 754,
+          "row": 0,
+          "size": 2,
+          "sym": "emphasis_delimiter",
+          "label": "emphasis-start"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This is the opening '*' mark.",
+          "label": "emphasis-start",
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-12/stray-ending-star"
   },
   {
     "column": 0,
@@ -1582,7 +2290,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1612,7 +2322,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1642,7 +2354,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1672,7 +2386,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1702,7 +2418,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1732,7 +2450,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1762,7 +2482,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1792,7 +2514,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1822,7 +2546,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1852,7 +2578,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1882,7 +2610,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1912,7 +2642,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1942,7 +2674,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -1972,7 +2706,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2002,7 +2738,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2032,7 +2770,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2062,7 +2802,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2092,7 +2834,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2122,7 +2866,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2152,7 +2898,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2182,7 +2930,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2212,7 +2962,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2242,7 +2994,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2272,7 +3026,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2302,7 +3058,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2332,7 +3090,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2362,7 +3122,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2392,7 +3154,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2422,7 +3186,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2452,7 +3218,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2482,7 +3250,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -2512,7 +3282,9 @@
         {
           "message": "This is the opening '*' mark.",
           "label": "emphasis-start",
-          "noteType": "simple"
+          "noteType": "simple",
+          "trimTrailingSpace": true,
+          "trimLeadingSpace": true
         }
       ],
       "hints": []
@@ -16383,6 +17155,36 @@
       "hints": []
     },
     "name": "Q-2-3/simple"
+  },
+  {
+    "column": 46,
+    "row": 0,
+    "state": 3209,
+    "sym": "pandoc_str_token1",
+    "errorInfo": {
+      "code": "Q-2-3",
+      "title": "Key-value Pair Before Class Specifier in Attribute",
+      "message": "This class specifier appears after the key-value pair.",
+      "captures": [
+        {
+          "column": 24,
+          "lrState": 3209,
+          "row": 0,
+          "size": 21,
+          "sym": "key_value_specifier",
+          "label": "key-value"
+        }
+      ],
+      "notes": [
+        {
+          "message": "This key-value pair cannot appear before the class specifier.",
+          "noteType": "simple",
+          "label": "key-value"
+        }
+      ],
+      "hints": []
+    },
+    "name": "Q-2-3/simple-2"
   },
   {
     "column": 5,

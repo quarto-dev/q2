@@ -818,8 +818,14 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
     match meta {
         MetaValue::MetaString(s) => {
             let mut output_stream = VerboseOutput::Sink(io::sink());
-            let result =
-                readers::qmd::read(s.as_bytes(), false, "<metadata>", &mut output_stream, true, None);
+            let result = readers::qmd::read(
+                s.as_bytes(),
+                false,
+                "<metadata>",
+                &mut output_stream,
+                true,
+                None,
+            );
             match result {
                 Ok((mut pandoc, _context, _warnings)) => {
                     // TODO: Handle warnings from recursive parse

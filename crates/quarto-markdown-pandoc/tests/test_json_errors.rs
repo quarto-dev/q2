@@ -12,7 +12,10 @@ fn test_json_error_format() {
         input.as_bytes(),
         false,
         "test.md",
-        &mut std::io::sink(), true, None);
+        &mut std::io::sink(),
+        true,
+        None,
+    );
 
     assert!(result.is_err());
     let diagnostics = result.unwrap_err();
@@ -36,7 +39,10 @@ fn test_regular_error_format() {
         input.as_bytes(),
         false,
         "test.md",
-        &mut std::io::sink(), true, None);
+        &mut std::io::sink(),
+        true,
+        None,
+    );
 
     assert!(result.is_err());
     let diagnostics = result.unwrap_err();
@@ -58,7 +64,10 @@ fn test_newline_warning() {
         input.as_bytes(),
         false,
         "test.md",
-        &mut std::io::sink(), true, None);
+        &mut std::io::sink(),
+        true,
+        None,
+    );
 
     // Should succeed (the newline is added automatically)
     assert!(result.is_ok());
