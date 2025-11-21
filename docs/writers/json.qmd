@@ -1,8 +1,14 @@
 ---
-title: "JSON Output Format"
+title: "JSON Writer"
 ---
 
-The `quarto-markdown-pandoc` binary can output AST in JSON format using `-t json`. This format is designed to be compatible with Pandoc's JSON AST while adding source tracking information.
+The `quarto-markdown-pandoc` binary can output AST in JSON format using `-t json`. This format is designed to be compatible with Pandoc's JSON AST while adding comprehensive source tracking information.
+
+For detailed information about source tracking:
+
+- **[Source Tracking Overview](../source-info/index.qmd)** - Architecture and concepts
+- **[JSON Format Specification](../source-info/json.qmd)** - Complete format reference with examples
+- **[Implementation Details](../source-info/architecture.qmd)** - Technical architecture and performance
 
 ## Basic Structure
 
@@ -189,6 +195,27 @@ To convert a byte offset to (row, column):
 
 This information is self-contained in the JSON, so consumers don't need to reopen source files
 
-## Pandoc compatibility
+## Configuration
+
+The JSON writer supports optional configuration:
+
+```bash
+# Basic output (no inline locations)
+quarto-markdown-pandoc -t json -i input.qmd -o output.json
+
+# With inline locations (adds 'l' field to each node)
+quarto-markdown-pandoc -t json --include-locations -i input.qmd
+```
+
+The `--include-locations` flag adds resolved location information directly to each AST node for debugging. This increases JSON size but makes inspection easier.
+
+## Pandoc Compatibility
 
 For compatibility with tools expecting Pandoc JSON, either ignore the `"s"` fields and `astContext` section (that's what Pandoc will do) or remove them from the JSON object ahead of time.
+
+Standard Pandoc tools will process the `meta` and `blocks` sections normally while ignoring the source tracking information.
+
+## Further Reading
+
+- **[Source Tracking System](../source-info/index.qmd)** - Complete source tracking documentation
+- **[JSON Format Details](../source-info/json.qmd)** - Format specification and examples

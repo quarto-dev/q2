@@ -1171,3 +1171,327 @@ pub fn write<W: std::io::Write>(
 ) -> std::io::Result<()> {
     write_with_config(pandoc, context, writer, &JsonConfig::default())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_source_map::{FileId, SourceInfo};
+    use std::rc::Rc;
+
+    fn make_test_context() -> ASTContext {
+        ASTContext::anonymous()
+    }
+
+    fn make_test_config() -> JsonConfig {
+        JsonConfig::default()
+    }
+
+    #[test]
+    fn test_source_info_pool_original() {
+        // Test that a single Original SourceInfo is added to the pool correctly
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 10,
+        };
+
+        let id = serializer.intern(&source_info);
+
+        // Should get ID 0 for the first entry
+        assert_eq!(id, 0);
+        assert_eq!(serializer.pool.len(), 1);
+
+        // Verify the pool entry
+        let entry = &serializer.pool[0];
+        assert_eq!(entry.start_offset, 0);
+        assert_eq!(entry.end_offset, 10);
+        match &entry.mapping {
+            SerializableSourceMapping::Original { file_id } => {
+                assert_eq!(*file_id, FileId(0));
+            }
+            _ => panic!("Expected Original mapping"),
+        }
+
+        // Interning the same SourceInfo again should return the same ID
+        let id2 = serializer.intern(&source_info);
+        assert_eq!(id2, 0);
+        assert_eq!(serializer.pool.len(), 1); // No new entry added
+    }
+
+    #[test]
+    fn test_source_info_pool_substring() {
+        // Test Substring with parent reference
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 100,
+        });
+
+        let child = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 10,
+            end_offset: 20,
+        };
+
+        let child_id = serializer.intern(&child);
+
+        // Parent should be interned first (ID 0), child second (ID 1)
+        assert_eq!(child_id, 1);
+        assert_eq!(serializer.pool.len(), 2);
+
+        // Verify parent entry
+        let parent_entry = &serializer.pool[0];
+        assert_eq!(parent_entry.start_offset, 0);
+        assert_eq!(parent_entry.end_offset, 100);
+        match &parent_entry.mapping {
+            SerializableSourceMapping::Original { file_id } => {
+                assert_eq!(*file_id, FileId(0));
+            }
+            _ => panic!("Expected Original mapping"),
+        }
+
+        // Verify child entry
+        let child_entry = &serializer.pool[1];
+        assert_eq!(child_entry.start_offset, 10);
+        assert_eq!(child_entry.end_offset, 20);
+        match &child_entry.mapping {
+            SerializableSourceMapping::Substring { parent_id } => {
+                assert_eq!(*parent_id, 0); // References parent
+            }
+            _ => panic!("Expected Substring mapping"),
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_siblings() {
+        // Test multiple nodes sharing the same parent
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 100,
+        });
+
+        let child1 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 10,
+            end_offset: 20,
+        };
+
+        let child2 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 30,
+            end_offset: 40,
+        };
+
+        let child3 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 50,
+            end_offset: 60,
+        };
+
+        let id1 = serializer.intern(&child1);
+        let id2 = serializer.intern(&child2);
+        let id3 = serializer.intern(&child3);
+
+        // Parent should be ID 0, children should be 1, 2, 3
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+        assert_eq!(id3, 3);
+        assert_eq!(serializer.pool.len(), 4); // 1 parent + 3 children
+
+        // All children should reference the same parent (ID 0)
+        for child_id in [1, 2, 3] {
+            let child_entry = &serializer.pool[child_id];
+            match &child_entry.mapping {
+                SerializableSourceMapping::Substring { parent_id } => {
+                    assert_eq!(*parent_id, 0);
+                }
+                _ => panic!("Expected Substring mapping"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_nested_deep() {
+        // Test deeply nested structure (5+ levels)
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        // Build a chain: Original -> Sub1 -> Sub2 -> Sub3 -> Sub4 -> Sub5
+        let level0 = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 1000,
+        });
+
+        let level1 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level0),
+            start_offset: 100,
+            end_offset: 900,
+        });
+
+        let level2 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level1),
+            start_offset: 200,
+            end_offset: 800,
+        });
+
+        let level3 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level2),
+            start_offset: 300,
+            end_offset: 700,
+        });
+
+        let level4 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level3),
+            start_offset: 400,
+            end_offset: 600,
+        });
+
+        let level5 = SourceInfo::Substring {
+            parent: Rc::clone(&level4),
+            start_offset: 450,
+            end_offset: 550,
+        };
+
+        let deepest_id = serializer.intern(&level5);
+
+        // Should have 6 entries total (0-5)
+        assert_eq!(deepest_id, 5);
+        assert_eq!(serializer.pool.len(), 6);
+
+        // Verify the chain: each level should reference its parent
+        for i in 1..=5 {
+            let entry = &serializer.pool[i];
+            match &entry.mapping {
+                SerializableSourceMapping::Substring { parent_id } => {
+                    assert_eq!(*parent_id, i - 1, "Level {} should reference parent {}", i, i - 1);
+                }
+                _ => panic!("Expected Substring mapping at level {}", i),
+            }
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_concat() {
+        // Test Concat mapping with multiple pieces
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let piece1_source = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 10,
+        });
+
+        let piece2_source = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 20,
+            end_offset: 30,
+        });
+
+        let concat = SourceInfo::Concat {
+            pieces: vec![
+                quarto_source_map::SourcePiece {
+                    source_info: (*piece1_source).clone(),
+                    offset_in_concat: 0,
+                    length: 10,
+                },
+                quarto_source_map::SourcePiece {
+                    source_info: (*piece2_source).clone(),
+                    offset_in_concat: 10,
+                    length: 10,
+                },
+            ],
+        };
+
+        let concat_id = serializer.intern(&concat);
+
+        // Should have 3 entries: piece1, piece2, concat
+        assert_eq!(concat_id, 2);
+        assert_eq!(serializer.pool.len(), 3);
+
+        // Verify concat entry
+        let concat_entry = &serializer.pool[2];
+        match &concat_entry.mapping {
+            SerializableSourceMapping::Concat { pieces } => {
+                assert_eq!(pieces.len(), 2);
+                assert_eq!(pieces[0].source_info_id, 0); // References piece1
+                assert_eq!(pieces[0].offset_in_concat, 0);
+                assert_eq!(pieces[0].length, 10);
+                assert_eq!(pieces[1].source_info_id, 1); // References piece2
+                assert_eq!(pieces[1].offset_in_concat, 10);
+                assert_eq!(pieces[1].length, 10);
+            }
+            _ => panic!("Expected Concat mapping"),
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_deduplication() {
+        // Test that the same Rc gets the same ID (deduplication)
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 100,
+        });
+
+        // Create multiple Substrings sharing the same parent Rc
+        let child1 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 10,
+            end_offset: 20,
+        };
+
+        let child2 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 30,
+            end_offset: 40,
+        };
+
+        serializer.intern(&child1);
+        serializer.intern(&child2);
+
+        // Should have 3 entries: parent (once), child1, child2
+        assert_eq!(serializer.pool.len(), 3);
+
+        // Both children should reference the same parent ID
+        match &serializer.pool[1].mapping {
+            SerializableSourceMapping::Substring { parent_id } => {
+                assert_eq!(*parent_id, 0);
+            }
+            _ => panic!("Expected Substring"),
+        }
+
+        match &serializer.pool[2].mapping {
+            SerializableSourceMapping::Substring { parent_id } => {
+                assert_eq!(*parent_id, 0); // Same parent ID as child1
+            }
+            _ => panic!("Expected Substring"),
+        }
+
+        // Verify the parent was only added once
+        let original_count = serializer.pool.iter().filter(|entry| {
+            matches!(entry.mapping, SerializableSourceMapping::Original { .. })
+        }).count();
+        assert_eq!(original_count, 1, "Parent should only appear once in pool");
+    }
+}

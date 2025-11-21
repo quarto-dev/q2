@@ -12,6 +12,8 @@ website:
         text: Syntax
       - href: writers/index.qmd
         text: Writers
+      - href: source-info/index.qmd
+        text: Source Tracking
 
 format:
   html:

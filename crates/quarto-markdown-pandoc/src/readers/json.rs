@@ -77,6 +77,7 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 /// **Backward Compatibility**: When reading JSON without source info (legacy format),
 /// all SourceInfo::default() instances throughout this file are intentional and provide
 /// backward compatibility with JSON that predates source tracking.
+#[derive(Debug)]
 struct SourceInfoDeserializer {
     pool: Vec<quarto_source_map::SourceInfo>,
 }
@@ -2184,5 +2185,153 @@ fn read_meta_value_with_source_info(
             "MetaValue: {}",
             t
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_source_map::{FileId, SourceInfo};
+    use serde_json::json;
+
+    #[test]
+    fn test_deserialize_source_info_pool_basic() {
+        // Test deserializing a simple pool with an Original source
+        let pool_json = json!([
+            {
+                "r": [0, 10],
+                "t": 0,
+                "d": 0  // file_id
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        assert_eq!(deserializer.pool.len(), 1);
+
+        // Verify the reconstructed SourceInfo
+        let source_info = &deserializer.pool[0];
+        match source_info {
+            SourceInfo::Original { file_id, start_offset, end_offset } => {
+                assert_eq!(*file_id, FileId(0));
+                assert_eq!(*start_offset, 0);
+                assert_eq!(*end_offset, 10);
+            }
+            _ => panic!("Expected Original variant"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_source_info_pool_with_refs() {
+        // Test deserializing a pool with parent-child relationships
+        let pool_json = json!([
+            {
+                "r": [0, 100],
+                "t": 0,
+                "d": 0  // Original with file_id 0
+            },
+            {
+                "r": [10, 20],
+                "t": 1,
+                "d": 0  // Substring with parent_id 0
+            },
+            {
+                "r": [30, 40],
+                "t": 1,
+                "d": 0  // Another Substring with parent_id 0
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+        assert_eq!(deserializer.pool.len(), 3);
+
+        // Verify parent (Original)
+        match &deserializer.pool[0] {
+            SourceInfo::Original { file_id, start_offset, end_offset } => {
+                assert_eq!(*file_id, FileId(0));
+                assert_eq!(*start_offset, 0);
+                assert_eq!(*end_offset, 100);
+            }
+            _ => panic!("Expected Original variant"),
+        }
+
+        // Verify first child (Substring)
+        match &deserializer.pool[1] {
+            SourceInfo::Substring { parent, start_offset, end_offset } => {
+                assert_eq!(*start_offset, 10);
+                assert_eq!(*end_offset, 20);
+                // Verify parent points to the Original
+                match &**parent {
+                    SourceInfo::Original { file_id, .. } => {
+                        assert_eq!(*file_id, FileId(0));
+                    }
+                    _ => panic!("Expected Original parent"),
+                }
+            }
+            _ => panic!("Expected Substring variant"),
+        }
+
+        // Test from_json_ref
+        let ref_json = json!(1);
+        let resolved = deserializer.from_json_ref(&ref_json).unwrap();
+        match resolved {
+            SourceInfo::Substring { start_offset, end_offset, .. } => {
+                assert_eq!(start_offset, 10);
+                assert_eq!(end_offset, 20);
+            }
+            _ => panic!("Expected Substring variant"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_invalid_ref() {
+        // Test error handling for invalid reference ID
+        let pool_json = json!([
+            {
+                "r": [0, 100],
+                "t": 0,
+                "d": 0
+            }
+        ]);
+
+        let deserializer = SourceInfoDeserializer::new(&pool_json).unwrap();
+
+        // Try to resolve a reference to non-existent ID
+        let ref_json = json!(99);
+        let result = deserializer.from_json_ref(&ref_json);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            JsonReadError::InvalidSourceInfoRef(id) => {
+                assert_eq!(id, 99);
+            }
+            _ => panic!("Expected InvalidSourceInfoRef error"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_circular_ref() {
+        // Test error handling for circular/forward references
+        let pool_json = json!([
+            {
+                "r": [0, 100],
+                "t": 0,
+                "d": 0
+            },
+            {
+                "r": [10, 20],
+                "t": 1,
+                "d": 2  // Forward reference to ID 2 (doesn't exist yet)
+            }
+        ]);
+
+        let result = SourceInfoDeserializer::new(&pool_json);
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            JsonReadError::CircularSourceInfoReference(id) => {
+                assert_eq!(id, 2);
+            }
+            _ => panic!("Expected CircularSourceInfoReference error"),
+        }
     }
 }

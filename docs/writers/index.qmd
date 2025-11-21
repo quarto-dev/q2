@@ -8,4 +8,5 @@ Writers convert the parsed AST (Abstract Syntax Tree) representation of a docume
 
 ## Available Writers
 
+- [JSON Writer](json.qmd) - Output Pandoc-compatible JSON AST with source tracking
 - [QMD Writer](qmd.qmd) - Write documents back to Quarto Markdown format
