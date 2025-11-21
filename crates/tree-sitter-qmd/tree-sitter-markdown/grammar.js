@@ -71,6 +71,7 @@ const PANDOC_REGEX_STR =
             KEYCAP_EMOJI_REGEX,
             EMOJI_REGEX,
             "[" + PANDOC_PUNCTUATION + "]",
+            "[>.,;!?]",
             startStrRegex +
             regexOr(
                 "[!,.;?\\u{00A0}" + PANDOC_ALPHA_NUM + PANDOC_SMART_QUOTES + "-]",
@@ -516,7 +517,6 @@ module.exports = grammar({
 
             alias($._autolink, $.autolink),
 
-            $._prose_punctuation,
             $.html_element,
             alias($._pandoc_line_break, $.pandoc_line_break),
             alias($._pandoc_attr_specifier, $.attribute_specifier),
@@ -647,7 +647,6 @@ module.exports = grammar({
 
         // Things that are parsed directly as a pandoc str
         pandoc_str: $ => choice(new RegExp(PANDOC_REGEX_STR, 'u'), '|'),
-        _prose_punctuation: $ => alias(/[.,;!?]+/, $.pandoc_str),
 
         // CONTAINER BLOCKS
 

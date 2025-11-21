@@ -265,6 +265,11 @@ fn error_diagnostic_from_parse_state(
                 }
             }
 
+            // Add hints
+            for hint in entry.error_info.hints {
+                builder = builder.add_hint(*hint);
+            }
+
             builder.build()
         })
         .max_by(|diag1, diag2| diagnostic_score(diag1).cmp(&diagnostic_score(diag2)))

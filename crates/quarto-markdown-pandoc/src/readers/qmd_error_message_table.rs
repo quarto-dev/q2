@@ -33,6 +33,7 @@ pub struct ErrorInfo {
     pub message: &'static str,
     pub captures: &'static [ErrorCapture],
     pub notes: &'static [ErrorNote],
+    pub hints: &'static [&'static str],
 }
 
 #[derive(Debug)]

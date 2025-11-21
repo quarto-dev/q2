@@ -13,7 +13,7 @@
     {
       "name": "simple",
       "description": "Simple case",
-      "content": "`Unclosed code span\n",
+      "content": "`",
       "captures": [
         {
           "label": "code-start",

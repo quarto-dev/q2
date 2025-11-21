@@ -37,6 +37,8 @@ struct ErrorInfo {
     message: String,
     captures: Vec<Capture>,
     notes: Vec<Note>,
+    #[serde(default)]
+    hints: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -130,6 +132,10 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
             }
         });
 
+        let hints = entry.error_info.hints.iter().map(|hint| {
+            quote! { #hint }
+        });
+
         quote! {
             crate::readers::qmd_error_message_table::ErrorTableEntry {
                 state: #state,
@@ -142,6 +148,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
                     message: #message,
                     captures: &[#(#captures),*],
                     notes: &[#(#notes),*],
+                    hints: &[#(#hints),*],
                 },
                 name: #name,
             }
