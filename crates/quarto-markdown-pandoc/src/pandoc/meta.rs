@@ -290,6 +290,7 @@ fn parse_yaml_string_as_markdown(
 
                 // For now, also return the error span so we can continue
                 // In the future, we might want to actually fail the parse
+                // NOTE: Synthetic error recovery span - uses default() for generated content
                 let span = Span {
                     attr: (
                         String::new(),
@@ -298,9 +299,9 @@ fn parse_yaml_string_as_markdown(
                     ),
                     content: vec![Inline::Str(Str {
                         text: value.to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::default(), // Synthetic
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::default(), // Synthetic
                     attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                 };
                 MetaValueWithSourceInfo::MetaInlines {
@@ -320,6 +321,7 @@ fn parse_yaml_string_as_markdown(
                 diagnostics.add(diagnostic);
 
                 // Return span with yaml-markdown-syntax-error class
+                // NOTE: Synthetic error recovery span - uses default() for generated content
                 let span = Span {
                     attr: (
                         String::new(),
@@ -328,9 +330,9 @@ fn parse_yaml_string_as_markdown(
                     ),
                     content: vec![Inline::Str(Str {
                         text: value.to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::default(), // Synthetic
                     })],
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::default(), // Synthetic
                     attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                 };
                 MetaValueWithSourceInfo::MetaInlines {
@@ -443,6 +445,7 @@ pub fn yaml_to_meta_with_source_info(
                                 text: s.clone(),
                                 source_info: source_info.clone(),
                             })],
+                            // TODO: Should propagate source_info from wrapped content
                             source_info: quarto_source_map::SourceInfo::default(),
                             attr_source: crate::pandoc::attr::AttrSourceInfo {
                                 id: None,            // No id
@@ -573,9 +576,9 @@ impl YamlEventHandler {
                 ),
                 content: vec![Inline::Str(Str {
                     text: s.to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                    source_info: quarto_source_map::SourceInfo::default(), // Legacy format - no source info available
                 })],
-                source_info: quarto_source_map::SourceInfo::default(),
+                source_info: quarto_source_map::SourceInfo::default(), // Legacy format - no source info available
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             };
             return MetaValue::MetaInlines(vec![Inline::Span(span)]);
@@ -757,6 +760,7 @@ pub fn parse_metadata_strings_with_source_info(
                 }
                 Err(_) => {
                     // Markdown parse failed - wrap in Span with class "yaml-markdown-syntax-error"
+                    // NOTE: Synthetic error recovery span - uses default() for generated content
                     let span = Span {
                         attr: (
                             String::new(),
@@ -765,9 +769,9 @@ pub fn parse_metadata_strings_with_source_info(
                         ),
                         content: vec![Inline::Str(Str {
                             text: value.clone(),
-                            source_info: quarto_source_map::SourceInfo::default(),
+                            source_info: quarto_source_map::SourceInfo::default(), // Synthetic
                         })],
-                        source_info: quarto_source_map::SourceInfo::default(),
+                        source_info: quarto_source_map::SourceInfo::default(), // Synthetic
                         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
                     };
                     MetaValueWithSourceInfo::MetaInlines {

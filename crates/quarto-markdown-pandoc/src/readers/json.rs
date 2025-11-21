@@ -69,6 +69,10 @@ type Result<T> = std::result::Result<T, JsonReadError>;
 /// The pool must be built in topological order (parents before children) so
 /// that when we reconstruct a SourceInfo with a parent_id, the parent already
 /// exists in the pool.
+///
+/// **Backward Compatibility**: When reading JSON without source info (legacy format),
+/// all SourceInfo::default() instances throughout this file are intentional and provide
+/// backward compatibility with JSON that predates source tracking.
 struct SourceInfoDeserializer {
     pool: Vec<quarto_source_map::SourceInfo>,
 }
