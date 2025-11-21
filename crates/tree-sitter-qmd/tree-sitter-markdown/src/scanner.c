@@ -124,6 +124,8 @@ typedef enum {
     PIPE_TABLE_DELIMITER, // to allow naked '|' in markdown
 
     PANDOC_LINE_BREAK,
+
+    TRIPLE_STAR, // simply for good error reporting
 } TokenType;
 
 #ifdef SCAN_DEBUG
@@ -222,6 +224,10 @@ static char* token_names[] = {
     "HTML_ELEMENT", // simply for good error reporting
 
     "PIPE_TABLE_DELIMITER",
+
+    "PANDOC_LINE_BREAK",
+
+    "TRIPLE_STAR", // simply for good error reporting
 };
 
 #endif
@@ -714,6 +720,10 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         extra_indentation = 1;
         // line is empty so don't interrupt paragraphs if this is a list marker
         dont_interrupt = s->matched == s->open_blocks.size;
+    }
+    if (star_count == 3 && !line_end) {
+        mark_end(s, lexer);
+        EMIT_TOKEN(TRIPLE_STAR);
     }
     // If there were at least 3 stars then this could be a thematic break
     bool thematic_break = star_count >= 3 && line_end;

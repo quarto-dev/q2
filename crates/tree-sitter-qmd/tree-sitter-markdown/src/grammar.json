@@ -4722,6 +4722,10 @@
     {
       "type": "SYMBOL",
       "name": "_pandoc_line_break"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_triple_star_error"
     }
   ],
   "inline": [],

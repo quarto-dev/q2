@@ -969,6 +969,8 @@ module.exports = grammar({
         $._pipe_table_delimiter, // so we can distinguish between pipe table | and pandoc_str |
 
         $._pandoc_line_break, // we need to do this in the external lexer to avoid eating the actual newline.
+
+        $._triple_star_error, // we do this simply to issue a good error message.
     ],
     precedences: $ => [],
     extras: $ => [],

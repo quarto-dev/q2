@@ -1,0 +1,14 @@
+{
+  "code": "Q-2-32",
+  "title": "Triple star emphasis disallowed",
+  "message": "Quarto Markdown doesn't support `***`. Consider using `*__` instead.",
+  "notes": [],
+  "cases": [
+    {
+      "name": "basic",
+      "description": "Paragraph with triple star",
+      "content": "***hello",
+      "captures": []
+    }
+  ]
+}
