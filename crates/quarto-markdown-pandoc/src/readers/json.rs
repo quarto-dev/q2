@@ -32,6 +32,7 @@ pub enum JsonReadError {
     InvalidSourceInfoRef(usize),
     ExpectedSourceInfoRef,
     MalformedSourceInfoPool,
+    CircularSourceInfoReference(usize),
 }
 
 impl std::fmt::Display for JsonReadError {
@@ -51,6 +52,9 @@ impl std::fmt::Display for JsonReadError {
             }
             JsonReadError::MalformedSourceInfoPool => {
                 write!(f, "Malformed sourceInfoPool in astContext")
+            }
+            JsonReadError::CircularSourceInfoReference(id) => {
+                write!(f, "Circular or forward reference in sourceInfoPool: ID {} references a parent that doesn't exist yet", id)
             }
         }
     }
@@ -98,7 +102,7 @@ impl SourceInfoDeserializer {
         let mut pool: Vec<quarto_source_map::SourceInfo> = Vec::with_capacity(pool_array.len());
 
         // Build pool in order - parents must come before children
-        for item in pool_array {
+        for (current_index, item) in pool_array.iter().enumerate() {
             // Parse offsets from "r" array
             let range_array = item
                 .get("r")
@@ -177,9 +181,14 @@ impl SourceInfoDeserializer {
                         return Err(JsonReadError::MalformedSourceInfoPool);
                     };
 
+                    // Check for circular/forward references
+                    if parent_id >= current_index {
+                        return Err(JsonReadError::CircularSourceInfoReference(parent_id));
+                    }
+
                     let parent = pool
                         .get(parent_id)
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        .ok_or(JsonReadError::InvalidSourceInfoRef(parent_id))?
                         .clone();
 
                     quarto_source_map::SourceInfo::Substring {
@@ -216,9 +225,14 @@ impl SourceInfoDeserializer {
                                 .ok_or(JsonReadError::MalformedSourceInfoPool)?
                                 as usize;
 
+                            // Check for circular/forward references
+                            if source_info_id >= current_index {
+                                return Err(JsonReadError::CircularSourceInfoReference(source_info_id));
+                            }
+
                             let source_info = pool
                                 .get(source_info_id)
-                                .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                                .ok_or(JsonReadError::InvalidSourceInfoRef(source_info_id))?
                                 .clone();
 
                             Ok(quarto_source_map::SourcePiece {
@@ -246,9 +260,14 @@ impl SourceInfoDeserializer {
                         .ok_or(JsonReadError::MalformedSourceInfoPool)?
                         as usize;
 
+                    // Check for circular/forward references
+                    if parent_id >= current_index {
+                        return Err(JsonReadError::CircularSourceInfoReference(parent_id));
+                    }
+
                     let parent = pool
                         .get(parent_id)
-                        .ok_or(JsonReadError::MalformedSourceInfoPool)?
+                        .ok_or(JsonReadError::InvalidSourceInfoRef(parent_id))?
                         .clone();
 
                     // Approximate with Substring
