@@ -204,6 +204,7 @@ module.exports = grammar({
         pandoc_horizontal_rule: $ => seq($._thematic_break, choice($._newline, $._eof)),
 
         pandoc_paragraph: $ => seq(
+            optional($._inline_whitespace),
             $._inlines, 
             choice($._newline, $._eof)
         ),
@@ -821,7 +822,7 @@ module.exports = grammar({
 
         // pandoc_line_break: $ => seq(/\\/, choice($._newline, $._eof)),
 
-        _inline_whitespace: $ => choice($._whitespace, $._soft_line_break),
+        _inline_whitespace: $ => prec(-1, choice($._whitespace, $._soft_line_break)),
         _whitespace: $ => /[ \t]+/,
         _linebreak: $ => /[\r\n]+/,
     },

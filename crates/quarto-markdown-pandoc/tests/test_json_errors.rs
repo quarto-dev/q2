@@ -78,7 +78,7 @@ fn test_newline_warning() {
 
 #[test]
 fn test_json_errors_flag_with_warning() {
-    // Create a temporary file with invalid markdown in metadata to trigger Q-1-101 warning
+    // Create a temporary file with invalid markdown in metadata to trigger Q-1-20 warning
     let temp_file = "/tmp/test_json_errors_warning.qmd";
     let input = r#"---
 title: "Test Document"
@@ -121,7 +121,7 @@ description: "[incomplete link"
 
     // Verify the JSON structure
     assert_eq!(json_value["kind"], "warning", "Expected warning kind");
-    assert_eq!(json_value["code"], "Q-1-101", "Expected Q-1-101 code");
+    assert_eq!(json_value["code"], "Q-1-20", "Expected Q-1-20 code");
     assert!(json_value["title"].is_string(), "Expected title field");
     assert!(json_value["problem"].is_object(), "Expected problem field");
 

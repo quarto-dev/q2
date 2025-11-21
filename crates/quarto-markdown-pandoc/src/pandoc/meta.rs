@@ -310,7 +310,7 @@ fn parse_yaml_string_as_markdown(
             } else {
                 // Untagged: WARN on parse failure
                 let diagnostic = DiagnosticMessageBuilder::warning("Failed to parse metadata value as markdown")
-                    .with_code("Q-1-101")
+                    .with_code("Q-1-20")
                     .with_location(source_info.clone())
                     .problem(format!("Could not parse '{}' as markdown", value))
                     .add_hint("Add the `!str` tag to treat this as a plain string, or fix the markdown syntax")
