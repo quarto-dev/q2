@@ -720,11 +720,29 @@ export type JSONValue =
  * AnnotatedParse structure (matching quarto-cli's interface)
  * This is the output format from all conversion functions.
  */
+/**
+ * Synthetic kinds for structural navigation nodes.
+ * These represent intermediate levels of hierarchy (rows, cells, etc.)
+ * that preserve navigability in flattened AnnotatedParse trees.
+ */
+export type StructuralKind =
+  | 'table-head'
+  | 'table-body'
+  | 'table-foot'
+  | 'table-row'
+  | 'table-cell'
+  | 'caption-short'
+  | 'caption-long'
+  | 'bullet-list-item'
+  | 'ordered-list-item'
+  | 'definition-list-item'
+  | 'definition';
+
 export interface AnnotatedParse {
   start: number;
   end: number;
   result: JSONValue;
-  kind: string;
+  kind: string | StructuralKind;
   source: MappedString;
   components: AnnotatedParse[];
 }

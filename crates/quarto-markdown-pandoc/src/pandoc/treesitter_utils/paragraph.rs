@@ -24,6 +24,10 @@ pub fn process_paragraph(
             inlines.push(inline);
         } else if let PandocNativeIntermediate::IntermediateInlines(inner_inlines) = child {
             inlines.extend(inner_inlines);
+        } else if let PandocNativeIntermediate::IntermediateAttr(attr, attr_source) = child {
+            // Attributes can appear in paragraphs (e.g., after math expressions)
+            // They will be processed by postprocess.rs to create Spans
+            inlines.push(Inline::Attr(attr, attr_source));
         }
     }
     PandocNativeIntermediate::IntermediateBlock(Block::Paragraph(Paragraph {

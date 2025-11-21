@@ -211,19 +211,19 @@ export class BlockConverter {
           source,
           components: [
             // Components in source order:
-            // TableHead rows and cells
-            ...this.convertTableHead(block.c[3], block.headS),
-            // TableBody rows and cells (multiple bodies)
-            ...block.c[4].flatMap((body, i) =>
+            // TableHead (structural node)
+            this.convertTableHead(block.c[3], block.headS),
+            // TableBody (structural nodes, multiple bodies)
+            ...block.c[4].map((body, i) =>
               this.convertTableBody(body, block.bodiesS[i])
             ),
-            // TableFoot rows and cells
-            ...this.convertTableFoot(block.c[5], block.footS),
-            // Caption (short and long) - comes after table in source
+            // TableFoot (structural node)
+            this.convertTableFoot(block.c[5], block.footS),
+            // Caption (short and long structural nodes) - comes after table in source
             ...this.convertCaption({
               shortCaption: block.c[1][0],
               longCaption: block.c[1][1]
-            }),
+            }, block.captionS),
             // Table attr - extracted from caption, so comes last
             ...this.convertAttr(block.c[0], block.attrS)
           ],
@@ -319,21 +319,53 @@ export class BlockConverter {
   /**
    * Convert Caption to AnnotatedParse components
    * Caption = { shortCaption: Inline[] | null, longCaption: Block[] }
+   *
+   * If captionS is provided (Table case), creates structural nodes for short/long.
+   * If captionS is not provided (Figure case), flattens components as before.
    */
-  private convertCaption(caption: Annotated_Caption): AnnotatedParse[] {
+  private convertCaption(caption: Annotated_Caption, captionS?: number): AnnotatedParse[] {
     const components: AnnotatedParse[] = [];
 
-    // Short caption (if present)
-    if (caption.shortCaption) {
+    if (captionS !== undefined) {
+      // Create structural nodes using caption source info
+      const source = this.sourceReconstructor.toMappedString(captionS);
+      const [start, end] = this.sourceReconstructor.getOffsets(captionS);
+
+      // Short caption structural node (if present)
+      if (caption.shortCaption) {
+        components.push({
+          result: caption.shortCaption as unknown as import('./types.js').JSONValue,
+          kind: 'caption-short',
+          source,
+          components: caption.shortCaption.map(inline => this.inlineConverter.convertInline(inline)),
+          start,
+          end
+        });
+      }
+
+      // Long caption structural node (always present)
+      components.push({
+        result: caption.longCaption as unknown as import('./types.js').JSONValue,
+        kind: 'caption-long',
+        source,
+        components: caption.longCaption.map(block => this.convertBlock(block)),
+        start,
+        end
+      });
+    } else {
+      // Flatten components (Figure case, no caption source info)
+      // Short caption (if present)
+      if (caption.shortCaption) {
+        components.push(
+          ...caption.shortCaption.map(inline => this.inlineConverter.convertInline(inline))
+        );
+      }
+
+      // Long caption (always present)
       components.push(
-        ...caption.shortCaption.map(inline => this.inlineConverter.convertInline(inline))
+        ...caption.longCaption.map(block => this.convertBlock(block))
       );
     }
-
-    // Long caption (always present)
-    components.push(
-      ...caption.longCaption.map(block => this.convertBlock(block))
-    );
 
     return components;
   }
@@ -345,18 +377,28 @@ export class BlockConverter {
   private convertTableHead(
     head: import('./types.js').Annotated_TableHead_Array,
     headS: import('./types.js').TableHeadSourceInfo
-  ): AnnotatedParse[] {
+  ): AnnotatedParse {
+    const source = this.sourceReconstructor.toMappedString(headS.s);
+    const [start, end] = this.sourceReconstructor.getOffsets(headS.s);
+
     const components: AnnotatedParse[] = [];
 
     // Head attr
     components.push(...this.convertAttr(head[0], headS.attrS));
 
-    // Head rows
+    // Head rows (each row is now a structural node)
     head[1].forEach((row, i) => {
-      components.push(...this.convertRow(row, headS.rowsS[i]));
+      components.push(this.convertRow(row, headS.rowsS[i]));
     });
 
-    return components;
+    return {
+      result: head as unknown as import('./types.js').JSONValue,
+      kind: 'table-head',
+      source,
+      components,
+      start,
+      end
+    };
   }
 
   /**
@@ -366,23 +408,33 @@ export class BlockConverter {
   private convertTableBody(
     body: import('./types.js').Annotated_TableBody_Array,
     bodyS: import('./types.js').TableBodySourceInfo
-  ): AnnotatedParse[] {
+  ): AnnotatedParse {
+    const source = this.sourceReconstructor.toMappedString(bodyS.s);
+    const [start, end] = this.sourceReconstructor.getOffsets(bodyS.s);
+
     const components: AnnotatedParse[] = [];
 
     // Body attr
     components.push(...this.convertAttr(body[0], bodyS.attrS));
 
-    // Body head rows
+    // Body head rows (each row is now a structural node)
     body[2].forEach((row, i) => {
-      components.push(...this.convertRow(row, bodyS.headS[i]));
+      components.push(this.convertRow(row, bodyS.headS[i]));
     });
 
-    // Body body rows
+    // Body body rows (each row is now a structural node)
     body[3].forEach((row, i) => {
-      components.push(...this.convertRow(row, bodyS.bodyS[i]));
+      components.push(this.convertRow(row, bodyS.bodyS[i]));
     });
 
-    return components;
+    return {
+      result: body as unknown as import('./types.js').JSONValue,
+      kind: 'table-body',
+      source,
+      components,
+      start,
+      end
+    };
   }
 
   /**
@@ -392,18 +444,28 @@ export class BlockConverter {
   private convertTableFoot(
     foot: import('./types.js').Annotated_TableFoot_Array,
     footS: import('./types.js').TableFootSourceInfo
-  ): AnnotatedParse[] {
+  ): AnnotatedParse {
+    const source = this.sourceReconstructor.toMappedString(footS.s);
+    const [start, end] = this.sourceReconstructor.getOffsets(footS.s);
+
     const components: AnnotatedParse[] = [];
 
     // Foot attr
     components.push(...this.convertAttr(foot[0], footS.attrS));
 
-    // Foot rows
+    // Foot rows (each row is now a structural node)
     foot[1].forEach((row, i) => {
-      components.push(...this.convertRow(row, footS.rowsS[i]));
+      components.push(this.convertRow(row, footS.rowsS[i]));
     });
 
-    return components;
+    return {
+      result: foot as unknown as import('./types.js').JSONValue,
+      kind: 'table-foot',
+      source,
+      components,
+      start,
+      end
+    };
   }
 
   /**
@@ -413,18 +475,28 @@ export class BlockConverter {
   private convertRow(
     row: import('./types.js').Annotated_Row,
     rowS: import('./types.js').RowSourceInfo
-  ): AnnotatedParse[] {
+  ): AnnotatedParse {
+    const source = this.sourceReconstructor.toMappedString(rowS.s);
+    const [start, end] = this.sourceReconstructor.getOffsets(rowS.s);
+
     const components: AnnotatedParse[] = [];
 
     // Row attr
     components.push(...this.convertAttr(row[0], rowS.attrS));
 
-    // Row cells
+    // Row cells (each cell is now a structural node)
     row[1].forEach((cell, i) => {
-      components.push(...this.convertCell(cell, rowS.cellsS[i]));
+      components.push(this.convertCell(cell, rowS.cellsS[i]));
     });
 
-    return components;
+    return {
+      result: row as unknown as import('./types.js').JSONValue,
+      kind: 'table-row',
+      source,
+      components,
+      start,
+      end
+    };
   }
 
   /**
@@ -434,7 +506,10 @@ export class BlockConverter {
   private convertCell(
     cell: import('./types.js').Annotated_Cell,
     cellS: import('./types.js').CellSourceInfo
-  ): AnnotatedParse[] {
+  ): AnnotatedParse {
+    const source = this.sourceReconstructor.toMappedString(cellS.s);
+    const [start, end] = this.sourceReconstructor.getOffsets(cellS.s);
+
     const components: AnnotatedParse[] = [];
 
     // Cell attr
@@ -443,6 +518,13 @@ export class BlockConverter {
     // Cell content (blocks)
     components.push(...cell[4].map(block => this.convertBlock(block)));
 
-    return components;
+    return {
+      result: cell as unknown as import('./types.js').JSONValue,
+      kind: 'table-cell',
+      source,
+      components,
+      start,
+      end
+    };
   }
 }

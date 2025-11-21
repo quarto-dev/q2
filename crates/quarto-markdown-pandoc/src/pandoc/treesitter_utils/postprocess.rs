@@ -663,8 +663,13 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 math_processed.push(Inline::Span(Span {
                                     attr: (attr.0.clone(), classes, attr.2.clone()),
                                     content: vec![Inline::Math(math.clone())],
-                                    // TODO: Should combine() source info from math and attr (see k-82)
-                                    source_info: quarto_source_map::SourceInfo::default(),
+                                    source_info: if let Some(attr_overall) =
+                                        attr_source.combine_all()
+                                    {
+                                        math.source_info.combine(&attr_overall)
+                                    } else {
+                                        math.source_info.clone()
+                                    },
                                     attr_source: attr_source.clone(),
                                 }));
 

@@ -140,7 +140,16 @@ test('table.json - table structure conversion', () => {
   assert.strictEqual(attrId!.result, 'tbl-example');
 
   // Should have cell content (Plain blocks with Str inlines)
-  const plainBlocks = tableBlock!.components.filter(c => c.kind === 'Plain');
+  // Navigate: Table -> table-head/table-body/table-foot -> table-row -> table-cell -> Plain
+  const structuralNodes = tableBlock!.components.filter(
+    c => c.kind === 'table-head' || c.kind === 'table-body' || c.kind === 'table-foot'
+  );
+  const cells = structuralNodes.flatMap(node =>
+    node.components.flatMap(row =>
+      row.components.filter(c => c.kind === 'table-cell')
+    )
+  );
+  const plainBlocks = cells.flatMap(cell => cell.components.filter(c => c.kind === 'Plain'));
   assert.ok(plainBlocks.length > 0, 'Table cells should have Plain content');
 });
 
@@ -153,9 +162,11 @@ test('table.json - table caption', () => {
 
   // Caption content should be in the components
   // The caption long blocks contain Plain blocks with Str inlines
-  // We need to find Plain components, then look at their nested components for Str
-  const plainComponents = tableBlock!.components.filter(c => c.kind === 'Plain');
-  assert.ok(plainComponents.length > 0, 'Table should have Plain components in caption');
+  // Navigate: Table -> caption-long -> Plain
+  const captionLong = tableBlock!.components.find(c => c.kind === 'caption-long');
+  assert.ok(captionLong, 'Table should have caption-long structural node');
+  const plainComponents = captionLong!.components.filter(c => c.kind === 'Plain');
+  assert.ok(plainComponents.length > 0, 'Table caption should have Plain components');
 
   // Collect all Str from Plain components
   const captionText = plainComponents
