@@ -186,7 +186,9 @@ impl DefinitionListConverter {
             json::read(&mut json_reader).context("Failed to parse JSON output from pandoc")?;
 
         let mut output = Vec::new();
-        qmd::write(&pandoc_ast, &mut output).context("Failed to write markdown output")?;
+        qmd::write(&pandoc_ast, &mut output).map_err(|diagnostics| {
+            anyhow::anyhow!("Failed to write markdown output: {:?}", diagnostics)
+        })?;
 
         let result = String::from_utf8(output)
             .context("Failed to parse output as UTF-8")?

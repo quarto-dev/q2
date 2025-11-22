@@ -419,5 +419,12 @@
     "message_template": "EditComment editorial markup ({>>...<<}) was not desugared to Span during postprocessing.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-36",
     "since_version": "99.9.9"
+  },
+  "Q-3-40": {
+    "subsystem": "writer",
+    "title": "Invalid Metadata Structure",
+    "message_template": "Document metadata must be a map structure for this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-40",
+    "since_version": "99.9.9"
   }
 }

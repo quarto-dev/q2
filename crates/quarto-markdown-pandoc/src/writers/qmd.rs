@@ -194,11 +194,19 @@ fn meta_value_with_source_info_to_yaml(
         crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
             // Render blocks using the qmd writer
             let mut buffer = Vec::<u8>::new();
+            let mut errors = Vec::new(); // Errors in metadata blocks are unexpected
             for (i, block) in content.iter().enumerate() {
                 if i > 0 {
                     writeln!(&mut buffer)?;
                 }
-                write_block(block, &mut buffer)?;
+                write_block(block, &mut buffer, &mut errors)?;
+            }
+            // If any errors accumulated, this is truly unexpected in metadata
+            if !errors.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Unexpected error in metadata block: {}", errors[0].title),
+                ));
             }
             let result = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -230,6 +238,7 @@ fn meta_value_with_source_info_to_yaml(
 fn write_meta<T: std::io::Write + ?Sized>(
     meta: &crate::pandoc::MetaValueWithSourceInfo,
     buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<bool> {
     // meta should be a MetaMap variant
     match meta {
@@ -269,7 +278,23 @@ fn write_meta<T: std::io::Write + ?Sized>(
                 Ok(true)
             }
         }
-        _ => panic!("Expected MetaMap for metadata"),
+        _ => {
+            // Defensive error: metadata should always be MetaMap
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Invalid metadata structure",
+                )
+                .with_code("Q-3-40")
+                .problem("Metadata must be a map structure for QMD output")
+                .add_detail(
+                    "The document metadata is not in the expected map format. \
+                     This may indicate a filter or processing issue.",
+                )
+                .add_hint("Check that filters maintain proper metadata structure")
+                .build(),
+            );
+            Ok(false)
+        }
     }
 }
 
@@ -306,19 +331,27 @@ fn write_attr<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
-fn write_blockquote(blockquote: &BlockQuote, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_blockquote(
+    blockquote: &BlockQuote,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     let mut blockquote_writer = BlockQuoteContext::new(buf);
     for (i, block) in blockquote.content.iter().enumerate() {
         if i > 0 {
             // Add a blank line between blocks in the blockquote
             writeln!(&mut blockquote_writer)?;
         }
-        write_block(block, &mut blockquote_writer)?;
+        write_block(block, &mut blockquote_writer, errors)?;
     }
     Ok(())
 }
 
-fn write_div(div: &crate::pandoc::Div, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_div(
+    div: &crate::pandoc::Div,
+    writer: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     write!(writer, "::: ")?;
     write_attr(&div.attr, writer)?;
     writeln!(writer)?;
@@ -326,14 +359,18 @@ fn write_div(div: &crate::pandoc::Div, writer: &mut dyn std::io::Write) -> std::
     for block in div.content.iter() {
         // Add a blank line between blocks in the blockquote
         writeln!(writer)?;
-        write_block(block, writer)?;
+        write_block(block, writer, errors)?;
     }
     writeln!(writer, "\n:::")?;
 
     Ok(())
 }
 
-fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_bulletlist(
+    bulletlist: &BulletList,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     // Determine if this is a tight list
     // A list is tight if the first block of all items is Plain (not Para)
     let is_tight = bulletlist
@@ -365,7 +402,7 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
                     // Add a blank line between blocks within a list item in loose lists
                     writeln!(&mut item_writer)?;
                 }
-                write_block(block, &mut item_writer)?;
+                write_block(block, &mut item_writer, errors)?;
             }
         }
     }
@@ -375,6 +412,7 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
 fn write_orderedlist(
     orderedlist: &OrderedList,
     buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     let (start_num, number_style, delimiter) = &orderedlist.attr;
 
@@ -398,7 +436,7 @@ fn write_orderedlist(
                 // Add a blank line between blocks within a list item in loose lists
                 writeln!(&mut item_writer)?;
             }
-            write_block(block, &mut item_writer)?;
+            write_block(block, &mut item_writer, errors)?;
         }
     }
     Ok(())
@@ -427,12 +465,16 @@ fn write_header(header: &Header, buf: &mut dyn std::io::Write) -> std::io::Resul
 }
 
 // FIXME this is wrong because pipe tables are quite limited (cannot have newlines in them)
-fn write_cell_content(cell: &Cell, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_cell_content(
+    cell: &Cell,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     for (i, block) in cell.content.iter().enumerate() {
         if i > 0 {
             write!(buf, " ")?; // Join multiple blocks with space
         }
-        write_block(block, buf)?;
+        write_block(block, buf, errors)?;
     }
     Ok(())
 }
@@ -521,6 +563,7 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
 fn write_definitionlist(
     deflist: &DefinitionList,
     buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     for (i, (term, definitions)) in deflist.content.iter().enumerate() {
         if i > 0 {
@@ -541,7 +584,7 @@ fn write_definitionlist(
                     writeln!(buf)?;
                     write!(buf, "    ")?; // Indent subsequent blocks in definition
                 }
-                write_block(block, buf)?;
+                write_block(block, buf, errors)?;
             }
         }
     }
@@ -556,7 +599,11 @@ fn write_horizontalrule(
     Ok(())
 }
 
-fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_figure(
+    figure: &Figure,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     // Write figure using div syntax with fig- class
     write!(buf, "::: ")?;
     write_attr(&figure.attr, buf)?;
@@ -565,7 +612,7 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
     // Write the figure content
     for block in &figure.content {
         writeln!(buf)?;
-        write_block(block, buf)?;
+        write_block(block, buf, errors)?;
     }
 
     // Write caption if it exists
@@ -576,7 +623,7 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
                 if i > 0 {
                     writeln!(buf)?;
                 }
-                write_block(block, buf)?;
+                write_block(block, buf, errors)?;
             }
         }
     } else if let Some(ref short_caption) = figure.caption.short {
@@ -594,8 +641,12 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
     Ok(())
 }
 
-fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::io::Result<bool> {
-    write_meta(&metablock.meta, buf)
+fn write_metablock(
+    metablock: &MetaBlock,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<bool> {
+    write_meta(&metablock.meta, buf, errors)
 }
 
 fn write_inlinerefdef(
@@ -613,6 +664,7 @@ fn write_inlinerefdef(
 fn write_fenced_note_definition(
     refdef: &crate::pandoc::block::NoteDefinitionFencedBlock,
     buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
 ) -> std::io::Result<()> {
     writeln!(buf, "::: ^{}", refdef.id)?;
     for (i, block) in refdef.content.iter().enumerate() {
@@ -620,13 +672,17 @@ fn write_fenced_note_definition(
             // Add a blank line between blocks
             writeln!(buf)?;
         }
-        write_block(block, buf)?;
+        write_block(block, buf, errors)?;
     }
     writeln!(buf, ":::")?;
     Ok(())
 }
 
-fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_table(
+    table: &Table,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     // Collect all rows (header + body rows)
     let mut all_rows = Vec::new();
 
@@ -657,7 +713,7 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
         let mut cell_strings = Vec::new();
         for (i, cell) in row.cells.iter().take(num_cols).enumerate() {
             let mut buffer = Vec::<u8>::new();
-            write_cell_content(cell, &mut buffer)?;
+            write_cell_content(cell, &mut buffer, errors)?;
             let content = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             let content = content.trim().to_string();
@@ -1227,7 +1283,11 @@ fn write_inline(
     }
 }
 
-fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_block(
+    block: &crate::pandoc::Block,
+    buf: &mut dyn std::io::Write,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
     match block {
         Block::Plain(plain) => {
             write_plain(plain, buf)?;
@@ -1236,22 +1296,22 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
             write_paragraph(para, buf)?;
         }
         Block::BlockQuote(blockquote) => {
-            write_blockquote(blockquote, buf)?;
+            write_blockquote(blockquote, buf, errors)?;
         }
         Block::BulletList(bulletlist) => {
-            write_bulletlist(bulletlist, buf)?;
+            write_bulletlist(bulletlist, buf, errors)?;
         }
         Block::OrderedList(orderedlist) => {
-            write_orderedlist(orderedlist, buf)?;
+            write_orderedlist(orderedlist, buf, errors)?;
         }
         Block::Div(div) => {
-            write_div(div, buf)?;
+            write_div(div, buf, errors)?;
         }
         Block::Header(header) => {
             write_header(header, buf)?;
         }
         Block::Table(table) => {
-            write_table(table, buf)?;
+            write_table(table, buf, errors)?;
         }
         Block::CodeBlock(codeblock) => {
             write_codeblock(codeblock, buf)?;
@@ -1263,27 +1323,38 @@ fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> st
             write_rawblock(rawblock, buf)?;
         }
         Block::DefinitionList(deflist) => {
-            write_definitionlist(deflist, buf)?;
+            write_definitionlist(deflist, buf, errors)?;
         }
         Block::HorizontalRule(rule) => {
             write_horizontalrule(rule, buf)?;
         }
         Block::Figure(figure) => {
-            write_figure(figure, buf)?;
+            write_figure(figure, buf, errors)?;
         }
         Block::BlockMetadata(metablock) => {
-            write_metablock(metablock, buf)?;
+            write_metablock(metablock, buf, errors)?;
         }
         Block::NoteDefinitionPara(refdef) => {
             write_inlinerefdef(refdef, buf)?;
         }
         Block::NoteDefinitionFencedBlock(refdef) => {
-            write_fenced_note_definition(refdef, buf)?;
+            write_fenced_note_definition(refdef, buf, errors)?;
         }
         Block::CaptionBlock(_) => {
-            panic!(
-                "CaptionBlock found in QMD writer - should have been processed during postprocessing"
-            )
+            // Defensive error: CaptionBlock should be processed during postprocessing
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Caption block not supported",
+                )
+                .with_code("Q-3-21")
+                .problem("Standalone caption block cannot be rendered in QMD format")
+                .add_detail(
+                    "Caption blocks should be attached to figures or tables during postprocessing. \
+                     This may indicate a postprocessing issue or filter-generated orphaned caption.",
+                )
+                .add_hint("Check for bugs in postprocessing or filters producing orphaned captions")
+                .build(),
+            );
         }
     }
     Ok(())
@@ -1305,13 +1376,42 @@ pub fn write_plain(plain: &Plain, buf: &mut dyn std::io::Write) -> std::io::Resu
     Ok(())
 }
 
-pub fn write<T: std::io::Write>(pandoc: &Pandoc, buf: &mut T) -> std::io::Result<()> {
-    let mut need_newline = write_meta(&pandoc.meta, buf)?;
+pub fn write<T: std::io::Write>(
+    pandoc: &Pandoc,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut errors = Vec::new();
+
+    // Try to write - IO errors are fatal
+    if let Err(e) = write_impl(pandoc, buf, &mut errors) {
+        // IO error - wrap and return
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write QMD output: {}", e))
+                .build(),
+        ]);
+    }
+
+    // Check for accumulated feature errors
+    if !errors.is_empty() {
+        return Err(errors);
+    }
+
+    Ok(())
+}
+
+fn write_impl<T: std::io::Write>(
+    pandoc: &Pandoc,
+    buf: &mut T,
+    errors: &mut Vec<quarto_error_reporting::DiagnosticMessage>,
+) -> std::io::Result<()> {
+    let mut need_newline = write_meta(&pandoc.meta, buf, errors)?;
     for block in &pandoc.blocks {
         if need_newline {
             write!(buf, "\n")?
         };
-        write_block(block, buf)?;
+        write_block(block, buf, errors)?;
         need_newline = true;
     }
     Ok(())

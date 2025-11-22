@@ -79,9 +79,7 @@ impl RuleRegistry {
         registry.register(Arc::new(
             crate::diagnostics::parse_check::ParseChecker::new()?,
         ));
-        registry.register(Arc::new(
-            crate::diagnostics::q_2_30::Q230Checker::new()?,
-        ));
+        registry.register(Arc::new(crate::diagnostics::q_2_30::Q230Checker::new()?));
 
         // Register conversion rules
         registry.register(Arc::new(
