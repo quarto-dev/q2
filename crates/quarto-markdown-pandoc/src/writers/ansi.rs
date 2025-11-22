@@ -88,6 +88,20 @@ impl StyleContext {
     }
 }
 
+/// Context for ANSI writer containing error accumulation.
+///
+/// This struct accumulates diagnostic errors during AST traversal,
+/// allowing the writer to report unsupported features rather than panicking.
+struct AnsiWriterContext {
+    errors: Vec<quarto_error_reporting::DiagnosticMessage>,
+}
+
+impl AnsiWriterContext {
+    fn new() -> Self {
+        AnsiWriterContext { errors: Vec::new() }
+    }
+}
+
 /// Convert a Color to ANSI foreground code
 fn color_to_ansi_fg(color: Color) -> String {
     match color {
@@ -443,8 +457,11 @@ fn calculate_indent_width(start: usize, count: usize) -> usize {
 /// This writer uses crossterm to render styled text. Currently supports:
 /// - Plain and Para blocks (with minimal inline rendering)
 ///
-/// Other block types will panic with a message indicating they need implementation.
-pub fn write<T: Write>(pandoc: &Pandoc, buf: &mut T) -> std::io::Result<()> {
+/// Other block types will emit proper diagnostic errors.
+pub fn write<T: Write>(
+    pandoc: &Pandoc,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
     write_with_config(pandoc, buf, &AnsiConfig::default())
 }
 
@@ -453,6 +470,33 @@ pub fn write_with_config<T: Write>(
     pandoc: &Pandoc,
     buf: &mut T,
     config: &AnsiConfig,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut ctx = AnsiWriterContext::new();
+
+    // Try to write - IO errors are fatal
+    if let Err(e) = write_impl(pandoc, buf, config, &mut ctx) {
+        // IO error - wrap and return
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write ANSI output: {}", e))
+                .build(),
+        ]);
+    }
+
+    // Check for accumulated feature errors
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+
+    Ok(())
+}
+
+fn write_impl<T: Write>(
+    pandoc: &Pandoc,
+    buf: &mut T,
+    config: &AnsiConfig,
+    ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<()> {
     let mut last_spacing = LastBlockSpacing::None;
 
@@ -468,7 +512,7 @@ pub fn write_with_config<T: Write>(
             writeln!(buf)?; // Extra \n for blank line
         }
 
-        last_spacing = write_block_with_depth(block, buf, config, 0, 0)?;
+        last_spacing = write_block_with_depth(block, buf, config, 0, 0, ctx)?;
     }
     Ok(())
 }
@@ -479,6 +523,7 @@ fn write_block_with_depth(
     config: &AnsiConfig,
     list_depth: usize,
     indent_chars: usize, // Total character indentation from all contexts
+    ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<LastBlockSpacing> {
     let mut style_ctx = StyleContext::new();
     match block {
@@ -492,24 +537,44 @@ fn write_block_with_depth(
             writeln!(buf)?;
             Ok(LastBlockSpacing::Paragraph)
         }
-        Block::Div(div) => write_div(div, buf, config, list_depth, indent_chars),
-        Block::BulletList(list) => write_bulletlist(list, buf, config, list_depth, indent_chars),
-        Block::OrderedList(list) => write_orderedlist(list, buf, config, list_depth, indent_chars),
-        Block::DefinitionList(list) => {
-            write_definitionlist(list, buf, config, list_depth, indent_chars)
+        Block::Div(div) => write_div(div, buf, config, list_depth, indent_chars, ctx),
+        Block::BulletList(list) => {
+            write_bulletlist(list, buf, config, list_depth, indent_chars, ctx)
         }
-        Block::BlockQuote(bq) => write_blockquote(bq, buf, config, list_depth, indent_chars),
+        Block::OrderedList(list) => {
+            write_orderedlist(list, buf, config, list_depth, indent_chars, ctx)
+        }
+        Block::DefinitionList(list) => {
+            write_definitionlist(list, buf, config, list_depth, indent_chars, ctx)
+        }
+        Block::BlockQuote(bq) => write_blockquote(bq, buf, config, list_depth, indent_chars, ctx),
 
-        // All other blocks panic with helpful messages
+        // All other blocks emit diagnostic errors
         Block::LineBlock(_) => {
-            panic!(
-                "LineBlock not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "LineBlock not supported in ANSI format",
+                )
+                .with_code("Q-3-50")
+                .problem("LineBlock elements cannot be rendered in ANSI terminal output")
+                .add_detail("ANSI output format has limited block type support")
+                .add_hint("Consider using a different output format for documents with line blocks")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::CodeBlock(_) => {
-            panic!(
-                "CodeBlock not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "CodeBlock not supported in ANSI format",
+                )
+                .with_code("Q-3-51")
+                .problem("CodeBlock elements cannot be rendered in ANSI terminal output")
+                .add_detail("ANSI output format does not yet support code blocks")
+                .add_hint("Consider using a different output format for documents with code blocks")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::RawBlock(raw) => {
             // Only render raw content if format matches "ansi"
@@ -590,34 +655,87 @@ fn write_block_with_depth(
             Ok(LastBlockSpacing::Paragraph)
         }
         Block::Table(_) => {
-            panic!(
-                "Table not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Table not supported in ANSI format",
+                )
+                .with_code("Q-3-52")
+                .problem("Table elements cannot be rendered in ANSI terminal output")
+                .add_detail("ANSI output format does not yet support tables")
+                .add_hint("Consider using a different output format for documents with tables")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::Figure(_) => {
-            panic!(
-                "Figure not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Figure not supported in ANSI format",
+                )
+                .with_code("Q-3-53")
+                .problem("Figure elements cannot be rendered in ANSI terminal output")
+                .add_detail("ANSI output format does not yet support figures")
+                .add_hint("Consider using a different output format for documents with figures")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::BlockMetadata(_) => {
-            panic!(
-                "BlockMetadata not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "BlockMetadata not supported in ANSI format",
+                )
+                .with_code("Q-3-20")
+                .problem("BlockMetadata elements cannot be rendered in ANSI terminal output")
+                .add_detail(
+                    "Block-level metadata is a Quarto extension not representable in ANSI format",
+                )
+                .add_hint("Metadata blocks are typically processed before rendering")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::NoteDefinitionPara(_) => {
-            panic!(
-                "NoteDefinitionPara not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "NoteDefinitionPara not supported in ANSI format",
+                )
+                .with_code("Q-3-54")
+                .problem("Note definitions cannot be rendered in ANSI terminal output")
+                .add_detail("ANSI output format does not yet support footnotes")
+                .add_hint("Consider using a different output format for documents with footnotes")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::NoteDefinitionFencedBlock(_) => {
-            panic!(
-                "NoteDefinitionFencedBlock not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "NoteDefinitionFencedBlock not supported in ANSI format",
+                )
+                .with_code("Q-3-55")
+                .problem("Fenced note definitions cannot be rendered in ANSI terminal output")
+                .add_detail("ANSI output format does not yet support footnotes")
+                .add_hint("Consider using a different output format for documents with footnotes")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
         Block::CaptionBlock(_) => {
-            panic!(
-                "CaptionBlock not yet implemented in ANSI writer. Please add support in src/writers/ansi.rs"
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Caption block not supported",
+                )
+                .with_code("Q-3-21")
+                .problem("Standalone caption blocks cannot be rendered in ANSI format")
+                .add_detail(
+                    "Caption blocks should be attached to figures or tables during postprocessing. \
+                     This may indicate a postprocessing issue or filter-generated orphaned caption.",
+                )
+                .add_hint("Check for bugs in postprocessing or filters producing orphaned captions")
+                .build(),
             );
+            Ok(LastBlockSpacing::None)
         }
     }
 }
@@ -629,21 +747,29 @@ fn write_div(
     config: &AnsiConfig,
     list_depth: usize,
     indent_chars: usize,
+    ansi_ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<LastBlockSpacing> {
     let fg_color = parse_color_attr(&div.attr, "color");
     let bg_color = parse_color_attr(&div.attr, "background-color");
 
     // If colors are present, use DivContext for line-by-line styling
     if fg_color.is_some() || bg_color.is_some() {
-        let mut ctx = DivContext::new(buf, fg_color, bg_color, config);
+        let mut div_ctx = DivContext::new(buf, fg_color, bg_color, config);
         for block in &div.content {
-            write_block_with_depth(block, &mut ctx, config, list_depth, indent_chars)?;
+            write_block_with_depth(
+                block,
+                &mut div_ctx,
+                config,
+                list_depth,
+                indent_chars,
+                ansi_ctx,
+            )?;
         }
-        ctx.flush()?;
+        div_ctx.flush()?;
     } else {
         // No colors, write blocks directly
         for block in &div.content {
-            write_block_with_depth(block, buf, config, list_depth, indent_chars)?;
+            write_block_with_depth(block, buf, config, list_depth, indent_chars, ansi_ctx)?;
         }
     }
 
@@ -657,6 +783,7 @@ fn write_bulletlist(
     config: &AnsiConfig,
     list_depth: usize,
     indent_chars: usize,
+    ansi_ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<LastBlockSpacing> {
     // Determine if list is tight (all first blocks are Plain) or loose
     let is_tight = list
@@ -675,7 +802,14 @@ fn write_bulletlist(
 
         // Write all blocks in item through the context
         for block in item {
-            write_block_with_depth(block, &mut ctx, config, list_depth + 1, indent_chars + 3)?;
+            write_block_with_depth(
+                block,
+                &mut ctx,
+                config,
+                list_depth + 1,
+                indent_chars + 3,
+                ansi_ctx,
+            )?;
         }
 
         ctx.flush()?;
@@ -691,6 +825,7 @@ fn write_orderedlist(
     config: &AnsiConfig,
     list_depth: usize,
     indent_chars: usize,
+    ansi_ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<LastBlockSpacing> {
     // ListAttributes is (start_number, number_style, number_delim)
     let start_number = list.attr.0;
@@ -721,6 +856,7 @@ fn write_orderedlist(
                 config,
                 list_depth + 1,
                 indent_chars + indent_width,
+                ansi_ctx,
             )?;
         }
 
@@ -737,6 +873,7 @@ fn write_definitionlist(
     config: &AnsiConfig,
     list_depth: usize,
     indent_chars: usize,
+    ansi_ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<LastBlockSpacing> {
     let mut style_ctx = StyleContext::new();
 
@@ -776,6 +913,7 @@ fn write_definitionlist(
                     config,
                     list_depth + 1,
                     indent_chars + 2,
+                    ansi_ctx,
                 )?;
 
                 if j > 0 {
@@ -813,6 +951,7 @@ fn write_blockquote(
     config: &AnsiConfig,
     list_depth: usize,
     indent_chars: usize,
+    ansi_ctx: &mut AnsiWriterContext,
 ) -> std::io::Result<LastBlockSpacing> {
     let mut ctx = BlockQuoteContext::new(buf, config);
     let mut last_spacing = LastBlockSpacing::None;
@@ -832,8 +971,14 @@ fn write_blockquote(
         }
 
         // BlockQuoteContext adds 2 characters: "│ "
-        last_spacing =
-            write_block_with_depth(block, &mut ctx, config, list_depth, indent_chars + 2)?;
+        last_spacing = write_block_with_depth(
+            block,
+            &mut ctx,
+            config,
+            list_depth,
+            indent_chars + 2,
+            ansi_ctx,
+        )?;
     }
 
     ctx.flush()?;

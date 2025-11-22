@@ -202,14 +202,7 @@ fn main() {
             ]
         }),
         #[cfg(feature = "terminal-support")]
-        "ansi" => writers::ansi::write(&pandoc, &mut buf).map_err(|e| {
-            vec![
-                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                    .with_code("Q-3-1")
-                    .problem(format!("Failed to write ANSI output: {}", e))
-                    .build(),
-            ]
-        }),
+        "ansi" => writers::ansi::write(&pandoc, &mut buf),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             std::process::exit(1);

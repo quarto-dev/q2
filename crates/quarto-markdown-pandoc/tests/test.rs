@@ -289,7 +289,8 @@ fn unit_test_snapshots_native() {
 #[test]
 fn unit_test_snapshots_qmd() {
     test_snapshots_for_format("qmd", |pandoc, _context, buffer| {
-        writers::qmd::write(pandoc, buffer).map_err(|e| e.into())
+        writers::qmd::write(pandoc, buffer)
+            .map_err(|e| format!("QMD writer errors: {:?}", e).into())
     });
 }
 
