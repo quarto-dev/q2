@@ -189,18 +189,7 @@ fn main() {
                     .map(|s| s == "full")
                     .unwrap_or(false),
             };
-            writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config).map_err(
-                |e| {
-                    vec![
-                        quarto_error_reporting::DiagnosticMessageBuilder::error(
-                            "IO error during write",
-                        )
-                        .with_code("Q-3-1")
-                        .problem(format!("Failed to write JSON output: {}", e))
-                        .build(),
-                    ]
-                },
-            )
+            writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
         }
         "native" => writers::native::write(&pandoc, &context, &mut buf),
         "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf).map_err(|e| {

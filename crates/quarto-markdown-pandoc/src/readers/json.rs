@@ -54,7 +54,11 @@ impl std::fmt::Display for JsonReadError {
                 write!(f, "Malformed sourceInfoPool in astContext")
             }
             JsonReadError::CircularSourceInfoReference(id) => {
-                write!(f, "Circular or forward reference in sourceInfoPool: ID {} references a parent that doesn't exist yet", id)
+                write!(
+                    f,
+                    "Circular or forward reference in sourceInfoPool: ID {} references a parent that doesn't exist yet",
+                    id
+                )
             }
         }
     }
@@ -228,7 +232,9 @@ impl SourceInfoDeserializer {
 
                             // Check for circular/forward references
                             if source_info_id >= current_index {
-                                return Err(JsonReadError::CircularSourceInfoReference(source_info_id));
+                                return Err(JsonReadError::CircularSourceInfoReference(
+                                    source_info_id,
+                                ));
                             }
 
                             let source_info = pool
@@ -2211,7 +2217,11 @@ mod tests {
         // Verify the reconstructed SourceInfo
         let source_info = &deserializer.pool[0];
         match source_info {
-            SourceInfo::Original { file_id, start_offset, end_offset } => {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } => {
                 assert_eq!(*file_id, FileId(0));
                 assert_eq!(*start_offset, 0);
                 assert_eq!(*end_offset, 10);
@@ -2246,7 +2256,11 @@ mod tests {
 
         // Verify parent (Original)
         match &deserializer.pool[0] {
-            SourceInfo::Original { file_id, start_offset, end_offset } => {
+            SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } => {
                 assert_eq!(*file_id, FileId(0));
                 assert_eq!(*start_offset, 0);
                 assert_eq!(*end_offset, 100);
@@ -2256,7 +2270,11 @@ mod tests {
 
         // Verify first child (Substring)
         match &deserializer.pool[1] {
-            SourceInfo::Substring { parent, start_offset, end_offset } => {
+            SourceInfo::Substring {
+                parent,
+                start_offset,
+                end_offset,
+            } => {
                 assert_eq!(*start_offset, 10);
                 assert_eq!(*end_offset, 20);
                 // Verify parent points to the Original
@@ -2274,7 +2292,11 @@ mod tests {
         let ref_json = json!(1);
         let resolved = deserializer.from_json_ref(&ref_json).unwrap();
         match resolved {
-            SourceInfo::Substring { start_offset, end_offset, .. } => {
+            SourceInfo::Substring {
+                start_offset,
+                end_offset,
+                ..
+            } => {
                 assert_eq!(start_offset, 10);
                 assert_eq!(end_offset, 20);
             }

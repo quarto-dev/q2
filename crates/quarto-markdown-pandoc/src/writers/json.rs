@@ -7,6 +7,8 @@ use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
+use hashlink::LinkedHashMap;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_source_map::{FileId, SourceInfo};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -118,6 +120,7 @@ struct SourceInfoSerializer<'a> {
     id_map: HashMap<*const SourceInfo, usize>,
     context: &'a ASTContext,
     config: &'a JsonConfig,
+    errors: Vec<DiagnosticMessage>,
 }
 
 impl<'a> SourceInfoSerializer<'a> {
@@ -127,6 +130,7 @@ impl<'a> SourceInfoSerializer<'a> {
             id_map: HashMap::new(),
             context,
             config,
+            errors: Vec::new(),
         }
     }
 
@@ -532,14 +536,105 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             &cite.source_info,
             serializer,
         ),
-        Inline::Shortcode(_)
-        | Inline::NoteReference(_)
-        | Inline::Attr(_, _)
-        | Inline::Insert(_)
-        | Inline::Delete(_)
-        | Inline::Highlight(_)
-        | Inline::EditComment(_) => {
-            panic!("Unsupported inline type: {:?}", inline)
+        Inline::Shortcode(shortcode) => {
+            // Defensive: Shortcodes should not reach JSON writer
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Shortcode not supported in JSON format")
+                    .with_code("Q-3-30")
+                    .problem(format!("Cannot render shortcode `{{{{< {} >}}}}` in JSON format", shortcode.name))
+                    .add_detail("Shortcodes are Quarto-specific and not representable in Pandoc JSON")
+                    .add_hint("Use native format or process shortcodes before writing JSON")
+                    .build()
+            );
+            let mut attr_hash = LinkedHashMap::new();
+            attr_hash.insert("data-shortcode".to_string(), shortcode.name.clone());
+            let attr = (String::new(), vec!["shortcode".to_string()], attr_hash);
+            node_with_source("Span", Some(json!([write_attr(&attr), []])), &SourceInfo::default(), serializer)
+        }
+        Inline::NoteReference(note_ref) => {
+            // Defensive: Should be converted to Span in postprocessing
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed note reference in JSON writer")
+                    .with_code("Q-3-31")
+                    .with_location(note_ref.source_info.clone())
+                    .problem(format!("Note reference `[^{}]` was not converted during postprocessing", note_ref.id))
+                    .add_detail("Note references should be processed before JSON output")
+                    .add_hint("This may indicate a bug in the processing pipeline")
+                    .build()
+            );
+            let mut attr_hash = LinkedHashMap::new();
+            attr_hash.insert("data-ref".to_string(), note_ref.id.clone());
+            let attr = (String::new(), vec!["footnote-ref".to_string()], attr_hash);
+            node_with_source("Span", Some(json!([write_attr(&attr), []])), &note_ref.source_info, serializer)
+        }
+        Inline::Attr(_attr, attr_source) => {
+            // Defensive: Standalone attributes should not reach JSON writer
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Standalone attribute not supported in JSON format")
+                    .with_code("Q-3-32")
+                    .with_location(attr_source.id.clone().unwrap_or_default())
+                    .problem("Cannot render standalone attributes in JSON format")
+                    .add_detail("Standalone attributes should be attached to elements during parsing")
+                    .add_hint("This may indicate a parsing issue or unsupported syntax")
+                    .build()
+            );
+            json!({"t": "Str", "c": ""})  // Empty string placeholder
+        }
+        Inline::Insert(ins) => {
+            // Defensive: Editorial marks should be desugared to Span
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Insert markup in JSON writer")
+                    .with_code("Q-3-33")
+                    .with_location(ins.source_info.clone())
+                    .problem("Insert markup `{++...++}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-insert".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&ins.content, serializer)])), &ins.source_info, serializer)
+        }
+        Inline::Delete(del) => {
+            // Defensive: Editorial marks should be desugared to Span
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Delete markup in JSON writer")
+                    .with_code("Q-3-34")
+                    .with_location(del.source_info.clone())
+                    .problem("Delete markup `{--...--}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-delete".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&del.content, serializer)])), &del.source_info, serializer)
+        }
+        Inline::Highlight(hl) => {
+            // Defensive: Editorial marks should be desugared to Span
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Highlight markup in JSON writer")
+                    .with_code("Q-3-35")
+                    .with_location(hl.source_info.clone())
+                    .problem("Highlight markup `{==...==}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-highlight".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&hl.content, serializer)])), &hl.source_info, serializer)
+        }
+        Inline::EditComment(ec) => {
+            // Defensive: Editorial marks should be desugared to Span
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed EditComment markup in JSON writer")
+                    .with_code("Q-3-36")
+                    .with_location(ec.source_info.clone())
+                    .problem("EditComment markup `{>>...<<}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-comment".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&ec.content, serializer)])), &ec.source_info, serializer)
         }
     }
 }
@@ -989,9 +1084,23 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
             &refdef.source_info,
             serializer,
         ),
-        Block::CaptionBlock(_) => {
-            panic!(
-                "CaptionBlock found in JSON writer - should have been processed during postprocessing"
+        Block::CaptionBlock(caption) => {
+            // Defensive: CaptionBlocks should be attached to figures/tables in postprocessing
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Orphaned caption block in JSON writer")
+                    .with_code("Q-3-21")
+                    .with_location(caption.source_info.clone())
+                    .problem("Caption block is not attached to a figure or table")
+                    .add_detail("Captions should be associated with figures/tables during postprocessing")
+                    .add_hint("This may indicate a postprocessing issue or filter-generated orphaned caption")
+                    .build()
+            );
+            // Render as a plain paragraph to avoid losing content
+            node_with_source(
+                "Plain",
+                Some(write_inlines(&caption.content, serializer)),
+                &caption.source_info,
+                serializer,
             )
         }
     }
@@ -1067,7 +1176,31 @@ fn write_meta(
                 .collect();
             Value::Object(map)
         }
-        _ => panic!("Expected MetaMap for Pandoc.meta"),
+        other => {
+            // Defensive: Pandoc.meta should always be MetaMap in valid AST
+            serializer.errors.push(
+                DiagnosticMessageBuilder::error("Invalid metadata structure in JSON writer")
+                    .with_code("Q-3-40")
+                    .problem("Pandoc metadata is not a MetaMap structure")
+                    .add_detail(format!(
+                        "Found {:?} instead of MetaMap",
+                        match other {
+                            crate::pandoc::MetaValueWithSourceInfo::MetaString { .. } =>
+                                "MetaString",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaBool { .. } => "MetaBool",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaInlines { .. } =>
+                                "MetaInlines",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaList { .. } => "MetaList",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { .. } =>
+                                "MetaBlocks",
+                            _ => "unknown",
+                        }
+                    ))
+                    .add_hint("This may indicate a malformed AST or parsing error")
+                    .build(),
+            );
+            Value::Object(serde_json::Map::new())
+        }
     }
 }
 
@@ -1080,13 +1213,22 @@ fn write_blocks(blocks: &[Block], serializer: &mut SourceInfoSerializer) -> Valu
     )
 }
 
-fn write_pandoc(pandoc: &Pandoc, context: &ASTContext, config: &JsonConfig) -> Value {
+fn write_pandoc(
+    pandoc: &Pandoc,
+    context: &ASTContext,
+    config: &JsonConfig,
+) -> Result<Value, Vec<DiagnosticMessage>> {
     // Create the SourceInfo serializer
     let mut serializer = SourceInfoSerializer::new(context, config);
 
     // Serialize AST, which will build the pool
     let meta_json = write_meta(&pandoc.meta, &mut serializer);
     let blocks_json = write_blocks(&pandoc.blocks, &mut serializer);
+
+    // Check if any errors were accumulated
+    if !serializer.errors.is_empty() {
+        return Err(serializer.errors);
+    }
 
     // Extract top-level key sources from metadata using the serializer
     let meta_top_level_key_sources: serde_json::Map<String, Value> =
@@ -1143,12 +1285,12 @@ fn write_pandoc(pandoc: &Pandoc, context: &ASTContext, config: &JsonConfig) -> V
         );
     }
 
-    json!({
+    Ok(json!({
         "pandoc-api-version": [1, 23, 1],
         "meta": meta_json,
         "blocks": blocks_json,
         "astContext": ast_context_obj,
-    })
+    }))
 }
 
 /// Write Pandoc AST to JSON with custom configuration.
@@ -1157,9 +1299,19 @@ pub fn write_with_config<W: std::io::Write>(
     context: &ASTContext,
     writer: &mut W,
     config: &JsonConfig,
-) -> std::io::Result<()> {
-    let json = write_pandoc(pandoc, context, config);
-    serde_json::to_writer(writer, &json)?;
+) -> Result<(), Vec<DiagnosticMessage>> {
+    let json = write_pandoc(pandoc, context, config)?;
+    serde_json::to_writer(writer, &json).map_err(|e| {
+        vec![quarto_error_reporting::DiagnosticMessage {
+            code: Some("Q-3-38".to_string()),
+            title: "JSON serialization failed".to_string(),
+            kind: quarto_error_reporting::DiagnosticKind::Error,
+            problem: Some(format!("Failed to serialize AST to JSON: {}", e).into()),
+            details: vec![],
+            hints: vec![],
+            location: None,
+        }]
+    })?;
     Ok(())
 }
 
@@ -1168,7 +1320,7 @@ pub fn write<W: std::io::Write>(
     pandoc: &Pandoc,
     context: &ASTContext,
     writer: &mut W,
-) -> std::io::Result<()> {
+) -> Result<(), Vec<DiagnosticMessage>> {
     write_with_config(pandoc, context, writer, &JsonConfig::default())
 }
 
@@ -1378,7 +1530,13 @@ mod tests {
             let entry = &serializer.pool[i];
             match &entry.mapping {
                 SerializableSourceMapping::Substring { parent_id } => {
-                    assert_eq!(*parent_id, i - 1, "Level {} should reference parent {}", i, i - 1);
+                    assert_eq!(
+                        *parent_id,
+                        i - 1,
+                        "Level {} should reference parent {}",
+                        i,
+                        i - 1
+                    );
                 }
                 _ => panic!("Expected Substring mapping at level {}", i),
             }
@@ -1489,9 +1647,11 @@ mod tests {
         }
 
         // Verify the parent was only added once
-        let original_count = serializer.pool.iter().filter(|entry| {
-            matches!(entry.mapping, SerializableSourceMapping::Original { .. })
-        }).count();
+        let original_count = serializer
+            .pool
+            .iter()
+            .filter(|entry| matches!(entry.mapping, SerializableSourceMapping::Original { .. }))
+            .count();
         assert_eq!(original_count, 1, "Parent should only appear once in pool");
     }
 }

@@ -356,5 +356,68 @@
     "message_template": "A note reference was not converted to a Span during postprocessing. This is a bug in the postprocessor.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-12",
     "since_version": "99.9.9"
+  },
+  "Q-3-20": {
+    "subsystem": "writer",
+    "title": "Block Metadata Not Supported",
+    "message_template": "YAML metadata blocks are internal AST nodes that cannot be rendered in this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-20",
+    "since_version": "99.9.9"
+  },
+  "Q-3-21": {
+    "subsystem": "writer",
+    "title": "Caption Block Not Supported",
+    "message_template": "Standalone caption blocks cannot be rendered in this output format. Captions should be attached to figures or tables.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-21",
+    "since_version": "99.9.9"
+  },
+  "Q-3-30": {
+    "subsystem": "writer",
+    "title": "Shortcode Not Supported",
+    "message_template": "Quarto shortcodes are not representable in this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-30",
+    "since_version": "99.9.9"
+  },
+  "Q-3-31": {
+    "subsystem": "writer",
+    "title": "Unprocessed Note Reference",
+    "message_template": "Note reference was not converted to Span during postprocessing. This may indicate a bug or a filter that bypassed postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-31",
+    "since_version": "99.9.9"
+  },
+  "Q-3-32": {
+    "subsystem": "writer",
+    "title": "Standalone Attribute Not Supported",
+    "message_template": "Standalone attributes (e.g., in table cells or headings) are not representable in this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-32",
+    "since_version": "99.9.9"
+  },
+  "Q-3-33": {
+    "subsystem": "writer",
+    "title": "Unprocessed Insert Markup",
+    "message_template": "Insert editorial markup ({++...++}) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-33",
+    "since_version": "99.9.9"
+  },
+  "Q-3-34": {
+    "subsystem": "writer",
+    "title": "Unprocessed Delete Markup",
+    "message_template": "Delete editorial markup ({--...--}) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-34",
+    "since_version": "99.9.9"
+  },
+  "Q-3-35": {
+    "subsystem": "writer",
+    "title": "Unprocessed Highlight Markup",
+    "message_template": "Highlight editorial markup ({==...==}) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-35",
+    "since_version": "99.9.9"
+  },
+  "Q-3-36": {
+    "subsystem": "writer",
+    "title": "Unprocessed EditComment Markup",
+    "message_template": "EditComment editorial markup ({>>...<<}) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-36",
+    "since_version": "99.9.9"
   }
 }

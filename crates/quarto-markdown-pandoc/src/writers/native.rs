@@ -90,8 +90,7 @@ fn write_native_colwidth<T: std::io::Write>(
     match colwidth {
         crate::pandoc::ColWidth::Default => write!(buf, "ColWidthDefault"),
         crate::pandoc::ColWidth::Percentage(percentage) => {
-            // FIXME
-            panic!("ColWidthPercentage is not implemented yet: {}", percentage);
+            write!(buf, "(ColWidth {})", percentage)
         }
     }
 }
@@ -352,7 +351,137 @@ fn write_inline<T: std::io::Write>(
             write!(buf, "] ")?;
             write_inlines(&cite_struct.content, context, buf, errors)?;
         }
-        _ => panic!("Unsupported inline type: {:?}", text),
+        Inline::Shortcode(shortcode) => {
+            // Extension error - Quarto shortcodes not supported in native format
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Shortcodes not supported in native format",
+                )
+                .with_code("Q-3-30")
+                .problem(format!("Cannot render shortcode `{{{{< {} >}}}}` in native format", shortcode.name))
+                .add_detail("Shortcodes are Quarto-specific syntax not represented in Pandoc's native format")
+                .add_hint("Use JSON output format to see shortcode details")
+                .build(),
+            );
+            // Skip this inline
+        }
+        Inline::NoteReference(note_ref) => {
+            // Defensive error - should be converted to Span in postprocess
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Unprocessed note reference",
+                )
+                .with_code("Q-3-31")
+                .problem(format!(
+                    "Note reference `[^{}]` was not converted during postprocessing",
+                    note_ref.id
+                ))
+                .with_location(note_ref.source_info.clone())
+                .add_detail(
+                    "Note references should be converted to Span nodes during postprocessing. \
+                     This may indicate a bug in the postprocessor or a filter that bypassed it.",
+                )
+                .add_hint("Please report this as a bug with a minimal reproducible example")
+                .build(),
+            );
+            // Skip this inline
+        }
+        Inline::Attr(_attr, attr_source) => {
+            // Extension error - standalone attributes not supported in native format
+            let mut builder = quarto_error_reporting::DiagnosticMessageBuilder::error(
+                "Standalone attributes not supported in native format",
+            )
+            .with_code("Q-3-32")
+            .problem("Cannot render standalone attribute in native format");
+
+            // Add location if available from attr id
+            if let Some(ref source_info) = attr_source.id {
+                builder = builder.with_location(source_info.clone());
+            }
+
+            errors.push(
+                builder
+                    .add_detail(
+                        "Standalone attributes (e.g., in table cells or headings) are not \
+                         representable in Pandoc's native format",
+                    )
+                    .add_hint("Use JSON output format to see attribute details")
+                    .build(),
+            );
+            // Skip this inline
+        }
+        Inline::Insert(ins) => {
+            // Defensive error - editorial marks should be desugared to Span
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Unprocessed Insert markup",
+                )
+                .with_code("Q-3-33")
+                .problem("Insert markup `{++...++}` was not desugared during postprocessing")
+                .with_location(ins.source_info.clone())
+                .add_detail(
+                    "Editorial marks should be converted to Span nodes during postprocessing. \
+                     This may indicate a bug or a filter that bypassed postprocessing.",
+                )
+                .add_hint("Ensure postprocessing is enabled or use a Lua filter to handle editorial marks")
+                .build(),
+            );
+            // Skip this inline
+        }
+        Inline::Delete(del) => {
+            // Defensive error - editorial marks should be desugared to Span
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Unprocessed Delete markup",
+                )
+                .with_code("Q-3-34")
+                .problem("Delete markup `{--...--}` was not desugared during postprocessing")
+                .with_location(del.source_info.clone())
+                .add_detail(
+                    "Editorial marks should be converted to Span nodes during postprocessing. \
+                     This may indicate a bug or a filter that bypassed postprocessing.",
+                )
+                .add_hint("Ensure postprocessing is enabled or use a Lua filter to handle editorial marks")
+                .build(),
+            );
+            // Skip this inline
+        }
+        Inline::Highlight(hl) => {
+            // Defensive error - editorial marks should be desugared to Span
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Unprocessed Highlight markup",
+                )
+                .with_code("Q-3-35")
+                .problem("Highlight markup `{==...==}` was not desugared during postprocessing")
+                .with_location(hl.source_info.clone())
+                .add_detail(
+                    "Editorial marks should be converted to Span nodes during postprocessing. \
+                     This may indicate a bug or a filter that bypassed postprocessing.",
+                )
+                .add_hint("Ensure postprocessing is enabled or use a Lua filter to handle editorial marks")
+                .build(),
+            );
+            // Skip this inline
+        }
+        Inline::EditComment(ec) => {
+            // Defensive error - editorial marks should be desugared to Span
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Unprocessed EditComment markup",
+                )
+                .with_code("Q-3-36")
+                .problem("EditComment markup `{>>...<<}` was not desugared during postprocessing")
+                .with_location(ec.source_info.clone())
+                .add_detail(
+                    "Editorial marks should be converted to Span nodes during postprocessing. \
+                     This may indicate a bug or a filter that bypassed postprocessing.",
+                )
+                .add_hint("Ensure postprocessing is enabled or use a Lua filter to handle editorial marks")
+                .build(),
+            );
+            // Skip this inline
+        }
     }
     Ok(())
 }
@@ -622,6 +751,16 @@ fn write_block<T: std::io::Write>(
             }
             write!(buf, "]")?;
         }
+        Block::LineBlock(crate::pandoc::LineBlock { content, .. }) => {
+            write!(buf, "LineBlock [")?;
+            for (i, line) in content.iter().enumerate() {
+                if i > 0 {
+                    write!(buf, ", ")?;
+                }
+                write_inlines(line, context, buf, errors)?;
+            }
+            write!(buf, "]")?;
+        }
         Block::NoteDefinitionPara(note_def) => {
             // Feature error - accumulate and continue
             errors.push(
@@ -664,7 +803,45 @@ fn write_block<T: std::io::Write>(
             );
             // Skip this block
         }
-        _ => panic!("Unsupported block type in native writer: {:?}", block),
+        Block::BlockMetadata(meta) => {
+            // Defensive error - should not reach writer but might via filters/library usage
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Block metadata not supported in native format",
+                )
+                .with_code("Q-3-20")
+                .problem("Cannot render YAML metadata block in native format")
+                .with_location(meta.source_info.clone())
+                .add_detail(
+                    "Metadata blocks are internal AST nodes that should be processed \
+                     before reaching the writer",
+                )
+                .add_hint("Use JSON output format to see full AST including metadata")
+                .build(),
+            );
+            // Skip this block
+        }
+        Block::CaptionBlock(caption) => {
+            // Defensive error - should be processed in postprocess but might reach via filters
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Caption block not supported in native format",
+                )
+                .with_code("Q-3-21")
+                .problem("Cannot render standalone caption block in native format")
+                .with_location(caption.source_info.clone())
+                .add_detail(
+                    "Caption blocks should be attached to figures or tables during \
+                     postprocessing",
+                )
+                .add_hint(
+                    "This may indicate a bug in postprocessing or a filter that \
+                     produces orphaned captions",
+                )
+                .build(),
+            );
+            // Skip this block
+        }
     }
     Ok(())
 }
