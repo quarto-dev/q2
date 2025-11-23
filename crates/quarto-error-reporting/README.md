@@ -4,6 +4,18 @@
 
 Error reporting and diagnostic messages for Quarto, providing structured, user-friendly error messages following tidyverse best practices.
 
+## For Quarto Contributors
+
+This crate is **internal infrastructure** for the Quarto Rust port. It provides consistent, high-quality error reporting across all Quarto subsystems (YAML validation, markdown parsing, rendering, etc.).
+
+**If you're working on Quarto and need to report errors**, this guide will help you:
+- Understand how error reporting works
+- Choose the right pattern for your subsystem
+- Add new error codes to the catalog
+- Write tidyverse-compliant error messages
+
+See `examples/` for runnable code showing common patterns.
+
 ## Overview
 
 This crate provides a comprehensive error reporting system inspired by:
@@ -12,61 +24,53 @@ This crate provides a comprehensive error reporting system inspired by:
 - **[R cli package](https://cli.r-lib.org/)**: Semantic, structured text output
 - **[Tidyverse style guide](https://style.tidyverse.org/errors.html)**: Best practices for error message content
 
-## Current Status
+### Architecture
 
-**Phase 1: Core Types** ✅ **COMPLETE**
+```
+┌─────────────────────────────────────┐
+│ quarto-error-reporting              │
+│                                     │
+│  DiagnosticMessage                  │
+│  ├─ title, code, kind               │
+│  ├─ problem (what went wrong)       │
+│  ├─ details (specific info)         │
+│  ├─ hints (how to fix)              │
+│  └─ location (SourceInfo)           │
+│                                     │
+│  Three output formats:              │
+│  ├─ to_text() → ANSI terminal       │
+│  ├─ to_json() → machine-readable    │
+│  └─ (with ariadne) → visual reports │
+└─────────────────────────────────────┘
+         │                   │
+         ▼                   ▼
+    ┌─────────┐         ┌──────────────┐
+    │ Error   │         │ quarto-      │
+    │ Catalog │         │ markdown-    │
+    │         │         │ pandoc       │
+    │ 70+     │         │ (ANSI writer)│
+    │ codes   │         └──────────────┘
+    └─────────┘
+```
 
-The crate provides complete types for representing diagnostic messages:
+**Key relationships**:
+- **quarto-source-map**: Provides `SourceInfo` for tracking locations
+- **ariadne**: Renders visual error reports with source context
+- **quarto-markdown-pandoc**: Contains ANSI writer for terminal output
 
-- `DiagnosticMessage`: Main error message structure with optional error codes
-- `MessageContent`: Content representation (Plain, Markdown)
-- `DetailItem`: Individual detail bullets with error/info/note kinds
-- `DiagnosticKind`: Error, Warning, Info, Note
-- `ErrorCodeInfo`: Metadata for error codes
-- Error catalog system (JSON-based, compile-time loaded)
+## Quick Start
 
-### Error Code System
+### Basic Error
 
-Quarto now supports TypeScript-style error codes for better searchability and documentation:
-
-**Format**: `Q-<subsystem>-<number>` (e.g., `Q-1-1`, `Q-2-301`)
-
-**Example**:
 ```rust
 use quarto_error_reporting::DiagnosticMessage;
 
-let error = DiagnosticMessage::error("YAML Syntax Error")
-    .with_code("Q-1-1");
-
-// Get docs URL automatically from catalog
-if let Some(url) = error.docs_url() {
-    println!("See {} for more information", url);
-}
+let error = DiagnosticMessage::error("File not found");
+println!("{}", error.to_text(None));
+// Output: Error: File not found
 ```
 
-**Benefits**:
-- Users can Google "Q-1-1" instead of error text
-- Error codes are stable across versions
-- Each code maps to detailed documentation
-- Optional but encouraged
-
-**Subsystem Numbers**:
-- 0: Internal/System Errors
-- 1: YAML and Configuration
-- 2: Markdown and Parsing
-- 3: Engines and Execution
-- 4: Rendering and Formats
-- 5: Projects and Structure
-- 6: Extensions and Plugins
-- 7: CLI and Tools
-- 8: Publishing and Deployment
-- 9+: Reserved for future use
-
-See `error_catalog.json` for the complete catalog and `/claude-notes/error-id-system-design.md` for full design documentation.
-
-### Builder API Usage
-
-The builder API encodes tidyverse guidelines directly in the API design:
+### With Builder API
 
 ```rust
 use quarto_error_reporting::DiagnosticMessageBuilder;
@@ -78,105 +82,320 @@ let error = DiagnosticMessageBuilder::error("Incompatible types")
     .add_detail("`y` has type `datetime`")
     .add_hint("Convert both to the same type?")
     .build();
+
+println!("{}", error.to_text(None));
 ```
 
-**Builder methods**:
-- `.error()`, `.warning()`, `.info()` - Create diagnostic with specified kind
-- `.with_code()` - Set error code (Q-<subsystem>-<number>)
-- `.problem()` - Set problem statement (the "what" - use "must" or "can't")
-- `.add_detail()` - Add error detail (✖ bullet)
-- `.add_info()` - Add info detail (i bullet)
-- `.add_note()` - Add note detail (plain bullet)
-- `.add_hint()` - Add hint (ends with ?)
-- `.build()` - Construct the message
-- `.build_with_validation()` - Build with tidyverse validation warnings
-
-## Planned Phases
-
-### Phase 2: Rendering Integration (Planned)
-
-- Integration with ariadne for visual terminal output
-- JSON serialization for machine-readable errors
-- Source span tracking for code locations
-
-### Phase 3: Console Output Helpers (Planned)
-
-**⚠️ Requires Design Discussion**
-
-Before implementing this phase, we need to discuss:
-
-1. **Missing Pandoc AST → ANSI Writer**: We don't yet have a writer that converts Pandoc AST to ANSI terminal output
-2. **Relationship with ariadne**: How should the AST-to-ANSI writer relate to ariadne's visual error reports?
-   - Should they be separate systems?
-   - Should ariadne handle errors with source context, while the AST writer handles console messages without source context?
-   - How do we avoid duplication?
-
-### Phase 4: Builder API (Planned)
-
-Tidyverse-style builder methods that make it easy to construct well-structured error messages:
+### With Source Location
 
 ```rust
-let error = DiagnosticMessage::builder()
-    .error("Unclosed code block")
+use quarto_error_reporting::DiagnosticMessageBuilder;
+use quarto_source_map::SourceInfo;
+
+let location = SourceInfo::original(file_id, start_offset, end_offset);
+
+let error = DiagnosticMessageBuilder::error("Unclosed code block")
+    .with_code("Q-2-301")
+    .with_location(location)
     .problem("Code block started but never closed")
-    .add_detail("The code block starting with `` ```{python} `` was never closed")
-    .at_location(opening_span)
-    .add_hint("Did you forget the closing `` ``` ``?")
-    .build()?;
+    .add_hint("Did you forget the closing ``` ?")
+    .build();
+
+// Render with source context
+println!("{}", error.to_text(Some(&source_context)));
 ```
 
-## Design Principles
+See `examples/` for complete, runnable examples.
 
-### Tidyverse Four-Part Structure
+## Error Code System
 
-Following tidyverse guidelines, diagnostic messages have:
+Quarto supports TypeScript-style error codes for better searchability and documentation.
 
-1. **Title**: Brief error message
-2. **Problem**: What went wrong (using "must" or "can't")
-3. **Details**: Specific information (max 5 bullets)
-4. **Hints**: Optional guidance (ends with ?)
+**Format**: `Q-<subsystem>-<number>` (e.g., `Q-1-1`, `Q-2-301`)
 
-### Semantic Markup
+**Subsystem Numbers**:
+- **0**: Internal/System Errors (Q-0-1, Q-0-99)
+- **1**: YAML and Configuration (Q-1-1 through Q-1-N)
+- **2**: Markdown and Parsing (Q-2-1 through Q-2-N)
+- **3**: Engines and Execution (Q-3-1 through Q-3-N)
+- **4**: Rendering and Formats (Q-4-1 through Q-4-N)
+- **5**: Projects and Structure (Q-5-1 through Q-5-N)
+- **6**: Extensions and Plugins (Q-6-1 through Q-6-N)
+- **7**: CLI and Tools (Q-7-1 through Q-7-N)
+- **8**: Publishing and Deployment (Q-8-1 through Q-8-N)
+- **9+**: Reserved for future use
 
-Use Pandoc span syntax for semantic inline markup:
+**Benefits**:
+- Users can Google "Q-2-301" instead of error message text
+- Error codes are stable across versions
+- Each code maps to documentation at `https://quarto.org/docs/errors/Q-X-Y`
+- Optional but encouraged
+
+**Catalog**: See `error_catalog.json` for the complete catalog of 70+ error codes.
+
+## Tidyverse Guidelines
+
+The builder API encodes tidyverse best practices for error messages:
+
+### Four-Part Structure
+
+1. **Title**: Brief error message (required)
+2. **Problem**: What went wrong, using "must" or "can't" (recommended)
+3. **Details**: Specific information, max 5 bullets (as needed)
+4. **Hints**: Optional guidance, ends with `?` (when helpful)
+
+### Builder Methods
+
+```rust
+DiagnosticMessageBuilder::error(title)
+    .with_code(code)                  // Q-X-Y error code
+    .problem(statement)                // What went wrong ("must"/"can't")
+    .add_detail(info)                  // ✖ bullet - specific error info
+    .add_info(info)                    // ℹ bullet - additional context
+    .add_note(info)                    // • bullet - related information
+    .add_hint(suggestion)              // Actionable fix (ends with ?)
+    .with_location(source_info)        // Source location for ariadne
+    .build()                           // Create the message
+```
+
+### Example Following Guidelines
+
+```rust
+let error = DiagnosticMessageBuilder::error("Invalid YAML Schema")
+    .with_code("Q-1-10")
+    .problem("Value must be a string, not a number")
+    .add_detail("Property `title` has type `number`")
+    .add_detail("Expected type is `string`")
+    .add_info("Schema defined in `_quarto.yml`")
+    .add_hint("Did you forget quotes around the value?")
+    .build();
+```
+
+### Validation
+
+Use `.build_with_validation()` to get warnings about tidyverse compliance:
+
+```rust
+let (msg, warnings) = DiagnosticMessageBuilder::error("Test")
+    .build_with_validation();
+
+for warning in warnings {
+    eprintln!("Warning: {}", warning);
+}
+```
+
+## Integration Patterns
+
+### Pattern 1: Parse Errors (with SourceInfo)
+
+Used in `quarto-markdown-pandoc/src/readers/qmd_error_messages.rs`:
+
+```rust
+use quarto_error_reporting::DiagnosticMessageBuilder;
+
+fn error_from_parse_state(...) -> DiagnosticMessage {
+    DiagnosticMessageBuilder::error(title)
+        .with_code(code)
+        .with_location(source_info)
+        .problem("...")
+        .add_detail("...")
+        .build()
+}
+```
+
+### Pattern 2: Validation Errors (structured details)
+
+Used in YAML validation:
+
+```rust
+let error = DiagnosticMessageBuilder::error("Schema Validation Failed")
+    .with_code("Q-1-10")
+    .problem("Value does not match expected schema")
+    .add_detail(format!("Property `{}` has type `{}`", prop, actual))
+    .add_detail(format!("Expected type is `{}`", expected))
+    .add_info(format!("Schema defined in `{}`", schema_file))
+    .build();
+```
+
+### Pattern 3: DiagnosticCollector (accumulating multiple errors)
+
+Used throughout the codebase:
+
+```rust
+use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
+
+let mut collector = DiagnosticCollector::new();
+
+// Add errors as you encounter them
+collector.error("First problem");
+collector.error_at("Second problem", location);
+
+// Check if any errors occurred
+if collector.has_errors() {
+    for diagnostic in collector.diagnostics() {
+        eprintln!("{}", diagnostic.to_text(Some(&ctx)));
+    }
+    return Err(/*...*/);
+}
+```
+
+### Pattern 4: Writer Errors (accumulated in context)
+
+Used in `quarto-markdown-pandoc/src/writers/ansi.rs`:
+
+```rust
+struct WriterContext {
+    errors: Vec<DiagnosticMessage>,
+}
+
+impl WriterContext {
+    fn report_unsupported(&mut self, feature: &str) {
+        self.errors.push(
+            DiagnosticMessageBuilder::error(format!("{} not supported", feature))
+                .with_code("Q-3-50")
+                .problem(format!("{} cannot be rendered in this format", feature))
+                .add_hint("Consider using a different output format")
+                .build()
+        );
+    }
+}
+
+// At end of writing
+if !ctx.errors.is_empty() {
+    return Err(ctx.errors);
+}
+```
+
+## Adding New Error Codes
+
+### Quick Steps
+
+1. **Find next error code**:
+   ```bash
+   cd crates/quarto-error-reporting
+   jq 'keys | map(select(startswith("Q-2-"))) | sort | last' error_catalog.json
+   ```
+
+2. **Add to catalog** (`error_catalog.json`):
+   ```json
+   {
+     "Q-2-42": {
+       "subsystem": "markdown",
+       "title": "Your Error Title",
+       "message_template": "Your error message",
+       "docs_url": "https://quarto.org/docs/errors/Q-2-42",
+       "since_version": "99.9.9"
+     }
+   }
+   ```
+
+3. **Use in code**:
+   ```rust
+   let error = DiagnosticMessageBuilder::error("Your Error Title")
+       .with_code("Q-2-42")
+       .problem("...")
+       .build();
+   ```
+
+### Guidelines
+
+- **Sequential numbering**: Use the next available number (don't skip)
+- **Subsystem consistency**: Use the correct subsystem number for your domain
+- **Stable codes**: Once assigned, error codes should not change
+- **Documentation**: Each code should map to a docs page (eventually)
+
+## Implementation Status
+
+**All core features complete:**
+
+- ✅ **Phase 1**: Core types (DiagnosticMessage, MessageContent, DetailItem)
+- ✅ **Phase 2**: ariadne integration and JSON serialization
+- ✅ **Phase 3**: ANSI writer (in quarto-markdown-pandoc)
+- ✅ **Phase 4**: Builder API with tidyverse validation
+
+**Current catalog**: 70+ error codes across all subsystems
+
+## Semantic Markup
+
+Use Pandoc span syntax for semantic inline markup in error messages:
 
 ```markdown
 Could not find file `config.yaml`{.file} in directory `/home/user/.config`{.path}
 ```
 
-Semantic classes (to be defined):
+**Semantic classes** (to be standardized):
 - `.file` - filenames and paths
 - `.engine` - engine names (jupyter, knitr)
 - `.format` - output formats (html, pdf)
 - `.option` - YAML option names
 - `.code` - generic code
 
-### Multiple Output Formats
+## Output Formats
 
-The same diagnostic message can be rendered to:
+The same `DiagnosticMessage` can be rendered to multiple formats:
 
-- **ANSI terminal**: Colorful, formatted output for TTY
-- **HTML**: Themeable output for web contexts
-- **JSON**: Machine-readable for programmatic use
+### ANSI Terminal
 
-## Implementation Notes
+```rust
+let text = error.to_text(None);
+println!("{}", text);
+```
 
-This crate follows the design outlined in `/claude-notes/error-reporting-design-research.md`.
+With source context (via ariadne):
 
-Key decisions:
-- ✅ Markdown strings → Pandoc AST internally (defer compile-time macros)
-- ✅ Rust-only (WASM for cross-language if needed)
-- ✅ Builder API encoding tidyverse guidelines
-- ⚠️ Pandoc AST → ANSI writer needs design discussion
-- ⚠️ Relationship with ariadne needs clarification
+```rust
+let text = error.to_text(Some(&source_context));
+println!("{}", text);
+```
+
+### JSON
+
+```rust
+let json = error.to_json();
+println!("{}", serde_json::to_string_pretty(&json)?);
+```
+
+### Custom Options
+
+```rust
+use quarto_error_reporting::TextRenderOptions;
+
+let options = TextRenderOptions {
+    enable_hyperlinks: false,  // Disable for snapshot testing
+};
+
+let text = error.to_text_with_options(None, &options);
+```
 
 ## Development
 
-Run tests:
+### Run Tests
 
 ```bash
 cargo test -p quarto-error-reporting
 ```
+
+### Build Documentation
+
+```bash
+cargo doc -p quarto-error-reporting --open
+```
+
+### Examples
+
+```bash
+cargo run --example basic_error
+cargo run --example builder_api
+cargo run --example with_location
+```
+
+## Resources
+
+- **Design docs**: `/claude-notes/error-reporting-design-research.md`
+- **Error ID system**: `/claude-notes/error-id-system-design.md`
+- **Examples**: `examples/` directory
+- **Tidyverse guide**: https://style.tidyverse.org/errors.html
+- **ariadne docs**: https://docs.rs/ariadne/
 
 ## License
 

@@ -286,7 +286,7 @@ impl DiagnosticMessage {
     /// Render this diagnostic message as text following tidyverse style.
     ///
     /// This is a convenience method that uses default rendering options.
-    /// For more control over rendering, use [`to_text_with_options`].
+    /// For more control over rendering, use [`Self::to_text_with_options`].
     ///
     /// # Example
     ///
@@ -1083,5 +1083,67 @@ mod tests {
 
         // Should not have location field when not provided
         assert!(json.get("location").is_none());
+    }
+
+    #[test]
+    fn test_text_render_options_disable_hyperlinks() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        let mut ctx = quarto_source_map::SourceContext::new();
+        let file_id = ctx.add_file(
+            "test.qmd".to_string(),
+            Some("test content".to_string()),
+        );
+
+        let location = quarto_source_map::SourceInfo::original(file_id, 0, 4);
+
+        let msg = DiagnosticMessageBuilder::error("Test error")
+            .with_location(location)
+            .build();
+
+        // With hyperlinks enabled (default)
+        let with_hyperlinks = msg.to_text(Some(&ctx));
+
+        // With hyperlinks disabled
+        let options = TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+        let without_hyperlinks = msg.to_text_with_options(Some(&ctx), &options);
+
+        // When hyperlinks are disabled, output should be different
+        // (specifically, no OSC 8 escape sequences)
+        if with_hyperlinks.contains("\x1b]8;") {
+            assert!(!without_hyperlinks.contains("\x1b]8;"),
+                   "Disabled hyperlinks should not contain OSC 8 codes");
+        }
+    }
+
+    #[test]
+    fn test_text_render_options_default() {
+        let options = TextRenderOptions::default();
+        assert!(options.enable_hyperlinks, "Default should enable hyperlinks");
+    }
+
+    #[test]
+    fn test_render_with_custom_options() {
+        use crate::builder::DiagnosticMessageBuilder;
+
+        let msg = DiagnosticMessageBuilder::error("Test")
+            .problem("Something went wrong")
+            .add_detail("Detail 1")
+            .add_hint("Try this")
+            .build();
+
+        let options = TextRenderOptions {
+            enable_hyperlinks: false,
+        };
+
+        let text = msg.to_text_with_options(None, &options);
+
+        // Should still render properly without hyperlinks
+        assert!(text.contains("Error: Test"));
+        assert!(text.contains("Something went wrong"));
+        assert!(text.contains("Detail 1"));
+        assert!(text.contains("Try this"));
     }
 }
