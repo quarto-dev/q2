@@ -6,6 +6,20 @@
     "docs_url": "https://quarto.org/docs/errors/Q-0-1",
     "since_version": "99.9.9"
   },
+  "Q-0-99": {
+    "subsystem": "internal",
+    "title": "Generic Error",
+    "message_template": "Uncategorized Error. This should never appear in production, and is a bug in Quarto.",
+    "docs_url": "https://quarto.org/docs/errors/Q-0-99",
+    "since_version": "99.9.9"
+  },
+  "Q-1-1": {
+    "subsystem": "yaml",
+    "title": "YAML Syntax Error",
+    "message_template": "There is a syntax error in the YAML document being parsed.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-1",
+    "since_version": "99.9.9"
+  },
   "Q-1-10": {
     "subsystem": "yaml",
     "title": "Missing Required Property",
@@ -395,29 +409,36 @@
   "Q-3-33": {
     "subsystem": "writer",
     "title": "Unprocessed Insert Markup",
-    "message_template": "Insert editorial markup ({++...++}) was not desugared to Span during postprocessing.",
+    "message_template": "Insert editorial markup ([++...]) was not desugared to Span during postprocessing.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-33",
     "since_version": "99.9.9"
   },
   "Q-3-34": {
     "subsystem": "writer",
     "title": "Unprocessed Delete Markup",
-    "message_template": "Delete editorial markup ({--...--}) was not desugared to Span during postprocessing.",
+    "message_template": "Delete editorial markup ([--...]) was not desugared to Span during postprocessing.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-34",
     "since_version": "99.9.9"
   },
   "Q-3-35": {
     "subsystem": "writer",
     "title": "Unprocessed Highlight Markup",
-    "message_template": "Highlight editorial markup ({==...==}) was not desugared to Span during postprocessing.",
+    "message_template": "Highlight editorial markup ([!!...]) was not desugared to Span during postprocessing.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-35",
     "since_version": "99.9.9"
   },
   "Q-3-36": {
     "subsystem": "writer",
     "title": "Unprocessed EditComment Markup",
-    "message_template": "EditComment editorial markup ({>>...<<}) was not desugared to Span during postprocessing.",
+    "message_template": "EditComment editorial markup ([>>...]) was not desugared to Span during postprocessing.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-36",
+    "since_version": "99.9.9"
+  },
+  "Q-3-38": {
+    "subsystem": "writer",
+    "title": "JSON Serialization Failed",
+    "message_template": "The AST-to-JSON serialization process failed.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-38",
     "since_version": "99.9.9"
   },
   "Q-3-40": {

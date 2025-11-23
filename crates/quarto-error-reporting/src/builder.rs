@@ -21,7 +21,7 @@ use crate::diagnostic::{
 /// use quarto_error_reporting::DiagnosticMessageBuilder;
 ///
 /// let error = DiagnosticMessageBuilder::error("Incompatible types")
-///     .with_code("Q-1-2")
+///     .with_code("Q-1-2") // quarto-error-code-audit-ignore
 ///     .problem("Cannot combine date and datetime types")
 ///     .add_detail("`x`{.arg} has type `date`{.type}")
 ///     .add_detail("`y`{.arg} has type `datetime`{.type}")
@@ -29,7 +29,7 @@ use crate::diagnostic::{
 ///     .build();
 ///
 /// assert_eq!(error.title, "Incompatible types");
-/// assert_eq!(error.code, Some("Q-1-2".to_string()));
+/// assert_eq!(error.code, Some("Q-1-2".to_string())); // quarto-error-code-audit-ignore
 /// assert!(error.problem.is_some());
 /// assert_eq!(error.details.len(), 2);
 /// assert_eq!(error.hints.len(), 1);
@@ -42,7 +42,7 @@ pub struct DiagnosticMessageBuilder {
     /// Brief title for the error
     title: String,
 
-    /// Optional error code (e.g., "Q-1-1")
+    /// Optional error code (e.g., "Q-1-1") (quarto-error-code-audit-ignore)
     code: Option<String>,
 
     /// The problem statement (the "what")
@@ -92,7 +92,7 @@ impl DiagnosticMessageBuilder {
     /// Create a generic error for migration purposes.
     ///
     /// This is a convenience method for the migration from ErrorCollector to DiagnosticMessage.
-    /// It creates an error with code Q-0-99 and includes file/line information for tracking
+    /// It creates an error with code Q-0-99 (quarto-error-code-audit-ignore) and includes file/line information for tracking
     /// where the error originated in the code.
     ///
     /// # Example
@@ -105,12 +105,12 @@ impl DiagnosticMessageBuilder {
     ///     file!(),
     ///     line!()
     /// );
-    /// assert_eq!(error.code, Some("Q-0-99".to_string()));
+    /// assert_eq!(error.code, Some("Q-0-99".to_string())); // quarto-error-code-audit-ignore
     /// assert!(error.title.contains("Found unexpected attribute"));
     /// ```
     pub fn generic_error(message: impl Into<String>, file: &str, line: u32) -> DiagnosticMessage {
         let title = format!("{} (at {}:{})", message.into(), file, line);
-        Self::error(title).with_code("Q-0-99").build()
+        Self::error(title).with_code("Q-0-99").build() // quarto-error-code-audit-ignore
     }
 
     /// Create a generic warning for migration purposes.
@@ -131,7 +131,7 @@ impl DiagnosticMessageBuilder {
     /// ```
     pub fn generic_warning(message: impl Into<String>, file: &str, line: u32) -> DiagnosticMessage {
         let title = format!("{} (at {}:{})", message.into(), file, line);
-        Self::warning(title).with_code("Q-0-99").build()
+        Self::warning(title).with_code("Q-0-99").build() // quarto-error-code-audit-ignore
     }
 
     /// Create a warning diagnostic builder.
@@ -164,7 +164,7 @@ impl DiagnosticMessageBuilder {
 
     /// Set the error code.
     ///
-    /// Error codes follow the format `Q-<subsystem>-<number>` (e.g., "Q-1-1").
+    /// Error codes follow the format `Q-<subsystem>-<number>` (e.g., "Q-1-1"). (quarto-error-code-audit-ignore)
     ///
     /// # Example
     ///
@@ -172,10 +172,10 @@ impl DiagnosticMessageBuilder {
     /// use quarto_error_reporting::DiagnosticMessageBuilder;
     ///
     /// let error = DiagnosticMessageBuilder::error("YAML Syntax Error")
-    ///     .with_code("Q-1-1")
+    ///     .with_code("Q-1-1") // quarto-error-code-audit-ignore
     ///     .build();
     ///
-    /// assert_eq!(error.code, Some("Q-1-1".to_string()));
+    /// assert_eq!(error.code, Some("Q-1-1".to_string())); // quarto-error-code-audit-ignore
     /// ```
     pub fn with_code(mut self, code: impl Into<String>) -> Self {
         self.code = Some(code.into());
@@ -523,7 +523,7 @@ mod tests {
     #[test]
     fn test_builder_complete_message() {
         let msg = DiagnosticMessageBuilder::error("Incompatible types")
-            .with_code("Q-1-2")
+            .with_code("Q-1-2") // quarto-error-code-audit-ignore
             .problem("Cannot combine date and datetime types")
             .add_detail("`x` has type `date`")
             .add_detail("`y` has type `datetime`")
@@ -531,7 +531,7 @@ mod tests {
             .build();
 
         assert_eq!(msg.title, "Incompatible types");
-        assert_eq!(msg.code, Some("Q-1-2".to_string()));
+        assert_eq!(msg.code, Some("Q-1-2".to_string())); // quarto-error-code-audit-ignore
         assert!(msg.problem.is_some());
         assert_eq!(msg.details.len(), 2);
         assert_eq!(msg.hints.len(), 1);

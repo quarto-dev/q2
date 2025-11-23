@@ -278,7 +278,7 @@ fn parse_yaml_string_as_markdown(
                 // !md tag: ERROR on parse failure
                 let diagnostic =
                     DiagnosticMessageBuilder::error("Failed to parse !md tagged value")
-                        .with_code("Q-1-100")
+                        .with_code("Q-1-20")
                         .with_location(source_info.clone())
                         .problem("The `!md` tag requires valid markdown syntax")
                         .add_detail(format!("Could not parse: {}", value))

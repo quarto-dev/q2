@@ -2,7 +2,7 @@
 
 /// Create a generic error with automatic file and line information.
 ///
-/// This macro is for migration purposes - it creates an error with code Q-0-99
+/// This macro is for migration purposes - it creates an error with code Q-0-99 (quarto-error-code-audit-ignore)
 /// and automatically includes the file and line number where the error was created.
 ///
 /// # Example
@@ -11,7 +11,7 @@
 /// use quarto_error_reporting::generic_error;
 ///
 /// let error = generic_error!("Found unexpected attribute");
-/// assert_eq!(error.code, Some("Q-0-99".to_string()));
+/// assert_eq!(error.code, Some("Q-0-99".to_string())); // quarto-error-code-audit-ignore
 /// assert!(error.title.contains("Found unexpected attribute"));
 /// assert!(error.title.contains(file!()));
 /// ```
@@ -24,7 +24,7 @@ macro_rules! generic_error {
 
 /// Create a generic warning with automatic file and line information.
 ///
-/// This macro is for migration purposes - it creates a warning with code Q-0-99
+/// This macro is for migration purposes - it creates a warning with code Q-0-99 (quarto-error-code-audit-ignore)
 /// and automatically includes the file and line number where the warning was created.
 ///
 /// # Example
@@ -33,7 +33,7 @@ macro_rules! generic_error {
 /// use quarto_error_reporting::generic_warning;
 ///
 /// let warning = generic_warning!("Caption found without table");
-/// assert_eq!(warning.code, Some("Q-0-99".to_string()));
+/// assert_eq!(warning.code, Some("Q-0-99".to_string())); // quarto-error-code-audit-ignore
 /// assert!(warning.title.contains("Caption found without table"));
 /// assert!(warning.title.contains(file!()));
 /// ```

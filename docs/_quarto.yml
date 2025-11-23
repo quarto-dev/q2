@@ -12,8 +12,18 @@ website:
         text: Syntax
       - href: writers/index.qmd
         text: Writers
-      - href: source-info/index.qmd
-        text: Source Tracking
+      - text: "Library Docs"
+        menu:
+          - href: ../library-docs/index.qmd
+            text: Overview
+          - text: "---"
+          - text: "Rust Libraries"
+          - href: ../library-docs/rust/source-info/index.qmd
+            text: Source Tracking
+          - text: "---"
+          - text: "TypeScript Libraries"
+          - href: ../library-docs/typescript/annotated-qmd/index.qmd
+            text: "@quarto/annotated-qmd"
 
 format:
   html:

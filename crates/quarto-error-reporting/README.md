@@ -1,5 +1,7 @@
 # quarto-error-reporting
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 Error reporting and diagnostic messages for Quarto, providing structured, user-friendly error messages following tidyverse best practices.
 
 ## Overview

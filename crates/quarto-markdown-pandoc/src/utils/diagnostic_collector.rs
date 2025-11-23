@@ -22,14 +22,14 @@ impl DiagnosticCollector {
 
     /// Helper: Add an error message (uses generic_error! macro for file/line tracking)
     ///
-    /// For migration from ErrorCollector. Creates a DiagnosticMessage with code Q-0-99.
+    /// For migration from ErrorCollector. Creates a DiagnosticMessage with code Q-0-99. (quarto-error-code-audit-ignore)
     pub fn error(&mut self, message: impl Into<String>) {
         self.add(quarto_error_reporting::generic_error!(message.into()));
     }
 
     /// Helper: Add a warning message (uses generic_warning! macro for file/line tracking)
     ///
-    /// For migration from ErrorCollector. Creates a DiagnosticMessage with code Q-0-99.
+    /// For migration from ErrorCollector. Creates a DiagnosticMessage with code Q-0-99. (quarto-error-code-audit-ignore)
     pub fn warn(&mut self, message: impl Into<String>) {
         self.add(quarto_error_reporting::generic_warning!(message.into()));
     }
@@ -129,7 +129,7 @@ mod tests {
 
         assert_eq!(collector.diagnostics.len(), 1);
         assert!(collector.has_errors());
-        assert_eq!(collector.diagnostics[0].code, Some("Q-0-99".to_string()));
+        assert_eq!(collector.diagnostics[0].code, Some("Q-0-99".to_string())); // quarto-error-code-audit-ignore
     }
 
     #[test]
@@ -139,7 +139,7 @@ mod tests {
 
         assert_eq!(collector.diagnostics.len(), 1);
         assert!(!collector.has_errors()); // Warnings don't count as errors
-        assert_eq!(collector.diagnostics[0].code, Some("Q-0-99".to_string()));
+        assert_eq!(collector.diagnostics[0].code, Some("Q-0-99".to_string())); // quarto-error-code-audit-ignore
     }
 
     #[test]

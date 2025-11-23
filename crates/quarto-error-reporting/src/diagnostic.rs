@@ -133,7 +133,7 @@ pub struct DetailItem {
 ///
 /// ```ignore
 /// let msg = DiagnosticMessage {
-///     code: Some("Q-1-2".to_string()),
+///     code: Some("Q-1-2".to_string()), // quarto-error-code-audit-ignore
 ///     title: "Incompatible types".to_string(),
 ///     kind: DiagnosticKind::Error,
 ///     problem: Some("Cannot combine date and datetime types".into()),
@@ -199,7 +199,7 @@ impl DiagnosticMessage {
     /// use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
     ///
     /// let error = DiagnosticMessageBuilder::error("Incompatible types")
-    ///     .with_code("Q-1-2")
+    ///     .with_code("Q-1-2") // quarto-error-code-audit-ignore
     ///     .problem("Cannot combine date and datetime types")
     ///     .add_detail("`x` has type `date`")
     ///     .add_detail("`y` has type `datetime`")
@@ -468,7 +468,7 @@ impl DiagnosticMessage {
     /// {
     ///   "kind": "error",
     ///   "title": "Invalid input",
-    ///   "code": "Q-1-2",
+    ///   "code": "Q-1-2", // quarto-error-code-audit-ignore
     ///   "problem": "Values must be numeric",
     ///   "details": [{"kind": "error", "content": "Found text in column 3"}],
     ///   "hints": ["Convert to numbers first?"]
@@ -907,7 +907,7 @@ mod tests {
 
     #[test]
     fn test_docs_url_invalid_code() {
-        let msg = DiagnosticMessage::error("Test error").with_code("Q-999-999");
+        let msg = DiagnosticMessage::error("Test error").with_code("Q-999-999"); // quarto-error-code-audit-ignore
         assert!(msg.docs_url().is_none());
     }
 
@@ -968,7 +968,7 @@ mod tests {
         use crate::builder::DiagnosticMessageBuilder;
 
         let msg = DiagnosticMessageBuilder::error("Invalid input")
-            .with_code("Q-1-2")
+            .with_code("Q-1-2") // quarto-error-code-audit-ignore
             .problem("Values must be numeric")
             .add_detail("Found text in column 3")
             .add_info("Expected numbers")
@@ -978,7 +978,7 @@ mod tests {
         let json = msg.to_json();
         assert_eq!(json["kind"], "error");
         assert_eq!(json["title"], "Invalid input");
-        assert_eq!(json["code"], "Q-1-2");
+        assert_eq!(json["code"], "Q-1-2"); // quarto-error-code-audit-ignore
         assert_eq!(json["problem"]["type"], "markdown");
         assert_eq!(json["problem"]["content"], "Values must be numeric");
         assert_eq!(json["details"][0]["kind"], "error");

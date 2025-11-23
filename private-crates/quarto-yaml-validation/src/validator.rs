@@ -165,10 +165,6 @@ fn validate_generic(
     context: &mut ValidationContext,
 ) -> ValidationResult<()> {
     match schema {
-        Schema::False => {
-            context.add_error(ValidationErrorKind::SchemaFalse, value);
-            Err(context.errors[0].clone())
-        }
         Schema::True => Ok(()),
         Schema::Boolean(s) => {
             context.with_schema_path("boolean", |ctx| validate_boolean(value, s, ctx))

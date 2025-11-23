@@ -36,7 +36,9 @@ use annotations::EMPTY_ANNOTATIONS;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Schema {
     /// Always fails validation
-    False,
+    // False,
+    // we're going to try not having a False schema because it's non-monotonic and so causes too much noncompositionality
+
     /// Always passes validation
     True,
     /// Boolean type schema
@@ -87,7 +89,7 @@ impl Schema {
     /// Get the annotations for this schema
     pub fn annotations(&self) -> &SchemaAnnotations {
         match self {
-            Schema::False | Schema::True => &EMPTY_ANNOTATIONS,
+            Schema::True => &EMPTY_ANNOTATIONS,
             Schema::Boolean(s) => &s.annotations,
             Schema::Number(s) => &s.annotations,
             Schema::String(s) => &s.annotations,
@@ -105,7 +107,7 @@ impl Schema {
     /// Get a mutable reference to the annotations for this schema
     pub fn annotations_mut(&mut self) -> Option<&mut SchemaAnnotations> {
         match self {
-            Schema::False | Schema::True => None,
+            Schema::True => None,
             Schema::Boolean(s) => Some(&mut s.annotations),
             Schema::Number(s) => Some(&mut s.annotations),
             Schema::String(s) => Some(&mut s.annotations),
@@ -127,7 +129,6 @@ impl Schema {
     /// Panics if called on False or True schemas, as they don't support annotations.
     pub(crate) fn with_annotations(mut self, annotations: SchemaAnnotations) -> Self {
         match &mut self {
-            Schema::False => panic!("Cannot set annotations on Schema::False"),
             Schema::True => panic!("Cannot set annotations on Schema::True"),
             Schema::Boolean(s) => s.annotations = annotations,
             Schema::Number(s) => s.annotations = annotations,
@@ -147,7 +148,6 @@ impl Schema {
     /// Get a human-readable name for this schema type
     pub fn type_name(&self) -> &'static str {
         match self {
-            Schema::False => "false",
             Schema::True => "true",
             Schema::Boolean(_) => "boolean",
             Schema::Number(_) => "number",
@@ -339,8 +339,7 @@ impl Schema {
             }
 
             // Primitives don't need compilation
-            Schema::False
-            | Schema::True
+            Schema::True
             | Schema::Boolean(_)
             | Schema::Number(_)
             | Schema::String(_)
@@ -387,7 +386,6 @@ mod tests {
 
     #[test]
     fn test_schema_type_name() {
-        assert_eq!(Schema::False.type_name(), "false");
         assert_eq!(Schema::True.type_name(), "true");
         assert_eq!(
             Schema::Boolean(BooleanSchema {

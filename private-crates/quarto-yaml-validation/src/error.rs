@@ -77,9 +77,6 @@ pub type ValidationResult<T> = Result<T, ValidationError>;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum ValidationErrorKind {
-    /// Schema 'false' always fails
-    SchemaFalse,
-
     /// Type mismatch
     TypeMismatch { expected: String, got: String },
 
@@ -134,15 +131,6 @@ pub enum ValidationErrorKind {
     /// Unresolved schema reference
     UnresolvedReference { ref_id: String },
 
-    /// AllOf validation failed
-    AllOfFailed { failing_schemas: Vec<usize> },
-
-    /// AnyOf validation failed (none matched)
-    AnyOfFailed { attempted_schemas: usize },
-
-    /// OneOf validation failed (zero or multiple matched)
-    OneOfFailed { matching_schemas: Vec<usize> },
-
     /// Other validation error
     ///
     /// **WARNING**: This is a last-resort variant for errors that don't fit any other category.
@@ -172,10 +160,6 @@ impl ValidationErrorKind {
             ValidationErrorKind::UnknownProperty { .. } => "Q-1-18",
             ValidationErrorKind::ArrayItemsNotUnique => "Q-1-19",
             ValidationErrorKind::StringLengthInvalid { .. } => "Q-1-20",
-            ValidationErrorKind::SchemaFalse => "Q-1-90",
-            ValidationErrorKind::AllOfFailed { .. } => "Q-1-91",
-            ValidationErrorKind::AnyOfFailed { .. } => "Q-1-92",
-            ValidationErrorKind::OneOfFailed { .. } => "Q-1-93",
             ValidationErrorKind::Other { .. } => "Q-1-99",
         }
     }
@@ -183,9 +167,6 @@ impl ValidationErrorKind {
     /// Format a human-readable message from this error kind
     pub fn message(&self) -> String {
         match self {
-            ValidationErrorKind::SchemaFalse => {
-                "Schema 'false' always fails validation".to_string()
-            }
             ValidationErrorKind::TypeMismatch { expected, got } => {
                 format!("Expected {}, got {}", expected, got)
             }
@@ -272,25 +253,6 @@ impl ValidationErrorKind {
             }
             ValidationErrorKind::UnresolvedReference { ref_id } => {
                 format!("Unresolved schema reference: {}", ref_id)
-            }
-            ValidationErrorKind::AllOfFailed { failing_schemas } => {
-                format!("AllOf validation failed for schemas: {:?}", failing_schemas)
-            }
-            ValidationErrorKind::AnyOfFailed { attempted_schemas } => {
-                format!(
-                    "AnyOf validation failed (tried {} schemas, none matched)",
-                    attempted_schemas
-                )
-            }
-            ValidationErrorKind::OneOfFailed { matching_schemas } => {
-                if matching_schemas.is_empty() {
-                    "OneOf validation failed (no schemas matched)".to_string()
-                } else {
-                    format!(
-                        "OneOf validation failed (multiple schemas matched: {:?})",
-                        matching_schemas
-                    )
-                }
             }
             ValidationErrorKind::Other { message } => message.clone(),
         }

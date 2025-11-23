@@ -1,5 +1,7 @@
 # ValidationDiagnostic JSON Output Schema
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 This document describes the JSON output format produced by `ValidationDiagnostic::to_json()` for machine-readable consumption of YAML validation errors.
 
 ## Overview
