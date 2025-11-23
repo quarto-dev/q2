@@ -1,5 +1,7 @@
 # Integration of quarto-error-reporting into validate-yaml Binary
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 **Date**: 2025-10-13
 **Context**: Design for incorporating structured error reporting into the validate-yaml CLI tool
 

@@ -1,5 +1,7 @@
 # Plan: Update qmd-syntax-helper to use DiagnosticMessage
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 ## Problem Statement
 
 The `qmd::read()` function signature changed from 5 parameters to 4 parameters, and the return type changed from `Vec<String>` to `Vec<DiagnosticMessage>`. This causes compilation failures in `qmd-syntax-helper` which still uses the old API.

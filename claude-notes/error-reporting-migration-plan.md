@@ -1,5 +1,7 @@
 # Migration Plan: quarto-markdown-pandoc Error Handling → quarto-error-reporting
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 ## Executive Summary
 
 This document outlines the plan to migrate quarto-markdown-pandoc's error handling from its current custom `ErrorCollector` trait to use the standardized `quarto-error-reporting` crate. This migration will provide richer, more structured error messages while maintaining the existing text/JSON output flexibility.
@@ -59,7 +61,7 @@ pub trait ErrorCollector {
 ```rust
 // Rich diagnostic message structure
 pub struct DiagnosticMessage {
-    pub code: Option<String>,          // e.g., "Q-1-1"
+    pub code: Option<String>,           // e.g., "Q-1-1" (quarto-error-code-audit-ignore)
     pub title: String,                  // Brief error message
     pub kind: DiagnosticKind,           // Error, Warning, Info
     pub problem: Option<MessageContent>,// What went wrong
@@ -256,7 +258,7 @@ Once all error sites use DiagnosticCollector:
 - Add `to_text()` method with simple formatting
 - Add `to_json()` method matching current JSON format
 - Add `DiagnosticMessageBuilder::generic_error()` helper that:
-  - Uses error code Q-0-99
+  - Uses error code Q-0-99 <!-- quarto-error-code-audit-ignore -->
   - Accepts `file!()`, `line!()` as parameters
   - Creates a generic error message for migration
   - Example: `.generic_error("Found unexpected attr", file!(), line!())`
@@ -384,7 +386,7 @@ Once all error sites use DiagnosticCollector:
    - Start with current flat format: `{title, kind, message, location}`
    - Can enhance later when needed
 
-2. **Error Codes**: Use generic Q-0-99 for now
+2. **Error Codes**: Use generic Q-0-99 <!-- quarto-error-code-audit-ignore --> for now
    - Create builder method that automatically includes `file!()` and `line!()` info
    - This allows us to track where errors originate in code
    - Later: Create separate task to replace with specific error codes

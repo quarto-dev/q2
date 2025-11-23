@@ -280,7 +280,7 @@ I recommend **Option D** for these reasons:
 2. **Migration timeline**: How long to keep ErrorCollector trait?
    - **Proposal**: Keep until all call sites use `.add()` directly (could be months)
 
-3. **Generic error codes**: Should every error during migration have Q-0-99?
+3. **Generic error codes**: Should every error during migration have Q-0-99? <!-- quarto-error-code-audit-ignore -->
    - **Proposal**: Yes, makes them easy to find and upgrade later
 
 4. **Macro location**: Should macros be in quarto-error-reporting or quarto-markdown-pandoc?

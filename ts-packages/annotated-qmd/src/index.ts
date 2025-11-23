@@ -24,6 +24,10 @@ export type {
   SourceInfoErrorHandler
 } from './source-map.js';
 
+export type {
+  DefinitionListEntry
+} from './navigation-helpers.js';
+
 // Re-export Pandoc AST types (base types)
 export type {
   // Supporting types
@@ -159,6 +163,13 @@ export { MetadataConverter } from './meta-converter.js';
 export { InlineConverter } from './inline-converter.js';
 export { BlockConverter } from './block-converter.js';
 export { DocumentConverter } from './document-converter.js';
+
+// Re-export navigation helpers
+export {
+  getListItems,
+  getOrderedListItems,
+  getDefinitionListEntries
+} from './navigation-helpers.js';
 
 // Import for main functions
 import { SourceInfoReconstructor } from './source-map.js';

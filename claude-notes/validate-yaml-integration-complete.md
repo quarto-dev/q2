@@ -1,5 +1,7 @@
 # validate-yaml Error Reporting Integration - Complete
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 **Date**: 2025-10-13
 **Status**: ✅ COMPLETE
 

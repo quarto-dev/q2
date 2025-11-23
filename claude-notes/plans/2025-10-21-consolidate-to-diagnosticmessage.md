@@ -1,5 +1,7 @@
 # Plan: Consolidate qmd::read Error Reporting to DiagnosticMessage
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 ## Problem Statement
 
 Currently, `qmd::read()` has fragmented error reporting:

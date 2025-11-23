@@ -1,5 +1,7 @@
 # Plan: JSON Diagnostics Output for Metadata Warnings/Errors
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 ## Problem Statement
 
 Currently, diagnostics collected during metadata parsing are output as text to stderr:

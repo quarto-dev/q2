@@ -1,5 +1,7 @@
 # k-253: YAML Validation Error Reporting Improvements
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 **Date**: 2025-10-27
 **Status**: Planning
 **Priority**: 1

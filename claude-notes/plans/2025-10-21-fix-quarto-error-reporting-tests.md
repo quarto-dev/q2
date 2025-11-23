@@ -1,5 +1,7 @@
 # Plan: Fix quarto-error-reporting Test Failures
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 ## Problem Statement
 
 Three tests are failing in `crates/quarto-error-reporting/src/diagnostic.rs` after commit `c3011c6` (k-103):

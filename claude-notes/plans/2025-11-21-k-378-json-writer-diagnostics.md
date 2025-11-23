@@ -1,5 +1,7 @@
 # JSON Writer Diagnostic Support - k-378
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 **Date**: 2025-11-21
 **Issue**: k-378 - Add diagnostic error reporting to JSON writer
 **Blocked**: k-375 (fixing JSON writer panics)

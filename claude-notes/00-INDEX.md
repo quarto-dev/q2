@@ -1,5 +1,7 @@
 # Claude Notes Index
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 This directory contains notes about the Kyoto project - exploring a Rust port of Quarto CLI.
 
 We track work in Beads instead of Markdown. Run `bd quickstart` to see how. Keep using markdown files to provide information to the user, but use Beads to track your own work, project dependencies, etc.
@@ -53,7 +55,7 @@ We track work in Beads instead of Markdown. Run `bd quickstart` to see how. Keep
 ## Error Reporting and Console Output
 
 - **[error-reporting-design-research.md](error-reporting-design-research.md)** - Comprehensive design for error reporting and console print subsystem: ariadne (visual errors), R cli (structured output), tidyverse style guide (message best practices), Markdown-based API with Pandoc AST, multiple output formats (ANSI/HTML/JSON)
-- **[error-id-system-design.md](error-id-system-design.md)** - TypeScript-style error code system for Quarto. Format: `Q-<subsystem>-<number>` (e.g., Q-1-1). JSON catalog, optional but encouraged, enables Googleable error codes
+- **[error-id-system-design.md](error-id-system-design.md)** - TypeScript-style error code system for Quarto. Format: `Q-<subsystem>-<number>` (e.g., Q-1-1). JSON catalog, optional but encouraged, enables Googleable error codes <!-- quarto-error-code-audit-ignore-file -->
 - **`crates/quarto-error-reporting/`** - ✅ **Phase 1 Complete!** Error reporting with TypeScript-style error codes. Includes DiagnosticMessage types, builder API, error catalog (JSON), Q-<subsystem>-<number> format. Phase 2-4 planned (rendering, console helpers)
 
 ## YAML and Validation

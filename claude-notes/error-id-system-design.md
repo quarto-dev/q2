@@ -1,5 +1,7 @@
 # Error ID System Design for Quarto
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 ## Executive Summary
 
 This document proposes a TypeScript-inspired error ID system for Quarto, providing stable, searchable error codes that improve user experience and documentation.

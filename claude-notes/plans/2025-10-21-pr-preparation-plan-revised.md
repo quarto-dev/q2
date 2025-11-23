@@ -1,5 +1,7 @@
 # PR Preparation Plan (REVISED): Extract crates/ Changes from kyoto to 2025-10-21
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 **Date**: 2025-10-21
 **Goal**: Extract ONLY `crates/` changes from `kyoto` branch to `2025-10-21` branch for PR to quarto-dev/quarto-markdown
 

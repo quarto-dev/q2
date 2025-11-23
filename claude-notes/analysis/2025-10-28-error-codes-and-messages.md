@@ -1,5 +1,7 @@
 # Error Codes and Error Messages Integration
 
+<!-- quarto-error-code-audit-ignore-file -->
+
 **Date**: 2025-10-28
 **Context**: Understanding how to add error codes to the new error messages
 

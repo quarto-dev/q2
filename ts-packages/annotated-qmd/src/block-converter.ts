@@ -122,8 +122,8 @@ export class BlockConverter {
 
       // BulletList: [[blocks]]
       // NOTE: components are flattened - all blocks from all items in document order.
-      // Item boundaries are lost. Reconstruct from result field or use helper API.
-      // TODO (k-193): Create helper API to navigate list items
+      // Item boundaries are lost. Reconstruct from result field or use getListItems() helper.
+      // See navigation-helpers.ts: getListItems()
       case 'BulletList':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
@@ -136,8 +136,8 @@ export class BlockConverter {
 
       // OrderedList: [listAttrs, [[blocks]]]
       // NOTE: components are flattened - all blocks from all items in document order.
-      // Item boundaries are lost. Reconstruct from result field or use helper API.
-      // TODO (k-193): Create helper API to navigate list items
+      // Item boundaries are lost. Reconstruct from result field or use getOrderedListItems() helper.
+      // See navigation-helpers.ts: getOrderedListItems()
       case 'OrderedList':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
@@ -185,8 +185,8 @@ export class BlockConverter {
       // NOTE: components are flattened - terms and definitions in document order.
       // Structure lost: can't distinguish term boundaries, definition boundaries,
       // or which blocks belong to which definition. Reconstruct from result field
-      // or use helper API.
-      // TODO (k-193): Create helper API to navigate definition list structure
+      // or use getDefinitionListEntries() helper.
+      // See navigation-helpers.ts: getDefinitionListEntries()
       case 'DefinitionList':
         return {
           result: block.c as unknown as import('./types.js').JSONValue,
