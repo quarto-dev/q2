@@ -1,0 +1,447 @@
+---
+title: "@quarto/annotated-qmd"
+---
+
+Convert `quarto-markdown-pandoc` JSON output to `AnnotatedParse` structures with full source mapping.
+
+## Installation
+
+```bash
+npm install @quarto/annotated-qmd
+```
+
+## Quick Start
+
+```typescript
+import { parseRustQmdDocument } from '@quarto/annotated-qmd';
+
+// Get JSON from quarto-markdown-pandoc
+const json = /* ... */;
+
+// Convert entire document
+const doc = parseRustQmdDocument(json);
+console.log(doc.components.length);  // metadata + blocks
+```
+
+## Use Cases
+
+### Building a Linter
+
+`AnnotatedParse` structures are ideal for writing linters because they preserve source locations, allowing you to provide precise error messages:
+
+```typescript
+import { parseRustQmdDocument } from '@quarto/annotated-qmd';
+import type { AnnotatedParse } from '@quarto/annotated-qmd';
+
+interface Diagnostic {
+  message: string;
+  file: string;
+  start: number;
+  end: number;
+}
+
+function checkHeadingLevels(doc: AnnotatedParse): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  let lastLevel = 0;
+
+  for (const component of doc.components) {
+    if (component.kind === 'Header') {
+      // Header structure: [level, attr, inlines]
+      const level = (component.result as [number, unknown, unknown[]])[0];
+
+      if (level > lastLevel + 1) {
+        diagnostics.push({
+          message: `Heading level skipped from ${lastLevel} to ${level}`,
+          file: component.source.name || 'unknown',
+          start: component.start,
+          end: component.end
+        });
+      }
+      lastLevel = level;
+    }
+  }
+
+  return diagnostics;
+}
+
+// Usage
+const doc = parseRustQmdDocument(json);
+const issues = checkHeadingLevels(doc);
+for (const issue of issues) {
+  console.error(`${issue.file}:${issue.start}-${issue.end}: ${issue.message}`);
+}
+```
+
+### Validating YAML Metadata
+
+You can validate frontmatter and provide helpful error messages:
+
+```typescript
+function validateFrontmatter(doc: AnnotatedParse): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+
+  // Metadata is typically the first component
+  const metadata = doc.components.find(c => c.kind === 'mapping');
+  if (!metadata) return diagnostics;
+
+  // Check for required fields
+  const hasTitle = metadata.components.some(
+    c => c.kind === 'mapping-key' && c.result === 'title'
+  );
+
+  if (!hasTitle) {
+    diagnostics.push({
+      message: 'Missing required field: title',
+      file: metadata.source.name || 'unknown',
+      start: metadata.start,
+      end: metadata.end
+    });
+  }
+
+  // Validate specific fields
+  for (let i = 0; i < metadata.components.length; i += 2) {
+    const key = metadata.components[i];
+    const value = metadata.components[i + 1];
+
+    if (key.result === 'title' && typeof value.result !== 'string') {
+      diagnostics.push({
+        message: 'Title must be a string',
+        file: value.source.name || 'unknown',
+        start: value.start,
+        end: value.end
+      });
+    }
+  }
+
+  return diagnostics;
+}
+```
+
+### Extracting Information
+
+Extract structured information from documents:
+
+```typescript
+function extractTableOfContents(doc: AnnotatedParse) {
+  const toc: Array<{ level: number; text: string; id: string }> = [];
+
+  for (const component of doc.components) {
+    if (component.kind === 'Header') {
+      const [level, attr, inlines] = component.result as [
+        number,
+        [string, string[], [string, string][]],
+        unknown[]
+      ];
+
+      // Extract text from inlines
+      const text = inlines
+        .filter((inline: any) => inline.t === 'Str')
+        .map((inline: any) => inline.c)
+        .join(' ');
+
+      toc.push({
+        level,
+        text,
+        id: attr[0] // ID from attributes
+      });
+    }
+  }
+
+  return toc;
+}
+```
+
+## AnnotatedParse Tree Structure
+
+Every `AnnotatedParse` node has these fields:
+
+- **`kind`**: String identifying the element type (`'Para'`, `'Header'`, `'Link'`, etc.)
+- **`result`**: Original Pandoc JSON value (useful for extracting structured data)
+- **`source`**: `MappedString` tracking the original source text and location
+- **`start`/`end`**: Character offsets in the source file
+- **`components`**: Array of child `AnnotatedParse` nodes
+
+### Tree Traversal
+
+Components are ordered by source position. For example, a document:
+
+```typescript
+Document {
+  kind: 'Document',
+  components: [
+    { kind: 'mapping', ... },      // Metadata
+    { kind: 'Header', ... },        // First block
+    { kind: 'Para', components: [  // Second block
+      { kind: 'Str', ... },         //   Text content
+      { kind: 'Link', ... }         //   Link
+    ]}
+  ]
+}
+```
+
+You can traverse the tree recursively:
+
+```typescript
+function findAll(node: AnnotatedParse, kind: string): AnnotatedParse[] {
+  const results: AnnotatedParse[] = [];
+
+  function traverse(n: AnnotatedParse) {
+    if (n.kind === kind) {
+      results.push(n);
+    }
+    for (const child of n.components) {
+      traverse(child);
+    }
+  }
+
+  traverse(node);
+  return results;
+}
+
+// Find all links
+const links = findAll(doc, 'Link');
+```
+
+### Flattened List Structures
+
+Lists flatten their item structure in `components` for simplicity. Use the navigation helpers to reconstruct the logical structure:
+
+```typescript
+import {
+  getListItems,
+  getOrderedListItems,
+  getDefinitionListEntries
+} from '@quarto/annotated-qmd';
+
+// BulletList
+const items = getListItems(bulletListNode);
+// items[0] is first item's blocks
+// items[1] is second item's blocks
+
+// OrderedList
+const numberedItems = getOrderedListItems(orderedListNode);
+
+// DefinitionList
+const entries = getDefinitionListEntries(defListNode);
+// entries[0].term is array of inline elements
+// entries[0].definitions is array of definition blocks
+```
+
+## Source Mapping Best Practices
+
+### Extracting Text
+
+Always use the source range to extract the exact text:
+
+```typescript
+const text = component.source.value.substring(
+  component.start,
+  component.end
+);
+```
+
+### Mapping to Original File
+
+`source` is a `MappedString` that tracks transformations. Use `.map()` to find the original location:
+
+```typescript
+const mapped = component.source.map(localOffset);
+if (mapped) {
+  console.log(`File: ${mapped.originalString.name}`);
+  console.log(`Line/col: ${mapped.index}`);
+  console.log(`Original string: ${mapped.originalString.value}`);
+}
+```
+
+### Error Reporting
+
+Use source locations for precise error messages:
+
+```typescript
+function reportError(
+  component: AnnotatedParse,
+  message: string
+): Diagnostic {
+  return {
+    message,
+    file: component.source.name || 'unknown',
+    start: component.start,
+    end: component.end,
+    text: component.source.value.substring(
+      component.start,
+      component.end
+    )
+  };
+}
+```
+
+## Cookbook
+
+### Find All Links
+
+```typescript
+function findAllLinks(node: AnnotatedParse): AnnotatedParse[] {
+  const links: AnnotatedParse[] = [];
+
+  function traverse(n: AnnotatedParse) {
+    if (n.kind === 'Link') {
+      links.push(n);
+    }
+    for (const child of n.components) {
+      traverse(child);
+    }
+  }
+
+  traverse(node);
+  return links;
+}
+
+// Usage
+const links = findAllLinks(doc);
+for (const link of links) {
+  const [attr, inlines, target] = link.result as [unknown, unknown[], [string, string]];
+  console.log(`Link to: ${target[0]}`);
+}
+```
+
+### Extract All Code Blocks
+
+```typescript
+function extractCodeBlocks(doc: AnnotatedParse) {
+  return doc.components
+    .filter(c => c.kind === 'CodeBlock')
+    .map(c => {
+      const [attr, code] = c.result as [
+        [string, string[], [string, string][]],
+        string
+      ];
+
+      return {
+        code,
+        language: attr[1][0] || 'text', // First class is language
+        id: attr[0],
+        attributes: Object.fromEntries(attr[2])
+      };
+    });
+}
+```
+
+### Check for Broken Links
+
+```typescript
+async function checkLinks(doc: AnnotatedParse): Promise<Diagnostic[]> {
+  const diagnostics: Diagnostic[] = [];
+  const links = findAllLinks(doc);
+
+  for (const link of links) {
+    const [_, __, target] = link.result as [unknown, unknown[], [string, string]];
+    const url = target[0];
+
+    // Check if file exists (for relative links)
+    if (!url.startsWith('http') && !url.startsWith('#')) {
+      const exists = await fileExists(url);
+      if (!exists) {
+        diagnostics.push({
+          message: `Broken link: ${url} not found`,
+          file: link.source.name || 'unknown',
+          start: link.start,
+          end: link.end
+        });
+      }
+    }
+  }
+
+  return diagnostics;
+}
+```
+
+### Validate Image Alt Text
+
+```typescript
+function checkImageAltText(doc: AnnotatedParse): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
+  const images = findAll(doc, 'Image');
+
+  for (const img of images) {
+    const [attr, inlines, target] = img.result as [
+      unknown,
+      Array<{t: string; c: string}>,
+      [string, string]
+    ];
+
+    // Check if alt text is empty
+    const altText = inlines
+      .filter(i => i.t === 'Str')
+      .map(i => i.c)
+      .join(' ');
+
+    if (!altText || altText.trim() === '') {
+      diagnostics.push({
+        message: 'Image missing alt text',
+        file: img.source.name || 'unknown',
+        start: img.start,
+        end: img.end
+      });
+    }
+  }
+
+  return diagnostics;
+}
+```
+
+### Extract Metadata Statistics
+
+```typescript
+function getDocumentStats(doc: AnnotatedParse) {
+  const stats = {
+    headers: 0,
+    paragraphs: 0,
+    codeBlocks: 0,
+    links: 0,
+    images: 0,
+    words: 0
+  };
+
+  function traverse(node: AnnotatedParse) {
+    switch (node.kind) {
+      case 'Header':
+        stats.headers++;
+        break;
+      case 'Para':
+        stats.paragraphs++;
+        break;
+      case 'CodeBlock':
+        stats.codeBlocks++;
+        break;
+      case 'Link':
+        stats.links++;
+        break;
+      case 'Image':
+        stats.images++;
+        break;
+      case 'Str':
+        stats.words += (node.result as string).split(/\s+/).length;
+        break;
+    }
+
+    for (const child of node.components) {
+      traverse(child);
+    }
+  }
+
+  traverse(doc);
+  return stats;
+}
+```
+
+## API Reference
+
+See the [TypeScript package README](https://github.com/quarto-dev/quarto-markdown/tree/main/ts-packages/annotated-qmd) for complete API documentation including:
+
+- `parseRustQmdDocument()` - Convert complete documents
+- `parseRustQmdBlocks()` - Convert block arrays
+- `parseRustQmdBlock()` - Convert single blocks
+- `parseRustQmdInline()` - Convert single inlines
+- `parseRustQmdMetadata()` - Convert metadata only
+
+All functions accept an optional `errorHandler` for custom error handling.

@@ -1,0 +1,39 @@
+---
+title: "Quarto Libraries Developer Guide"
+---
+
+This section contains documentation for developers who want to use Quarto's parsing and source-tracking libraries in their own projects.
+
+## Rust Libraries
+
+### Source Tracking
+
+The `quarto-source-map` crate provides infrastructure for tracking source locations through transformations:
+
+- [Source Info Documentation](rust/source-info/index.qmd) - Comprehensive guide to `SourceInfo`, `SourceMapping`, and `SourceContext`
+
+### Markdown Parsing
+
+The `quarto-markdown-pandoc` crate parses Quarto Markdown and produces Pandoc AST with source locations:
+
+- Binary: `quarto-markdown-pandoc` - Command-line parser
+- JSON output with embedded source tracking
+
+## TypeScript Libraries
+
+### @quarto/annotated-qmd
+
+Convert `quarto-markdown-pandoc` JSON output to `AnnotatedParse` structures with full source mapping:
+
+- [@quarto/annotated-qmd Documentation](typescript/annotated-qmd/index.qmd) - API reference, linting examples, and cookbook recipes
+
+## Overview
+
+These libraries work together to enable:
+
+1. **Parsing** - Convert `.qmd` files to Pandoc AST (Rust)
+2. **Source Tracking** - Maintain precise source locations (Rust)
+3. **Conversion** - Transform to TypeScript-friendly structures (TypeScript)
+4. **Validation & Linting** - Build tools that provide helpful error messages
+
+All libraries preserve source location information, enabling precise error reporting and IDE tooling.
