@@ -114,3 +114,26 @@ $articles:bibentry()[; ]$
           (partial
             (partial_name))
           (literal_separator))))
+================================================================================
+template.txt 6 - loops
+================================================================================
+$for(items)$
+$it:partial()/uppercase$
+$endfor$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (forloop
+          (forloop_variable)
+          (forloop_content
+            (template_element
+              (text))
+            (template_element
+              (interpolation
+                (variable_name)
+                (partial
+                  (partial_name))
+                (pipe
+                  (pipe_uppercase))))
+            (template_element
+              (text))))))
