@@ -38,9 +38,20 @@ module.exports = grammar({
     variable_name: ($) => /[A-Za-z][A-Za-z0-9._-]*/,
     partial_array_separator: ($) => /[^$\]]+/,
     nesting: ($) => "$^$",
-    partial_name: ($) => /[A-Za-z0-9/\\_.-]+/,
 
-    partial: ($) => seq($.partial_name, "()", optional(seq("[", $.partial_array_separator, "]"))),
+    pipe_left: ($) => seq("left", $._whitespace, 
+        alias(/[0-9]+/, $.n), $._whitespace, 
+        seq("\"", alias(/([^"]|\\")*/, $.leftborder), "\""), $._whitespace,
+        seq("\"", alias(/([^"]|\\")*/, $.rightborder), "\"")),
+    pipe_center: ($) => seq("center", $._whitespace, 
+        alias(/[0-9]+/, $.n), $._whitespace, 
+        seq("\"", alias(/([^"]|\\")*/, $.leftborder), "\""), $._whitespace,
+        seq("\"", alias(/([^"]|\\")*/, $.rightborder), "\"")),
+    pipe_right: ($) => seq("right", $._whitespace, 
+        alias(/[0-9]+/, $.n), $._whitespace, 
+        seq("\"", alias(/([^"]|\\")*/, $.leftborder), "\""), $._whitespace,
+        seq("\"", alias(/([^"]|\\")*/, $.rightborder), "\"")),
+
     pipe: ($) => choice(
       alias("pairs", $.pipe_pairs),
       alias("first", $.pipe_first),
@@ -55,53 +66,58 @@ module.exports = grammar({
       alias("nowrap", $.pipe_nowrap),
       alias("alpha", $.pipe_alpha),
       alias("roman", $.pipe_roman),
-      alias(seq("left", $._whitespace, 
-        alias(/[0-9]+/, $.n), $._whitespace, 
-        seq("\"", alias(/([^"]|\\")*/, $.leftborder), "\""), $._whitespace,
-        seq("\"", alias(/([^"]|\\")*/, $.rightborder), "\"")), $.pipe_left),
-      alias(seq("center", $._whitespace, 
-        alias(/[0-9]+/, $.n), $._whitespace, 
-        seq("\"", alias(/([^"]|\\")*/, $.leftborder), "\""), $._whitespace,
-        seq("\"", alias(/([^"]|\\")*/, $.rightborder), "\"")), $.pipe_center),
-      alias(seq("right", $._whitespace, 
-        alias(/[0-9]+/, $.n), $._whitespace, 
-        seq("\"", alias(/([^"]|\\")*/, $.leftborder), "\""), $._whitespace,
-        seq("\"", alias(/([^"]|\\")*/, $.rightborder), "\"")), $.pipe_right)
+      $.pipe_left,
+      $.pipe_center,
+      $.pipe_right
+    ),
+
+    partial_name: ($) => /[A-Za-z0-9/\\_.-]+/,
+    partial: ($) => seq($.partial_name, "()"),
+
+    literal_separator: ($) => /[^$\]]+/,
+
+    _interpolation: ($) => choice(
+      seq(w($), $.variable_name, repeat(seq("/", $.pipe)), w($), optional(seq("[", $.literal_separator, "]")), w($)),
+      seq(w($), $.variable_name, seq(":", $.partial), optional(seq("[", $.literal_separator, "]")), repeat(seq("/", $.pipe)), w($)),
     ),
 
     interpolation: ($) => choice(
-      seq("$",  w($), $.variable_name, optional(seq(":", $.partial)), repeat(seq("/", $.pipe)), w($), "$"),
-      seq("${", w($), $.variable_name, optional(seq(":", $.partial)), repeat(seq("/", $.pipe)), w($), "}"),
+      seq("$",  $._interpolation, "$"),
+      seq("${", $._interpolation, "}"),
     ),
+
+    conditional_condition: ($) => seq("(", w($), $.variable_name, w($), ")"),
+    _conditional_elseif_1: ($) => prec.right(seq("$",  w($), "elseif", w($), $.conditional_condition, w($), "$", $._content)),
+    _conditional_elseif_2: ($) => prec.right(seq("${", w($), "elseif", w($), $.conditional_condition, w($), "}", $._content)),
 
     conditional: ($) => choice(
       seq(
-        "$", w($), "if", w($), "(", w($), $.variable_name, w($), ")", w($), "$", 
-        $._content, 
-        repeat(prec.right(seq("$", w($), "elseif", w($), "(", $.variable_name, ")", w($), "$", $._content))),
-        optional(seq("$", w($), "else", w($), "$", $._content)),
+        "$", w($), "if", w($), $.conditional_condition, w($), "$", 
+        alias($._content, $.conditional_then), 
+        repeat(alias($._conditional_elseif_1, $.conditional_elseif)),
+        optional(seq("$", w($), "else", w($), "$", alias($._content, $.conditional_else))),
         "$endif$"
       ),
       seq(
-        "${", w($), "if", w($), "(", $.variable_name, ")", w($), "}", 
-        $._content, 
-        repeat(prec.right(seq("${", w($), "elseif", w($), "(", $.variable_name, ")", w($), "}", $._content))),
-        optional(seq("${", w($), "else", w($), "}", $._content)),
+        "${", w($), "if", w($), $.conditional_condition, w($), "}", 
+        alias($._content, $.conditional_then), 
+        repeat(alias($._conditional_elseif_2, $.conditional_elseif)),
+        optional(seq("${", w($), "else", w($), "}", alias($._content, $.conditional_else))),
         "${", w($), "endif", w($), "}"
       )
     ),
 
     forloop: ($) => choice(
       seq(
-        "$", w($), "for", w($), "(", $.variable_name, ")", w($), "$",
-        $._content, 
-        optional(seq("$", w($), "sep", w($), "$", $._content)),
+        "$", w($), "for", w($), "(", alias($.variable_name, $.forloop_variable), ")", w($), "$",
+        alias($._content, $.forloop_content),
+        optional(seq("$", w($), "sep", w($), "$", alias($._content, $.forloop_separator))),
         "$", w($), "endfor", w($), "$"
       ),
       seq(
-        "${", w($), "for", w($), "(", $.variable_name, ")", w($), "}",
-        $._content, 
-        optional(seq("${", w($), "sep", w($), "}", $._content)),
+        "${", w($), "for", w($), "(", alias($.variable_name, $.forloop_variable), ")", w($), "}",
+        alias($._content, $.forloop_content), 
+        optional(seq("${", w($), "sep", w($), "}", alias($._content, $.forloop_separator))),
         "${", w($), "endfor", w($), "}"
       ),
     ),

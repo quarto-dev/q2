@@ -23,11 +23,83 @@
       "required": true,
       "types": [
         {
-          "type": "template_element",
+          "type": "conditional_condition",
           "named": true
         },
         {
+          "type": "conditional_else",
+          "named": true
+        },
+        {
+          "type": "conditional_elseif",
+          "named": true
+        },
+        {
+          "type": "conditional_then",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_condition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
           "type": "variable_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_else",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_elseif",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "conditional_condition",
+          "named": true
+        },
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_then",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
           "named": true
         }
       ]
@@ -42,11 +114,45 @@
       "required": true,
       "types": [
         {
-          "type": "template_element",
+          "type": "forloop_content",
           "named": true
         },
         {
-          "type": "variable_name",
+          "type": "forloop_separator",
+          "named": true
+        },
+        {
+          "type": "forloop_variable",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "forloop_content",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "forloop_separator",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
           "named": true
         }
       ]
@@ -60,6 +166,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "literal_separator",
+          "named": true
+        },
         {
           "type": "partial",
           "named": true
@@ -80,13 +190,9 @@
     "named": true,
     "fields": {},
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": true,
       "types": [
-        {
-          "type": "partial_array_separator",
-          "named": true
-        },
         {
           "type": "partial_name",
           "named": true
@@ -99,17 +205,9 @@
     "named": true,
     "fields": {},
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": true,
       "types": [
-        {
-          "type": "leftborder",
-          "named": true
-        },
-        {
-          "type": "n",
-          "named": true
-        },
         {
           "type": "pipe_allbutlast",
           "named": true
@@ -172,6 +270,71 @@
         },
         {
           "type": "pipe_uppercase",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_center",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "leftborder",
+          "named": true
+        },
+        {
+          "type": "n",
+          "named": true
+        },
+        {
+          "type": "rightborder",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_left",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "leftborder",
+          "named": true
+        },
+        {
+          "type": "n",
+          "named": true
+        },
+        {
+          "type": "rightborder",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_right",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "leftborder",
+          "named": true
+        },
+        {
+          "type": "n",
           "named": true
         },
         {
@@ -241,6 +404,10 @@
     }
   },
   {
+    "type": "\"",
+    "named": false
+  },
+  {
     "type": "$",
     "named": false
   },
@@ -285,6 +452,10 @@
     "named": false
   },
   {
+    "type": "center",
+    "named": false
+  },
+  {
     "type": "comment",
     "named": true
   },
@@ -309,11 +480,23 @@
     "named": false
   },
   {
+    "type": "forloop_variable",
+    "named": true
+  },
+  {
     "type": "if",
     "named": false
   },
   {
+    "type": "left",
+    "named": false
+  },
+  {
     "type": "leftborder",
+    "named": true
+  },
+  {
+    "type": "literal_separator",
     "named": true
   },
   {
@@ -322,10 +505,6 @@
   },
   {
     "type": "nesting",
-    "named": true
-  },
-  {
-    "type": "partial_array_separator",
     "named": true
   },
   {
@@ -341,10 +520,6 @@
     "named": true
   },
   {
-    "type": "pipe_center",
-    "named": true
-  },
-  {
     "type": "pipe_chomp",
     "named": true
   },
@@ -354,10 +529,6 @@
   },
   {
     "type": "pipe_last",
-    "named": true
-  },
-  {
-    "type": "pipe_left",
     "named": true
   },
   {
@@ -385,16 +556,16 @@
     "named": true
   },
   {
-    "type": "pipe_right",
-    "named": true
-  },
-  {
     "type": "pipe_roman",
     "named": true
   },
   {
     "type": "pipe_uppercase",
     "named": true
+  },
+  {
+    "type": "right",
+    "named": false
   },
   {
     "type": "rightborder",
