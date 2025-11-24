@@ -19,8 +19,29 @@ pub struct MarkdownParser {
 /// A stateful object for walking a [`MarkdownTree`] efficiently.
 ///
 /// This is a thin wrapper around [`TreeCursor`] for the unified markdown tree.
+///
+/// Note: This type exists for backwards compatibility. For new code using
+/// `quarto-treesitter-ast` traversals, use [`MarkdownTree::walk_cursor`] to get
+/// a raw [`TreeCursor`] directly.
 pub struct MarkdownCursor<'a> {
     block_cursor: TreeCursor<'a>,
+}
+
+impl<'a> MarkdownCursor<'a> {
+    /// Unwrap this into the underlying [`TreeCursor`].
+    pub fn into_inner(self) -> TreeCursor<'a> {
+        self.block_cursor
+    }
+
+    /// Get a reference to the underlying [`TreeCursor`].
+    pub fn as_cursor(&self) -> &TreeCursor<'a> {
+        &self.block_cursor
+    }
+
+    /// Get a mutable reference to the underlying [`TreeCursor`].
+    pub fn as_cursor_mut(&mut self) -> &mut TreeCursor<'a> {
+        &mut self.block_cursor
+    }
 }
 
 impl<'a> MarkdownCursor<'a> {
@@ -143,10 +164,21 @@ impl MarkdownTree {
     }
 
     /// Create a new [`MarkdownCursor`] starting from the root of the tree.
+    ///
+    /// For new code using `quarto-treesitter-ast` traversals, prefer [`walk_cursor`](Self::walk_cursor)
+    /// which returns a raw [`TreeCursor`] directly.
     pub fn walk(&self) -> MarkdownCursor<'_> {
         MarkdownCursor {
             block_cursor: self.block_tree.walk(),
         }
+    }
+
+    /// Create a new [`TreeCursor`] starting from the root of the tree.
+    ///
+    /// This returns the raw tree-sitter cursor directly, suitable for use with
+    /// generic traversal functions from `quarto-treesitter-ast`.
+    pub fn walk_cursor(&self) -> TreeCursor<'_> {
+        self.block_tree.walk()
     }
 }
 

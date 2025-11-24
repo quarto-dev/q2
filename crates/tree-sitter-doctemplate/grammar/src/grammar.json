@@ -17,6 +17,10 @@
       "type": "PATTERN",
       "value": "[^$]+"
     },
+    "escaped_dollar": {
+      "type": "STRING",
+      "value": "$$"
+    },
     "comment": {
       "type": "PATTERN",
       "value": "\\$\\-\\-[^\\n]+"
@@ -1497,6 +1501,10 @@
         {
           "type": "SYMBOL",
           "name": "text"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "escaped_dollar"
         },
         {
           "type": "SYMBOL",

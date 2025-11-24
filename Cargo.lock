@@ -251,6 +251,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "diff"
+version = "0.1.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56254986775e3233ffa9c4d7d3faaf6d36a2c09d30b20687e9f88bc8bafc16c8"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -782,6 +788,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pretty_assertions"
+version = "1.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ae130e2f271fbc2ac3a40fb1d07180839cdbbe443c7a27e1e3c13c5cac0116d"
+dependencies = [
+ "diff",
+ "yansi",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -832,6 +848,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-doctemplate"
+version = "0.1.0"
+dependencies = [
+ "pretty_assertions",
+ "quarto-error-reporting",
+ "quarto-parse-errors",
+ "quarto-source-map",
+ "quarto-treesitter-ast",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tree-sitter",
+ "tree-sitter-doctemplate",
+]
+
+[[package]]
 name = "quarto-error-message-macros"
 version = "0.1.0"
 dependencies = [
@@ -871,6 +903,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-parse-errors",
  "quarto-source-map",
+ "quarto-treesitter-ast",
  "quarto-yaml",
  "regex",
  "serde",
@@ -908,6 +941,13 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "quarto-treesitter-ast"
+version = "0.1.0"
+dependencies = [
+ "tree-sitter",
 ]
 
 [[package]]

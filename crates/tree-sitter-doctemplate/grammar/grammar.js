@@ -33,6 +33,7 @@ module.exports = grammar({
 
     // Plain text (anything not starting a template element)
     text: ($) => /[^$]+/,
+    escaped_dollar: ($) => "$$",
     comment: ($) => /\$\-\-[^\n]+/,
     _whitespace: ($) => /[ \t]+/,
     variable_name: ($) => /[A-Za-z][A-Za-z0-9._-]*/,
@@ -127,6 +128,7 @@ module.exports = grammar({
 
     template_element: ($) => choice(
       $.text,
+      $.escaped_dollar,
       $.comment,
       $.interpolation,
       $.conditional,

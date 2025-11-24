@@ -137,3 +137,17 @@ $endfor$
                   (pipe_uppercase))))
             (template_element
               (text))))))
+================================================================================
+template.txt 7 - escaped_dollar
+================================================================================
+$for(items)$it $$$endfor$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (forloop
+          (forloop_variable)
+          (forloop_content
+            (template_element
+              (text))
+            (template_element
+              (escaped_dollar))))))

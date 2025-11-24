@@ -381,6 +381,10 @@
           "named": true
         },
         {
+          "type": "escaped_dollar",
+          "named": true
+        },
+        {
           "type": "forloop",
           "named": true
         },
@@ -474,6 +478,10 @@
   {
     "type": "endif",
     "named": false
+  },
+  {
+    "type": "escaped_dollar",
+    "named": true
   },
   {
     "type": "for",

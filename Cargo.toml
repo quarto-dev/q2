@@ -78,6 +78,8 @@ path = "./crates/quarto-error-reporting"
 [workspace.dependencies.quarto-source-map]
 path = "./crates/quarto-source-map"
 
+[workspace.dependencies.quarto-treesitter-ast]
+path = "./crates/quarto-treesitter-ast"
 
 [workspace.lints.clippy]
 assigning_clones = "warn"

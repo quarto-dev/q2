@@ -1,0 +1,38 @@
+[package]
+name = "quarto-doctemplate"
+version = "0.1.0"
+description = "Pandoc-compatible document template engine for Quarto"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Tree-sitter grammar for template syntax
+tree-sitter-doctemplate = { path = "../tree-sitter-doctemplate" }
+tree-sitter = { workspace = true }
+
+# Generic tree-sitter traversal utilities
+quarto-treesitter-ast = { workspace = true }
+
+# Error reporting infrastructure
+quarto-parse-errors = { path = "../quarto-parse-errors" }
+quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-source-map = { path = "../quarto-source-map" }
+
+# Serialization (for TemplateValue conversion from JSON)
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4"
+
+[lints]
+workspace = true

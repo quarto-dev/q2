@@ -25,6 +25,7 @@ quarto-error-reporting = { path = "../quarto-error-reporting" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-yaml = { path = "../quarto-yaml" }
 quarto-parse-errors = { path = "../quarto-parse-errors" }
+quarto-treesitter-ast = { workspace = true }
 regex = { version = "1.10.0", features = ["unicode"] }
 clap = { version = "4.0", features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
