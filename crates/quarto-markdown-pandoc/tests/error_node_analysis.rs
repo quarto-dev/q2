@@ -3,7 +3,7 @@
  * Temporary test to analyze ERROR nodes in tree-sitter parse tree
  */
 
-use quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserverTrait;
+use quarto_parse_errors::TreeSitterLogObserverTrait;
 use std::collections::BTreeMap;
 use tree_sitter_qmd::MarkdownParser;
 
@@ -80,8 +80,7 @@ fn analyze_categorical_predictors_errors() {
     }
 
     // Now run the actual error diagnostic generation to compare
-    let mut log_observer =
-        quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver::default();
+    let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
     parser.parser.set_logger(Some(Box::new(|log_type, message| {
         if let tree_sitter::LogType::Parse = log_type {
             log_observer.log(log_type, message);

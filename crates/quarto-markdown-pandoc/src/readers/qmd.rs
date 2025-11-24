@@ -15,7 +15,7 @@ use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
 use crate::readers::qmd_error_messages::{produce_diagnostic_messages, produce_error_message_json};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
-use crate::utils::tree_sitter_log_observer::TreeSitterLogObserverTrait;
+use quarto_parse_errors::TreeSitterLogObserverTrait;
 use std::io::Write;
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
@@ -35,7 +35,7 @@ fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf:
 
 pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
     let mut parser = MarkdownParser::default();
-    let mut log_observer = crate::utils::tree_sitter_log_observer::TreeSitterLogObserver::default();
+    let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
     parser
         .parser
         .set_logger(Some(Box::new(|log_type, message| match log_type {
@@ -66,9 +66,8 @@ pub fn read<T: Write>(
     Vec<quarto_error_reporting::DiagnosticMessage>,
 > {
     let mut parser = MarkdownParser::default();
-    let mut fast_log_observer =
-        crate::utils::tree_sitter_log_observer::TreeSitterLogObserverFast::default();
-    let mut log_observer = crate::utils::tree_sitter_log_observer::TreeSitterLogObserver::default();
+    let mut fast_log_observer = quarto_parse_errors::TreeSitterLogObserverFast::default();
+    let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
 
     parser
         .parser

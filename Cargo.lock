@@ -303,17 +303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "error-message-macros"
-version = "0.1.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "serde",
- "serde_json",
- "syn",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -843,6 +832,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-error-message-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn",
+]
+
+[[package]]
 name = "quarto-error-reporting"
 version = "0.1.0"
 dependencies = [
@@ -862,13 +862,14 @@ dependencies = [
  "ariadne",
  "clap",
  "crossterm",
- "error-message-macros",
  "glob",
  "hashlink",
  "insta",
  "once_cell",
  "paste",
+ "quarto-error-message-macros",
  "quarto-error-reporting",
+ "quarto-parse-errors",
  "quarto-source-map",
  "quarto-yaml",
  "regex",
@@ -887,6 +888,18 @@ dependencies = [
  "libfuzzer-sys",
  "quarto-markdown-pandoc",
  "yaml-rust2",
+]
+
+[[package]]
+name = "quarto-parse-errors"
+version = "0.1.0"
+dependencies = [
+ "quarto-error-message-macros",
+ "quarto-error-reporting",
+ "quarto-source-map",
+ "serde",
+ "serde_json",
+ "tree-sitter",
 ]
 
 [[package]]

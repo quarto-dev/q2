@@ -1,10 +1,16 @@
 /*
- * tree_sitter_log_observer.rs
+ * tree_sitter_log.rs
  * Copyright (c) 2025 Posit, PBC
  */
 
-use std::collections::HashMap; // Still needed for TreeSitterParseLog::processes
+//! Tree-sitter parser log observation for error reporting.
+//!
+//! This module provides utilities to capture and analyze tree-sitter's internal
+//! parse state, enabling high-quality error message generation.
 
+use std::collections::HashMap;
+
+/// State of the tree-sitter log observer during parsing.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TreeSitterLogState {
     Idle,
@@ -12,16 +18,18 @@ pub enum TreeSitterLogState {
     JustReduced,
 }
 
+/// A message from the parser process containing parse state information.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ProcessMessage {
     pub version: usize,
-    pub state: usize,
+    pub state: usize,    // LR parser state
     pub row: usize,
     pub column: usize,
-    pub sym: String,
-    pub size: usize,
+    pub sym: String,     // Symbol at this position
+    pub size: usize,     // Size of the token in characters
 }
 
+/// A token that was consumed during parsing.
 #[derive(Debug)]
 pub struct ConsumedToken {
     pub row: usize,
@@ -31,6 +39,7 @@ pub struct ConsumedToken {
     pub sym: String,
 }
 
+/// Complete log of a single parse attempt.
 #[derive(Debug)]
 pub struct TreeSitterParseLog {
     pub messages: Vec<String>,
@@ -38,9 +47,10 @@ pub struct TreeSitterParseLog {
     pub current_lookahead: Option<(String, usize)>,
     pub processes: HashMap<usize, TreeSitterProcessLog>,
     pub all_tokens: Vec<ConsumedToken>,
-    pub consumed_tokens: Vec<ConsumedToken>, // row, column, size, LR state
+    pub consumed_tokens: Vec<ConsumedToken>,
 }
 
+/// Log of a single parser process (GLR parsers may have multiple concurrent processes).
 #[derive(Debug)]
 pub struct TreeSitterProcessLog {
     pub found_accept: bool,
@@ -57,7 +67,7 @@ impl TreeSitterProcessLog {
 
 impl TreeSitterParseLog {
     pub fn is_good(&self) -> bool {
-        // for every process, there can't be any version that reached a state
+        // For every process, there can't be any version that reached a state
         // with error states
         for (_, process) in &self.processes {
             if !process.is_good() {
@@ -69,6 +79,8 @@ impl TreeSitterParseLog {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Trait for objects that can observe tree-sitter parser logs.
 pub trait TreeSitterLogObserverTrait {
     fn had_errors(&self) -> bool;
     fn log(&mut self, log_type: tree_sitter::LogType, message: &str);
@@ -76,6 +88,7 @@ pub trait TreeSitterLogObserverTrait {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Fast log observer that only tracks whether errors occurred (no detailed state).
 pub struct TreeSitterLogObserverFast {
     pub saw_error: bool,
 }
@@ -99,12 +112,12 @@ impl TreeSitterLogObserverTrait for TreeSitterLogObserverFast {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+/// Full log observer that captures detailed parse state for error message generation.
 pub struct TreeSitterLogObserver {
     pub parses: Vec<TreeSitterParseLog>,
     state: TreeSitterLogState,
 }
 
-// need both impl and trait? Smells like bad design :/
 impl TreeSitterLogObserver {
     pub fn had_errors(&self) -> bool {
         for parse in &self.parses {
@@ -125,8 +138,8 @@ impl TreeSitterLogObserverTrait for TreeSitterLogObserver {
         }
         false
     }
+
     fn log(&mut self, _log_type: tree_sitter::LogType, message: &str) {
-        // Implement your logging logic here
         let words: Vec<&str> = message.split_whitespace().collect();
         if words.is_empty() {
             eprintln!("Empty log message from tree-sitter");
@@ -313,7 +326,7 @@ impl TreeSitterLogObserverTrait for TreeSitterLogObserver {
                             row: current_process_message.row,
                             column: current_process_message.column,
                             size,
-                            sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
+                            sym: current_process_message.sym.clone(),
                         };
                         current_parse.consumed_tokens.push(new_token)
                     }
@@ -327,7 +340,7 @@ impl TreeSitterLogObserverTrait for TreeSitterLogObserver {
                             row: current_process_message.row,
                             column: current_process_message.column,
                             size,
-                            sym: current_process_message.sym.clone(), // TODO would prefer not to clone here
+                            sym: current_process_message.sym.clone(),
                         };
                         current_parse.consumed_tokens.push(new_token)
                     }
