@@ -141,6 +141,46 @@ pub fn node_location(node: &tree_sitter::Node) -> quarto_source_map::Range {
     }
 }
 
+/// Options for extracting source info from tree-sitter nodes
+#[derive(Debug, Clone, Default)]
+pub struct SourceInfoOptions {
+    /// Whether to trim leading whitespace from the source location
+    pub trim_leading_whitespace: bool,
+    /// Whether to trim trailing whitespace from the source location
+    pub trim_trailing_whitespace: bool,
+}
+
+impl SourceInfoOptions {
+    /// Create options with no trimming (default behavior)
+    pub fn none() -> Self {
+        Self::default()
+    }
+
+    /// Create options that trim both leading and trailing whitespace
+    pub fn trim_all() -> Self {
+        Self {
+            trim_leading_whitespace: true,
+            trim_trailing_whitespace: true,
+        }
+    }
+
+    /// Create options that trim only leading whitespace
+    pub fn trim_leading() -> Self {
+        Self {
+            trim_leading_whitespace: true,
+            trim_trailing_whitespace: false,
+        }
+    }
+
+    /// Create options that trim only trailing whitespace
+    pub fn trim_trailing() -> Self {
+        Self {
+            trim_leading_whitespace: false,
+            trim_trailing_whitespace: true,
+        }
+    }
+}
+
 pub fn node_source_info(node: &tree_sitter::Node) -> quarto_source_map::SourceInfo {
     quarto_source_map::SourceInfo::from_range(quarto_source_map::FileId(0), node_location(node))
 }
@@ -149,12 +189,51 @@ pub fn node_source_info_with_context(
     node: &tree_sitter::Node,
     context: &ASTContext,
 ) -> quarto_source_map::SourceInfo {
-    // If we're in a recursive parse (parent_source_info is set), wrap the SourceInfo
-    // as a Substring of the parent. This chains the location back to the original file.
-    if let Some(parent) = &context.parent_source_info {
+    node_source_info_with_options(node, context, &SourceInfoOptions::none())
+}
+
+/// Extract source info from a tree-sitter node with additional options
+///
+/// This is the most general form that allows trimming whitespace from the resulting
+/// source location. Use `node_source_info_with_context` for the common case where
+/// no trimming is needed.
+///
+/// # Arguments
+/// * `node` - The tree-sitter node
+/// * `context` - The AST context containing file and parent information
+/// * `options` - Options for extracting the source info (e.g., whitespace trimming)
+///
+/// # Returns
+/// A SourceInfo that may be trimmed based on the provided options
+pub fn node_source_info_with_options(
+    node: &tree_sitter::Node,
+    context: &ASTContext,
+    options: &SourceInfoOptions,
+) -> quarto_source_map::SourceInfo {
+    // First, get the base source info (same logic as node_source_info_with_context)
+    let base_source_info = if let Some(parent) = &context.parent_source_info {
         quarto_source_map::SourceInfo::substring(parent.clone(), node.start_byte(), node.end_byte())
     } else {
         quarto_source_map::SourceInfo::from_range(context.current_file_id(), node_location(node))
+    };
+
+    // Apply trimming if requested
+    if options.trim_leading_whitespace || options.trim_trailing_whitespace {
+        let input_text = context
+            .source_context
+            .get_file(context.current_file_id())
+            .and_then(|f| f.content.as_ref())
+            .map(|s| s.as_str())
+            .unwrap_or("");
+
+        crate::utils::trim_source_location::trim_whitespace(
+            &base_source_info,
+            input_text,
+            options.trim_leading_whitespace,
+            options.trim_trailing_whitespace,
+        )
+    } else {
+        base_source_info
     }
 }
 

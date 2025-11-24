@@ -9,3 +9,4 @@ pub mod diagnostic_collector;
 pub mod output;
 pub mod text;
 pub mod tree_sitter_log_observer;
+pub mod trim_source_location;
