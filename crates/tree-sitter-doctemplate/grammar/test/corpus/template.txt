@@ -151,3 +151,45 @@ $for(items)$it $$$endfor$
               (text))
             (template_element
               (escaped_dollar))))))
+================================================================================
+template.txt 8 - conditionals
+================================================================================
+$if(a)$A$elseif(b)$B$else$C$endif$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text)))
+          (conditional_elseif
+            (conditional_condition
+              (variable_name))
+            (template_element
+              (text)))
+          (conditional_else
+            (template_element
+              (text))))))
+================================================================================
+template.txt 8 - conditionals (syntax 2)
+================================================================================
+${if(a)}A${elseif(b)}B${else}C${endif}
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text)))
+          (conditional_elseif
+            (conditional_condition
+              (variable_name))
+            (template_element
+              (text)))
+          (conditional_else
+            (template_element
+              (text))))))

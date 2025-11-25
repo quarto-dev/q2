@@ -34,7 +34,7 @@ module.exports = grammar({
     // Plain text (anything not starting a template element)
     text: ($) => /[^$]+/,
     escaped_dollar: ($) => "$$",
-    comment: ($) => /\$\-\-[^\n]+/,
+    comment: ($) => /\$\-\-[^\n]+[\n]?/,
     _whitespace: ($) => /[ \t]+/,
     variable_name: ($) => /[A-Za-z][A-Za-z0-9._-]*/,
     partial_array_separator: ($) => /[^$\]]+/,
@@ -88,38 +88,38 @@ module.exports = grammar({
     ),
 
     conditional_condition: ($) => seq("(", w($), $.variable_name, w($), ")"),
-    _conditional_elseif_1: ($) => prec.right(seq("$",  w($), "elseif", w($), $.conditional_condition, w($), "$", $._content)),
-    _conditional_elseif_2: ($) => prec.right(seq("${", w($), "elseif", w($), $.conditional_condition, w($), "}", $._content)),
+    _conditional_elseif_1: $ => prec.right(seq($._keyword_elseif_1, w($), $.conditional_condition, w($), "$", $._content)),
+    _conditional_elseif_2: $ => prec.right(seq($._keyword_elseif_2, w($), $.conditional_condition, w($), "}", $._content)),
 
     conditional: ($) => choice(
       seq(
-        "$", w($), "if", w($), $.conditional_condition, w($), "$", 
+        $._keyword_if_1, w($), $.conditional_condition, w($), "$", 
         alias($._content, $.conditional_then), 
         repeat(alias($._conditional_elseif_1, $.conditional_elseif)),
-        optional(seq("$", w($), "else", w($), "$", alias($._content, $.conditional_else))),
-        "$endif$"
+        optional(seq($._keyword_else_1, w($), "$", alias($._content, $.conditional_else))),
+        $._keyword_endif_1, "$"
       ),
       seq(
-        "${", w($), "if", w($), $.conditional_condition, w($), "}", 
+        $._keyword_if_2, w($), $.conditional_condition, w($), "}", 
         alias($._content, $.conditional_then), 
         repeat(alias($._conditional_elseif_2, $.conditional_elseif)),
-        optional(seq("${", w($), "else", w($), "}", alias($._content, $.conditional_else))),
-        "${", w($), "endif", w($), "}"
+        optional(seq($._keyword_else_2, w($), "}", alias($._content, $.conditional_else))),
+        $._keyword_endif_2, "}"
       )
     ),
 
     forloop: ($) => choice(
       seq(
-        "$", w($), "for", w($), "(", alias($.variable_name, $.forloop_variable), ")", w($), "$",
+        $._keyword_for_1, w($), "(", alias($.variable_name, $.forloop_variable), ")", w($), "$",
         alias($._content, $.forloop_content),
         optional(seq("$", w($), "sep", w($), "$", alias($._content, $.forloop_separator))),
-        "$", w($), "endfor", w($), "$"
+        $._keyword_endfor_1, w($), "$"
       ),
       seq(
-        "${", w($), "for", w($), "(", alias($.variable_name, $.forloop_variable), ")", w($), "}",
+        $._keyword_for_2, w($), "(", alias($.variable_name, $.forloop_variable), ")", w($), "}",
         alias($._content, $.forloop_content), 
         optional(seq("${", w($), "sep", w($), "}", alias($._content, $.forloop_separator))),
-        "${", w($), "endfor", w($), "}"
+        $._keyword_endfor_2, w($), "}"
       ),
     ),
 
@@ -138,4 +138,18 @@ module.exports = grammar({
       $.nesting,
     ),
   },
+  externals: $ => [
+    $._keyword_for_1,
+    $._keyword_for_2,
+    $._keyword_endfor_1,
+    $._keyword_endfor_2,
+    $._keyword_if_1,
+    $._keyword_if_2,
+    $._keyword_else_1,
+    $._keyword_else_2,
+    $._keyword_elseif_1,
+    $._keyword_elseif_2,
+    $._keyword_endif_1,
+    $._keyword_endif_2,
+  ]
 });

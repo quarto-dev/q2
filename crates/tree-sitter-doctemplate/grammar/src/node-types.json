@@ -416,10 +416,6 @@
     "named": false
   },
   {
-    "type": "$endif$",
-    "named": false
-  },
-  {
     "type": "${",
     "named": false
   },
@@ -464,36 +460,12 @@
     "named": true
   },
   {
-    "type": "else",
-    "named": false
-  },
-  {
-    "type": "elseif",
-    "named": false
-  },
-  {
-    "type": "endfor",
-    "named": false
-  },
-  {
-    "type": "endif",
-    "named": false
-  },
-  {
     "type": "escaped_dollar",
     "named": true
   },
   {
-    "type": "for",
-    "named": false
-  },
-  {
     "type": "forloop_variable",
     "named": true
-  },
-  {
-    "type": "if",
-    "named": false
   },
   {
     "type": "left",
