@@ -17,6 +17,7 @@ anyhow.workspace = true
 clap = { version = "4.0", features = ["derive"] }
 walkdir = "2.5"
 include_dir = "0.7"
+rayon = "1.10"
 
 [dev-dependencies]
 quarto-source-map = { workspace = true }

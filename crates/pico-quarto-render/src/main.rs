@@ -11,13 +11,46 @@ mod template_context;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use walkdir::WalkDir;
 
 use embedded_resolver::EmbeddedResolver;
 use format_writers::HtmlWriters;
+use quarto_doctemplate::Template;
 use template_context::{compile_template, prepare_template_metadata, render_with_template};
+
+/// Result of processing a single QMD file.
+struct ProcessResult {
+    /// The input path that was processed.
+    input_path: PathBuf,
+    /// The result: Ok(output_path) or Err(error).
+    result: Result<PathBuf>,
+}
+
+/// Thread-safe wrapper for Template.
+///
+/// Template contains SourceInfo which uses Rc internally, making it not Sync/Send.
+/// We wrap it and use unsafe to assert it's safe to share across threads.
+///
+/// # Safety
+///
+/// This is safe because:
+/// 1. We only read from the template during parallel processing (no mutation)
+/// 2. The Rc inside SourceInfo is never incremented/decremented after template compilation
+/// 3. Template::render() only reads the AST nodes, it doesn't modify them
+/// 4. Each thread gets a shared reference and doesn't modify the template
+///
+/// The underlying issue is that SourceInfo uses Rc for substring tracking,
+/// but in the template context, these Rc values are created once during parsing
+/// and never mutated afterward. The template evaluation is purely read-only.
+struct SendSyncTemplate(Template);
+
+// SAFETY: See struct documentation above.
+unsafe impl Sync for SendSyncTemplate {}
+unsafe impl Send for SendSyncTemplate {}
 
 #[derive(Parser, Debug)]
 #[command(name = "pico-quarto-render")]
@@ -73,25 +106,57 @@ fn main() -> Result<()> {
         eprintln!("Found {} .qmd files", qmd_files.len());
     }
 
-    // Process each file
+    // Compile template once (shared across all threads)
+    let template_source = embedded_resolver::get_main_template()
+        .ok_or_else(|| anyhow::anyhow!("Main template not found"))?;
+    let resolver = EmbeddedResolver;
+    let template = compile_template(template_source, &resolver)?;
+
+    // Check if single-threaded mode is requested (for cleaner profiling)
+    let single_threaded = std::env::var("RAYON_NUM_THREADS")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+
+    // Process files, collecting results
+    let results: Vec<ProcessResult> = if single_threaded {
+        // Sequential processing (cleaner stack traces for profiling)
+        qmd_files
+            .iter()
+            .map(|qmd_path| ProcessResult {
+                input_path: qmd_path.clone(),
+                result: process_qmd_file(qmd_path, &args.input_dir, &args.output_dir, &template),
+            })
+            .collect()
+    } else {
+        // Parallel processing with rayon
+        let shared_template = Arc::new(SendSyncTemplate(template));
+        qmd_files
+            .par_iter()
+            .map(|qmd_path| {
+                let template = &shared_template.0;
+                ProcessResult {
+                    input_path: qmd_path.clone(),
+                    result: process_qmd_file(qmd_path, &args.input_dir, &args.output_dir, template),
+                }
+            })
+            .collect()
+    };
+
+    // Output results sequentially (preserves order, no interleaving)
     let mut success_count = 0;
     let mut error_count = 0;
 
-    for qmd_path in qmd_files {
-        // Print filename at verbose level 1+
-        if args.verbose >= 1 {
-            eprintln!("Rendering {:?}", qmd_path);
-        }
-
-        match process_qmd_file(&qmd_path, &args.input_dir, &args.output_dir, args.verbose) {
+    for process_result in results {
+        match process_result.result {
             Ok(output_path) => {
                 if args.verbose >= 1 {
+                    eprintln!("Rendered {:?}", process_result.input_path);
                     eprintln!("  -> {:?}", output_path);
                 }
                 success_count += 1;
             }
             Err(e) => {
-                eprintln!("✗ Error processing {:?}: {}", qmd_path, e);
+                eprintln!("✗ Error processing {:?}: {}", process_result.input_path, e);
                 error_count += 1;
             }
         }
@@ -115,21 +180,16 @@ fn process_qmd_file(
     qmd_path: &Path,
     input_dir: &Path,
     output_dir: &Path,
-    verbose: u8,
+    template: &Template,
 ) -> Result<PathBuf> {
     // Read the input file
     let input_content =
         fs::read(qmd_path).context(format!("Failed to read file: {:?}", qmd_path))?;
 
     // Parse QMD to AST
-    // Enable parser verbose mode at level 2+
-    let mut output_stream: Box<dyn std::io::Write> = if verbose >= 2 {
-        Box::new(std::io::stderr())
-    } else {
-        Box::new(std::io::sink())
-    };
+    let mut output_stream = std::io::sink();
 
-    let (mut pandoc, _context, warnings) = quarto_markdown_pandoc::readers::qmd::read(
+    let (mut pandoc, _context, _warnings) = quarto_markdown_pandoc::readers::qmd::read(
         &input_content,
         false, // loose mode
         qmd_path.to_str().unwrap_or("<unknown>"),
@@ -147,25 +207,12 @@ fn process_qmd_file(
         anyhow::anyhow!("Parse errors:\n{}", error_text)
     })?;
 
-    // Log warnings if verbose
-    if verbose >= 2 {
-        for warning in warnings {
-            eprintln!("Warning: {}", warning.to_text(None));
-        }
-    }
-
     // Prepare template metadata (adds pagetitle from title, etc.)
     prepare_template_metadata(&mut pandoc);
 
-    // Load and compile template
-    let template_source = embedded_resolver::get_main_template()
-        .ok_or_else(|| anyhow::anyhow!("Main template not found"))?;
-    let resolver = EmbeddedResolver;
-    let template = compile_template(template_source, &resolver)?;
-
     // Render with template
     let writers = HtmlWriters;
-    let html_output = render_with_template(&pandoc, &template, &writers)?;
+    let html_output = render_with_template(&pandoc, template, &writers)?;
 
     // Determine output path
     let relative_path = qmd_path
