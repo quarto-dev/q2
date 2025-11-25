@@ -54,6 +54,29 @@ impl DiagnosticCollector {
         self.add(diagnostic);
     }
 
+    /// Add an error message with error code and source location.
+    pub fn error_with_code(
+        &mut self,
+        code: &str,
+        message: impl Into<String>,
+        location: SourceInfo,
+    ) {
+        let diagnostic = DiagnosticMessageBuilder::error(message)
+            .with_code(code)
+            .with_location(location)
+            .build();
+        self.add(diagnostic);
+    }
+
+    /// Add a warning message with error code and source location.
+    pub fn warn_with_code(&mut self, code: &str, message: impl Into<String>, location: SourceInfo) {
+        let diagnostic = DiagnosticMessageBuilder::warning(message)
+            .with_code(code)
+            .with_location(location)
+            .build();
+        self.add(diagnostic);
+    }
+
     /// Check if any errors were collected (warnings don't count).
     pub fn has_errors(&self) -> bool {
         self.diagnostics
@@ -171,6 +194,44 @@ impl<'a> EvalContext<'a> {
             self.error_at(message, location);
         } else {
             self.warn_at(message, location);
+        }
+    }
+
+    /// Add an error with error code and source location.
+    pub fn error_with_code(
+        &mut self,
+        code: &str,
+        message: impl Into<String>,
+        location: &SourceInfo,
+    ) {
+        self.diagnostics
+            .error_with_code(code, message, location.clone());
+    }
+
+    /// Add a warning with error code and source location.
+    pub fn warn_with_code(
+        &mut self,
+        code: &str,
+        message: impl Into<String>,
+        location: &SourceInfo,
+    ) {
+        self.diagnostics
+            .warn_with_code(code, message, location.clone());
+    }
+
+    /// Add an error or warning with error code depending on strict mode.
+    ///
+    /// In strict mode, this adds an error. Otherwise, it adds a warning.
+    pub fn warn_or_error_with_code(
+        &mut self,
+        code: &str,
+        message: impl Into<String>,
+        location: &SourceInfo,
+    ) {
+        if self.strict_mode {
+            self.error_with_code(code, message, location);
+        } else {
+            self.warn_with_code(code, message, location);
         }
     }
 
@@ -292,5 +353,53 @@ mod tests {
         assert!(parent.has_errors());
         let diagnostics = parent.into_diagnostics();
         assert_eq!(diagnostics.len(), 2);
+    }
+
+    #[test]
+    fn test_diagnostic_collector_error_with_code() {
+        let mut collector = DiagnosticCollector::new();
+        let location = SourceInfo::default();
+        collector.error_with_code("Q-10-2", "Undefined variable: foo", location);
+
+        assert!(!collector.is_empty());
+        assert!(collector.has_errors());
+        assert_eq!(collector.diagnostics().len(), 1);
+        assert_eq!(collector.diagnostics()[0].code.as_deref(), Some("Q-10-2"));
+    }
+
+    #[test]
+    fn test_diagnostic_collector_warn_with_code() {
+        let mut collector = DiagnosticCollector::new();
+        let location = SourceInfo::default();
+        collector.warn_with_code("Q-10-2", "Undefined variable: foo", location);
+
+        assert!(!collector.is_empty());
+        assert!(!collector.has_errors()); // Warnings don't count as errors
+        assert_eq!(collector.diagnostics().len(), 1);
+        assert_eq!(collector.diagnostics()[0].code.as_deref(), Some("Q-10-2"));
+    }
+
+    #[test]
+    fn test_eval_context_warn_or_error_with_code() {
+        let vars = TemplateContext::new();
+        let location = SourceInfo::default();
+
+        // Normal mode: warning with code
+        let mut ctx = EvalContext::new(&vars);
+        ctx.warn_or_error_with_code("Q-10-2", "Test", &location);
+        assert!(!ctx.has_errors());
+        let diagnostics = ctx.into_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-10-2"));
+        assert_eq!(diagnostics[0].kind, DiagnosticKind::Warning);
+
+        // Strict mode: error with code
+        let mut ctx_strict = EvalContext::new(&vars).with_strict_mode(true);
+        ctx_strict.warn_or_error_with_code("Q-10-2", "Test", &location);
+        assert!(ctx_strict.has_errors());
+        let diagnostics = ctx_strict.into_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-10-2"));
+        assert_eq!(diagnostics[0].kind, DiagnosticKind::Error);
     }
 }

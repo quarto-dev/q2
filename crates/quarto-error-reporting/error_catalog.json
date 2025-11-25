@@ -489,5 +489,55 @@
     "message_template": "Fenced note definitions cannot be rendered in ANSI terminal output.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-55",
     "since_version": "99.9.9"
+  },
+
+  "Q-10-1": {
+    "subsystem": "template",
+    "title": "Template Parse Error",
+    "message_template": "Failed to parse the template syntax.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-1",
+    "since_version": "99.9.9"
+  },
+  "Q-10-2": {
+    "subsystem": "template",
+    "title": "Undefined Variable",
+    "message_template": "The variable referenced in the template is not defined in the context.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-2",
+    "since_version": "99.9.9"
+  },
+  "Q-10-3": {
+    "subsystem": "template",
+    "title": "Partial Not Found",
+    "message_template": "The referenced partial template file could not be found.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-3",
+    "since_version": "99.9.9"
+  },
+  "Q-10-4": {
+    "subsystem": "template",
+    "title": "Recursive Partial",
+    "message_template": "Partial templates are nested too deeply, possibly indicating infinite recursion.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-4",
+    "since_version": "99.9.9"
+  },
+  "Q-10-5": {
+    "subsystem": "template",
+    "title": "Unresolved Partial Reference",
+    "message_template": "A partial reference was not resolved during template compilation.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-5",
+    "since_version": "99.9.9"
+  },
+  "Q-10-6": {
+    "subsystem": "template",
+    "title": "Unknown Pipe",
+    "message_template": "The pipe transformation specified in the template is not recognized.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-6",
+    "since_version": "99.9.9"
+  },
+  "Q-10-7": {
+    "subsystem": "template",
+    "title": "Invalid Pipe Arguments",
+    "message_template": "The arguments provided to the pipe transformation are invalid.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-7",
+    "since_version": "99.9.9"
   }
 }

@@ -209,7 +209,8 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
         None => {
             // Emit warning or error depending on strict mode
             let var_path = var.path.join(".");
-            ctx.warn_or_error_at(
+            ctx.warn_or_error_with_code(
+                "Q-10-2",
                 format!("Undefined variable: {}", var_path),
                 &var.source_info,
             );
@@ -320,7 +321,11 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
         Some(nodes) => nodes,
         None => {
             // Partial was not resolved during compilation - emit error
-            ctx.error_at(format!("Partial '{}' was not resolved", name), source_info);
+            ctx.error_with_code(
+                "Q-10-5",
+                format!("Partial '{}' was not resolved", name),
+                source_info,
+            );
             return Ok(Doc::Empty);
         }
     };
@@ -341,7 +346,8 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
                 None => {
                     // Variable not found - emit warning/error
                     let var_path = var_ref.path.join(".");
-                    ctx.warn_or_error_at(
+                    ctx.warn_or_error_with_code(
+                        "Q-10-2",
                         format!("Undefined variable: {}", var_path),
                         &var_ref.source_info,
                     );
@@ -433,13 +439,14 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Hello, !");
 
-        // Should have a warning
+        // Should have a warning with error code Q-10-2
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(
             diagnostics[0].kind,
             quarto_error_reporting::DiagnosticKind::Warning
         );
         assert!(diagnostics[0].title.contains("Undefined variable"));
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-10-2"));
     }
 
     #[test]
@@ -450,12 +457,13 @@ mod tests {
         // Should fail in strict mode
         assert!(result.is_err());
 
-        // Should have an error (not a warning)
+        // Should have an error (not a warning) with error code Q-10-2
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(
             diagnostics[0].kind,
             quarto_error_reporting::DiagnosticKind::Error
         );
+        assert_eq!(diagnostics[0].code.as_deref(), Some("Q-10-2"));
     }
 
     #[test]
