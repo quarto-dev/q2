@@ -45,6 +45,7 @@ pub mod ast;
 pub mod context;
 pub mod doc;
 pub mod error;
+pub mod eval_context;
 pub mod evaluator;
 pub mod parser;
 
@@ -56,4 +57,5 @@ pub use ast::{
 pub use context::{TemplateContext, TemplateValue};
 pub use doc::Doc;
 pub use error::TemplateError;
+pub use eval_context::{DiagnosticCollector, EvalContext};
 pub use parser::Template;

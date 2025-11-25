@@ -12,9 +12,11 @@ use crate::ast::TemplateNode;
 use crate::ast::VariableRef;
 use crate::ast::{BreakableSpace, Comment, Conditional, ForLoop, Literal, Nesting, Partial};
 use crate::context::{TemplateContext, TemplateValue};
-use crate::doc::{Doc, concat_docs, intersperse_docs};
+use crate::doc::{concat_docs, intersperse_docs, Doc};
 use crate::error::TemplateResult;
+use crate::eval_context::EvalContext;
 use crate::parser::Template;
+use quarto_error_reporting::DiagnosticMessage;
 
 impl Template {
     /// Render this template with the given context.
@@ -24,8 +26,12 @@ impl Template {
     ///
     /// # Returns
     /// The rendered output string, or an error if evaluation fails.
+    ///
+    /// Note: This method does not report warnings. Use [`render_with_diagnostics`]
+    /// if you need access to warnings (like undefined variable warnings).
     pub fn render(&self, context: &TemplateContext) -> TemplateResult<String> {
-        let doc = evaluate(&self.nodes, context)?;
+        let mut eval_ctx = EvalContext::new(context);
+        let doc = evaluate_nodes(&self.nodes, &mut eval_ctx)?;
         Ok(doc.render(None))
     }
 
@@ -33,36 +39,126 @@ impl Template {
     ///
     /// This is useful when you need the structured representation
     /// for further processing before final string rendering.
+    ///
+    /// Note: This method does not report warnings. Use [`evaluate_with_diagnostics`]
+    /// if you need access to warnings.
     pub fn evaluate(&self, context: &TemplateContext) -> TemplateResult<Doc> {
-        evaluate(&self.nodes, context)
+        let mut eval_ctx = EvalContext::new(context);
+        evaluate_nodes(&self.nodes, &mut eval_ctx)
+    }
+
+    /// Render this template with diagnostics collection.
+    ///
+    /// Returns both the rendered output and any diagnostics (errors and warnings)
+    /// that were collected during evaluation.
+    ///
+    /// # Arguments
+    /// * `context` - The variable context for evaluation
+    ///
+    /// # Returns
+    /// A tuple of (result, diagnostics) where:
+    /// - `result` is `Ok(String)` if rendering succeeded, `Err(())` if there were errors
+    /// - `diagnostics` is a list of all errors and warnings
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let template = Template::compile("Hello, $name$!")?;
+    /// let ctx = TemplateContext::new(); // Note: 'name' not defined
+    ///
+    /// let (result, diagnostics) = template.render_with_diagnostics(&ctx);
+    ///
+    /// // Result is Ok because undefined variables are warnings, not errors
+    /// assert!(result.is_ok());
+    /// // But we get a warning about the undefined variable
+    /// assert!(!diagnostics.is_empty());
+    /// ```
+    pub fn render_with_diagnostics(
+        &self,
+        context: &TemplateContext,
+    ) -> (Result<String, ()>, Vec<DiagnosticMessage>) {
+        let mut eval_ctx = EvalContext::new(context);
+        let result = evaluate_nodes(&self.nodes, &mut eval_ctx);
+
+        let diagnostics = eval_ctx.into_diagnostics();
+        let has_errors = diagnostics
+            .iter()
+            .any(|d| d.kind == quarto_error_reporting::DiagnosticKind::Error);
+
+        match result {
+            Ok(doc) if !has_errors => (Ok(doc.render(None)), diagnostics),
+            _ => (Err(()), diagnostics),
+        }
+    }
+
+    /// Render this template in strict mode.
+    ///
+    /// In strict mode, warnings (like undefined variables) are treated as errors.
+    ///
+    /// # Arguments
+    /// * `context` - The variable context for evaluation
+    ///
+    /// # Returns
+    /// A tuple of (result, diagnostics).
+    pub fn render_strict(
+        &self,
+        context: &TemplateContext,
+    ) -> (Result<String, ()>, Vec<DiagnosticMessage>) {
+        let mut eval_ctx = EvalContext::new(context).with_strict_mode(true);
+        let result = evaluate_nodes(&self.nodes, &mut eval_ctx);
+
+        let diagnostics = eval_ctx.into_diagnostics();
+        let has_errors = diagnostics
+            .iter()
+            .any(|d| d.kind == quarto_error_reporting::DiagnosticKind::Error);
+
+        match result {
+            Ok(doc) if !has_errors => (Ok(doc.render(None)), diagnostics),
+            _ => (Err(()), diagnostics),
+        }
+    }
+
+    /// Evaluate this template to a Doc tree with diagnostics collection.
+    ///
+    /// Similar to [`evaluate`], but also returns collected diagnostics.
+    pub fn evaluate_with_diagnostics(
+        &self,
+        context: &TemplateContext,
+    ) -> (TemplateResult<Doc>, Vec<DiagnosticMessage>) {
+        let mut eval_ctx = EvalContext::new(context);
+        let result = evaluate_nodes(&self.nodes, &mut eval_ctx);
+        let diagnostics = eval_ctx.into_diagnostics();
+        (result, diagnostics)
     }
 }
 
 /// Evaluate a list of template nodes to a Doc.
-pub fn evaluate(nodes: &[TemplateNode], context: &TemplateContext) -> TemplateResult<Doc> {
-    let docs: Result<Vec<Doc>, _> = nodes.iter().map(|n| evaluate_node(n, context)).collect();
+///
+/// This is the internal evaluation function that threads EvalContext.
+fn evaluate_nodes(nodes: &[TemplateNode], ctx: &mut EvalContext) -> TemplateResult<Doc> {
+    let docs: Result<Vec<Doc>, _> = nodes.iter().map(|n| evaluate_node(n, ctx)).collect();
     Ok(concat_docs(docs?))
 }
 
 /// Evaluate a single template node to a Doc.
-fn evaluate_node(node: &TemplateNode, context: &TemplateContext) -> TemplateResult<Doc> {
+fn evaluate_node(node: &TemplateNode, ctx: &mut EvalContext) -> TemplateResult<Doc> {
     match node {
         TemplateNode::Literal(Literal { text, .. }) => Ok(Doc::text(text)),
 
-        TemplateNode::Variable(var) => Ok(render_variable(var, context)),
+        TemplateNode::Variable(var) => Ok(render_variable(var, ctx)),
 
         TemplateNode::Conditional(Conditional {
             branches,
             else_branch,
             ..
-        }) => evaluate_conditional(branches, else_branch, context),
+        }) => evaluate_conditional(branches, else_branch, ctx),
 
         TemplateNode::ForLoop(ForLoop {
             var,
             body,
             separator,
             ..
-        }) => evaluate_for_loop(var, body, separator, context),
+        }) => evaluate_for_loop(var, body, separator, ctx),
 
         TemplateNode::Partial(Partial {
             name,
@@ -79,13 +175,13 @@ fn evaluate_node(node: &TemplateNode, context: &TemplateContext) -> TemplateResu
         TemplateNode::Nesting(Nesting { children, .. }) => {
             // TODO: Implement nesting/indentation tracking
             // For now, just evaluate children without nesting
-            evaluate(children, context)
+            evaluate_nodes(children, ctx)
         }
 
         TemplateNode::BreakableSpace(BreakableSpace { children, .. }) => {
             // For now, breakable spaces just evaluate their children
             // Full breakable space semantics require line-width-aware rendering
-            evaluate(children, context)
+            evaluate_nodes(children, ctx)
         }
 
         TemplateNode::Comment(Comment { .. }) => {
@@ -98,17 +194,17 @@ fn evaluate_node(node: &TemplateNode, context: &TemplateContext) -> TemplateResu
 /// Resolve a variable reference in the context.
 fn resolve_variable<'a>(
     var: &VariableRef,
-    context: &'a TemplateContext,
+    variables: &'a TemplateContext,
 ) -> Option<&'a TemplateValue> {
     // Variable paths may contain dots (e.g., "employee.salary" is a single path element)
     // Split on dots to get the actual path components
     let path: Vec<&str> = var.path.iter().flat_map(|s| s.split('.')).collect();
-    context.get_path(&path)
+    variables.get_path(&path)
 }
 
 /// Render a variable reference to a Doc.
-fn render_variable(var: &VariableRef, context: &TemplateContext) -> Doc {
-    match resolve_variable(var, context) {
+fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
+    match resolve_variable(var, ctx.variables) {
         Some(value) => {
             // Handle literal separator for arrays: $var[, ]$
             if let Some(sep) = &var.separator {
@@ -120,7 +216,12 @@ fn render_variable(var: &VariableRef, context: &TemplateContext) -> Doc {
             // TODO: Apply pipes
             value.to_doc()
         }
-        None => Doc::Empty,
+        None => {
+            // Emit warning or error depending on strict mode
+            let var_path = var.path.join(".");
+            ctx.warn_or_error_at(format!("Undefined variable: {}", var_path), &var.source_info);
+            Doc::Empty
+        }
     }
 }
 
@@ -128,20 +229,20 @@ fn render_variable(var: &VariableRef, context: &TemplateContext) -> Doc {
 fn evaluate_conditional(
     branches: &[(VariableRef, Vec<TemplateNode>)],
     else_branch: &Option<Vec<TemplateNode>>,
-    context: &TemplateContext,
+    ctx: &mut EvalContext,
 ) -> TemplateResult<Doc> {
     // Try each if/elseif branch
     for (condition, body) in branches {
-        if let Some(value) = resolve_variable(condition, context) {
+        if let Some(value) = resolve_variable(condition, ctx.variables) {
             if value.is_truthy() {
-                return evaluate(body, context);
+                return evaluate_nodes(body, ctx);
             }
         }
     }
 
     // No branch matched, try else
     if let Some(else_body) = else_branch {
-        evaluate(else_body, context)
+        evaluate_nodes(else_body, ctx)
     } else {
         Ok(Doc::Empty)
     }
@@ -152,9 +253,9 @@ fn evaluate_for_loop(
     var: &VariableRef,
     body: &[TemplateNode],
     separator: &Option<Vec<TemplateNode>>,
-    context: &TemplateContext,
+    ctx: &mut EvalContext,
 ) -> TemplateResult<Doc> {
-    let value = resolve_variable(var, context);
+    let value = resolve_variable(var, ctx.variables);
 
     // Determine what to iterate over
     let items: Vec<&TemplateValue> = match value {
@@ -173,7 +274,7 @@ fn evaluate_for_loop(
 
     // Render separator if present
     let sep_doc = if let Some(sep_nodes) = separator {
-        Some(evaluate(sep_nodes, context)?)
+        Some(evaluate_nodes(sep_nodes, ctx)?)
     } else {
         None
     };
@@ -181,13 +282,19 @@ fn evaluate_for_loop(
     // Render each iteration
     let mut results = Vec::new();
     for item in &items {
-        let mut child_ctx = context.child();
+        let mut child_vars = ctx.variables.child();
 
         // Bind to variable name AND "it" (Pandoc semantics)
-        child_ctx.insert(var_name, (*item).clone());
-        child_ctx.insert("it", (*item).clone());
+        child_vars.insert(var_name, (*item).clone());
+        child_vars.insert("it", (*item).clone());
 
-        results.push(evaluate(body, &child_ctx)?);
+        // Create child context and evaluate
+        let mut child_ctx = ctx.child(&child_vars);
+        let result = evaluate_nodes(body, &mut child_ctx)?;
+        results.push(result);
+
+        // Merge any diagnostics from the child context
+        ctx.merge_diagnostics(child_ctx);
     }
 
     // Join with separator
@@ -195,6 +302,18 @@ fn evaluate_for_loop(
         Some(sep) => Ok(intersperse_docs(results, sep)),
         None => Ok(concat_docs(results)),
     }
+}
+
+// Re-export the old evaluate function for backwards compatibility
+// (kept as a module-level function in case anyone was using it)
+
+/// Evaluate a list of template nodes to a Doc.
+///
+/// This is a convenience function that creates a temporary EvalContext.
+/// For production use with diagnostics, use `Template::render_with_diagnostics`.
+pub fn evaluate(nodes: &[TemplateNode], context: &TemplateContext) -> TemplateResult<Doc> {
+    let mut eval_ctx = EvalContext::new(context);
+    evaluate_nodes(nodes, &mut eval_ctx)
 }
 
 #[cfg(test)]
@@ -229,6 +348,40 @@ mod tests {
         let template = compile("Hello, $name$!");
         // Variable not defined - should produce empty string
         assert_eq!(template.render(&ctx()).unwrap(), "Hello, !");
+    }
+
+    #[test]
+    fn test_missing_variable_warning() {
+        let template = compile("Hello, $name$!");
+        let (result, diagnostics) = template.render_with_diagnostics(&ctx());
+
+        // Should succeed (undefined variables are warnings, not errors)
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "Hello, !");
+
+        // Should have a warning
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Warning
+        );
+        assert!(diagnostics[0].title.contains("Undefined variable"));
+    }
+
+    #[test]
+    fn test_missing_variable_strict_mode() {
+        let template = compile("Hello, $name$!");
+        let (result, diagnostics) = template.render_strict(&ctx());
+
+        // Should fail in strict mode
+        assert!(result.is_err());
+
+        // Should have an error (not a warning)
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Error
+        );
     }
 
     #[test]
@@ -459,5 +612,44 @@ mod tests {
         let mut ctx = ctx();
         ctx.insert("x", TemplateValue::String("false".to_string()));
         assert_eq!(template.render(&ctx).unwrap(), "truthy");
+    }
+
+    #[test]
+    fn test_multiple_undefined_variables() {
+        let template = compile("$a$ $b$ $c$");
+        let (result, diagnostics) = template.render_with_diagnostics(&ctx());
+
+        // Should succeed with warnings
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "  "); // Three empties with spaces between
+
+        // Should have three warnings
+        assert_eq!(diagnostics.len(), 3);
+        for diag in &diagnostics {
+            assert_eq!(diag.kind, quarto_error_reporting::DiagnosticKind::Warning);
+        }
+    }
+
+    #[test]
+    fn test_for_loop_with_undefined_in_body() {
+        // Undefined variable inside a for loop body
+        let template = compile("$for(x)$[$y$]$endfor$");
+        let mut ctx = ctx();
+        ctx.insert(
+            "x",
+            TemplateValue::List(vec![
+                TemplateValue::String("a".to_string()),
+                TemplateValue::String("b".to_string()),
+            ]),
+        );
+
+        let (result, diagnostics) = template.render_with_diagnostics(&ctx);
+
+        // Should succeed (warnings, not errors)
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "[][]"); // Two empty brackets
+
+        // Should have two warnings (one per iteration)
+        assert_eq!(diagnostics.len(), 2);
     }
 }
