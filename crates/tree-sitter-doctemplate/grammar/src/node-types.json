@@ -1,0 +1,589 @@
+[
+  {
+    "type": "bare_partial",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "partial_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "breakable_block",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "conditional_condition",
+          "named": true
+        },
+        {
+          "type": "conditional_else",
+          "named": true
+        },
+        {
+          "type": "conditional_elseif",
+          "named": true
+        },
+        {
+          "type": "conditional_then",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_condition",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "variable_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_else",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_elseif",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "conditional_condition",
+          "named": true
+        },
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "conditional_then",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "forloop",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "forloop_content",
+          "named": true
+        },
+        {
+          "type": "forloop_separator",
+          "named": true
+        },
+        {
+          "type": "forloop_variable",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "forloop_content",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "forloop_separator",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "interpolation",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "bare_partial",
+          "named": true
+        },
+        {
+          "type": "literal_separator",
+          "named": true
+        },
+        {
+          "type": "partial",
+          "named": true
+        },
+        {
+          "type": "pipe",
+          "named": true
+        },
+        {
+          "type": "variable_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "partial",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "partial_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "pipe_allbutlast",
+          "named": true
+        },
+        {
+          "type": "pipe_alpha",
+          "named": true
+        },
+        {
+          "type": "pipe_center",
+          "named": true
+        },
+        {
+          "type": "pipe_chomp",
+          "named": true
+        },
+        {
+          "type": "pipe_first",
+          "named": true
+        },
+        {
+          "type": "pipe_last",
+          "named": true
+        },
+        {
+          "type": "pipe_left",
+          "named": true
+        },
+        {
+          "type": "pipe_length",
+          "named": true
+        },
+        {
+          "type": "pipe_lowercase",
+          "named": true
+        },
+        {
+          "type": "pipe_nowrap",
+          "named": true
+        },
+        {
+          "type": "pipe_pairs",
+          "named": true
+        },
+        {
+          "type": "pipe_rest",
+          "named": true
+        },
+        {
+          "type": "pipe_reverse",
+          "named": true
+        },
+        {
+          "type": "pipe_right",
+          "named": true
+        },
+        {
+          "type": "pipe_roman",
+          "named": true
+        },
+        {
+          "type": "pipe_uppercase",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_center",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "leftborder",
+          "named": true
+        },
+        {
+          "type": "n",
+          "named": true
+        },
+        {
+          "type": "rightborder",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_left",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "leftborder",
+          "named": true
+        },
+        {
+          "type": "n",
+          "named": true
+        },
+        {
+          "type": "rightborder",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "pipe_right",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "leftborder",
+          "named": true
+        },
+        {
+          "type": "n",
+          "named": true
+        },
+        {
+          "type": "rightborder",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "template",
+    "named": true,
+    "root": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "template_element",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "template_element",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "breakable_block",
+          "named": true
+        },
+        {
+          "type": "comment",
+          "named": true
+        },
+        {
+          "type": "conditional",
+          "named": true
+        },
+        {
+          "type": "escaped_dollar",
+          "named": true
+        },
+        {
+          "type": "forloop",
+          "named": true
+        },
+        {
+          "type": "interpolation",
+          "named": true
+        },
+        {
+          "type": "nesting",
+          "named": true
+        },
+        {
+          "type": "partial",
+          "named": true
+        },
+        {
+          "type": "text",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "\"",
+    "named": false
+  },
+  {
+    "type": "$",
+    "named": false
+  },
+  {
+    "type": "${",
+    "named": false
+  },
+  {
+    "type": "$~$",
+    "named": false
+  },
+  {
+    "type": "(",
+    "named": false
+  },
+  {
+    "type": "()",
+    "named": false
+  },
+  {
+    "type": ")",
+    "named": false
+  },
+  {
+    "type": "/",
+    "named": false
+  },
+  {
+    "type": ":",
+    "named": false
+  },
+  {
+    "type": "[",
+    "named": false
+  },
+  {
+    "type": "]",
+    "named": false
+  },
+  {
+    "type": "center",
+    "named": false
+  },
+  {
+    "type": "comment",
+    "named": true
+  },
+  {
+    "type": "escaped_dollar",
+    "named": true
+  },
+  {
+    "type": "forloop_variable",
+    "named": true
+  },
+  {
+    "type": "left",
+    "named": false
+  },
+  {
+    "type": "leftborder",
+    "named": true
+  },
+  {
+    "type": "literal_separator",
+    "named": true
+  },
+  {
+    "type": "n",
+    "named": true
+  },
+  {
+    "type": "nesting",
+    "named": true
+  },
+  {
+    "type": "partial_name",
+    "named": true
+  },
+  {
+    "type": "pipe_allbutlast",
+    "named": true
+  },
+  {
+    "type": "pipe_alpha",
+    "named": true
+  },
+  {
+    "type": "pipe_chomp",
+    "named": true
+  },
+  {
+    "type": "pipe_first",
+    "named": true
+  },
+  {
+    "type": "pipe_last",
+    "named": true
+  },
+  {
+    "type": "pipe_length",
+    "named": true
+  },
+  {
+    "type": "pipe_lowercase",
+    "named": true
+  },
+  {
+    "type": "pipe_nowrap",
+    "named": true
+  },
+  {
+    "type": "pipe_pairs",
+    "named": true
+  },
+  {
+    "type": "pipe_rest",
+    "named": true
+  },
+  {
+    "type": "pipe_reverse",
+    "named": true
+  },
+  {
+    "type": "pipe_roman",
+    "named": true
+  },
+  {
+    "type": "pipe_uppercase",
+    "named": true
+  },
+  {
+    "type": "right",
+    "named": false
+  },
+  {
+    "type": "rightborder",
+    "named": true
+  },
+  {
+    "type": "sep",
+    "named": false
+  },
+  {
+    "type": "text",
+    "named": true
+  },
+  {
+    "type": "variable_name",
+    "named": true
+  },
+  {
+    "type": "}",
+    "named": false
+  }
+]

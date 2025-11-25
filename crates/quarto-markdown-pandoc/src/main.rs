@@ -189,28 +189,10 @@ fn main() {
                     .map(|s| s == "full")
                     .unwrap_or(false),
             };
-            writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config).map_err(
-                |e| {
-                    vec![
-                        quarto_error_reporting::DiagnosticMessageBuilder::error(
-                            "IO error during write",
-                        )
-                        .with_code("Q-3-1")
-                        .problem(format!("Failed to write JSON output: {}", e))
-                        .build(),
-                    ]
-                },
-            )
+            writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
         }
         "native" => writers::native::write(&pandoc, &context, &mut buf),
-        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf).map_err(|e| {
-            vec![
-                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                    .with_code("Q-3-1")
-                    .problem(format!("Failed to write QMD output: {}", e))
-                    .build(),
-            ]
-        }),
+        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
         "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
             vec![
                 quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
@@ -219,15 +201,26 @@ fn main() {
                     .build(),
             ]
         }),
+        "plaintext" | "plain" => {
+            let (output, diagnostics) = writers::plaintext::blocks_to_string(&pandoc.blocks);
+            buf.extend_from_slice(output.as_bytes());
+            // Plaintext diagnostics are warnings (dropped nodes), not errors
+            // Output them but don't fail
+            if !diagnostics.is_empty() {
+                if args.json_errors {
+                    for diagnostic in &diagnostics {
+                        eprintln!("{}", diagnostic.to_json());
+                    }
+                } else {
+                    for diagnostic in &diagnostics {
+                        eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                    }
+                }
+            }
+            Ok(())
+        }
         #[cfg(feature = "terminal-support")]
-        "ansi" => writers::ansi::write(&pandoc, &mut buf).map_err(|e| {
-            vec![
-                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                    .with_code("Q-3-1")
-                    .problem(format!("Failed to write ANSI output: {}", e))
-                    .build(),
-            ]
-        }),
+        "ansi" => writers::ansi::write(&pandoc, &mut buf),
         _ => {
             eprintln!("Unknown output format: {}", args.to);
             std::process::exit(1);

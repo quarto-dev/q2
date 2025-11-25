@@ -127,12 +127,12 @@ mod tests {
     #[test]
     fn test_get_subsystem() {
         assert_eq!(get_subsystem("Q-0-1"), Some("internal"));
-        assert_eq!(get_subsystem("Q-999-999"), None);
+        assert_eq!(get_subsystem("Q-999-999"), None); // quarto-error-code-audit-ignore
     }
 
     #[test]
     fn test_nonexistent_code() {
-        assert!(get_error_info("Q-999-999").is_none());
-        assert!(get_docs_url("Q-999-999").is_none());
+        assert!(get_error_info("Q-999-999").is_none()); // quarto-error-code-audit-ignore
+        assert!(get_docs_url("Q-999-999").is_none()); // quarto-error-code-audit-ignore
     }
 }

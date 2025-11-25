@@ -1,0 +1,1 @@
+$if(show_greeting)$Hello, $name$!$else$Goodbye.$endif$

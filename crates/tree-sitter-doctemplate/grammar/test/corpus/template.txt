@@ -1,0 +1,205 @@
+================================================================================
+template.txt 1
+================================================================================
+This is a template.
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (text)))
+================================================================================
+template.txt 2
+================================================================================
+This is a template.
+$if(foo)$
+$foo.bar$
+$endif$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (text))
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text))
+            (template_element
+              (interpolation
+                (variable_name)))
+            (template_element
+              (text))))))
+================================================================================
+template.txt 3
+================================================================================
+This is a template.
+$if(foo)$
+$foo.bar$
+$elseif(bar)$
+$bar.bar$
+$endif$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (text))
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text))
+            (template_element
+              (interpolation
+                (variable_name)))
+            (template_element
+              (text)))
+          (conditional_elseif
+            (conditional_condition
+              (variable_name))
+            (template_element
+              (text))
+            (template_element
+              (interpolation
+                (variable_name)))
+            (template_element
+              (text))))))
+================================================================================
+template.txt 4 - pipes
+================================================================================
+This is a template.
+$if(foo)$
+$foo.bar/chomp/left 10 "|" "|"$
+$endif$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (text))
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text))
+            (template_element
+              (interpolation
+                (variable_name)
+                (pipe
+                  (pipe_chomp))
+                (pipe
+                  (pipe_left
+                    (n)
+                    (leftborder)
+                    (rightborder)))))
+            (template_element
+              (text))))))
+================================================================================
+template.txt 5 - partials (NB jgm/doctemplates/README.md has syntax errors here)
+================================================================================
+${months[, ]}
+
+$articles:bibentry()[; ]$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (interpolation
+          (variable_name)
+          (literal_separator)))
+      (template_element
+        (text))
+      (template_element
+        (interpolation
+          (variable_name)
+          (partial
+            (partial_name))
+          (literal_separator))))
+================================================================================
+template.txt 6 - loops
+================================================================================
+$for(items)$
+$it:partial()/uppercase$
+$endfor$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (forloop
+          (forloop_variable)
+          (forloop_content
+            (template_element
+              (text))
+            (template_element
+              (interpolation
+                (variable_name)
+                (partial
+                  (partial_name))
+                (pipe
+                  (pipe_uppercase))))
+            (template_element
+              (text))))))
+================================================================================
+template.txt 7 - escaped_dollar
+================================================================================
+$for(items)$it $$$endfor$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (forloop
+          (forloop_variable)
+          (forloop_content
+            (template_element
+              (text))
+            (template_element
+              (escaped_dollar))))))
+================================================================================
+template.txt 8 - conditionals
+================================================================================
+$if(a)$A$elseif(b)$B$else$C$endif$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text)))
+          (conditional_elseif
+            (conditional_condition
+              (variable_name))
+            (template_element
+              (text)))
+          (conditional_else
+            (template_element
+              (text))))))
+================================================================================
+template.txt 8 - conditionals (syntax 2)
+================================================================================
+${if(a)}A${elseif(b)}B${else}C${endif}
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (conditional
+          (conditional_condition
+            (variable_name))
+          (conditional_then
+            (template_element
+              (text)))
+          (conditional_elseif
+            (conditional_condition
+              (variable_name))
+            (template_element
+              (text)))
+          (conditional_else
+            (template_element
+              (text))))))
+================================================================================
+template.txt 9 - bare partials
+================================================================================
+$hello()$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (interpolation
+          (bare_partial
+            (partial_name)))))

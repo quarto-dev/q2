@@ -3,72 +3,40 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::utils::tree_sitter_log_observer::ProcessMessage;
-use error_message_macros::include_error_table;
+//! QMD-specific error table module.
+//!
+//! This module provides the error table for the QMD parser by:
+//! 1. Re-exporting types from quarto-parse-errors
+//! 2. Providing get_error_table() that embeds the QMD error corpus
+//! 3. Providing convenience lookup functions
 
-#[derive(Debug)]
-pub struct ErrorCapture {
-    pub column: usize,
-    pub lr_state: usize,
-    pub row: usize,
-    pub size: usize,
-    pub sym: &'static str,
-    pub label: &'static str,
-}
+// Re-export types from quarto-parse-errors
+pub use quarto_parse_errors::{ErrorTableEntry, ProcessMessage};
 
-#[derive(Debug)]
-pub struct ErrorNote {
-    pub message: &'static str,
-    pub label: Option<&'static str>,
-    pub note_type: &'static str,
-    pub label_begin: Option<&'static str>,
-    pub label_end: Option<&'static str>,
-    pub trim_leading_space: Option<bool>,
-    pub trim_trailing_space: Option<bool>,
-}
+use quarto_error_message_macros::include_error_table;
 
-#[derive(Debug)]
-pub struct ErrorInfo {
-    pub code: Option<&'static str>,
-    pub title: &'static str,
-    pub message: &'static str,
-    pub captures: &'static [ErrorCapture],
-    pub notes: &'static [ErrorNote],
-    pub hints: &'static [&'static str],
-}
-
-#[derive(Debug)]
-pub struct ErrorTableEntry {
-    pub state: usize,
-    pub sym: &'static str,
-    pub row: usize,
-    pub column: usize,
-    pub error_info: ErrorInfo,
-    pub name: &'static str,
-}
-
+/// Get the error table for the QMD parser.
+///
+/// This embeds the error corpus at compile time.
 pub fn get_error_table() -> &'static [ErrorTableEntry] {
-    include_error_table!("./resources/error-corpus/_autogen-table.json")
+    include_error_table!(
+        "./resources/error-corpus/_autogen-table.json",
+        "quarto_parse_errors"
+    )
 }
 
+/// Look up an error message by parser state and symbol.
+///
+/// Convenience wrapper that uses the QMD error table.
 pub fn lookup_error_message(process_message: &ProcessMessage) -> Option<&'static str> {
-    let table = get_error_table();
-
-    for entry in table {
-        if entry.state == process_message.state && entry.sym == process_message.sym {
-            return Some(entry.error_info.message);
-        }
-    }
-
-    None
+    quarto_parse_errors::lookup_error_message(get_error_table(), process_message)
 }
 
+/// Look up error table entries by parser state and symbol.
+///
+/// Convenience wrapper that uses the QMD error table.
 pub fn lookup_error_entry(process_message: &ProcessMessage) -> Vec<&'static ErrorTableEntry> {
-    let table = get_error_table();
-    table
-        .into_iter()
-        .filter(|entry| entry.state == process_message.state && entry.sym == process_message.sym)
-        .collect()
+    quarto_parse_errors::lookup_error_entry(get_error_table(), process_message)
 }
 
 #[cfg(test)]

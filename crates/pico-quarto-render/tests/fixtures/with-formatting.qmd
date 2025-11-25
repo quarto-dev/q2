@@ -1,0 +1,9 @@
+---
+title: "Formatting Test"
+---
+
+This has *emphasis* and **strong** text.
+
+## A Heading
+
+A paragraph under the heading.

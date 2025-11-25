@@ -1,0 +1,9 @@
+[package]
+name = "quarto-treesitter-ast"
+version = "0.1.0"
+edition = "2021"
+description = "Generic tree-sitter AST traversal utilities for Quarto parsers"
+license = "MIT"
+
+[dependencies]
+tree-sitter = { workspace = true }

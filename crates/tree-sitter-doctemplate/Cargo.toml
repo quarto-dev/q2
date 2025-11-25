@@ -1,0 +1,32 @@
+[package]
+name = "tree-sitter-doctemplate"
+version = "0.1.0"
+description = "Tree-sitter grammar for Pandoc document templates"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+
+build = "build.rs"
+include = [
+  "src/*",
+  "grammar/src/*",
+  "grammar/grammar.js",
+]
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+tree-sitter = { workspace = true }
+tree-sitter-language = "0.1"
+
+[build-dependencies]
+cc = "1.1.22"
+
+[lints]
+workspace = true

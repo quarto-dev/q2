@@ -7,6 +7,8 @@ use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
+use hashlink::LinkedHashMap;
+use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_source_map::{FileId, SourceInfo};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -229,6 +231,25 @@ impl<'a> SourceInfoSerializer<'a> {
     }
 }
 
+/// Context for JSON writer containing both source info serialization and error collection.
+///
+/// This struct combines the SourceInfoSerializer (for building the source info pool)
+/// with error accumulation during AST traversal. Separating these concerns makes the
+/// dual purpose of the writer more explicit.
+struct JsonWriterContext<'a> {
+    serializer: SourceInfoSerializer<'a>,
+    errors: Vec<DiagnosticMessage>,
+}
+
+impl<'a> JsonWriterContext<'a> {
+    fn new(ast_context: &'a ASTContext, config: &'a JsonConfig) -> Self {
+        JsonWriterContext {
+            serializer: SourceInfoSerializer::new(ast_context, config),
+            errors: Vec::new(),
+        }
+    }
+}
+
 /// Resolve source info to fully resolved location with file_id, line, column, and offset.
 ///
 /// Returns None if the source info cannot be mapped (e.g., synthetic nodes).
@@ -269,14 +290,14 @@ fn node_with_source(
     t: &str,
     c: Option<Value>,
     source_info: &SourceInfo,
-    serializer: &mut SourceInfoSerializer,
+    ctx: &mut JsonWriterContext,
 ) -> Value {
     let mut obj = serde_json::Map::new();
     obj.insert("t".to_string(), json!(t));
     if let Some(content) = c {
         obj.insert("c".to_string(), content);
     }
-    serializer.add_source_info(&mut obj, source_info);
+    ctx.serializer.add_source_info(&mut obj, source_info);
     Value::Object(obj)
 }
 
@@ -323,34 +344,31 @@ fn write_attr(attr: &Attr) -> Value {
 ///   "classes": [<source_info_ref or null>, ...],
 ///   "kvs": [[<key_ref or null>, <value_ref or null>], ...]
 /// }
-fn write_attr_source(attr_source: &AttrSourceInfo, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_attr_source(attr_source: &AttrSourceInfo, ctx: &mut JsonWriterContext) -> Value {
     json!({
-        "id": attr_source.id.as_ref().map(|s| serializer.to_json_ref(s)),
+        "id": attr_source.id.as_ref().map(|s| ctx.serializer.to_json_ref(s)),
         "classes": attr_source.classes.iter().map(|cls|
-            cls.as_ref().map(|s| serializer.to_json_ref(s))
+            cls.as_ref().map(|s| ctx.serializer.to_json_ref(s))
         ).collect::<Vec<_>>(),
         "kvs": attr_source.attributes.iter().map(|(k, v)|
             json!([
-                k.as_ref().map(|s| serializer.to_json_ref(s)),
-                v.as_ref().map(|s| serializer.to_json_ref(s))
+                k.as_ref().map(|s| ctx.serializer.to_json_ref(s)),
+                v.as_ref().map(|s| ctx.serializer.to_json_ref(s))
             ])
         ).collect::<Vec<_>>()
     })
 }
 
-fn write_target_source(
-    target_source: &TargetSourceInfo,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_target_source(target_source: &TargetSourceInfo, ctx: &mut JsonWriterContext) -> Value {
     json!([
         target_source
             .url
             .as_ref()
-            .map(|s| serializer.to_json_ref(s)),
+            .map(|s| ctx.serializer.to_json_ref(s)),
         target_source
             .title
             .as_ref()
-            .map(|s| serializer.to_json_ref(s))
+            .map(|s| ctx.serializer.to_json_ref(s))
     ])
 }
 
@@ -362,50 +380,50 @@ fn write_citation_mode(mode: &CitationMode) -> Value {
     }
 }
 
-fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
     match inline {
         Inline::Str(s) => node_with_source(
             "Str",
             Some(json!(s.text)),
             &s.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Space(space) => node_with_source(
             "Space",
             None,
             &space.source_info,
-            serializer,
+            ctx,
         ),
         Inline::LineBreak(lb) => node_with_source(
             "LineBreak",
             None,
             &lb.source_info,
-            serializer,
+            ctx,
         ),
         Inline::SoftBreak(sb) => node_with_source(
             "SoftBreak",
             None,
             &sb.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Emph(e) => node_with_source(
             "Emph",
-            Some(write_inlines(&e.content, serializer)),
+            Some(write_inlines(&e.content, ctx)),
             &e.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Strong(s) => node_with_source(
             "Strong",
-            Some(write_inlines(&s.content, serializer)),
+            Some(write_inlines(&s.content, ctx)),
             &s.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Code(c) => {
             let mut obj = serde_json::Map::new();
             obj.insert("t".to_string(), json!("Code"));
             obj.insert("c".to_string(), json!([write_attr(&c.attr), c.text]));
-            serializer.add_source_info(&mut obj, &c.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&c.attr_source, serializer));
+            ctx.serializer.add_source_info(&mut obj, &c.source_info);
+            obj.insert("attrS".to_string(), write_attr_source(&c.attr_source, ctx));
             Value::Object(obj)
         }
         Inline::Math(m) => {
@@ -417,38 +435,38 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
                 "Math",
                 Some(json!([math_type, m.text])),
                 &m.source_info,
-                serializer,
+            ctx,
             )
         }
         Inline::Underline(u) => node_with_source(
             "Underline",
-            Some(write_inlines(&u.content, serializer)),
+            Some(write_inlines(&u.content, ctx)),
             &u.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Strikeout(s) => node_with_source(
             "Strikeout",
-            Some(write_inlines(&s.content, serializer)),
+            Some(write_inlines(&s.content, ctx)),
             &s.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Superscript(s) => node_with_source(
             "Superscript",
-            Some(write_inlines(&s.content, serializer)),
+            Some(write_inlines(&s.content, ctx)),
             &s.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Subscript(s) => node_with_source(
             "Subscript",
-            Some(write_inlines(&s.content, serializer)),
+            Some(write_inlines(&s.content, ctx)),
             &s.source_info,
-            serializer,
+            ctx,
         ),
         Inline::SmallCaps(s) => node_with_source(
             "SmallCaps",
-            Some(write_inlines(&s.content, serializer)),
+            Some(write_inlines(&s.content, ctx)),
             &s.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Quoted(q) => {
             let quote_type = match q.quote_type {
@@ -457,9 +475,9 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             };
             node_with_source(
                 "Quoted",
-                Some(json!([quote_type, write_inlines(&q.content, serializer)])),
+                Some(json!([quote_type, write_inlines(&q.content, ctx)])),
                 &q.source_info,
-                serializer,
+            ctx,
             )
         }
         Inline::Link(link) => {
@@ -467,31 +485,31 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             obj.insert("t".to_string(), json!("Link"));
             obj.insert("c".to_string(), json!([
                 write_attr(&link.attr),
-                write_inlines(&link.content, serializer),
+                write_inlines(&link.content, ctx),
                 [link.target.0, link.target.1]
             ]));
-            serializer.add_source_info(&mut obj, &link.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&link.attr_source, serializer));
-            obj.insert("targetS".to_string(), write_target_source(&link.target_source, serializer));
+            ctx.serializer.add_source_info(&mut obj, &link.source_info);
+            obj.insert("attrS".to_string(), write_attr_source(&link.attr_source, ctx));
+            obj.insert("targetS".to_string(), write_target_source(&link.target_source, ctx));
             Value::Object(obj)
         }
         Inline::RawInline(raw) => node_with_source(
             "RawInline",
             Some(json!([raw.format.clone(), raw.text.clone()])),
             &raw.source_info,
-            serializer,
+            ctx,
         ),
         Inline::Image(image) => {
             let mut obj = serde_json::Map::new();
             obj.insert("t".to_string(), json!("Image"));
             obj.insert("c".to_string(), json!([
                 write_attr(&image.attr),
-                write_inlines(&image.content, serializer),
+                write_inlines(&image.content, ctx),
                 [image.target.0, image.target.1]
             ]));
-            serializer.add_source_info(&mut obj, &image.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&image.attr_source, serializer));
-            obj.insert("targetS".to_string(), write_target_source(&image.target_source, serializer));
+            ctx.serializer.add_source_info(&mut obj, &image.source_info);
+            obj.insert("attrS".to_string(), write_attr_source(&image.attr_source, ctx));
+            obj.insert("targetS".to_string(), write_target_source(&image.target_source, ctx));
             Value::Object(obj)
         }
         Inline::Span(span) => {
@@ -499,17 +517,17 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
             obj.insert("t".to_string(), json!("Span"));
             obj.insert("c".to_string(), json!([
                 write_attr(&span.attr),
-                write_inlines(&span.content, serializer)
+                write_inlines(&span.content, ctx)
             ]));
-            serializer.add_source_info(&mut obj, &span.source_info);
-            obj.insert("attrS".to_string(), write_attr_source(&span.attr_source, serializer));
+            ctx.serializer.add_source_info(&mut obj, &span.source_info);
+            obj.insert("attrS".to_string(), write_attr_source(&span.attr_source, ctx));
             Value::Object(obj)
         }
         Inline::Note(note) => node_with_source(
             "Note",
-            Some(write_blocks(&note.content, serializer)),
+            Some(write_blocks(&note.content, ctx)),
             &note.source_info,
-            serializer,
+            ctx,
         ),
         // we can't test this just yet because
         // our citationNoteNum counter doesn't match Pandoc's
@@ -519,36 +537,127 @@ fn write_inline(inline: &Inline, serializer: &mut SourceInfoSerializer) -> Value
                 cite.citations.iter().map(|citation| {
                     json!({
                         "citationId": citation.id.clone(),
-                        "citationPrefix": write_inlines(&citation.prefix, serializer),
-                        "citationSuffix": write_inlines(&citation.suffix, serializer),
+                        "citationPrefix": write_inlines(&citation.prefix, ctx),
+                        "citationSuffix": write_inlines(&citation.suffix, ctx),
                         "citationMode": write_citation_mode(&citation.mode),
                         "citationHash": citation.hash,
                         "citationNoteNum": citation.note_num,
-                        "citationIdS": citation.id_source.as_ref().map(|s| serializer.to_json_ref(s))
+                        "citationIdS": citation.id_source.as_ref().map(|s| ctx.serializer.to_json_ref(s))
                     })
                 }).collect::<Vec<_>>(),
-                write_inlines(&cite.content, serializer)
+                write_inlines(&cite.content, ctx)
             ])),
             &cite.source_info,
-            serializer,
+            ctx,
         ),
-        Inline::Shortcode(_)
-        | Inline::NoteReference(_)
-        | Inline::Attr(_, _)
-        | Inline::Insert(_)
-        | Inline::Delete(_)
-        | Inline::Highlight(_)
-        | Inline::EditComment(_) => {
-            panic!("Unsupported inline type: {:?}", inline)
+        Inline::Shortcode(shortcode) => {
+            // Defensive: Shortcodes should not reach JSON writer
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Shortcode not supported in JSON format")
+                    .with_code("Q-3-30")
+                    .problem(format!("Cannot render shortcode `{{{{< {} >}}}}` in JSON format", shortcode.name))
+                    .add_detail("Shortcodes are Quarto-specific and not representable in Pandoc JSON")
+                    .add_hint("Use native format or process shortcodes before writing JSON")
+                    .build()
+            );
+            let mut attr_hash = LinkedHashMap::new();
+            attr_hash.insert("data-shortcode".to_string(), shortcode.name.clone());
+            let attr = (String::new(), vec!["shortcode".to_string()], attr_hash);
+            node_with_source("Span", Some(json!([write_attr(&attr), []])), &SourceInfo::default(), ctx)
+        }
+        Inline::NoteReference(note_ref) => {
+            // Defensive: Should be converted to Span in postprocessing
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed note reference in JSON writer")
+                    .with_code("Q-3-31")
+                    .with_location(note_ref.source_info.clone())
+                    .problem(format!("Note reference `[^{}]` was not converted during postprocessing", note_ref.id))
+                    .add_detail("Note references should be processed before JSON output")
+                    .add_hint("This may indicate a bug in the processing pipeline")
+                    .build()
+            );
+            let mut attr_hash = LinkedHashMap::new();
+            attr_hash.insert("data-ref".to_string(), note_ref.id.clone());
+            let attr = (String::new(), vec!["footnote-ref".to_string()], attr_hash);
+            node_with_source("Span", Some(json!([write_attr(&attr), []])), &note_ref.source_info, ctx)
+        }
+        Inline::Attr(_attr, attr_source) => {
+            // Defensive: Standalone attributes should not reach JSON writer
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Standalone attribute not supported in JSON format")
+                    .with_code("Q-3-32")
+                    .with_location(attr_source.id.clone().unwrap_or_default())
+                    .problem("Cannot render standalone attributes in JSON format")
+                    .add_detail("Standalone attributes should be attached to elements during parsing")
+                    .add_hint("This may indicate a parsing issue or unsupported syntax")
+                    .build()
+            );
+            json!({"t": "Str", "c": ""})  // Empty string placeholder
+        }
+        Inline::Insert(ins) => {
+            // Defensive: Editorial marks should be desugared to Span
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Insert markup in JSON writer")
+                    .with_code("Q-3-33")
+                    .with_location(ins.source_info.clone())
+                    .problem("Insert markup `{++...++}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-insert".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&ins.content, ctx)])), &ins.source_info, ctx)
+        }
+        Inline::Delete(del) => {
+            // Defensive: Editorial marks should be desugared to Span
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Delete markup in JSON writer")
+                    .with_code("Q-3-34")
+                    .with_location(del.source_info.clone())
+                    .problem("Delete markup `{--...--}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-delete".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&del.content, ctx)])), &del.source_info, ctx)
+        }
+        Inline::Highlight(hl) => {
+            // Defensive: Editorial marks should be desugared to Span
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed Highlight markup in JSON writer")
+                    .with_code("Q-3-35")
+                    .with_location(hl.source_info.clone())
+                    .problem("Highlight markup `{==...==}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-highlight".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&hl.content, ctx)])), &hl.source_info, ctx)
+        }
+        Inline::EditComment(ec) => {
+            // Defensive: Editorial marks should be desugared to Span
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Unprocessed EditComment markup in JSON writer")
+                    .with_code("Q-3-36")
+                    .with_location(ec.source_info.clone())
+                    .problem("EditComment markup `{>>...<<}` was not desugared during postprocessing")
+                    .add_detail("CriticMarkup should be processed before JSON output")
+                    .add_hint("Enable CriticMarkup processing or use a different output format")
+                    .build()
+            );
+            let attr = (String::new(), vec!["critic-comment".to_string()], LinkedHashMap::new());
+            node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&ec.content, ctx)])), &ec.source_info, ctx)
         }
     }
 }
 
-fn write_inlines(inlines: &Inlines, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_inlines(inlines: &Inlines, ctx: &mut JsonWriterContext) -> Value {
     json!(
         inlines
             .iter()
-            .map(|inline| write_inline(inline, serializer))
+            .map(|inline| write_inline(inline, ctx))
             .collect::<Vec<_>>()
     )
 }
@@ -572,36 +681,33 @@ fn write_list_attributes(attr: &ListAttributes) -> Value {
     json!([attr.0, number_style, number_delimiter])
 }
 
-fn write_blockss(blockss: &[Vec<Block>], serializer: &mut SourceInfoSerializer) -> Value {
+fn write_blockss(blockss: &[Vec<Block>], ctx: &mut JsonWriterContext) -> Value {
     json!(
         blockss
             .iter()
             .map(|blocks| blocks
                 .iter()
-                .map(|block| write_block(block, serializer))
+                .map(|block| write_block(block, ctx))
                 .collect::<Vec<_>>())
             .collect::<Vec<_>>()
     )
 }
 
 // Write caption as Pandoc array format: [short, long]
-fn write_caption(caption: &Caption, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_caption(caption: &Caption, ctx: &mut JsonWriterContext) -> Value {
     json!([
-        &caption
-            .short
-            .as_ref()
-            .map(|s| write_inlines(&s, serializer)),
+        &caption.short.as_ref().map(|s| write_inlines(&s, ctx)),
         &caption
             .long
             .as_ref()
-            .map(|l| write_blocks(&l, serializer))
+            .map(|l| write_blocks(&l, ctx))
             .unwrap_or_else(|| json!([])),
     ])
 }
 
 // Write caption source info separately
-fn write_caption_source(caption: &Caption, serializer: &mut SourceInfoSerializer) -> Value {
-    json!(serializer.to_json_ref(&caption.source_info))
+fn write_caption_source(caption: &Caption, ctx: &mut JsonWriterContext) -> Value {
+    json!(ctx.serializer.to_json_ref(&caption.source_info))
 }
 
 fn write_alignment(alignment: &crate::pandoc::table::Alignment) -> Value {
@@ -625,63 +731,54 @@ fn write_colspec(colspec: &crate::pandoc::table::ColSpec) -> Value {
 }
 
 // Write cell as Pandoc array format: [attr, alignment, rowSpan, colSpan, content]
-fn write_cell(cell: &crate::pandoc::table::Cell, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_cell(cell: &crate::pandoc::table::Cell, ctx: &mut JsonWriterContext) -> Value {
     json!([
         write_attr(&cell.attr),
         write_alignment(&cell.alignment),
         cell.row_span,
         cell.col_span,
-        write_blocks(&cell.content, serializer)
+        write_blocks(&cell.content, ctx)
     ])
 }
 
 // Write cell source info separately
-fn write_cell_source(
-    cell: &crate::pandoc::table::Cell,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_cell_source(cell: &crate::pandoc::table::Cell, ctx: &mut JsonWriterContext) -> Value {
     json!({
-        "s": serializer.to_json_ref(&cell.source_info),
-        "attrS": write_attr_source(&cell.attr_source, serializer)
+        "s": ctx.serializer.to_json_ref(&cell.source_info),
+        "attrS": write_attr_source(&cell.attr_source, ctx)
     })
 }
 
 // Write row as Pandoc array format: [attr, cells]
-fn write_row(row: &crate::pandoc::table::Row, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_row(row: &crate::pandoc::table::Row, ctx: &mut JsonWriterContext) -> Value {
     json!([
         write_attr(&row.attr),
         row.cells
             .iter()
-            .map(|cell| write_cell(cell, serializer))
+            .map(|cell| write_cell(cell, ctx))
             .collect::<Vec<_>>()
     ])
 }
 
 // Write row source info separately
-fn write_row_source(
-    row: &crate::pandoc::table::Row,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_row_source(row: &crate::pandoc::table::Row, ctx: &mut JsonWriterContext) -> Value {
     json!({
-        "s": serializer.to_json_ref(&row.source_info),
-        "attrS": write_attr_source(&row.attr_source, serializer),
+        "s": ctx.serializer.to_json_ref(&row.source_info),
+        "attrS": write_attr_source(&row.attr_source, ctx),
         "cellsS": row.cells
             .iter()
-            .map(|cell| write_cell_source(cell, serializer))
+            .map(|cell| write_cell_source(cell, ctx))
             .collect::<Vec<_>>()
     })
 }
 
 // Write table head as Pandoc array format: [attr, rows]
-fn write_table_head(
-    head: &crate::pandoc::table::TableHead,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_table_head(head: &crate::pandoc::table::TableHead, ctx: &mut JsonWriterContext) -> Value {
     json!([
         write_attr(&head.attr),
         head.rows
             .iter()
-            .map(|row| write_row(row, serializer))
+            .map(|row| write_row(row, ctx))
             .collect::<Vec<_>>()
     ])
 }
@@ -689,33 +786,30 @@ fn write_table_head(
 // Write table head source info separately
 fn write_table_head_source(
     head: &crate::pandoc::table::TableHead,
-    serializer: &mut SourceInfoSerializer,
+    ctx: &mut JsonWriterContext,
 ) -> Value {
     json!({
-        "s": serializer.to_json_ref(&head.source_info),
-        "attrS": write_attr_source(&head.attr_source, serializer),
+        "s": ctx.serializer.to_json_ref(&head.source_info),
+        "attrS": write_attr_source(&head.attr_source, ctx),
         "rowsS": head.rows
             .iter()
-            .map(|row| write_row_source(row, serializer))
+            .map(|row| write_row_source(row, ctx))
             .collect::<Vec<_>>()
     })
 }
 
 // Write table body as Pandoc array format: [attr, rowHeadColumns, head, body]
-fn write_table_body(
-    body: &crate::pandoc::table::TableBody,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_table_body(body: &crate::pandoc::table::TableBody, ctx: &mut JsonWriterContext) -> Value {
     json!([
         write_attr(&body.attr),
         body.rowhead_columns,
         body.head
             .iter()
-            .map(|row| write_row(row, serializer))
+            .map(|row| write_row(row, ctx))
             .collect::<Vec<_>>(),
         body.body
             .iter()
-            .map(|row| write_row(row, serializer))
+            .map(|row| write_row(row, ctx))
             .collect::<Vec<_>>()
     ])
 }
@@ -723,32 +817,29 @@ fn write_table_body(
 // Write table body source info separately
 fn write_table_body_source(
     body: &crate::pandoc::table::TableBody,
-    serializer: &mut SourceInfoSerializer,
+    ctx: &mut JsonWriterContext,
 ) -> Value {
     json!({
-        "s": serializer.to_json_ref(&body.source_info),
-        "attrS": write_attr_source(&body.attr_source, serializer),
+        "s": ctx.serializer.to_json_ref(&body.source_info),
+        "attrS": write_attr_source(&body.attr_source, ctx),
         "headS": body.head
             .iter()
-            .map(|row| write_row_source(row, serializer))
+            .map(|row| write_row_source(row, ctx))
             .collect::<Vec<_>>(),
         "bodyS": body.body
             .iter()
-            .map(|row| write_row_source(row, serializer))
+            .map(|row| write_row_source(row, ctx))
             .collect::<Vec<_>>()
     })
 }
 
 // Write table foot as Pandoc array format: [attr, rows]
-fn write_table_foot(
-    foot: &crate::pandoc::table::TableFoot,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_table_foot(foot: &crate::pandoc::table::TableFoot, ctx: &mut JsonWriterContext) -> Value {
     json!([
         write_attr(&foot.attr),
         foot.rows
             .iter()
-            .map(|row| write_row(row, serializer))
+            .map(|row| write_row(row, ctx))
             .collect::<Vec<_>>()
     ])
 }
@@ -756,19 +847,19 @@ fn write_table_foot(
 // Write table foot source info separately
 fn write_table_foot_source(
     foot: &crate::pandoc::table::TableFoot,
-    serializer: &mut SourceInfoSerializer,
+    ctx: &mut JsonWriterContext,
 ) -> Value {
     json!({
-        "s": serializer.to_json_ref(&foot.source_info),
-        "attrS": write_attr_source(&foot.attr_source, serializer),
+        "s": ctx.serializer.to_json_ref(&foot.source_info),
+        "attrS": write_attr_source(&foot.attr_source, ctx),
         "rowsS": foot.rows
             .iter()
-            .map(|row| write_row_source(row, serializer))
+            .map(|row| write_row_source(row, ctx))
             .collect::<Vec<_>>()
     })
 }
 
-fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
+fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
     match block {
         Block::Figure(figure) => {
             let mut obj = serde_json::Map::new();
@@ -777,14 +868,15 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 "c".to_string(),
                 json!([
                     write_attr(&figure.attr),
-                    write_caption(&figure.caption, serializer),
-                    write_blocks(&figure.content, serializer)
+                    write_caption(&figure.caption, ctx),
+                    write_blocks(&figure.content, ctx)
                 ]),
             );
-            serializer.add_source_info(&mut obj, &figure.source_info);
+            ctx.serializer
+                .add_source_info(&mut obj, &figure.source_info);
             obj.insert(
                 "attrS".to_string(),
-                write_attr_source(&figure.attr_source, serializer),
+                write_attr_source(&figure.attr_source, ctx),
             );
             Value::Object(obj)
         }
@@ -795,33 +887,30 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                     .content
                     .iter()
                     .map(|(term, definition)| {
-                        json!([
-                            write_inlines(term, serializer),
-                            write_blockss(&definition, serializer),
-                        ])
+                        json!([write_inlines(term, ctx), write_blockss(&definition, ctx),])
                     })
                     .collect::<Vec<_>>()
             )),
             &deflist.source_info,
-            serializer,
+            ctx,
         ),
         Block::OrderedList(orderedlist) => node_with_source(
             "OrderedList",
             Some(json!([
                 write_list_attributes(&orderedlist.attr),
-                write_blockss(&orderedlist.content, serializer),
+                write_blockss(&orderedlist.content, ctx),
             ])),
             &orderedlist.source_info,
-            serializer,
+            ctx,
         ),
         Block::RawBlock(raw) => node_with_source(
             "RawBlock",
             Some(json!([raw.format.clone(), raw.text.clone()])),
             &raw.source_info,
-            serializer,
+            ctx,
         ),
         Block::HorizontalRule(block) => {
-            node_with_source("HorizontalRule", None, &block.source_info, serializer)
+            node_with_source("HorizontalRule", None, &block.source_info, ctx)
         }
         Block::Table(table) => {
             let mut obj = serde_json::Map::new();
@@ -830,29 +919,29 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 "c".to_string(),
                 json!([
                     write_attr(&table.attr),
-                    write_caption(&table.caption, serializer),
+                    write_caption(&table.caption, ctx),
                     table.colspec.iter().map(write_colspec).collect::<Vec<_>>(),
-                    write_table_head(&table.head, serializer),
+                    write_table_head(&table.head, ctx),
                     table
                         .bodies
                         .iter()
-                        .map(|body| write_table_body(body, serializer))
+                        .map(|body| write_table_body(body, ctx))
                         .collect::<Vec<_>>(),
-                    write_table_foot(&table.foot, serializer)
+                    write_table_foot(&table.foot, ctx)
                 ]),
             );
-            serializer.add_source_info(&mut obj, &table.source_info);
+            ctx.serializer.add_source_info(&mut obj, &table.source_info);
             obj.insert(
                 "attrS".to_string(),
-                write_attr_source(&table.attr_source, serializer),
+                write_attr_source(&table.attr_source, ctx),
             );
             obj.insert(
                 "captionS".to_string(),
-                write_caption_source(&table.caption, serializer),
+                write_caption_source(&table.caption, ctx),
             );
             obj.insert(
                 "headS".to_string(),
-                write_table_head_source(&table.head, serializer),
+                write_table_head_source(&table.head, ctx),
             );
             obj.insert(
                 "bodiesS".to_string(),
@@ -860,13 +949,13 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                     table
                         .bodies
                         .iter()
-                        .map(|body| write_table_body_source(body, serializer))
+                        .map(|body| write_table_body_source(body, ctx))
                         .collect::<Vec<_>>()
                 ),
             );
             obj.insert(
                 "footS".to_string(),
-                write_table_foot_source(&table.foot, serializer),
+                write_table_foot_source(&table.foot, ctx),
             );
             Value::Object(obj)
         }
@@ -876,23 +965,20 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
             obj.insert("t".to_string(), json!("Div"));
             obj.insert(
                 "c".to_string(),
-                json!([
-                    write_attr(&div.attr),
-                    write_blocks(&div.content, serializer)
-                ]),
+                json!([write_attr(&div.attr), write_blocks(&div.content, ctx)]),
             );
-            serializer.add_source_info(&mut obj, &div.source_info);
+            ctx.serializer.add_source_info(&mut obj, &div.source_info);
             obj.insert(
                 "attrS".to_string(),
-                write_attr_source(&div.attr_source, serializer),
+                write_attr_source(&div.attr_source, ctx),
             );
             Value::Object(obj)
         }
         Block::BlockQuote(quote) => node_with_source(
             "BlockQuote",
-            Some(write_blocks(&quote.content, serializer)),
+            Some(write_blocks(&quote.content, ctx)),
             &quote.source_info,
-            serializer,
+            ctx,
         ),
         Block::LineBlock(lineblock) => node_with_source(
             "LineBlock",
@@ -900,17 +986,17 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 lineblock
                     .content
                     .iter()
-                    .map(|inlines| write_inlines(inlines, serializer))
+                    .map(|inlines| write_inlines(inlines, ctx))
                     .collect::<Vec<_>>()
             )),
             &lineblock.source_info,
-            serializer,
+            ctx,
         ),
         Block::Paragraph(para) => node_with_source(
             "Para",
-            Some(write_inlines(&para.content, serializer)),
+            Some(write_inlines(&para.content, ctx)),
             &para.source_info,
-            serializer,
+            ctx,
         ),
         Block::Header(header) => {
             let mut obj = serde_json::Map::new();
@@ -920,13 +1006,14 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 json!([
                     header.level,
                     write_attr(&header.attr),
-                    write_inlines(&header.content, serializer)
+                    write_inlines(&header.content, ctx)
                 ]),
             );
-            serializer.add_source_info(&mut obj, &header.source_info);
+            ctx.serializer
+                .add_source_info(&mut obj, &header.source_info);
             obj.insert(
                 "attrS".to_string(),
-                write_attr_source(&header.attr_source, serializer),
+                write_attr_source(&header.attr_source, ctx),
             );
             Value::Object(obj)
         }
@@ -937,18 +1024,19 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                 "c".to_string(),
                 json!([write_attr(&codeblock.attr), codeblock.text]),
             );
-            serializer.add_source_info(&mut obj, &codeblock.source_info);
+            ctx.serializer
+                .add_source_info(&mut obj, &codeblock.source_info);
             obj.insert(
                 "attrS".to_string(),
-                write_attr_source(&codeblock.attr_source, serializer),
+                write_attr_source(&codeblock.attr_source, ctx),
             );
             Value::Object(obj)
         }
         Block::Plain(plain) => node_with_source(
             "Plain",
-            Some(write_inlines(&plain.content, serializer)),
+            Some(write_inlines(&plain.content, ctx)),
             &plain.source_info,
-            serializer,
+            ctx,
         ),
         Block::BulletList(bulletlist) => node_with_source(
             "BulletList",
@@ -958,40 +1046,48 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
                     .iter()
                     .map(|blocks| blocks
                         .iter()
-                        .map(|block| write_block(block, serializer))
+                        .map(|block| write_block(block, ctx))
                         .collect::<Vec<_>>())
                     .collect::<Vec<_>>()
             )),
             &bulletlist.source_info,
-            serializer,
+            ctx,
         ),
         Block::BlockMetadata(meta) => node_with_source(
             "BlockMetadata",
-            Some(write_meta_value_with_source_info(&meta.meta, serializer)),
+            Some(write_meta_value_with_source_info(&meta.meta, ctx)),
             &meta.source_info,
-            serializer,
+            ctx,
         ),
         Block::NoteDefinitionPara(refdef) => node_with_source(
             "NoteDefinitionPara",
-            Some(json!([
-                refdef.id,
-                write_inlines(&refdef.content, serializer)
-            ])),
+            Some(json!([refdef.id, write_inlines(&refdef.content, ctx)])),
             &refdef.source_info,
-            serializer,
+            ctx,
         ),
         Block::NoteDefinitionFencedBlock(refdef) => node_with_source(
             "NoteDefinitionFencedBlock",
-            Some(json!([
-                refdef.id,
-                write_blocks(&refdef.content, serializer)
-            ])),
+            Some(json!([refdef.id, write_blocks(&refdef.content, ctx)])),
             &refdef.source_info,
-            serializer,
+            ctx,
         ),
-        Block::CaptionBlock(_) => {
-            panic!(
-                "CaptionBlock found in JSON writer - should have been processed during postprocessing"
+        Block::CaptionBlock(caption) => {
+            // Defensive: CaptionBlocks should be attached to figures/tables in postprocessing
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Orphaned caption block in JSON writer")
+                    .with_code("Q-3-21")
+                    .with_location(caption.source_info.clone())
+                    .problem("Caption block is not attached to a figure or table")
+                    .add_detail("Captions should be associated with figures/tables during postprocessing")
+                    .add_hint("This may indicate a postprocessing issue or filter-generated orphaned caption")
+                    .build()
+            );
+            // Render as a plain paragraph to avoid losing content
+            node_with_source(
+                "Plain",
+                Some(write_inlines(&caption.content, ctx)),
+                &caption.source_info,
+                ctx,
             )
         }
     }
@@ -999,39 +1095,39 @@ fn write_block(block: &Block, serializer: &mut SourceInfoSerializer) -> Value {
 
 fn write_meta_value_with_source_info(
     value: &crate::pandoc::MetaValueWithSourceInfo,
-    serializer: &mut SourceInfoSerializer,
+    ctx: &mut JsonWriterContext,
 ) -> Value {
     match value {
         crate::pandoc::MetaValueWithSourceInfo::MetaString { value, source_info } => json!({
             "t": "MetaString",
             "c": value,
-            "s": serializer.to_json_ref(source_info)
+            "s": ctx.serializer.to_json_ref(source_info)
         }),
         crate::pandoc::MetaValueWithSourceInfo::MetaBool { value, source_info } => json!({
             "t": "MetaBool",
             "c": value,
-            "s": serializer.to_json_ref(source_info)
+            "s": ctx.serializer.to_json_ref(source_info)
         }),
         crate::pandoc::MetaValueWithSourceInfo::MetaInlines {
             content,
             source_info,
         } => json!({
             "t": "MetaInlines",
-            "c": write_inlines(content, serializer),
-            "s": serializer.to_json_ref(source_info)
+            "c": write_inlines(content, ctx),
+            "s": ctx.serializer.to_json_ref(source_info)
         }),
         crate::pandoc::MetaValueWithSourceInfo::MetaBlocks {
             content,
             source_info,
         } => json!({
             "t": "MetaBlocks",
-            "c": write_blocks(content, serializer),
-            "s": serializer.to_json_ref(source_info)
+            "c": write_blocks(content, ctx),
+            "s": ctx.serializer.to_json_ref(source_info)
         }),
         crate::pandoc::MetaValueWithSourceInfo::MetaList { items, source_info } => json!({
             "t": "MetaList",
-            "c": items.iter().map(|item| write_meta_value_with_source_info(item, serializer)).collect::<Vec<_>>(),
-            "s": serializer.to_json_ref(source_info)
+            "c": items.iter().map(|item| write_meta_value_with_source_info(item, ctx)).collect::<Vec<_>>(),
+            "s": ctx.serializer.to_json_ref(source_info)
         }),
         crate::pandoc::MetaValueWithSourceInfo::MetaMap {
             entries,
@@ -1040,18 +1136,15 @@ fn write_meta_value_with_source_info(
             "t": "MetaMap",
             "c": entries.iter().map(|entry| json!({
                 "key": entry.key,
-                "key_source": serializer.to_json_ref(&entry.key_source),
-                "value": write_meta_value_with_source_info(&entry.value, serializer)
+                "key_source": ctx.serializer.to_json_ref(&entry.key_source),
+                "value": write_meta_value_with_source_info(&entry.value, ctx)
             })).collect::<Vec<_>>(),
-            "s": serializer.to_json_ref(source_info)
+            "s": ctx.serializer.to_json_ref(source_info)
         }),
     }
 }
 
-fn write_meta(
-    meta: &crate::pandoc::MetaValueWithSourceInfo,
-    serializer: &mut SourceInfoSerializer,
-) -> Value {
+fn write_meta(meta: &crate::pandoc::MetaValueWithSourceInfo, ctx: &mut JsonWriterContext) -> Value {
     // meta should be a MetaMap variant
     // Write as Pandoc-compatible object format
     match meta {
@@ -1061,39 +1154,77 @@ fn write_meta(
                 .map(|entry| {
                     (
                         entry.key.clone(),
-                        write_meta_value_with_source_info(&entry.value, serializer),
+                        write_meta_value_with_source_info(&entry.value, ctx),
                     )
                 })
                 .collect();
             Value::Object(map)
         }
-        _ => panic!("Expected MetaMap for Pandoc.meta"),
+        other => {
+            // Defensive: Pandoc.meta should always be MetaMap in valid AST
+            ctx.errors.push(
+                DiagnosticMessageBuilder::error("Invalid metadata structure in JSON writer")
+                    .with_code("Q-3-40")
+                    .problem("Pandoc metadata is not a MetaMap structure")
+                    .add_detail(format!(
+                        "Found {:?} instead of MetaMap",
+                        match other {
+                            crate::pandoc::MetaValueWithSourceInfo::MetaString { .. } =>
+                                "MetaString",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaBool { .. } => "MetaBool",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaInlines { .. } =>
+                                "MetaInlines",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaList { .. } => "MetaList",
+                            crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { .. } =>
+                                "MetaBlocks",
+                            _ => "unknown",
+                        }
+                    ))
+                    .add_hint("This may indicate a malformed AST or parsing error")
+                    .build(),
+            );
+            Value::Object(serde_json::Map::new())
+        }
     }
 }
 
-fn write_blocks(blocks: &[Block], serializer: &mut SourceInfoSerializer) -> Value {
+fn write_blocks(blocks: &[Block], ctx: &mut JsonWriterContext) -> Value {
     json!(
         blocks
             .iter()
-            .map(|block| write_block(block, serializer))
+            .map(|block| write_block(block, ctx))
             .collect::<Vec<_>>()
     )
 }
 
-fn write_pandoc(pandoc: &Pandoc, context: &ASTContext, config: &JsonConfig) -> Value {
-    // Create the SourceInfo serializer
-    let mut serializer = SourceInfoSerializer::new(context, config);
+fn write_pandoc(
+    pandoc: &Pandoc,
+    ast_context: &ASTContext,
+    config: &JsonConfig,
+) -> Result<Value, Vec<DiagnosticMessage>> {
+    // Create the JSON writer context
+    let mut ctx = JsonWriterContext::new(ast_context, config);
 
     // Serialize AST, which will build the pool
-    let meta_json = write_meta(&pandoc.meta, &mut serializer);
-    let blocks_json = write_blocks(&pandoc.blocks, &mut serializer);
+    let meta_json = write_meta(&pandoc.meta, &mut ctx);
+    let blocks_json = write_blocks(&pandoc.blocks, &mut ctx);
+
+    // Check if any errors were accumulated
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
 
     // Extract top-level key sources from metadata using the serializer
     let meta_top_level_key_sources: serde_json::Map<String, Value> =
         if let crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } = &pandoc.meta {
             entries
                 .iter()
-                .map(|entry| (entry.key.clone(), serializer.to_json_ref(&entry.key_source)))
+                .map(|entry| {
+                    (
+                        entry.key.clone(),
+                        ctx.serializer.to_json_ref(&entry.key_source),
+                    )
+                })
                 .collect()
         } else {
             serde_json::Map::new()
@@ -1104,10 +1235,10 @@ fn write_pandoc(pandoc: &Pandoc, context: &ASTContext, config: &JsonConfig) -> V
 
     // Serialize files array combining filenames and FileInformation
     // Each file entry has: "name", "line_breaks", "total_length"
-    let files_array: Vec<Value> = (0..context.filenames.len())
+    let files_array: Vec<Value> = (0..ast_context.filenames.len())
         .map(|idx| {
-            let filename = &context.filenames[idx];
-            let file_info = context
+            let filename = &ast_context.filenames[idx];
+            let file_info = ast_context
                 .source_context
                 .get_file(quarto_source_map::FileId(idx))
                 .and_then(|file| file.file_info.as_ref());
@@ -1131,8 +1262,8 @@ fn write_pandoc(pandoc: &Pandoc, context: &ASTContext, config: &JsonConfig) -> V
     ast_context_obj.insert("files".to_string(), json!(files_array));
 
     // Only include sourceInfoPool if non-empty
-    if !serializer.pool.is_empty() {
-        ast_context_obj.insert("sourceInfoPool".to_string(), json!(serializer.pool));
+    if !ctx.serializer.pool.is_empty() {
+        ast_context_obj.insert("sourceInfoPool".to_string(), json!(ctx.serializer.pool));
     }
 
     // Only include metaTopLevelKeySources if non-empty
@@ -1143,12 +1274,12 @@ fn write_pandoc(pandoc: &Pandoc, context: &ASTContext, config: &JsonConfig) -> V
         );
     }
 
-    json!({
+    Ok(json!({
         "pandoc-api-version": [1, 23, 1],
         "meta": meta_json,
         "blocks": blocks_json,
         "astContext": ast_context_obj,
-    })
+    }))
 }
 
 /// Write Pandoc AST to JSON with custom configuration.
@@ -1157,9 +1288,19 @@ pub fn write_with_config<W: std::io::Write>(
     context: &ASTContext,
     writer: &mut W,
     config: &JsonConfig,
-) -> std::io::Result<()> {
-    let json = write_pandoc(pandoc, context, config);
-    serde_json::to_writer(writer, &json)?;
+) -> Result<(), Vec<DiagnosticMessage>> {
+    let json = write_pandoc(pandoc, context, config)?;
+    serde_json::to_writer(writer, &json).map_err(|e| {
+        vec![quarto_error_reporting::DiagnosticMessage {
+            code: Some("Q-3-38".to_string()),
+            title: "JSON serialization failed".to_string(),
+            kind: quarto_error_reporting::DiagnosticKind::Error,
+            problem: Some(format!("Failed to serialize AST to JSON: {}", e).into()),
+            details: vec![],
+            hints: vec![],
+            location: None,
+        }]
+    })?;
     Ok(())
 }
 
@@ -1168,6 +1309,338 @@ pub fn write<W: std::io::Write>(
     pandoc: &Pandoc,
     context: &ASTContext,
     writer: &mut W,
-) -> std::io::Result<()> {
+) -> Result<(), Vec<DiagnosticMessage>> {
     write_with_config(pandoc, context, writer, &JsonConfig::default())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_source_map::{FileId, SourceInfo};
+    use std::rc::Rc;
+
+    fn make_test_context() -> ASTContext {
+        ASTContext::anonymous()
+    }
+
+    fn make_test_config() -> JsonConfig {
+        JsonConfig::default()
+    }
+
+    #[test]
+    fn test_source_info_pool_original() {
+        // Test that a single Original SourceInfo is added to the pool correctly
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 10,
+        };
+
+        let id = serializer.intern(&source_info);
+
+        // Should get ID 0 for the first entry
+        assert_eq!(id, 0);
+        assert_eq!(serializer.pool.len(), 1);
+
+        // Verify the pool entry
+        let entry = &serializer.pool[0];
+        assert_eq!(entry.start_offset, 0);
+        assert_eq!(entry.end_offset, 10);
+        match &entry.mapping {
+            SerializableSourceMapping::Original { file_id } => {
+                assert_eq!(*file_id, FileId(0));
+            }
+            _ => panic!("Expected Original mapping"),
+        }
+
+        // Interning the same SourceInfo again should return the same ID
+        let id2 = serializer.intern(&source_info);
+        assert_eq!(id2, 0);
+        assert_eq!(serializer.pool.len(), 1); // No new entry added
+    }
+
+    #[test]
+    fn test_source_info_pool_substring() {
+        // Test Substring with parent reference
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 100,
+        });
+
+        let child = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 10,
+            end_offset: 20,
+        };
+
+        let child_id = serializer.intern(&child);
+
+        // Parent should be interned first (ID 0), child second (ID 1)
+        assert_eq!(child_id, 1);
+        assert_eq!(serializer.pool.len(), 2);
+
+        // Verify parent entry
+        let parent_entry = &serializer.pool[0];
+        assert_eq!(parent_entry.start_offset, 0);
+        assert_eq!(parent_entry.end_offset, 100);
+        match &parent_entry.mapping {
+            SerializableSourceMapping::Original { file_id } => {
+                assert_eq!(*file_id, FileId(0));
+            }
+            _ => panic!("Expected Original mapping"),
+        }
+
+        // Verify child entry
+        let child_entry = &serializer.pool[1];
+        assert_eq!(child_entry.start_offset, 10);
+        assert_eq!(child_entry.end_offset, 20);
+        match &child_entry.mapping {
+            SerializableSourceMapping::Substring { parent_id } => {
+                assert_eq!(*parent_id, 0); // References parent
+            }
+            _ => panic!("Expected Substring mapping"),
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_siblings() {
+        // Test multiple nodes sharing the same parent
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 100,
+        });
+
+        let child1 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 10,
+            end_offset: 20,
+        };
+
+        let child2 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 30,
+            end_offset: 40,
+        };
+
+        let child3 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 50,
+            end_offset: 60,
+        };
+
+        let id1 = serializer.intern(&child1);
+        let id2 = serializer.intern(&child2);
+        let id3 = serializer.intern(&child3);
+
+        // Parent should be ID 0, children should be 1, 2, 3
+        assert_eq!(id1, 1);
+        assert_eq!(id2, 2);
+        assert_eq!(id3, 3);
+        assert_eq!(serializer.pool.len(), 4); // 1 parent + 3 children
+
+        // All children should reference the same parent (ID 0)
+        for child_id in [1, 2, 3] {
+            let child_entry = &serializer.pool[child_id];
+            match &child_entry.mapping {
+                SerializableSourceMapping::Substring { parent_id } => {
+                    assert_eq!(*parent_id, 0);
+                }
+                _ => panic!("Expected Substring mapping"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_nested_deep() {
+        // Test deeply nested structure (5+ levels)
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        // Build a chain: Original -> Sub1 -> Sub2 -> Sub3 -> Sub4 -> Sub5
+        let level0 = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 1000,
+        });
+
+        let level1 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level0),
+            start_offset: 100,
+            end_offset: 900,
+        });
+
+        let level2 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level1),
+            start_offset: 200,
+            end_offset: 800,
+        });
+
+        let level3 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level2),
+            start_offset: 300,
+            end_offset: 700,
+        });
+
+        let level4 = Rc::new(SourceInfo::Substring {
+            parent: Rc::clone(&level3),
+            start_offset: 400,
+            end_offset: 600,
+        });
+
+        let level5 = SourceInfo::Substring {
+            parent: Rc::clone(&level4),
+            start_offset: 450,
+            end_offset: 550,
+        };
+
+        let deepest_id = serializer.intern(&level5);
+
+        // Should have 6 entries total (0-5)
+        assert_eq!(deepest_id, 5);
+        assert_eq!(serializer.pool.len(), 6);
+
+        // Verify the chain: each level should reference its parent
+        for i in 1..=5 {
+            let entry = &serializer.pool[i];
+            match &entry.mapping {
+                SerializableSourceMapping::Substring { parent_id } => {
+                    assert_eq!(
+                        *parent_id,
+                        i - 1,
+                        "Level {} should reference parent {}",
+                        i,
+                        i - 1
+                    );
+                }
+                _ => panic!("Expected Substring mapping at level {}", i),
+            }
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_concat() {
+        // Test Concat mapping with multiple pieces
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let piece1_source = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 10,
+        });
+
+        let piece2_source = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 20,
+            end_offset: 30,
+        });
+
+        let concat = SourceInfo::Concat {
+            pieces: vec![
+                quarto_source_map::SourcePiece {
+                    source_info: (*piece1_source).clone(),
+                    offset_in_concat: 0,
+                    length: 10,
+                },
+                quarto_source_map::SourcePiece {
+                    source_info: (*piece2_source).clone(),
+                    offset_in_concat: 10,
+                    length: 10,
+                },
+            ],
+        };
+
+        let concat_id = serializer.intern(&concat);
+
+        // Should have 3 entries: piece1, piece2, concat
+        assert_eq!(concat_id, 2);
+        assert_eq!(serializer.pool.len(), 3);
+
+        // Verify concat entry
+        let concat_entry = &serializer.pool[2];
+        match &concat_entry.mapping {
+            SerializableSourceMapping::Concat { pieces } => {
+                assert_eq!(pieces.len(), 2);
+                assert_eq!(pieces[0].source_info_id, 0); // References piece1
+                assert_eq!(pieces[0].offset_in_concat, 0);
+                assert_eq!(pieces[0].length, 10);
+                assert_eq!(pieces[1].source_info_id, 1); // References piece2
+                assert_eq!(pieces[1].offset_in_concat, 10);
+                assert_eq!(pieces[1].length, 10);
+            }
+            _ => panic!("Expected Concat mapping"),
+        }
+    }
+
+    #[test]
+    fn test_source_info_pool_deduplication() {
+        // Test that the same Rc gets the same ID (deduplication)
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut serializer = SourceInfoSerializer::new(&context, &config);
+
+        let parent = Rc::new(SourceInfo::Original {
+            file_id: FileId(0),
+            start_offset: 0,
+            end_offset: 100,
+        });
+
+        // Create multiple Substrings sharing the same parent Rc
+        let child1 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 10,
+            end_offset: 20,
+        };
+
+        let child2 = SourceInfo::Substring {
+            parent: Rc::clone(&parent),
+            start_offset: 30,
+            end_offset: 40,
+        };
+
+        serializer.intern(&child1);
+        serializer.intern(&child2);
+
+        // Should have 3 entries: parent (once), child1, child2
+        assert_eq!(serializer.pool.len(), 3);
+
+        // Both children should reference the same parent ID
+        match &serializer.pool[1].mapping {
+            SerializableSourceMapping::Substring { parent_id } => {
+                assert_eq!(*parent_id, 0);
+            }
+            _ => panic!("Expected Substring"),
+        }
+
+        match &serializer.pool[2].mapping {
+            SerializableSourceMapping::Substring { parent_id } => {
+                assert_eq!(*parent_id, 0); // Same parent ID as child1
+            }
+            _ => panic!("Expected Substring"),
+        }
+
+        // Verify the parent was only added once
+        let original_count = serializer
+            .pool
+            .iter()
+            .filter(|entry| matches!(entry.mapping, SerializableSourceMapping::Original { .. }))
+            .count();
+        assert_eq!(original_count, 1, "Parent should only appear once in pool");
+    }
 }

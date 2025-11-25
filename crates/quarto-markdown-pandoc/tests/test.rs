@@ -289,14 +289,26 @@ fn unit_test_snapshots_native() {
 #[test]
 fn unit_test_snapshots_qmd() {
     test_snapshots_for_format("qmd", |pandoc, _context, buffer| {
-        writers::qmd::write(pandoc, buffer).map_err(|e| e.into())
+        writers::qmd::write(pandoc, buffer)
+            .map_err(|e| format!("QMD writer errors: {:?}", e).into())
     });
 }
 
 #[test]
 fn unit_test_snapshots_json() {
     test_snapshots_for_format("json", |pandoc, context, buffer| {
-        writers::json::write(pandoc, context, buffer).map_err(|e| e.into())
+        writers::json::write(pandoc, context, buffer).map_err(|errors| {
+            // Convert Vec<DiagnosticMessage> to Box<dyn Error>
+            let error_messages = errors
+                .iter()
+                .map(|e| format!("{}: {}", e.code.as_deref().unwrap_or("ERROR"), e.title))
+                .collect::<Vec<_>>()
+                .join("; ");
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                error_messages,
+            )) as Box<dyn std::error::Error>
+        })
     });
 }
 

@@ -1076,10 +1076,15 @@ fn native_visitor<T: Write>(
             let raw_text = node.utf8_text(input_bytes).unwrap();
             let text = raw_text.trim().to_string();
 
+            // Get the source info with whitespace trimming for the warning
+            use crate::pandoc::location::{SourceInfoOptions, node_source_info_with_options};
+            let trimmed_source_info =
+                node_source_info_with_options(node, context, &SourceInfoOptions::trim_all());
+
             // Create a warning (not error) about the auto-conversion
             let msg = DiagnosticMessageBuilder::warning("HTML element converted to raw HTML")
                 .with_code("Q-2-9")
-                .with_location(node_source_info_with_context(node, context))
+                .with_location(trimmed_source_info)
                 .add_info("HTML elements are automatically converted to RawInline nodes with format 'html'")
                 .add_hint("To be explicit, use: `<element>`{=html}")
                 .build();

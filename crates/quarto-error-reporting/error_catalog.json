@@ -6,6 +6,20 @@
     "docs_url": "https://quarto.org/docs/errors/Q-0-1",
     "since_version": "99.9.9"
   },
+  "Q-0-99": {
+    "subsystem": "internal",
+    "title": "Generic Error",
+    "message_template": "Uncategorized Error. This should never appear in production, and is a bug in Quarto.",
+    "docs_url": "https://quarto.org/docs/errors/Q-0-99",
+    "since_version": "99.9.9"
+  },
+  "Q-1-1": {
+    "subsystem": "yaml",
+    "title": "YAML Syntax Error",
+    "message_template": "There is a syntax error in the YAML document being parsed.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-1",
+    "since_version": "99.9.9"
+  },
   "Q-1-10": {
     "subsystem": "yaml",
     "title": "Missing Required Property",
@@ -355,6 +369,175 @@
     "title": "Unresolved Note Reference",
     "message_template": "A note reference was not converted to a Span during postprocessing. This is a bug in the postprocessor.",
     "docs_url": "https://quarto.org/docs/errors/Q-3-12",
+    "since_version": "99.9.9"
+  },
+  "Q-3-20": {
+    "subsystem": "writer",
+    "title": "Block Metadata Not Supported",
+    "message_template": "YAML metadata blocks are internal AST nodes that cannot be rendered in this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-20",
+    "since_version": "99.9.9"
+  },
+  "Q-3-21": {
+    "subsystem": "writer",
+    "title": "Caption Block Not Supported",
+    "message_template": "Standalone caption blocks cannot be rendered in this output format. Captions should be attached to figures or tables.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-21",
+    "since_version": "99.9.9"
+  },
+  "Q-3-30": {
+    "subsystem": "writer",
+    "title": "Shortcode Not Supported",
+    "message_template": "Quarto shortcodes are not representable in this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-30",
+    "since_version": "99.9.9"
+  },
+  "Q-3-31": {
+    "subsystem": "writer",
+    "title": "Unprocessed Note Reference",
+    "message_template": "Note reference was not converted to Span during postprocessing. This may indicate a bug or a filter that bypassed postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-31",
+    "since_version": "99.9.9"
+  },
+  "Q-3-32": {
+    "subsystem": "writer",
+    "title": "Standalone Attribute Not Supported",
+    "message_template": "Standalone attributes (e.g., in table cells or headings) are not representable in this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-32",
+    "since_version": "99.9.9"
+  },
+  "Q-3-33": {
+    "subsystem": "writer",
+    "title": "Unprocessed Insert Markup",
+    "message_template": "Insert editorial markup ([++...]) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-33",
+    "since_version": "99.9.9"
+  },
+  "Q-3-34": {
+    "subsystem": "writer",
+    "title": "Unprocessed Delete Markup",
+    "message_template": "Delete editorial markup ([--...]) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-34",
+    "since_version": "99.9.9"
+  },
+  "Q-3-35": {
+    "subsystem": "writer",
+    "title": "Unprocessed Highlight Markup",
+    "message_template": "Highlight editorial markup ([!!...]) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-35",
+    "since_version": "99.9.9"
+  },
+  "Q-3-36": {
+    "subsystem": "writer",
+    "title": "Unprocessed EditComment Markup",
+    "message_template": "EditComment editorial markup ([>>...]) was not desugared to Span during postprocessing.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-36",
+    "since_version": "99.9.9"
+  },
+  "Q-3-38": {
+    "subsystem": "writer",
+    "title": "JSON Serialization Failed",
+    "message_template": "The AST-to-JSON serialization process failed.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-38",
+    "since_version": "99.9.9"
+  },
+  "Q-3-40": {
+    "subsystem": "writer",
+    "title": "Invalid Metadata Structure",
+    "message_template": "Document metadata must be a map structure for this output format.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-40",
+    "since_version": "99.9.9"
+  },
+  "Q-3-50": {
+    "subsystem": "writer",
+    "title": "LineBlock Not Supported in ANSI Format",
+    "message_template": "LineBlock elements cannot be rendered in ANSI terminal output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-50",
+    "since_version": "99.9.9"
+  },
+  "Q-3-51": {
+    "subsystem": "writer",
+    "title": "CodeBlock Not Supported in ANSI Format",
+    "message_template": "CodeBlock elements cannot be rendered in ANSI terminal output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-51",
+    "since_version": "99.9.9"
+  },
+  "Q-3-52": {
+    "subsystem": "writer",
+    "title": "Table Not Supported in ANSI Format",
+    "message_template": "Table elements cannot be rendered in ANSI terminal output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-52",
+    "since_version": "99.9.9"
+  },
+  "Q-3-53": {
+    "subsystem": "writer",
+    "title": "Figure Not Supported in ANSI Format",
+    "message_template": "Figure elements cannot be rendered in ANSI terminal output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-53",
+    "since_version": "99.9.9"
+  },
+  "Q-3-54": {
+    "subsystem": "writer",
+    "title": "NoteDefinitionPara Not Supported in ANSI Format",
+    "message_template": "Note definitions cannot be rendered in ANSI terminal output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-54",
+    "since_version": "99.9.9"
+  },
+  "Q-3-55": {
+    "subsystem": "writer",
+    "title": "NoteDefinitionFencedBlock Not Supported in ANSI Format",
+    "message_template": "Fenced note definitions cannot be rendered in ANSI terminal output.",
+    "docs_url": "https://quarto.org/docs/errors/Q-3-55",
+    "since_version": "99.9.9"
+  },
+
+  "Q-10-1": {
+    "subsystem": "template",
+    "title": "Template Parse Error",
+    "message_template": "Failed to parse the template syntax.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-1",
+    "since_version": "99.9.9"
+  },
+  "Q-10-2": {
+    "subsystem": "template",
+    "title": "Undefined Variable",
+    "message_template": "The variable referenced in the template is not defined in the context.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-2",
+    "since_version": "99.9.9"
+  },
+  "Q-10-3": {
+    "subsystem": "template",
+    "title": "Partial Not Found",
+    "message_template": "The referenced partial template file could not be found.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-3",
+    "since_version": "99.9.9"
+  },
+  "Q-10-4": {
+    "subsystem": "template",
+    "title": "Recursive Partial",
+    "message_template": "Partial templates are nested too deeply, possibly indicating infinite recursion.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-4",
+    "since_version": "99.9.9"
+  },
+  "Q-10-5": {
+    "subsystem": "template",
+    "title": "Unresolved Partial Reference",
+    "message_template": "A partial reference was not resolved during template compilation.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-5",
+    "since_version": "99.9.9"
+  },
+  "Q-10-6": {
+    "subsystem": "template",
+    "title": "Unknown Pipe",
+    "message_template": "The pipe transformation specified in the template is not recognized.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-6",
+    "since_version": "99.9.9"
+  },
+  "Q-10-7": {
+    "subsystem": "template",
+    "title": "Invalid Pipe Arguments",
+    "message_template": "The arguments provided to the pipe transformation are invalid.",
+    "docs_url": "https://quarto.org/docs/errors/Q-10-7",
     "since_version": "99.9.9"
   }
 }

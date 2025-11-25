@@ -15,6 +15,79 @@ use hashlink::LinkedHashMap;
 use std::io::{self, Write};
 use yaml_rust2::{Yaml, YamlEmitter};
 
+/// Delimiter choice for emphasis and strong emphasis
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmphasisDelimiter {
+    /// Asterisk delimiter (* or **)
+    Asterisk,
+    /// Underscore delimiter (_ or __)
+    Underscore,
+}
+
+/// Stack frame tracking emphasis state
+#[derive(Debug, Clone)]
+pub struct EmphasisStackFrame {
+    /// The delimiter used for this emphasis level
+    pub delimiter: EmphasisDelimiter,
+    /// Whether this is strong emphasis (true) or regular emphasis (false)
+    pub is_strong: bool,
+}
+
+/// Context for QMD writer, threaded through all write functions
+pub struct QmdWriterContext {
+    /// Accumulated error messages during writing
+    pub errors: Vec<quarto_error_reporting::DiagnosticMessage>,
+
+    /// Stack tracking parent emphasis delimiters to avoid ambiguity.
+    /// When writing nested Emph/Strong nodes, we check this stack to
+    /// choose delimiters that won't create *** sequences.
+    pub emphasis_stack: Vec<EmphasisStackFrame>,
+}
+
+impl QmdWriterContext {
+    pub fn new() -> Self {
+        Self {
+            errors: Vec::new(),
+            emphasis_stack: Vec::new(),
+        }
+    }
+
+    pub fn push_emphasis(&mut self, delimiter: EmphasisDelimiter, is_strong: bool) {
+        self.emphasis_stack.push(EmphasisStackFrame {
+            delimiter,
+            is_strong,
+        });
+    }
+
+    pub fn pop_emphasis(&mut self) {
+        self.emphasis_stack.pop();
+    }
+
+    /// Choose delimiter for Emph to avoid *** ambiguity
+    pub fn choose_emph_delimiter(&self) -> EmphasisDelimiter {
+        // If parent uses asterisks (regardless of whether it's Emph or Strong),
+        // use underscore to avoid creating *** sequences
+        if let Some(parent) = self.emphasis_stack.last() {
+            if matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
+                return EmphasisDelimiter::Underscore;
+            }
+        }
+        EmphasisDelimiter::Asterisk // Default
+    }
+
+    /// Choose delimiter for Strong to avoid *** ambiguity
+    pub fn choose_strong_delimiter(&self) -> EmphasisDelimiter {
+        // If parent uses asterisks (regardless of whether it's Emph or Strong),
+        // use underscore to avoid creating *** sequences
+        if let Some(parent) = self.emphasis_stack.last() {
+            if matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
+                return EmphasisDelimiter::Underscore;
+            }
+        }
+        EmphasisDelimiter::Asterisk // Default
+    }
+}
+
 struct BlockQuoteContext<'a, W: Write + ?Sized> {
     inner: &'a mut W,
     at_line_start: bool,
@@ -184,8 +257,19 @@ fn meta_value_with_source_info_to_yaml(
         crate::pandoc::MetaValueWithSourceInfo::MetaInlines { content, .. } => {
             // Render inlines using the qmd writer
             let mut buffer = Vec::<u8>::new();
+            let mut ctx = QmdWriterContext::new(); // Errors in metadata inlines are unexpected
             for inline in content {
-                write_inline(inline, &mut buffer)?;
+                write_inline(inline, &mut buffer, &mut ctx)?;
+            }
+            // If any errors accumulated, this is truly unexpected in metadata
+            if !ctx.errors.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Unexpected error in metadata inline: {}",
+                        ctx.errors[0].title
+                    ),
+                ));
             }
             let result = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -194,11 +278,22 @@ fn meta_value_with_source_info_to_yaml(
         crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
             // Render blocks using the qmd writer
             let mut buffer = Vec::<u8>::new();
+            let mut ctx = QmdWriterContext::new(); // Errors in metadata blocks are unexpected
             for (i, block) in content.iter().enumerate() {
                 if i > 0 {
                     writeln!(&mut buffer)?;
                 }
-                write_block(block, &mut buffer)?;
+                write_block(block, &mut buffer, &mut ctx)?;
+            }
+            // If any errors accumulated, this is truly unexpected in metadata
+            if !ctx.errors.is_empty() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Unexpected error in metadata block: {}",
+                        ctx.errors[0].title
+                    ),
+                ));
             }
             let result = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -230,6 +325,7 @@ fn meta_value_with_source_info_to_yaml(
 fn write_meta<T: std::io::Write + ?Sized>(
     meta: &crate::pandoc::MetaValueWithSourceInfo,
     buf: &mut T,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<bool> {
     // meta should be a MetaMap variant
     match meta {
@@ -269,7 +365,23 @@ fn write_meta<T: std::io::Write + ?Sized>(
                 Ok(true)
             }
         }
-        _ => panic!("Expected MetaMap for metadata"),
+        _ => {
+            // Defensive error: metadata should always be MetaMap
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Invalid metadata structure",
+                )
+                .with_code("Q-3-40")
+                .problem("Metadata must be a map structure for QMD output")
+                .add_detail(
+                    "The document metadata is not in the expected map format. \
+                     This may indicate a filter or processing issue.",
+                )
+                .add_hint("Check that filters maintain proper metadata structure")
+                .build(),
+            );
+            Ok(false)
+        }
     }
 }
 
@@ -280,6 +392,7 @@ fn escape_quotes(s: &str) -> String {
 fn write_attr<W: std::io::Write + ?Sized>(
     attr: &crate::pandoc::Attr,
     writer: &mut W,
+    _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     let (id, classes, keyvals) = attr;
     let mut wrote_something = false;
@@ -306,34 +419,46 @@ fn write_attr<W: std::io::Write + ?Sized>(
     Ok(())
 }
 
-fn write_blockquote(blockquote: &BlockQuote, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_blockquote(
+    blockquote: &BlockQuote,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     let mut blockquote_writer = BlockQuoteContext::new(buf);
     for (i, block) in blockquote.content.iter().enumerate() {
         if i > 0 {
             // Add a blank line between blocks in the blockquote
             writeln!(&mut blockquote_writer)?;
         }
-        write_block(block, &mut blockquote_writer)?;
+        write_block(block, &mut blockquote_writer, ctx)?;
     }
     Ok(())
 }
 
-fn write_div(div: &crate::pandoc::Div, writer: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_div(
+    div: &crate::pandoc::Div,
+    writer: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     write!(writer, "::: ")?;
-    write_attr(&div.attr, writer)?;
+    write_attr(&div.attr, writer, ctx)?;
     writeln!(writer)?;
 
     for block in div.content.iter() {
         // Add a blank line between blocks in the blockquote
         writeln!(writer)?;
-        write_block(block, writer)?;
+        write_block(block, writer, ctx)?;
     }
     writeln!(writer, "\n:::")?;
 
     Ok(())
 }
 
-fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_bulletlist(
+    bulletlist: &BulletList,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Determine if this is a tight list
     // A list is tight if the first block of all items is Plain (not Para)
     let is_tight = bulletlist
@@ -365,7 +490,7 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
                     // Add a blank line between blocks within a list item in loose lists
                     writeln!(&mut item_writer)?;
                 }
-                write_block(block, &mut item_writer)?;
+                write_block(block, &mut item_writer, ctx)?;
             }
         }
     }
@@ -375,6 +500,7 @@ fn write_bulletlist(bulletlist: &BulletList, buf: &mut dyn std::io::Write) -> st
 fn write_orderedlist(
     orderedlist: &OrderedList,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     let (start_num, number_style, delimiter) = &orderedlist.attr;
 
@@ -398,13 +524,17 @@ fn write_orderedlist(
                 // Add a blank line between blocks within a list item in loose lists
                 writeln!(&mut item_writer)?;
             }
-            write_block(block, &mut item_writer)?;
+            write_block(block, &mut item_writer, ctx)?;
         }
     }
     Ok(())
 }
 
-fn write_header(header: &Header, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_header(
+    header: &Header,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Write the appropriate number of # symbols for the heading level
     for _ in 0..header.level {
         write!(buf, "#")?;
@@ -413,13 +543,13 @@ fn write_header(header: &Header, buf: &mut dyn std::io::Write) -> std::io::Resul
 
     // Write the header content
     for inline in &header.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
 
     // Add attributes if they exist
     if !is_empty_attr(&header.attr) {
         write!(buf, " ")?;
-        write_attr(&header.attr, buf)?;
+        write_attr(&header.attr, buf, ctx)?;
     }
 
     writeln!(buf)?;
@@ -427,12 +557,16 @@ fn write_header(header: &Header, buf: &mut dyn std::io::Write) -> std::io::Resul
 }
 
 // FIXME this is wrong because pipe tables are quite limited (cannot have newlines in them)
-fn write_cell_content(cell: &Cell, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_cell_content(
+    cell: &Cell,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     for (i, block) in cell.content.iter().enumerate() {
         if i > 0 {
             write!(buf, " ")?; // Join multiple blocks with space
         }
-        write_block(block, buf)?;
+        write_block(block, buf, ctx)?;
     }
     Ok(())
 }
@@ -446,7 +580,11 @@ fn get_alignment_char(alignment: &Alignment) -> char {
     }
 }
 
-fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_codeblock(
+    codeblock: &CodeBlock,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Determine the number of backticks needed
     // Use at least 3, but more if the content contains backticks
     let fence = determine_backticks(&codeblock.text);
@@ -466,7 +604,7 @@ fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::
         write!(buf, "{}", classes[0])?;
     } else if !id.is_empty() || !classes.is_empty() || !keyvals.is_empty() {
         // Has attributes: write full attribute block (no space before it)
-        write_attr(&codeblock.attr, buf)?;
+        write_attr(&codeblock.attr, buf, ctx)?;
     }
 
     writeln!(buf)?;
@@ -488,14 +626,18 @@ fn write_codeblock(codeblock: &CodeBlock, buf: &mut dyn std::io::Write) -> std::
     Ok(())
 }
 
-fn write_lineblock(lineblock: &LineBlock, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_lineblock(
+    lineblock: &LineBlock,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     for (i, line) in lineblock.content.iter().enumerate() {
         if i > 0 {
             writeln!(buf)?;
         }
         write!(buf, "| ")?;
         for inline in line {
-            write_inline(inline, buf)?;
+            write_inline(inline, buf, ctx)?;
         }
     }
     writeln!(buf)?;
@@ -521,6 +663,7 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
 fn write_definitionlist(
     deflist: &DefinitionList,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     for (i, (term, definitions)) in deflist.content.iter().enumerate() {
         if i > 0 {
@@ -529,7 +672,7 @@ fn write_definitionlist(
 
         // Write the term
         for inline in term {
-            write_inline(inline, buf)?;
+            write_inline(inline, buf, ctx)?;
         }
         writeln!(buf)?;
 
@@ -541,7 +684,7 @@ fn write_definitionlist(
                     writeln!(buf)?;
                     write!(buf, "    ")?; // Indent subsequent blocks in definition
                 }
-                write_block(block, buf)?;
+                write_block(block, buf, ctx)?;
             }
         }
     }
@@ -556,16 +699,20 @@ fn write_horizontalrule(
     Ok(())
 }
 
-fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_figure(
+    figure: &Figure,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Write figure using div syntax with fig- class
     write!(buf, "::: ")?;
-    write_attr(&figure.attr, buf)?;
+    write_attr(&figure.attr, buf, ctx)?;
     writeln!(buf)?;
 
     // Write the figure content
     for block in &figure.content {
         writeln!(buf)?;
-        write_block(block, buf)?;
+        write_block(block, buf, ctx)?;
     }
 
     // Write caption if it exists
@@ -576,7 +723,7 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
                 if i > 0 {
                     writeln!(buf)?;
                 }
-                write_block(block, buf)?;
+                write_block(block, buf, ctx)?;
             }
         }
     } else if let Some(ref short_caption) = figure.caption.short {
@@ -584,7 +731,7 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
             writeln!(buf)?;
             // Convert short caption (inlines) to a paragraph for consistency
             for inline in short_caption {
-                write_inline(inline, buf)?;
+                write_inline(inline, buf, ctx)?;
             }
             writeln!(buf)?;
         }
@@ -594,17 +741,22 @@ fn write_figure(figure: &Figure, buf: &mut dyn std::io::Write) -> std::io::Resul
     Ok(())
 }
 
-fn write_metablock(metablock: &MetaBlock, buf: &mut dyn std::io::Write) -> std::io::Result<bool> {
-    write_meta(&metablock.meta, buf)
+fn write_metablock(
+    metablock: &MetaBlock,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<bool> {
+    write_meta(&metablock.meta, buf, ctx)
 }
 
 fn write_inlinerefdef(
     refdef: &crate::pandoc::block::NoteDefinitionPara,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[^{}]: ", refdef.id)?;
     for inline in &refdef.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     writeln!(buf)?;
     Ok(())
@@ -613,6 +765,7 @@ fn write_inlinerefdef(
 fn write_fenced_note_definition(
     refdef: &crate::pandoc::block::NoteDefinitionFencedBlock,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     writeln!(buf, "::: ^{}", refdef.id)?;
     for (i, block) in refdef.content.iter().enumerate() {
@@ -620,13 +773,17 @@ fn write_fenced_note_definition(
             // Add a blank line between blocks
             writeln!(buf)?;
         }
-        write_block(block, buf)?;
+        write_block(block, buf, ctx)?;
     }
     writeln!(buf, ":::")?;
     Ok(())
 }
 
-fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_table(
+    table: &Table,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Collect all rows (header + body rows)
     let mut all_rows = Vec::new();
 
@@ -657,7 +814,7 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
         let mut cell_strings = Vec::new();
         for (i, cell) in row.cells.iter().take(num_cols).enumerate() {
             let mut buffer = Vec::<u8>::new();
-            write_cell_content(cell, &mut buffer)?;
+            write_cell_content(cell, &mut buffer, ctx)?;
             let content = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             let content = content.trim().to_string();
@@ -722,7 +879,7 @@ fn write_table(table: &Table, buf: &mut dyn std::io::Write) -> std::io::Result<(
                 if let Block::Plain(plain) = block {
                     write!(buf, ": ")?;
                     for inline in &plain.content {
-                        write_inline(inline, buf)?;
+                        write_inline(inline, buf, ctx)?;
                     }
                     writeln!(buf)?;
                 }
@@ -790,45 +947,85 @@ fn escape_markdown(text: &str) -> String {
     result
 }
 
-fn write_str(s: &Str, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_str(
+    s: &Str,
+    buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     let text = reverse_smart_quotes(&s.text);
     let escaped = escape_markdown(&text);
     write!(buf, "{}", escaped)
 }
 
-fn write_space(_: &crate::pandoc::Space, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_space(
+    _: &crate::pandoc::Space,
+    buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     write!(buf, " ")
 }
 
 fn write_soft_break(
     _: &crate::pandoc::SoftBreak,
     buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     // Pandoc's writer for markdown outputs a space for soft breaks
     // We choose to deviate from Pandoc for roundtripping purposes
     writeln!(buf)
 }
 
-fn write_emph(emph: &crate::pandoc::Emph, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-    write!(buf, "*")?;
+fn write_emph(
+    emph: &crate::pandoc::Emph,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    // Choose delimiter based on parent emphasis to avoid *** ambiguity
+    let delimiter = ctx.choose_emph_delimiter();
+    let delim_str = match delimiter {
+        EmphasisDelimiter::Asterisk => "*",
+        EmphasisDelimiter::Underscore => "_",
+    };
+
+    write!(buf, "{}", delim_str)?;
+    ctx.push_emphasis(delimiter, false);
+
     for inline in &emph.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
-    write!(buf, "*")
+
+    ctx.pop_emphasis();
+    write!(buf, "{}", delim_str)
 }
 
 fn write_strong(
     strong: &crate::pandoc::Strong,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    write!(buf, "**")?;
+    // Choose delimiter based on parent emphasis to avoid *** ambiguity
+    let delimiter = ctx.choose_strong_delimiter();
+    let delim_str = match delimiter {
+        EmphasisDelimiter::Asterisk => "**",
+        EmphasisDelimiter::Underscore => "__",
+    };
+
+    write!(buf, "{}", delim_str)?;
+    ctx.push_emphasis(delimiter, true);
+
     for inline in &strong.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
-    write!(buf, "**")
+
+    ctx.pop_emphasis();
+    write!(buf, "{}", delim_str)
 }
 
-fn write_code(code: &crate::pandoc::Code, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_code(
+    code: &crate::pandoc::Code,
+    buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     // Handle inline code with proper backtick escaping
     let backticks = determine_backticks(&code.text);
     write!(buf, "{}", backticks)?;
@@ -841,7 +1038,7 @@ fn write_code(code: &crate::pandoc::Code, buf: &mut dyn std::io::Write) -> std::
     write!(buf, "{}", backticks)?;
     // TODO: Handle attributes if non-empty
     if !is_empty_attr(&code.attr) {
-        write_attr(&code.attr, buf)?;
+        write_attr(&code.attr, buf, _ctx)?;
     }
     Ok(())
 }
@@ -849,15 +1046,20 @@ fn write_code(code: &crate::pandoc::Code, buf: &mut dyn std::io::Write) -> std::
 fn write_linebreak(
     _line_break: &crate::pandoc::LineBreak,
     buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "\\")?;
     writeln!(buf)
 }
 
-fn write_link(link: &crate::pandoc::Link, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_link(
+    link: &crate::pandoc::Link,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     write!(buf, "[")?;
     for inline in &link.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "](")?;
     write!(buf, "{}", link.target.0)?;
@@ -866,15 +1068,19 @@ fn write_link(link: &crate::pandoc::Link, buf: &mut dyn std::io::Write) -> std::
     }
     write!(buf, ")")?;
     if !is_empty_attr(&link.attr) {
-        write_attr(&link.attr, buf)?;
+        write_attr(&link.attr, buf, ctx)?;
     }
     Ok(())
 }
 
-fn write_image(image: &crate::pandoc::Image, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_image(
+    image: &crate::pandoc::Image,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     write!(buf, "![")?;
     for inline in &image.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "](")?;
     write!(buf, "{}", image.target.0)?;
@@ -883,7 +1089,7 @@ fn write_image(image: &crate::pandoc::Image, buf: &mut dyn std::io::Write) -> st
     }
     write!(buf, ")")?;
     if !is_empty_attr(&image.attr) {
-        write_attr(&image.attr, buf)?;
+        write_attr(&image.attr, buf, ctx)?;
     }
     Ok(())
 }
@@ -891,10 +1097,11 @@ fn write_image(image: &crate::pandoc::Image, buf: &mut dyn std::io::Write) -> st
 fn write_strikeout(
     strikeout: &crate::pandoc::Strikeout,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "~~")?;
     for inline in &strikeout.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "~~")
 }
@@ -902,10 +1109,11 @@ fn write_strikeout(
 fn write_subscript(
     subscript: &crate::pandoc::Subscript,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "~")?;
     for inline in &subscript.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "~")
 }
@@ -913,15 +1121,20 @@ fn write_subscript(
 fn write_superscript(
     superscript: &crate::pandoc::Superscript,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "^")?;
     for inline in &superscript.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "^")
 }
 
-fn write_math(math: &crate::pandoc::Math, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_math(
+    math: &crate::pandoc::Math,
+    buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     match math.math_type {
         crate::pandoc::MathType::InlineMath => {
             write!(buf, "${}$", math.text)?;
@@ -936,26 +1149,31 @@ fn write_math(math: &crate::pandoc::Math, buf: &mut dyn std::io::Write) -> std::
 fn write_quoted(
     quoted: &crate::pandoc::Quoted,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     match quoted.quote_type {
         crate::pandoc::QuoteType::SingleQuote => {
             write!(buf, "'")?;
             for inline in &quoted.content {
-                write_inline(inline, buf)?;
+                write_inline(inline, buf, ctx)?;
             }
             write!(buf, "'")?;
         }
         crate::pandoc::QuoteType::DoubleQuote => {
             write!(buf, "\"")?;
             for inline in &quoted.content {
-                write_inline(inline, buf)?;
+                write_inline(inline, buf, ctx)?;
             }
             write!(buf, "\"")?;
         }
     }
     Ok(())
 }
-fn write_span(span: &crate::pandoc::Span, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_span(
+    span: &crate::pandoc::Span,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     let (id, classes, keyvals) = &span.attr;
 
     // Check if this is an editorial mark span that should use decorated syntax
@@ -973,7 +1191,7 @@ fn write_span(span: &crate::pandoc::Span, buf: &mut dyn std::io::Write) -> std::
             // Write using decorated syntax
             write!(buf, "[{}", marker)?;
             for inline in &span.content {
-                write_inline(inline, buf)?;
+                write_inline(inline, buf, ctx)?;
             }
             write!(buf, "]")?;
             return Ok(());
@@ -984,34 +1202,40 @@ fn write_span(span: &crate::pandoc::Span, buf: &mut dyn std::io::Write) -> std::
     // Even empty attributes should be written as [content]{} for proper roundtripping
     write!(buf, "[")?;
     for inline in &span.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]")?;
-    write_attr(&span.attr, buf)?;
+    write_attr(&span.attr, buf, ctx)?;
     Ok(())
 }
 
 fn write_underline(
     underline: &crate::pandoc::Underline,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[")?;
     for inline in &underline.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]{{.underline}}")
 }
 fn write_smallcaps(
     smallcaps: &crate::pandoc::SmallCaps,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[")?;
     for inline in &smallcaps.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]{{.smallcaps}}")
 }
-fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_cite(
+    cite: &crate::pandoc::Cite,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     use crate::pandoc::CitationMode;
 
     // Check if we have any NormalCitation or SuppressAuthor citations
@@ -1034,7 +1258,7 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
             // Write prefix
             let has_prefix = !citation.prefix.is_empty();
             for inline in &citation.prefix {
-                write_inline(inline, buf)?;
+                write_inline(inline, buf, ctx)?;
             }
             // Only add space if prefix exists and doesn't end with whitespace
             if has_prefix {
@@ -1057,7 +1281,7 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
 
             // Write suffix
             for inline in &citation.suffix {
-                write_inline(inline, buf)?;
+                write_inline(inline, buf, ctx)?;
             }
         }
         write!(buf, "]")?;
@@ -1074,7 +1298,7 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
             if !citation.suffix.is_empty() {
                 write!(buf, " [")?;
                 for inline in &citation.suffix {
-                    write_inline(inline, buf)?;
+                    write_inline(inline, buf, ctx)?;
                 }
                 write!(buf, "]")?;
             }
@@ -1088,6 +1312,7 @@ fn write_cite(cite: &crate::pandoc::Cite, buf: &mut dyn std::io::Write) -> std::
 fn write_rawinline(
     raw: &crate::pandoc::RawInline,
     buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     // Only output raw content if it's for markdown format
     if raw.format == "markdown" {
@@ -1097,7 +1322,11 @@ fn write_rawinline(
         write!(buf, "`{}`{{={}}}", raw.text, raw.format)
     }
 }
-fn write_note(note: &crate::pandoc::Note, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_note(
+    note: &crate::pandoc::Note,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     write!(buf, "^[")?;
     for (i, block) in note.content.iter().enumerate() {
         if i > 0 {
@@ -1107,12 +1336,12 @@ fn write_note(note: &crate::pandoc::Note, buf: &mut dyn std::io::Write) -> std::
         match block {
             crate::pandoc::Block::Plain(plain) => {
                 for inline in &plain.content {
-                    write_inline(inline, buf)?;
+                    write_inline(inline, buf, ctx)?;
                 }
             }
             crate::pandoc::Block::Paragraph(para) => {
                 for inline in &para.content {
-                    write_inline(inline, buf)?;
+                    write_inline(inline, buf, ctx)?;
                 }
             }
             _ => {
@@ -1126,68 +1355,74 @@ fn write_note(note: &crate::pandoc::Note, buf: &mut dyn std::io::Write) -> std::
 fn write_notereference(
     noteref: &crate::pandoc::NoteReference,
     buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[^{}]", noteref.id)
 }
 fn write_shortcode(
     shortcode: &crate::pandoc::Shortcode,
     buf: &mut dyn std::io::Write,
+    _ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "{{{{{}}}}}", shortcode.name)
 }
 fn write_insert(
     insert: &crate::pandoc::Insert,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[++ ")?;
     for inline in &insert.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]")?;
     if !is_empty_attr(&insert.attr) {
-        write_attr(&insert.attr, buf)?;
+        write_attr(&insert.attr, buf, ctx)?;
     }
     Ok(())
 }
 fn write_delete(
     delete: &crate::pandoc::Delete,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[-- ")?;
     for inline in &delete.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]")?;
     if !is_empty_attr(&delete.attr) {
-        write_attr(&delete.attr, buf)?;
+        write_attr(&delete.attr, buf, ctx)?;
     }
     Ok(())
 }
 fn write_highlight(
     highlight: &crate::pandoc::Highlight,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[!! ")?;
     for inline in &highlight.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]")?;
     if !is_empty_attr(&highlight.attr) {
-        write_attr(&highlight.attr, buf)?;
+        write_attr(&highlight.attr, buf, ctx)?;
     }
     Ok(())
 }
 fn write_editcomment(
     comment: &crate::pandoc::EditComment,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     write!(buf, "[>> ")?;
     for inline in &comment.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     write!(buf, "]")?;
     if !is_empty_attr(&comment.attr) {
-        write_attr(&comment.attr, buf)?;
+        write_attr(&comment.attr, buf, ctx)?;
     }
     Ok(())
 }
@@ -1195,123 +1430,176 @@ fn write_editcomment(
 fn write_inline(
     inline: &crate::pandoc::Inline,
     buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
     match inline {
-        crate::pandoc::Inline::EditComment(node) => write_editcomment(node, buf),
-        crate::pandoc::Inline::Highlight(node) => write_highlight(node, buf),
-        crate::pandoc::Inline::Delete(node) => write_delete(node, buf),
-        crate::pandoc::Inline::Insert(node) => write_insert(node, buf),
-        crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf),
-        crate::pandoc::Inline::Attr(node, _) => write_attr(node, buf),
-        crate::pandoc::Inline::NoteReference(node) => write_notereference(node, buf),
-        crate::pandoc::Inline::Note(node) => write_note(node, buf),
-        crate::pandoc::Inline::RawInline(node) => write_rawinline(node, buf),
-        crate::pandoc::Inline::Cite(node) => write_cite(node, buf),
-        crate::pandoc::Inline::SmallCaps(node) => write_smallcaps(node, buf),
-        crate::pandoc::Inline::Underline(node) => write_underline(node, buf),
-        crate::pandoc::Inline::Span(node) => write_span(node, buf),
-        crate::pandoc::Inline::Quoted(node) => write_quoted(node, buf),
-        crate::pandoc::Inline::Math(node) => write_math(node, buf),
-        crate::pandoc::Inline::Subscript(node) => write_subscript(node, buf),
-        crate::pandoc::Inline::Superscript(node) => write_superscript(node, buf),
-        crate::pandoc::Inline::Strikeout(node) => write_strikeout(node, buf),
-        crate::pandoc::Inline::Str(node) => write_str(node, buf),
-        crate::pandoc::Inline::Space(node) => write_space(node, buf),
-        crate::pandoc::Inline::SoftBreak(node) => write_soft_break(node, buf),
-        crate::pandoc::Inline::Emph(node) => write_emph(node, buf),
-        crate::pandoc::Inline::Strong(node) => write_strong(node, buf),
-        crate::pandoc::Inline::Code(node) => write_code(node, buf),
-        crate::pandoc::Inline::LineBreak(node) => write_linebreak(node, buf),
-        crate::pandoc::Inline::Link(node) => write_link(node, buf),
-        crate::pandoc::Inline::Image(node) => write_image(node, buf),
+        crate::pandoc::Inline::EditComment(node) => write_editcomment(node, buf, ctx),
+        crate::pandoc::Inline::Highlight(node) => write_highlight(node, buf, ctx),
+        crate::pandoc::Inline::Delete(node) => write_delete(node, buf, ctx),
+        crate::pandoc::Inline::Insert(node) => write_insert(node, buf, ctx),
+        crate::pandoc::Inline::Shortcode(node) => write_shortcode(node, buf, ctx),
+        crate::pandoc::Inline::Attr(node, _) => write_attr(node, buf, ctx),
+        crate::pandoc::Inline::NoteReference(node) => write_notereference(node, buf, ctx),
+        crate::pandoc::Inline::Note(node) => write_note(node, buf, ctx),
+        crate::pandoc::Inline::RawInline(node) => write_rawinline(node, buf, ctx),
+        crate::pandoc::Inline::Cite(node) => write_cite(node, buf, ctx),
+        crate::pandoc::Inline::SmallCaps(node) => write_smallcaps(node, buf, ctx),
+        crate::pandoc::Inline::Underline(node) => write_underline(node, buf, ctx),
+        crate::pandoc::Inline::Span(node) => write_span(node, buf, ctx),
+        crate::pandoc::Inline::Quoted(node) => write_quoted(node, buf, ctx),
+        crate::pandoc::Inline::Math(node) => write_math(node, buf, ctx),
+        crate::pandoc::Inline::Subscript(node) => write_subscript(node, buf, ctx),
+        crate::pandoc::Inline::Superscript(node) => write_superscript(node, buf, ctx),
+        crate::pandoc::Inline::Strikeout(node) => write_strikeout(node, buf, ctx),
+        crate::pandoc::Inline::Str(node) => write_str(node, buf, ctx),
+        crate::pandoc::Inline::Space(node) => write_space(node, buf, ctx),
+        crate::pandoc::Inline::SoftBreak(node) => write_soft_break(node, buf, ctx),
+        crate::pandoc::Inline::Emph(node) => write_emph(node, buf, ctx),
+        crate::pandoc::Inline::Strong(node) => write_strong(node, buf, ctx),
+        crate::pandoc::Inline::Code(node) => write_code(node, buf, ctx),
+        crate::pandoc::Inline::LineBreak(node) => write_linebreak(node, buf, ctx),
+        crate::pandoc::Inline::Link(node) => write_link(node, buf, ctx),
+        crate::pandoc::Inline::Image(node) => write_image(node, buf, ctx),
     }
 }
 
-fn write_block(block: &crate::pandoc::Block, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+fn write_block(
+    block: &crate::pandoc::Block,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     match block {
         Block::Plain(plain) => {
-            write_plain(plain, buf)?;
+            write_plain(plain, buf, ctx)?;
         }
         Block::Paragraph(para) => {
-            write_paragraph(para, buf)?;
+            write_paragraph(para, buf, ctx)?;
         }
         Block::BlockQuote(blockquote) => {
-            write_blockquote(blockquote, buf)?;
+            write_blockquote(blockquote, buf, ctx)?;
         }
         Block::BulletList(bulletlist) => {
-            write_bulletlist(bulletlist, buf)?;
+            write_bulletlist(bulletlist, buf, ctx)?;
         }
         Block::OrderedList(orderedlist) => {
-            write_orderedlist(orderedlist, buf)?;
+            write_orderedlist(orderedlist, buf, ctx)?;
         }
         Block::Div(div) => {
-            write_div(div, buf)?;
+            write_div(div, buf, ctx)?;
         }
         Block::Header(header) => {
-            write_header(header, buf)?;
+            write_header(header, buf, ctx)?;
         }
         Block::Table(table) => {
-            write_table(table, buf)?;
+            write_table(table, buf, ctx)?;
         }
         Block::CodeBlock(codeblock) => {
-            write_codeblock(codeblock, buf)?;
+            write_codeblock(codeblock, buf, ctx)?;
         }
         Block::LineBlock(lineblock) => {
-            write_lineblock(lineblock, buf)?;
+            write_lineblock(lineblock, buf, ctx)?;
         }
         Block::RawBlock(rawblock) => {
             write_rawblock(rawblock, buf)?;
         }
         Block::DefinitionList(deflist) => {
-            write_definitionlist(deflist, buf)?;
+            write_definitionlist(deflist, buf, ctx)?;
         }
         Block::HorizontalRule(rule) => {
             write_horizontalrule(rule, buf)?;
         }
         Block::Figure(figure) => {
-            write_figure(figure, buf)?;
+            write_figure(figure, buf, ctx)?;
         }
         Block::BlockMetadata(metablock) => {
-            write_metablock(metablock, buf)?;
+            write_metablock(metablock, buf, ctx)?;
         }
         Block::NoteDefinitionPara(refdef) => {
-            write_inlinerefdef(refdef, buf)?;
+            write_inlinerefdef(refdef, buf, ctx)?;
         }
         Block::NoteDefinitionFencedBlock(refdef) => {
-            write_fenced_note_definition(refdef, buf)?;
+            write_fenced_note_definition(refdef, buf, ctx)?;
         }
         Block::CaptionBlock(_) => {
-            panic!(
-                "CaptionBlock found in QMD writer - should have been processed during postprocessing"
-            )
+            // Defensive error: CaptionBlock should be processed during postprocessing
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Caption block not supported",
+                )
+                .with_code("Q-3-21")
+                .problem("Standalone caption block cannot be rendered in QMD format")
+                .add_detail(
+                    "Caption blocks should be attached to figures or tables during postprocessing. \
+                     This may indicate a postprocessing issue or filter-generated orphaned caption.",
+                )
+                .add_hint("Check for bugs in postprocessing or filters producing orphaned captions")
+                .build(),
+            );
         }
     }
     Ok(())
 }
 
-pub fn write_paragraph(para: &Paragraph, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+pub fn write_paragraph(
+    para: &Paragraph,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     for inline in &para.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     writeln!(buf)?;
     Ok(())
 }
 
-pub fn write_plain(plain: &Plain, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+pub fn write_plain(
+    plain: &Plain,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
     for inline in &plain.content {
-        write_inline(inline, buf)?;
+        write_inline(inline, buf, ctx)?;
     }
     writeln!(buf)?;
     Ok(())
 }
 
-pub fn write<T: std::io::Write>(pandoc: &Pandoc, buf: &mut T) -> std::io::Result<()> {
-    let mut need_newline = write_meta(&pandoc.meta, buf)?;
+pub fn write<T: std::io::Write>(
+    pandoc: &Pandoc,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut ctx = QmdWriterContext::new();
+
+    // Try to write - IO errors are fatal
+    if let Err(e) = write_impl(pandoc, buf, &mut ctx) {
+        // IO error - wrap and return
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write QMD output: {}", e))
+                .build(),
+        ]);
+    }
+
+    // Check for accumulated feature errors
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+
+    Ok(())
+}
+
+fn write_impl<T: std::io::Write>(
+    pandoc: &Pandoc,
+    buf: &mut T,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    let mut need_newline = write_meta(&pandoc.meta, buf, ctx)?;
     for block in &pandoc.blocks {
         if need_newline {
             write!(buf, "\n")?
         };
-        write_block(block, buf)?;
+        write_block(block, buf, ctx)?;
         need_newline = true;
     }
     Ok(())

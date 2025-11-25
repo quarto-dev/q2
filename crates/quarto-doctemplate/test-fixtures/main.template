@@ -1,0 +1,51 @@
+== Testing Pandoc Template Syntax ==
+
+-- Basic interpolation --
+Title: $title$
+
+-- Variable with pipe --
+Title uppercase: $title/uppercase$
+
+-- Variable with separator (array iteration shorthand) --
+Items: $items[, ]$
+
+-- Variable with pipe AND separator --
+Tags: $tags/uppercase[; ]$
+
+-- For loop with sep --
+Authors:
+$for(author)$
+  - $author.name$ <$author.email$>
+$sep$
+$endfor$
+
+-- Partial without variable --
+$author-card()$
+
+-- Partial with variable (iterates over array) --
+$author:author-card()$
+
+-- Partial with separator --
+$author:author-card()[---]$
+
+-- Partial with pipe (after separator) --
+$author:author-card()[---]/chomp$
+
+-- Metadata pairs pipe --
+Metadata:
+$for(metadata/pairs)$
+  $it.key$: $it.value$
+$endfor$
+
+-- Conditional --
+$if(title)$
+Has title: $title$
+$else$
+No title
+$endif$
+
+-- Nesting directive --
+Description: $^$$title$ is a test document
+             with multiple lines of content.
+
+== End of Template ==
