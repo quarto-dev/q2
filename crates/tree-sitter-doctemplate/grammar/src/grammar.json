@@ -399,7 +399,7 @@
     },
     "partial_name": {
       "type": "PATTERN",
-      "value": "[A-Za-z0-9/\\\\_.-]+"
+      "value": "[A-Za-z0-9/\\\\\\/_.-]+"
     },
     "partial": {
       "type": "SEQ",
@@ -407,6 +407,24 @@
         {
           "type": "SYMBOL",
           "name": "partial_name"
+        },
+        {
+          "type": "STRING",
+          "value": "()"
+        }
+      ]
+    },
+    "bare_partial": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_bare_partial_identifier"
+          },
+          "named": true,
+          "value": "partial_name"
         },
         {
           "type": "STRING",
@@ -563,6 +581,55 @@
                   "type": "BLANK"
                 }
               ]
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "/"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "pipe"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_whitespace"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_whitespace"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            },
+            {
+              "type": "SYMBOL",
+              "name": "bare_partial"
             },
             {
               "type": "REPEAT",
@@ -1409,6 +1476,10 @@
     {
       "type": "SYMBOL",
       "name": "_keyword_endif_2"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_bare_partial_identifier"
     }
   ],
   "inline": [],

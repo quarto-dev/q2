@@ -201,6 +201,24 @@ fn main() {
                     .build(),
             ]
         }),
+        "plaintext" | "plain" => {
+            let (output, diagnostics) = writers::plaintext::blocks_to_string(&pandoc.blocks);
+            buf.extend_from_slice(output.as_bytes());
+            // Plaintext diagnostics are warnings (dropped nodes), not errors
+            // Output them but don't fail
+            if !diagnostics.is_empty() {
+                if args.json_errors {
+                    for diagnostic in &diagnostics {
+                        eprintln!("{}", diagnostic.to_json());
+                    }
+                } else {
+                    for diagnostic in &diagnostics {
+                        eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                    }
+                }
+            }
+            Ok(())
+        }
         #[cfg(feature = "terminal-support")]
         "ansi" => writers::ansi::write(&pandoc, &mut buf),
         _ => {

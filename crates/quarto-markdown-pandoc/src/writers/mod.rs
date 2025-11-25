@@ -8,4 +8,5 @@ pub mod ansi;
 pub mod html;
 pub mod json;
 pub mod native;
+pub mod plaintext;
 pub mod qmd;

@@ -107,12 +107,37 @@ impl TemplateValue {
             TemplateValue::String(s) => Doc::text(s),
             TemplateValue::Bool(true) => Doc::text("true"),
             TemplateValue::Bool(false) => Doc::Empty,
-            TemplateValue::List(items) => {
-                crate::doc::concat_docs(items.iter().map(|v| v.to_doc()))
-            }
+            TemplateValue::List(items) => crate::doc::concat_docs(items.iter().map(|v| v.to_doc())),
             TemplateValue::Map(_) => Doc::text("true"),
             TemplateValue::Null => Doc::Empty,
         }
+    }
+
+    /// Convert this value to a TemplateContext for partial evaluation.
+    ///
+    /// This is used when evaluating applied partials (`$var:partial()$`).
+    /// The value becomes the context for evaluating the partial template.
+    ///
+    /// - Map: the map fields become the context variables
+    /// - Other values: bound to "it" and also to their own string representation
+    ///   for simple value access
+    pub fn to_context(&self) -> TemplateContext {
+        let mut ctx = TemplateContext::new();
+        match self {
+            TemplateValue::Map(m) => {
+                // Map fields become context variables
+                for (key, value) in m {
+                    ctx.insert(key.clone(), value.clone());
+                }
+                // Also bind "it" to the entire map for consistency
+                ctx.insert("it", self.clone());
+            }
+            _ => {
+                // Non-map values are bound to "it"
+                ctx.insert("it", self.clone());
+            }
+        }
+        ctx
     }
 }
 

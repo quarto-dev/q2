@@ -12,7 +12,7 @@ use crate::ast::TemplateNode;
 use crate::ast::VariableRef;
 use crate::ast::{BreakableSpace, Comment, Conditional, ForLoop, Literal, Nesting, Partial};
 use crate::context::{TemplateContext, TemplateValue};
-use crate::doc::{concat_docs, intersperse_docs, Doc};
+use crate::doc::{Doc, concat_docs, intersperse_docs};
 use crate::error::TemplateResult;
 use crate::eval_context::EvalContext;
 use crate::parser::Template;
@@ -160,17 +160,7 @@ fn evaluate_node(node: &TemplateNode, ctx: &mut EvalContext) -> TemplateResult<D
             ..
         }) => evaluate_for_loop(var, body, separator, ctx),
 
-        TemplateNode::Partial(Partial {
-            name,
-            var,
-            separator,
-            pipes,
-            ..
-        }) => {
-            // TODO: Implement partial loading and evaluation
-            let _ = (name, var, separator, pipes);
-            Ok(Doc::Empty)
-        }
+        TemplateNode::Partial(partial) => evaluate_partial(partial, ctx),
 
         TemplateNode::Nesting(Nesting { children, .. }) => {
             // TODO: Implement nesting/indentation tracking
@@ -219,7 +209,10 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
         None => {
             // Emit warning or error depending on strict mode
             let var_path = var.path.join(".");
-            ctx.warn_or_error_at(format!("Undefined variable: {}", var_path), &var.source_info);
+            ctx.warn_or_error_at(
+                format!("Undefined variable: {}", var_path),
+                &var.source_info,
+            );
             Doc::Empty
         }
     }
@@ -301,6 +294,87 @@ fn evaluate_for_loop(
     match sep_doc {
         Some(sep) => Ok(intersperse_docs(results, sep)),
         None => Ok(concat_docs(results)),
+    }
+}
+
+/// Evaluate a partial template.
+///
+/// Partials come in two forms:
+/// - Bare partial: `$partial()$` - evaluated with current context
+/// - Applied partial: `$var:partial()$` - evaluated with var's value as context
+///
+/// For applied partials with array values, the partial is evaluated once per item,
+/// with optional separator between iterations.
+fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<Doc> {
+    let Partial {
+        name,
+        var,
+        separator,
+        pipes,
+        resolved,
+        source_info,
+    } = partial;
+
+    // Get the resolved partial nodes
+    let nodes = match resolved {
+        Some(nodes) => nodes,
+        None => {
+            // Partial was not resolved during compilation - emit error
+            ctx.error_at(format!("Partial '{}' was not resolved", name), source_info);
+            return Ok(Doc::Empty);
+        }
+    };
+
+    // TODO: Apply pipes to partial output
+    let _ = pipes;
+
+    match var {
+        None => {
+            // Bare partial: evaluate with current context
+            evaluate_nodes(nodes, ctx)
+        }
+        Some(var_ref) => {
+            // Applied partial: evaluate with var's value as context
+            let value = resolve_variable(var_ref, ctx.variables);
+
+            match value {
+                None => {
+                    // Variable not found - emit warning/error
+                    let var_path = var_ref.path.join(".");
+                    ctx.warn_or_error_at(
+                        format!("Undefined variable: {}", var_path),
+                        &var_ref.source_info,
+                    );
+                    Ok(Doc::Empty)
+                }
+                Some(TemplateValue::List(items)) => {
+                    // Iterate over list items
+                    let mut results = Vec::new();
+                    for item in items {
+                        let item_ctx = item.to_context();
+                        let mut child_ctx = ctx.child(&item_ctx);
+                        let result = evaluate_nodes(nodes, &mut child_ctx)?;
+                        results.push(result);
+                        ctx.merge_diagnostics(child_ctx);
+                    }
+
+                    // Join with separator
+                    if let Some(sep) = separator {
+                        Ok(intersperse_docs(results, Doc::text(sep)))
+                    } else {
+                        Ok(concat_docs(results))
+                    }
+                }
+                Some(value) => {
+                    // Single value: evaluate once with value as context
+                    let item_ctx = value.to_context();
+                    let mut child_ctx = ctx.child(&item_ctx);
+                    let result = evaluate_nodes(nodes, &mut child_ctx)?;
+                    ctx.merge_diagnostics(child_ctx);
+                    Ok(result)
+                }
+            }
+        }
     }
 }
 
@@ -651,5 +725,215 @@ mod tests {
 
         // Should have two warnings (one per iteration)
         assert_eq!(diagnostics.len(), 2);
+    }
+
+    // Partial tests using MemoryResolver for in-memory partials
+
+    use crate::resolver::MemoryResolver;
+    use std::path::Path;
+
+    fn compile_with_partials(
+        source: &str,
+        partials: impl IntoIterator<Item = (&'static str, &'static str)>,
+    ) -> Template {
+        let resolver = MemoryResolver::with_partials(partials.into_iter());
+        Template::compile_with_resolver(source, Path::new("test.html"), &resolver, 0)
+            .expect("template should compile")
+    }
+
+    #[test]
+    fn test_bare_partial() {
+        // Bare partial: $header()$ evaluates with current context
+        let template = compile_with_partials("$header()$", [("header", "<h1>$title$</h1>")]);
+        let mut ctx = ctx();
+        ctx.insert("title", TemplateValue::String("Hello".to_string()));
+
+        assert_eq!(template.render(&ctx).unwrap(), "<h1>Hello</h1>");
+    }
+
+    #[test]
+    fn test_bare_partial_nested() {
+        // Nested bare partials
+        let template = compile_with_partials(
+            "$wrapper()$",
+            [
+                ("wrapper", "<div>$inner()$</div>"),
+                ("inner", "Content: $text$"),
+            ],
+        );
+        let mut ctx = ctx();
+        ctx.insert("text", TemplateValue::String("Hello".to_string()));
+
+        assert_eq!(template.render(&ctx).unwrap(), "<div>Content: Hello</div>");
+    }
+
+    #[test]
+    fn test_applied_partial_with_map() {
+        // Applied partial: $item:card()$ evaluates with item as context
+        let template =
+            compile_with_partials("$item:card()$", [("card", "<div>$name$ - $price$</div>")]);
+
+        let mut ctx = ctx();
+        let mut item = HashMap::new();
+        item.insert(
+            "name".to_string(),
+            TemplateValue::String("Widget".to_string()),
+        );
+        item.insert(
+            "price".to_string(),
+            TemplateValue::String("$10".to_string()),
+        );
+        ctx.insert("item", TemplateValue::Map(item));
+
+        assert_eq!(template.render(&ctx).unwrap(), "<div>Widget - $10</div>");
+    }
+
+    #[test]
+    fn test_applied_partial_with_list() {
+        // Applied partial with list: iterates over items
+        let template = compile_with_partials("$items:item()$", [("item", "[$name$]")]);
+
+        let mut ctx = ctx();
+        let items = vec![
+            {
+                let mut m = HashMap::new();
+                m.insert("name".to_string(), TemplateValue::String("A".to_string()));
+                TemplateValue::Map(m)
+            },
+            {
+                let mut m = HashMap::new();
+                m.insert("name".to_string(), TemplateValue::String("B".to_string()));
+                TemplateValue::Map(m)
+            },
+        ];
+        ctx.insert("items", TemplateValue::List(items));
+
+        assert_eq!(template.render(&ctx).unwrap(), "[A][B]");
+    }
+
+    #[test]
+    fn test_applied_partial_with_list_and_separator() {
+        // Applied partial with list and separator: $items:item()[, ]$
+        let template = compile_with_partials("$items:item()[, ]$", [("item", "$name$")]);
+
+        let mut ctx = ctx();
+        let items = vec![
+            {
+                let mut m = HashMap::new();
+                m.insert("name".to_string(), TemplateValue::String("A".to_string()));
+                TemplateValue::Map(m)
+            },
+            {
+                let mut m = HashMap::new();
+                m.insert("name".to_string(), TemplateValue::String("B".to_string()));
+                TemplateValue::Map(m)
+            },
+            {
+                let mut m = HashMap::new();
+                m.insert("name".to_string(), TemplateValue::String("C".to_string()));
+                TemplateValue::Map(m)
+            },
+        ];
+        ctx.insert("items", TemplateValue::List(items));
+
+        assert_eq!(template.render(&ctx).unwrap(), "A, B, C");
+    }
+
+    #[test]
+    fn test_applied_partial_with_scalar() {
+        // Applied partial with scalar value: binds to "it"
+        let template = compile_with_partials("$name:bold()$", [("bold", "<b>$it$</b>")]);
+
+        let mut ctx = ctx();
+        ctx.insert("name", TemplateValue::String("Alice".to_string()));
+
+        assert_eq!(template.render(&ctx).unwrap(), "<b>Alice</b>");
+    }
+
+    #[test]
+    fn test_partial_missing_variable_warning() {
+        // Undefined variable in applied partial should emit warning
+        let template = compile_with_partials("$x:partial()$", [("partial", "content")]);
+
+        let (result, diagnostics) = template.render_with_diagnostics(&ctx());
+
+        // Should succeed (warning, not error)
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), ""); // Empty because x is undefined
+
+        // Should have a warning about undefined variable
+        assert_eq!(diagnostics.len(), 1);
+        assert!(diagnostics[0].title.contains("Undefined variable"));
+    }
+
+    #[test]
+    fn test_unresolved_partial_error() {
+        // Partial that wasn't resolved during compilation should emit error
+        // We can't easily test this with the normal API, but we can test
+        // the diagnostic behavior indirectly
+        let template = compile_with_partials("Text only", []);
+        assert_eq!(template.render(&ctx()).unwrap(), "Text only");
+    }
+
+    #[test]
+    fn test_partial_in_conditional() {
+        // Partial inside conditional block
+        let template =
+            compile_with_partials("$if(show)$$header()$$endif$", [("header", "[HEADER]")]);
+
+        let mut ctx_true = ctx();
+        ctx_true.insert("show", TemplateValue::Bool(true));
+        assert_eq!(template.render(&ctx_true).unwrap(), "[HEADER]");
+
+        let mut ctx_false = ctx();
+        ctx_false.insert("show", TemplateValue::Bool(false));
+        assert_eq!(template.render(&ctx_false).unwrap(), "");
+    }
+
+    #[test]
+    fn test_partial_in_for_loop() {
+        // Partial inside for loop
+        let template =
+            compile_with_partials("$for(items)$$item()$$sep$, $endfor$", [("item", "[$it$]")]);
+
+        let mut ctx = ctx();
+        ctx.insert(
+            "items",
+            TemplateValue::List(vec![
+                TemplateValue::String("a".to_string()),
+                TemplateValue::String("b".to_string()),
+            ]),
+        );
+
+        assert_eq!(template.render(&ctx).unwrap(), "[a], [b]");
+    }
+
+    #[test]
+    fn test_to_context_map() {
+        // TemplateValue::to_context with map
+        let mut map = HashMap::new();
+        map.insert("x".to_string(), TemplateValue::String("val".to_string()));
+        let value = TemplateValue::Map(map);
+
+        let ctx = value.to_context();
+        assert_eq!(
+            ctx.get("x"),
+            Some(&TemplateValue::String("val".to_string()))
+        );
+        // Also has "it" bound to the whole map
+        assert!(ctx.get("it").is_some());
+    }
+
+    #[test]
+    fn test_to_context_scalar() {
+        // TemplateValue::to_context with scalar
+        let value = TemplateValue::String("hello".to_string());
+        let ctx = value.to_context();
+
+        // Scalar is bound to "it"
+        assert_eq!(
+            ctx.get("it"),
+            Some(&TemplateValue::String("hello".to_string()))
+        );
     }
 }

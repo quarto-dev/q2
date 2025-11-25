@@ -84,6 +84,12 @@ pub struct Partial {
     pub pipes: Vec<Pipe>,
     /// Source location of this partial reference.
     pub source_info: SourceInfo,
+    /// Resolved partial template nodes (populated during compilation).
+    ///
+    /// This is `None` after parsing and before partial resolution.
+    /// After `resolve_partials()` is called, this contains the parsed
+    /// nodes from the partial template file.
+    pub resolved: Option<Vec<TemplateNode>>,
 }
 
 /// Nesting directive: `$^$` marks indentation point.

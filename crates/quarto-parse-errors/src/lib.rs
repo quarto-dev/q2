@@ -112,31 +112,21 @@
 //! }
 //! ```
 
+pub mod error_generation;
 pub mod error_table;
 pub mod tree_sitter_log;
-pub mod error_generation;
 
 // Re-export commonly used types
 pub use error_table::{
-    ErrorTableEntry, ErrorInfo, ErrorCapture, ErrorNote,
-    lookup_error_message, lookup_error_entry,
+    ErrorCapture, ErrorInfo, ErrorNote, ErrorTableEntry, lookup_error_entry, lookup_error_message,
 };
 
 pub use tree_sitter_log::{
-    TreeSitterLogObserver,
-    TreeSitterLogObserverTrait,
-    TreeSitterLogObserverFast,
-    TreeSitterParseLog,
-    TreeSitterProcessLog,
-    ConsumedToken,
-    ProcessMessage,
-    TreeSitterLogState,
+    ConsumedToken, ProcessMessage, TreeSitterLogObserver, TreeSitterLogObserverFast,
+    TreeSitterLogObserverTrait, TreeSitterLogState, TreeSitterParseLog, TreeSitterProcessLog,
 };
 
 pub use error_generation::{
-    produce_diagnostic_messages,
-    collect_error_node_ranges,
-    get_outer_error_nodes,
-    prune_diagnostics_by_error_nodes,
-    diagnostic_score,
+    collect_error_node_ranges, diagnostic_score, get_outer_error_nodes,
+    produce_diagnostic_messages, prune_diagnostics_by_error_nodes,
 };

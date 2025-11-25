@@ -13,8 +13,10 @@ use crate::ast::{
     TemplateNode, VariableRef,
 };
 use crate::error::{TemplateError, TemplateResult};
+use crate::resolver::{PartialResolver, remove_final_newline, resolve_partial_path};
 use quarto_source_map::{FileId, SourceContext, SourceInfo};
 use quarto_treesitter_ast::bottomup_traverse_concrete_tree;
+use std::path::Path;
 use tree_sitter::{Node, Parser};
 
 /// A compiled template ready for evaluation.
@@ -83,6 +85,8 @@ enum Intermediate {
     Text(String),
     /// A partial reference (name only, source info is reconstructed from outer node)
     Partial(String),
+    /// A bare partial reference: $partial()$ with optional pipes
+    BarePartial(String, Vec<Pipe>, SourceInfo),
     /// Content for conditional branches
     ConditionalThen(Vec<TemplateNode>),
     ConditionalElse(Vec<TemplateNode>),
@@ -165,6 +169,174 @@ impl Template {
     pub fn nodes(&self) -> &[TemplateNode] {
         &self.nodes
     }
+
+    /// Compile a template from a file, resolving partials from the filesystem.
+    ///
+    /// This is the main entry point for loading templates that may reference partials.
+    /// Partials are loaded from the same directory as the template file.
+    ///
+    /// # Arguments
+    /// * `path` - Path to the template file
+    ///
+    /// # Returns
+    /// A compiled template with all partials resolved, or an error.
+    pub fn compile_from_file(path: &Path) -> TemplateResult<Self> {
+        let source = std::fs::read_to_string(path)?;
+        let filename = path.to_string_lossy();
+        Self::compile_with_resolver(&source, path, &crate::resolver::FileSystemResolver, 0).map_err(
+            |e| {
+                // Enhance error message with filename
+                match e {
+                    TemplateError::ParseError { message } => TemplateError::ParseError {
+                        message: format!("{}: {}", filename, message),
+                    },
+                    _ => e,
+                }
+            },
+        )
+    }
+
+    /// Compile a template with a custom partial resolver.
+    ///
+    /// This method allows specifying how partials are loaded, which is useful
+    /// for testing (using in-memory partials) or loading from non-filesystem sources.
+    ///
+    /// # Arguments
+    /// * `source` - The template source text
+    /// * `template_path` - Path used for resolving relative partial references
+    /// * `resolver` - The partial resolver to use
+    /// * `depth` - Current nesting depth (for recursion protection)
+    ///
+    /// # Returns
+    /// A compiled template with all partials resolved, or an error.
+    pub fn compile_with_resolver(
+        source: &str,
+        template_path: &Path,
+        resolver: &impl PartialResolver,
+        depth: usize,
+    ) -> TemplateResult<Self> {
+        const MAX_DEPTH: usize = 50;
+
+        // First, parse the template without partial resolution
+        let filename = template_path.to_string_lossy();
+        let mut template = Self::compile_with_filename(source, &filename)?;
+
+        // Then resolve partials recursively
+        resolve_partials(
+            &mut template.nodes,
+            template_path,
+            resolver,
+            depth,
+            MAX_DEPTH,
+        )?;
+
+        Ok(template)
+    }
+}
+
+/// Recursively resolve partial references in a list of template nodes.
+///
+/// This function traverses the AST and for each `Partial` node:
+/// 1. Loads the partial source using the resolver
+/// 2. Parses the partial source
+/// 3. Recursively resolves any partials in the loaded partial
+/// 4. Stores the resolved nodes in the `Partial.resolved` field
+fn resolve_partials(
+    nodes: &mut [TemplateNode],
+    template_path: &Path,
+    resolver: &impl PartialResolver,
+    depth: usize,
+    max_depth: usize,
+) -> TemplateResult<()> {
+    // Check recursion limit
+    if depth > max_depth {
+        // Find the first partial to report in the error
+        for node in nodes.iter() {
+            if let TemplateNode::Partial(partial) = node {
+                return Err(TemplateError::RecursivePartial {
+                    name: partial.name.clone(),
+                    max_depth,
+                });
+            }
+        }
+        // Shouldn't reach here, but fallback
+        return Err(TemplateError::RecursivePartial {
+            name: "<unknown>".to_string(),
+            max_depth,
+        });
+    }
+
+    for node in nodes.iter_mut() {
+        match node {
+            TemplateNode::Partial(partial) => {
+                // Load the partial source
+                let partial_source = resolver
+                    .get_partial(&partial.name, template_path)
+                    .ok_or_else(|| TemplateError::PartialNotFound {
+                        name: partial.name.clone(),
+                    })?;
+
+                // Remove final newline (Pandoc behavior)
+                let partial_source = remove_final_newline(&partial_source);
+
+                // Determine the path for this partial (for nested partial resolution)
+                let partial_path = resolve_partial_path(&partial.name, template_path);
+
+                // Parse the partial and resolve its partials recursively
+                let partial_template = Template::compile_with_resolver(
+                    partial_source,
+                    &partial_path,
+                    resolver,
+                    depth + 1,
+                )?;
+
+                // Store the resolved nodes
+                partial.resolved = Some(partial_template.nodes);
+            }
+
+            // Recurse into nested structures
+            TemplateNode::Conditional(cond) => {
+                for (_, body) in &mut cond.branches {
+                    resolve_partials(body, template_path, resolver, depth, max_depth)?;
+                }
+                if let Some(else_branch) = &mut cond.else_branch {
+                    resolve_partials(else_branch, template_path, resolver, depth, max_depth)?;
+                }
+            }
+
+            TemplateNode::ForLoop(for_loop) => {
+                resolve_partials(
+                    &mut for_loop.body,
+                    template_path,
+                    resolver,
+                    depth,
+                    max_depth,
+                )?;
+                if let Some(sep) = &mut for_loop.separator {
+                    resolve_partials(sep, template_path, resolver, depth, max_depth)?;
+                }
+            }
+
+            TemplateNode::Nesting(nesting) => {
+                resolve_partials(
+                    &mut nesting.children,
+                    template_path,
+                    resolver,
+                    depth,
+                    max_depth,
+                )?;
+            }
+
+            TemplateNode::BreakableSpace(bs) => {
+                resolve_partials(&mut bs.children, template_path, resolver, depth, max_depth)?;
+            }
+
+            // Other nodes don't need recursion
+            TemplateNode::Literal(_) | TemplateNode::Variable(_) | TemplateNode::Comment(_) => {}
+        }
+    }
+
+    Ok(())
 }
 
 /// Find the first ERROR node and produce a useful error message.
@@ -249,26 +421,51 @@ fn visit_node(
 
         // Interpolation: $var$ or ${var}
         "interpolation" | "_interpolation" => {
-            let (var_ref, pipes, separator, partial_name) = extract_interpolation_parts(children);
-
-            if let Some(partial) = partial_name {
-                // This is a partial application: $var:partial()$
-                Intermediate::Node(TemplateNode::Partial(Partial {
-                    name: partial,
-                    var: var_ref,
-                    separator,
+            match extract_interpolation_parts(children) {
+                InterpolationResult::BarePartial {
+                    partial_name,
                     pipes,
-                    source_info,
-                }))
-            } else if let Some(var) = var_ref {
-                // Regular variable interpolation
-                let mut var = var;
-                var.pipes = pipes;
-                var.separator = separator;
-                var.source_info = source_info;
-                Intermediate::Node(TemplateNode::Variable(var))
-            } else {
-                Intermediate::Unknown
+                    source_info: bare_source_info,
+                } => {
+                    // Bare partial: $partial()$
+                    Intermediate::Node(TemplateNode::Partial(Partial {
+                        name: partial_name,
+                        var: None,
+                        separator: None,
+                        pipes,
+                        source_info: bare_source_info,
+                        resolved: None,
+                    }))
+                }
+                InterpolationResult::AppliedPartial {
+                    var_ref,
+                    partial_name,
+                    pipes,
+                    separator,
+                } => {
+                    // Applied partial: $var:partial()$
+                    Intermediate::Node(TemplateNode::Partial(Partial {
+                        name: partial_name,
+                        var: var_ref,
+                        separator,
+                        pipes,
+                        source_info,
+                        resolved: None,
+                    }))
+                }
+                InterpolationResult::Variable {
+                    var_ref: Some(var),
+                    pipes,
+                    separator,
+                } => {
+                    // Regular variable interpolation
+                    let mut var = var;
+                    var.pipes = pipes;
+                    var.separator = separator;
+                    var.source_info = source_info;
+                    Intermediate::Node(TemplateNode::Variable(var))
+                }
+                InterpolationResult::Variable { var_ref: None, .. } => Intermediate::Unknown,
             }
         }
 
@@ -296,7 +493,7 @@ fn visit_node(
             Intermediate::Pipe(Pipe::new(pipe_name, source_info))
         }
 
-        // Partial reference
+        // Partial reference (applied partial: $var:partial()$)
         "partial" => {
             // Find the partial_name child
             for (kind, child) in children {
@@ -310,6 +507,28 @@ fn visit_node(
             // Strip the () suffix if present
             let name = name.strip_suffix("()").unwrap_or(&name).to_string();
             Intermediate::Partial(name)
+        }
+
+        // Bare partial reference: $partial()$
+        "bare_partial" => {
+            // Extract partial_name and pipes from children
+            let mut partial_name = String::new();
+            let mut pipes = Vec::new();
+
+            for (kind, child) in children {
+                match child {
+                    Intermediate::Text(name) if kind == "partial_name" => {
+                        partial_name = name;
+                    }
+                    Intermediate::Pipe(pipe) => {
+                        pipes.push(pipe);
+                    }
+                    _ => {}
+                }
+            }
+
+            // Return a BarePartial intermediate that will be converted to a Partial node
+            Intermediate::BarePartial(partial_name, pipes, source_info)
         }
 
         "partial_name" => {
@@ -458,15 +677,31 @@ fn collect_nodes(children: Vec<(String, Intermediate)>) -> Vec<TemplateNode> {
     nodes
 }
 
+/// Result of extracting interpolation parts.
+enum InterpolationResult {
+    /// Regular variable interpolation
+    Variable {
+        var_ref: Option<VariableRef>,
+        pipes: Vec<Pipe>,
+        separator: Option<String>,
+    },
+    /// Applied partial: $var:partial()$
+    AppliedPartial {
+        var_ref: Option<VariableRef>,
+        partial_name: String,
+        pipes: Vec<Pipe>,
+        separator: Option<String>,
+    },
+    /// Bare partial: $partial()$
+    BarePartial {
+        partial_name: String,
+        pipes: Vec<Pipe>,
+        source_info: SourceInfo,
+    },
+}
+
 /// Extract parts from an interpolation node.
-fn extract_interpolation_parts(
-    children: Vec<(String, Intermediate)>,
-) -> (
-    Option<VariableRef>,
-    Vec<Pipe>,
-    Option<String>,
-    Option<String>,
-) {
+fn extract_interpolation_parts(children: Vec<(String, Intermediate)>) -> InterpolationResult {
     let mut var_ref = None;
     let mut pipes = Vec::new();
     let mut separator = None;
@@ -478,6 +713,14 @@ fn extract_interpolation_parts(
             Intermediate::Pipe(pipe) => pipes.push(pipe),
             Intermediate::LiteralSeparator(sep) => separator = Some(sep),
             Intermediate::Partial(name) => partial_name = Some(name),
+            // Bare partial is already fully parsed
+            Intermediate::BarePartial(name, bare_pipes, source_info) => {
+                return InterpolationResult::BarePartial {
+                    partial_name: name,
+                    pipes: bare_pipes,
+                    source_info,
+                };
+            }
             // Also check for _interpolation which passes through
             Intermediate::Node(TemplateNode::Variable(var)) if kind == "_interpolation" => {
                 var_ref = Some(VariableRef {
@@ -489,11 +732,32 @@ fn extract_interpolation_parts(
                 pipes = var.pipes;
                 separator = var.separator;
             }
+            // Pass through partial nodes from nested _interpolation
+            Intermediate::Node(TemplateNode::Partial(partial)) if kind == "_interpolation" => {
+                return InterpolationResult::BarePartial {
+                    partial_name: partial.name,
+                    pipes: partial.pipes,
+                    source_info: partial.source_info,
+                };
+            }
             _ => {}
         }
     }
 
-    (var_ref, pipes, separator, partial_name)
+    if let Some(name) = partial_name {
+        InterpolationResult::AppliedPartial {
+            var_ref,
+            partial_name: name,
+            pipes,
+            separator,
+        }
+    } else {
+        InterpolationResult::Variable {
+            var_ref,
+            pipes,
+            separator,
+        }
+    }
 }
 
 /// Extract pipe arguments (n, leftborder, rightborder).

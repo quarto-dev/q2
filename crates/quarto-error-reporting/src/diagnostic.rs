@@ -1090,10 +1090,7 @@ mod tests {
         use crate::builder::DiagnosticMessageBuilder;
 
         let mut ctx = quarto_source_map::SourceContext::new();
-        let file_id = ctx.add_file(
-            "test.qmd".to_string(),
-            Some("test content".to_string()),
-        );
+        let file_id = ctx.add_file("test.qmd".to_string(), Some("test content".to_string()));
 
         let location = quarto_source_map::SourceInfo::original(file_id, 0, 4);
 
@@ -1113,15 +1110,20 @@ mod tests {
         // When hyperlinks are disabled, output should be different
         // (specifically, no OSC 8 escape sequences)
         if with_hyperlinks.contains("\x1b]8;") {
-            assert!(!without_hyperlinks.contains("\x1b]8;"),
-                   "Disabled hyperlinks should not contain OSC 8 codes");
+            assert!(
+                !without_hyperlinks.contains("\x1b]8;"),
+                "Disabled hyperlinks should not contain OSC 8 codes"
+            );
         }
     }
 
     #[test]
     fn test_text_render_options_default() {
         let options = TextRenderOptions::default();
-        assert!(options.enable_hyperlinks, "Default should enable hyperlinks");
+        assert!(
+            options.enable_hyperlinks,
+            "Default should enable hyperlinks"
+        );
     }
 
     #[test]

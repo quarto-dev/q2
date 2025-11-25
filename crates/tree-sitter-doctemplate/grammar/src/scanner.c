@@ -64,7 +64,8 @@ typedef enum {
     KEYWORD_ELSEIF_1,
     KEYWORD_ELSEIF_2,
     KEYWORD_ENDIF_1,
-    KEYWORD_ENDIF_2
+    KEYWORD_ENDIF_2,
+    BARE_PARTIAL_IDENTIFIER,
 } TokenType;
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -80,12 +81,47 @@ static void lex_whitespace(TSLexer *lexer) {
     }
 }
 
+static bool lookahead_is_alpha(TSLexer *lexer) {
+    return (lexer->lookahead >= 'A' && lexer->lookahead <= 'Z') || 
+        (lexer->lookahead >= 'a' && lexer->lookahead <= 'z');
+}
+
+static bool lookahead_is_num(TSLexer *lexer) {
+    return (lexer->lookahead >= '0' && lexer->lookahead <= '9');
+}
+
+static bool lookahead_is_space(TSLexer *lexer) {
+    return (lexer->lookahead == ' ' || lexer->lookahead == '\t');
+}
+
+static bool parse_bare_partial_identifier(TSLexer *lexer) {
+    do {
+        lexer->advance(lexer, false);
+    } while (!lexer->eof(lexer) && (
+        lookahead_is_alpha(lexer) || 
+        lookahead_is_num(lexer) ||
+        lexer->lookahead == '\\' ||
+        lexer->lookahead == '/' ||
+        lexer->lookahead == '_' ||
+        lexer->lookahead == '.' ||
+        lexer->lookahead == '-'));
+    lexer->mark_end(lexer);
+    while (lookahead_is_space(lexer)) {
+        lexer->advance(lexer, false);
+    }
+    LEX_STRING("()");
+    EMIT_TOKEN(BARE_PARTIAL_IDENTIFIER);
+}
+
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     (void)(s);
     // KEYWORD_FOR_1: "$", w($), "for"
     // KEYWORD_FOR_2: "${", w($), "for"
 
     int kw_type = 1;
+    if (lookahead_is_alpha(lexer) && valid_symbols[BARE_PARTIAL_IDENTIFIER]) {
+        return parse_bare_partial_identifier(lexer);
+    }
     LEX_CHARACTER('$');
     if (lexer->lookahead == '{') {
         kw_type = 2;

@@ -51,7 +51,7 @@ fn main() {
         .add_detail("Detail 3")
         .add_detail("Detail 4")
         .add_detail("Detail 5")
-        .add_detail("Detail 6")  // Too many!
+        .add_detail("Detail 6") // Too many!
         .build_with_validation();
 
     println!("{}", msg.to_text(None));

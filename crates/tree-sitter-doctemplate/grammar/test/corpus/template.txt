@@ -193,3 +193,13 @@ ${if(a)}A${elseif(b)}B${else}C${endif}
           (conditional_else
             (template_element
               (text))))))
+================================================================================
+template.txt 9 - bare partials
+================================================================================
+$hello()$
+--------------------------------------------------------------------------------
+    (template
+      (template_element
+        (interpolation
+          (bare_partial
+            (partial_name)))))

@@ -72,14 +72,18 @@ module.exports = grammar({
       $.pipe_right
     ),
 
-    partial_name: ($) => /[A-Za-z0-9/\\_.-]+/,
+    partial_name: ($) => /[A-Za-z0-9/\\\/_.-]+/,
     partial: ($) => seq($.partial_name, "()"),
+
+    // we use an external _bare_partial_token to allow the lexer to cheat a bit and see if it's a bare partial with ()
+    bare_partial: ($) => seq(alias($._bare_partial_identifier, $.partial_name), "()"),
 
     literal_separator: ($) => /[^$\]]+/,
 
     _interpolation: ($) => choice(
       seq(w($), $.variable_name, repeat(seq("/", $.pipe)), w($), optional(seq("[", $.literal_separator, "]")), w($)),
       seq(w($), $.variable_name, seq(":", $.partial), optional(seq("[", $.literal_separator, "]")), repeat(seq("/", $.pipe)), w($)),
+      seq(w($), $.bare_partial, repeat(seq("/", $.pipe)), w($)),
     ),
 
     interpolation: ($) => choice(
@@ -151,5 +155,6 @@ module.exports = grammar({
     $._keyword_elseif_2,
     $._keyword_endif_1,
     $._keyword_endif_2,
+    $._bare_partial_identifier,
   ]
 });

@@ -44,11 +44,17 @@ fn main() {
     // Show the difference in output
     println!("With hyperlinks enabled:");
     println!("  Length: {} bytes", default_text.len());
-    println!("  Contains OSC 8 codes: {}", default_text.contains("\x1b]8;"));
+    println!(
+        "  Contains OSC 8 codes: {}",
+        default_text.contains("\x1b]8;")
+    );
 
     println!("\nWith hyperlinks disabled:");
     println!("  Length: {} bytes", no_hyperlink_text.len());
-    println!("  Contains OSC 8 codes: {}", no_hyperlink_text.contains("\x1b]8;"));
+    println!(
+        "  Contains OSC 8 codes: {}",
+        no_hyperlink_text.contains("\x1b]8;")
+    );
 
     println!("\n=== Example 4: JSON output (no hyperlinks) ===\n");
 

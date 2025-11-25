@@ -1,5 +1,20 @@
 [
   {
+    "type": "bare_partial",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "partial_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "breakable_block",
     "named": true,
     "fields": {},
@@ -166,6 +181,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "bare_partial",
+          "named": true
+        },
         {
           "type": "literal_separator",
           "named": true

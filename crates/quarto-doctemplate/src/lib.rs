@@ -48,6 +48,7 @@ pub mod error;
 pub mod eval_context;
 pub mod evaluator;
 pub mod parser;
+pub mod resolver;
 
 // Re-export main types at crate root
 pub use ast::{
@@ -59,3 +60,4 @@ pub use doc::Doc;
 pub use error::TemplateError;
 pub use eval_context::{DiagnosticCollector, EvalContext};
 pub use parser::Template;
+pub use resolver::{FileSystemResolver, MemoryResolver, NullResolver, PartialResolver};

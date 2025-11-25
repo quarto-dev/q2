@@ -238,7 +238,7 @@ fn write_inline<T: std::io::Write>(inline: &Inline, buf: &mut T) -> std::io::Res
 }
 
 /// Write a sequence of inlines
-fn write_inlines<T: std::io::Write>(inlines: &Inlines, buf: &mut T) -> std::io::Result<()> {
+pub fn write_inlines<T: std::io::Write>(inlines: &Inlines, buf: &mut T) -> std::io::Result<()> {
     for inline in inlines {
         write_inline(inline, buf)?;
     }
@@ -513,7 +513,7 @@ fn write_table_row<T: std::io::Write>(
 }
 
 /// Write a sequence of blocks
-fn write_blocks<T: std::io::Write>(blocks: &[Block], buf: &mut T) -> std::io::Result<()> {
+pub fn write_blocks<T: std::io::Write>(blocks: &[Block], buf: &mut T) -> std::io::Result<()> {
     for block in blocks {
         write_block(block, buf)?;
     }

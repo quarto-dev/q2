@@ -10,8 +10,8 @@
 
 use std::collections::HashSet;
 
-use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use crate::error_table::{ErrorCapture, ErrorTableEntry, lookup_error_entry};
+use crate::tree_sitter_log::{ConsumedToken, TreeSitterLogObserver};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::Location;
 

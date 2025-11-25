@@ -169,7 +169,8 @@ impl Default for Doc {
 
 /// Concatenate multiple documents.
 pub fn concat_docs(docs: impl IntoIterator<Item = Doc>) -> Doc {
-    docs.into_iter().fold(Doc::Empty, |acc, doc| acc.concat(doc))
+    docs.into_iter()
+        .fold(Doc::Empty, |acc, doc| acc.concat(doc))
 }
 
 /// Intersperse documents with a separator.
@@ -217,14 +218,8 @@ mod tests {
         assert_eq!(doc.render(None), "hello world");
 
         // Concat with Empty is identity
-        assert_eq!(
-            Doc::text("hello").concat(Doc::Empty).render(None),
-            "hello"
-        );
-        assert_eq!(
-            Doc::Empty.concat(Doc::text("hello")).render(None),
-            "hello"
-        );
+        assert_eq!(Doc::text("hello").concat(Doc::Empty).render(None), "hello");
+        assert_eq!(Doc::Empty.concat(Doc::text("hello")).render(None), "hello");
     }
 
     #[test]

@@ -3,7 +3,10 @@ use quote::quote;
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
-use syn::{parse::{Parse, ParseStream}, parse_macro_input, LitStr, Token};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, LitStr, Token,
+};
 
 #[derive(Deserialize)]
 struct Capture {
@@ -87,7 +90,8 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
         serde_json::from_str(&json_content).expect("Failed to parse JSON");
 
     // Parse module prefix into tokens
-    let module_tokens: proc_macro2::TokenStream = module_prefix.parse().expect("Invalid module prefix");
+    let module_tokens: proc_macro2::TokenStream =
+        module_prefix.parse().expect("Invalid module prefix");
 
     let table_entries = entries.iter().map(|entry| {
         let state = entry.state;

@@ -7,7 +7,7 @@
 //! Note: DiagnosticCollector is in quarto-markdown-pandoc, so this example shows
 //! the pattern manually. In real code, use the DiagnosticCollector utility.
 
-use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder, DiagnosticKind};
+use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_source_map::{SourceContext, SourceInfo};
 
 /// Simple collector for accumulating diagnostic messages
@@ -38,7 +38,7 @@ impl SimpleCollector {
         self.add(
             DiagnosticMessageBuilder::error(message.into())
                 .with_location(location)
-                .build()
+                .build(),
         );
     }
 
@@ -53,10 +53,7 @@ impl SimpleCollector {
     }
 
     fn to_text(&self, ctx: Option<&SourceContext>) -> Vec<String> {
-        self.diagnostics
-            .iter()
-            .map(|d| d.to_text(ctx))
-            .collect()
+        self.diagnostics.iter().map(|d| d.to_text(ctx)).collect()
     }
 }
 
@@ -71,7 +68,10 @@ fn main() {
     collector.error("Invalid value for 'format': expected string, got number");
 
     if collector.has_errors() {
-        println!("Validation failed with {} diagnostics:", collector.diagnostics().len());
+        println!(
+            "Validation failed with {} diagnostics:",
+            collector.diagnostics().len()
+        );
         for text in collector.to_text(None) {
             println!("{}", text);
         }
@@ -126,7 +126,10 @@ fn main() {
 
     // Check at the end
     if collector3.has_errors() {
-        eprintln!("Processing failed with {} errors", collector3.diagnostics().len());
+        eprintln!(
+            "Processing failed with {} errors",
+            collector3.diagnostics().len()
+        );
         eprintln!("\nErrors:");
         for diag in collector3.diagnostics() {
             eprintln!("  - {}", diag.title);

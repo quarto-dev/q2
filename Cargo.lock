@@ -768,7 +768,10 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "clap",
+ "include_dir",
+ "quarto-doctemplate",
  "quarto-markdown-pandoc",
+ "quarto-source-map",
  "walkdir",
 ]
 

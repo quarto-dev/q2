@@ -5,11 +5,19 @@
  * Experimental prototype for rendering QMD files to HTML
  */
 
+mod embedded_resolver;
+mod format_writers;
+mod template_context;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+use embedded_resolver::EmbeddedResolver;
+use format_writers::HtmlWriters;
+use template_context::{compile_template, prepare_template_metadata, render_with_template};
 
 #[derive(Parser, Debug)]
 #[command(name = "pico-quarto-render")]
@@ -121,7 +129,7 @@ fn process_qmd_file(
         Box::new(std::io::sink())
     };
 
-    let (pandoc, _context, warnings) = quarto_markdown_pandoc::readers::qmd::read(
+    let (mut pandoc, _context, warnings) = quarto_markdown_pandoc::readers::qmd::read(
         &input_content,
         false, // loose mode
         qmd_path.to_str().unwrap_or("<unknown>"),
@@ -146,10 +154,18 @@ fn process_qmd_file(
         }
     }
 
-    // Convert AST to HTML
-    let mut html_buf = Vec::new();
-    quarto_markdown_pandoc::writers::html::write(&pandoc, &mut html_buf)
-        .context("Failed to write HTML")?;
+    // Prepare template metadata (adds pagetitle from title, etc.)
+    prepare_template_metadata(&mut pandoc);
+
+    // Load and compile template
+    let template_source = embedded_resolver::get_main_template()
+        .ok_or_else(|| anyhow::anyhow!("Main template not found"))?;
+    let resolver = EmbeddedResolver;
+    let template = compile_template(template_source, &resolver)?;
+
+    // Render with template
+    let writers = HtmlWriters;
+    let html_output = render_with_template(&pandoc, &template, &writers)?;
 
     // Determine output path
     let relative_path = qmd_path
@@ -166,7 +182,7 @@ fn process_qmd_file(
     }
 
     // Write HTML to output file
-    fs::write(&output_path, html_buf)
+    fs::write(&output_path, &html_output)
         .context(format!("Failed to write output file: {:?}", output_path))?;
 
     Ok(output_path)

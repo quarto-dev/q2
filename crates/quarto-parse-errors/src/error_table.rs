@@ -18,10 +18,10 @@ use crate::tree_sitter_log::ProcessMessage;
 #[derive(Debug)]
 pub struct ErrorCapture {
     pub column: usize,
-    pub lr_state: usize,  // LR parser state when this token was consumed
+    pub lr_state: usize, // LR parser state when this token was consumed
     pub row: usize,
-    pub size: usize,      // Size of the token in characters
-    pub sym: &'static str, // Token symbol from the parser
+    pub size: usize,         // Size of the token in characters
+    pub sym: &'static str,   // Token symbol from the parser
     pub label: &'static str, // Label used to reference this capture in notes
 }
 
@@ -40,12 +40,12 @@ pub struct ErrorNote {
 /// Complete information for generating a diagnostic message.
 #[derive(Debug)]
 pub struct ErrorInfo {
-    pub code: Option<&'static str>,  // Error code (e.g., "Q-2-1")
-    pub title: &'static str,          // Short error title
-    pub message: &'static str,        // Main error message
+    pub code: Option<&'static str>,        // Error code (e.g., "Q-2-1")
+    pub title: &'static str,               // Short error title
+    pub message: &'static str,             // Main error message
     pub captures: &'static [ErrorCapture], // Tokens to highlight
-    pub notes: &'static [ErrorNote],  // Additional context
-    pub hints: &'static [&'static str], // Suggestions for fixing
+    pub notes: &'static [ErrorNote],       // Additional context
+    pub hints: &'static [&'static str],    // Suggestions for fixing
 }
 
 /// Entry in the error table mapping a parser state to diagnostic information.
@@ -54,12 +54,12 @@ pub struct ErrorInfo {
 /// that triggered this error.
 #[derive(Debug)]
 pub struct ErrorTableEntry {
-    pub state: usize,         // LR parser state
-    pub sym: &'static str,    // Lookahead symbol
-    pub row: usize,           // Row in test case (for debugging)
-    pub column: usize,        // Column in test case (for debugging)
+    pub state: usize,      // LR parser state
+    pub sym: &'static str, // Lookahead symbol
+    pub row: usize,        // Row in test case (for debugging)
+    pub column: usize,     // Column in test case (for debugging)
     pub error_info: ErrorInfo,
-    pub name: &'static str,   // Test case name (for debugging)
+    pub name: &'static str, // Test case name (for debugging)
 }
 
 /// Look up an error message by parser state and symbol.

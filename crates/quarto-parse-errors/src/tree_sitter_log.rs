@@ -22,11 +22,11 @@ pub enum TreeSitterLogState {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ProcessMessage {
     pub version: usize,
-    pub state: usize,    // LR parser state
+    pub state: usize, // LR parser state
     pub row: usize,
     pub column: usize,
-    pub sym: String,     // Symbol at this position
-    pub size: usize,     // Size of the token in characters
+    pub sym: String, // Symbol at this position
+    pub size: usize, // Size of the token in characters
 }
 
 /// A token that was consumed during parsing.
