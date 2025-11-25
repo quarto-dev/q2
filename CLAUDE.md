@@ -3,6 +3,7 @@
 ## **TERMINAL RESET**
 
 If the terminal output becomes corrupted (especially from truncated ANSI link sequences), reset it with:
+
 ```bash
 printf '\033[0m' && printf '\033]8;;\007' && echo "Terminal reset"
 ```
@@ -40,15 +41,6 @@ bd dep add <discovered-id> <parent-id> --type discovered-from
 
 # Create and link in one command (new way)
 bd create "Issue title" -t bug -p 1 --deps discovered-from:<parent-id> --json
-
-# Label management
-bd label add <id> <label> --json
-bd label remove <id> <label> --json
-bd label list <id> --json
-bd label list-all --json
-
-# Filter issues by label
-bd list --label bug,critical --json
 
 # Complete work
 bd close <id> --reason "Done" --json
@@ -133,6 +125,7 @@ When fixing ANY bug:
 
 ## Testing instructions
 
+- **CRITICAL**: Use `cargo nextest run` instead of `cargo test`.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
 
 ## Coding instructions
