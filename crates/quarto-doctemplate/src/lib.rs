@@ -43,6 +43,7 @@
 
 pub mod ast;
 pub mod context;
+pub mod doc;
 pub mod error;
 pub mod evaluator;
 pub mod parser;
@@ -53,5 +54,6 @@ pub use ast::{
     TemplateNode, VariableRef,
 };
 pub use context::{TemplateContext, TemplateValue};
+pub use doc::Doc;
 pub use error::TemplateError;
 pub use parser::Template;

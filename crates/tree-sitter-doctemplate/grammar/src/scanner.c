@@ -81,6 +81,7 @@ static void lex_whitespace(TSLexer *lexer) {
 }
 
 static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
+    (void)(s);
     // KEYWORD_FOR_1: "$", w($), "for"
     // KEYWORD_FOR_2: "${", w($), "for"
 
@@ -166,6 +167,7 @@ static unsigned serialize(Scanner *s, char *buffer) {
 // Read the whole state of a Scanner from a byte buffer
 // `serizalize` and `deserialize` should be fully symmetric.
 static void deserialize(Scanner *s, const char *buffer, unsigned length) {
+    (void)(buffer);
     s->own_size = length;
 }
 

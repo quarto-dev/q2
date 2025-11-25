@@ -602,16 +602,16 @@ mod tests {
 
     #[test]
     fn test_parse_comment() {
-        // Comment ends at newline; newline is captured in subsequent text node
+        // Comment includes the trailing newline (chomped)
         let template = Template::compile("$-- This is a comment\ntext").unwrap();
         assert_eq!(template.nodes.len(), 2);
         match &template.nodes[0] {
             TemplateNode::Comment(c) => assert!(c.text.contains("This is a comment")),
             _ => panic!("Expected Comment node"),
         }
-        // Second node includes the newline
+        // Second node is just the text after the newline
         match &template.nodes[1] {
-            TemplateNode::Literal(lit) => assert_eq!(lit.text, "\ntext"),
+            TemplateNode::Literal(lit) => assert_eq!(lit.text, "text"),
             _ => panic!("Expected Literal node after comment"),
         }
     }

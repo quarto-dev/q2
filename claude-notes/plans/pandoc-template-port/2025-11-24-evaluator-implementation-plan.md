@@ -115,22 +115,193 @@ We have:
 - `TemplateValue::render()`: Basic implementation
 - `evaluator.rs`: Skeleton with TODOs
 
-### Design Decision: Phased Approach
+### Design Decision: Doc Type from the Start
 
-**Phase 1 (k-387 scope): Simple String Output**
-- Output type: `String`
-- No pipes
-- No partials
-- Nesting: Simplified approach (track column, post-process newlines)
-- Breakable spaces: No-op (pass through content)
+After analysis, we decided to implement a minimal `Doc` type from the start rather than
+using `String` and retrofitting later. The key insight is that **nesting is structural,
+not post-processing** — with `String`, we'd track column and post-process newlines, but
+with `Doc`, we build `Prefixed` nodes that the renderer handles correctly.
 
-**Phase 2 (future): Full Doc Output**
-- Create `Doc<T>` type with proper breakable space support
-- Full nesting with column tracking
-- All pipes implemented
-- Partial loading
+#### The Full doclayout Doc Type (16 variants)
+
+```haskell
+data Doc a = Text Int a              -- 1. text with display width
+          | Block Int [Attributed a] -- 2. fixed-width block (tables)
+          | VFill Int a              -- 3. vertically expandable content
+          | CookedText Int (Attr a)  -- 4. pre-processed text
+          | Prefixed Text (Doc a)    -- 5. prefix each line (nesting)
+          | BeforeNonBlank (Doc a)   -- 6. render only if followed by non-blank
+          | Flush (Doc a)            -- 7. force left margin, ignore indent
+          | BreakingSpace            -- 8. breakable space
+          | AfterBreak Text          -- 9. text only at line starts after break
+          | CarriageReturn           -- 10. newline unless at line start
+          | NewLine                  -- 11. hard newline
+          | BlankLines Int           -- 12. ensure N blank lines
+          | Concat (Doc a) (Doc a)   -- 13. concatenation
+          | Styled StyleReq (Doc a)  -- 14. formatting (bold, color, etc.)
+          | Linked Text (Doc a)      -- 15. hyperlink
+          | Empty                    -- 16. nothing
+```
+
+#### Our Minimal Doc Type (6 variants)
+
+For the initial implementation, we use a minimal subset:
+
+```rust
+enum Doc {
+    Empty,                              // nothing
+    Text(String),                       // literal text
+    Concat(Box<Doc>, Box<Doc>),         // concatenation
+    Prefixed(String, Box<Doc>),         // prefix each line (for nesting)
+    BreakingSpace,                      // space that CAN break at line wrap
+    NewLine,                            // hard newline
+}
+```
+
+#### What We're Omitting (and Why)
+
+| Constructor | Purpose | Why Omitted |
+|-------------|---------|-------------|
+| `Block` | Fixed-width blocks for tables | Needed for `left`/`right`/`center` pipes — defer to pipe implementation |
+| `VFill` | Vertical fill for block borders | Same as Block |
+| `CookedText` | Pre-processed text | Optimization, can defer |
+| `BeforeNonBlank` | Conditional render if followed by content | Edge case for smart separators |
+| `Flush` | Ignore current indentation | Rarely used |
+| `AfterBreak` | Text after line breaks | For continuation markers |
+| `CarriageReturn` | Soft newline | May add later if needed for clean output |
+| `BlankLines` | Ensure N blank lines | Spacing control, can defer |
+| `Styled` | Bold, italic, colors | Terminal formatting, not core |
+| `Linked` | Hyperlinks | Terminal hyperlinks, not core |
+
+#### How Nesting Works with Doc
+
+In doclayout:
+```haskell
+nest :: Int -> Doc a -> Doc a
+nest ind = prefixed (replicate ind ' ')
+```
+
+`nest 4 doc` wraps `doc` in `Prefixed "    " doc`, meaning "add 4 spaces to each line".
+
+In the template evaluator:
+```haskell
+renderTemp (Nested t) ctx = do
+  n <- S.get  -- get current column position
+  DL.nest n <$> renderTemp t ctx
+```
+
+The `State Int` monad tracks column position. When `$^$` is encountered:
+1. Get current column `n`
+2. Apply `nest n` (i.e., `Prefixed (spaces n)`) to the nested content
+
+The `updateColumn` function simulates rendering to compute where the cursor ends up
+after each piece of text.
+
+#### Why Not String with Post-Processing?
+
+With `String`, nesting would require:
+```rust
+fn apply_nesting(s: &str, indent: usize) -> String {
+    s.lines().enumerate().map(|(i, l)|
+        if i == 0 { l.to_string() }
+        else { " ".repeat(indent) + l }
+    ).collect::<Vec<_>>().join("\n")
+}
+```
+
+Problems:
+1. **Composability**: Post-processing doesn't compose. Nested `$^$` directives would
+   require tracking indent levels through string manipulation.
+2. **Interaction with other features**: Breakable spaces interact with nesting —
+   if a line breaks, the continuation needs proper indentation.
+3. **Retrofitting cost**: Converting from post-processing to structural would require
+   rewriting the entire evaluator.
+
+With `Doc`, nesting is just `Prefixed(indent, inner)` — the renderer handles composition.
+
+#### Render Function
+
+```rust
+impl Doc {
+    /// Render to string, optionally wrapping at line_width
+    pub fn render(&self, line_width: Option<usize>) -> String {
+        // For initial implementation, ignore line_width (no reflow)
+        self.render_no_wrap()
+    }
+
+    fn render_no_wrap(&self) -> String {
+        match self {
+            Doc::Empty => String::new(),
+            Doc::Text(s) => s.clone(),
+            Doc::Concat(a, b) => a.render_no_wrap() + &b.render_no_wrap(),
+            Doc::Prefixed(prefix, inner) => {
+                // Add prefix to each line
+                inner.render_no_wrap()
+                    .lines()
+                    .enumerate()
+                    .map(|(i, l)| if i == 0 { l.to_string() } else { format!("{}{}", prefix, l) })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            }
+            Doc::BreakingSpace => " ".to_string(),  // Non-breaking for now
+            Doc::NewLine => "\n".to_string(),
+        }
+    }
+}
+```
+
+#### Future Extensions
+
+When we need more features:
+- **Pipes** (`left`/`right`/`center`): Add `Block` variant
+- **Soft newlines**: Add `CarriageReturn` variant
+- **Reflow**: Implement proper `render` with line width handling
+- **Terminal formatting**: Add `Styled` variant
+
+**No pipes or partials in initial scope** — these will be separate issues.
 
 ### Phase 1 Implementation Plan
+
+#### 0. Create Doc Type and Update Infrastructure
+
+Before implementing variable interpolation, we need to:
+
+1. Create `src/doc.rs` with the minimal `Doc` enum
+2. Update `TemplateValue` to hold `Doc` instead of just being renderable to `String`
+3. Update evaluator to return `Doc` instead of `String`
+4. Provide `Template::render()` that returns `String` via `Doc::render()`
+
+```rust
+// src/doc.rs
+#[derive(Debug, Clone, PartialEq)]
+pub enum Doc {
+    Empty,
+    Text(String),
+    Concat(Box<Doc>, Box<Doc>),
+    Prefixed(String, Box<Doc>),
+    BreakingSpace,
+    NewLine,
+}
+
+impl Doc {
+    pub fn text(s: impl Into<String>) -> Self {
+        Doc::Text(s.into())
+    }
+
+    pub fn concat(self, other: Doc) -> Self {
+        match (&self, &other) {
+            (Doc::Empty, _) => other,
+            (_, Doc::Empty) => self,
+            _ => Doc::Concat(Box::new(self), Box::new(other)),
+        }
+    }
+
+    pub fn render(&self, _line_width: Option<usize>) -> String {
+        // Initial implementation ignores line_width
+        self.render_simple()
+    }
+}
+```
 
 #### 1. Variable Interpolation (k-389)
 
@@ -140,21 +311,19 @@ fn resolve_variable(var: &VariableRef, context: &TemplateContext) -> Option<&Tem
     context.get_path(&path)
 }
 
-fn render_variable(var: &VariableRef, context: &TemplateContext) -> String {
+fn render_variable(var: &VariableRef, context: &TemplateContext) -> Doc {
     match resolve_variable(var, context) {
         Some(value) => {
             // Handle literal separator for arrays: $var[, ]$
             if let Some(sep) = &var.separator {
                 if let TemplateValue::List(items) = value {
-                    return items.iter()
-                        .map(|v| v.render())
-                        .collect::<Vec<_>>()
-                        .join(sep);
+                    let docs: Vec<Doc> = items.iter().map(|v| v.to_doc()).collect();
+                    return intersperse_docs(docs, Doc::text(sep));
                 }
             }
-            value.render()
+            value.to_doc()
         }
-        None => String::new(),
+        None => Doc::Empty,
     }
 }
 ```
@@ -162,6 +331,7 @@ fn render_variable(var: &VariableRef, context: &TemplateContext) -> String {
 **Considerations**:
 - The `it` keyword needs special handling in loop contexts
 - Variable paths like `employee.salary` are handled by `get_path`
+- `TemplateValue::to_doc()` converts values to Doc
 
 #### 2. Conditional Evaluation (k-390)
 

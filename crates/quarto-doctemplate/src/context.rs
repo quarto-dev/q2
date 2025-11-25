@@ -13,6 +13,8 @@
 
 use std::collections::HashMap;
 
+use crate::doc::Doc;
+
 /// A value that can be used in template evaluation.
 ///
 /// This mirrors the value types supported by Pandoc's doctemplates library.
@@ -86,6 +88,30 @@ impl TemplateValue {
             TemplateValue::List(items) => items.iter().map(|v| v.render()).collect(),
             TemplateValue::Map(_) => "true".to_string(),
             TemplateValue::Null => String::new(),
+        }
+    }
+
+    /// Convert this value to a Doc for structured output.
+    ///
+    /// This is the preferred method for evaluation as it preserves
+    /// structural information needed for proper nesting.
+    ///
+    /// - String: Doc::Text
+    /// - Bool true: Doc::Text("true")
+    /// - Bool false: Doc::Empty
+    /// - List: concatenation of Doc elements
+    /// - Map: Doc::Text("true")
+    /// - Null: Doc::Empty
+    pub fn to_doc(&self) -> Doc {
+        match self {
+            TemplateValue::String(s) => Doc::text(s),
+            TemplateValue::Bool(true) => Doc::text("true"),
+            TemplateValue::Bool(false) => Doc::Empty,
+            TemplateValue::List(items) => {
+                crate::doc::concat_docs(items.iter().map(|v| v.to_doc()))
+            }
+            TemplateValue::Map(_) => Doc::text("true"),
+            TemplateValue::Null => Doc::Empty,
         }
     }
 }
