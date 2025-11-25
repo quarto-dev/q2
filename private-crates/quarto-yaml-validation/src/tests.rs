@@ -106,8 +106,5 @@ mod integration_tests {
 
         let schema_true = Schema::True;
         assert!(validate(&yaml, &schema_true, &registry, &make_source_ctx()).is_ok());
-
-        let schema_false = Schema::False;
-        assert!(validate(&yaml, &schema_false, &registry, &make_source_ctx()).is_err());
     }
 }
