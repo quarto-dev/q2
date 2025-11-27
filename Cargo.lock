@@ -998,6 +998,7 @@ name = "quarto-xml"
 version = "0.1.0"
 dependencies = [
  "insta",
+ "quarto-error-reporting",
  "quarto-source-map",
  "quick-xml",
  "thiserror",
