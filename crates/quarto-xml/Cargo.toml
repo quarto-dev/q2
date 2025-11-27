@@ -9,6 +9,7 @@ description = "Source-tracked XML parsing for Quarto"
 
 [dependencies]
 quick-xml = { workspace = true }
+quarto-error-reporting = { path = "../quarto-error-reporting" }
 quarto-source-map = { path = "../quarto-source-map" }
 thiserror = { workspace = true }
 

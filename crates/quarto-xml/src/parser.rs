@@ -1,7 +1,8 @@
 //! XML parser that builds XmlWithSourceInfo trees.
 
 use crate::{
-    Error, Result, XmlAttribute, XmlChild, XmlChildren, XmlElement, XmlWithSourceInfo,
+    Error, ParseResult, Result, XmlAttribute, XmlChild, XmlChildren, XmlElement,
+    XmlParseContext, XmlWithSourceInfo,
 };
 use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Reader;
@@ -39,6 +40,62 @@ pub fn parse_with_file_id(content: &str, file_id: FileId) -> Result<XmlWithSourc
 /// that track back to the parent document.
 pub fn parse_with_parent(content: &str, parent: SourceInfo) -> Result<XmlWithSourceInfo> {
     parse_impl(content, Some(parent), FileId(0))
+}
+
+/// Parse XML from a string with diagnostic collection.
+///
+/// This is the preferred function when you need rich error messages with
+/// Q-9-* error codes. The context collects any warnings or lints during
+/// parsing, and errors are returned as DiagnosticMessage objects.
+///
+/// # Example
+///
+/// ```rust
+/// use quarto_xml::{parse_with_context, XmlParseContext};
+///
+/// let mut ctx = XmlParseContext::new();
+/// match parse_with_context("<root/>", &mut ctx) {
+///     Ok(xml) => {
+///         assert_eq!(xml.root.name, "root");
+///         // Check for any warnings
+///         if ctx.has_diagnostics() {
+///             for diag in ctx.diagnostics() {
+///                 eprintln!("Warning: {}", diag.title);
+///             }
+///         }
+///     }
+///     Err(errors) => {
+///         for err in errors {
+///             eprintln!("Error [{}]: {}", err.code.as_deref().unwrap_or("?"), err.title);
+///         }
+///     }
+/// }
+/// ```
+///
+/// # Errors
+///
+/// Returns a vector of DiagnosticMessage objects if parsing fails.
+pub fn parse_with_context(
+    content: &str,
+    ctx: &mut XmlParseContext,
+) -> ParseResult<XmlWithSourceInfo> {
+    parse_with_context_impl(content, None, FileId(0), ctx)
+}
+
+fn parse_with_context_impl(
+    content: &str,
+    parent: Option<SourceInfo>,
+    file_id: FileId,
+    ctx: &mut XmlParseContext,
+) -> ParseResult<XmlWithSourceInfo> {
+    match parse_impl(content, parent, file_id) {
+        Ok(xml) => Ok(xml),
+        Err(err) => {
+            let diagnostic = err.to_diagnostic();
+            ctx.add_diagnostic(diagnostic.clone());
+            Err(vec![diagnostic])
+        }
+    }
 }
 
 fn parse_impl(
@@ -667,5 +724,133 @@ mod tests {
 
         // The version attribute name should be tracked correctly
         // It appears after xmlns:csl="http://example.org"
+    }
+
+    // ==================== Error Behavior Tests ====================
+
+    #[test]
+    fn test_empty_document_diagnostic() {
+        use crate::XmlParseContext;
+
+        let mut ctx = XmlParseContext::new();
+        let result = parse_with_context("", &mut ctx);
+
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+
+        let err = &errors[0];
+        assert_eq!(err.code.as_deref(), Some("Q-9-5"));
+        assert_eq!(err.title, "Empty XML Document");
+    }
+
+    #[test]
+    fn test_unclosed_element_diagnostic() {
+        use crate::XmlParseContext;
+
+        let mut ctx = XmlParseContext::new();
+        let result = parse_with_context("<root>", &mut ctx);
+
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+
+        let err = &errors[0];
+        assert_eq!(err.code.as_deref(), Some("Q-9-2"));
+        assert_eq!(err.title, "Unexpected End of XML Input");
+        assert!(ctx.has_diagnostics());
+    }
+
+    #[test]
+    fn test_multiple_roots_diagnostic() {
+        use crate::XmlParseContext;
+
+        let mut ctx = XmlParseContext::new();
+        let result = parse_with_context("<root/><another/>", &mut ctx);
+
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+
+        let err = &errors[0];
+        assert_eq!(err.code.as_deref(), Some("Q-9-6"));
+        assert_eq!(err.title, "Multiple XML Root Elements");
+    }
+
+    #[test]
+    fn test_syntax_error_diagnostic() {
+        use crate::XmlParseContext;
+
+        let mut ctx = XmlParseContext::new();
+        let result = parse_with_context("<root attr=unquoted/>", &mut ctx);
+
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+
+        let err = &errors[0];
+        // Syntax errors from quick-xml become Q-9-1
+        assert_eq!(err.code.as_deref(), Some("Q-9-1"));
+        assert_eq!(err.title, "XML Syntax Error");
+    }
+
+    #[test]
+    fn test_context_collects_diagnostics() {
+        use crate::XmlParseContext;
+
+        let mut ctx = XmlParseContext::new();
+
+        // Successful parse should have no diagnostics
+        let result = parse_with_context("<root/>", &mut ctx);
+        assert!(result.is_ok());
+        assert!(!ctx.has_diagnostics());
+
+        // Failed parse should add diagnostic to context
+        let mut ctx2 = XmlParseContext::new();
+        let result = parse_with_context("", &mut ctx2);
+        assert!(result.is_err());
+        assert!(ctx2.has_diagnostics());
+        assert_eq!(ctx2.diagnostics().len(), 1);
+    }
+
+    #[test]
+    fn test_error_to_diagnostic_conversion() {
+        // Test that Error::to_diagnostic produces the right codes
+        let err = Error::EmptyDocument;
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("Q-9-5"));
+
+        let err = Error::MultipleRoots { location: None };
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("Q-9-6"));
+
+        let err = Error::UnexpectedEof {
+            expected: "closing tag".to_string(),
+            location: None,
+        };
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("Q-9-2"));
+
+        let err = Error::MismatchedEndTag {
+            expected: "root".to_string(),
+            found: "other".to_string(),
+            location: None,
+        };
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("Q-9-3"));
+
+        let err = Error::InvalidStructure {
+            message: "test".to_string(),
+            location: None,
+        };
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("Q-9-4"));
+
+        let err = Error::XmlSyntax {
+            message: "test".to_string(),
+            position: None,
+        };
+        let diag = err.to_diagnostic();
+        assert_eq!(diag.code.as_deref(), Some("Q-9-1"));
     }
 }

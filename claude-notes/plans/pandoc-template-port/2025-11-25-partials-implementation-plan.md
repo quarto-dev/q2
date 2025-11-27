@@ -434,7 +434,7 @@ fn evaluate_partial(
 
 ## Error Handling
 
-**Error code namespace**: Template errors use **q-9-*** codes in quarto-error-reporting.
+**Error code namespace**: Template errors use **Q-10-*** codes in quarto-error-reporting.
 
 New error variants:
 
@@ -442,28 +442,28 @@ New error variants:
 pub enum TemplateError {
     // ... existing variants
 
-    /// Partial file not found (q-9-001)
+    /// Partial file not found (Q-10-001)
     PartialNotFound {
         name: String,
         source_info: SourceInfo,
         searched_path: PathBuf,
     },
 
-    /// Partial contains parse error (q-9-002)
+    /// Partial contains parse error (Q-10-002)
     PartialParseError {
         name: String,
         source_info: SourceInfo,
         error: String,
     },
 
-    /// Recursion limit exceeded (q-9-003)
+    /// Recursion limit exceeded (Q-10-003)
     RecursionLimitExceeded {
         name: String,
         source_info: SourceInfo,
         depth: usize,
     },
 
-    /// Unresolved partial - internal error (q-9-004)
+    /// Unresolved partial - internal error (Q-10-004)
     UnresolvedPartial {
         name: String,
         source_info: SourceInfo,
@@ -512,7 +512,7 @@ $loop1()$
 
 # Haskell expected output: (loop)
 # Our expected output: Error with source location
-#   error[q-9-003]: partial recursion limit exceeded
+#   error[Q-10-003]: partial recursion limit exceeded
 #     --> loop1.txt:1:1
 #       |
 #     1 | $loop2()$
@@ -526,7 +526,7 @@ $loop1()$
    - For now: template compilation time only
 
 2. ~~**How to handle missing partials?**~~
-   - **Resolved**: Emit error with source location (q-9-001)
+   - **Resolved**: Emit error with source location (Q-10-001)
 
 3. **Caching?**
    - Currently: each partial parsed fresh

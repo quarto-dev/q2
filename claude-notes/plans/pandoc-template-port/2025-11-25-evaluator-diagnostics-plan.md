@@ -61,7 +61,7 @@ From `crates/quarto-error-reporting/src/builder.rs`:
 
 ```rust
 let error = DiagnosticMessageBuilder::error("Partial not found")
-    .with_code("Q-9-001")
+    .with_code("Q-10-001")
     .with_location(source_info)
     .problem("Could not find partial file")
     .add_detail(format!("Looking for `{}`", partial_name))
@@ -239,7 +239,7 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
 fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<Doc> {
     if ctx.partial_depth >= ctx.max_partial_depth {
         let diagnostic = DiagnosticMessageBuilder::error("Partial recursion limit exceeded")
-            .with_code("Q-9-003")
+            .with_code("Q-10-003")
             .with_location(partial.source_info.clone())
             .problem(format!(
                 "Partial '{}' exceeded maximum nesting depth of {}",
@@ -257,18 +257,18 @@ fn evaluate_partial(partial: &Partial, ctx: &mut EvalContext) -> TemplateResult<
 
 ### Diagnostic Categories
 
-Template errors use **Q-9-*** codes:
+Template errors use **Q-10-*** codes:
 
 | Code | Error Type |
 |------|------------|
-| Q-9-001 | Partial not found |
-| Q-9-002 | Partial parse error |
-| Q-9-003 | Partial recursion limit exceeded |
-| Q-9-004 | Internal: unresolved partial |
-| Q-9-010 | Undefined variable (warning) |
-| Q-9-011 | Type mismatch (e.g., applying separator to non-list) |
-| Q-9-020 | Unknown pipe |
-| Q-9-021 | Invalid pipe parameters |
+| Q-10-001 | Partial not found |
+| Q-10-002 | Partial parse error |
+| Q-10-003 | Partial recursion limit exceeded |
+| Q-10-004 | Internal: unresolved partial |
+| Q-10-010 | Undefined variable (warning) |
+| Q-10-011 | Type mismatch (e.g., applying separator to non-list) |
+| Q-10-020 | Unknown pipe |
+| Q-10-021 | Invalid pipe parameters |
 
 ## Implementation Plan
 

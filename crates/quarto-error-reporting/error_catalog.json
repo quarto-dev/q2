@@ -491,6 +491,49 @@
     "since_version": "99.9.9"
   },
 
+  "Q-9-1": {
+    "subsystem": "xml",
+    "title": "XML Syntax Error",
+    "message_template": "There is a syntax error in the XML document being parsed.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-1",
+    "since_version": "99.9.9"
+  },
+  "Q-9-2": {
+    "subsystem": "xml",
+    "title": "Unexpected End of XML Input",
+    "message_template": "The XML document ended unexpectedly before parsing was complete.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-2",
+    "since_version": "99.9.9"
+  },
+  "Q-9-3": {
+    "subsystem": "xml",
+    "title": "Mismatched XML End Tag",
+    "message_template": "An XML end tag does not match its corresponding start tag.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-3",
+    "since_version": "99.9.9"
+  },
+  "Q-9-4": {
+    "subsystem": "xml",
+    "title": "Invalid XML Structure",
+    "message_template": "The XML document has an invalid structure.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-4",
+    "since_version": "99.9.9"
+  },
+  "Q-9-5": {
+    "subsystem": "xml",
+    "title": "Empty XML Document",
+    "message_template": "The XML document contains no root element.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-5",
+    "since_version": "99.9.9"
+  },
+  "Q-9-6": {
+    "subsystem": "xml",
+    "title": "Multiple XML Root Elements",
+    "message_template": "The XML document contains multiple root elements, which is not valid XML.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-6",
+    "since_version": "99.9.9"
+  },
+
   "Q-10-1": {
     "subsystem": "template",
     "title": "Template Parse Error",

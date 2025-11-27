@@ -114,16 +114,18 @@ Quarto supports TypeScript-style error codes for better searchability and docume
 **Format**: `Q-<subsystem>-<number>` (e.g., `Q-1-1`, `Q-2-301`)
 
 **Subsystem Numbers**:
-- **0**: Internal/System Errors (Q-0-1, Q-0-99)
-- **1**: YAML and Configuration (Q-1-1 through Q-1-N)
-- **2**: Markdown and Parsing (Q-2-1 through Q-2-N)
-- **3**: Engines and Execution (Q-3-1 through Q-3-N)
-- **4**: Rendering and Formats (Q-4-1 through Q-4-N)
-- **5**: Projects and Structure (Q-5-1 through Q-5-N)
-- **6**: Extensions and Plugins (Q-6-1 through Q-6-N)
-- **7**: CLI and Tools (Q-7-1 through Q-7-N)
-- **8**: Publishing and Deployment (Q-8-1 through Q-8-N)
-- **9+**: Reserved for future use
+- **0**: Internal/System Errors
+- **1**: YAML and Configuration
+- **2**: Markdown and Parsing
+- **3**: Engines and Execution
+- **4**: Rendering and Formats
+- **5**: Projects and Structure
+- **6**: Extensions and Plugins
+- **7**: CLI and Tools
+- **8**: Publishing and Deployment
+- **9**: XML parsing
+- **10**: Templates
+- **11+**: Reserved for future use
 
 **Benefits**:
 - Users can Google "Q-2-301" instead of error message text

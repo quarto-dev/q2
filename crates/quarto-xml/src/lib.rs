@@ -12,6 +12,7 @@
 //! - [`XmlElement`]: An XML element with name, attributes, children, and source info
 //! - [`XmlAttribute`]: An attribute with name, value, and separate source info for each
 //! - [`XmlChildren`]: Element content (elements, text, mixed, or empty)
+//! - [`XmlParseContext`]: Context for collecting diagnostics during parsing
 //!
 //! # Example
 //!
@@ -47,15 +48,40 @@
 //! assert_eq!(xml.root.source_info.end_offset(), content.len());
 //! ```
 //!
+//! # Diagnostic Collection
+//!
+//! For richer error reporting with Q-9-* error codes, use [`parse_with_context`]:
+//!
+//! ```rust
+//! use quarto_xml::{parse_with_context, XmlParseContext};
+//!
+//! let mut ctx = XmlParseContext::new();
+//! match parse_with_context("<root/>", &mut ctx) {
+//!     Ok(xml) => {
+//!         // Check for warnings even on success
+//!         for diag in ctx.diagnostics() {
+//!             eprintln!("{}", diag.title);
+//!         }
+//!     }
+//!     Err(errors) => {
+//!         for err in errors {
+//!             eprintln!("Error: {}", err.title);
+//!         }
+//!     }
+//! }
+//! ```
+//!
 //! For XML embedded in other documents, use [`parse_with_parent`] to create
 //! substring mappings that track back to the parent document.
 
+pub mod context;
 pub mod error;
 pub mod parser;
 pub mod types;
 
 // Re-export main types
-pub use error::{Error, Result};
-pub use parser::{parse, parse_with_file_id, parse_with_parent};
+pub use context::XmlParseContext;
+pub use error::{Error, ParseResult, Result};
+pub use parser::{parse, parse_with_context, parse_with_file_id, parse_with_parent};
 pub use quarto_source_map::SourceInfo;
 pub use types::{XmlAttribute, XmlChild, XmlChildren, XmlElement, XmlWithSourceInfo};
