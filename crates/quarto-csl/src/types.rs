@@ -38,6 +38,9 @@ pub struct Style {
     /// Bibliography layout (optional).
     pub bibliography: Option<Layout>,
 
+    /// Style-level name formatting options.
+    pub name_options: InheritableNameOptions,
+
     /// Source location of the entire style element.
     pub source_info: SourceInfo,
 }
@@ -205,10 +208,94 @@ pub struct Layout {
     pub delimiter: Option<String>,
     /// Sort keys (for bibliography).
     pub sort: Option<Sort>,
+    /// Inheritable name options (from citation/bibliography element).
+    pub name_options: InheritableNameOptions,
     /// Elements in the layout.
     pub elements: Vec<Element>,
     /// Source location.
     pub source_info: SourceInfo,
+}
+
+/// Inheritable name formatting options.
+///
+/// These options can be set on style, citation, bibliography, or names elements
+/// and inherit down to name elements. More specific levels override general levels.
+#[derive(Debug, Clone, Default)]
+pub struct InheritableNameOptions {
+    /// And word/symbol.
+    pub and: Option<NameAnd>,
+    /// Delimiter between names.
+    pub delimiter: Option<String>,
+    /// Delimiter before last name.
+    pub delimiter_precedes_last: Option<DelimiterPrecedesLast>,
+    /// Delimiter before et-al.
+    pub delimiter_precedes_et_al: Option<DelimiterPrecedesLast>,
+    /// Et-al threshold.
+    pub et_al_min: Option<u32>,
+    /// Et-al use first.
+    pub et_al_use_first: Option<u32>,
+    /// Et-al use last (show last author after ellipsis).
+    pub et_al_use_last: Option<bool>,
+    /// Whether to initialize given names. Defaults to true.
+    /// When false, given names are not broken into initials even if initialize-with is set.
+    pub initialize: Option<bool>,
+    /// Initialize with.
+    pub initialize_with: Option<String>,
+    /// Name form (long, short).
+    pub form: Option<NameForm>,
+    /// Name-as-sort-order (first, all).
+    pub name_as_sort_order: Option<NameAsSortOrder>,
+    /// Sort separator.
+    pub sort_separator: Option<String>,
+}
+
+impl InheritableNameOptions {
+    /// Merge two InheritableNameOptions, with `self` taking precedence over `other`.
+    ///
+    /// This implements the CSL inheritance model where more specific levels
+    /// (name → names → layout → style) override general levels.
+    pub fn merge(&self, other: &Self) -> Self {
+        Self {
+            and: self.and.or(other.and),
+            delimiter: self.delimiter.clone().or_else(|| other.delimiter.clone()),
+            delimiter_precedes_last: self.delimiter_precedes_last.or(other.delimiter_precedes_last),
+            delimiter_precedes_et_al: self
+                .delimiter_precedes_et_al
+                .or(other.delimiter_precedes_et_al),
+            et_al_min: self.et_al_min.or(other.et_al_min),
+            et_al_use_first: self.et_al_use_first.or(other.et_al_use_first),
+            et_al_use_last: self.et_al_use_last.or(other.et_al_use_last),
+            initialize: self.initialize.or(other.initialize),
+            initialize_with: self
+                .initialize_with
+                .clone()
+                .or_else(|| other.initialize_with.clone()),
+            form: self.form.or(other.form),
+            name_as_sort_order: self.name_as_sort_order.or(other.name_as_sort_order),
+            sort_separator: self
+                .sort_separator
+                .clone()
+                .or_else(|| other.sort_separator.clone()),
+        }
+    }
+
+    /// Convert a Name element's options to InheritableNameOptions.
+    pub fn from_name(name: &Name) -> Self {
+        Self {
+            and: name.and,
+            delimiter: name.delimiter.clone(),
+            delimiter_precedes_last: name.delimiter_precedes_last,
+            delimiter_precedes_et_al: name.delimiter_precedes_et_al,
+            et_al_min: name.et_al_min,
+            et_al_use_first: name.et_al_use_first,
+            et_al_use_last: name.et_al_use_last,
+            initialize: name.initialize,
+            initialize_with: name.initialize_with.clone(),
+            form: name.form,
+            name_as_sort_order: name.name_as_sort_order,
+            sort_separator: name.sort_separator.clone(),
+        }
+    }
 }
 
 /// Sort specification.
@@ -369,18 +456,36 @@ pub struct Name {
     pub delimiter: Option<String>,
     /// Delimiter before last name.
     pub delimiter_precedes_last: Option<DelimiterPrecedesLast>,
+    /// Delimiter before et-al.
+    pub delimiter_precedes_et_al: Option<DelimiterPrecedesLast>,
     /// Et-al threshold.
     pub et_al_min: Option<u32>,
     /// Et-al use first.
     pub et_al_use_first: Option<u32>,
+    /// Et-al use last (show last author after ellipsis).
+    pub et_al_use_last: Option<bool>,
+    /// Whether to initialize given names. Defaults to true.
+    /// When false, given names are not broken into initials even if initialize-with is set.
+    pub initialize: Option<bool>,
     /// Initialize with.
     pub initialize_with: Option<String>,
-    /// Name form (long, short).
-    pub form: NameForm,
+    /// Name form (long, short). None means inherit from parent level.
+    pub form: Option<NameForm>,
+    /// Name-as-sort-order (first, all).
+    pub name_as_sort_order: Option<NameAsSortOrder>,
     /// Sort separator.
     pub sort_separator: Option<String>,
     /// Source location.
     pub source_info: Option<SourceInfo>,
+}
+
+/// Name-as-sort-order option.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameAsSortOrder {
+    /// Only the first name is inverted (Family, Given).
+    First,
+    /// All names are inverted.
+    All,
 }
 
 /// Name "and" option.

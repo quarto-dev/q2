@@ -12,7 +12,8 @@ use crate::reference::Reference;
 use crate::types::{Citation, Processor};
 use crate::Result;
 use quarto_csl::{
-    Element, ElementType, Formatting, GroupElement, Layout, NamesElement, TextElement, TextSource,
+    Element, ElementType, Formatting, GroupElement, InheritableNameOptions, Layout, NamesElement,
+    TextElement, TextSource,
 };
 
 /// Evaluation context for processing a single reference.
@@ -21,13 +22,20 @@ struct EvalContext<'a> {
     processor: &'a mut Processor,
     /// The reference being processed.
     reference: &'a Reference,
+    /// Inherited name options from citation/bibliography level.
+    inherited_name_options: &'a InheritableNameOptions,
 }
 
 impl<'a> EvalContext<'a> {
-    fn new(processor: &'a mut Processor, reference: &'a Reference) -> Self {
+    fn new(
+        processor: &'a mut Processor,
+        reference: &'a Reference,
+        inherited_name_options: &'a InheritableNameOptions,
+    ) -> Self {
         Self {
             processor,
             reference,
+            inherited_name_options,
         }
     }
 
@@ -53,11 +61,35 @@ impl<'a> EvalContext<'a> {
 pub fn evaluate_citation(processor: &mut Processor, citation: &Citation) -> Result<String> {
     // Clone layout to avoid borrow conflicts
     let layout = processor.style.citation.clone();
+    let style_name_options = processor.style.name_options.clone();
     let delimiter = layout.delimiter.clone().unwrap_or_else(|| "; ".to_string());
+    // Merge citation-level options with style-level options (citation takes precedence)
+    let name_options = layout.name_options.merge(&style_name_options);
+
+    // Assign initial citation numbers for each item (based on citation order)
+    for item in &citation.items {
+        processor.get_initial_citation_number(&item.id);
+    }
+
+    // Sort citation items if sort keys are defined
+    let sorted_items: Vec<_> = if let Some(ref sort) = layout.sort {
+        let mut items_with_keys: Vec<_> = citation
+            .items
+            .iter()
+            .map(|item| {
+                let keys = processor.compute_sort_keys(&item.id, &sort.keys);
+                (item, keys)
+            })
+            .collect();
+        items_with_keys.sort_by(|a, b| crate::types::compare_sort_keys(&a.1, &b.1));
+        items_with_keys.into_iter().map(|(item, _)| item).collect()
+    } else {
+        citation.items.iter().collect()
+    };
 
     let mut item_outputs = Vec::new();
 
-    for item in &citation.items {
+    for item in sorted_items {
         let reference = processor
             .get_reference(&item.id)
             .ok_or_else(|| crate::Error::ReferenceNotFound {
@@ -66,7 +98,7 @@ pub fn evaluate_citation(processor: &mut Processor, citation: &Citation) -> Resu
             })?
             .clone();
 
-        let mut ctx = EvalContext::new(processor, &reference);
+        let mut ctx = EvalContext::new(processor, &reference, &name_options);
         let output = evaluate_layout(&mut ctx, &layout)?;
 
         // Apply prefix/suffix from citation item
@@ -107,14 +139,48 @@ pub fn evaluate_bibliography_entry(
         .bibliography
         .clone()
         .expect("bibliography layout required");
+    let style_name_options = processor.style.name_options.clone();
 
-    let mut ctx = EvalContext::new(processor, reference);
+    // Merge bibliography-level options with style-level options (bibliography takes precedence)
+    let name_options = layout.name_options.merge(&style_name_options);
+    let mut ctx = EvalContext::new(processor, reference, &name_options);
     let output = evaluate_layout(&mut ctx, &layout)?;
 
     // Apply layout-level formatting
     let final_output = Output::formatted(layout.formatting.clone(), vec![output]);
 
     Ok(final_output.render())
+}
+
+/// Evaluate a macro for sorting purposes.
+///
+/// This evaluates the macro's elements and returns the plain text result
+/// (stripped of formatting) for use as a sort key.
+pub fn evaluate_macro_for_sort(
+    processor: &Processor,
+    reference: &Reference,
+    elements: &[Element],
+) -> Result<String> {
+    // Create a temporary mutable processor for evaluation
+    // This is a bit awkward but necessary due to the EvalContext design
+    let mut temp_processor = Processor::new(processor.style.clone());
+    temp_processor.add_reference(reference.clone());
+    // Copy citation numbers so macros that use citation-number work correctly
+    temp_processor.copy_initial_citation_numbers(processor);
+
+    let style_name_options = temp_processor.style.name_options.clone();
+    let layout_name_options = temp_processor
+        .style
+        .bibliography
+        .as_ref()
+        .map(|b| b.name_options.clone())
+        .unwrap_or_default();
+    let name_options = layout_name_options.merge(&style_name_options);
+
+    let mut ctx = EvalContext::new(&mut temp_processor, reference, &name_options);
+    let output = evaluate_elements(&mut ctx, elements, "")?;
+
+    Ok(output.render())
 }
 
 /// Evaluate a layout (citation or bibliography).
@@ -171,7 +237,14 @@ fn evaluate_text(
 ) -> Result<Output> {
     let output = match &text_el.source {
         TextSource::Variable { name, .. } => {
-            if let Some(value) = ctx.reference.get_variable(name) {
+            // Special handling for citation-number
+            if name == "citation-number" {
+                if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
+                    Output::literal(num.to_string())
+                } else {
+                    Output::Null
+                }
+            } else if let Some(value) = ctx.reference.get_variable(name) {
                 // Tag title for potential hyperlinking
                 if name == "title" {
                     Output::tagged(Tag::Title, Output::literal(value))
@@ -247,83 +320,196 @@ fn format_names(
     names: &[crate::reference::Name],
     names_el: &NamesElement,
 ) -> String {
-    let name_format = names_el.name.as_ref();
+    use quarto_csl::{DelimiterPrecedesLast, NameAsSortOrder};
 
-    // Get formatting options
-    let delimiter = name_format
-        .and_then(|n| n.delimiter.clone())
+    // Merge name element options with inherited options (name takes precedence)
+    let effective_options = if let Some(name) = names_el.name.as_ref() {
+        InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
+    } else {
+        ctx.inherited_name_options.clone()
+    };
+
+    // Get formatting options from merged effective options
+    let delimiter = effective_options
+        .delimiter
+        .clone()
         .unwrap_or_else(|| ", ".to_string());
 
-    let and_word = name_format.and_then(|n| n.and.as_ref()).map(|a| {
-        match a {
-            quarto_csl::NameAnd::Text => ctx.get_term("and", quarto_csl::TermForm::Long, false)
-                .unwrap_or_else(|| "and".to_string()),
-            quarto_csl::NameAnd::Symbol => "&".to_string(),
-        }
+    let and_word = effective_options.and.as_ref().map(|a| match a {
+        quarto_csl::NameAnd::Text => ctx
+            .get_term("and", quarto_csl::TermForm::Long, false)
+            .unwrap_or_else(|| "and".to_string()),
+        quarto_csl::NameAnd::Symbol => "&".to_string(),
     });
 
-    // et-al handling
-    let et_al_min = name_format.and_then(|n| n.et_al_min).unwrap_or(u32::MAX);
-    let et_al_use_first = name_format.and_then(|n| n.et_al_use_first).unwrap_or(1);
+    let delimiter_precedes_last = effective_options
+        .delimiter_precedes_last
+        .unwrap_or(DelimiterPrecedesLast::Contextual);
 
-    let use_et_al = names.len() as u32 >= et_al_min;
+    let delimiter_precedes_et_al = effective_options
+        .delimiter_precedes_et_al
+        .unwrap_or(DelimiterPrecedesLast::Contextual);
+
+    let name_as_sort_order = effective_options.name_as_sort_order;
+
+    // et-al handling
+    // CSL spec: truncation only happens if BOTH et-al-min AND et-al-use-first are specified
+    let et_al_min = effective_options.et_al_min;
+    let et_al_use_first = effective_options.et_al_use_first;
+    let et_al_use_last = effective_options.et_al_use_last.unwrap_or(false);
+
+    let use_et_al = match (et_al_min, et_al_use_first) {
+        (Some(min), Some(_)) => names.len() as u32 >= min,
+        _ => false,
+    };
     let names_to_show = if use_et_al {
-        et_al_use_first as usize
+        et_al_use_first.unwrap_or(1) as usize
     } else {
         names.len()
     };
 
-    // Format individual names
-    let formatted_names: Vec<String> = names
-        .iter()
-        .take(names_to_show)
-        .map(|n| format_single_name(n, name_format))
-        .collect();
+    // Format individual names, tracking which ones are actually inverted
+    // Literal names are never inverted even with name-as-sort-order="all"
+    let mut formatted_names: Vec<String> = Vec::new();
+    let mut is_inverted: Vec<bool> = Vec::new();
+
+    for (i, n) in names.iter().take(names_to_show).enumerate() {
+        // Literal names are never inverted
+        let is_literal = n.literal.is_some();
+        let inverted = if is_literal {
+            false
+        } else {
+            match name_as_sort_order {
+                Some(NameAsSortOrder::All) => true,
+                Some(NameAsSortOrder::First) => i == 0,
+                None => false,
+            }
+        };
+        formatted_names.push(format_single_name(n, &effective_options, inverted));
+        is_inverted.push(inverted);
+    }
+
+    // Helper to check if we should include delimiter before last/et-al
+    // For AfterInvertedName, we need to check if the second-to-last name was actually inverted
+    let should_include_delimiter = |rule: DelimiterPrecedesLast, count: usize| -> bool {
+        match rule {
+            DelimiterPrecedesLast::Always => true,
+            DelimiterPrecedesLast::Never => false,
+            DelimiterPrecedesLast::Contextual => count >= 3, // Only with 3+ names
+            DelimiterPrecedesLast::AfterInvertedName => {
+                // Include only if the second-to-last name was actually inverted
+                // (not a literal name)
+                if count >= 2 && is_inverted.len() >= count - 1 {
+                    is_inverted[count - 2]
+                } else {
+                    false
+                }
+            }
+        }
+    };
+
+    // When using et-al-use-last, don't use "and" connector - the list is truncated
+    let use_and_connector = !use_et_al || !et_al_use_last || names.len() <= names_to_show;
 
     // Join names
-    let mut result = if formatted_names.len() == 1 {
+    let mut result = if formatted_names.is_empty() {
+        String::new()
+    } else if formatted_names.len() == 1 {
         formatted_names[0].clone()
     } else if formatted_names.len() == 2 {
-        if let Some(ref and) = and_word {
-            format!("{} {} {}", formatted_names[0], and, formatted_names[1])
+        if use_and_connector {
+            if let Some(ref and) = and_word {
+                let use_delim = should_include_delimiter(delimiter_precedes_last, 2);
+                if use_delim {
+                    format!(
+                        "{}{}{}{}",
+                        formatted_names[0],
+                        delimiter.trim_end(),
+                        if and.is_empty() { "" } else { " " },
+                        format!("{} {}", and, formatted_names[1])
+                    )
+                } else {
+                    format!("{} {} {}", formatted_names[0], and, formatted_names[1])
+                }
+            } else {
+                formatted_names.join(&delimiter)
+            }
         } else {
             formatted_names.join(&delimiter)
         }
     } else {
         let last_idx = formatted_names.len() - 1;
         let init = formatted_names[..last_idx].join(&delimiter);
-        if let Some(ref and) = and_word {
-            format!("{}{} {} {}", init, delimiter, and, formatted_names[last_idx])
+        if use_and_connector {
+            if let Some(ref and) = and_word {
+                let use_delim = should_include_delimiter(delimiter_precedes_last, formatted_names.len());
+                if use_delim {
+                    format!(
+                        "{}{} {} {}",
+                        init, delimiter.trim_end(), and, formatted_names[last_idx]
+                    )
+                } else {
+                    format!("{} {} {}", init, and, formatted_names[last_idx])
+                }
+            } else {
+                format!("{}{}{}", init, delimiter, formatted_names[last_idx])
+            }
         } else {
             format!("{}{}{}", init, delimiter, formatted_names[last_idx])
         }
     };
 
-    // Add et al. if needed
+    // Handle et-al
     if use_et_al {
-        let et_al = ctx
-            .get_term("et-al", quarto_csl::TermForm::Long, false)
-            .unwrap_or_else(|| "et al.".to_string());
-        result = format!("{} {}", result, et_al);
+        if et_al_use_last && names.len() > names_to_show {
+            // Show ellipsis and last name: "A, B, … Z"
+            let last_name = format_single_name(
+                &names[names.len() - 1],
+                &effective_options,
+                name_as_sort_order == Some(NameAsSortOrder::All),
+            );
+            let use_delim = should_include_delimiter(delimiter_precedes_et_al, formatted_names.len() + 1);
+            if use_delim {
+                result = format!("{}{} … {}", result, delimiter.trim_end(), last_name);
+            } else {
+                result = format!("{} … {}", result, last_name);
+            }
+        } else {
+            // Regular et al.
+            let et_al = ctx
+                .get_term("et-al", quarto_csl::TermForm::Long, false)
+                .unwrap_or_else(|| "et al.".to_string());
+            let use_delim = should_include_delimiter(delimiter_precedes_et_al, formatted_names.len() + 1);
+            if use_delim {
+                result = format!("{}{} {}", result, delimiter.trim_end(), et_al);
+            } else {
+                result = format!("{} {}", result, et_al);
+            }
+        }
     }
 
     result
 }
 
 /// Format a single name.
+///
+/// If `inverted` is true, format as "Family, Given" (sort order).
+/// Otherwise, format as "Given Family" (display order).
 fn format_single_name(
     name: &crate::reference::Name,
-    name_format: Option<&quarto_csl::Name>,
+    options: &quarto_csl::InheritableNameOptions,
+    inverted: bool,
 ) -> String {
     // Handle literal names
     if let Some(ref lit) = name.literal {
         return lit.clone();
     }
 
-    let form = name_format.map(|n| n.form).unwrap_or_default();
-    let initialize_with = name_format.and_then(|n| n.initialize_with.clone());
-    let sort_separator = name_format
-        .and_then(|n| n.sort_separator.clone())
+    let form = options.form.unwrap_or_default();
+    let initialize_with = options.initialize_with.clone();
+    let sort_separator = options
+        .sort_separator
+        .clone()
         .unwrap_or_else(|| ", ".to_string());
 
     match form {
@@ -339,10 +525,7 @@ fn format_single_name(
             parts.join(" ")
         }
         quarto_csl::NameForm::Long | quarto_csl::NameForm::Count => {
-            // Long form: family, given
-            let mut parts = Vec::new();
-
-            // Non-dropping particle + family
+            // Build family part (non-dropping particle + family name)
             let family_part = {
                 let mut fp = Vec::new();
                 if let Some(ref ndp) = name.non_dropping_particle {
@@ -354,48 +537,163 @@ fn format_single_name(
                 fp.join(" ")
             };
 
-            if !family_part.is_empty() {
-                parts.push(family_part);
-            }
-
-            // Suffix
-            if let Some(ref suffix) = name.suffix {
-                if !parts.is_empty() {
-                    parts.push(suffix.clone());
-                }
-            }
-
-            // Given name (possibly initialized)
-            if let Some(ref given) = name.given {
-                let given_formatted = if let Some(ref init) = initialize_with {
-                    initialize_name(given, init)
+            // Build given part (possibly initialized)
+            // CSL rule: if a name has only a given name (no family name), don't initialize it
+            // because that given name IS their name (e.g., "Banksy", "Cher")
+            let should_initialize = options.initialize.unwrap_or(true);
+            let given_part = name.given.as_ref().map(|given| {
+                if name.family.is_none() {
+                    // No family name - given name is their full name, don't initialize
+                    given.clone()
+                } else if let Some(ref init) = initialize_with {
+                    if should_initialize {
+                        initialize_name(given, init)
+                    } else {
+                        // initialize="false": normalize with initialize-with pattern but don't break into initials
+                        normalize_given_name(given, init)
+                    }
                 } else {
                     given.clone()
-                };
-                parts.push(given_formatted);
-            }
+                }
+            });
 
-            if parts.len() <= 1 {
-                parts.join("")
+            // Build suffix part
+            let suffix_part = name.suffix.clone();
+
+            if inverted {
+                // Sort order: "Family, Given" or "Family, Given, Suffix"
+                let mut result = family_part;
+                if let Some(given) = given_part {
+                    if !result.is_empty() && !given.is_empty() {
+                        result = format!("{}{}{}", result, sort_separator, given);
+                    } else if !given.is_empty() {
+                        result = given;
+                    }
+                }
+                if let Some(suffix) = suffix_part {
+                    if !result.is_empty() {
+                        result = format!("{}, {}", result, suffix);
+                    }
+                }
+                result
             } else {
-                // family, given format
-                let family_suffix = parts[..parts.len() - 1].join(", ");
-                format!("{}{}{}", family_suffix, sort_separator, parts.last().unwrap())
+                // Display order: "Given Family" or "Given Family, Suffix"
+                let mut parts = Vec::new();
+                if let Some(given) = given_part {
+                    if !given.is_empty() {
+                        parts.push(given);
+                    }
+                }
+                if !family_part.is_empty() {
+                    parts.push(family_part);
+                }
+                let mut result = parts.join(" ");
+                if let Some(suffix) = suffix_part {
+                    if !result.is_empty() {
+                        result = format!("{}, {}", result, suffix);
+                    }
+                }
+                result
             }
         }
     }
 }
 
+/// Normalize a given name without breaking into initials (for initialize="false").
+/// Replaces periods with the initialize-with separator while preserving the original characters.
+/// E.g., "M.E" with " " -> "M E", "Ph.M.E." with " " -> "Ph M E"
+/// E.g., "M.E" with "" -> "ME", "Ph.M.E." with "" -> "PhME"
+/// E.g., "John M.E." with "" -> "John ME" (space before initials preserved)
+fn normalize_given_name(given: &str, initialize_with: &str) -> String {
+    // When initialize-with is empty:
+    // - Remove periods
+    // - Remove spaces between initial-like parts (short segments)
+    // - Keep spaces between full words and initials
+    // When initialize-with is a space:
+    // - Replace periods with spaces and normalize
+
+    if initialize_with.is_empty() {
+        // Special handling for empty initialize-with
+        // Split into parts, process each, then join intelligently
+        let parts: Vec<&str> = given.split_whitespace().collect();
+        let processed: Vec<String> = parts
+            .iter()
+            .map(|p| p.replace('.', ""))
+            .filter(|p| !p.is_empty())
+            .collect();
+
+        // Join parts: use empty string between short parts (<=2 chars), space otherwise
+        if processed.is_empty() {
+            return String::new();
+        }
+
+        let mut result = processed[0].clone();
+        for i in 1..processed.len() {
+            let prev = &processed[i - 1];
+            let curr = &processed[i];
+            // Use space if either part is longer than 2 chars (likely a full word)
+            if prev.len() > 2 || curr.len() > 2 {
+                result.push(' ');
+            }
+            result.push_str(curr);
+        }
+        result
+    } else {
+        // Non-empty initialize-with: replace periods with it and normalize spaces
+        let mut result = String::new();
+        let chars: Vec<char> = given.chars().collect();
+        let len = chars.len();
+
+        for (i, &c) in chars.iter().enumerate() {
+            if c == '.' {
+                // Check if this is a trailing period (at the end)
+                if i == len - 1 {
+                    // Skip trailing period
+                    continue;
+                }
+                // Replace period with initialize-with
+                result.push_str(initialize_with);
+            } else {
+                result.push(c);
+            }
+        }
+
+        // Normalize whitespace: collapse multiple spaces into one
+        result
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 /// Initialize a given name (e.g., "John William" -> "J. W.").
 fn initialize_name(given: &str, initialize_with: &str) -> String {
+    // Initialize each whitespace-separated part, preserving hyphens
+    // "John-Lee William" with ". " -> "J.-L. W."
+    // "John Quiggly" with "" -> "JQ"
+    let trimmed = initialize_with.trim_end();
+
     given
         .split_whitespace()
-        .filter_map(|part| part.chars().next())
-        .map(|c| format!("{}{}", c.to_uppercase(), initialize_with))
+        .map(|word| {
+            // Check if this word contains a hyphen
+            if word.contains('-') {
+                // Initialize each hyphenated part: "John-Lee" -> "J.-L."
+                word.split('-')
+                    .filter_map(|part| part.chars().next())
+                    .map(|c| format!("{}{}", c.to_uppercase(), trimmed))
+                    .collect::<Vec<_>>()
+                    .join("-")
+            } else {
+                // Simple word: "John" -> "J."
+                word.chars()
+                    .next()
+                    .map(|c| format!("{}{}", c.to_uppercase(), trimmed))
+                    .unwrap_or_default()
+            }
+        })
         .collect::<Vec<_>>()
-        .join("")
-        .trim()
-        .to_string()
+        .join(if initialize_with.ends_with(' ') { " " } else { "" })
 }
 
 /// Evaluate a group element.
@@ -428,15 +726,15 @@ fn evaluate_choose(
             quarto_csl::MatchType::All => branch
                 .conditions
                 .iter()
-                .all(|c| evaluate_condition(ctx, c)),
+                .all(|c| evaluate_condition(ctx, c, branch.match_type)),
             quarto_csl::MatchType::Any => branch
                 .conditions
                 .iter()
-                .any(|c| evaluate_condition(ctx, c)),
+                .any(|c| evaluate_condition(ctx, c, branch.match_type)),
             quarto_csl::MatchType::None => branch
                 .conditions
                 .iter()
-                .all(|c| !evaluate_condition(ctx, c)),
+                .all(|c| !evaluate_condition(ctx, c, branch.match_type)),
         };
 
         if matches {
@@ -448,28 +746,75 @@ fn evaluate_choose(
 }
 
 /// Evaluate a condition.
-fn evaluate_condition(ctx: &EvalContext, condition: &quarto_csl::Condition) -> bool {
+///
+/// For multi-value conditions (e.g., `variable="title edition"`), the `match_type`
+/// determines whether all or any of the values must match:
+/// - `All`: all values must satisfy the condition
+/// - `Any`: at least one value must satisfy the condition
+/// - `None`: interpreted as `Any` for the internal check (negation applied at branch level)
+fn evaluate_condition(
+    ctx: &EvalContext,
+    condition: &quarto_csl::Condition,
+    match_type: quarto_csl::MatchType,
+) -> bool {
     use quarto_csl::ConditionType;
 
+    // Helper to check if a variable exists (any type: standard, names, date)
+    let var_exists = |v: &str| {
+        ctx.reference.get_variable(v).is_some()
+            || ctx.reference.get_names(v).is_some()
+            || ctx.reference.get_date(v).is_some()
+    };
+
+    // Helper to check if a variable is numeric
+    let is_numeric = |v: &str| {
+        ctx.reference
+            .get_variable(v)
+            .map(|s| s.chars().all(|c| c.is_ascii_digit() || c == '-'))
+            .unwrap_or(false)
+    };
+
+    // Helper to check if a date is uncertain
+    let is_uncertain_date = |v: &str| {
+        ctx.reference
+            .get_date(v)
+            .map(|d| d.circa.unwrap_or(false))
+            .unwrap_or(false)
+    };
+
+    // For match="all", require ALL values in a multi-value condition
+    // For match="any" or match="none", require ANY value (none applies negation at branch level)
+    let use_all = matches!(match_type, quarto_csl::MatchType::All);
+
     match &condition.condition_type {
-        ConditionType::Type(types) => types.iter().any(|t| t == &ctx.reference.ref_type),
-        ConditionType::Variable(vars) => vars.iter().any(|v| {
-            ctx.reference.get_variable(v).is_some()
-                || ctx.reference.get_names(v).is_some()
-                || ctx.reference.get_date(v).is_some()
-        }),
-        ConditionType::IsNumeric(vars) => vars.iter().any(|v| {
-            ctx.reference
-                .get_variable(v)
-                .map(|s| s.chars().all(|c| c.is_ascii_digit() || c == '-'))
-                .unwrap_or(false)
-        }),
-        ConditionType::IsUncertainDate(vars) => vars.iter().any(|v| {
-            ctx.reference
-                .get_date(v)
-                .map(|d| d.circa.unwrap_or(false))
-                .unwrap_or(false)
-        }),
+        ConditionType::Type(types) => {
+            if use_all {
+                types.iter().all(|t| t == &ctx.reference.ref_type)
+            } else {
+                types.iter().any(|t| t == &ctx.reference.ref_type)
+            }
+        }
+        ConditionType::Variable(vars) => {
+            if use_all {
+                vars.iter().all(|v| var_exists(v))
+            } else {
+                vars.iter().any(|v| var_exists(v))
+            }
+        }
+        ConditionType::IsNumeric(vars) => {
+            if use_all {
+                vars.iter().all(|v| is_numeric(v))
+            } else {
+                vars.iter().any(|v| is_numeric(v))
+            }
+        }
+        ConditionType::IsUncertainDate(vars) => {
+            if use_all {
+                vars.iter().all(|v| is_uncertain_date(v))
+            } else {
+                vars.iter().any(|v| is_uncertain_date(v))
+            }
+        }
         ConditionType::Locator(_) => false, // TODO: Implement locator checking
         ConditionType::Position(_) => false, // TODO: Implement position checking
         ConditionType::Disambiguate(_) => false, // TODO: Implement disambiguate checking
@@ -482,6 +827,16 @@ fn evaluate_number(
     num_el: &quarto_csl::NumberElement,
     _formatting: &Formatting,
 ) -> Result<Output> {
+    // Special handling for citation-number
+    if num_el.variable == "citation-number" {
+        if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
+            // TODO: Apply number form (ordinal, roman, etc.)
+            return Ok(Output::literal(num.to_string()));
+        } else {
+            return Ok(Output::Null);
+        }
+    }
+
     if let Some(value) = ctx.reference.get_variable(&num_el.variable) {
         // TODO: Apply number form (ordinal, roman, etc.)
         Ok(Output::literal(value))
@@ -799,9 +1154,27 @@ mod tests {
             ..Default::default()
         };
 
-        let mut format = quarto_csl::Name::default();
-        format.form = quarto_csl::NameForm::Short;
+        let options = quarto_csl::InheritableNameOptions {
+            form: Some(quarto_csl::NameForm::Short),
+            ..Default::default()
+        };
 
-        assert_eq!(format_single_name(&name, Some(&format)), "Smith");
+        assert_eq!(format_single_name(&name, &options, false), "Smith");
+    }
+
+    #[test]
+    fn test_format_single_name_inverted() {
+        let name = crate::reference::Name {
+            family: Some("Smith".to_string()),
+            given: Some("John".to_string()),
+            ..Default::default()
+        };
+
+        let options = quarto_csl::InheritableNameOptions::default();
+
+        // Normal order: Given Family
+        assert_eq!(format_single_name(&name, &options, false), "John Smith");
+        // Inverted order: Family, Given
+        assert_eq!(format_single_name(&name, &options, true), "Smith, John");
     }
 }

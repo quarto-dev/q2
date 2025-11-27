@@ -3,13 +3,15 @@
 //! This module defines types for parsing and representing bibliographic
 //! references in CSL-JSON format.
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 /// A bibliographic reference in CSL-JSON format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reference {
     /// Unique identifier for this reference.
+    /// CSL-JSON allows both string and integer IDs, so we accept both.
+    #[serde(deserialize_with = "deserialize_string_or_int")]
     pub id: String,
 
     /// Reference type (e.g., "book", "article-journal", "chapter").
@@ -124,6 +126,21 @@ impl StringOrNumber {
             StringOrNumber::String(s) => s.parse().ok(),
             StringOrNumber::Number(n) => Some(*n),
         }
+    }
+}
+
+/// Deserialize a value that can be either a string or an integer into a String.
+/// CSL-JSON allows reference IDs to be either strings or integers.
+fn deserialize_string_or_int<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(s) => Ok(s),
+        serde_json::Value::Number(n) => Ok(n.to_string()),
+        _ => Err(Error::custom("expected string or number for id")),
     }
 }
 

@@ -279,6 +279,9 @@ impl CslParser {
         // Parse style options from attributes
         let options = self.parse_style_options(element);
 
+        // Parse style-level name options from attributes
+        let name_options = self.parse_inheritable_name_options(element);
+
         // Parse child elements
         let mut info = None;
         let mut locales = Vec::new();
@@ -336,6 +339,7 @@ impl CslParser {
             macros,
             citation,
             bibliography,
+            name_options,
             source_info: element.source_info.clone(),
         })
     }
@@ -554,6 +558,9 @@ impl CslParser {
         let formatting = self.parse_formatting(element);
         let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
 
+        // Parse inheritable name options from citation/bibliography element
+        let name_options = self.parse_inheritable_name_options(element);
+
         // Find layout child element
         let layout_el = element.get_children("layout");
         let layout_element = if layout_el.is_empty() {
@@ -587,9 +594,90 @@ impl CslParser {
             formatting: layout_formatting,
             delimiter: layout_delimiter,
             sort,
+            name_options,
             elements,
             source_info: element.source_info.clone(),
         })
+    }
+
+    /// Parse inheritable name options from an element (style, citation, bibliography).
+    fn parse_inheritable_name_options(&self, element: &XmlElement) -> InheritableNameOptions {
+        let and = self.get_attr(element, "and").map(|a| match a.value.as_str() {
+            "symbol" => NameAnd::Symbol,
+            _ => NameAnd::Text,
+        });
+
+        let delimiter = self
+            .get_attr(element, "name-delimiter")
+            .map(|a| a.value.clone());
+
+        let delimiter_precedes_last = self
+            .get_attr(element, "delimiter-precedes-last")
+            .map(|a| match a.value.as_str() {
+                "always" => DelimiterPrecedesLast::Always,
+                "never" => DelimiterPrecedesLast::Never,
+                "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
+                _ => DelimiterPrecedesLast::Contextual,
+            });
+
+        let delimiter_precedes_et_al = self
+            .get_attr(element, "delimiter-precedes-et-al")
+            .map(|a| match a.value.as_str() {
+                "always" => DelimiterPrecedesLast::Always,
+                "never" => DelimiterPrecedesLast::Never,
+                "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
+                _ => DelimiterPrecedesLast::Contextual,
+            });
+
+        let et_al_min = self
+            .get_attr(element, "et-al-min")
+            .and_then(|a| a.value.parse().ok());
+        let et_al_use_first = self
+            .get_attr(element, "et-al-use-first")
+            .and_then(|a| a.value.parse().ok());
+        let et_al_use_last = self
+            .get_attr(element, "et-al-use-last")
+            .map(|a| a.value == "true");
+
+        let initialize = self
+            .get_attr(element, "initialize")
+            .map(|a| a.value != "false");
+
+        let initialize_with = self
+            .get_attr(element, "initialize-with")
+            .map(|a| a.value.clone());
+
+        let form = self.get_attr(element, "name-form").map(|a| match a.value.as_str() {
+            "short" => NameForm::Short,
+            "count" => NameForm::Count,
+            _ => NameForm::Long,
+        });
+
+        let name_as_sort_order = self
+            .get_attr(element, "name-as-sort-order")
+            .map(|a| match a.value.as_str() {
+                "all" => NameAsSortOrder::All,
+                _ => NameAsSortOrder::First,
+            });
+
+        let sort_separator = self
+            .get_attr(element, "sort-separator")
+            .map(|a| a.value.clone());
+
+        InheritableNameOptions {
+            and,
+            delimiter,
+            delimiter_precedes_last,
+            delimiter_precedes_et_al,
+            et_al_min,
+            et_al_use_first,
+            et_al_use_last,
+            initialize,
+            initialize_with,
+            form,
+            name_as_sort_order,
+            sort_separator,
+        }
     }
 
     fn parse_sort(&self, element: &XmlElement) -> Result<Sort> {
@@ -779,25 +867,45 @@ impl CslParser {
                     _ => DelimiterPrecedesLast::Contextual,
                 });
 
+        let delimiter_precedes_et_al =
+            self.get_attr(element, "delimiter-precedes-et-al")
+                .map(|a| match a.value.as_str() {
+                    "always" => DelimiterPrecedesLast::Always,
+                    "never" => DelimiterPrecedesLast::Never,
+                    "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
+                    _ => DelimiterPrecedesLast::Contextual,
+                });
+
         let et_al_min = self
             .get_attr(element, "et-al-min")
             .and_then(|a| a.value.parse().ok());
         let et_al_use_first = self
             .get_attr(element, "et-al-use-first")
             .and_then(|a| a.value.parse().ok());
+        let et_al_use_last = self
+            .get_attr(element, "et-al-use-last")
+            .map(|a| a.value == "true");
+
+        let initialize = self
+            .get_attr(element, "initialize")
+            .map(|a| a.value != "false");
 
         let initialize_with = self
             .get_attr(element, "initialize-with")
             .map(|a| a.value.clone());
 
-        let form = self
-            .get_attr(element, "form")
-            .map(|a| match a.value.as_str() {
-                "short" => NameForm::Short,
-                "count" => NameForm::Count,
-                _ => NameForm::Long,
-            })
-            .unwrap_or_default();
+        let form = self.get_attr(element, "form").map(|a| match a.value.as_str() {
+            "short" => NameForm::Short,
+            "count" => NameForm::Count,
+            _ => NameForm::Long,
+        });
+
+        let name_as_sort_order =
+            self.get_attr(element, "name-as-sort-order")
+                .map(|a| match a.value.as_str() {
+                    "all" => NameAsSortOrder::All,
+                    _ => NameAsSortOrder::First,
+                });
 
         let sort_separator = self
             .get_attr(element, "sort-separator")
@@ -807,10 +915,14 @@ impl CslParser {
             and,
             delimiter,
             delimiter_precedes_last,
+            delimiter_precedes_et_al,
             et_al_min,
             et_al_use_first,
+            et_al_use_last,
+            initialize,
             initialize_with,
             form,
+            name_as_sort_order,
             sort_separator,
             source_info: Some(element.source_info.clone()),
         })

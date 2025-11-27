@@ -898,6 +898,7 @@ name = "quarto-citeproc"
 version = "0.1.0"
 dependencies = [
  "glob",
+ "hashlink",
  "insta",
  "quarto-csl",
  "quarto-error-reporting",

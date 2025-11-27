@@ -178,15 +178,20 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
             outputs.join("\n")
         }
         "bibliography" => {
-            let mut outputs = Vec::new();
-            for reference in &references {
-                if let Some(output) = processor
-                    .format_bibliography_entry(&reference.id)
-                    .map_err(|e| format!("Bibliography error: {:?}", e))?
-                {
-                    outputs.push(format_bib_entry(&output));
-                }
+            // Process citations first to assign initial citation numbers
+            // This is needed for citation-number sorting to work correctly
+            for citation in &citations {
+                let _ = processor.process_citation(citation);
             }
+
+            // Use generate_bibliography to get entries in sorted order
+            let entries = processor
+                .generate_bibliography()
+                .map_err(|e| format!("Bibliography error: {:?}", e))?;
+            let outputs: Vec<String> = entries
+                .into_iter()
+                .map(|(_, formatted)| format_bib_entry(&formatted))
+                .collect();
             format_bibliography(&outputs)
         }
         other => return Err(format!("Unknown mode: {}", other)),
@@ -221,7 +226,12 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
             let items: Vec<CitationItem> = cite_group
                 .into_iter()
                 .filter_map(|v| {
-                    let id = v.get("id")?.as_str()?.to_string();
+                    // Handle both string and integer IDs
+                    let id = match v.get("id")? {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => return None,
+                    };
                     Some(CitationItem {
                         id,
                         locator: v
@@ -267,7 +277,12 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
             let items: Vec<CitationItem> = cite_group
                 .into_iter()
                 .filter_map(|v| {
-                    let id = v.get("id")?.as_str()?.to_string();
+                    // Handle both string and integer IDs
+                    let id = match v.get("id")? {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => return None,
+                    };
                     Some(CitationItem {
                         id,
                         locator: v
