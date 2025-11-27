@@ -1,0 +1,91 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Aloysius Asthma and Bronchitis (1980); Artemis Asthma and Bronchitis (1995)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-givenname="true"
+         givenname-disambiguation-rule="primary-name">
+    <layout delimiter="; ">
+      <names delimiter=", " variable="author">
+        <name and="text" delimiter-precedes-last="never" form="short" />
+      </names>
+      <group prefix=" (" suffix=")">
+        <date variable="issued">
+          <date-part name="year" />
+        </date>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Aloysius"
+            },
+            {
+                "family": "Bronchitis",
+                "given": "Bosworth"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1980"
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Artemis"
+            },
+            {
+                "family": "Bronchitis",
+                "given": "Beauregarde"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1995"
+                ]
+            ]
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

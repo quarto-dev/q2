@@ -123,7 +123,7 @@ Quarto supports TypeScript-style error codes for better searchability and docume
 - **6**: Extensions and Plugins
 - **7**: CLI and Tools
 - **8**: Publishing and Deployment
-- **9**: XML parsing
+- **9**: XML parsing and processing
 - **10**: Templates
 - **11+**: Reserved for future use
 

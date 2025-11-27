@@ -1,0 +1,100 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Smith, Brown, et al. (1980); Smith, Beefheart, et al. (1980)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         et-al-min="3"
+         et-al-use-first="1"
+         disambiguate-add-names="true">
+    <layout delimiter="; ">
+      <group delimiter=" ">
+        <names delimiter=", " variable="author">
+          <name and="symbol" delimiter-precedes-last="never" form="short"/>
+        </names>
+        <date variable="issued" prefix="(" suffix=")">
+          <date-part name="year"/>
+        </date>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Smith",
+                "given": "John"
+            },
+            {
+                "family": "Brown",
+                "given": "John"
+            },
+            {
+                "family": "Jones",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    1980
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Smith",
+                "given": "John"
+            },
+            {
+                "family": "Beefheart",
+                "given": "Captain"
+            },
+            {
+                "family": "Jones",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    1980
+                ]
+            ]
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

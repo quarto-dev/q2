@@ -533,6 +533,76 @@
     "docs_url": "https://quarto.org/docs/errors/Q-9-6",
     "since_version": "99.9.9"
   },
+  "Q-9-7": {
+    "subsystem": "xml",
+    "title": "Missing Required Attribute",
+    "message_template": "A required attribute is missing from a CSL element.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-7",
+    "since_version": "99.9.9"
+  },
+  "Q-9-8": {
+    "subsystem": "xml",
+    "title": "Invalid Attribute Value",
+    "message_template": "An attribute value in the CSL file is not valid.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-8",
+    "since_version": "99.9.9"
+  },
+  "Q-9-9": {
+    "subsystem": "xml",
+    "title": "Missing Required Element",
+    "message_template": "A required child element is missing from a CSL element.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-9",
+    "since_version": "99.9.9"
+  },
+  "Q-9-10": {
+    "subsystem": "xml",
+    "title": "Unexpected Element",
+    "message_template": "An element appears in an unexpected location in the CSL file.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-10",
+    "since_version": "99.9.9"
+  },
+  "Q-9-11": {
+    "subsystem": "xml",
+    "title": "Missing Text Source",
+    "message_template": "A text element must specify a source (variable, macro, term, or value).",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-11",
+    "since_version": "99.9.9"
+  },
+  "Q-9-12": {
+    "subsystem": "xml",
+    "title": "Undefined Macro",
+    "message_template": "A macro reference refers to a macro that is not defined.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-12",
+    "since_version": "99.9.9"
+  },
+  "Q-9-13": {
+    "subsystem": "xml",
+    "title": "Circular Macro Dependency",
+    "message_template": "Macro references form a circular dependency.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-13",
+    "since_version": "99.9.9"
+  },
+  "Q-9-14": {
+    "subsystem": "xml",
+    "title": "Duplicate Macro Definition",
+    "message_template": "A macro is defined more than once.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-14",
+    "since_version": "99.9.9"
+  },
+  "Q-9-15": {
+    "subsystem": "xml",
+    "title": "Invalid CSL Version",
+    "message_template": "The CSL version string is not valid.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-15",
+    "since_version": "99.9.9"
+  },
+  "Q-9-16": {
+    "subsystem": "xml",
+    "title": "Invalid Root Element",
+    "message_template": "CSL document must have <style> as the root element.",
+    "docs_url": "https://quarto.org/docs/errors/Q-9-16",
+    "since_version": "99.9.9"
+  },
 
   "Q-10-1": {
     "subsystem": "template",

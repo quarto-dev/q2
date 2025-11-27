@@ -1,0 +1,55 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+01790 (is-numeric)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0" page-range-format="chicago">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <group delimiter=" ">
+        <text variable="page"/>
+        <choose>
+          <if is-numeric="page">
+            <text value="(is-numeric)"/>
+          </if>
+          <else>
+            <text value="(non-numeric)"/>
+          </else>
+        </choose>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "page": "01790",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,52 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+Closing the Scientist–Practitioner Gap: Studies from 2016 with Significant Practical Utility
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <text variable="title" text-case="title"/>
+    </layout>
+  </citation>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "id": "ITEM-1",
+    "title": "Closing the scientist–practitioner gap: studies from 2016 with significant practical utility",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

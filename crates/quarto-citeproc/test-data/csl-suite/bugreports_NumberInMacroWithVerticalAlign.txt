@@ -1,0 +1,59 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+Formerly: <sup><i>2</i></sup>; <sup><i>3</i>–<i>5</i></sup>
+
+Revised per discussion @ https://discourse.citationstyles.org/t/formatting-attributes-and-hyphen/1518
+
+
+>>===== RESULT =====>>
+<sup><i>2</i></sup>; <sup><i>3–5</i></sup>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="edition-mac">
+    <number variable="edition" font-style="italic"/>
+  </macro>
+  <citation>
+    <layout delimiter="; ">
+      <text macro="edition-mac" vertical-align="sup"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "edition": "2",
+        "id": "ITEM-1",
+        "title": "His Anonymous Life",
+        "type": "book"
+    },
+    {
+        "edition": "3-5",
+        "id": "ITEM-2",
+        "title": "His Anonymous Life",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

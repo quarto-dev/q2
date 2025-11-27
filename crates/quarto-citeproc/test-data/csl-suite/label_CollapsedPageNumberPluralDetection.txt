@@ -1,0 +1,69 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+His Anonymous Life, page 327-30
+His Anonymous Life, pages 427–430
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1",
+            "label": "page",
+            "locator": "327\\-30"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-1",
+            "label": "page",
+            "locator": "427-30"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0"
+      page-range-format="expanded">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+     <group delimiter=", ">
+       <text variable="title"/>
+       <group delimiter=" ">
+         <label variable="locator"/>
+         <text variable="locator"/>
+       </group>
+     </group>
+    </layout>
+  </citation>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "id": "ITEM-1",
+    "title": "His Anonymous Life",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,138 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+>>[0] Title Four; Title Five
+..[1] Title Two; Title Three
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-2"
+                },
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                0
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-4"
+                },
+                {
+                    "id": "ITEM-5"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        [
+            [
+                "CITATION-2",
+                0
+            ]
+        ]
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="in-text"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <text variable="title" />
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <text variable="title" />
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "title": "Title One",
+        "id": "ITEM-1", 
+        "type": "book"
+    }, 
+    {
+        "title": "Title Two",
+        "id": "ITEM-2", 
+        "type": "book"
+    }, 
+    {
+        "title": "Title Three",
+        "id": "ITEM-3", 
+        "type": "book"
+    }, 
+    {
+        "title": "Title Four",
+        "id": "ITEM-4", 
+        "type": "book"
+    }, 
+    {
+        "title": "Title Five",
+        "id": "ITEM-5", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

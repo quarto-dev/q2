@@ -1,0 +1,78 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+The first item begins with a valid French language tag, followed by
+garbage. The second begins with a valid English tag followed by
+garbage. The third begins with garbage. The behaviour in the RESULT
+reflects the CSL 1.0.1 specification, which in the Title Case
+Conversion section reads:
+
+  "If default-locale is set to a locale code with a primary language
+  tag other than "en", items are assumed to be non-English. An item is
+  only considered to be English if the value of its language field
+  starts with the "en" primary language tag."
+
+In the style used in this test, no locale is set, so the default is
+"en". When the language tag parse fails, "en" is assumed.
+
+By agreement within CSL circles, garbage should be construed as
+"non-English content" for purposes of applying text-case rules. This
+is not happy, since without specifics we cannot know which cite format
+to apply to the item. To keep things simple in citeproc-js, we set the
+language for garbage to "tlh", for Klingon, which is about as
+non-English as you can get.
+
+>>===== RESULT =====>>
+His anonymous life; His Anonymous Life; His anonymous life
+<<===== RESULT =====<<
+        
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <text variable="title" text-case="title"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "language": "fr French language",
+        "title": "His anonymous life",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "language": "en--other stuff commenting about the lingo",
+        "title": "His anonymous life",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-3",
+        "language": "french language",
+        "title": "His anonymous life",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

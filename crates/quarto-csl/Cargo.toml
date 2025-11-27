@@ -1,0 +1,17 @@
+[package]
+name = "quarto-csl"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "CSL (Citation Style Language) parsing with source tracking for Quarto"
+
+[dependencies]
+quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-source-map = { path = "../quarto-source-map" }
+quarto-xml = { path = "../quarto-xml" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }

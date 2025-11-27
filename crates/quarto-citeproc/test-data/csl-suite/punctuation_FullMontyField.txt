@@ -1,0 +1,241 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+ENDING IN COLON
+colon: colon
+period.: colon
+semicolon; colon
+exclamation! colon
+question? colon
+comma,: colon
+
+ENDING IN PERIOD
+colon: period
+period. period
+semicolon; period
+exclamation! period
+question? period
+comma,. period
+
+ENDING IN SEMICOLON
+colon:; semicolon
+period.; semicolon
+semicolon; semicolon
+exclamation!; semicolon
+question?; semicolon
+comma,; semicolon
+
+ENDING IN EXCLAMATION
+colon! exclamation
+period.! exclamation
+semicolon! exclamation
+exclamation! exclamation
+question?! exclamation
+comma,! exclamation
+
+ENDING IN QUESTION
+colon? question
+period.? question
+semicolon? question
+exclamation!? question
+question? question
+comma,? question
+
+ENDING IN COMMA
+colon:, comma
+period., comma
+semicolon;, comma
+exclamation!, comma
+question?, comma
+comma, comma
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <group delimiter="&#x0A;">
+        <text value="ENDING IN COLON"/>
+        <group>
+          <text value="colon:"/>
+          <text value="colon" prefix=": "/>
+        </group>
+        <group>
+          <text value="period."/>
+          <text value="colon" prefix=": "/>
+        </group>
+        <group>
+          <text value="semicolon;"/>
+          <text value="colon" prefix=": "/>
+        </group>
+        <group>
+          <text value="exclamation!"/>
+          <text value="colon" prefix=": "/>
+        </group>
+        <group>
+          <text value="question?"/>
+          <text value="colon" prefix=": "/>
+        </group>
+        <group>
+          <text value="comma,"/>
+          <text value="colon" prefix=": "/>
+        </group>
+        <text value="&#x0A;ENDING IN PERIOD"/>
+        <group>
+          <text value="colon:"/>
+          <text value="period" prefix=". "/>
+        </group>
+        <group>
+          <text value="period."/>
+          <text value="period" prefix=". "/>
+        </group>
+        <group>
+          <text value="semicolon;"/>
+          <text value="period" prefix=". "/>
+        </group>
+        <group>
+          <text value="exclamation!"/>
+          <text value="period" prefix=". "/>
+        </group>
+        <group>
+          <text value="question?"/>
+          <text value="period" prefix=". "/>
+        </group>
+        <group>
+          <text value="comma,"/>
+          <text value="period" prefix=". "/>
+        </group>
+        <text value="&#x0A;ENDING IN SEMICOLON"/>
+        <group>
+          <text value="colon:"/>
+          <text value="semicolon" prefix="; "/>
+        </group>
+        <group>
+          <text value="period."/>
+          <text value="semicolon" prefix="; "/>
+        </group>
+        <group>
+          <text value="semicolon;"/>
+          <text value="semicolon" prefix="; "/>
+        </group>
+        <group>
+          <text value="exclamation!"/>
+          <text value="semicolon" prefix="; "/>
+        </group>
+        <group>
+          <text value="question?"/>
+          <text value="semicolon" prefix="; "/>
+        </group>
+        <group>
+          <text value="comma,"/>
+          <text value="semicolon" prefix="; "/>
+        </group>
+        <text value="&#x0A;ENDING IN EXCLAMATION"/>
+        <group>
+          <text value="colon:"/>
+          <text value="exclamation" prefix="! "/>
+        </group>
+        <group>
+          <text value="period."/>
+          <text value="exclamation" prefix="! "/>
+        </group>
+        <group>
+          <text value="semicolon;"/>
+          <text value="exclamation" prefix="! "/>
+        </group>
+        <group>
+          <text value="exclamation!"/>
+          <text value="exclamation" prefix="! "/>
+        </group>
+        <group>
+          <text value="question?"/>
+          <text value="exclamation" prefix="! "/>
+        </group>
+        <group>
+          <text value="comma,"/>
+          <text value="exclamation" prefix="! "/>
+        </group>
+        <text value="&#x0A;ENDING IN QUESTION"/>
+        <group>
+          <text value="colon:"/>
+          <text value="question" prefix="? "/>
+        </group>
+        <group>
+          <text value="period."/>
+          <text value="question" prefix="? "/>
+        </group>
+        <group>
+          <text value="semicolon;"/>
+          <text value="question" prefix="? "/>
+        </group>
+        <group>
+          <text value="exclamation!"/>
+          <text value="question" prefix="? "/>
+        </group>
+        <group>
+          <text value="question?"/>
+          <text value="question" prefix="? "/>
+        </group>
+        <group>
+          <text value="comma,"/>
+          <text value="question" prefix="? "/>
+        </group>
+        <text value="&#x0A;ENDING IN COMMA"/>
+        <group>
+          <text value="colon:"/>
+          <text value="comma" prefix=", "/>
+        </group>
+        <group>
+          <text value="period."/>
+          <text value="comma" prefix=", "/>
+        </group>
+        <group>
+          <text value="semicolon;"/>
+          <text value="comma" prefix=", "/>
+        </group>
+        <group>
+          <text value="exclamation!"/>
+          <text value="comma" prefix=", "/>
+        </group>
+        <group>
+          <text value="question?"/>
+          <text value="comma" prefix=", "/>
+        </group>
+        <group>
+          <text value="comma,"/>
+          <text value="comma" prefix=", "/>
+        </group>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

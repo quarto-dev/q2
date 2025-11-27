@@ -1,0 +1,122 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+The bug this tested for turned out to be unrelated to legal
+items. When the style rendered a title instead of an author
+in an author-date style with "collapse," the processor was
+mistakenly assuming that the citation had collapsed, and
+delivered ", " as delimiter.
+
+>>===== RESULT =====>>
+>>[0] (Álvarez: 2000; Pineapple Case: 2000)
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-2"
+                },
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" demote-non-dropping-particle="sort-only">
+  <!-- This style was edited with the Visual CSL Editor (http://editor.citationstyles.org/visualEditor/) -->
+  <info>
+    <title>Food and Agriculture Organization of the United Nations</title>
+    <title-short>FAO</title-short>
+    <id>http://www.zotero.org/styles/food-and-agriculture-organization-of-the-united-nations</id>
+    <link href="http://www.zotero.org/styles/food-and-agriculture-organization-of-the-united-nations" rel="self"/>
+    <link href="http://www.fao.org/3/a-ac339e.pdf" rel="documentation"/>
+    <author>
+      <name>Bin Liu</name>
+      <email>lieubean@gmail.com</email>
+      <uri>https://www.linkedin.com/in/lieubean/</uri>
+    </author>
+    <contributor>
+      <name>Julian Plummer</name>
+      <email>Julian.Plummer@fao.org</email>
+    </contributor>
+    <category citation-format="author-date"/>
+    <category field="science"/>
+    <category field="social_science"/>
+    <summary>This style is created to meet the citation and bibliographical requirements of FAOSTYLE, and has been tested with Zotero and Mendeley. Last update: March 2017.</summary>
+    <updated>2017-03-10T01:12:03+01:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <citation disambiguate-add-year-suffix="true" collapse="year">
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <choose>
+        <if match="none" type="article-journal"> 
+          <names variable="author" suffix=": ">
+            <name form="short"/>
+          </names>
+          <date variable="issued" form="text" date-parts="year"/>
+        </if>
+        <else>
+          <text variable="title" suffix=": "/>
+          <date variable="issued" form="text" date-parts="year"/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Bobblehead", 
+                "given": "Bobbie" 
+            }
+        ], 
+        "id": "ITEM-1", 
+        "type": "article-journal",
+        "title": "Pineapple Case",
+        "issued": {
+             "date-parts": [[2000]]
+        }
+    }, 
+    {
+        "author": [
+            {
+                "family": "Álvarez", 
+                "given": "Ajax" 
+            }
+        ], 
+        "id": "ITEM-2", 
+        "type": "book",
+        "issued": {
+             "date-parts": [[2000]]
+        }
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,226 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+Under the logic described in the CSL specification, this test passes
+before all names have been added at the disambiguate-add-names stage.
+
+We have works authored by the following persons:
+
+Book A (2000) authors
+ Devon Dropsy
+ Edward Enteritis
+ Xavier Fever
+
+Book B (2000) authors
+ Devon Dropsy
+ Ernie Enteritis
+ Yves Fever
+
+We're using the following options:
+        et-al-min="3"
+        et-al-use-first="1"
+        disambiguate-add-names="true"
+        disambiguate-add-givenname="true"
+        disambiguate-add-year-suffix="true"
+        givenname-disambiguation-rule="all-names"
+
+With "all-names" disambiguation, the base form of the names, _before_
+the cites are run through disambiguation, will be:
+
+Book A (2000) authors
+ Dropsy
+ Edward Enteritis
+ X. Fever
+
+Book B (2000) authors
+ Dropsy
+ Ernie Enteritis
+ Y. Fever
+
+This is because, under all-names disambiguation, the _names_ must
+first be distinguished, throughout the document.
+
+We have an et-al-use-first value of 1, so we start with one name:
+
+Book A (2000) authors
+ Dropsy
+
+Book B (2000) authors
+ Dropsy
+
+For disambiguate-add-names, we'll add names until the cites clear, if
+at all.  So we add one name, producing:
+
+Book A (2000) authors
+ Dropsy
+ Edward Enteritis
+
+Book B (2000) authors
+ Dropsy
+ Ernie Enteritis
+
+... and the cites clear.
+
+
+>>===== RESULT =====>>
+Asthma et al. (1990a); Asthma et al. (1990b); Dropsy, Edward Enteritis, et al. (2000); Dropsy, Ernie Enteritis, et al. (2000)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-givenname="true"
+         disambiguate-add-names="true"
+         disambiguate-add-year-suffix="true"
+         et-al-min="3"
+         et-al-use-first="1"
+         givenname-disambiguation-rule="all-names">
+    <layout delimiter="; ">
+      <names delimiter=", " variable="author">
+        <name delimiter=", " form="short" initialize-with="." />
+      </names>
+      <group prefix=" (" suffix=")">
+        <date variable="issued">
+          <date-part name="year" />
+        </date>
+        <text variable="year-suffix" />
+      </group>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key variable="author" names-min="2" names-use-first="1"/>
+    </sort>
+    <layout>
+      <text value="bogus"/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Albert"
+            },
+            {
+                "family": "Bronchitis",
+                "given": "Bosworth"
+            },
+            {
+                "family": "Cold",
+                "given": "Crispin"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1990"
+                ]
+            ]
+        },
+        "title": "Book A",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Albert"
+            },
+            {
+                "family": "Bronchitis",
+                "given": "Bosworth"
+            },
+            {
+                "family": "Cold",
+                "given": "Crispin"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1990"
+                ]
+            ]
+        },
+        "title": "Book B",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Dropsy",
+                "given": "Devon"
+            },
+            {
+                "family": "Enteritis",
+                "given": "Edward"
+            },
+            {
+                "family": "Fever",
+                "given": "Xavier"
+            }
+        ],
+        "id": "ITEM-3",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Book C",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Dropsy",
+                "given": "Devon"
+            },
+            {
+                "family": "Enteritis",
+                "given": "Ernie"
+            },
+            {
+                "family": "Fever",
+                "given": "Yves"
+            }
+        ],
+        "id": "ITEM-4",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Book D",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

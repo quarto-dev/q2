@@ -1,0 +1,287 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+<i>Aalto</i>, Book One, S. 100 This.<i>Álvarez</i>, Book Two, S. 200<i>Álvarez</i>, Film One, 300
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1",
+            "locator": "100",
+            "suffix": " This."
+        },
+        {
+            "id": "ITEM-2",
+            "locator": "200"
+        },
+        {
+            "id": "ITEM-3",
+            "locator": "300"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="note" default-locale="de-DE">
+  <info>
+    <title>Meine juristische Zitierweise M. K.</title>
+    <id>http://www.zotero.org/styles/juristische-zitierweise-deutsch</id>
+    <link href="http://www.zotero.org/styles/juristische-zitierweise-deutsch" rel="self"/>
+    <author>
+      <name>MK</name>
+    </author>
+    <category citation-format="note"/>
+    <category field="law"/>
+    <summary>Juristische Zitierweise nach Stüber www.niederle-media.de/Zitieren.pdf</summary>
+    <updated>2012-09-28T02:06:38+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <macro name="author-and-editor">
+    <names variable="author">
+      <name/>
+      <substitute>
+        <names variable="editor"/>
+      </substitute>
+    </names>
+  </macro>
+  <citation et-al-min="4" et-al-use-first="1">
+    <layout>
+      <choose>
+        <if type="article-journal">
+          <names variable="author" prefix="" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="short"/>
+          </names>
+          <text variable="container-title" prefix=", " suffix=" " form="short"/>
+          <date variable="issued" prefix="" suffix=", ">
+            <date-part name="year" form="long" prefix="" suffix=""/>
+            <date-part name="month" form="numeric" prefix="" suffix=""/>
+            <date-part name="day" form="ordinal" prefix="" suffix=""/>
+          </date>
+	      <text variable="page-first" prefix=""/>
+          <text variable="locator" prefix=", " suffix=""/>
+        </if>
+	    <else-if type="bill">
+	      <text variable="title" prefix="" suffix=", " form="short"/>
+	      <text variable="locator" prefix="S. " suffix=""/>
+	    </else-if>
+	    <else-if type="legal_case" match="any">
+          <choose>
+            <!-- is the case published in a journal? -->
+            <if variable="container-title">
+              <text variable="authority" suffix=" "/>
+              <text variable="container-title" form="short" suffix=" "/>
+              <text variable="volume" suffix=", "/>
+              <text variable="page"/>
+              <text variable="locator" prefix=", " suffix=""/>
+            </if>
+            <else>
+              <text variable="authority" suffix=", "/>
+              <text variable="genre" suffix=" v. "/>
+              <date form="numeric" variable="issued" suffix=" &#8211; "/>
+              <text variable="number"/>
+            </else>
+          </choose>
+          <choose>
+            <if variable="title-short">
+              <text variable="title-short" prefix=" &#8211; "/>
+            </if>
+          </choose>
+        </else-if>
+	    <else-if type="thesis">
+	      <names variable="author" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="short"/>
+          </names>
+          <text variable="title" prefix=", " suffix="" form="short"/>
+		  <text variable="locator" prefix=", S. " suffix=""/>
+	    </else-if>
+        <else-if type="book">
+          <names variable="author" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="short"/>
+          </names>
+          <text variable="title" prefix=", " suffix="" form="short"/>
+	      <choose>
+	        <if locator="page">
+              <text variable="locator" prefix=", S. " suffix=""/>
+	        </if>
+	        <else-if locator="paragraph">
+	          <text variable="locator" prefix="" suffix=""/>
+	        </else-if>
+	      </choose>
+	    </else-if>
+        <else-if type="chapter">
+          <names variable="author" prefix="" suffix="" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="short"/>
+          </names>
+          <text variable="title" prefix=", " suffix=""/>
+          <text variable="container-title" prefix=", in: " suffix=", " form="short"/>
+	      <text variable="page-first" prefix="S. " suffix=""/>
+          <text variable="locator" prefix=", " suffix=""/>
+        </else-if>
+        <else-if type="entry-dictionary">
+          <names variable="author" prefix="" suffix="" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="short"/>
+          </names>
+          <names variable="editor" prefix=", in: " suffix="">
+            <name delimiter="/" form="short"/>
+          </names>
+          <text variable="title" prefix=", " suffix=", " form="short"/>
+	      <text variable="page-first" prefix="S. " suffix=" "/>
+          <text variable="locator" prefix="" suffix=""/>
+        </else-if>
+        <else-if type="entry-encyclopedia">
+          
+          <text value="in: " prefix="" suffix=""/>
+          <text variable="title" prefix="" suffix=", " form="short"/>
+          <text variable="locator" suffix=""/>
+        </else-if>
+        <else>
+          <names variable="author" prefix="" font-style="italic">
+            <name delimiter="; " name-as-sort-order="all" sort-separator=", " form="short"/>
+          </names>
+          <text variable="title" prefix=", " suffix=", "/>
+          <text variable="locator" suffix=""/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+  <bibliography>
+	<sort>
+  	  <key macro="author-and-editor"/>
+	</sort>
+    <layout>
+      <choose>
+        <if type="article-journal">
+          <names variable="author" prefix="" suffix=": " font-style="italic">
+            <name delimiter="/ " name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text variable="title" prefix="" suffix=", "/>
+          <text variable="container-title" prefix="" suffix=" "/>
+          <date variable="issued" prefix="" suffix=", ">
+            <date-part name="year" form="long" prefix="" suffix=""/>
+            <date-part name="month" form="numeric" prefix="" suffix=""/>
+            <date-part name="day" form="ordinal" prefix="" suffix=""/>
+          </date>
+          <text variable="page" prefix="S. " suffix="."/>
+        </if>
+        <else-if type="book">
+          <names variable="author" prefix="" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text variable="title" prefix=": " suffix=", "/>
+          <text variable="edition" prefix="" suffix=", "/>
+          <text variable="publisher-place" prefix="" suffix=" "/>
+          <date variable="issued" prefix="" suffix=". ">
+            <date-part name="year" form="long" prefix="" suffix=""/>
+          </date>
+        </else-if>
+        <else-if type="entry-dictionary">
+          <names variable="editor" prefix="" suffix=" " font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text value=" (Hrsg.)" prefix="" suffix=": "/>
+          <text variable="container-title" prefix=" " suffix=", "/>
+          <text variable="edition" prefix="" suffix=", "/>
+          <text variable="publisher-place" prefix="" suffix=" "/>
+          <date variable="issued" prefix="" suffix="">
+            <date-part name="year" form="long" prefix="" suffix="."/>
+          </date>
+	    </else-if>
+        <else-if type="chapter">
+          <names variable="author" prefix="" suffix=": " font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text variable="title" prefix=" " suffix=", in: "/>
+          <names variable="editor" prefix="" suffix=" (Hrsg.): " font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text variable="container-title" prefix="" suffix=", "/>
+          <text variable="publisher-place" prefix="" suffix=" "/>
+          <date variable="issued" prefix="" suffix="">
+            <date-part name="year" form="long" prefix="" suffix=", "/>
+          </date>
+          <text variable="page" prefix="S. " suffix="."/>
+        </else-if>
+        <else-if type="thesis">
+          <names variable="author" prefix="" font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text variable="title" prefix=": " suffix=", Diss. jur., "/>
+          <text variable="publisher-place" prefix="" suffix=" "/>
+          <date variable="issued" prefix="" suffix=" (Zit.: ">
+            <date-part name="year" form="long" prefix="" suffix=""/>
+          </date>
+ 	      <text value="Bearbeiter," prefix="" suffix=" " font-style="italic"/>
+          <text variable="title" prefix="" suffix="" form="short"/>
+          <text value=")." prefix="" suffix=" "/>
+        </else-if>
+        <else-if type="entry-encyclopedia">
+          <names variable="editor" prefix="" suffix=" (Hrsg.): " font-style="italic">
+            <name delimiter="/" name-as-sort-order="all" sort-separator=", " form="long"/>
+          </names>
+          <text variable="title" prefix="" suffix=", "/>
+          <text variable="edition" prefix="" suffix=", "/>
+          <text variable="publisher-place" prefix="" suffix=" "/>
+          <date variable="issued" prefix="" suffix=" (Zit.: ">
+            <date-part name="year" form="long" prefix="" suffix=""/>
+          </date>
+          <text value="Bearbeiter," prefix="" suffix=" " font-style="italic"/>
+          <text value="in: " prefix="" suffix=" "/>
+          <text variable="title" prefix="" suffix="" form="short"/>
+          <text value=")." prefix="" suffix=" "/>
+        </else-if>
+      </choose>
+    </layout>
+  </bibliography>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "author": [
+      {
+        "family": "Aalto",
+        "given": "Alan"
+      }
+    ],
+    "id": "ITEM-1",
+    "title": "Book One",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Álvarez",
+        "given": "Ajax"
+      }
+    ],
+    "id": "ITEM-2",
+    "title": "Book Two",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Álvarez",
+        "given": "Ajax"
+      }
+    ],
+    "id": "ITEM-3",
+    "title": "Film One",
+    "type": "motion_picture"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

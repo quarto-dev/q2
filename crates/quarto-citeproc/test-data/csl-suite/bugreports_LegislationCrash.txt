@@ -1,0 +1,119 @@
+>>==== MODE ====>>
+bibliography
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+<div class="csl-bib-body">
+  <div class="csl-entry"><i>Arrêté du 23 mars 1992 relatif au programme des études conduisant au diplôme d’État d’infirmier</i>, 1992. </div>
+</div>
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" demote-non-dropping-particle="never" default-locale="fr-FR">
+  <info>
+    <title>ISO-690 (author-date, French)</title>
+    <id>http://www.zotero.org/styles/iso690-author-date-fr</id>
+    <link href="http://www.zotero.org/styles/iso690-author-date-fr" rel="self"/>
+    <link href="https://forums.zotero.org/discussion/23511" rel="documentation"/>
+    <author>
+      <name>Laure Mellifluo</name>
+      <email>laure.melli@gmail.com</email>
+    </author>
+    <author>
+      <name>Raphael Grolimund</name>
+      <email>raphael.grolimund@epfl.ch</email>
+    </author>
+    <author>
+      <name>Michel Hardegger</name>
+      <email>hardegger@gmail.com</email>
+    </author>
+    <contributor>
+      <name>Pierre-Amiel Giraud</name>
+      <email>pierre-amiel.giraud@u-bordeaux3.fr</email>
+    </contributor>
+    <category citation-format="author-date"/>
+    <category field="generic-base"/>
+    <summary>Style based on ISO 690:2010(F), V1.1</summary>
+    <updated>2013-05-31T20:00:00+01:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <locale>
+    <terms>
+      <term name="no date">[sans date]</term>
+      <term name="in">in</term>
+      <term name="online">en&#160;ligne</term>
+      <term name="accessed">consulté&#160;le</term>
+      <term name="retrieved">disponible</term>
+      <term name="from">à l'adresse</term>
+      <term name="translator" form="short">trad.</term>
+      <term name="editor" form="short">éd.</term>
+    </terms>
+  </locale>
+  <macro name="title">
+    <text variable="title" font-style="italic" suffix=", "/>
+    <date variable="issued" suffix=". " form="text" date-parts="year"/>
+  </macro>
+  <citation>
+    <layout>
+      <text value="BOGUS"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+       <names variable="author">
+         <name/>
+         <substitute>
+           <text macro="title"/>
+         </substitute>
+       </names>
+       <date variable="issued" date-parts="year-month-day" form="text"/>
+    </layout>
+  </bibliography>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "accessed": {
+      "date-parts": [
+        [
+          "2017",
+          8,
+          29
+        ]
+      ]
+    },
+    "id": "ITEM-1",
+    "issued": {
+      "date-parts": [
+        [
+          "1992",
+          3,
+          23
+        ]
+      ]
+    },
+    "title": "Arrêté du 23 mars 1992 relatif au programme des études conduisant au diplôme d'État d'infirmier",
+    "type": "legislation"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

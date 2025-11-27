@@ -1,0 +1,62 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Sample Title: (2000 June 18)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+   <locale>
+    <date form="text">
+      <date-part name="year"/>
+      <date-part name="month" form="long" prefix=" "/>
+      <date-part name="day" prefix=" "/>
+    </date>
+  </locale>
+  <citation>
+    <layout>
+      <text variable="title" suffix=": "/>
+      <date variable="issued" date-parts="year-month-day" form="text" prefix="(" suffix=")"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000",
+                    "6",
+                    "18"
+                ]
+            ]
+        },
+        "title": "Sample Title",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,64 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+Note placement of the period after "reference".  Suppression 
+of duplicate punctuation across nesting levels of the output 
+object must be done at the higher of the two.
+
+Note also the period after "etc", which in this case is a
+delimiter supplied by the style.
+
+>>===== RESULT =====>>
+“His Anonymous Life etc.” (1965) <i>reference.</i> blurble
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <group delimiter=". ">
+        <text variable="title" quotes="true"/>
+        <group delimiter=" ">
+          <date variable="issued" form="text" date-parts="year" prefix="(" suffix=")"/>
+          <text value="reference." font-style="italic"/>
+        </group>
+        <text value="blurble"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1965"
+                ]
+            ]
+        },
+        "title": "His Anonymous Life etc",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

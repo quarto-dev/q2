@@ -1,0 +1,65 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+Jonathan Chang وآخرون.
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" default-locale="ar">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout suffix="." delimiter="; ">
+      <names variable="author">
+        <name et-al-use-first="1" et-al-min="3"/>
+      </names>
+    </layout>
+  </citation>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+    {
+        "author": [
+            {
+                "family": "Chang",
+                "given": "Jonathan"
+            },
+            {
+                "family": "Gerrish",
+                "given": "Sean"
+            },
+            {
+                "family": "Wang",
+                "given": "Chong"
+            }
+        ],
+        "id": "ITEM-1",
+        "type": "book"
+    }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

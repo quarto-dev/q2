@@ -1,0 +1,83 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Doe (2000a); Doe (2000b)
+<<===== RESULT =====<<
+
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-year-suffix="true">
+    <layout delimiter="; ">
+      <names variable="author">
+        <name form="short" />
+      </names>
+      <date variable="issued" prefix=" (" suffix=")">
+        <date-part name="year" />
+      </date>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Book A",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Book B",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

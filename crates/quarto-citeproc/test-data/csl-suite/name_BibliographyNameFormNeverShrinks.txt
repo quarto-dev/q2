@@ -1,0 +1,143 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry"><i>Smith, Jimmie</i></div>
+  <div class="csl-entry"><i>Smith, Reggie</i></div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="note" default-locale="de-DE" demote-non-dropping-particle="never">
+  <!-- This style was edited with the Visual CSL Editor (http://editor.citationstyles.org/visualEditor/) -->
+  <info>
+    <title>SCRDiss2</title>
+    <id>http://www.zotero.org/styles/juristische-zitierweise</id>
+    <link href="http://www.zotero.org/styles/juristische-zitierweise" rel="self"/>
+    <link href="www.niederle-media.de/Zitieren.pdf" rel="documentation"/>
+    <link href="https://forums.zotero.org/discussion/20886/citation-style-for-german-lawyers/" rel="documentation"/>
+    <author>
+      <name>SCR</name>
+      <email>Sophie.Catherine@gmx.de</email>
+    </author>
+    <contributor>
+      <name>SCR</name>
+    </contributor>
+    <category citation-format="note"/>
+    <category field="law"/>
+    <summary>Juristische Zitierweise nach Stüber www.niederle-media.de/Zitieren.pdf</summary>
+    <updated>2017-12-28T23:40:35+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <locale xml:lang="de-DE">
+    <terms>
+      <term name="accessed">besucht am</term>
+    </terms>
+  </locale>
+  <macro name="author">
+    <names variable="author" font-style="italic">
+      <name delimiter="/ " name-as-sort-order="all" sort-separator=", " form="long"/>
+      <label form="short" prefix=" (" suffix=")"/>
+      <substitute>
+        <names variable="editor"/>
+      </substitute>
+    </names>
+  </macro>
+
+<macro name="editor">
+    <names variable="editor" font-style="italic">
+      <name delimiter="/ " name-as-sort-order="all" sort-separator=", " form="long"/>
+      <label form="short" prefix=" (" suffix=")"/>
+    </names>
+  </macro>
+  <macro name="author-note">
+    <names variable="author" font-style="italic">
+      <name form="short" delimiter="/" et-al-min="3" et-al-use-first="1"  initialize-with=". "/>
+    </names>
+  </macro>
+  <macro name="autor-editor-note">
+    <names variable="author" font-style="italic">
+      <name form="short" delimiter="/" et-al-min="3" et-al-use-first="1" sort-separator=""/>
+      <substitute>
+        <names variable="editor"/>
+      </substitute>
+    </names>
+  </macro>
+  <citation disambiguate-add-names="true" disambiguate-add-givenname="true" givenname-disambiguation-rule="all-names-with-initials">
+    <layout delimiter="; " suffix=".">
+      <text macro="autor-editor-note"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key macro="author"/>
+      <key variable="issued"/>
+    </sort>
+    <layout>
+       <text macro="author"/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "Reggie"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "Jimmie"
+            }
+        ], 
+        "id": "ITEM-2", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,252 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-2"
+                }
+            ],
+            "properties": {
+                "noteIndex": 2
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-3",
+            "citationItems": [
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 3
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ]
+        ],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+
+Updating all three is correct here, at least on the current
+processor design. The logic is not simple.
+
+Disambiguation is based on the subsequent form. In this test case,
+the value of et-al-subsequent-min is 3. In the first two insertions,
+the Burnod cites come out with one name only, because the list
+of names is 3 or greater in length, and adding names contributes
+nothing to disambiguation.
+
+When the Urban cite is inserted, the internal parameters are
+correctly adjusted to 3 for the first two cites, and that difference
+triggers tainting, hence all three cites are queued for updating.
+
+This is not entirely optimal, because in the *rendered* form,
+all three insertions will result in five names on the Burnod
+cites. However, controlling the redundant update in this case
+would require that we code position context adjustments into
+the disambiguation module. That is not practicable because
+the et-al parameters may vary between name nodes in the CSL.
+
+A clean and precise solution to this is possible, but it doesn't
+seem to be worth the candle.
+
+>>===== RESULT =====>>
+>>[0] (Caminiti, Johnson, Burnod, Galli, &#38; Ferraina 1990a)
+>>[1] (Caminiti, Johnson, Burnod, Galli, &#38; Ferraina 1990b)
+>>[2] (Caminiti, Johnson, &#38; Urbano 1990)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+        et-al-min="6"
+        et-al-use-first="1"
+  		et-al-subsequent-min="3" 
+		et-al-subsequent-use-first="1" 
+		disambiguate-add-names="true" 
+		disambiguate-add-givenname="true"
+        disambiguate-add-year-suffix="true">
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <group delimiter=" ">
+        <names variable="author">
+  		  <name form="short" and="symbol"/>
+        </names>
+        <date variable="issued" form="text" date-parts="year"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+	{
+		"type" : "article-journal",
+		"id" : "ITEM-1",
+		"author": [
+			{
+   				"family": "Caminiti",
+    			"given": "R"
+			},
+			{
+    			"family" : "Johnson",
+				"given": "P B"
+			},
+			{
+    			"family" : "Burnod",
+    			"given": "Y"
+			},
+			{
+    			"family" : "Galli",
+    			"given": "C"
+			},
+			{
+    			"family" : "Ferraina",
+    			"given": "S"
+			}
+		],
+		"issued" : {
+    		"date-parts" : [
+				[1990]
+    		]
+		}
+	},
+	{
+		"type" : "article-journal",
+		"id" : "ITEM-2",
+		"author": [
+			{
+   				"family": "Caminiti",
+    			"given": "R"
+			},
+			{
+    			"family" : "Johnson",
+				"given": "P B"
+			},
+			{
+    			"family" : "Burnod",
+    			"given": "Y"
+			},
+			{
+    			"family" : "Galli",
+    			"given": "C"
+			},
+			{
+    			"family" : "Ferraina",
+    			"given": "S"
+			}
+		],
+		"issued" : {
+    		"date-parts" : [
+				[1990]
+    		]
+		}
+	},
+	{
+		"type" : "article-journal",
+		"id" : "ITEM-3",
+		"author": [
+			{
+    			"family" : "Caminiti",
+    			"given": "R"
+			},
+			{
+    			"family" : "Johnson",
+    			"given": "P B"
+			},
+			{
+    			"family" : "Urbano",
+    			"given": "A"
+			}
+		],
+		"issued" : {
+			"date-parts" : [
+				[1990,7]
+    		]
+		}
+    },
+	{
+		"type" : "article-journal",
+		"id" : "ITEM-4",
+		"author": [
+			{
+    			"family" : "Caminiti",
+    			"given": "R"
+			},
+			{
+    			"family" : "Johnson",
+    			"given": "P B"
+			},
+			{
+    			"family" : "Urbano",
+    			"given": "A"
+			}
+		],
+		"issued" : {
+			"date-parts" : [
+				[1990,7]
+    		]
+		}
+    }
+]
+<<===== INPUT =====<<
+
+
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,59 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+TRUE
+FALSE
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="&#x0A;">
+      <choose>
+        <if variable="title edition" match="all">
+          <text value="TRUE"/>
+        </if>
+        <else>
+          <text value="FALSE"/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "edition": "5",
+        "id": "ITEM-1",
+        "title": "My Book",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "title": "His Book",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,94 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+(1965a,b)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+   <info>
+      <title>Molecular Ecology (dev)</title>
+      <id>http://www.zotero.org/styles/Molecular Ecology</id>
+      <link href="http://www.zotero.org/styles/Molecular Ecology" rel="self"/>
+      <author>
+         <name>myname</name>
+         <email>myname@gmx.net</email>
+      </author>
+      <contributor>
+         <name> Sebastian Karcher</name>
+      </contributor>
+      <category field="biology"/>
+      <category field="generic-base"/>
+      <updated>2011-04-06T02:21:30+00:00</updated>
+      <rights>This work is licensed under a Creative Commons Attribution-Share Alike 3.0 License: http://creativecommons.org/licenses/by-sa/3.0/</rights>
+   </info>
+   <citation year-suffix-delimiter="," 
+			 disambiguate-add-year-suffix="true" 
+			 collapse="year-suffix" 
+			 disambiguate-add-names="true">
+      <layout prefix="(" suffix=")" delimiter="; ">
+      <!-- layout delimiter="; " -->
+        <date variable="issued">
+           <date-part name="year"/>
+        </date>
+      </layout>
+   </citation>
+   <bibliography>
+      <layout>
+         <text value="dummy"/>
+      </layout>
+   </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1965"
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1965"
+                ]
+            ]
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

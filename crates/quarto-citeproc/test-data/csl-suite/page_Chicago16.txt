@@ -1,0 +1,288 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+Examples taken from:
+
+  http://cmosshoptalk.com/2018/04/10/316-7-316-17-or-316-317-chicago-style-for-number-ranges/
+
+>>===== RESULT =====>>
+Example A, at 3–10
+Example B, at 71–72
+Example C, at 71–72
+Example D, at 96–117
+Example E, at 100–104
+Example F, at 1100–1113
+Example G, at 1100–1113
+Example H, at 101–8
+Example I, at 808–33
+Example J, at 1103–4
+Example K, at 321–28
+Example L, at 321–28
+Example M, at 498–532
+Example N, at 1087–89
+Example O, at 1087–89
+Example P, at 1496–500
+Example Q, at 11564–615
+Example R, at 12991–123001
+Example S, at xxv–xxviii
+Example T, at cvi–cix
+<<===== RESULT =====<<
+
+
+>>===== CITATION-ITEMS =====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-2"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-3"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-4"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-5"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-6"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-7"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-8"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-9"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-10"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-11"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-12"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-13"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-14"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-15"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-16"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-17"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-18"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-19"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-20"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+
+>>===== CSL =====>>
+<style
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0"
+      page-range-format="chicago-16">
+  <info>
+    <id />
+    <title />
+    <updated>2021-09-16T20:00:00+08:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title"/>
+      <text variable="page" prefix=", at "/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "page": "3-10",
+        "title": "Example A",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "page": "71-72",
+        "title": "Example B",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-3",
+        "page": "71-2",
+        "title": "Example C",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-4",
+        "page": "96-117",
+        "title": "Example D",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-5",
+        "page": "100-104",
+        "title": "Example E",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-6",
+        "page": "1100-1113",
+        "title": "Example F",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-7",
+        "page": "1100-13",
+        "title": "Example G",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-8",
+        "page": "101-108",
+        "title": "Example H",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-9",
+        "page": "808-833",
+        "title": "Example I",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-10",
+        "page": "1103-1104",
+        "title": "Example J",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-11",
+        "page": "321-328",
+        "title": "Example K",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-12",
+        "page": "321-8",
+        "title": "Example L",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-13",
+        "page": "498-532",
+        "title": "Example M",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-14",
+        "page": "1087-1089",
+        "title": "Example N",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-15",
+        "page": "1087-89",
+        "title": "Example O",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-16",
+        "page": "1496-1500",
+        "title": "Example P",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-17",
+        "page": "11564-11615",
+        "title": "Example Q",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-18",
+        "page": "12991-123001",
+        "title": "Example R",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-19",
+        "page": "xxv-xxviii",
+        "title": "Example S",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-20",
+        "page": "cvi-cix",
+        "title": "Example T",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<

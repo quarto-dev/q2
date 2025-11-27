@@ -1,0 +1,272 @@
+>>==== MODE ====>>
+bibliography
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Book One, (zitiert als: <i>Aalto</i>, Chapter One).</div>
+</div>
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="note" default-locale="de-DE">
+  <info>
+    <title>Juristische Zitierweise (Stüber) (German)</title>
+    <id>http://www.zotero.org/styles/juristische-zitierweise</id>
+    <link href="http://www.zotero.org/styles/juristische-zitierweise" rel="self"/>
+    <link href="www.niederle-media.de/Zitieren.pdf" rel="documentation"/>
+    <link href="https://forums.zotero.org/discussion/20886/citation-style-for-german-lawyers/" rel="documentation"/>
+    <author>
+      <name>Oliver Wolf</name>
+      <email>wolf.o@gmx.net</email>
+    </author>
+    <contributor>
+      <name>Philipp Zumstein</name>
+    </contributor>
+    <category citation-format="note"/>
+    <category field="law"/>
+    <summary>Juristische Zitierweise nach Stüber www.niederle-media.de/Zitieren.pdf</summary>
+    <updated>2014-08-10T17:03:15+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <macro name="author">
+    <names variable="author" font-style="italic">
+      <name delimiter=" / " name-as-sort-order="all" sort-separator=", " form="long"/>
+      <label form="short" prefix=" (" suffix=")"/>
+      <substitute>
+        <names variable="editor"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="author-note">
+    <names variable="author" font-style="italic">
+      <name form="short" delimiter="/" et-al-min="5" et-al-use-first="1" name-as-sort-order="all"/>
+    </names>
+  </macro>
+  <macro name="locator-with-label">
+    <group delimiter=" ">
+      <label variable="locator" form="symbol"/>
+      <text variable="locator"/>
+    </group>
+  </macro>
+  <macro name="autor-editor-note">
+    <names variable="author" font-style="italic">
+      <name form="short" delimiter="/" et-al-min="5" et-al-use-first="1" sort-separator=""/>
+      <substitute>
+        <names variable="editor"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="journalname-year">
+    <group delimiter=" ">
+      <text variable="container-title" form="short"/>
+      <date date-parts="year" form="text" variable="issued"/>
+    </group>
+  </macro>
+  <macro name="inbook">
+    <group delimiter=": ">
+      <text term="in"/>
+      <group delimiter=", ">
+        <names variable="editor">
+          <name form="short" delimiter="/" initialize-with=""/>
+        </names>
+      </group>
+    </group>
+  </macro>
+  <macro name="firstpage-locator">
+    <group delimiter=" ">
+      <text variable="page-first"/>
+      <text variable="locator" prefix="(" suffix=")"/>
+    </group>
+  </macro>
+  <citation>
+    <layout delimiter="; ">
+      <choose>
+        <if type="article-journal">
+          <group delimiter=", ">
+            <text macro="author-note"/>
+            <text macro="journalname-year"/>
+            <text macro="firstpage-locator"/>
+          </group>
+        </if>
+        <else-if type="book">
+          <group delimiter=", ">
+            <text macro="autor-editor-note"/>
+            <text variable="title" form="short"/>
+            <text macro="locator-with-label"/>
+          </group>
+        </else-if>
+        <else-if type="chapter">
+          <group delimiter=", ">
+            <text macro="author-note"/>
+            <text macro="inbook"/>
+            <text variable="title" form="short" suffix=","/>
+            <text variable="note"/>
+            <text macro="locator-with-label"/>
+          </group>
+        </else-if>
+        <else-if type="entry-encyclopedia">
+          <text value=", in: "/>
+          <text variable="title" suffix="," form="short"/>
+          <text variable="note" suffix=","/>
+        </else-if>
+        <else-if type="legal_case" match="any">     
+          <choose>
+            <if variable="number">
+              <text variable="authority" suffix=", "/>
+              <text variable="note" suffix=" "/>
+              <date form="numeric" variable="issued" prefix="v. " suffix=" &#8211; " />
+              <text variable="number"/>
+            </if>
+            <else>
+              <text variable="authority" suffix=" "/>
+              <text variable="container-title" suffix=" "/>
+              <text variable="volume" suffix=", "/>
+              <text macro="firstpage-locator"/>
+            </else>
+          </choose>	
+        </else-if>
+        <else-if type="webpage">
+          <text variable="note" suffix=" unter "/>
+          <text variable="URL" font-style="italic" suffix=" [zuletzt aufgerufen am "/>
+          <date form="numeric" variable="issued" suffix="]"/>
+        </else-if>
+        <else-if type="legislation">
+          <text variable="title" form="short"/>
+        </else-if>
+      </choose>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key macro="author"/>
+      <key variable="issued"/>
+    </sort>
+    <layout>
+      <choose>
+        <if type="article-journal">
+          <text macro="author" font-weight="bold"/>
+          <text variable="title" prefix=": " suffix=", "/>
+          <text variable="container-title" form="short" suffix=" "/>
+          <date variable="issued" suffix=", ">
+            <date-part name="year" form="long"/>
+            <date-part name="month" form="numeric"/>
+            <date-part name="day" form="ordinal"/>
+          </date>
+          <text variable="page" prefix="S. " suffix=" ff."/>
+        </if>
+        <else-if type="book">
+          <text macro="author" font-weight="bold"/>
+          <text variable="title" prefix=", " suffix=", "/>
+          <text variable="edition" suffix=" Auflage, "/>
+          <text variable="publisher-place" suffix=" "/>   
+          <date variable="issued">
+            <date-part name="year" form="long"/>
+          </date>
+          <group prefix=" (zitiert als: " suffix=").">
+            <text macro="autor-editor-note" suffix=", "/>  
+            <text variable="title" form="short"/>
+          </group>     
+        </else-if>  
+        <else-if type="chapter">
+          <names variable="editor" font-weight="bold" font-style="italic" suffix=" (Hrsg.)">
+            <name delimiter=" / " name-as-sort-order="all" sort-separator=", " form="long"/>      
+          </names>
+          <text variable="container-title" prefix=": " suffix=", "/>
+          <text variable="volume" prefix="Band " suffix=", "/>
+          <text variable="collection-title" suffix=", "/>
+          <text variable="edition" suffix=" Auflage, "/>
+          <text variable="publisher-place" suffix=" "/>
+          <date variable="issued">
+            <date-part name="year" form="long"/>
+          </date>
+          <group prefix=" (zitiert als: " suffix=").">
+            <text macro="autor-editor-note" suffix=", "/>  
+            <text variable="title" form="short"/>
+          </group> 
+        </else-if>
+        <else-if type="thesis">
+          <text macro="author" font-weight="bold"/>
+          <text variable="title" prefix=", " suffix=", Diss. jur., "/>
+          <text variable="publisher-place" suffix=" "/>
+          <date variable="issued" suffix=". ">
+            <date-part name="year" form="long"/>
+          </date>
+        </else-if>
+        <else-if type="entry-encyclopedia">
+          <names variable="editor" font-weight="bold" font-style="italic" suffix=" (Hrsg.)">
+            <name delimiter=" / " name-as-sort-order="all" sort-separator=", " form="long"/>      
+          </names>
+          <text variable="container-title" prefix=": " suffix=", "/>
+          <text variable="volume" prefix="Band " suffix=", "/>
+          <text variable="collection-title" suffix=", "/>
+          <text variable="edition" suffix=" Auflage, "/>
+          <text variable="publisher-place" suffix=" "/>
+          <date variable="issued" >
+            <date-part name="year" form="long"/>
+          </date>
+          <group display="block">
+            <group prefix=" (zitiert als: " suffix=").">
+              <text value="Bearbeiter," suffix=" " font-style="italic"/>
+              <text value="in:" suffix=" "/>
+              <text variable="title" form="short"/>
+            </group>
+          </group>
+        </else-if>
+        <else-if type="legal_case">
+          <text value="Rechtsprechung"/>
+        </else-if>
+        <else-if type="webpage">
+          <text value="webpage"/>
+        </else-if>
+        <else>
+          <text macro="author"/>
+          <text variable="title" prefix=", " suffix=", "/>
+          <text variable="container-title" suffix=" "/>
+          <date variable="issued" suffix=", ">
+            <date-part name="year" form="long"/>
+            <date-part name="month" form="numeric"/>
+            <date-part name="day" form="ordinal"/>
+          </date>
+          <text variable="page" suffix="."/>
+        </else>
+      </choose>
+    </layout>
+  </bibliography>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "author": [
+      {
+        "family": "Aalto",
+        "given": "Alan"
+      }
+    ],
+    "collection-title": "Book One",
+    "id": "ITEM-1",
+    "title": "Chapter One",
+    "type": "chapter"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

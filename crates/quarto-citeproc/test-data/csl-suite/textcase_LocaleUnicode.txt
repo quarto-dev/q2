@@ -1,0 +1,96 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+>>===== DESCRIPTION =====>>
+Details here:
+https://forums.zotero.org/discussion/83567/uppercase-letter-problem-in-turkish
+<<===== DESCRIPTION =====<<
+
+>>===== RESULT =====>>
+IA AND IB EN
+IA AND IB EN
+İC AND ID TR
+BAD LANGUAGE CODE THAT PASSES IN NODE.JS BUT FAILS IN SOME BROWSERS
+<<===== RESULT =====<<
+
+>>===== CITATION-ITEMS =====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-2"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-3"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-4"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      default-locale="en"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title" text-case="uppercase"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "title": "ia and ıb EN",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "title": "ia and ıb EN",
+        "type": "book",
+        "language": "en"
+    },
+    {
+        "id": "ITEM-3",
+        "title": "ic and ıd TR",
+        "type": "book",
+        "language": "tr"
+    },
+    {
+        "id": "ITEM-4",
+        "title": "bad language code that passes in node.js but fails in some browsers",
+        "type": "book",
+        "language": "original-one hello"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+
+

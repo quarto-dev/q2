@@ -1,0 +1,189 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+>>===== RESULT =====>>
+>>[0] Smith (1986a); Smith (1986b); Smith (1986c); Smith (1986d)
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                },
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                },
+                {
+                    "id": "ITEM-3"
+                },
+                {
+                    "id": "ITEM-4"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         et-al-min="3"
+         et-al-use-first="1"
+         disambiguate-add-names="true"
+         disambiguate-add-givenname="true"
+         disambiguate-add-year-suffix="true">
+    <layout delimiter="; ">
+      <group delimiter=" ">
+        <names delimiter=", " variable="author">
+          <name and="symbol" delimiter-precedes-last="never" form="short"/>
+        </names>
+        <date variable="issued" prefix="(" suffix=")">
+          <date-part name="year"/>
+        </date>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }
+        ], 
+        "issued": {
+            "date-parts": [
+                [
+                    1986
+                ]
+            ]
+        }, 
+        "type": "book",
+        "id": "ITEM-1"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }
+        ], 
+        "issued": {
+            "date-parts": [
+                [
+                    1986
+                ]
+            ]
+        }, 
+        "type": "book",
+        "id": "ITEM-2"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }
+        ], 
+        "issued": {
+            "date-parts": [
+                [
+                    1986
+                ]
+            ]
+        }, 
+        "type": "book",
+        "id": "ITEM-3"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }
+        ], 
+        "issued": {
+            "date-parts": [
+                [
+                    1986
+                ]
+            ]
+        }, 
+        "type": "book",
+        "id": "ITEM-4"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,205 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+>>===== RESULT =====>>
+..[0] (Doe p. 12)
+..[1] (ibid-with-locator)
+..[2] (Roe bk. 20)
+>>[3] (ibid-with-locator)
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1",
+                    "locator": "12"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-1",
+                    "label": "book",
+                    "locator": "12"
+                }
+            ],
+            "properties": {
+                "noteIndex": 2
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-3",
+            "citationItems": [
+                {
+                    "id": "ITEM-2",
+                    "label": "book",
+                    "locator": "20"
+                }
+            ],
+            "properties": {
+                "noteIndex": 3
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-4",
+            "citationItems": [
+                {
+                    "id": "ITEM-2",
+                    "label": "chapter",
+                    "locator": "20"
+                }
+            ],
+            "properties": {
+                "noteIndex": 4
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ],
+            [
+                "CITATION-3",
+                3
+            ]
+        ],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; " prefix="(" suffix=")">
+      <choose>
+        <if position="first">
+          <names variable="author">
+            <name form="short"/>
+          </names>
+          <group prefix=" ">
+            <label variable="locator" form="short" suffix=" "/>
+            <text variable="locator"/>
+          </group>
+        </if>
+        <else-if position="ibid-with-locator">
+          <text value="ibid-with-locator"/>
+        </else-if>
+        <else-if position="ibid">
+          <text term="ibid"/>
+        </else-if>
+        <else-if position="subsequent">
+          <text value="subsequent"/>
+        </else-if>
+        <else>
+          <text value="huh?"/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Roe", 
+                "given": "Jane"
+            }
+        ], 
+        "id": "ITEM-2", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Noakes", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-3", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Snoakes", 
+                "given": "Richard"
+            }
+        ], 
+        "id": "ITEM-4", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

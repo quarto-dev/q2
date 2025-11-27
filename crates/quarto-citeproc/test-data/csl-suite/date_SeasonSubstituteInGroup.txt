@@ -1,0 +1,67 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+Grouping ordinarily causes bare terms to be suppressed if
+at least one attempt is made to render a variable in an
+enclosing group, and all such attempts fail.  Seasons are
+rendered as terms output instead of the month.  Where only
+the month is requested, it will fail (triggering the season
+term write operation).  This test confirms that in this
+special case, the term is treated as if it were a successful
+rendering of a variable.
+
+
+>>===== RESULT =====>>
+(Autumn)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <group prefix="(" suffix=")">
+        <date variable="issued">
+          <date-part name="month" />
+          <date-part name="day" prefix=" " />
+        </date>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    2000
+                ]
+            ],
+            "season": 3
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

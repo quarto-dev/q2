@@ -1,0 +1,59 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+
+>>===== RESULT =====>>
+<b>([1],[2],[3])</b>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <sort>
+      <key variable="citation-number" />
+    </sort>
+    <layout delimiter="," font-weight="bold" prefix="(" suffix=")">
+      <text prefix="[" suffix="]" variable="citation-number" />
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "title": "Paper 1",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "title": "Paper 2",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-3",
+        "title": "Paper 3",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

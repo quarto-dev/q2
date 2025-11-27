@@ -1,0 +1,45 @@
+>>== MODE ==>>
+citation
+<<== MODE ==<<
+
+
+
+>>== RESULT ==>>
+<i>My <span style="font-style:normal;">Amazing</span> Title</i>
+<<== RESULT ==<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text font-style="italic" variable="title" />
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "item-1",
+        "title": "My <i>Amazing</i> Title",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

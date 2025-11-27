@@ -1,0 +1,104 @@
+>>==== MODE ====>>
+bibliography
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Allabout</div>
+  <div class="csl-entry">Dale</div>
+  <div class="csl-entry">Dalebout</div>
+</div>
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-2"
+        },
+        {
+            "id": "ITEM-3"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="author">
+    <names variable="author">
+      <name form="short" />
+    </names>
+  </macro>
+  <citation>
+    <sort>
+      <key macro="author" />
+    </sort>
+    <layout delimiter="; ">
+      <text macro="author" />
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key variable="author" />
+    </sort>
+    <layout>
+      <text macro="author" />
+      <text variable="title"/>
+    </layout>
+  </bibliography>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "author": [
+      {
+        "family": "Dale",
+        "given": "Zippy"
+      }
+    ],
+    "id": "ITEM-1",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Dalebout",
+        "given": "Arnie"
+      }
+    ],
+    "id": "ITEM-3",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Allabout",
+        "given": "Kelly"
+      }
+    ],
+    "id": "ITEM-2",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

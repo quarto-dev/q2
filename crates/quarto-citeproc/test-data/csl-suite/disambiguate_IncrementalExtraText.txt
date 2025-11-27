@@ -1,0 +1,147 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+Yost Trisk
+John Smith, Book One
+John Smith, Book Two
+John Smith, Complete Works, ed. 5
+John Smith, Complete Works, ed. 6
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-0"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-2"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-3"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-4"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <group delimiter=", ">
+         <names variable="author">
+           <name/>
+         </names>
+         <choose>
+           <if disambiguate="true">
+             <text variable="title"/>
+           </if>
+         </choose>
+         <choose>
+           <if disambiguate="true">
+             <group delimiter=" ">
+               <label variable="edition" form="short"/>
+               <number variable="edition"/>
+             </group>
+           </if>
+         </choose>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "author": [
+      {
+        "family": "Trisk",
+        "given": "Yost"
+      }
+    ],
+    "id": "ITEM-0",
+    "title": "Book One",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Smith",
+        "given": "John"
+      }
+    ],
+    "edition": "3",
+    "id": "ITEM-1",
+    "title": "Book One",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Smith",
+        "given": "John"
+      }
+    ],
+    "edition": "4",
+    "id": "ITEM-2",
+    "title": "Book Two",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Smith",
+        "given": "John"
+      }
+    ],
+    "edition": "5",
+    "id": "ITEM-3",
+    "title": "Complete Works",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Smith",
+        "given": "John"
+      }
+    ],
+    "edition": "6",
+    "id": "ITEM-4",
+    "title": "Complete Works",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

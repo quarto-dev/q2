@@ -1,0 +1,174 @@
+This test illustrates a use case for the following rule, discussed on the Zotero forums:
+
+  "When different groups of authors with the same first author and date 
+  occur, they should be cited thus: (Able, Baker & Charles 1986a; Able, 
+  David & Edwards 1986b), then subsequently abbreviated to (Able et al. 
+  1986a; Able et al. 1986b)."
+
+  "Italicized letters 'a', 'b', 'c', etc., should be added to the date of 
+  papers with the same first authorship and year"
+
+The test illustrates that the first rule can be satisfied with the CSL 0.8
+feature set, and the second using the year-suffix text variable introduced
+in CSL 0.9.  It differs slightly from the example given by the poster
+(asplundj) in that the cites do not include author initials, but this conforms
+to the cited style guide.
+
+
+The discussion can be found at: 
+  http://forums.zotero.org/discussion/5290/collapse-year-suffix/
+
+The style guide containing the rule quoted above can be found 
+at:
+  http://www.wiley.com/bw/submit.asp?ref=0269-8463&site=1
+
+
+The point in all of this for implementers is that evaluation of 
+an in-text key for disambiguation purposes should be based on the 
+subsequent form of the cite, even if it occurs only once in the 
+text.
+
+
+Frank Bennett
+2009-04-14
+
+
+
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+(Baur, Fröberg, Baur, et al. 2000<i>a</i>; Baur, Schileyko &#38; Baur 2000<i>b</i>; Doe 2000)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-year-suffix="true"
+         et-al-min="3"
+         et-al-subsequent-min="1"
+         et-al-subsequent-use-first="1"
+         et-al-use-first="3">
+    <layout delimiter="; " prefix="(" suffix=")">
+      <names variable="author">
+        <name and="symbol" delimiter=", " delimiter-precedes-last="never" form="short" />
+      </names>
+      <date prefix=" " variable="issued">
+        <date-part name="year" />
+      </date>
+      <text font-style="italic" variable="year-suffix" />
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Baur",
+                "given": "Bruno"
+            },
+            {
+                "family": "Fröberg",
+                "given": "Lars"
+            },
+            {
+                "family": "Baur",
+                "given": "Anette"
+            },
+            {
+                "family": "Guggenheim",
+                "given": "Richard"
+            },
+            {
+                "family": "Haase",
+                "given": "Martin"
+            }
+        ],
+        "container-title": "Nordic Journal of Botany",
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "page": "119-128",
+        "title": "Ultrastructure of snail grazing damage to calcicolous lichens",
+        "type": "article-journal",
+        "volume": "20"
+    },
+    {
+        "author": [
+            {
+                "family": "Baur",
+                "given": "Bruno"
+            },
+            {
+                "family": "Schileyko",
+                "given": "Anatoly A."
+            },
+            {
+                "family": "Baur",
+                "given": "Anette"
+            }
+        ],
+        "container-title": "Journal of Molluscan Studies",
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "page": "285-289",
+        "title": "Ecological observations on _Arianta aethiops aethiops_ (Helicidae), a land snail endemic to the South Carpathian mountains, Romania",
+        "type": "article-journal",
+        "volume": "66"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "container-title": "Journal of Irreproducible Results",
+        "id": "ITEM-3",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "page": "5-7",
+        "title": "Some bogus title",
+        "type": "article-journal",
+        "volume": "666"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

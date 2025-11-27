@@ -1,0 +1,93 @@
+>>==== MODE ====>>
+bibliography
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Klark Kent</div>
+  <div class="csl-entry">Smith, John</div>
+</div>
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-2"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" version="1.0" class="note">
+  <info>
+    <title>United Kingdom</title>
+    <id>http://citationstylist.org/modules/juris-gb</id>
+    <link href="http://citationstylist/modules/juris-gb" rel="self"/>
+    <link href="http://juris-m.github.io" rel="documentation"/>
+    <author>
+      <name>Frank Bennett</name>
+      <email>biercenator@gmail.com</email>
+    </author>
+    <category citation-format="note"/>
+    <category field="law"/>
+    <summary>Juris-M style module for the United Kingdom</summary>
+    <updated>2013-01-26T22:06:38+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  
+  <citation>
+    <layout>
+      <names variable="author">
+        <name/>
+      </names>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key variable="author"/>
+    </sort>
+    <layout>
+      <names variable="author">
+        <name/>
+      </names>
+    </layout>
+  </bibliography>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "author": [
+      {
+        "literal": "Smith, John"
+      }
+    ],
+    "id": "ITEM-1",
+    "type": "book"
+  },
+  {
+    "author": [
+      {
+        "family": "Kent",
+        "given": "Klark"
+      }
+    ],
+    "id": "ITEM-2",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,74 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+
+>>===== RESULT =====>>
+is-numeric is FALSE: version: 2002, amended effective June 1, 2010, and January 1, 2017
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" demote-non-dropping-particle="sort-only">
+  <info>
+    <title>Chicago Manual of Style (Full Note w. Bibliography) [delimiter fixes]</title>
+    <id>http://www.zotero.org/styles/chicago-fullnote-bibliography-delimiter-fixes</id>
+    <link href="http://www.zotero.org/styles/chicago-fullnote-bibliography-delimiter-fixes" rel="self"/>
+    <link href="http://www.chicagomanualofstyle.org/tools_citationguide.html" rel="documentation"/>
+    <author>
+      <name>Julian Onions</name>
+      <email>julian.onions@gmail.com</email>
+    </author>
+    <summary>Chicago format with full notes and bibliography (with delimiter fixes)</summary>
+    <category field="generic-base"/>
+    <category citation-format="note"/>
+    <updated>2009-12-04T20:22:16+00:00</updated>
+    <rights>This work is licensed under a Creative Commons Attribution-Share Alike 3.0 License: http://creativecommons.org/licenses/by-sa/3.0/</rights>
+  </info>
+  <citation et-al-min="4" et-al-use-first="1" disambiguate-add-names="true">
+    <layout>
+      <group delimiter=" ">
+        <choose>
+          <if is-numeric="version">
+            <text value="is-numeric is TRUE: "/>
+          </if>
+          <else>
+            <text value="is-numeric is FALSE:"/>
+          </else>
+        </choose>
+        <number variable="version"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+
+<<===== CSL =====<<
+
+>>===== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "Titlea"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+
+
+>>===== INPUT =====>>
+[
+  {"id":"Titlea","type":"report","version":"version: 2002, amended effective June 1, 2010, and January 1, 2017"}
+]
+<<===== INPUT =====<<
+
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

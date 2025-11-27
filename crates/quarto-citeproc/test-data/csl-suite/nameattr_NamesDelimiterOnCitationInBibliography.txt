@@ -1,0 +1,68 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">John DoeJane Roe</div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation
+      names-delimiter=" AND ALSO THE EDITOR ">
+    <layout>
+      <names variable="author editor">
+        <name name-as-sort-order="all"/>
+      </names>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <names variable="author editor">
+        <name />
+      </names>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "editor": [
+            {
+                "family": "Roe",
+                "given": "Jane"
+            }
+        ],
+        "id": "ITEM-1",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,90 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+>>===== DESCRIPTION =====>>
+Title case not disabled on volume-title with alternative languages
+
+<https://github.com/Juris-M/citeproc-js/issues/251>
+<<===== DESCRIPTION =====<<
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Syntax und Stilistik</div>
+  <div class="csl-entry">Syntax und Stilistik</div>
+  <div class="csl-entry">Syntax und Stilistik</div>
+  <div class="csl-entry">Syntax und Stilistik</div>
+  <div class="csl-entry">Syntax und Stilistik</div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2025-03-12T12:22:26+00:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <text value="DUMMY"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <text text-case="title" variable="event-title"/>
+      <text text-case="title" variable="original-title"/>
+      <text text-case="title" variable="part-title"/>
+      <text text-case="title" variable="reviewed-title"/>
+      <text text-case="title" variable="volume-title"/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "event-title": "Syntax und Stilistik",
+        "id": "ITEM-1",
+        "language": "de",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "language": "de",
+        "original-title": "Syntax und Stilistik",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-3",
+        "language": "de",
+        "part-title": "Syntax und Stilistik",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-4",
+        "language": "de",
+        "reviewed-title": "Syntax und Stilistik",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-5",
+        "language": "de",
+        "type": "book",
+        "volume-title": "Syntax und Stilistik"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<

@@ -1,0 +1,187 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Doe, John. <i>Hello 4</i>.</div>
+  <div class="csl-entry">--- ed. <i>Hello 1</i>.</div>
+  <div class="csl-entry">Doe, John Barbitol. <i>Hello 2</i>.</div>
+  <div class="csl-entry">Doe, John Egbert. <i>Hello 3</i>.</div>
+</div>
+<<===== RESULT =====<<
+
+
+mla-x.csl
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="in-text"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="editor-translator">
+    <names variable="editor translator" delimiter=". ">
+      <label form="verb-short" text-case="capitalize-first" suffix=" "/>
+      <name and="symbol" delimiter=", "/>
+    </names>
+  </macro>
+  <macro name="author">
+    <names variable="author">
+      <name name-as-sort-order="first" and="text" sort-separator=", " delimiter=", " delimiter-precedes-last="always"/>
+      <label form="short" prefix=" " suffix="." strip-periods="true"/>
+      <substitute>
+        <names variable="editor"/>
+        <names variable="translator"/>
+        <text macro="title"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="non-author">
+    <names variable="editor">
+      <name name-as-sort-order="first" and="text" sort-separator=", " delimiter=", " delimiter-precedes-last="always"/>
+      <label form="short" prefix=" " suffix="." strip-periods="true"/>
+      <substitute>
+        <names variable="translator"/>
+        <text macro="title"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="title">
+    <choose>
+      <if type="bill book graphic legal_case motion_picture report song" match="any">
+        <text variable="title" font-style="italic"/>
+      </if>
+      <else>
+        <text variable="title" quotes="true"/>
+      </else>
+    </choose>
+  </macro>
+  <citation et-al-min="4" et-al-use-first="1" disambiguate-add-names="true" disambiguate-add-givenname="true">
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <text value="BOGUS"/>
+    </layout>
+  </citation>
+  <bibliography hanging-indent="true" et-al-min="4" et-al-use-first="1" line-spacing="2" subsequent-author-substitute="---">
+    <sort>
+      <key macro="author"/>
+      <key macro="non-author" sort="descending"/>
+      <key variable="title"/>
+    </sort>
+    <layout>
+      <text macro="author" suffix="."/>
+      <text macro="title" prefix=" " suffix="."/>
+      <choose>
+        <if type="bill book graphic legal_case motion_picture report song" match="any">
+          <text macro="editor-translator" prefix=" " suffix="."/>
+        </if>
+        <else-if type="chapter paper-conference" match="any">
+          <group>
+            <text variable="container-title" font-style="italic" prefix=" " suffix="."/>
+            <text macro="editor-translator" prefix=" " suffix="."/>
+          </group>
+          <text variable="page" prefix=" " suffix="."/>
+        </else-if>
+        <else>
+          <group prefix=" " suffix="." delimiter=": ">
+            <group delimiter=" ">
+              <text macro="editor-translator" suffix="."/>
+              <text variable="container-title" font-style="italic"/>
+              <choose>
+                <if type="article-journal">
+                  <group delimiter=" ">
+                    <group delimiter=".">
+                      <text variable="volume"/>
+                      <text variable="issue"/>
+                    </group>
+                    <date variable="issued" prefix="(" suffix=")">
+                      <date-part name="year"/>
+                    </date>
+                  </group>
+                </if>
+                <else>
+                  <date variable="issued">
+                    <date-part name="day" suffix=" "/>
+                    <date-part name="month" form="short" suffix=" "/>
+                    <date-part name="year"/>
+                  </date>
+                </else>
+              </choose>
+            </group>
+            <text variable="page"/>
+          </group>
+        </else>
+      </choose>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+
+
+
+>>===== INPUT =====>>
+[
+    {
+        "editor": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "title": "Hello 1",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-4",
+        "title": "Hello 4",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John Barbitol"
+            }
+        ],
+        "id": "ITEM-2",
+        "title": "Hello 2",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John Egbert"
+            }
+        ],
+        "id": "ITEM-3",
+        "title": "Hello 3",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -358,7 +358,9 @@ quarto-citeproc
 
 ### quarto-xml: Generic XML with Source Tracking
 
-Analogous to quarto-yaml, this crate provides source-tracked XML parsing:
+Analogous to quarto-yaml, this crate provides source-tracked XML parsing.
+
+**IMPORTANT API Note for quarto-csl:** Use `all_children()` instead of `elements()` when iterating child elements in CSL files. Whitespace between elements (common in formatted CSL files) causes `XmlChildren::Mixed` instead of `XmlChildren::Elements`. The `get_children(name)` method already handles this transparently, so prefer it when filtering by element name.
 
 ```rust
 // quarto-xml/src/types.rs
@@ -1285,3 +1287,14 @@ Build custom implementation (this design) because:
 - quick-xml: `external-sources/quick-xml/`
 - quarto-yaml (pattern for quarto-xml): `crates/quarto-yaml/`
 - CiteprocOutput analysis: `claude-notes/research/2025-11-26-citeproc-output-architecture.md`
+
+## Development Resources
+
+**Haskell citeproc binary** (for comparison/testing):
+```
+/Users/cscheid/repos/github/cscheid/kyoto/external-sources/citeproc/dist-newstyle/build/aarch64-osx/ghc-9.4.8/citeproc-0.11/x/citeproc/build/citeproc/citeproc
+```
+
+**Locale files**: Copied to `crates/quarto-citeproc/locales/` (60 files)
+
+**CSL conformance test suite**: Copied to `crates/quarto-citeproc/test-data/csl-suite/` (858 tests)

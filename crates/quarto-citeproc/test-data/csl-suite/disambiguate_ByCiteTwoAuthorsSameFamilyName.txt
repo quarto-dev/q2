@@ -1,0 +1,109 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Asthma and Asthma (1980); Bronchitis (1995); Asthma (1885)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-givenname="true"
+         disambiguate-add-year-suffix="true"
+         givenname-disambiguation-rule="by-cite">
+    <layout delimiter="; ">
+      <names delimiter=", " variable="author">
+        <name and="text" delimiter=", " delimiter-precedes-last="never" form="short" initialize-with="." />
+      </names>
+      <group prefix=" (" suffix=")">
+        <date variable="issued">
+          <date-part name="year" />
+        </date>
+        <text variable="year-suffix" />
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Albert"
+            },
+            {
+                "family": "Asthma",
+                "given": "Bridget"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1980"
+                ]
+            ]
+        },
+        "title": "Book A",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Bronchitis",
+                "given": "Beauregarde"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1995"
+                ]
+            ]
+        },
+        "title": "Book B",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Albert"
+            }
+        ],
+        "id": "ITEM-3",
+        "issued": {
+            "date-parts": [
+                [
+                    "1885"
+                ]
+            ]
+        },
+        "title": "Book C",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

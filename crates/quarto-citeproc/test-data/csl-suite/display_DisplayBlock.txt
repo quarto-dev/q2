@@ -1,0 +1,99 @@
+>>== MODE ==>>
+bibliography
+<<== MODE ==<<
+
+
+
+>>== RESULT ==>>
+<div class="csl-bib-body">
+  <div class="csl-entry">John Smith, Book A (2000)<div class="csl-indent">An interesting book by an interesting author.</div>
+  </div>
+  <div class="csl-entry">Robert Jones, Book B (2001)<div class="csl-indent">An old contribution to a new field.</div>
+  </div>
+</div>
+<<== RESULT ==<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text value="hello" />
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <group delimiter=" ">
+        <group delimiter=", ">
+          <names variable="author">
+            <name />
+          </names>
+          <text variable="title" />
+        </group>
+        <date prefix="(" suffix=")" variable="issued">
+          <date-part name="year" />
+        </date>
+      </group>
+      <text display="indent" variable="abstract" />
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "abstract": "An interesting book by an interesting author.",
+        "author": [
+            {
+                "family": "Smith",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Book A",
+        "type": "book"
+    },
+    {
+        "abstract": "An old contribution to a new field.",
+        "author": [
+            {
+                "family": "Jones",
+                "given": "Robert"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "2001"
+                ]
+            ]
+        },
+        "title": "Book B",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

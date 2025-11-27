@@ -1,0 +1,106 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+>>===== RESULT =====>>
+(A Ylinen, 1995a; b; c)
+<<===== RESULT =====<<
+
+>>===== CSL =====>>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+  <info>
+    <title>The Journal of Neuroscience vJT</title>
+    <id>http://www.zotero.org/styles/journal-of-neuroscience-collapsedciteyears</id>
+    <link href="http://www.zotero.org/styles/journal-of-neuroscience-collapsedciteyears" rel="self"/>
+    <author>
+      <name>Ullrich Bartsch</name>
+      <email>ubartsch@gmail.com</email>
+    </author>
+    <contributor>
+      <name>Omar Mian</name>
+      <email>o.mian@ucl.ac.uk</email>
+    </contributor>
+    <category citation-format="author-date"/>
+    <category field="medicine"/>
+    <updated>2011-08-14T18:46:01+00:00</updated>
+    <summary>The Journal of Neuroscience style</summary>
+    <link href="http://www.jneurosci.org/misc/ifa_organization.shtml" rel="documentation"/>
+    <rights>This work is licensed under a Creative Commons Attribution-Share Alike 3.0 License: http://creativecommons.org/licenses/by-sa/3.0/</rights>
+  </info>
+  <citation disambiguate-add-year-suffix="true" collapse="year-suffix">
+    <layout prefix="(" suffix=")" delimiter="; ">
+        <group delimiter=", ">
+          <names variable="author"/>
+          <date variable="issued" form="text" date-parts="year"/>
+        </group>
+    </layout>
+  </citation>
+  <bibliography hanging-indent="true" et-al-min="20" et-al-use-first="1">
+    <layout suffix=".">
+      <text value="forget me"/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Ylinen",
+                "given": "A"
+            }
+        ],
+        "id": 22,
+        "issued": {
+            "date-parts": [
+                [
+                    1995
+                ]
+            ]
+        },
+        "type": "article-journal"
+    },
+    {
+        "author": [
+            {
+                "family": "Ylinen",
+                "given": "A"
+            }
+        ],
+        "id": 21,
+        "issued": {
+            "date-parts": [
+                [
+                    "1995"
+                ]
+            ]
+        },
+        "type": "article-journal"
+    },
+    {
+        "author": [
+            {
+                "family": "Ylinen",
+                "given": "A"
+            }
+        ],
+        "id": 23,
+        "issued": {
+            "date-parts": [
+                [
+                    "1995"
+                ]
+            ]
+        },
+        "type": "article-journal"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

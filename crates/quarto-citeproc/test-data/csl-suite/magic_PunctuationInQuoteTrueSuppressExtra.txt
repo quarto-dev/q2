@@ -1,0 +1,51 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+
+>>===== RESULT =====>>
+“Article A?” Journal B
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <locale xml:lang="en">
+    <style-options punctuation-in-quote="true" />
+  </locale>
+  <citation>
+    <layout>
+      <text quotes="true" variable="title" />
+      <text variable="container-title" prefix=". "/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "container-title": "Journal B",
+        "id": "ITEM-1",
+        "title": "Article A?",
+        "type": "article-journal"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

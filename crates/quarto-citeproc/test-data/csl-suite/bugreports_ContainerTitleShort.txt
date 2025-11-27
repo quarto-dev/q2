@@ -1,0 +1,73 @@
+>>==== MODE ====>>
+bibliography
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Anon J/Anon J/Anonymous Journal</div>
+  <div class="csl-entry">Journal-1/Journal-1/Anonymous Journal One</div>
+</div>
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-2"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text value="BOGUS"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <group delimiter="/">
+        <text variable="container-title-short"/>
+        <text variable="container-title" form="short"/>
+        <text variable="container-title"/>
+      </group>
+    </layout>
+  </bibliography></style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "container-title": "Anonymous Journal",
+    "id": "ITEM-1",
+    "journalAbbreviation": "Anon J",
+    "type": "article-journal"
+  },
+  {
+    "container-title": "Anonymous Journal One",
+    "container-title-short": "Journal-1",
+    "id": "ITEM-2",
+    "type": "chapter"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

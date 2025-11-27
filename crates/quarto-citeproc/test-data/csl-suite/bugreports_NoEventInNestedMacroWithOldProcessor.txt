@@ -1,0 +1,141 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+This turned out to be a very roundabout method of identifying a simple error in the CSL here:
+
+http://forums.zotero.org/discussion/11576/problems-with-paperconference-and-speech/#Comment_61711
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">My Anonymous Paper. Paper presented at Big Event, Bogus.</div>
+  <div class="csl-entry">My Anonymous Speech. Speech delivered at Other Big Event, Bogus.</div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="title">
+    <text variable="title"/>
+  </macro>
+  <macro name="day-month">
+    <text value="Bogus"/>
+  </macro>
+  <macro name="publisher">
+    <text value="Bogus"/>
+  </macro>
+  <macro name="contributors">
+    <text value="Bogus"/>
+  </macro>
+  <macro name="event">
+    <choose>
+      <if variable="event">
+        <choose>
+          <if type="paper-conference">
+            <text value="paper presented at" text-case="capitalize-first" suffix=" "/>
+            <text variable="event"/>
+          </if>
+          <else-if type="speech">
+            <text value="speech delivered at" text-case="capitalize-first" suffix=" "/>
+            <text variable="event"/>
+          </else-if>
+        </choose>
+      </if>
+    </choose>
+  </macro>
+  <macro name="issue">
+    <choose>
+      <if type="paper-conference speech" match="any">
+        <group prefix=". " delimiter=", ">
+          <text macro="event"/>
+          <text variable="event-place"/>
+          <text macro="day-month"/>
+        </group>
+      </if>
+      <else-if type="article-journal">
+        <text macro="day-month" prefix=" (" suffix=")"/>
+      </else-if>
+      <else-if type="article-newspaper article-magazine" match="any">
+        <text macro="day-month" prefix=", "/>
+      </else-if>
+      <else-if type="legal_case"> </else-if>
+      <else>
+        <group prefix=". " delimiter=", ">
+          <choose>
+            <if type="thesis">
+              <text variable="genre" text-case="capitalize-first"/>
+            </if>
+          </choose>
+          <text macro="publisher"/>
+          <text macro="day-month"/>
+        </group>
+      </else>
+    </choose>
+  </macro>
+  <citation>
+    <layout>
+      <text value="Bogus"/>
+    </layout>
+  </citation>
+  <bibliography
+    hanging-indent="true"
+    et-al-min="11"
+    et-al-use-first="7"
+    subsequent-author-substitute="———"
+    entry-spacing="0">
+    <sort>
+      <key macro="contributors"/>
+      <key variable="issued"/>
+    </sort>
+    <layout suffix=".">
+      <!-- text macro="contributors" suffix=". "/ -->
+      <!-- text macro="date" suffix=". "/ -->
+      <text macro="title"/>
+      <!-- text macro="description"/ -->
+      <!-- text macro="secondary-contributors" prefix=". "/ -->
+      <!-- text macro="container-title" prefix=". "/ -->
+      <!-- text macro="container-contributors"/ -->
+      <!-- text macro="locators-chapter"/ -->
+      <!-- text macro="edition" prefix=". "/ -->
+      <!-- text macro="locators"/ -->
+      <!-- text macro="collection-title" prefix=". "/ -->
+      <text macro="issue"/>
+      <!-- text macro="locators-article"/ -->
+      <!-- text macro="access" prefix=". Available at: "/ -->
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "event": "Big Event",
+        "id": "ITEM-1",
+        "title": "My Anonymous Paper",
+        "type": "paper-conference"
+    },
+    {
+        "event": "Other Big Event",
+        "id": "ITEM-2",
+        "title": "My Anonymous Speech",
+        "type": "speech"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

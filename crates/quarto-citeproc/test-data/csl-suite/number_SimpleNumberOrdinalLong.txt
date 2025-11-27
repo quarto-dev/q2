@@ -1,0 +1,70 @@
+>>== MODE ==>>
+citation
+<<== MODE ==<<
+
+
+
+>>== RESULT ==>>
+42nd
+ninth
+<<== RESULT ==<<
+
+>>== CITATION-ITEMS ==>>
+[
+    [
+        {
+            "id": "item-1"
+        }
+    ],
+    [
+        {
+            "id": "item-2"
+        }
+    ]
+]
+<<== CITATION-ITEMS ==<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <number form="long-ordinal" variable="volume" />
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "item-1", 
+        "title": "Ignore me", 
+        "type": "book", 
+        "volume": "42"
+    }, 
+    {
+        "id": "item-2", 
+        "title": "Ignore me too", 
+        "type": "book", 
+        "volume": "9"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

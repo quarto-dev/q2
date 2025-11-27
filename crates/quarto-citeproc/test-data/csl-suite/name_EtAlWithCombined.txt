@@ -1,0 +1,411 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">John Doe。</div>
+  <div class="csl-entry">——，Ziggy Zither等點校。</div>
+  <div class="csl-entry">田中太郎, Yossarian Yoda, 等翻譯員。</div>
+</div>
+<<===== RESULT =====<<
+
+>>===== CITATION-ITEMS =====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-2"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-3"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" et-al-min="3" et-al-use-first="2" default-locale="zh-TW">
+  <info>
+    <title xml:lang="zh-TW">Humanities Chinese</title>
+    <id>http://www.zotero.org/styles/humanities-chinese</id>
+    <link rel="self" href="http://www.zotero.org/styles/humanities-chinese"/>
+    <link href="http://www.zotero.org/styles/humanities-chinese" rel="documentation" xml:lang="zh-TW"/>
+    <author>
+      <name>Tan Yin Hoe</name>
+      <email>astyh83@gmail.com</email>
+    </author>
+    <updated>2014-05-18T12:43:24+00:00</updated>
+  </info>
+  <locale xml:lang="zh-TW">
+    <date form="text">
+      <date-part name="year" suffix="年"/>
+      <date-part name="month" form="numeric" suffix="月"/>
+      <date-part name="day" suffix="日"/>
+    </date>
+  </locale>
+  <macro name="container-title">
+    <choose>
+      <if type="chapter paper-conference" match="any">
+        <group delimiter="，">
+          <group>
+            <text value="收錄"/>
+            <text macro="container-author" suffix="，"/>
+            <text variable="container-title" prefix="《" suffix="》"/>
+          </group>
+          <group>
+            <label variable="volume"/>
+            <number variable="volume"/>
+          </group>
+          <group>
+            <text term="book"/>
+            <text variable="collection-number"/>
+          </group>
+        </group>
+      </if>
+      <else-if type="article-journal" match="any">
+        <text macro="journal"/>
+      </else-if>
+      <else>
+        <text variable="container-title" prefix="《" suffix="》"/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="contributor">
+    <choose>
+      <if match="all" variable="author editor">
+        <group delimiter="，">
+          <text macro="labelled-author"/>
+          <text macro="labelled-editor"/>
+        </group>
+      </if>
+      <else-if match="all" variable="author translator">
+        <group delimiter="，">
+          <text macro="labelled-author"/>
+          <text macro="labelled-translator"/>
+        </group>
+      </else-if>
+      <else-if match="all" variable="author collection-editor">
+        <group delimiter="，">
+          <text macro="labelled-author"/>
+          <text macro="labelled-series-editor"/>
+        </group>
+      </else-if>
+      <else>
+        <names variable="author">
+          <name delimiter="、" delimiter-precedes-et-al="never"/>
+          <et-al/>
+          <substitute>
+            <text macro="editor"/>
+            <text macro="translator"/>
+            <text macro="reviewed-author"/>
+          </substitute>
+        </names>
+      </else>
+    </choose>
+  </macro>
+  <macro name="title">
+    <choose>
+      <if type="article article-journal chapter paper-conference" match="any">
+        <text variable="title" prefix="〈" suffix="〉"/>
+      </if>
+      <else>
+        <text variable="title" prefix="《" suffix="》"/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="journal">
+    <group delimiter="，">
+      <text variable="container-title" prefix="《" suffix="》"/>
+      <group delimiter="，">
+        <date date-parts="year-month" form="text" variable="issued"/>
+        <text macro="volume"/>
+        <group>
+          <text value="第"/>
+          <number variable="issue"/>
+          <label variable="issue"/>
+        </group>
+      </group>
+    </group>
+  </macro>
+  <macro name="collection-title">
+    <choose>
+      <if match="any" variable="collection-title">
+        <group delimiter="，">
+          <text variable="collection-title" prefix="《" suffix="》"/>
+          <group>
+            <number variable="collection-number"/>
+          </group>
+        </group>
+      </if>
+    </choose>
+  </macro>
+  <macro name="publisher">
+    <choose>
+      <if type="thesis" match="any">
+        <group prefix="（" suffix="）">
+          <group>
+            <text variable="publisher-place" suffix="："/>
+          </group>
+          <group delimiter="，">
+            <text variable="publisher" suffix="論文"/>
+            <date date-parts="year" form="text" variable="issued"/>
+          </group>
+        </group>
+      </if>
+      <else-if type="article book chapter paper-conference" match="any">
+        <group prefix="（" suffix="）">
+          <group>
+            <text variable="publisher-place" suffix="："/>
+          </group>
+          <group delimiter="，">
+            <text variable="publisher"/>
+            <date date-parts="year" form="text" variable="issued"/>
+          </group>
+        </group>
+      </else-if>
+    </choose>
+  </macro>
+  <macro name="locator">
+    <choose>
+      <if match="any" variable="locator">
+        <label variable="locator"/>
+        <text variable="locator"/>
+      </if>
+      <else-if match="any" variable="page">
+        <label variable="locator"/>
+        <text variable="page"/>
+      </else-if>
+    </choose>
+  </macro>
+  <macro name="title-short">
+    <group>
+      <choose>
+        <if type="article article-journal chapter paper-conference" match="any">
+          <group>
+            <text variable="title-short" prefix="〈" suffix="〉"/>
+          </group>
+        </if>
+        <else>
+          <text variable="title-short" prefix="《" suffix="》"/>
+        </else>
+      </choose>
+    </group>
+  </macro>
+  <macro name="volume">
+    <choose>
+      <if match="any" is-numeric="volume">
+        <label variable="volume"/>
+        <text variable="volume"/>
+      </if>
+      <else>
+        <text variable="volume"/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="editor">
+    <names variable="editorial-director editor">
+      <name/>
+      <label/>
+    </names>
+  </macro>
+  <macro name="translator">
+    <names variable="translator">
+      <name/>
+      <label/>
+    </names>
+  </macro>
+  <macro name="reviewed-author">
+    <names variable="reviewed-author">
+      <name/>
+      <label/>
+    </names>
+  </macro>
+  <macro name="container-author">
+    <names variable="container-author">
+      <name/>
+      <et-al/>
+    </names>
+  </macro>
+  <macro name="series-editor">
+    <names variable="collection-editor">
+      <name/>
+      <label/>
+    </names>
+  </macro>
+  <macro name="labelled-author">
+    <names variable="author">
+      <name/>
+      <et-al/>
+      <label form="verb-short"/>
+    </names>
+  </macro>
+  <macro name="labelled-translator">
+    <names variable="translator">
+      <name/>
+      <et-al/>
+      <label form="verb-short"/>
+    </names>
+  </macro>
+  <macro name="labelled-editor">
+    <names variable="editor">
+      <name/>
+      <et-al/>
+      <label form="verb-short"/>
+    </names>
+  </macro>
+  <macro name="labelled-series-editor">
+    <names variable="collection-editor" delimiter="、">
+      <name delimiter="、" et-al-min="2" et-al-use-first="1"/>
+      <et-al/>
+      <label form="verb"/>
+    </names>
+  </macro>
+  <citation>
+    <layout>
+      <choose>
+        <if match="all" position="subsequent">
+          <group delimiter="，">
+            <group>
+              <text macro="contributor"/>
+            </group>
+            <group>
+              <text macro="title-short"/>
+            </group>
+            <group>
+              <text macro="locator"/>
+            </group>
+          </group>
+          <text value="。"/>
+        </if>
+        <else>
+          <group delimiter="，">
+            <group>
+              <text macro="contributor"/>
+            </group>
+            <group>
+              <text macro="title"/>
+            </group>
+            <group>
+              <text macro="container-title"/>
+            </group>
+            <group>
+              <text macro="collection-title"/>
+            </group>
+            <group>
+              <group>
+                <text macro="publisher"/>
+              </group>
+            </group>
+            <group>
+              <text macro="locator"/>
+            </group>
+          </group>
+          <text value="。"/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+  <bibliography subsequent-author-substitute="——" entry-spacing="2" hanging-indent="true">
+    <layout>
+      <group delimiter="，">
+        <group>
+          <text macro="contributor"/>
+        </group>
+        <group>
+          <text macro="title"/>
+        </group>
+        <group>
+          <text macro="container-title"/>
+        </group>
+        <group>
+          <text macro="collection-title"/>
+        </group>
+        <group>
+          <group>
+            <text macro="publisher"/>
+          </group>
+        </group>
+        <group>
+          <text macro="locator"/>
+        </group>
+      </group>
+      <text value="。"/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "collection-editor": [
+            {
+                "family": "Zither", 
+                "given": "Ziggy"
+            }, 
+            {
+                "family": "Yoda", 
+                "given": "Yossarian"
+            }, 
+            {
+                "family": "Xylophone", 
+                "given": "Xerxes"
+            }
+        ], 
+        "id": "ITEM-2", 
+        "type": "book"
+    },
+    {
+        "translator": [
+            {
+                "family": "田中", 
+                "given": "太郎"
+            }, 
+            {
+                "family": "Yoda", 
+                "given": "Yossarian"
+            }, 
+            {
+                "family": "Xylophone", 
+                "given": "Xerxes"
+            }
+        ], 
+        "id": "ITEM-3", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,65 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+The result will differ with in-text style in citeproc-js (only one
+name variable will be rendered).  That would be the right result for
+most in-text styles, but would be unwanted in an in-text note
+style. A CSL extension (note-in-text?) would cover that case.
+
+
+>>===== RESULT =====>>
+John Doe (ed. &#38; trans.)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <names variable="editor translator" delimiter=", ">
+        <name />
+        <label form="short" prefix=" (" suffix=")"/>
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "editor": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "translator": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,83 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Doe, JQ n.d., </div>
+</div>
+<<===== RESULT =====<<
+
+
+Macros are from a private style "unisa-harvard", forwarded by a user.
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="in-text"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="author">
+     <names variable="author">
+        <name name-as-sort-order="all" and="symbol" sort-separator=", " initialize-with="" delimiter=", " delimiter-precedes-last="never"/>
+        <label form="short" prefix=" (" suffix=")" strip-periods="true"/>
+        <substitute>
+           <names variable="editor"/>
+        </substitute>
+     </names>
+  </macro>
+  <macro name="year-date">
+     <choose>
+        <if variable="issued">
+           <date variable="issued">
+              <date-part name="year"/>
+           </date>
+        </if>
+        <else>
+           <text term="no date" form="short"/>
+        </else>
+     </choose>
+  </macro>
+  <citation>
+    <layout>
+      <text value="BOGUS"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <text macro="author"/>
+      <text macro="year-date" prefix=" " suffix=", "/>
+    </layout>
+  </bibliography>
+</style>
+
+
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John Quiggly"
+            }
+        ],
+        "id": "ITEM-1",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

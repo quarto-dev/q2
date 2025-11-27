@@ -1,0 +1,89 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+[[X]Jane Roe (<i>ed.</i>); [X]John Doe]
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <locale>
+    <terms>
+      <term name="et-al">hello</term>
+    </terms>
+  </locale>
+  <citation>
+    <layout delimiter="; " prefix="[" suffix="]">
+      <names prefix="[X]" variable="author">
+        <name />
+        <label form="short" prefix=" (" suffix=".)" font-style="italic"/>
+        <substitute>
+          <names variable="editor" />
+        </substitute>
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "editor": [
+            {
+                "family": "Roe",
+                "given": "Jane"
+            }
+        ],
+        "id": "item-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Her Anonymous Anthology",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "simple-western-name-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1965",
+                    "6",
+                    "1"
+                ]
+            ]
+        },
+        "title": "His Anonymous Life",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

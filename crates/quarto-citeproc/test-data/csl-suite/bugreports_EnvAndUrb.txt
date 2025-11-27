@@ -1,0 +1,215 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+Note that disambiguate-add-names does not take effect, because the names are
+exposed by disambiguate="true", which has a lower priority than names expansion,
+and disambiguation attempts terminate immediately after it is applied.
+
+
+>>===== RESULT =====>>
+>>[0] Baines, T S, O Benedettini and J M Kay, ‘Title One’; Baines, T S, F Gump and J M Kay, ‘Title Two’.
+..[1] See reference 1, Baines et al.
+>>[2] See reference 1, Baines et al.
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 2
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-3",
+            "citationItems": [
+                {
+                    "id": "ITEM-2"
+                }
+            ],
+            "properties": {
+                "noteIndex": 3
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ]
+        ],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+>>==== CITATION-ITEMS ====
+[
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-2"
+        }
+    ], 
+    [
+        {
+            "id": "ITEM-1",
+            "position": 1,
+            "first-reference-note-number": 1
+        }
+    ], 
+    [
+        {
+            "id": "ITEM-2",
+            "position": 1,
+            "first-reference-note-number": 1
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====
+
+
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" demote-non-dropping-particle="sort-only" default-locale="en-GB" page-range-format="expanded">
+  <info>
+    <title>Environment and Urbanization</title>
+    <id>http://www.zotero.org/styles/environment-and-urbanization</id>
+    <link href="http://www.zotero.org/styles/environment-and-urbanization" rel="self"/>
+    <link href="http://www.zotero.org/styles/journal-of-applied-philosophy" rel="template"/>
+    <link href="https://us.sagepub.com/en-us/nam/journal/environment-and-urbanization#ReferenceStyle" rel="documentation"/>
+    <author>
+      <name>Sebastian Karcher</name>
+    </author>
+    <category citation-format="note"/>
+    <category field="geography"/>
+    <issn>0956-2478</issn>
+    <eissn>1746-0301</eissn>
+    <summary>Style calls for endnote symbols in parentheses, which CSL can't do</summary>
+    <updated>2012-10-25T21:15:26+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <citation et-al-min="7" et-al-use-first="1" disambiguate-add-names="true" disambiguate-add-givenname="true">
+    <layout suffix="." delimiter="; ">
+      <choose>
+        <if position="subsequent">
+          <group delimiter=", ">
+            <text variable="first-reference-note-number" prefix="See reference "/>
+            <choose>
+              <if disambiguate="true">
+                <names variable="author">
+                  <name form="short" and="text" sort-separator=", " delimiter=", " delimiter-precedes-last="never" et-al-min="3" et-al-use-first="1" initialize-with=" "/>
+                </names>
+              </if>
+            </choose>
+            <choose>
+              <if disambiguate="true">
+                <text variable="title" quotes="true" text-case="title" form="short"/>
+              </if>
+            </choose>
+          </group>
+        </if>
+        <else>
+          <group delimiter=", ">
+            <names variable="author">
+              <name and="text" sort-separator=", " delimiter=", " delimiter-precedes-last="never" initialize-with=" " name-as-sort-order="first" initialize="false"/>
+            </names>
+            <text variable="title" quotes="true"/>
+          </group>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>==== INPUT ====>>
+[
+  {
+    "author": [
+      {
+        "family": "Baines",
+        "given": "T. S."
+      },
+      {
+        "family": "Benedettini",
+        "given": "O."
+      },
+      {
+        "family": "Kay",
+        "given": "J. M."
+      }
+    ],
+    "id": "ITEM-1",
+    "title": "Title One",
+    "type": "article-journal"
+  },
+  {
+    "author": [
+      {
+        "family": "Baines",
+        "given": "T. S."
+      },
+      {
+        "family": "Gump",
+        "given": "F."
+      },
+      {
+        "family": "Kay",
+        "given": "J. M."
+      }
+    ],
+    "id": "ITEM-2",
+    "title": "Title Two",
+    "type": "article-journal"
+  }
+]
+<<==== INPUT ====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

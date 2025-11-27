@@ -1,0 +1,109 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Date: (); Date: (Spring); Date: (Spring); Date: (); Date: (Winter)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <text value="Date: ("/>
+      <date variable="issued">
+        <date-part name="month" form="long" strip-periods="true"/>
+      </date>
+      <text value=")"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    1965,
+                    -1,
+                    1
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    1965,
+                    13,
+                    1
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "id": "ITEM-3",
+        "issued": {
+            "date-parts": [
+                [
+                    1965,
+                    17,
+                    1
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "id": "ITEM-4",
+        "issued": {
+            "date-parts": [
+                [
+                    1965,
+                    60,
+                    1
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "id": "ITEM-5",
+        "issued": {
+            "date-parts": [
+                [
+                    1965,
+                    24,
+                    0
+                ]
+            ]
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

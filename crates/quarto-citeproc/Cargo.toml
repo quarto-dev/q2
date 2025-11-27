@@ -1,0 +1,23 @@
+[package]
+name = "quarto-citeproc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Citation processing engine using CSL styles"
+
+[dependencies]
+quarto-csl = { path = "../quarto-csl" }
+quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-source-map = { path = "../quarto-source-map" }
+quarto-xml = { path = "../quarto-xml" }
+rust-embed = { version = "8", features = ["include-exclude"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+
+[build-dependencies]
+glob = "0.3"

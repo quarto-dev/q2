@@ -1,0 +1,88 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+## 2013-04-17 :: Frank Bennett <biercenator@gmail.com>
+
+  This test previously had no givenname-disambiguation-rule attribute.
+  It has been added because the CSL specification requires processors
+  to adopt by-cite disambiguation as the default.
+
+
+>>===== RESULT =====>>
+(Nolan J. Malone 2001; Kemp Malone 1951)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-givenname="true" givenname-disambiguation-rule="all-names">
+    <layout delimiter="; " prefix="(" suffix=")">
+      <group delimiter=" ">
+        <names delimiter=", " variable="author">
+          <name and="text" delimiter=", " form="short" />
+        </names>
+        <date variable="issued">
+          <date-part name="year" />
+        </date>
+        <text variable="year-suffix" />
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Malone",
+                "given": "Nolan J."
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "2001"
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Malone",
+                "given": "Kemp"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1951"
+                ]
+            ]
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

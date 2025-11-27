@@ -853,4 +853,158 @@ mod tests {
         let diag = err.to_diagnostic();
         assert_eq!(diag.code.as_deref(), Some("Q-9-1"));
     }
+
+    // ==================== CSL Integration Tests ====================
+
+    #[test]
+    fn test_parse_real_csl_style() {
+        // Parse a real CSL style file to verify quarto-xml handles CSL format
+        let csl = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+  <info>
+    <title>Test Style</title>
+    <id>http://example.org/test</id>
+  </info>
+  <locale xml:lang="en">
+    <terms>
+      <term name="chapter" form="short">ch.</term>
+    </terms>
+  </locale>
+  <macro name="author">
+    <names variable="author">
+      <name initialize-with=". "/>
+    </names>
+  </macro>
+  <citation>
+    <layout>
+      <text macro="author"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <group delimiter=", ">
+        <text macro="author"/>
+        <date variable="issued">
+          <date-part name="year"/>
+        </date>
+      </group>
+    </layout>
+  </bibliography>
+</style>"#;
+
+        let xml = parse(csl).unwrap();
+
+        // Verify root element
+        assert_eq!(xml.root.name, "style");
+        assert_eq!(xml.root.get_attribute("class"), Some("in-text"));
+        assert_eq!(xml.root.get_attribute("version"), Some("1.0"));
+
+        // Verify we can navigate the structure (use all_children to handle whitespace)
+        let elements = xml.root.all_children();
+        let element_names: Vec<&str> = elements.iter().map(|e| e.name.as_str()).collect();
+        assert!(element_names.contains(&"info"));
+        assert!(element_names.contains(&"locale"));
+        assert!(element_names.contains(&"macro"));
+        assert!(element_names.contains(&"citation"));
+        assert!(element_names.contains(&"bibliography"));
+
+        // Verify macro element
+        let macros = xml.root.get_children("macro");
+        assert_eq!(macros.len(), 1);
+        assert_eq!(macros[0].get_attribute("name"), Some("author"));
+
+        // Verify locale with xml:lang attribute
+        let locales = xml.root.get_children("locale");
+        assert_eq!(locales.len(), 1);
+        // xml:lang is stored as "lang" with prefix "xml"
+        let locale = &locales[0];
+        let lang_attr = locale.attributes.iter().find(|a| a.name == "lang");
+        assert!(lang_attr.is_some());
+        assert_eq!(lang_attr.unwrap().value, "en");
+        assert_eq!(lang_attr.unwrap().prefix, Some("xml".to_string()));
+    }
+
+    #[test]
+    fn test_parse_csl_choose_conditionals() {
+        // Test parsing CSL choose/if/else-if/else structure
+        let csl = r#"<macro name="title">
+  <choose>
+    <if type="book" match="any">
+      <text variable="title" font-style="italic"/>
+    </if>
+    <else-if type="article">
+      <text variable="title" quotes="true"/>
+    </else-if>
+    <else>
+      <text variable="title"/>
+    </else>
+  </choose>
+</macro>"#;
+
+        let xml = parse(csl).unwrap();
+        assert_eq!(xml.root.name, "macro");
+
+        let choose = xml.root.get_children("choose");
+        assert_eq!(choose.len(), 1);
+
+        // Use all_children to handle whitespace between elements
+        let choose_children = choose[0].all_children();
+
+        let choose_names: Vec<&str> = choose_children.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(choose_names, vec!["if", "else-if", "else"]);
+
+        // Verify if element attributes
+        let if_el = choose_children[0];
+        assert_eq!(if_el.get_attribute("type"), Some("book"));
+        assert_eq!(if_el.get_attribute("match"), Some("any"));
+    }
+
+    #[test]
+    fn test_parse_csl_names_element() {
+        // Test parsing CSL names element structure
+        let csl = r#"<names variable="author">
+  <name initialize-with=". " delimiter=", " and="text"/>
+  <label form="short" prefix=", "/>
+  <substitute>
+    <names variable="editor"/>
+  </substitute>
+</names>"#;
+
+        let xml = parse(csl).unwrap();
+        assert_eq!(xml.root.name, "names");
+        assert_eq!(xml.root.get_attribute("variable"), Some("author"));
+
+        let children = xml.root.all_children();
+        assert_eq!(children.len(), 3);
+        assert_eq!(children[0].name, "name");
+        assert_eq!(children[1].name, "label");
+        assert_eq!(children[2].name, "substitute");
+
+        // Verify name element attributes
+        let name_el = children[0];
+        assert_eq!(name_el.get_attribute("initialize-with"), Some(". "));
+        assert_eq!(name_el.get_attribute("delimiter"), Some(", "));
+        assert_eq!(name_el.get_attribute("and"), Some("text"));
+    }
+
+    #[test]
+    fn test_parse_csl_date_element() {
+        // Test parsing CSL date element structure
+        let csl = r#"<date variable="issued">
+  <date-part name="year" form="long"/>
+  <date-part name="month" form="short" suffix="-"/>
+  <date-part name="day" form="numeric"/>
+</date>"#;
+
+        let xml = parse(csl).unwrap();
+        assert_eq!(xml.root.name, "date");
+        assert_eq!(xml.root.get_attribute("variable"), Some("issued"));
+
+        let date_parts = xml.root.all_children();
+        assert_eq!(date_parts.len(), 3);
+
+        assert_eq!(date_parts[0].get_attribute("name"), Some("year"));
+        assert_eq!(date_parts[1].get_attribute("name"), Some("month"));
+        assert_eq!(date_parts[2].get_attribute("name"), Some("day"));
+    }
 }

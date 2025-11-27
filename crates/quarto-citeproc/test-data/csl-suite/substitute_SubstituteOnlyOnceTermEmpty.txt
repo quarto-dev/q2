@@ -1,0 +1,52 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Content:
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2019-08-11T16:56:00+02:00</updated>
+  </info>
+  <locale>
+    <terms>
+      <term name="author">Author Term Value</term>
+      <term name="editor"></term>
+    </terms>
+  </locale>
+  <citation>
+    <layout>
+      <group delimiter=" ">
+        <group><text value="Content:"/></group>
+        <names variable="translator">
+          <substitute>
+            <text term="editor"/>
+            <text term="author"/>
+          </substitute>
+        </names>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<

@@ -1,0 +1,269 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+The Unicode standard provides a number of discrete superscript
+characters, to allow such to be transferred across systems
+without the need for system-specific markup. Because the characters
+are currently not fully supported on all platforms for rendering,
+implementations may desire to convert them into a marked-up
+equivalent when rendering.
+
+The list of characters used in this test is here:
+
+  http://unicode.org/reports/tr30/datafiles/SuperscriptFolding.txt
+
+Relevant discussions:
+
+  http://forums.zotero.org/discussion/18074/edition-with-superscript/
+  https://github.com/citation-style-language/schema/issues/49
+
+
+>>===== RESULT =====>>
+<sup>a</sup>
+<sup>2</sup>
+<sup>3</sup>
+<sup>1</sup>
+<sup>o</sup>
+<sup>h</sup>
+<sup>ɦ</sup>
+<sup>j</sup>
+<sup>r</sup>
+<sup>ɹ</sup>
+<sup>ɻ</sup>
+<sup>ʁ</sup>
+<sup>w</sup>
+<sup>y</sup>
+<sup>ɣ</sup>
+<sup>l</sup>
+<sup>s</sup>
+<sup>x</sup>
+<sup>ʕ</sup>
+<sup>A</sup>
+<sup>Æ</sup>
+<sup>B</sup>
+<sup>D</sup>
+<sup>E</sup>
+<sup>Ǝ</sup>
+<sup>G</sup>
+<sup>H</sup>
+<sup>I</sup>
+<sup>J</sup>
+<sup>K</sup>
+<sup>L</sup>
+<sup>M</sup>
+<sup>N</sup>
+<sup>O</sup>
+<sup>Ȣ</sup>
+<sup>P</sup>
+<sup>R</sup>
+<sup>T</sup>
+<sup>U</sup>
+<sup>W</sup>
+<sup>a</sup>
+<sup>ɐ</sup>
+<sup>ɑ</sup>
+<sup>ᴂ</sup>
+<sup>b</sup>
+<sup>d</sup>
+<sup>e</sup>
+<sup>ə</sup>
+<sup>ɛ</sup>
+<sup>ɜ</sup>
+<sup>g</sup>
+<sup>k</sup>
+<sup>m</sup>
+<sup>ŋ</sup>
+<sup>o</sup>
+<sup>ɔ</sup>
+<sup>ᴖ</sup>
+<sup>ᴗ</sup>
+<sup>p</sup>
+<sup>t</sup>
+<sup>u</sup>
+<sup>ᴝ</sup>
+<sup>ɯ</sup>
+<sup>v</sup>
+<sup>ᴥ</sup>
+<sup>β</sup>
+<sup>γ</sup>
+<sup>δ</sup>
+<sup>φ</sup>
+<sup>χ</sup>
+<sup>0</sup>
+<sup>i</sup>
+<sup>4</sup>
+<sup>5</sup>
+<sup>6</sup>
+<sup>7</sup>
+<sup>8</sup>
+<sup>9</sup>
+<sup>+</sup>
+<sup>−</sup>
+<sup>=</sup>
+<sup>(</sup>
+<sup>)</sup>
+<sup>n</sup>
+<sup>SM</sup>
+<sup>TM</sup>
+<sup>一</sup>
+<sup>二</sup>
+<sup>三</sup>
+<sup>四</sup>
+<sup>上</sup>
+<sup>中</sup>
+<sup>下</sup>
+<sup>甲</sup>
+<sup>乙</sup>
+<sup>丙</sup>
+<sup>丁</sup>
+<sup>天</sup>
+<sup>地</sup>
+<sup>人</sup>
+<sup>ʔ</sup>
+<sup>ʕ</sup>
+<sup>و</sup>
+<sup>ي</sup>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <group delimiter="&#x0A;">
+        <text value="&#x00AA;"/>
+        <text value="&#x00B2;"/>
+        <text value="&#x00B3;"/>
+        <text value="&#x00B9;"/>
+        <text value="&#x00BA;"/>
+        <text value="&#x02B0;"/>
+        <text value="&#x02B1;"/>
+        <text value="&#x02B2;"/>
+        <text value="&#x02B3;"/>
+        <text value="&#x02B4;"/>
+        <text value="&#x02B5;"/>
+        <text value="&#x02B6;"/>
+        <text value="&#x02B7;"/>
+        <text value="&#x02B8;"/>
+        <text value="&#x02E0;"/>
+        <text value="&#x02E1;"/>
+        <text value="&#x02E2;"/>
+        <text value="&#x02E3;"/>
+        <text value="&#x02E4;"/>
+        <text value="&#x1D2C;"/>
+        <text value="&#x1D2D;"/>
+        <text value="&#x1D2E;"/>
+        <text value="&#x1D30;"/>
+        <text value="&#x1D31;"/>
+        <text value="&#x1D32;"/>
+        <text value="&#x1D33;"/>
+        <text value="&#x1D34;"/>
+        <text value="&#x1D35;"/>
+        <text value="&#x1D36;"/>
+        <text value="&#x1D37;"/>
+        <text value="&#x1D38;"/>
+        <text value="&#x1D39;"/>
+        <text value="&#x1D3A;"/>
+        <text value="&#x1D3C;"/>
+        <text value="&#x1D3D;"/>
+        <text value="&#x1D3E;"/>
+        <text value="&#x1D3F;"/>
+        <text value="&#x1D40;"/>
+        <text value="&#x1D41;"/>
+        <text value="&#x1D42;"/>
+        <text value="&#x1D43;"/>
+        <text value="&#x1D44;"/>
+        <text value="&#x1D45;"/>
+        <text value="&#x1D46;"/>
+        <text value="&#x1D47;"/>
+        <text value="&#x1D48;"/>
+        <text value="&#x1D49;"/>
+        <text value="&#x1D4A;"/>
+        <text value="&#x1D4B;"/>
+        <text value="&#x1D4C;"/>
+        <text value="&#x1D4D;"/>
+        <text value="&#x1D4F;"/>
+        <text value="&#x1D50;"/>
+        <text value="&#x1D51;"/>
+        <text value="&#x1D52;"/>
+        <text value="&#x1D53;"/>
+        <text value="&#x1D54;"/>
+        <text value="&#x1D55;"/>
+        <text value="&#x1D56;"/>
+        <text value="&#x1D57;"/>
+        <text value="&#x1D58;"/>
+        <text value="&#x1D59;"/>
+        <text value="&#x1D5A;"/>
+        <text value="&#x1D5B;"/>
+        <text value="&#x1D5C;"/>
+        <text value="&#x1D5D;"/>
+        <text value="&#x1D5E;"/>
+        <text value="&#x1D5F;"/>
+        <text value="&#x1D60;"/>
+        <text value="&#x1D61;"/>
+        <text value="&#x2070;"/>
+        <text value="&#x2071;"/>
+        <text value="&#x2074;"/>
+        <text value="&#x2075;"/>
+        <text value="&#x2076;"/>
+        <text value="&#x2077;"/>
+        <text value="&#x2078;"/>
+        <text value="&#x2079;"/>
+        <text value="&#x207A;"/>
+        <text value="&#x207B;"/>
+        <text value="&#x207C;"/>
+        <text value="&#x207D;"/>
+        <text value="&#x207E;"/>
+        <text value="&#x207F;"/>
+        <text value="&#x2120;"/>
+        <text value="&#x2122;"/>
+        <text value="&#x3192;"/>
+        <text value="&#x3193;"/>
+        <text value="&#x3194;"/>
+        <text value="&#x3195;"/>
+        <text value="&#x3196;"/>
+        <text value="&#x3197;"/>
+        <text value="&#x3198;"/>
+        <text value="&#x3199;"/>
+        <text value="&#x319A;"/>
+        <text value="&#x319B;"/>
+        <text value="&#x319C;"/>
+        <text value="&#x319D;"/>
+        <text value="&#x319E;"/>
+        <text value="&#x319F;"/>
+        <text value="&#x02C0;"/>
+        <text value="&#x02C1;"/>
+        <text value="&#x06E5;"/>
+        <text value="&#x06E6;"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "title": "Bogus Title",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

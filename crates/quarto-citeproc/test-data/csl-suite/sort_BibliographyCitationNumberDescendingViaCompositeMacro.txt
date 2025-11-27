@@ -1,0 +1,78 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">[4] Aaaa</div>
+  <div class="csl-entry">[3] Bbbb</div>
+  <div class="csl-entry">[2] Xxxx</div>
+  <div class="csl-entry">[1] Zzzz</div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="citation-number">
+    <text variable="citation-number"/>
+  </macro>
+  <citation>
+    <layout>
+      <text value="bogus"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key variable="title" sort="ascending"/>
+      <key variable="citation-number" sort="descending"/>
+    </sort>
+    <layout>
+      <text variable="citation-number" prefix="[" suffix="] "/>
+      <text variable="title" />
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "item-1",
+        "title": "Aaaa",
+        "type": "book"
+    },
+    {
+        "id": "item-3",
+        "title": "Bbbb",
+        "type": "book"
+    },
+    {
+        "id": "item-4",
+        "title": "Zzzz",
+        "type": "book"
+    },
+    {
+        "id": "item-5",
+        "title": "Xxxx",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

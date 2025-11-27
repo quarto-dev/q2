@@ -1,0 +1,77 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+>>===== DESCRIPTION =====>>
+limit-day-ordinals-to-day-1 with date ranges
+
+Reported by @bwiernik @ https://gist.github.com/bwiernik/a18438c70e7a98155812a6652ffa91cc
+<<===== DESCRIPTION =====<<
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">1<sup>e</sup><sup>r</sup>-14 octobre 2004</div>
+  <div class="csl-entry">14 octobre-1<sup>e</sup><sup>r</sup> novembre 2004</div>
+</div>
+<<===== RESULT =====<<
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" page-range-format="minimal-two" default-locale="fr-FR">
+  <info>
+    <title>Date ranges with ordinal French option format</title>
+    <title-short>dates_ranges_ordinal_french</title-short>
+    <id>http://www.zotero.org/styles/dates_ranges_ordinal_french</id>
+    <link rel="self" href="http://www.zotero.org/styles/dates_ranges_ordinal_french"/>
+    <author>
+      <name/>
+    </author>
+    <category citation-format="note"/>
+    <category field="humanities"/>
+    <updated>2020-06-27T10:27:51+00:00</updated>
+    <rights license="http://creativecommons.org/licenses/by-sa/3.0/">This work is licensed under a Creative Commons Attribution-ShareAlike 3.0 License</rights>
+  </info>
+  <locale xml:lang="fr">
+    <style-options limit-day-ordinals-to-day-1="true"/>
+  </locale>
+  <citation>
+    <layout delimiter=" ; ">
+      <date delimiter=" " variable="event-date">
+        <date-part name="day" form="ordinal" range-delimiter="-"/>
+        <date-part name="month" form="long" range-delimiter="-"/>
+        <date-part name="year" range-delimiter="-"/>
+      </date>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <date delimiter=" " variable="event-date">
+        <date-part name="day" form="ordinal" range-delimiter="-"/>
+        <date-part name="month" form="long" range-delimiter="-"/>
+        <date-part name="year" range-delimiter="-"/>
+      </date>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "first_day_1_second_not1",
+        "language": "fr",
+        "note": "event-date: 2004-10-01/2004-10-14",
+        "type": "book"
+    },
+    {
+        "id": "first_day_not1_second_1",
+        "language": "fr",
+        "note": "event-date: 2004-10-14/2004-11-01",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+>>===== VERSION =====>>
+1.0.1
+<<===== VERSION =====<<

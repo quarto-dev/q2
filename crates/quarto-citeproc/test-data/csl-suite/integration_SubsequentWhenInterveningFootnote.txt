@@ -1,0 +1,108 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+>>===== RESULT =====>>
+..[0] (Doe)
+>>[1] (I am subsequent)
+<<===== RESULT =====<<
+
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 3
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ]
+        ],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; " prefix="(" suffix=")">
+      <choose>
+        <if position="first">
+          <names variable="author">
+            <name form="short"/>
+          </names>
+          <group prefix=" ">
+            <label variable="locator" form="short" suffix=" "/>
+            <text variable="locator"/>
+          </group>
+        </if>
+        <else-if position="subsequent">
+ 		    <text value="I am subsequent"/>
+		</else-if>
+        <else>
+            <text value="I am ibid or ibid-with-locator"/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

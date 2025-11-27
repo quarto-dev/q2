@@ -1,0 +1,95 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Asth00a; Asth00b; Bron00
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-year-suffix="true">
+    <layout delimiter="; ">
+        <text variable="citation-label"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Albert"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1900"
+                ]
+            ]
+        },
+        "title": "Book A",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Asthma",
+                "given": "Zeppo"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1900"
+                ]
+            ]
+        },
+        "title": "Book B",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Bronchitis",
+                "given": "Buffy"
+            }
+        ],
+        "id": "ITEM-3",
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        },
+        "title": "Book C",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,112 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">Doe, Book C</div>
+  <div class="csl-entry">Doe, Book B</div>
+  <div class="csl-entry">Roe, Book A</div>
+</div>
+<<===== RESULT =====<<
+
+
+This test originally anticipated that names should be
+forced to long form when generating sort keys. This
+behavior was in conflict with the explicit terms of the
+specification:
+
+  http://citationstyles.org/downloads/specification.html#sorting-macros
+
+It also caught users early in the deployment of citproc-js
+in Zotero:
+
+  http://forums.zotero.org/discussion/18246/sort-bibliography-by-author-priority-of-surnames-given-names-and-initials/
+
+The test has been amended to reflect correct behavior, by switching
+the input order of the "Book B" and "Book C" entries. Three other
+tests based on user data now cover this behavior:
+
+  sort_VariousNameMacros1.txt
+  sort_VariousNameMacros2.txt
+  sort_VariousNameMacros3.txt
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="author-name">
+    <names variable="author">
+      <name form="short"/>
+    </names>
+  </macro>
+  <citation>
+    <layout>
+        <text value="Ignore me"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key macro="author-name"/>
+    </sort>
+    <layout>
+      <text macro="author-name"/>
+      <text variable="title" prefix=", "/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Roe",
+                "given": "Jane"
+            }
+        ],
+        "id": "ITEM-1",
+        "title": "Book A",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-2",
+        "title": "Book C",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "James"
+            }
+        ],
+        "id": "ITEM-3",
+        "title": "Book B",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

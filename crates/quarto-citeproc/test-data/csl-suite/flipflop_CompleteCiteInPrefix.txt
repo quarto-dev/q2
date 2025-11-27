@@ -1,0 +1,58 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+Wilhelm Dilthey, “The Types of World Views and Their Unfoldment Within the Metaphysical Systems,” in <i>Dilthey’s Philosophy of Existence: Introduction to Weltanschauungslehre</i>, trans. William Kluback and Martin Weinbaum (New York: Bookman Associates, 1957), 26–27 Other Book Title
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1",
+            "prefix": "Wilhelm Dilthey, \"The Types of World Views and Their Unfoldment Within the Metaphysical Systems,\" in <i>Dilthey’s Philosophy of Existence: Introduction to Weltanschauungslehre</i>, trans. William Kluback and Martin Weinbaum (New York: Bookman Associates, 1957), 26–27 "
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="author">
+    <names variable="author">
+      <name form="short" />
+    </names>
+  </macro>
+  <citation>
+    <layout delimiter="; ">
+      <text variable="title" />
+    </layout>
+  </citation>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "id": "ITEM-1",
+    "title": "Other Book Title",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

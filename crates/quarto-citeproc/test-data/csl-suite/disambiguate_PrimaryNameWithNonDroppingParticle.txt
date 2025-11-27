@@ -1,0 +1,168 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+(dos Santos et al. 2016; Santos et al. 2020)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="in-text" version="1.0" 
+      demote-non-dropping-particle="never" 
+      page-range-format="expanded">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+        et-al-min="3" 
+        et-al-use-first="1" 
+        disambiguate-add-year-suffix="true" 
+        disambiguate-add-names="true" 
+        disambiguate-add-givenname="true" 
+        collapse="year" 
+        givenname-disambiguation-rule="primary-name">
+     <layout delimiter="; " prefix="(" suffix=")">
+       <group delimiter=" ">
+         <names delimiter=", " variable="author">
+           <name form="short" and="symbol" delimiter=", " initialize-with=". "/>
+         </names>
+         <date variable="issued">
+           <date-part name="year" />
+         </date>
+         <text variable="year-suffix" />
+       </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "DOI": "10.1177/0269881116652578",
+        "ISSN": "0269-8811",
+        "URL": "https://doi.org/10.1177/0269881116652578",
+        "accessed": {
+            "date-parts": [
+                [
+                    2020,
+                    11,
+                    3
+                ]
+            ]
+        },
+        "author": [
+            {
+                "family": "Santos",
+                "given": "Rafael G",
+                "non-dropping-particle": "dos"
+            },
+            {
+                "family": "Balthazar",
+                "given": "Fermanda M"
+            },
+            {
+                "family": "Bouso",
+                "given": "José C"
+            },
+            {
+                "family": "Hallak",
+                "given": "Jaime EC"
+            }
+        ],
+        "container-title": "Journal of Psychopharmacology",
+        "container-title-short": "J Psychopharmacol",
+        "id": "dosSantos2016CurrentState",
+        "issue": "12",
+        "issued": {
+            "date-parts": [
+                [
+                    2016,
+                    12,
+                    1
+                ]
+            ]
+        },
+        "language": "en",
+        "page": "1230-1247",
+        "publisher": "SAGE Publications Ltd STM",
+        "source": "SAGE Journals",
+        "title": "The current state of research on ayahuasca: A systematic review of human studies assessing psychiatric symptoms, neuropsychological functioning, and neuroimaging",
+        "title-short": "The current state of research on ayahuasca",
+        "type": "article-journal",
+        "volume": "30"
+    },
+    {
+        "DOI": "10.3390/plants9070870",
+        "URL": "https://www.mdpi.com/2223-7747/9/7/870",
+        "accessed": {
+            "date-parts": [
+                [
+                    2020,
+                    11,
+                    3
+                ]
+            ]
+        },
+        "author": [
+            {
+                "family": "Santos",
+                "given": "Beatriz Werneck Lopes"
+            },
+            {
+                "dropping-particle": "de",
+                "family": "Oliveira",
+                "given": "Regina Célia"
+            },
+            {
+                "family": "Sonsin-Oliveira",
+                "given": "Julia"
+            },
+            {
+                "family": "Fagg",
+                "given": "Christopher William"
+            },
+            {
+                "family": "Barbosa",
+                "given": "José Beethoven Figueiredo"
+            },
+            {
+                "family": "Caldas",
+                "given": "Eloisa Dutra"
+            }
+        ],
+        "container-title": "Plants",
+        "id": "Santos2020BiodiversityVCarboline",
+        "issue": "7",
+        "issued": {
+            "date-parts": [
+                [
+                    2020,
+                    7
+                ]
+            ]
+        },
+        "language": "en",
+        "number": "7",
+        "page": "870",
+        "publisher": "Multidisciplinary Digital Publishing Institute",
+        "source": "www.mdpi.com",
+        "title": "Biodiversity of β-Carboline Profile of Banisteriopsis caapi and Ayahuasca, a Plant and a Brew with Neuropharmacological Potential",
+        "type": "article-journal",
+        "volume": "9"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<

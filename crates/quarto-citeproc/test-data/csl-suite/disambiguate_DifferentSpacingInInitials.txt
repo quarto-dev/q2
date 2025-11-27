@@ -1,0 +1,69 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Doe, His Anonymous Life (part 1); Doe, His Anonymous Life (part 2)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation
+    disambiguate-add-givenname="true"
+    givenname-disambiguation-rule="all-names">
+    <layout delimiter="; ">
+      <group delimiter=", ">
+        <names variable="author">
+          <name form="short" initialize-with=". " name-as-sort-order="first" sort-separator=", "/>
+        </names>
+        <text variable="title"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "J. J."
+            }
+        ],
+        "id": "ITEM-1",
+        "title": "His Anonymous Life (part 1)",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "J.J."
+            }
+        ],
+        "id": "ITEM-2",
+        "title": "His Anonymous Life (part 2)",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

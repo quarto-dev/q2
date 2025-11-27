@@ -1,0 +1,69 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+## This test currently produces this:
+
+Example: weird composite, at 123N110–5, 456K200–99
+
+## It used to expect this:
+
+>>===== RESULT =====>>
+Example: weird composite, at 123N110-N5, 456K200-99
+<<===== RESULT =====<<
+
+## Which is correct, do you think?
+
+## Here is the data from which the results above are derived:
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1", 
+        "page": "123N110 - N5, 456K200 - 99", 
+        "title": "Example: weird composite", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+>>===== CITATION-ITEMS =====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0"
+      page-range-format="expanded">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title"/>
+      <text variable="page" prefix=", at "/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

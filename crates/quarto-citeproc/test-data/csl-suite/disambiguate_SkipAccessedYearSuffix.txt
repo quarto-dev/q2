@@ -1,0 +1,196 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry"><b>Doe J</b>. His Anonymous Life. http://example.com (accessed 15 December 2000). 1965a</div>
+  <div class="csl-entry"><b>Doe J</b>. His Anonymous Life. http://example.com (accessed 15 December 2000). 1965b</div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="author-bib">
+    <names variable="author" suffix=". ">
+      <name sort-separator=" " initialize-with="" name-as-sort-order="all" delimiter=", " font-weight="bold" delimiter-precedes-last="always"/>
+      <label form="long" prefix=", " suffix="." text-case="lowercase"/>
+    </names>
+  </macro>
+  <macro name="publisher">
+    <text variable="publisher" suffix=", "/>       
+    <text variable="publisher-place" suffix=", "/>     
+    <text macro="date"/>
+  </macro>
+  <macro name="date">
+    <choose>
+      <if variable="issued">
+        <group>
+          <date variable="issued">
+            <date-part name="year"/>
+          </date>
+          <text variable="year-suffix"/>
+        </group>
+      </if>
+      <else>
+        <group delimiter="-">
+          <text term="no date"/>
+          <text variable="year-suffix"/>
+        </group>
+      </else>
+    </choose>
+  </macro>
+  <macro name="access">
+    <choose>
+      <if variable="DOI"/>
+      <!--don't use if there is a DOI-->
+      <else>
+        <choose>
+          <if variable="URL">
+            <group delimiter=" " prefix=" ">
+              <group>
+                <text variable="URL"/>
+              </group>
+              <group prefix="(accessed " suffix="). " delimiter=" ">
+                <date variable="accessed" suffix="">
+                  <date-part name="day" prefix=""/>
+                  <date-part name="month" prefix=" " suffix=" " form="long" strip-periods="true"/>
+                  <date-part name="year"/>
+                </date>
+              </group>
+            </group>
+          </if>
+        </choose>
+      </else>
+    </choose>
+  </macro>
+  <macro name="title">
+    <choose>
+      <if variable="DOI">
+        <text variable="title"/>
+      </if>
+      <else>
+        <group delimiter=" ">
+          <choose>
+            <if type="bill book graphic legal_case legislation motion_picture report song" match="any">
+              <choose>
+                <if variable="URL">
+                  <text variable="title"/>
+                </if>
+                <else>
+                  <text variable="title" font-style="italic"/>
+                </else>
+              </choose>
+            </if>
+            <else>
+              <text variable="title"/>
+            </else>
+          </choose>
+        </group>
+      </else>
+    </choose>
+  </macro>
+  <!--   formatting citation      -->
+  <citation et-al-min="3" et-al-use-first="1" disambiguate-add-year-suffix="true" collapse="year">
+    <layout>
+      <text value="BOGUS"/>
+    </layout>
+  </citation>
+  <!--   formatting bibliography      -->
+  <bibliography>
+    <sort>
+      <key macro="author-bib"/>
+      <key macro="date"/>
+    </sort>
+    <layout suffix="">
+      <text macro="author-bib"/>
+      <text macro="title" suffix=". "/>
+      <text macro="access"/>
+      <text macro="publisher"/>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "URL": "http://example.com",
+        "accessed": {
+            "date-parts": [
+                [
+                    "2000",
+                    "12",
+                    "15"
+                ]
+            ]
+        },
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1965",
+                    "6",
+                    "1"
+                ]
+            ]
+        },
+        "title": "His Anonymous Life",
+        "type": "book"
+    },
+    {
+        "URL": "http://example.com",
+        "accessed": {
+            "date-parts": [
+                [
+                    "2000",
+                    "12",
+                    "15"
+                ]
+            ]
+        },
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    "1965",
+                    "6",
+                    "1"
+                ]
+            ]
+        },
+        "title": "His Anonymous Life",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

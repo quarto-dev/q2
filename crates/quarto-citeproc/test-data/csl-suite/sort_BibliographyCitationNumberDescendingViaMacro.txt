@@ -1,0 +1,102 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">[8] Book One</div>
+  <div class="csl-entry">[7] Book Three</div>
+  <div class="csl-entry">[6] Book Four</div>
+  <div class="csl-entry">[5] Book Six</div>
+  <div class="csl-entry">[4] Book Two</div>
+  <div class="csl-entry">[3] Book Five</div>
+  <div class="csl-entry">[2] Book Seven</div>
+  <div class="csl-entry">[1] Book Eight</div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="citation-number">
+    <text variable="citation-number"/>
+  </macro>
+  <citation>
+    <layout>
+      <text value="bogus"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key macro="citation-number" sort="ascending"/>
+      <key macro="citation-number" sort="descending"/>
+    </sort>
+    <layout>
+      <text variable="citation-number" prefix="[" suffix="] "/>
+      <text variable="title" />
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "item-1",
+        "title": "Book One",
+        "type": "book"
+    },
+    {
+        "id": "item-3",
+        "title": "Book Three",
+        "type": "book"
+    },
+    {
+        "id": "item-4",
+        "title": "Book Four",
+        "type": "book"
+    },
+    {
+        "id": "item-6",
+        "title": "Book Six",
+        "type": "book"
+    },
+    {
+        "id": "item-2",
+        "title": "Book Two",
+        "type": "book"
+    },
+    {
+        "id": "item-5",
+        "title": "Book Five",
+        "type": "book"
+    },
+    {
+        "id": "item-7",
+        "title": "Book Seven",
+        "type": "book"
+    },
+    {
+        "id": "item-8",
+        "title": "Book Eight",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

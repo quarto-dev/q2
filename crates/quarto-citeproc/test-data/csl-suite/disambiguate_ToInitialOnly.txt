@@ -1,0 +1,86 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Smith; Smith; B. Muggins; J. Muggins
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-givenname="true"
+         givenname-disambiguation-rule="all-names-with-initials">
+    <layout delimiter="; ">
+      <names delimiter=", " variable="author">
+        <name and="text" 
+              delimiter-precedes-last="never" 
+              initialize-with="." form="short"/>
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Smith",
+                "given": "Cecil"
+            }
+        ],
+        "id": "ITEM-1",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Smith",
+                "given": "Charles"
+            }
+        ],
+        "id": "ITEM-2",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Muggins",
+                "given": "Bob"
+            }
+        ],
+        "id": "ITEM-3",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Muggins",
+                "given": "Jardine"
+            }
+        ],
+        "id": "ITEM-4",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

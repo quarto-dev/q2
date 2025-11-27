@@ -1,0 +1,60 @@
+>>== MODE ==>>
+citation
+<<== MODE ==<<
+
+
+
+>>== RESULT ==>>
+Should print this: Book A … and this: Book A … but this only once: Blob
+<<== RESULT ==<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text prefix="Should print this: " variable="title" />
+      <text prefix=" &#8230; and this: " variable="title" />
+      <names variable="author" prefix=" &#8230; but this only once: ">
+        <name/>
+        <substitute>
+          <names variable="editor"/>
+        </substitute>
+      </names>
+      <names variable="editor">
+        <name/>
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "editor": [
+            {
+                "literal": "Blob"
+            }
+        ],
+        "id": "item-1",
+        "title": "Book A",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,43 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+>>===== RESULT =====>>
+The Mirror, the Window, and the Telescope: How Renaissance Linear Perspective Changed Our Vision of the Universe
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title" text-case="title"/>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "title": "The <span class=\"nocase\">Mirror</span>, the <span class=\"nocase\">Window</span>, and the <span class=\"nocase\">Telescope</span>: <span class=\"nocase\">How Renaissance Linear Perspective Changed Our Vision</span> of the <span class=\"nocase\">Universe</span>",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

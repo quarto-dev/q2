@@ -1,0 +1,106 @@
+>>===== MODE =====>>
+bibliography
+<<===== MODE =====<<
+
+
+>>===== RESULT =====>>
+<div class="csl-bib-body">
+  <div class="csl-entry">
+    <div class="csl-left-margin">[1]</div><div class="csl-right-inline"> John Aloysius Doe, “John’s Book” (1999)</div>
+  </div>
+  <div class="csl-entry">
+    <div class="csl-left-margin">[2]</div><div class="csl-right-inline"> Jane Henrietta Roe, “Jane’s Book” (2000)</div>
+  </div>
+</div>
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="in-text"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="author">
+    <names variable="author">
+      <name and="text" />
+    </names>
+  </macro>
+  <macro name="date">
+    <date variable="issued">
+      <date-part name="year" />
+    </date>
+    <text variable="year-suffix" />
+  </macro>
+  <citation>
+    <layout>
+      <text variable="citation-number"/>
+    </layout>
+  </citation>
+  <bibliography 
+         subsequent-author-substitute="">
+    <layout>
+      <text variable="citation-number" prefix="[" suffix="]" display="left-margin"/>
+      <group delimiter=" " prefix=" " display="right-inline">
+       <group delimiter=", ">
+          <text macro="author"/>
+          <text variable="title" quotes="true"/>
+        </group>
+        <text macro="date" prefix="(" suffix=")"/>
+      </group>
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe",
+                "given": "John Aloysius"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    1999
+                ]
+            ]
+        },
+        "title": "John's Book",
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "Roe",
+                "given": "Jane Henrietta"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    2000
+                ]
+            ]
+        },
+        "title": "Jane's Book",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

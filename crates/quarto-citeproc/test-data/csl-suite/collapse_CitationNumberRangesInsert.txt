@@ -1,0 +1,142 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+This test confirms that the symptoms described here have been
+addressed: http://forums.zotero.org/discussion/3579
+
+
+>>===== RESULT =====>>
+..[0] [1]
+>>[1] [1]–[4]
+<<===== RESULT =====<<
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                },
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-4"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [],
+        [
+            [
+                "CITATION-1",
+                0
+            ]
+        ]
+    ],
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                },
+                {
+                    "id": "ITEM-3"
+                },
+                {
+                    "id": "ITEM-4"
+                }
+            ],
+            "properties": {
+                "noteIndex": 0
+            }
+        },
+        [
+            [
+                "CITATION-2",
+                0
+            ]
+        ],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         collapse="citation-number">
+    <sort>
+      <key variable="citation-number" />
+    </sort>
+    <layout delimiter=", ">
+      <text prefix="[" suffix="]" variable="citation-number" />
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1", 
+        "title": "Paper 1", 
+        "type": "book"
+    }, 
+    {
+        "id": "ITEM-2", 
+        "title": "Paper 2", 
+        "type": "book"
+    }, 
+    {
+        "id": "ITEM-3", 
+        "title": "Paper 3", 
+        "type": "book"
+    },
+    {
+        "id": "ITEM-4", 
+        "title": "Paper 4", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

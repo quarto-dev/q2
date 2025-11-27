@@ -1,0 +1,87 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+>>===== DESCRIPTION =====>>
+Test to cover request here:
+http://xbiblio-devel.2463403.n2.nabble.com/contextual-labels-for-non-numeric-page-ranges-td7578166.html
+
+See also:
+https://discourse.citationstyles.org/t/contextual-labels-for-non-numeric-page-ranges/1117
+<<===== DESCRIPTION =====<<
+
+
+>>===== RESULT =====>>
+His Anonymous Life (1) pages 1–2 (cs:text) vs His Anonymous Life (1) pages 1–2 (cs:number); His Anonymous Life (2) pages i–ix (cs:text) vs His Anonymous Life (2) pages i–ix (cs:number); His Anonymous Life (3) page 3-B (cs:text) vs His Anonymous Life (3) page 3-B (cs:number); His Anonymous Life (4) page Michaelson-Morely (cs:text) vs His Anonymous Life (4) page Michaelson-Morely (cs:number)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; ">
+      <group delimiter=" " suffix=" (cs:text)">
+        <text variable="title"/>
+        <label variable="page"/>
+        <text variable="page"/>
+      </group>
+      <group delimiter=" " prefix=" vs " suffix=" (cs:number)">
+        <text variable="title"/>
+        <label variable="page"/>
+        <text variable="page"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "ITEM-1",
+        "page": "1-2",
+        "title": "His Anonymous Life (1)",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-2",
+        "page": "i-ix",
+        "title": "His Anonymous Life (2)",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-3",
+        "page": "3\\-B",
+        "title": "His Anonymous Life (3)",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-4",
+        "page": "4–6",
+        "title": "His Anonymous Life (4)",
+        "type": "book"
+    },
+    {
+        "id": "ITEM-4",
+        "page": "Michaelson-Morely",
+        "title": "His Anonymous Life (4)",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

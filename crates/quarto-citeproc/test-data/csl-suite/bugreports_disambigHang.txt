@@ -1,0 +1,117 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+(de Boer et al. 2000a, 2000b)
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="in-text"
+      demote-non-dropping-particle="never" default-locale="en-US"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation et-al-min="3" et-al-use-first="1"
+    disambiguate-add-givenname="true" disambiguate-add-year-suffix="true"
+    collapse="year" cite-group-delimiter=", ">
+    <layout delimiter="; " prefix="(" suffix=")">
+      <group delimiter=" ">
+        <names variable="author">
+          <name form="short" and="text" delimiter=", " initialize-with=". "/>
+        </names>
+        <date variable="issued" form="text" date-parts="year"/>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "de Boer",
+                "given": "Carl G."
+            },
+            {
+                "family": "Ray",
+                "given": "John P."
+            },
+            {
+                "family": "Hacohen",
+                "given": "Nir"
+            },
+            {
+                "family": "Regev",
+                "given": "Aviv"
+            }
+        ],
+        "id": "ITEM-1",
+        "issued": {
+            "date-parts": [
+                [
+                    2000,
+                    1,
+                    15
+                ]
+            ]
+        },
+        "type": "book"
+    },
+    {
+        "author": [
+            {
+                "family": "de Boer",
+                "given": "Carl G."
+            },
+            {
+                "family": "Vaishnav",
+                "given": "Eeshit Dhaval"
+            },
+            {
+                "family": "Sadeh",
+                "given": "Ronen"
+            },
+            {
+                "family": "Abeyta",
+                "given": "Esteban Luis"
+            },
+            {
+                "family": "Friedman",
+                "given": "Nir"
+            },
+            {
+                "family": "Regev",
+                "given": "Aviv"
+            }
+        ],
+        "id": "ITEM-2",
+        "issued": {
+            "date-parts": [
+                [
+                    2000,
+                    1,
+                    15
+                ]
+            ]
+        },
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<

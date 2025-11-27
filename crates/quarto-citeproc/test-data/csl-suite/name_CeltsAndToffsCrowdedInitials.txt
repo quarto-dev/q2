@@ -1,0 +1,70 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+This example comes to us via a query to comp.text.tex:
+
+  http://groups.google.com/group/comp.text.tex/browse_thread/thread/4796d6a2f06952ad?hl=en
+
+(This is a modified version of the desired output inicated in the user's
+post, with no spaces following the periods in initials)
+
+>>===== RESULT =====>>
+O’Malley, C.D., &#38; Saunders, J.B. de C.M.
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <names variable="translator">
+        <name and="symbol" delimiter=", " delimiter-precedes-last="always" initialize-with="." name-as-sort-order="all" sort-separator=", " />
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "item-1",
+        "issued": {
+            "date-parts": [
+                [
+                    "1952"
+                ]
+            ]
+        },
+        "title": "Leonardo on the Human Body",
+        "translator": [
+            {
+                "family": "O’Malley",
+                "given": "Charles D."
+            },
+            {
+                "family": "Saunders",
+                "given": "John Bertrand de Cusance Morant"
+            }
+        ],
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

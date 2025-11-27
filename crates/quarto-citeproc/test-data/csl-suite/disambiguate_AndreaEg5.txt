@@ -1,0 +1,189 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Smith, Brown &#38; J. Jones (1980a); Smith, Brown &#38; J. Jones (1980b)
+Smith, Brown &#38; J. Jones (1980a); Smith, Benson, et al. (1980)
+Smith, Brown &#38; J. Jones (1980a); Smith, Brown &#38; A. Jones (1980)
+<<===== RESULT =====<<
+
+
+>>===== CITATION-ITEMS =====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-2"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-3"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-1"
+        },
+        {
+            "id": "ITEM-4"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="year">
+    <date variable="issued" date-parts="year" form="text"/>
+  </macro>
+  <citation 
+         et-al-min="3"
+         et-al-use-first="1"
+         disambiguate-add-names="true"
+         disambiguate-add-givenname="true"
+         disambiguate-add-year-suffix="true"
+	     givenname-disambiguation-rule="by-cite">
+
+    <layout delimiter="; ">
+      <group delimiter=" ">
+        <names delimiter=", " variable="author">
+          <name initialize-with=". " and="symbol" delimiter-precedes-last="never" form="short"/>
+        </names>
+        <date variable="issued" prefix="(" suffix=")">
+          <date-part name="year"/>
+        </date>
+      </group>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }, 
+            {
+                "family": "Brown", 
+                "given": "John"
+            }, 
+            {
+                "family": "Jones", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "issued": {
+            "date-parts": [
+                [
+                    1980
+                ]
+            ]
+        }, 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }, 
+            {
+                "family": "Brown", 
+                "given": "John"
+            }, 
+            {
+                "family": "Jones", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-2", 
+        "issued": {
+            "date-parts": [
+                [
+                    1980
+                ]
+            ]
+        }, 
+        "type": "book"
+    },
+   {
+       "author": [
+           {
+               "family": "Smith",
+               "given": "John"
+           },
+           {
+               "family": "Benson",
+               "given": "John"
+           },
+           {
+               "family": "Jones",
+               "given": "John"
+           }
+       ],
+       "id": "ITEM-3",
+       "issued": {
+           "date-parts": [
+               [
+                   1980
+               ]
+           ]
+       },
+       "type": "book"
+   },
+    {
+        "author": [
+            {
+                "family": "Smith", 
+                "given": "John"
+            }, 
+            {
+                "family": "Brown", 
+                "given": "John"
+            }, 
+            {
+                "family": "Jones", 
+                "given": "Arthur"
+            }
+        ], 
+        "id": "ITEM-4", 
+        "issued": {
+            "date-parts": [
+                [
+                    1980
+                ]
+            ]
+        }, 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

@@ -1,0 +1,88 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+>>===== RESULT =====>>
+[1] Zzzz (third-cited); [2] Xxxx (fourth-cited); [3] Bbbb (second-cited); [4] Aaaa (first-cited)
+<<===== RESULT =====<<
+
+## Companion bibliography:
+## 
+## <div class="csl-bib-body">
+##   <div class="csl-entry">[1] Zzzz (third-cited)</div>
+##   <div class="csl-entry">[2] Xxxx (fourth-cited)</div>
+##   <div class="csl-entry">[3] Bbbb (second-cited)</div>
+##   <div class="csl-entry">[4] Aaaa (first-cited)</div>
+## </div>
+
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <macro name="citation-number-macro">
+    <number variable="citation-number"/>
+  </macro>
+  <citation>
+    <sort>
+      <key macro="citation-number-macro"/>
+    </sort>
+    <layout delimiter="; ">
+      <group delimiter=" ">
+        <text variable="citation-number" prefix="[" suffix="]"/>
+        <text variable="title"/>
+      </group>
+    </layout>
+  </citation>
+  <bibliography>
+    <sort>
+      <key variable="title" sort="descending"/>
+      <key macro="citation-number-macro" sort="ascending"/>
+    </sort>
+    <layout>
+      <text variable="citation-number" prefix="[" suffix="] "/>
+      <text variable="title" />
+    </layout>
+  </bibliography>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "id": "item-1",
+        "title": "Aaaa (first-cited)",
+        "type": "book"
+    },
+    {
+        "id": "item-2",
+        "title": "Bbbb (second-cited)",
+        "type": "book"
+    },
+    {
+        "id": "item-3",
+        "title": "Zzzz (third-cited)",
+        "type": "book"
+    },
+    {
+        "id": "item-4",
+        "title": "Xxxx (fourth-cited)",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

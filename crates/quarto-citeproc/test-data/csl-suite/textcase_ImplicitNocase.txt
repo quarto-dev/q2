@@ -1,0 +1,74 @@
+>>==== MODE ====>>
+citation
+<<==== MODE ====<<
+
+>>==== RESULT ====>>
+My <span style="font-variant:small-caps;">small caps phrase</span> in a Title
+My <sup>superscript phrase</sup> in a Title
+My <sub>subscript phrase</sub> in a Title
+<<==== RESULT ====<<
+
+>>==== CITATION-ITEMS ====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-2"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-3"
+        }
+    ]
+]
+<<==== CITATION-ITEMS ====<<
+
+>>==== CSL ====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title" text-case="title" />
+    </layout>
+  </citation>
+</style>
+<<==== CSL ====<<
+
+>>==== INPUT ====>>
+[
+  {
+    "id": "ITEM-1",
+    "title": "My <sc>small caps phrase</sc> in a title",
+    "type": "book"
+  },
+  {
+    "id": "ITEM-2",
+    "title": "My <sup>superscript phrase</sup> in a title",
+    "type": "book"
+  },
+  {
+    "id": "ITEM-3",
+    "title": "My <sub>subscript phrase</sub> in a title",
+    "type": "book"
+  }
+]
+<<==== INPUT ====<<
+
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

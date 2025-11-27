@@ -1,0 +1,268 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+..[0] John Doe, His Book (2000); John Doe, His Other Book (2001).
+..[1] Jane Roe, Her Book (1998).
+..[2] Roe, supra note 2.
+..[3] Doe, His Book, supra note 1.
+>>[4] Roe, supra note 2.
+<<===== RESULT =====<<
+
+>>===== CITATIONS =====>>
+[
+    [
+        {
+            "citationID": "CITATION-1",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                },
+                {
+                    "id": "ITEM-2"
+                }
+            ],
+            "properties": {
+                "noteIndex": 1
+            }
+        },
+        [],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-2",
+            "citationItems": [
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 2
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-3",
+            "citationItems": [
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 3
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-4",
+            "citationItems": [
+                {
+                    "id": "ITEM-1"
+                }
+            ],
+            "properties": {
+                "noteIndex": 4
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ],
+            [
+                "CITATION-3",
+                3
+            ]
+        ],
+        []
+    ],
+    [
+        {
+            "citationID": "CITATION-5",
+            "citationItems": [
+                {
+                    "id": "ITEM-3"
+                }
+            ],
+            "properties": {
+                "noteIndex": 5
+            }
+        },
+        [
+            [
+                "CITATION-1",
+                1
+            ],
+            [
+                "CITATION-2",
+                2
+            ],
+            [
+                "CITATION-3",
+                3
+            ],
+            [
+                "CITATION-4",
+                4
+            ]
+        ],
+        []
+    ]
+]
+<<===== CITATIONS =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation>
+    <layout delimiter="; " suffix=".">
+      <choose>
+        <if position="first">
+          <names variable="author">
+            <name />
+          </names>
+          <text prefix=", " variable="title" />
+          <date variable="issued">
+            <date-part name="year" prefix=" (" suffix=")" />
+          </date>
+        </if>
+        <else-if position="subsequent">
+          <names variable="author">
+            <name form="short" />
+          </names>
+          <choose>
+            <if disambiguate="true">
+              <text prefix=", " variable="title" />
+            </if>
+          </choose>
+          <text prefix=", " suffix=" " value="supra note" />
+          <text variable="first-reference-note-number" />
+        </else-if>
+        <else>
+          <text value="FAILED TO MATCH"/>
+        </else>
+      </choose>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "issued": {
+            "date-parts": [
+                [
+                    "2000"
+                ]
+            ]
+        }, 
+        "title": "His Book", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-2", 
+        "issued": {
+            "date-parts": [
+                [
+                    "2001"
+                ]
+            ]
+        }, 
+        "title": "His Other Book", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Roe", 
+                "given": "Jane"
+            }
+        ], 
+        "id": "ITEM-3", 
+        "issued": {
+            "date-parts": [
+                [
+                    "1998"
+                ]
+            ]
+        }, 
+        "title": "Her Book", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Roe", 
+                "given": "Jane"
+            }
+        ], 
+        "id": "ITEM-4", 
+        "issued": {
+            "date-parts": [
+                [
+                    "1999"
+                ]
+            ]
+        }, 
+        "title": "Her Other Book", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

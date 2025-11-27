@@ -1,0 +1,97 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+Disambiguation by given name, when used with the short form alone
+(without an initialize-with attribute on the name) will add a full
+name as required.
+
+>>===== RESULT =====>>
+Roe
+John Doe; Aloysius Doe
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<style 
+      xmlns="http://purl.org/net/xbiblio/csl"
+      class="note"
+      version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <citation 
+         disambiguate-add-givenname="true"
+         givenname-disambiguation-rule="by-cite">
+    <layout delimiter="; ">
+      <names variable="author">
+        <name form="short" />
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== CITATION-ITEMS =====>>
+[
+    [
+        {
+            "id": "ITEM-1"
+        }
+    ],
+    [
+        {
+            "id": "ITEM-2"
+        },
+        {
+            "id": "ITEM-3"
+        }
+    ]
+]
+<<===== CITATION-ITEMS =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Roe", 
+                "given": "Jane"
+            }
+        ], 
+        "id": "ITEM-1", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "John"
+            }
+        ], 
+        "id": "ITEM-2", 
+        "type": "book"
+    }, 
+    {
+        "author": [
+            {
+                "family": "Doe", 
+                "given": "Aloysius"
+            }
+        ], 
+        "id": "ITEM-3", 
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+

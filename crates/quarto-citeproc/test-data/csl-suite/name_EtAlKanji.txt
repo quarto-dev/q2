@@ -1,0 +1,64 @@
+>>===== MODE =====>>
+citation
+<<===== MODE =====<<
+
+
+
+>>===== RESULT =====>>
+Ziggy Zither, 等
+<<===== RESULT =====<<
+
+
+>>===== CSL =====>>
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0" et-al-min="3" et-al-use-first="1" delimiter-precedes-et-al="always" default-locale="zh-TW">
+  <info>
+    <title>Test Style</title>
+    <id>http://www.zotero.org/styles/test-style</id>
+    <link rel="self" href="http://www.zotero.org/styles/test-style"/>
+    <link href="http://www.zotero.org/styles/test-style" rel="documentation"/>
+    <author>
+      <name>FB</name>
+      <email>email@address</email>
+    </author>
+    <updated>2014-05-18T12:43:24+00:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <names variable="author">
+        <name/>
+      </names>
+    </layout>
+  </citation>
+</style>
+<<===== CSL =====<<
+
+
+>>===== INPUT =====>>
+[
+    {
+        "author": [
+            {
+                "family": "Zither",
+                "given": "Ziggy"
+            },
+            {
+                "family": "Yoda",
+                "given": "Yossarian"
+            },
+            {
+                "family": "Xylophone",
+                "given": "Xerxes"
+            }
+        ],
+        "id": "ITEM-1",
+        "type": "book"
+    }
+]
+<<===== INPUT =====<<
+
+
+>>===== VERSION =====>>
+1.0
+<<===== VERSION =====<<
+
