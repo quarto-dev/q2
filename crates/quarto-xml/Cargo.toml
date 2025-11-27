@@ -1,0 +1,16 @@
+[package]
+name = "quarto-xml"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Source-tracked XML parsing for Quarto"
+
+[dependencies]
+quick-xml = { workspace = true }
+quarto-source-map = { path = "../quarto-source-map" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
