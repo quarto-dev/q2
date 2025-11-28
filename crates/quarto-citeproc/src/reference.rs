@@ -85,7 +85,7 @@ pub struct Reference {
     pub number_of_pages: Option<StringOrNumber>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chapter: Option<StringOrNumber>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "abstract", skip_serializing_if = "Option::is_none")]
     pub abstract_: Option<String>,
     #[serde(rename = "DOI", skip_serializing_if = "Option::is_none")]
     pub doi: Option<String>,

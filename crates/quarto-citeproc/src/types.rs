@@ -110,10 +110,73 @@ pub struct CitationItem {
     #[serde(rename = "author-only", skip_serializing_if = "Option::is_none")]
     pub author_only: Option<bool>,
 
-    /// Citation position (for note-style citations).
-    /// 0 = first, 1 = subsequent, 2 = ibid, 3 = ibid-with-locator, 4 = near-note
+    /// Citation position flags (for note-style citations).
+    /// Bitmask: 1=First, 2=Subsequent, 4=Ibid, 8=IbidWithLocator, 16=NearNote
+    /// Multiple positions can be true at once (e.g., Ibid + NearNote + Subsequent).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub position: Option<i32>,
+}
+
+/// Position bitmask constants for serialization.
+/// Internal representation uses Vec<Position>, but JSON uses i32 for compatibility.
+pub mod position_bitmask {
+    pub const FIRST: i32 = 0x100;
+    pub const SUBSEQUENT: i32 = 0x200;
+    pub const IBID: i32 = 0x400;
+    pub const IBID_WITH_LOCATOR: i32 = 0x800;
+    pub const NEAR_NOTE: i32 = 0x1000;
+}
+
+/// Convert a list of positions to a bitmask for serialization.
+pub fn positions_to_bitmask(positions: &[quarto_csl::Position]) -> i32 {
+    use quarto_csl::Position;
+    let mut flags = 0;
+    for pos in positions {
+        flags |= match pos {
+            Position::First => position_bitmask::FIRST,
+            Position::Subsequent => position_bitmask::SUBSEQUENT,
+            Position::Ibid => position_bitmask::IBID,
+            Position::IbidWithLocator => position_bitmask::IBID_WITH_LOCATOR,
+            Position::NearNote => position_bitmask::NEAR_NOTE,
+        };
+    }
+    flags
+}
+
+/// Convert a bitmask (or legacy value) to a list of positions.
+pub fn bitmask_to_positions(value: i32) -> Vec<quarto_csl::Position> {
+    use quarto_csl::Position;
+
+    // Handle legacy format (0-4) vs new bitmask format (>= 0x100)
+    if value <= 4 {
+        match value {
+            0 => vec![Position::First],
+            1 => vec![Position::Subsequent],
+            2 => vec![Position::Ibid, Position::Subsequent],
+            3 => vec![Position::IbidWithLocator, Position::Ibid, Position::Subsequent],
+            4 => vec![Position::NearNote, Position::Subsequent],
+            _ => vec![Position::First],
+        }
+    } else {
+        // New bitmask format
+        let mut positions = Vec::new();
+        if (value & position_bitmask::FIRST) != 0 {
+            positions.push(Position::First);
+        }
+        if (value & position_bitmask::SUBSEQUENT) != 0 {
+            positions.push(Position::Subsequent);
+        }
+        if (value & position_bitmask::IBID) != 0 {
+            positions.push(Position::Ibid);
+        }
+        if (value & position_bitmask::IBID_WITH_LOCATOR) != 0 {
+            positions.push(Position::IbidWithLocator);
+        }
+        if (value & position_bitmask::NEAR_NOTE) != 0 {
+            positions.push(Position::NearNote);
+        }
+        positions
+    }
 }
 
 /// Citation processor that applies CSL styles to references.
@@ -136,6 +199,28 @@ pub struct Processor {
 
     /// Next citation number for initial assignment.
     next_citation_number: i32,
+
+    /// Citation history tracking for position calculation.
+    /// Maps (note_index, item_id) to citation info for ibid detection.
+    citation_history: CitationHistory,
+}
+
+// Position is represented as Vec<quarto_csl::Position> internally,
+// matching the citeproc reference implementation.
+
+/// Tracks citation history for position calculation.
+#[derive(Default)]
+struct CitationHistory {
+    /// Last item cited in each note (for ibid detection within same note).
+    /// Maps note_index -> (item_id, locator, label)
+    last_item_in_note: HashMap<i32, (String, Option<String>, Option<String>)>,
+    /// The globally last item cited in the immediately previous citation.
+    /// For ibid detection across notes. Only tracked for single-item citations.
+    /// (item_id, locator, label, note_index)
+    last_single_citation_item: Option<(String, Option<String>, Option<String>, i32)>,
+    /// Last citation info for each item (for near-note and subsequent detection).
+    /// Maps item_id -> (note_index, locator, label)
+    last_cited: HashMap<String, (i32, Option<String>, Option<String>)>,
 }
 
 impl Processor {
@@ -149,7 +234,126 @@ impl Processor {
             initial_citation_numbers: HashMap::new(),
             final_citation_numbers: None,
             next_citation_number: 1,
+            citation_history: CitationHistory::default(),
         }
+    }
+
+    /// Calculate positions for a citation item based on citation history.
+    /// Returns a list of positions that are true for this citation,
+    /// matching the citeproc reference implementation.
+    ///
+    /// Position hierarchy (per CSL spec):
+    /// - ibid-with-locator implies ibid implies subsequent
+    /// - near-note implies subsequent
+    /// - Multiple positions can be true simultaneously (e.g., [NearNote, Ibid, Subsequent])
+    fn calculate_position(
+        &self,
+        note_index: i32,
+        item_id: &str,
+        locator: Option<&str>,
+        label: Option<&str>,
+        is_single_item_citation: bool,
+        near_note_distance: u32,
+    ) -> Vec<quarto_csl::Position> {
+        use quarto_csl::Position;
+
+        // Check if item was ever cited before
+        let prev_citation = self.citation_history.last_cited.get(item_id);
+        if prev_citation.is_none() {
+            return vec![Position::First];
+        }
+
+        // Start with Subsequent as the base (like citeproc reference impl)
+        let mut positions = vec![Position::Subsequent];
+
+        // Get previous citation info
+        let (prev_note, prev_locator, prev_label) = prev_citation.unwrap();
+
+        // Check for near-note: previous citation within near_note_distance
+        // CSL spec: "does not precede by more than near_note_distance notes"
+        // This means distance <= near_note_distance (e.g., distance=0 with near-note-distance=0 is valid)
+        let distance = (note_index - prev_note).abs();
+        if distance <= near_note_distance as i32 {
+            positions.push(Position::NearNote);
+        }
+
+        // Check for ibid within the same note
+        let is_ibid_same_note = if let Some((last_item_id, _, _)) =
+            self.citation_history.last_item_in_note.get(&note_index)
+        {
+            last_item_id == item_id
+        } else {
+            false
+        };
+
+        // Check for ibid across notes (single-item citations only)
+        let is_ibid_cross_note = if is_single_item_citation {
+            if let Some((last_item_id, _, _, _)) = &self.citation_history.last_single_citation_item
+            {
+                last_item_id == item_id
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if is_ibid_same_note || is_ibid_cross_note {
+            // Determine if ibid or ibid-with-locator
+            let locator_changed =
+                locator != prev_locator.as_deref() || label != prev_label.as_deref();
+            if locator.is_some() && locator_changed {
+                positions.push(Position::IbidWithLocator);
+                positions.push(Position::Ibid);
+            } else {
+                positions.push(Position::Ibid);
+            }
+        }
+
+        positions
+    }
+
+    /// Update citation history after processing a citation item.
+    fn update_citation_history(
+        &mut self,
+        note_index: i32,
+        item_id: &str,
+        locator: Option<&str>,
+        label: Option<&str>,
+        is_single_item_citation: bool,
+    ) {
+        // Track last citation of each item (for subsequent and near-note detection)
+        self.citation_history.last_cited.insert(
+            item_id.to_string(),
+            (
+                note_index,
+                locator.map(|s| s.to_string()),
+                label.map(|s| s.to_string()),
+            ),
+        );
+        // Track last item in each note (for same-note ibid detection)
+        self.citation_history.last_item_in_note.insert(
+            note_index,
+            (
+                item_id.to_string(),
+                locator.map(|s| s.to_string()),
+                label.map(|s| s.to_string()),
+            ),
+        );
+        // Track globally last single-item citation for cross-note ibid
+        if is_single_item_citation {
+            self.citation_history.last_single_citation_item = Some((
+                item_id.to_string(),
+                locator.map(|s| s.to_string()),
+                label.map(|s| s.to_string()),
+                note_index,
+            ));
+        }
+    }
+
+    /// Reset citation history (useful for tests).
+    pub fn reset_citation_history(&mut self) {
+        self.citation_history = CitationHistory::default();
     }
 
     /// Add a reference to the processor.
@@ -537,6 +741,21 @@ impl Processor {
         self.style.options.limit_day_ordinals_to_day_1
     }
 
+    /// Check if punctuation should be moved inside quotes.
+    /// This checks locale overrides first, then falls back to style options.
+    /// When true, periods and commas following a closing quote are moved inside.
+    pub fn punctuation_in_quote(&self) -> bool {
+        // First check style-level locale overrides
+        for locale in &self.style.locales {
+            if let Some(ref opts) = locale.options {
+                return opts.punctuation_in_quote;
+            }
+        }
+
+        // Fall back to style options
+        self.style.options.punctuation_in_quote
+    }
+
     /// Get the bibliography sort key for a reference.
     ///
     /// This is used for year suffix assignment, which needs to follow
@@ -670,9 +889,55 @@ impl Processor {
         let add_names = strategy.add_names;
         let add_givenname = strategy.add_givenname;
         let add_year_suffix = strategy.add_year_suffix;
+        let near_note_distance = self.style.citation.near_note_distance;
 
-        // First pass: render all citations
-        let mut outputs: Vec<crate::output::Output> = citations
+        // Reset citation history for fresh position calculation
+        self.reset_citation_history();
+
+        // Calculate positions for items that don't have them explicitly set
+        let citations_with_positions: Vec<Citation> = citations
+            .iter()
+            .map(|citation| {
+                let note_index = citation.note_number.unwrap_or(0);
+                let is_single_item_citation = citation.items.len() == 1;
+                let items_with_positions: Vec<CitationItem> = citation
+                    .items
+                    .iter()
+                    .map(|item| {
+                        let mut item = item.clone();
+                        // Only calculate position if not explicitly set
+                        if item.position.is_none() {
+                            let positions = self.calculate_position(
+                                note_index,
+                                &item.id,
+                                item.locator.as_deref(),
+                                item.label.as_deref(),
+                                is_single_item_citation,
+                                near_note_distance,
+                            );
+                            item.position = Some(positions_to_bitmask(&positions));
+                        }
+                        // Update history after calculating position for this item
+                        self.update_citation_history(
+                            note_index,
+                            &item.id,
+                            item.locator.as_deref(),
+                            item.label.as_deref(),
+                            is_single_item_citation,
+                        );
+                        item
+                    })
+                    .collect();
+                Citation {
+                    id: citation.id.clone(),
+                    note_number: citation.note_number,
+                    items: items_with_positions,
+                }
+            })
+            .collect();
+
+        // First pass: render all citations with calculated positions
+        let mut outputs: Vec<crate::output::Output> = citations_with_positions
             .iter()
             .map(|c| self.process_citation_to_output(c))
             .collect::<Result<Vec<_>>>()?;
@@ -688,7 +953,7 @@ impl Processor {
             if rule != GivenNameDisambiguationRule::ByCite {
                 apply_global_name_disambiguation(self, &disamb_data, rule);
                 // Re-render and refresh ambiguities
-                outputs = citations
+                outputs = citations_with_positions
                     .iter()
                     .map(|c| self.process_citation_to_output(c))
                     .collect::<Result<Vec<_>>>()?;
@@ -701,7 +966,7 @@ impl Processor {
         if add_names && !ambiguities.is_empty() {
             try_add_names(self, &ambiguities, add_givenname);
             // Re-render and refresh ambiguities
-            outputs = citations
+            outputs = citations_with_positions
                 .iter()
                 .map(|c| self.process_citation_to_output(c))
                 .collect::<Result<Vec<_>>>()?;
@@ -721,7 +986,7 @@ impl Processor {
                     GivenNameDisambiguationRule::ByCite,
                 );
                 // Re-render and refresh ambiguities
-                outputs = citations
+                outputs = citations_with_positions
                     .iter()
                     .map(|c| self.process_citation_to_output(c))
                     .collect::<Result<Vec<_>>>()?;
@@ -737,7 +1002,7 @@ impl Processor {
                 self.set_year_suffix(&item_id, suffix);
             }
             // Re-render and refresh ambiguities
-            outputs = citations
+            outputs = citations_with_positions
                 .iter()
                 .map(|c| self.process_citation_to_output(c))
                 .collect::<Result<Vec<_>>>()?;
@@ -749,7 +1014,7 @@ impl Processor {
         set_disambiguate_condition(self, &ambiguities);
 
         // Final pass: re-render with all disambiguation applied
-        citations
+        citations_with_positions
             .iter()
             .map(|c| self.process_citation_to_output(c))
             .collect()

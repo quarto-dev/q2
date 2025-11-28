@@ -53,9 +53,41 @@ Detailed CSL spec documentation has been created in `claude-notes/csl-spec/`:
 
 These documents are cross-referenced with the original spec at `external-sources/csl-spec/specification.rst`.
 
+## Test Organization
+
+### Test Files
+
+- `tests/enabled_tests.txt` - Tests that are expected to pass (one test name per line)
+- `tests/deferred_tests.txt` - Tests intentionally set aside with documented reasons
+
+### Deferred Tests Policy
+
+**IMPORTANT**: Adding tests to `deferred_tests.txt` requires user approval. These are tests we've decided to intentionally skip, not just "not yet attempted" tests.
+
+Before proposing to defer a test:
+1. Investigate the test thoroughly
+2. Understand why it fails and what would be needed to fix it
+3. Ask the user for approval, explaining the rationale
+
+Valid reasons for deferring:
+- CSL style quirk that produces technically-correct but undesirable output
+- Edge case that would require disproportionate effort relative to its value
+- Test that conflicts with other more important behaviors
+
+Format in `deferred_tests.txt`:
+```
+# Date and reason for deferring
+# Explanation of why this test is deferred
+test_name
+```
+
 ## Current State
 
-- **390 enabled tests passing (45.5% coverage)**
+- **501 enabled tests passing (58.4% coverage)** - Updated 2025-11-28
+- Position tracking implemented (first, subsequent, ibid, ibid-with-locator, near-note)
+- Unicode curly quotes for locale rendering
+- Sentence-initial capitalization for citation terms (ibid, etc.)
+- Variable `form="short"` support (title-short, container-title-short with journalAbbreviation fallback)
 - k-444 infrastructure (in progress) - added delimiter field to Formatting struct, smart punctuation handling, substitute context inheritance
 - Up from 377 after k-443 multi-pass disambiguation - properly re-renders and refreshes ambiguities after each disambiguation step; year suffixes now correctly skip items already disambiguated by givenname expansion
 - Up from 358 after k-443 (integration fixes) - fixed layout delimiter bug (was applying layout delimiter between elements within a layout, should only join citation items)
@@ -110,21 +142,27 @@ These documents are cross-referenced with the original spec at `external-sources
    - Added `options` field to Locale struct for locale-level style option overrides
    - Enabled: `date_DayOrdinalDayOneOnly`
 
-## Test Coverage Analysis
+## Test Coverage Analysis (Updated 2025-11-28)
 
 | Category | Enabled | Total | Gap | Coverage |
 |----------|---------|-------|-----|----------|
-| name | 14 | 111 | 97 | 12.6% |
-| nameattr | 16 | 97 | 81 | 16.5% |
-| date | 75 | 101 | 26 | 74.3% |
-| bugreports | 9 | 83 | 74 | 10.8% |
-| disambiguate | 5 | 72 | 67 | 6.9% |
-| sort | 4 | 66 | 62 | 6.1% |
-| magic | 1 | 40 | 39 | 2.5% |
-| textcase | 1 | 31 | 30 | 3.2% |
-| collapse | 0 | 21 | 21 | 0% |
-| flipflop | 0 | 19 | 19 | 0% |
-| condition | 10 | 17 | 7 | 58.8% |
+| nameattr | 89 | 97 | 8 | 91% |
+| condition | 15 | 17 | 2 | 88% |
+| date | 83 | 101 | 18 | 82% |
+| textcase | 23 | 31 | 8 | 74% |
+| disambiguate | 43 | 72 | 29 | 59% |
+| collapse | 12 | 21 | 9 | 57% |
+| substitute | 4 | 7 | 3 | 57% |
+| label | 10 | 19 | 9 | 52% |
+| sort | 30 | 66 | 36 | 45% |
+| name | 48 | 111 | 63 | 43% |
+| locale | 9 | 23 | 14 | 39% |
+| position | 6 | 16 | 10 | 37% |
+| number | 6 | 20 | 14 | 30% |
+| bugreports | 21 | 83 | 62 | 25% |
+| affix | 2 | 9 | 7 | 22% |
+| flipflop | 4 | 19 | 15 | 21% |
+| magic | 2 | 40 | 38 | 5% |
 
 ### Remaining Date Tests (26 ignored)
 
@@ -226,6 +264,69 @@ See detailed design: `claude-notes/plans/2025-11-28-multi-pass-rendering-archite
 - Delimiter bugs (~20-30 tests)
 - Substitute inheritance (~50-100 tests)
 - Year-suffix with multi-pass (~20-30 tests)
+
+### Phase 6: Locale Post-Processing Pipeline (NEW)
+
+**Goal**: Implement a post-processing pipeline matching Pandoc citeproc's architecture for locale-specific text transformations.
+
+**Architectural Pattern** (from `external-sources/citeproc/src/Citeproc.hs`):
+
+```haskell
+-- Citeproc.hs lines 50-52
+movePunct = case localePunctuationInQuote locale of
+              Just True -> movePunctuationInsideQuotes
+              _         -> id
+```
+
+The reference implementation applies these transformations **after** rendering:
+1. `localizeQuotes` - Convert generic quotes to locale-specific characters
+2. `movePunctuationInsideQuotes` - Move punctuation inside quotes when `punctuation-in-quote="true"`
+
+**Key architectural insight**: The `CiteprocOutput` typeclass (Types.hs:212-216) defines these as trait methods:
+- `addQuotes :: a -> a`
+- `movePunctuationInsideQuotes :: a -> a`
+- `localizeQuotes :: Locale -> a -> a`
+
+**Implementation plan**:
+
+1. **Quote Localization** (~15-20 tests)
+   - Add locale term lookup for: `open-quote`, `close-quote`, `open-inner-quote`, `close-inner-quote`
+   - Track nesting depth to flip between outer/inner quotes
+   - Currently: hardcoded `"` `"` `'` `'`
+   - Test: `affix_CommaAfterQuote` - Expected `"quote"` got `'quote'`
+
+2. **Moving Punctuation** (~10-15 tests)
+   - Parse `punctuation-in-quote` locale option
+   - When true, move `,` `.` inside closing quotes
+   - Test: `magic_StripPeriodsFalse` - Expected `"Article,"` got `"Article, "`
+
+3. **Display Attribute** (~30-40 tests) - See Phase 7
+   - Render `display` attribute as `<div class="csl-{value}">`
+   - Values: `block`, `left-margin`, `right-inline`, `indent`
+   - Many bibliography tests expect this HTML structure
+
+**Files to modify**:
+- `crates/quarto-citeproc/src/output.rs` - Add post-processing functions
+- `crates/quarto-citeproc/src/locale.rs` - Add quote term lookup
+- `crates/quarto-csl/src/types.rs` - Add `punctuation_in_quote` to locale options
+
+### Phase 7: Display Attribute Support
+
+**Goal**: Render the `display` attribute for bibliography formatting.
+
+**Expected output** (from test `variables_ContainerTitleShort.txt`):
+```html
+<div class="csl-entry">
+  <div class="csl-left-margin">1. </div><div class="csl-right-inline">Content...</div>
+</div>
+```
+
+**Implementation**:
+1. Parse `display` attribute in Formatting (may already be partially done)
+2. Add `DisplayStyle` enum: `Block`, `LeftMargin`, `RightInline`, `Indent`
+3. Render as `<div class="csl-{style}">` wrapper in CSL HTML output
+
+**Expected impact**: ~30-40 tests (bugreports, sort, other categories)
 
 ## Files to Modify
 

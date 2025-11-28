@@ -67,6 +67,11 @@ pub struct StyleOptions {
     /// When true, only the 1st day gets an ordinal suffix (e.g., "1st"),
     /// other days are rendered as plain numbers (e.g., "2", "3").
     pub limit_day_ordinals_to_day_1: bool,
+    /// Whether to move trailing punctuation inside closing quotes.
+    /// When true, periods and commas immediately following a closing quote
+    /// are moved inside the quote (American English style).
+    /// Defaults to false (British English style).
+    pub punctuation_in_quote: bool,
     /// Source location.
     pub source_info: Option<SourceInfo>,
 }
@@ -281,6 +286,9 @@ pub struct Layout {
     pub year_suffix_delimiter: Option<String>,
     /// Disambiguation strategy (only for citation layouts).
     pub disambiguation: DisambiguationStrategy,
+    /// Maximum distance (in notes) for near-note position detection.
+    /// Defaults to 5 per CSL spec.
+    pub near_note_distance: u32,
     /// Source location.
     pub source_info: SourceInfo,
 }

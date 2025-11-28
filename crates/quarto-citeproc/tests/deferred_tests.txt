@@ -1,0 +1,13 @@
+# Deferred CSL Conformance Tests
+#
+# Tests listed here are intentionally not enabled. They represent edge cases,
+# CSL style quirks, or behaviors we've decided to defer rather than fix now.
+# Review periodically to see if any should be addressed.
+#
+# Format: test_name  # reason for deferring
+
+# 2025-11-28: CSL style quirk produces intentional double commas ", ,"
+# The style has prefix=", " on a date element inside a group with delimiter=", "
+# When the publisher field is empty, both commas appear. This is technically
+# "correct" per the CSL spec but is an artifact of poor style design.
+bugreports_AccidentalAllCaps

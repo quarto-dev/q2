@@ -591,8 +591,25 @@ impl Output {
     /// - Notes
     ///
     /// Tags are transparent and don't affect the output structure.
+    ///
+    /// Note: This method ignores the `display` attribute. For bibliography entries
+    /// that use display attributes, use `to_blocks()` instead.
     pub fn to_inlines(&self) -> quarto_pandoc_types::Inlines {
         to_inlines_inner(self)
+    }
+
+    /// Convert the output to Pandoc Blocks.
+    ///
+    /// This produces a `Vec<Block>` that properly handles the `display` attribute
+    /// used in bibliography formatting. The display attribute creates:
+    /// - `display="block"` → `<div class="csl-block">`
+    /// - `display="left-margin"` → `<div class="csl-left-margin">`
+    /// - `display="right-inline"` → `<div class="csl-right-inline">`
+    /// - `display="indent"` → `<div class="csl-indent">`
+    ///
+    /// Content without display attributes is wrapped in a Plain block.
+    pub fn to_blocks(&self) -> Vec<quarto_pandoc_types::Block> {
+        to_blocks_inner(self)
     }
 
     /// Strip leading whitespace from this output.
@@ -804,29 +821,52 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
             formatting,
             children,
         } => {
-            // First, recursively convert children, with optional delimiter
-            let mut inner: Vec<Inline> = if let Some(ref delim) = formatting.delimiter {
-                // Join children with delimiter, filtering out empty results
-                let child_results: Vec<Vec<Inline>> = children
-                    .iter()
-                    .map(to_inlines_inner)
-                    .filter(|inlines| !inlines.is_empty())
-                    .collect();
+            // First, recursively convert children
+            // Collect as Vec<Vec<Inline>> to apply fix_punct_siblings at sibling boundaries
+            let child_results: Vec<Vec<Inline>> = children
+                .iter()
+                .map(to_inlines_inner)
+                .filter(|inlines| !inlines.is_empty())
+                .collect();
 
+            if child_results.is_empty() {
+                return vec![];
+            }
+
+            // Pandoc's order of operations:
+            // 1. Render children (done above)
+            // 2. Add delimiters as separate elements
+            // 3. Apply fixPunct on the whole list (including delimiters)
+            // 4. mconcat to flatten
+
+            // Step 2: Add delimiters between elements (as separate siblings)
+            let with_delimiters: Vec<Vec<Inline>> = if let Some(ref delim) = formatting.delimiter {
                 let mut result = Vec::new();
                 for (i, child_inlines) in child_results.into_iter().enumerate() {
                     if i > 0 && !delim.is_empty() {
-                        result.push(Inline::Str(Str {
-                            text: delim.clone(),
-                            source_info: empty_source_info(),
-                        }));
+                        // Smart delimiter: skip if next element starts with punctuation
+                        // (This is Pandoc's addDelimiters behavior)
+                        let first_char = get_leading_char(&child_inlines);
+                        if !matches!(first_char, Some(',') | Some(';') | Some('.')) {
+                            result.push(vec![Inline::Str(Str {
+                                text: delim.clone(),
+                                source_info: empty_source_info(),
+                            })]);
+                        }
                     }
-                    result.extend(child_inlines);
+                    result.push(child_inlines);
                 }
                 result
             } else {
-                children.iter().flat_map(to_inlines_inner).collect()
+                child_results
             };
+
+            // Step 3: Apply fix_punct_siblings to fix collisions at sibling boundaries
+            // This includes collisions between content and delimiters
+            let fixed_siblings = fix_punct_siblings(with_delimiters);
+
+            // Step 4: Flatten into a single Vec<Inline>
+            let mut inner: Vec<Inline> = fixed_siblings.into_iter().flatten().collect();
 
             if inner.is_empty() {
                 return vec![];
@@ -862,10 +902,35 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
             }
             if let Some(ref suffix) = formatting.suffix {
                 if !suffix.is_empty() {
-                    inner.push(Inline::Str(Str {
-                        text: suffix.clone(),
-                        source_info: empty_source_info(),
-                    }));
+                    // Check for punctuation collision between content and suffix
+                    let content_end = get_trailing_char(&inner);
+                    let suffix_start = suffix.chars().next();
+                    if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
+                        let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
+                        if !keep_x_end {
+                            trim_trailing_char(&mut inner);
+                        }
+                        if keep_y_start {
+                            inner.push(Inline::Str(Str {
+                                text: suffix.clone(),
+                                source_info: empty_source_info(),
+                            }));
+                        } else {
+                            // Skip first char of suffix
+                            let trimmed_suffix: String = suffix.chars().skip(1).collect();
+                            if !trimmed_suffix.is_empty() {
+                                inner.push(Inline::Str(Str {
+                                    text: trimmed_suffix,
+                                    source_info: empty_source_info(),
+                                }));
+                            }
+                        }
+                    } else {
+                        inner.push(Inline::Str(Str {
+                            text: suffix.clone(),
+                            source_info: empty_source_info(),
+                        }));
+                    }
                 }
             }
 
@@ -925,6 +990,165 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
             }
 
             inner
+        }
+    }
+}
+
+// ============================================================================
+// Pandoc Block conversion (for display attribute support)
+// ============================================================================
+
+/// A display region extracted from the Output AST.
+#[derive(Debug)]
+struct DisplayRegion {
+    display: Option<quarto_csl::Display>,
+    content: Output,
+}
+
+/// Convert Output to Pandoc Blocks, handling the display attribute.
+///
+/// The display attribute creates block-level structure in bibliography entries.
+/// This function extracts display regions and wraps them in Div blocks with
+/// the appropriate CSS classes.
+fn to_blocks_inner(output: &Output) -> Vec<quarto_pandoc_types::Block> {
+    use quarto_pandoc_types::{Block, Div, Plain};
+
+    // Extract display regions from the output
+    let regions = extract_display_regions(output);
+
+    // If there's only one region with no display attribute, just wrap in Plain
+    if regions.len() == 1 && regions[0].display.is_none() {
+        let inlines = to_inlines_inner(&regions[0].content);
+        if inlines.is_empty() {
+            return vec![];
+        }
+        return vec![Block::Plain(Plain {
+            content: inlines,
+            source_info: empty_source_info(),
+        })];
+    }
+
+    // Create blocks for each display region
+    let mut blocks = Vec::new();
+    for region in regions {
+        let inlines = to_inlines_inner(&region.content);
+        if inlines.is_empty() {
+            continue;
+        }
+
+        match region.display {
+            Some(display) => {
+                // Create a Div with the appropriate CSS class
+                let class = match display {
+                    quarto_csl::Display::Block => "csl-block",
+                    quarto_csl::Display::LeftMargin => "csl-left-margin",
+                    quarto_csl::Display::RightInline => "csl-right-inline",
+                    quarto_csl::Display::Indent => "csl-indent",
+                };
+                let mut attr = quarto_pandoc_types::empty_attr();
+                attr.1.push(class.to_string());
+
+                blocks.push(Block::Div(Div {
+                    attr,
+                    content: vec![Block::Plain(Plain {
+                        content: inlines,
+                        source_info: empty_source_info(),
+                    })],
+                    source_info: empty_source_info(),
+                    attr_source: empty_attr_source(),
+                }));
+            }
+            None => {
+                // No display attribute - wrap in Plain
+                blocks.push(Block::Plain(Plain {
+                    content: inlines,
+                    source_info: empty_source_info(),
+                }));
+            }
+        }
+    }
+
+    blocks
+}
+
+/// Extract display regions from an Output AST.
+///
+/// This walks the top-level children and groups content by display attribute.
+/// Content with the same display attribute (or no display attribute) is grouped together.
+fn extract_display_regions(output: &Output) -> Vec<DisplayRegion> {
+    match output {
+        Output::Null => vec![],
+        Output::Literal(_) => vec![DisplayRegion {
+            display: None,
+            content: output.clone(),
+        }],
+        Output::Tagged { child, .. } => {
+            // Tags are transparent - look inside
+            extract_display_regions(child)
+        }
+        Output::Linked { .. } | Output::InNote(_) => vec![DisplayRegion {
+            display: None,
+            content: output.clone(),
+        }],
+        Output::Formatted {
+            formatting,
+            children,
+        } => {
+            // If this node has a display attribute, it's a single region
+            if formatting.display.is_some() {
+                return vec![DisplayRegion {
+                    display: formatting.display,
+                    content: output.clone(),
+                }];
+            }
+
+            // No display attribute on this node - check children
+            let mut regions = Vec::new();
+            let mut current_no_display = Vec::new();
+
+            for child in children {
+                let child_regions = extract_display_regions(child);
+
+                for region in child_regions {
+                    if region.display.is_some() {
+                        // Flush accumulated no-display content first
+                        if !current_no_display.is_empty() {
+                            regions.push(DisplayRegion {
+                                display: None,
+                                content: Output::Formatted {
+                                    formatting: formatting.clone(),
+                                    children: std::mem::take(&mut current_no_display),
+                                },
+                            });
+                        }
+                        regions.push(region);
+                    } else {
+                        // Accumulate content without display attribute
+                        current_no_display.push(region.content);
+                    }
+                }
+            }
+
+            // Flush remaining no-display content
+            if !current_no_display.is_empty() {
+                regions.push(DisplayRegion {
+                    display: None,
+                    content: Output::Formatted {
+                        formatting: formatting.clone(),
+                        children: current_no_display,
+                    },
+                });
+            }
+
+            // If no regions were found, treat the whole thing as one region
+            if regions.is_empty() {
+                regions.push(DisplayRegion {
+                    display: None,
+                    content: output.clone(),
+                });
+            }
+
+            regions
         }
     }
 }
@@ -1335,6 +1559,610 @@ pub fn join_with_smart_delim(strings: Vec<String>, delimiter: &str) -> String {
     fixed.join("")
 }
 
+/// Determine how to handle a punctuation collision between two characters.
+///
+/// Returns (keep_first, keep_second) based on the characters at the boundary.
+fn punct_collision_rule(x_end: char, y_start: char) -> (bool, bool) {
+    match (x_end, y_start) {
+        // Based on Pandoc citeproc Types.hs fixPunct
+        ('!', '.') => (true, false),  // keepFirst
+        ('!', '?') => (true, true),   // keepBoth
+        ('!', ':') => (true, false),  // keepFirst
+        ('!', ',') => (true, true),   // keepBoth
+        ('!', ';') => (true, true),   // keepBoth
+        ('?', '!') => (true, true),   // keepBoth
+        ('?', '.') => (true, false),  // keepFirst
+        ('?', ':') => (true, false),  // keepFirst
+        ('?', ',') => (true, true),   // keepBoth
+        ('?', ';') => (true, true),   // keepBoth
+        ('.', '!') => (true, true),   // keepBoth
+        ('.', '?') => (true, true),   // keepBoth
+        ('.', ':') => (true, true),   // keepBoth
+        ('.', ',') => (true, true),   // keepBoth
+        ('.', ';') => (true, true),   // keepBoth
+        (':', '!') => (false, true),  // keepSecond
+        (':', '?') => (false, true),  // keepSecond
+        (':', '.') => (true, false),  // keepFirst
+        (':', ',') => (true, true),   // keepBoth
+        (':', ';') => (true, true),   // keepBoth
+        (',', '!') => (true, true),   // keepBoth
+        (',', '?') => (true, true),   // keepBoth
+        (',', ':') => (true, true),   // keepBoth
+        (',', '.') => (true, true),   // keepBoth
+        (',', ';') => (true, true),   // keepBoth
+        (';', '!') => (false, true),  // keepSecond
+        (';', '?') => (false, true),  // keepSecond
+        (';', ':') => (true, false),  // keepFirst
+        (';', '.') => (true, false),  // keepFirst
+        (';', ',') => (true, true),   // keepBoth
+        ('!', '!') => (true, false),  // keepFirst
+        ('?', '?') => (true, false),  // keepFirst
+        ('.', '.') => (true, false),  // keepFirst
+        (':', ':') => (true, false),  // keepFirst
+        (';', ';') => (true, false),  // keepFirst
+        (',', ',') => (true, false),  // keepFirst
+        (' ', ' ') => (false, true),  // keepSecond
+        (' ', ',') => (false, true),  // keepSecond
+        (' ', '.') => (false, true),  // keepSecond
+        _ => (true, true),            // keepBoth - default
+    }
+}
+
+/// Fix punctuation collisions between adjacent sibling outputs.
+///
+/// This is the correct implementation matching Pandoc citeproc's approach.
+/// Unlike the global `fix_punct_inlines`, this operates on a list of sibling
+/// results (each sibling is a `Vec<Inline>`) and only fixes collisions at
+/// the boundaries between siblings - not between arbitrary adjacent strings.
+///
+/// The key insight from Pandoc citeproc is that `fixPunct` is called on the
+/// list of rendered siblings, not on the final flattened output. This preserves
+/// intentional punctuation sequences (like `, , ` from separate delimiters)
+/// while still fixing collisions at affix boundaries.
+fn fix_punct_siblings(siblings: Vec<Vec<quarto_pandoc_types::Inline>>) -> Vec<Vec<quarto_pandoc_types::Inline>> {
+    use quarto_pandoc_types::Inline;
+
+    if siblings.len() < 2 {
+        return siblings;
+    }
+
+    let mut result: Vec<Vec<Inline>> = Vec::with_capacity(siblings.len());
+    let mut iter = siblings.into_iter().peekable();
+
+    while let Some(mut current) = iter.next() {
+        if let Some(next) = iter.peek_mut() {
+            // Get the last char of current sibling and first char of next sibling
+            let current_end = get_trailing_char(&current);
+            let next_start = get_leading_char(next);
+
+            if let (Some(x_end), Some(y_start)) = (current_end, next_start) {
+                let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
+
+                // Modify current's trailing character if needed
+                if !keep_x_end {
+                    trim_trailing_char(&mut current);
+                }
+
+                // Modify next's leading character if needed
+                if !keep_y_start {
+                    trim_leading_char(next);
+                }
+            }
+        }
+
+        if !current.is_empty() {
+            result.push(current);
+        }
+    }
+
+    result
+}
+
+/// Get the trailing character of the last Str in an Inlines vector.
+fn get_trailing_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
+    use quarto_pandoc_types::Inline;
+
+    for inline in inlines.iter().rev() {
+        match inline {
+            Inline::Str(s) if !s.text.is_empty() => {
+                return s.text.chars().last();
+            }
+            Inline::Space(_) => return Some(' '),
+            // Skip formatting wrappers and look inside
+            Inline::Emph(e) => {
+                if let Some(c) = get_trailing_char(&e.content) {
+                    return Some(c);
+                }
+            }
+            Inline::Strong(s) => {
+                if let Some(c) = get_trailing_char(&s.content) {
+                    return Some(c);
+                }
+            }
+            Inline::SmallCaps(s) => {
+                if let Some(c) = get_trailing_char(&s.content) {
+                    return Some(c);
+                }
+            }
+            Inline::Quoted(q) => {
+                if let Some(c) = get_trailing_char(&q.content) {
+                    return Some(c);
+                }
+            }
+            Inline::Span(s) => {
+                if let Some(c) = get_trailing_char(&s.content) {
+                    return Some(c);
+                }
+            }
+            _ => continue,
+        }
+    }
+    None
+}
+
+/// Get the leading character of the first Str in an Inlines vector.
+fn get_leading_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
+    use quarto_pandoc_types::Inline;
+
+    for inline in inlines.iter() {
+        match inline {
+            Inline::Str(s) if !s.text.is_empty() => {
+                return s.text.chars().next();
+            }
+            Inline::Space(_) => return Some(' '),
+            // Skip formatting wrappers and look inside
+            Inline::Emph(e) => {
+                if let Some(c) = get_leading_char(&e.content) {
+                    return Some(c);
+                }
+            }
+            Inline::Strong(s) => {
+                if let Some(c) = get_leading_char(&s.content) {
+                    return Some(c);
+                }
+            }
+            Inline::SmallCaps(s) => {
+                if let Some(c) = get_leading_char(&s.content) {
+                    return Some(c);
+                }
+            }
+            Inline::Quoted(q) => {
+                if let Some(c) = get_leading_char(&q.content) {
+                    return Some(c);
+                }
+            }
+            Inline::Span(s) => {
+                if let Some(c) = get_leading_char(&s.content) {
+                    return Some(c);
+                }
+            }
+            _ => continue,
+        }
+    }
+    None
+}
+
+/// Trim the trailing character from the last Str in an Inlines vector.
+fn trim_trailing_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
+    use quarto_pandoc_types::Inline;
+
+    for i in (0..inlines.len()).rev() {
+        match &mut inlines[i] {
+            Inline::Str(s) if !s.text.is_empty() => {
+                let new_text: String = s.text.chars().take(s.text.chars().count() - 1).collect();
+                if new_text.is_empty() {
+                    inlines.remove(i);
+                } else {
+                    s.text = new_text;
+                }
+                return;
+            }
+            Inline::Space(_) => {
+                inlines.remove(i);
+                return;
+            }
+            Inline::Emph(e) => {
+                trim_trailing_char(&mut e.content);
+                if e.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::Strong(s) => {
+                trim_trailing_char(&mut s.content);
+                if s.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::SmallCaps(s) => {
+                trim_trailing_char(&mut s.content);
+                if s.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::Quoted(q) => {
+                trim_trailing_char(&mut q.content);
+                if q.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::Span(s) => {
+                trim_trailing_char(&mut s.content);
+                if s.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            _ => continue,
+        }
+    }
+}
+
+/// Trim the leading character from the first Str in an Inlines vector.
+fn trim_leading_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
+    use quarto_pandoc_types::Inline;
+
+    for i in 0..inlines.len() {
+        match &mut inlines[i] {
+            Inline::Str(s) if !s.text.is_empty() => {
+                let new_text: String = s.text.chars().skip(1).collect();
+                if new_text.is_empty() {
+                    inlines.remove(i);
+                } else {
+                    s.text = new_text;
+                }
+                return;
+            }
+            Inline::Space(_) => {
+                inlines.remove(i);
+                return;
+            }
+            Inline::Emph(e) => {
+                trim_leading_char(&mut e.content);
+                if e.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::Strong(s) => {
+                trim_leading_char(&mut s.content);
+                if s.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::SmallCaps(s) => {
+                trim_leading_char(&mut s.content);
+                if s.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::Quoted(q) => {
+                trim_leading_char(&mut q.content);
+                if q.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            Inline::Span(s) => {
+                trim_leading_char(&mut s.content);
+                if s.content.is_empty() {
+                    inlines.remove(i);
+                }
+                return;
+            }
+            _ => continue,
+        }
+    }
+}
+
+/// Move periods and commas from after closing quotes to inside them.
+///
+/// This implements the CSL `punctuation-in-quote` locale option, which
+/// is used for American English style where periods and commas go inside
+/// closing quotation marks.
+///
+/// This operates on the Output AST, looking for Formatted nodes with
+/// `quotes: true` followed by content starting with `.` or `,`, and
+/// moves that punctuation inside the quoted content.
+///
+/// This matches the reference citeproc implementation which operates on
+/// Pandoc Inlines rather than strings.
+pub fn move_punctuation_inside_quotes(output: Output) -> Output {
+    move_punct_in_children(vec![output])
+        .into_iter()
+        .next()
+        .unwrap_or(Output::Null)
+}
+
+/// Process a list of Output nodes, moving punctuation inside quotes.
+fn move_punct_in_children(children: Vec<Output>) -> Vec<Output> {
+    if children.is_empty() {
+        return children;
+    }
+
+    let mut result = Vec::with_capacity(children.len());
+    let mut iter = children.into_iter().peekable();
+
+    while let Some(current) = iter.next() {
+        // Check if current ends with a quoted node (direct or nested)
+        if let Some(quoted_path) = find_trailing_quoted(&current) {
+            // Look ahead to see if next sibling starts with punctuation
+            if let Some(next) = iter.peek() {
+                if let Some((punct, rest)) = extract_leading_punct(next) {
+                    // Check that quoted content doesn't already end with this punctuation
+                    if !ends_with_punct_in_path(&current, &quoted_path, punct) {
+                        // Move punctuation inside the quoted node
+                        let modified = insert_punct_in_path(current, &quoted_path, punct);
+
+                        result.push(recurse_punct_in_quotes(modified));
+
+                        // Consume the next element and push the remainder (if any)
+                        iter.next(); // consume the peeked element
+                        if let Some(rest_output) = rest {
+                            result.push(move_punctuation_inside_quotes(rest_output));
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Recursively process the current node
+        result.push(recurse_punct_in_quotes(current));
+    }
+
+    result
+}
+
+/// Path to a quoted node within a tree (indices of children to follow).
+type QuotedPath = Vec<usize>;
+
+/// Find the path to a trailing quoted element in an Output tree.
+/// Returns the path of child indices to reach the quoted Formatted node.
+fn find_trailing_quoted(output: &Output) -> Option<QuotedPath> {
+    match output {
+        Output::Formatted {
+            formatting,
+            children,
+        } => {
+            if formatting.quotes {
+                // This node itself is quoted
+                return Some(vec![]);
+            }
+            // Check the last non-null child
+            for (i, child) in children.iter().enumerate().rev() {
+                if !child.is_null() {
+                    if let Some(mut path) = find_trailing_quoted(child) {
+                        path.insert(0, i);
+                        return Some(path);
+                    }
+                    break;
+                }
+            }
+            None
+        }
+        Output::Tagged { child, .. } => {
+            // Look through tagged nodes
+            if let Some(mut path) = find_trailing_quoted(child) {
+                // Use usize::MAX as a sentinel for "go into Tagged child"
+                path.insert(0, usize::MAX);
+                return Some(path);
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Check if the node at the given path ends with the specified punctuation.
+fn ends_with_punct_in_path(output: &Output, path: &[usize], punct: char) -> bool {
+    if path.is_empty() {
+        // We're at the quoted node
+        if let Output::Formatted { children, .. } = output {
+            return ends_with_punct(children, punct);
+        }
+        return false;
+    }
+
+    match output {
+        Output::Formatted { children, .. } => {
+            if let Some(&idx) = path.first() {
+                if let Some(child) = children.get(idx) {
+                    return ends_with_punct_in_path(child, &path[1..], punct);
+                }
+            }
+            false
+        }
+        Output::Tagged { child, .. } => {
+            if path.first() == Some(&usize::MAX) {
+                return ends_with_punct_in_path(child, &path[1..], punct);
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+/// Insert punctuation into the quoted node at the given path.
+fn insert_punct_in_path(output: Output, path: &[usize], punct: char) -> Output {
+    if path.is_empty() {
+        // We're at the quoted node - insert punctuation at the end
+        if let Output::Formatted {
+            formatting,
+            mut children,
+        } = output
+        {
+            children.push(Output::Literal(punct.to_string()));
+            return Output::Formatted {
+                formatting,
+                children,
+            };
+        }
+        return output;
+    }
+
+    match output {
+        Output::Formatted {
+            formatting,
+            children,
+        } => {
+            if let Some(&idx) = path.first() {
+                let new_children: Vec<Output> = children
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, child)| {
+                        if i == idx {
+                            insert_punct_in_path(child, &path[1..], punct)
+                        } else {
+                            child
+                        }
+                    })
+                    .collect();
+                return Output::Formatted {
+                    formatting,
+                    children: new_children,
+                };
+            }
+            Output::Formatted {
+                formatting,
+                children,
+            }
+        }
+        Output::Tagged { tag, child } => {
+            if path.first() == Some(&usize::MAX) {
+                return Output::Tagged {
+                    tag,
+                    child: Box::new(insert_punct_in_path(*child, &path[1..], punct)),
+                };
+            }
+            Output::Tagged { tag, child }
+        }
+        other => other,
+    }
+}
+
+/// Recursively apply punctuation-in-quote transformation to a single node.
+fn recurse_punct_in_quotes(output: Output) -> Output {
+    match output {
+        Output::Formatted {
+            formatting,
+            children,
+        } => Output::Formatted {
+            formatting,
+            children: move_punct_in_children(children),
+        },
+        Output::Linked { url, children } => Output::Linked {
+            url,
+            children: move_punct_in_children(children),
+        },
+        Output::InNote(child) => {
+            Output::InNote(Box::new(move_punctuation_inside_quotes(*child)))
+        }
+        Output::Tagged { tag, child } => Output::Tagged {
+            tag,
+            child: Box::new(move_punctuation_inside_quotes(*child)),
+        },
+        // Literal and Null don't have children
+        other => other,
+    }
+}
+
+/// Extract leading punctuation (. or ,) from an Output node.
+/// Returns the punctuation character and the remaining Output (if any).
+/// When extracting from wrapped nodes (Tagged, Formatted), reconstructs
+/// the wrapper around the remaining content.
+fn extract_leading_punct(output: &Output) -> Option<(char, Option<Output>)> {
+    match output {
+        Output::Literal(s) => {
+            let first = s.chars().next()?;
+            if first == '.' || first == ',' {
+                let rest = &s[first.len_utf8()..];
+                let rest_output = if rest.is_empty() {
+                    None
+                } else {
+                    Some(Output::Literal(rest.to_string()))
+                };
+                Some((first, rest_output))
+            } else {
+                None
+            }
+        }
+        Output::Formatted {
+            formatting,
+            children,
+        } => {
+            // Check first non-null child
+            for (i, child) in children.iter().enumerate() {
+                if !child.is_null() {
+                    if let Some((punct, rest_child)) = extract_leading_punct(child) {
+                        // Reconstruct the Formatted node with the rest
+                        let mut new_children: Vec<Output> = Vec::new();
+                        if let Some(rest) = rest_child {
+                            new_children.push(rest);
+                        }
+                        new_children.extend(children[i + 1..].iter().cloned());
+
+                        let rest_output = if new_children.is_empty()
+                            || new_children.iter().all(|c| c.is_null())
+                        {
+                            None
+                        } else {
+                            Some(Output::Formatted {
+                                formatting: formatting.clone(),
+                                children: new_children,
+                            })
+                        };
+                        return Some((punct, rest_output));
+                    }
+                    return None;
+                }
+            }
+            None
+        }
+        Output::Tagged { tag, child } => {
+            // Recurse into the child but preserve the tag wrapper
+            if let Some((punct, rest_child)) = extract_leading_punct(child) {
+                let rest_output = rest_child.map(|rest| Output::Tagged {
+                    tag: tag.clone(),
+                    child: Box::new(rest),
+                });
+                Some((punct, rest_output))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Check if output ends with the given punctuation character.
+fn ends_with_punct(children: &[Output], punct: char) -> bool {
+    for child in children.iter().rev() {
+        if child.is_null() {
+            continue;
+        }
+        return output_ends_with_char(child, punct);
+    }
+    false
+}
+
+/// Check if a single Output node ends with the given character.
+fn output_ends_with_char(output: &Output, c: char) -> bool {
+    match output {
+        Output::Literal(s) => s.ends_with(c),
+        Output::Formatted { children, .. } => ends_with_punct(children, c),
+        Output::Tagged { child, .. } => output_ends_with_char(child, c),
+        Output::Linked { children, .. } => ends_with_punct(children, c),
+        Output::InNote(child) => output_ends_with_char(child, c),
+        Output::Null => false,
+    }
+}
+
 // ============================================================================
 // CSL Rich Text Parser
 // ============================================================================
@@ -1414,6 +2242,32 @@ impl<'a> RichTextParser<'a> {
                     children.push(Output::Literal("<".to_string()));
                     self.pos += 1;
                     text_start = self.pos;
+                }
+            } else if self.remaining().starts_with('\'') || self.remaining().starts_with('"') {
+                // CSL uses straight quotes as generic quote markers that get localized
+                // See: https://github.com/jgm/citeproc (parseCslJson, pCslQuoted)
+                let quote_char = self.remaining().chars().next().unwrap();
+
+                // Check if followed by non-space (opening quote heuristic)
+                let next_char = self.remaining().chars().nth(1);
+                if next_char.map(|c| !c.is_whitespace()).unwrap_or(false) {
+                    // Flush accumulated text
+                    if self.pos > text_start {
+                        children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+                    }
+
+                    // Try to parse as quoted content
+                    if let Some(output) = self.try_parse_quoted(quote_char) {
+                        children.push(output);
+                        text_start = self.pos;
+                    } else {
+                        // Not a valid quote, treat as literal
+                        self.pos += 1;
+                        text_start = self.pos - 1; // Include the quote char
+                    }
+                } else {
+                    // Quote followed by space - treat as literal
+                    self.pos += 1;
                 }
             } else {
                 self.pos += self.remaining().chars().next().map(|c| c.len_utf8()).unwrap_or(1);
@@ -1528,6 +2382,48 @@ impl<'a> RichTextParser<'a> {
             }
         }
 
+        None
+    }
+
+    /// Try to parse quoted content starting at the current position.
+    /// The quote_char is the opening quote character (' or ").
+    /// Returns formatted output with quotes=true if successful.
+    fn try_parse_quoted(&mut self, quote_char: char) -> Option<Output> {
+        // Skip the opening quote
+        self.pos += 1;
+        let content_start = self.pos;
+
+        // Find the closing quote
+        let mut depth = 1;
+        while self.pos < self.input.len() {
+            let c = self.remaining().chars().next()?;
+            if c == quote_char {
+                depth -= 1;
+                if depth == 0 {
+                    // Found closing quote
+                    let content = &self.input[content_start..self.pos];
+                    self.pos += 1; // Skip closing quote
+
+                    // Parse the content recursively (may contain tags)
+                    let inner = if content.is_empty() {
+                        vec![]
+                    } else {
+                        let mut inner_parser = RichTextParser::new(content);
+                        let children = inner_parser.parse_children(None);
+                        children
+                    };
+
+                    // Wrap with quotes formatting
+                    let mut fmt = Formatting::default();
+                    fmt.quotes = true;
+                    return Some(Output::formatted(fmt, inner));
+                }
+            }
+            self.pos += c.len_utf8();
+        }
+
+        // No closing quote found - reset position and return None
+        self.pos = content_start - 1;
         None
     }
 }
@@ -2099,6 +2995,59 @@ pub fn render_inlines_to_csl_html(inlines: &quarto_pandoc_types::Inlines) -> Str
     result
 }
 
+/// Render Pandoc Blocks to CSL HTML.
+///
+/// This handles the display attribute by rendering Divs with the appropriate
+/// CSS classes. For testing only.
+pub fn render_blocks_to_csl_html(blocks: &[quarto_pandoc_types::Block]) -> String {
+    let mut result = String::new();
+    let ctx = CslRenderContext::default();
+
+    for block in blocks {
+        render_block_to_csl_html(block, &mut result, ctx);
+    }
+
+    result
+}
+
+fn render_block_to_csl_html(
+    block: &quarto_pandoc_types::Block,
+    output: &mut String,
+    ctx: CslRenderContext,
+) {
+    use quarto_pandoc_types::Block;
+
+    match block {
+        Block::Plain(p) => {
+            for inline in &p.content {
+                render_inline_to_csl_html_with_ctx(inline, output, ctx);
+            }
+        }
+        Block::Paragraph(p) => {
+            for inline in &p.content {
+                render_inline_to_csl_html_with_ctx(inline, output, ctx);
+            }
+        }
+        Block::Div(d) => {
+            let (_, classes, _) = &d.attr;
+            // Get the first class as the div class
+            if let Some(class) = classes.first() {
+                output.push_str("<div class=\"");
+                output.push_str(class);
+                output.push_str("\">");
+            }
+            for inner_block in &d.content {
+                render_block_to_csl_html(inner_block, output, ctx);
+            }
+            if classes.first().is_some() {
+                output.push_str("</div>");
+            }
+        }
+        // Other block types are not expected in CSL output
+        _ => {}
+    }
+}
+
 fn render_inline_to_csl_html_with_ctx(
     inline: &quarto_pandoc_types::Inline,
     output: &mut String,
@@ -2108,8 +3057,10 @@ fn render_inline_to_csl_html_with_ctx(
 
     match inline {
         Inline::Str(s) => {
-            // Escape HTML special characters
-            output.push_str(&html_escape(&s.text));
+            // Convert straight apostrophes to curly (typographic) apostrophes
+            // and escape HTML special characters
+            let text = s.text.replace('\'', "\u{2019}"); // ' -> '
+            output.push_str(&html_escape(&text));
         }
         Inline::Space(_) => {
             output.push(' ');
@@ -2921,6 +3872,127 @@ mod punct_tests {
         let input = vec!["A".to_string(), ". B".to_string()];
         let result = join_with_smart_delim(input, ", ");
         assert_eq!(result, "A. B");
+    }
+
+    #[test]
+    fn test_punctuation_in_quote() {
+        use super::{move_punctuation_inside_quotes, Output, Tag};
+        use quarto_csl::Formatting;
+
+        // Helper to create a quoted output
+        fn quoted(text: &str) -> Output {
+            let mut fmt = Formatting::default();
+            fmt.quotes = true;
+            Output::Formatted {
+                formatting: fmt,
+                children: vec![Output::Literal(text.to_string())],
+            }
+        }
+
+        // Test: "Hello" followed by ". world" → "Hello." followed by " world"
+        let input = Output::sequence(vec![quoted("Hello"), Output::literal(". world")]);
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(result.render(), "\u{201C}Hello.\u{201D} world");
+
+        // Test: quoted followed by comma
+        let input = Output::sequence(vec![quoted("one"), Output::literal(", "), quoted("two")]);
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(result.render(), "\u{201C}one,\u{201D} \u{201C}two\u{201D}");
+
+        // Test: already has punctuation inside - should not double
+        let input = Output::sequence(vec![quoted("Hello."), Output::literal(". world")]);
+        let result = move_punctuation_inside_quotes(input);
+        // Should NOT move because content already ends with period
+        assert_eq!(result.render(), "\u{201C}Hello.\u{201D}. world");
+
+        // Test: no trailing punctuation - unchanged
+        let input = Output::sequence(vec![quoted("Hello"), Output::literal(" world")]);
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(result.render(), "\u{201C}Hello\u{201D} world");
+
+        // Test: punctuation in a Tagged suffix (matches real citation structure)
+        let input = Output::sequence(vec![
+            quoted("The Title"),
+            Output::tagged(Tag::Suffix, Output::literal(". And more")),
+        ]);
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(result.render(), "\u{201C}The Title.\u{201D} And more");
+
+        // Test: complex suffix with nested quotes (like `. And "so it goes"`)
+        let complex_suffix = Output::sequence(vec![
+            Output::literal(". And "),
+            quoted("so it goes"),
+        ]);
+        let input = Output::sequence(vec![
+            quoted("The Title"),
+            Output::tagged(Tag::Suffix, complex_suffix),
+        ]);
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(
+            result.render(),
+            "\u{201C}The Title.\u{201D} And \u{201C}so it goes\u{201D}"
+        );
+
+        // Test: full citation structure with Item wrapper (matches actual citation output)
+        let complex_suffix = Output::sequence(vec![
+            Output::literal(". And "),
+            quoted("so it goes"),
+        ]);
+        let inner = Output::sequence(vec![
+            quoted("The Title"),
+            Output::tagged(Tag::Suffix, complex_suffix),
+        ]);
+        let input = Output::tagged(
+            Tag::Item {
+                item_type: super::CitationItemType::NormalCite,
+                item_id: "ITEM-1".to_string(),
+            },
+            inner,
+        );
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(
+            result.render(),
+            "\u{201C}The Title.\u{201D} And \u{201C}so it goes\u{201D}"
+        );
+
+        // Test: using parse_csl_rich_text for the suffix (matches actual code path)
+        let parsed_suffix = super::parse_csl_rich_text(". And \"so it goes\"");
+        let inner = Output::sequence(vec![
+            quoted("The Title"),
+            Output::tagged(Tag::Suffix, parsed_suffix),
+        ]);
+        let input = Output::tagged(
+            Tag::Item {
+                item_type: super::CitationItemType::NormalCite,
+                item_id: "ITEM-1".to_string(),
+            },
+            inner,
+        );
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(
+            result.render(),
+            "\u{201C}The Title.\u{201D} And \u{201C}so it goes\u{201D}"
+        );
+
+        // Test: with capitalize_first applied (simulates no-prefix case)
+        let parsed_suffix = super::parse_csl_rich_text(". And \"so it goes\"");
+        let layout_output = quoted("The Title");
+        let inner = Output::sequence(vec![
+            layout_output.capitalize_first(), // This is what happens when there's no prefix
+            Output::tagged(Tag::Suffix, parsed_suffix),
+        ]);
+        let input = Output::tagged(
+            Tag::Item {
+                item_type: super::CitationItemType::NormalCite,
+                item_id: "ITEM-1".to_string(),
+            },
+            inner,
+        );
+        let result = move_punctuation_inside_quotes(input);
+        assert_eq!(
+            result.render(),
+            "\u{201C}The Title.\u{201D} And \u{201C}so it goes\u{201D}"
+        );
     }
 
     #[test]

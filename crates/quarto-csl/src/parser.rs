@@ -375,11 +375,17 @@ impl CslParser {
             .map(|a| a.value == "true")
             .unwrap_or(false);
 
+        let punctuation_in_quote = self
+            .get_attr(element, "punctuation-in-quote")
+            .map(|a| a.value == "true")
+            .unwrap_or(false);
+
         StyleOptions {
             demote_non_dropping_particle: demote,
             initialize_with_hyphen: init_hyphen,
             page_range_format: page_range,
             limit_day_ordinals_to_day_1: limit_day_ordinals,
+            punctuation_in_quote,
             source_info: Some(element.source_info.clone()),
         }
     }
@@ -625,6 +631,12 @@ impl CslParser {
             .get_attr(element, "year-suffix-delimiter")
             .map(|a| a.value.clone());
 
+        // Parse near-note-distance (defaults to 5 per CSL spec)
+        let near_note_distance = self
+            .get_attr(element, "near-note-distance")
+            .and_then(|a| a.value.parse::<u32>().ok())
+            .unwrap_or(5);
+
         // Parse disambiguation strategy
         let disambiguation = self.parse_disambiguation_strategy(element);
 
@@ -641,6 +653,7 @@ impl CslParser {
             after_collapse_delimiter,
             year_suffix_delimiter,
             disambiguation,
+            near_note_distance,
             source_info: element.source_info.clone(),
         })
     }

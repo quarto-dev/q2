@@ -12,7 +12,9 @@
 
 use std::collections::HashMap;
 
-use quarto_citeproc::output::render_inlines_to_csl_html;
+use quarto_citeproc::output::{
+    move_punctuation_inside_quotes, render_blocks_to_csl_html, render_inlines_to_csl_html,
+};
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
 
@@ -90,9 +92,9 @@ fn parse_sections(content: &str) -> HashMap<String, String> {
     let mut current_content = String::new();
 
     for line in content.lines() {
-        // Check for section start: >>===== NAME =====>> or >>==== NAME ====>>
-        // (test files use varying numbers of = signs)
-        if line.starts_with(">>") && line.contains("====") && line.ends_with(">>") {
+        // Check for section start: >>===== NAME =====>> or >>== NAME ==>>
+        // (test files use varying numbers of = signs, some have only 2)
+        if line.starts_with(">>") && line.contains("==") && line.ends_with(">>") {
             // Save previous section if any
             if let Some(ref name) = current_section {
                 sections.insert(name.clone(), current_content.trim_end().to_string());
@@ -103,8 +105,8 @@ fn parse_sections(content: &str) -> HashMap<String, String> {
             current_section = Some(name.to_lowercase());
             current_content = String::new();
         }
-        // Check for section end: <<===== NAME =====<< or <<==== NAME ====<<
-        else if line.starts_with("<<") && line.contains("====") && line.ends_with("<<") {
+        // Check for section end: <<===== NAME =====<< or <<== NAME ==<<
+        else if line.starts_with("<<") && line.contains("==") && line.ends_with("<<") {
             if let Some(ref name) = current_section {
                 sections.insert(name.clone(), current_content.trim_end().to_string());
             }
@@ -169,6 +171,12 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
     // Build citations
     let citations = build_citations(test, &references)?;
 
+    // Check locale options for post-processing
+    let punct_in_quote = processor.punctuation_in_quote();
+
+    // Check if this is a complex CITATIONS format test (needs incremental output)
+    let is_incremental = test.citations.is_some() && is_complex_citations_format(test);
+
     // Process based on mode
     let actual = match test.mode.as_str() {
         "citation" => {
@@ -180,11 +188,23 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
             let outputs: Vec<String> = output_asts
                 .into_iter()
                 .map(|output_ast| {
-                    let inlines = output_ast.to_inlines();
+                    // Apply locale post-processing on the Output AST
+                    let processed = if punct_in_quote {
+                        move_punctuation_inside_quotes(output_ast)
+                    } else {
+                        output_ast
+                    };
+                    let inlines = processed.to_inlines();
                     render_inlines_to_csl_html(&inlines)
                 })
                 .collect();
-            outputs.join("\n")
+
+            // Apply incremental output format if needed
+            if is_incremental {
+                format_incremental_output(&outputs)
+            } else {
+                outputs.join("\n")
+            }
         }
         "bibliography" => {
             // Process citations first with disambiguation to assign initial citation numbers
@@ -199,12 +219,20 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
                 .generate_bibliography_to_outputs()
                 .map_err(|e| format!("Bibliography error: {:?}", e))?;
 
-            // Convert each entry through the new pipeline: Output → Inlines → CSL HTML
+            // Convert each entry through the new pipeline: Output → Blocks → CSL HTML
+            // Using to_blocks() handles the display attribute for bibliography entries
             let outputs: Vec<String> = entries
                 .into_iter()
                 .map(|(_, output)| {
-                    let inlines = output.to_inlines();
-                    let html = render_inlines_to_csl_html(&inlines);
+                    // Apply locale post-processing on the Output AST
+                    let processed = if punct_in_quote {
+                        move_punctuation_inside_quotes(output)
+                    } else {
+                        output
+                    };
+                    // Use to_blocks() to handle display attributes
+                    let blocks = processed.to_blocks();
+                    let html = render_blocks_to_csl_html(&blocks);
                     format_bib_entry(&html)
                 })
                 .collect();
@@ -230,57 +258,36 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
 
 /// Build citations from test data.
 fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citation>, String> {
-    // Check for explicit citations first
+    // Check for explicit citations first (CITATIONS format)
     if let Some(ref citations_json) = test.citations {
-        // Parse the citations JSON
-        // Format: [[{"id": "ITEM-1"}], [{"id": "ITEM-2"}]]
-        let raw: Vec<Vec<serde_json::Value>> = serde_json::from_str(citations_json)
+        // Try to parse as the complex CITATIONS format first:
+        // [[{citationID, citationItems, properties}, citations_pre, citations_post], ...]
+        let raw: serde_json::Value = serde_json::from_str(citations_json)
             .map_err(|e| format!("Citations JSON error: {}", e))?;
 
-        let mut citations = Vec::new();
-        for cite_group in raw {
-            let items: Vec<CitationItem> = cite_group
-                .into_iter()
-                .filter_map(|v| {
-                    // Handle both string and integer IDs
-                    let id = match v.get("id")? {
-                        serde_json::Value::String(s) => s.clone(),
-                        serde_json::Value::Number(n) => n.to_string(),
-                        _ => return None,
-                    };
-                    Some(CitationItem {
-                        id,
-                        locator: v
-                            .get("locator")
-                            .and_then(|l| l.as_str())
-                            .map(|s| s.to_string()),
-                        label: v
-                            .get("label")
-                            .and_then(|l| l.as_str())
-                            .map(|s| s.to_string()),
-                        prefix: v
-                            .get("prefix")
-                            .and_then(|p| p.as_str())
-                            .map(|s| s.to_string()),
-                        suffix: v
-                            .get("suffix")
-                            .and_then(|s| s.as_str())
-                            .map(|s| s.to_string()),
-                        position: v.get("position").and_then(|p| p.as_i64()).map(|n| n as i32),
-                        ..Default::default()
-                    })
-                })
-                .collect();
+        if let Some(outer_array) = raw.as_array() {
+            // Check if this is the complex CITATIONS format by looking at the first element
+            let is_complex_format = outer_array.first().map_or(false, |first| {
+                // Complex format: first element is a 3-element array [citation_obj, pre, post]
+                // where citation_obj has "citationItems" key
+                if let Some(arr) = first.as_array() {
+                    arr.first()
+                        .and_then(|obj| obj.get("citationItems"))
+                        .is_some()
+                } else {
+                    false
+                }
+            });
 
-            if !items.is_empty() {
-                citations.push(Citation {
-                    items,
-                    ..Default::default()
-                });
+            if is_complex_format {
+                return parse_complex_citations_format(outer_array);
+            } else {
+                // Simple format: [[{id: "ITEM-1"}], [{id: "ITEM-2"}]]
+                return parse_simple_citations_format(outer_array);
             }
         }
 
-        return Ok(citations);
+        return Err("Citations must be an array".to_string());
     }
 
     // Check for citation-items
@@ -292,36 +299,8 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
         let mut citations = Vec::new();
         for cite_group in raw {
             let items: Vec<CitationItem> = cite_group
-                .into_iter()
-                .filter_map(|v| {
-                    // Handle both string and integer IDs
-                    let id = match v.get("id")? {
-                        serde_json::Value::String(s) => s.clone(),
-                        serde_json::Value::Number(n) => n.to_string(),
-                        _ => return None,
-                    };
-                    Some(CitationItem {
-                        id,
-                        locator: v
-                            .get("locator")
-                            .and_then(|l| l.as_str())
-                            .map(|s| s.to_string()),
-                        label: v
-                            .get("label")
-                            .and_then(|l| l.as_str())
-                            .map(|s| s.to_string()),
-                        prefix: v
-                            .get("prefix")
-                            .and_then(|p| p.as_str())
-                            .map(|s| s.to_string()),
-                        suffix: v
-                            .get("suffix")
-                            .and_then(|s| s.as_str())
-                            .map(|s| s.to_string()),
-                        position: v.get("position").and_then(|p| p.as_i64()).map(|n| n as i32),
-                        ..Default::default()
-                    })
-                })
+                .iter()
+                .filter_map(|v| parse_citation_item(v))
                 .collect();
 
             if !items.is_empty() {
@@ -350,9 +329,174 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
     }])
 }
 
+/// Parse the complex CITATIONS format used in CSL test suite.
+/// Format: [[{citationID, citationItems, properties}, citations_pre, citations_post], ...]
+fn parse_complex_citations_format(
+    outer_array: &[serde_json::Value],
+) -> Result<Vec<Citation>, String> {
+    let mut citations = Vec::new();
+
+    for entry in outer_array {
+        let entry_array = entry
+            .as_array()
+            .ok_or("CITATIONS entry must be an array")?;
+
+        // First element is the citation object
+        let citation_obj = entry_array
+            .first()
+            .ok_or("CITATIONS entry must have citation object")?;
+
+        // Extract citationID
+        let citation_id = citation_obj
+            .get("citationID")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Extract noteIndex from properties
+        let note_number = citation_obj
+            .get("properties")
+            .and_then(|p| p.get("noteIndex"))
+            .and_then(|n| n.as_i64())
+            .map(|n| n as i32);
+
+        // Extract citationItems
+        let citation_items_array = citation_obj
+            .get("citationItems")
+            .and_then(|v| v.as_array())
+            .ok_or("CITATIONS entry must have citationItems array")?;
+
+        let items: Vec<CitationItem> = citation_items_array
+            .iter()
+            .filter_map(|v| parse_citation_item(v))
+            .collect();
+
+        if !items.is_empty() {
+            citations.push(Citation {
+                id: citation_id,
+                note_number,
+                items,
+            });
+        }
+    }
+
+    Ok(citations)
+}
+
+/// Parse the simple citations format: [[{id: "ITEM-1"}], [{id: "ITEM-2"}]]
+fn parse_simple_citations_format(
+    outer_array: &[serde_json::Value],
+) -> Result<Vec<Citation>, String> {
+    let mut citations = Vec::new();
+
+    for cite_group in outer_array {
+        let group_array = cite_group.as_array().ok_or("Citation group must be an array")?;
+
+        let items: Vec<CitationItem> = group_array
+            .iter()
+            .filter_map(|v| parse_citation_item(v))
+            .collect();
+
+        if !items.is_empty() {
+            citations.push(Citation {
+                items,
+                ..Default::default()
+            });
+        }
+    }
+
+    Ok(citations)
+}
+
+/// Check if a test uses the complex CITATIONS format (with citationItems nested structure).
+fn is_complex_citations_format(test: &CslTest) -> bool {
+    if let Some(ref citations_json) = test.citations {
+        if let Ok(raw) = serde_json::from_str::<serde_json::Value>(citations_json) {
+            if let Some(outer_array) = raw.as_array() {
+                return outer_array.first().map_or(false, |first| {
+                    if let Some(arr) = first.as_array() {
+                        arr.first()
+                            .and_then(|obj| obj.get("citationItems"))
+                            .is_some()
+                    } else {
+                        false
+                    }
+                });
+            }
+        }
+    }
+    false
+}
+
+/// Format output with incremental citation markers.
+/// Previous citations get `..[n]` prefix, last citation gets `>>[n]` prefix.
+fn format_incremental_output(outputs: &[String]) -> String {
+    if outputs.is_empty() {
+        return String::new();
+    }
+
+    let last_idx = outputs.len() - 1;
+    outputs
+        .iter()
+        .enumerate()
+        .map(|(i, output)| {
+            let marker = if i == last_idx { ">>" } else { ".." };
+            format!("{}[{}] {}", marker, i, output)
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Parse a single citation item from JSON.
+fn parse_citation_item(v: &serde_json::Value) -> Option<CitationItem> {
+    // Handle both string and integer IDs
+    let id = match v.get("id")? {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Number(n) => n.to_string(),
+        _ => return None,
+    };
+
+    Some(CitationItem {
+        id,
+        locator: v
+            .get("locator")
+            .and_then(|l| l.as_str())
+            .map(|s| s.to_string()),
+        label: v
+            .get("label")
+            .and_then(|l| l.as_str())
+            .map(|s| s.to_string()),
+        prefix: v
+            .get("prefix")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string()),
+        suffix: v
+            .get("suffix")
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string()),
+        position: v
+            .get("position")
+            .and_then(|p| p.as_i64())
+            .map(|n| n as i32),
+        ..Default::default()
+    })
+}
+
 /// Format a bibliography entry with div wrapper.
 fn format_bib_entry(entry: &str) -> String {
-    format!("  <div class=\"csl-entry\">{}</div>", entry)
+    // Different display attributes use different formatting:
+    // - left-margin/right-inline: newline after opening, 4-space indent before content
+    // - indent/block: content inline with opening, only newline before closing
+    if entry.contains("class=\"csl-left-margin\"")
+        || entry.contains("class=\"csl-right-inline\"")
+    {
+        // SecondFieldAlign style: newline and indent before inner divs
+        format!("  <div class=\"csl-entry\">\n    {}\n  </div>", entry)
+    } else if entry.contains("class=\"csl-indent\"") || entry.contains("class=\"csl-block\"") {
+        // Block/indent style: content inline, newline before closing
+        format!("  <div class=\"csl-entry\">{}\n  </div>", entry)
+    } else {
+        format!("  <div class=\"csl-entry\">{}</div>", entry)
+    }
 }
 
 /// Format the complete bibliography with outer div.
@@ -382,6 +526,31 @@ fn simple_diff(expected: &str, actual: &str) -> String {
             diff.push_str(&format!("Line {}:\n", i + 1));
             diff.push_str(&format!("  - {}\n", exp));
             diff.push_str(&format!("  + {}\n", act));
+
+            // Show byte-level differences if lines look similar
+            let exp_bytes: Vec<u8> = exp.bytes().collect();
+            let act_bytes: Vec<u8> = act.bytes().collect();
+            if exp_bytes.len() != act_bytes.len() {
+                diff.push_str(&format!(
+                    "  Length differs: expected {} bytes, actual {} bytes\n",
+                    exp_bytes.len(),
+                    act_bytes.len()
+                ));
+            }
+            // Find first differing byte
+            for j in 0..exp_bytes.len().min(act_bytes.len()) {
+                if exp_bytes[j] != act_bytes[j] {
+                    diff.push_str(&format!(
+                        "  First byte diff at position {}: expected 0x{:02x} ({:?}), actual 0x{:02x} ({:?})\n",
+                        j,
+                        exp_bytes[j],
+                        char::from_u32(exp_bytes[j] as u32),
+                        act_bytes[j],
+                        char::from_u32(act_bytes[j] as u32)
+                    ));
+                    break;
+                }
+            }
         }
     }
 

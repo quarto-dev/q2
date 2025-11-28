@@ -36,8 +36,9 @@ struct EvalContext<'a> {
     /// Locator label type from citation item (e.g., "page", "chapter").
     /// If not specified, defaults to "page" when locator is present.
     locator_label: Option<&'a str>,
-    /// Citation position (for note-style citations).
-    position: Option<quarto_csl::Position>,
+    /// Citation positions (for note-style citations).
+    /// Multiple positions can be true simultaneously (e.g., [NearNote, Ibid, Subsequent]).
+    positions: Vec<quarto_csl::Position>,
 }
 
 impl<'a> EvalContext<'a> {
@@ -55,7 +56,7 @@ impl<'a> EvalContext<'a> {
             in_substitute: false,
             locator: None,
             locator_label: None,
-            position: None,
+            positions: Vec::new(), // No positions in bibliography context
         }
     }
 
@@ -66,17 +67,13 @@ impl<'a> EvalContext<'a> {
         inherited_name_options: &'a InheritableNameOptions,
         citation_item: &'a CitationItem,
     ) -> Self {
-        // Convert numeric position to Position enum
-        // 0 = First, 1 = Subsequent, 2 = Ibid, 3 = IbidWithLocator, 4 = NearNote
-        // Default to First if no position specified (first citation of a reference)
-        let position = Some(match citation_item.position {
-            Some(0) | None => quarto_csl::Position::First,
-            Some(1) => quarto_csl::Position::Subsequent,
-            Some(2) => quarto_csl::Position::Ibid,
-            Some(3) => quarto_csl::Position::IbidWithLocator,
-            Some(4) => quarto_csl::Position::NearNote,
-            Some(_) => quarto_csl::Position::First, // Unknown position, default to first
-        });
+        use crate::types::bitmask_to_positions;
+
+        // Convert position from i32 (bitmask or legacy) to Vec<Position>
+        let positions = match citation_item.position {
+            None => vec![quarto_csl::Position::First],
+            Some(v) => bitmask_to_positions(v),
+        };
 
         Self {
             processor,
@@ -86,7 +83,7 @@ impl<'a> EvalContext<'a> {
             in_substitute: false,
             locator: citation_item.locator.as_deref(),
             locator_label: citation_item.label.as_deref(),
-            position,
+            positions,
         }
     }
 
@@ -192,23 +189,43 @@ pub fn evaluate_citation_to_output(
         let output = evaluate_layout(&mut ctx, &layout)?;
 
         // Apply prefix/suffix from citation item
+        // Prefixes/suffixes may contain CSL rich text (quotes, formatting)
+        // See: https://github.com/jgm/citeproc (addFormatting uses parseCslJson for affixes)
         // If there's no prefix, capitalize the first letter of the output (sentence-initial capitalization)
         let mut parts = Vec::new();
         if let Some(ref prefix) = item.prefix {
-            parts.push(Output::tagged(
-                Tag::Prefix,
-                Output::sequence(vec![Output::literal(prefix), Output::literal(" ")]),
-            ));
+            // Parse prefix for CSL rich text (quotes, HTML markup)
+            let parsed_prefix = crate::output::parse_csl_rich_text(prefix);
+            // Only add separator space if prefix doesn't already end with whitespace
+            let needs_space = !prefix.ends_with(' ') && !prefix.ends_with('\t');
+            let prefix_with_sep = if needs_space {
+                Output::sequence(vec![parsed_prefix, Output::literal(" ")])
+            } else {
+                parsed_prefix
+            };
+            parts.push(Output::tagged(Tag::Prefix, prefix_with_sep));
             parts.push(output);
         } else {
             // Capitalize first letter when no prefix
             parts.push(output.capitalize_first());
         }
         if let Some(ref suffix) = item.suffix {
-            parts.push(Output::tagged(
-                Tag::Suffix,
-                Output::sequence(vec![Output::literal(" "), Output::literal(suffix)]),
-            ));
+            // Parse suffix for CSL rich text (quotes, HTML markup)
+            let parsed_suffix = crate::output::parse_csl_rich_text(suffix);
+            // Only add separator space if suffix doesn't already start with whitespace or punctuation
+            // Punctuation (., ,) should not have a space before it - this is important for
+            // punctuation-in-quote processing.
+            let first_char = suffix.chars().next();
+            let needs_space = !suffix.starts_with(' ')
+                && !suffix.starts_with('\t')
+                && first_char != Some('.')
+                && first_char != Some(',');
+            let suffix_with_sep = if needs_space {
+                Output::sequence(vec![Output::literal(" "), parsed_suffix])
+            } else {
+                parsed_suffix
+            };
+            parts.push(Output::tagged(Tag::Suffix, suffix_with_sep));
         }
 
         // Determine citation item type based on author_only and suppress_author flags
@@ -1274,52 +1291,42 @@ fn evaluate_condition(
                 false
             }
         }
-        ConditionType::Position(positions) => {
+        ConditionType::Position(required_positions) => {
             // Check if the citation position matches any of the specified positions.
+            // Uses Vec<Position> for position tracking (matching citeproc reference impl).
             // CSL positions have an implicit hierarchy:
-            // - "first" matches only First
-            // - "subsequent" matches Subsequent, Ibid, IbidWithLocator (any non-first)
-            // - "ibid" matches Ibid and IbidWithLocator
-            // - "ibid-with-locator" matches only IbidWithLocator
-            // - "near-note" matches NearNote
-            let matches_position = |required: &quarto_csl::Position| -> bool {
-                match ctx.position {
-                    Some(quarto_csl::Position::First) => {
-                        matches!(required, quarto_csl::Position::First)
+            // - "first" matches if First is in positions
+            // - "subsequent" matches if Subsequent, Ibid, or IbidWithLocator is in positions
+            // - "ibid" matches if Ibid or IbidWithLocator is in positions
+            // - "ibid-with-locator" matches if IbidWithLocator is in positions
+            // - "near-note" matches if NearNote is in positions
+            use quarto_csl::Position;
+
+            let matches_position = |required: &Position| -> bool {
+                match required {
+                    Position::First => ctx.positions.contains(&Position::First),
+                    Position::Subsequent => {
+                        // Subsequent is true if any of: Subsequent, Ibid, IbidWithLocator
+                        ctx.positions.contains(&Position::Subsequent)
+                            || ctx.positions.contains(&Position::Ibid)
+                            || ctx.positions.contains(&Position::IbidWithLocator)
                     }
-                    Some(quarto_csl::Position::Subsequent) => {
-                        matches!(required, quarto_csl::Position::Subsequent)
+                    Position::Ibid => {
+                        // Ibid is true if Ibid or IbidWithLocator
+                        ctx.positions.contains(&Position::Ibid)
+                            || ctx.positions.contains(&Position::IbidWithLocator)
                     }
-                    Some(quarto_csl::Position::Ibid) => {
-                        matches!(
-                            required,
-                            quarto_csl::Position::Subsequent | quarto_csl::Position::Ibid
-                        )
+                    Position::IbidWithLocator => {
+                        ctx.positions.contains(&Position::IbidWithLocator)
                     }
-                    Some(quarto_csl::Position::IbidWithLocator) => {
-                        matches!(
-                            required,
-                            quarto_csl::Position::Subsequent
-                                | quarto_csl::Position::Ibid
-                                | quarto_csl::Position::IbidWithLocator
-                        )
-                    }
-                    Some(quarto_csl::Position::NearNote) => {
-                        matches!(required, quarto_csl::Position::NearNote)
-                    }
-                    None => {
-                        // No position set means position conditions don't apply
-                        // (e.g., in bibliography context or when position info is missing)
-                        // All position checks should return false
-                        false
-                    }
+                    Position::NearNote => ctx.positions.contains(&Position::NearNote),
                 }
             };
 
             if use_all {
-                positions.iter().all(|p| matches_position(p))
+                required_positions.iter().all(|p| matches_position(p))
             } else {
-                positions.iter().any(|p| matches_position(p))
+                required_positions.iter().any(|p| matches_position(p))
             }
         }
         ConditionType::Disambiguate(expected) => {
