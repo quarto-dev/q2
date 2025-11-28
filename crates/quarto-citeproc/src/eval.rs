@@ -7,9 +7,9 @@
 //! semantic information for post-processing (disambiguation, hyperlinking, etc.),
 //! then renders to the final string format.
 
-use crate::output::{join_outputs, Output, Tag};
+use crate::output::{Output, Tag};
 use crate::reference::Reference;
-use crate::types::{Citation, Processor};
+use crate::types::{Citation, CitationItem, Processor};
 use crate::Result;
 use quarto_csl::{
     Element, ElementType, Formatting, GroupElement, InheritableNameOptions, Layout, NamesElement,
@@ -24,9 +24,22 @@ struct EvalContext<'a> {
     reference: &'a Reference,
     /// Inherited name options from citation/bibliography level.
     inherited_name_options: &'a InheritableNameOptions,
+    /// Name options from parent <names> element for substitute inheritance.
+    /// When inside a substitute block, this holds the name options from the
+    /// parent <names> element that should be inherited by child <names>.
+    substitute_name_options: Option<InheritableNameOptions>,
+    /// Whether we're currently inside a substitute block.
+    in_substitute: bool,
+    // Citation item context (set when processing a citation, None for bibliography)
+    /// Locator value from citation item (e.g., "42-45").
+    locator: Option<&'a str>,
+    /// Locator label type from citation item (e.g., "page", "chapter").
+    /// If not specified, defaults to "page" when locator is present.
+    locator_label: Option<&'a str>,
 }
 
 impl<'a> EvalContext<'a> {
+    /// Create context for bibliography entry (no citation item data).
     fn new(
         processor: &'a mut Processor,
         reference: &'a Reference,
@@ -36,6 +49,28 @@ impl<'a> EvalContext<'a> {
             processor,
             reference,
             inherited_name_options,
+            substitute_name_options: None,
+            in_substitute: false,
+            locator: None,
+            locator_label: None,
+        }
+    }
+
+    /// Create context for citation item (includes locator data).
+    fn with_citation_item(
+        processor: &'a mut Processor,
+        reference: &'a Reference,
+        inherited_name_options: &'a InheritableNameOptions,
+        citation_item: &'a CitationItem,
+    ) -> Self {
+        Self {
+            processor,
+            reference,
+            inherited_name_options,
+            substitute_name_options: None,
+            in_substitute: false,
+            locator: citation_item.locator.as_deref(),
+            locator_label: citation_item.label.as_deref(),
         }
     }
 
@@ -54,6 +89,39 @@ impl<'a> EvalContext<'a> {
         plural: bool,
     ) -> Option<String> {
         self.processor.get_term(name, form, plural)
+    }
+
+    /// Get a variable value, checking citation item context first, then reference.
+    ///
+    /// Citation item variables (locator, label) take precedence when available.
+    fn get_variable(&self, name: &str) -> Option<String> {
+        match name {
+            "locator" => self.locator.map(|s| s.to_string()),
+            "label" => self
+                .locator_label
+                .or_else(|| {
+                    // Default to "page" if locator is present but no label specified
+                    if self.locator.is_some() {
+                        Some("page")
+                    } else {
+                        None
+                    }
+                })
+                .map(|s| s.to_string()),
+            _ => self.reference.get_variable(name),
+        }
+    }
+
+    /// Get the effective locator label for term lookup.
+    ///
+    /// Returns the label type (e.g., "page", "chapter") for locator term lookup.
+    fn get_locator_label(&self) -> Option<&str> {
+        if self.locator.is_some() {
+            // Default to "page" if no explicit label
+            Some(self.locator_label.unwrap_or("page"))
+        } else {
+            None
+        }
     }
 }
 
@@ -103,7 +171,8 @@ pub fn evaluate_citation_to_output(
             })?
             .clone();
 
-        let mut ctx = EvalContext::new(processor, &reference, &name_options);
+        // Use with_citation_item to include locator/label from citation item
+        let mut ctx = EvalContext::with_citation_item(processor, &reference, &name_options, item);
         let output = evaluate_layout(&mut ctx, &layout)?;
 
         // Apply prefix/suffix from citation item
@@ -122,7 +191,25 @@ pub fn evaluate_citation_to_output(
             ));
         }
 
-        item_outputs.push(Output::sequence(parts));
+        // Determine citation item type based on author_only and suppress_author flags
+        let item_type = if item.author_only == Some(true) {
+            crate::output::CitationItemType::AuthorOnly
+        } else if item.suppress_author == Some(true) {
+            crate::output::CitationItemType::SuppressAuthor
+        } else {
+            crate::output::CitationItemType::NormalCite
+        };
+
+        // Wrap with Tag::Item for disambiguation
+        let tagged_output = Output::tagged(
+            Tag::Item {
+                item_type,
+                item_id: item.id.clone(),
+            },
+            Output::sequence(parts),
+        );
+
+        item_outputs.push(tagged_output);
     }
 
     // Apply collapse logic based on collapse mode
@@ -131,7 +218,11 @@ pub fn evaluate_citation_to_output(
             collapse_by_year(item_outputs, &layout)
         }
         Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
-        Collapse::None => join_outputs(item_outputs, &delimiter),
+        Collapse::None => Output::formatted_with_delimiter(
+            Formatting::default(),
+            item_outputs,
+            &delimiter,
+        ),
     };
 
     // Apply layout-level formatting
@@ -185,10 +276,12 @@ fn collapse_by_year(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> O
     // Join groups with the main delimiter
     let group_outputs: Vec<Output> = groups
         .into_iter()
-        .map(|group| join_outputs(group, &cite_group_delimiter))
+        .map(|group| {
+            Output::formatted_with_delimiter(Formatting::default(), group, &cite_group_delimiter)
+        })
         .collect();
 
-    join_outputs(group_outputs, &delimiter)
+    Output::formatted_with_delimiter(Formatting::default(), group_outputs, &delimiter)
 }
 
 /// Collapse citations by citation number (numeric collapse with ranges).
@@ -289,7 +382,7 @@ fn collapse_by_citation_number(item_outputs: Vec<Output>, layout: &quarto_csl::L
         }
     }
 
-    join_outputs(result_outputs, &delimiter)
+    Output::formatted_with_delimiter(Formatting::default(), result_outputs, &delimiter)
 }
 
 /// Create a range output from start and end outputs.
@@ -361,9 +454,13 @@ pub fn evaluate_macro_for_sort(
 }
 
 /// Evaluate a layout (citation or bibliography).
+///
+/// Note: The layout delimiter is for joining citation items, not elements within
+/// a single layout evaluation. Elements within a layout are concatenated without
+/// a delimiter. The layout delimiter is applied at a higher level when combining
+/// the results of multiple citation items.
 fn evaluate_layout(ctx: &mut EvalContext, layout: &Layout) -> Result<Output> {
-    let delimiter = layout.delimiter.clone().unwrap_or_default();
-    evaluate_elements(ctx, &layout.elements, &delimiter)
+    evaluate_elements(ctx, &layout.elements, "")
 }
 
 /// Evaluate a sequence of elements.
@@ -381,7 +478,12 @@ fn evaluate_elements(
         }
     }
 
-    Ok(join_outputs(outputs, delimiter))
+    // Use formatted_with_delimiter for smart punctuation handling
+    Ok(Output::formatted_with_delimiter(
+        Formatting::default(),
+        outputs,
+        delimiter,
+    ))
 }
 
 /// Evaluate a single element.
@@ -422,7 +524,20 @@ fn evaluate_text(
                 } else {
                     Output::Null
                 }
-            } else if let Some(value) = ctx.reference.get_variable(name) {
+            } else if name == "year-suffix" {
+                // Year suffix from disambiguation (1=a, 2=b, etc.)
+                if let Some(suffix) = ctx
+                    .reference
+                    .disambiguation
+                    .as_ref()
+                    .and_then(|d| d.year_suffix)
+                {
+                    let letter = suffix_to_letter(suffix);
+                    Output::tagged(Tag::YearSuffix(suffix), Output::literal(letter))
+                } else {
+                    Output::Null
+                }
+            } else if let Some(value) = ctx.get_variable(name) {
                 // Parse CSL rich text (HTML-like markup) from the value
                 let parsed = crate::output::parse_csl_rich_text(&value);
                 // Tag title for potential hyperlinking
@@ -469,25 +584,70 @@ fn evaluate_names(
             if !names.is_empty() {
                 // Format the names
                 let formatted = format_names(ctx, names, names_el);
-                // Tag with names for disambiguation
-                return Ok(Output::tagged(
+                let names_output = Output::tagged(
                     Tag::Names {
                         variable: var.clone(),
                         names: names.to_vec(),
                     },
                     Output::literal(formatted),
-                ));
+                );
+
+                // Check for label
+                if let Some(ref label) = names_el.label {
+                    // Determine plural based on name count
+                    let is_plural = match label.plural {
+                        quarto_csl::LabelPlural::Always => true,
+                        quarto_csl::LabelPlural::Never => false,
+                        quarto_csl::LabelPlural::Contextual => names.len() > 1,
+                    };
+
+                    // Look up the term for this variable (e.g., "editor" -> "editor" term)
+                    if let Some(term) = ctx.get_term(var, label.form, is_plural) {
+                        let label_output = Output::formatted(
+                            label.formatting.clone(),
+                            vec![Output::literal(term)],
+                        );
+                        // Combine names + label
+                        return Ok(Output::sequence(vec![names_output, label_output]));
+                    }
+                }
+
+                return Ok(names_output);
             }
         }
     }
 
     // No names found - try substitute if present
     if let Some(ref substitute) = names_el.substitute {
+        // Save the current substitute context
+        let prev_substitute_options = ctx.substitute_name_options.clone();
+        let prev_in_substitute = ctx.in_substitute;
+
+        // Set up substitute context with the parent names element's options
+        // so that child <names> elements can inherit name formatting
+        let parent_options = if let Some(name) = names_el.name.as_ref() {
+            InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
+        } else {
+            ctx.inherited_name_options.clone()
+        };
+        ctx.substitute_name_options = Some(parent_options);
+        ctx.in_substitute = true;
+
+        let mut result = Output::Null;
         for element in substitute {
             let sub_output = evaluate_element(ctx, element)?;
             if !sub_output.is_null() {
-                return Ok(sub_output);
+                result = sub_output;
+                break;
             }
+        }
+
+        // Restore previous substitute context
+        ctx.substitute_name_options = prev_substitute_options;
+        ctx.in_substitute = prev_in_substitute;
+
+        if !result.is_null() {
+            return Ok(result);
         }
     }
 
@@ -503,8 +663,17 @@ fn format_names(
     use quarto_csl::{DelimiterPrecedesLast, NameAsSortOrder};
 
     // Merge name element options with inherited options (name takes precedence)
+    // When inside a substitute block, also consider the parent names element's options
     let effective_options = if let Some(name) = names_el.name.as_ref() {
+        // This names element has its own <name> - use it, but merge with inherited
         InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
+    } else if ctx.in_substitute {
+        // Inside substitute and no <name> on this element - inherit from parent
+        if let Some(ref parent_opts) = ctx.substitute_name_options {
+            parent_opts.clone()
+        } else {
+            ctx.inherited_name_options.clone()
+        }
     } else {
         ctx.inherited_name_options.clone()
     };
@@ -538,20 +707,41 @@ fn format_names(
     let et_al_use_first = effective_options.et_al_use_first;
     let et_al_use_last = effective_options.et_al_use_last.unwrap_or(false);
 
+    // Check for disambiguation override of et-al-use-first
+    let disamb_et_al_names = ctx
+        .reference
+        .disambiguation
+        .as_ref()
+        .and_then(|d| d.et_al_names);
+
     let use_et_al = match (et_al_min, et_al_use_first) {
         (Some(min), Some(_)) => names.len() as u32 >= min,
         _ => false,
     };
-    let names_to_show = if use_et_al {
+    let names_to_show = if let Some(disamb_count) = disamb_et_al_names {
+        // Disambiguation override - show this many names (but use et-al if still truncating)
+        disamb_count as usize
+    } else if use_et_al {
         et_al_use_first.unwrap_or(1) as usize
     } else {
         names.len()
+    };
+
+    // Determine if we still need et-al after disambiguation override
+    let show_et_al = if disamb_et_al_names.is_some() {
+        // With disambiguation override, still show et-al if we're not showing all names
+        names_to_show < names.len()
+    } else {
+        use_et_al
     };
 
     // Format individual names, tracking which ones are actually inverted
     // Literal names are never inverted even with name-as-sort-order="all"
     let mut formatted_names: Vec<String> = Vec::new();
     let mut is_inverted: Vec<bool> = Vec::new();
+
+    // Get disambiguation hints for names
+    let disamb = ctx.reference.disambiguation.as_ref();
 
     for (i, n) in names.iter().take(names_to_show).enumerate() {
         // Literal names are never inverted
@@ -565,7 +755,9 @@ fn format_names(
                 None => false,
             }
         };
-        formatted_names.push(format_single_name(n, &effective_options, inverted));
+        // Check if there's a disambiguation hint for this name
+        let is_primary = i == 0;
+        formatted_names.push(format_single_name(n, &effective_options, inverted, disamb, is_primary));
         is_inverted.push(inverted);
     }
 
@@ -588,8 +780,10 @@ fn format_names(
         }
     };
 
-    // When using et-al-use-last, don't use "and" connector - the list is truncated
-    let use_and_connector = !use_et_al || !et_al_use_last || names.len() <= names_to_show;
+    // Don't use "and" connector when truncating with et-al
+    // The "and" is only for joining the last two names when showing ALL names
+    // Exception: et-al-use-last still uses the ellipsis format, not "and"
+    let use_and_connector = !show_et_al;
 
     // Join names
     let mut result = if formatted_names.is_empty() {
@@ -640,13 +834,16 @@ fn format_names(
     };
 
     // Handle et-al
-    if use_et_al {
+    if show_et_al {
         if et_al_use_last && names.len() > names_to_show {
             // Show ellipsis and last name: "A, B, … Z"
+            // The last name is not primary for disambiguation purposes
             let last_name = format_single_name(
                 &names[names.len() - 1],
                 &effective_options,
                 name_as_sort_order == Some(NameAsSortOrder::All),
+                disamb,
+                false, // not primary
             );
             let use_delim = should_include_delimiter(delimiter_precedes_et_al, formatted_names.len() + 1);
             if use_delim {
@@ -675,17 +872,49 @@ fn format_names(
 ///
 /// If `inverted` is true, format as "Family, Given" (sort order).
 /// Otherwise, format as "Given Family" (display order).
+///
+/// If disambiguation data is provided and contains a hint for this name,
+/// the form and initialization may be overridden to show given names.
 fn format_single_name(
     name: &crate::reference::Name,
     options: &quarto_csl::InheritableNameOptions,
     inverted: bool,
+    disamb: Option<&crate::reference::DisambiguationData>,
+    is_primary: bool,
 ) -> String {
+    use crate::reference::NameHint;
+
     // Handle literal names
     if let Some(ref lit) = name.literal {
         return lit.clone();
     }
 
-    let form = options.form.unwrap_or_default();
+    // Look up disambiguation hint for this name
+    let name_key = name.family.clone().or_else(|| name.literal.clone()).unwrap_or_default();
+    let hint = disamb.and_then(|d| d.name_hints.get(&name_key));
+
+    // Determine effective form based on disambiguation hint
+    let base_form = options.form.unwrap_or_default();
+    let (form, force_no_initialize) = match hint {
+        Some(NameHint::AddInitials) => {
+            // Switch to long form (shows given name as initials)
+            (quarto_csl::NameForm::Long, false)
+        }
+        Some(NameHint::AddGivenName) => {
+            // Switch to long form AND don't initialize (show full given name)
+            (quarto_csl::NameForm::Long, true)
+        }
+        Some(NameHint::AddInitialsIfPrimary) if is_primary => {
+            // Only expand if this is the primary (first) name
+            (quarto_csl::NameForm::Long, false)
+        }
+        Some(NameHint::AddGivenNameIfPrimary) if is_primary => {
+            // Only expand if this is the primary (first) name
+            (quarto_csl::NameForm::Long, true)
+        }
+        _ => (base_form, false),
+    };
+
     let initialize_with = options.initialize_with.clone();
     let sort_separator = options
         .sort_separator
@@ -720,10 +949,14 @@ fn format_single_name(
             // Build given part (possibly initialized)
             // CSL rule: if a name has only a given name (no family name), don't initialize it
             // because that given name IS their name (e.g., "Banksy", "Cher")
-            let should_initialize = options.initialize.unwrap_or(true);
+            // force_no_initialize is set by disambiguation hints (AddGivenName) to show full names
+            let should_initialize = options.initialize.unwrap_or(true) && !force_no_initialize;
             let given_part = name.given.as_ref().map(|given| {
                 if name.family.is_none() {
                     // No family name - given name is their full name, don't initialize
+                    given.clone()
+                } else if force_no_initialize {
+                    // Disambiguation override: show full given name
                     given.clone()
                 } else if let Some(ref init) = initialize_with {
                     if should_initialize {
@@ -940,16 +1173,17 @@ fn evaluate_condition(
     use quarto_csl::ConditionType;
 
     // Helper to check if a variable exists (any type: standard, names, date)
+    // Uses unified get_variable which checks citation item context first
     let var_exists = |v: &str| {
-        ctx.reference.get_variable(v).is_some()
+        ctx.get_variable(v).is_some()
             || ctx.reference.get_names(v).is_some()
             || ctx.reference.get_date(v).is_some()
     };
 
     // Helper to check if a variable is numeric
+    // Uses unified get_variable which checks citation item context first
     let is_numeric = |v: &str| {
-        ctx.reference
-            .get_variable(v)
+        ctx.get_variable(v)
             .map(|s| s.chars().all(|c| c.is_ascii_digit() || c == '-'))
             .unwrap_or(false)
     };
@@ -997,7 +1231,14 @@ fn evaluate_condition(
         }
         ConditionType::Locator(_) => false, // TODO: Implement locator checking
         ConditionType::Position(_) => false, // TODO: Implement position checking
-        ConditionType::Disambiguate(_) => false, // TODO: Implement disambiguate checking
+        ConditionType::Disambiguate(expected) => {
+            // Check if the reference has been marked for disambiguation
+            ctx.reference
+                .disambiguation
+                .as_ref()
+                .map(|d| d.disamb_condition == *expected)
+                .unwrap_or(!expected) // If no disambiguation data, condition is false
+        }
     }
 }
 
@@ -1021,7 +1262,7 @@ fn evaluate_number(
         }
     }
 
-    if let Some(value) = ctx.reference.get_variable(&num_el.variable) {
+    if let Some(value) = ctx.get_variable(&num_el.variable) {
         // TODO: Apply number form (ordinal, roman, etc.)
         Ok(Output::literal(value))
     } else {
@@ -1035,22 +1276,61 @@ fn evaluate_label(
     label_el: &quarto_csl::LabelElement,
     _formatting: &Formatting,
 ) -> Result<Output> {
+    // For locator variable, we need special handling:
+    // - The term to look up is the locator label type (e.g., "page"), not "locator"
+    // - Plural is determined by analyzing the locator value
+    let (term_name, value_for_plural) = if label_el.variable == "locator" {
+        // Get the locator label type (e.g., "page", "chapter")
+        let label_type = ctx.get_locator_label();
+        let locator_value = ctx.locator.map(|s| s.to_string());
+        match label_type {
+            Some(lt) => (lt.to_string(), locator_value),
+            None => return Ok(Output::Null), // No locator, no label
+        }
+    } else {
+        (label_el.variable.clone(), ctx.get_variable(&label_el.variable))
+    };
+
     // Determine if plural
     let is_plural = match label_el.plural {
         quarto_csl::LabelPlural::Always => true,
         quarto_csl::LabelPlural::Never => false,
         quarto_csl::LabelPlural::Contextual => {
-            // Check if the variable has multiple values
-            // For now, assume singular
-            false
+            // Check if the value indicates plural (ranges, "and", multiple values)
+            value_for_plural
+                .as_ref()
+                .map(|v| is_plural_value(v))
+                .unwrap_or(false)
         }
     };
 
-    if let Some(term) = ctx.get_term(&label_el.variable, label_el.form, is_plural) {
-        Ok(Output::tagged(Tag::Term(label_el.variable.clone()), Output::literal(term)))
+    if let Some(term) = ctx.get_term(&term_name, label_el.form, is_plural) {
+        Ok(Output::tagged(Tag::Term(term_name), Output::literal(term)))
     } else {
         Ok(Output::Null)
     }
+}
+
+/// Check if a value indicates plural (for locator/page labels).
+///
+/// Plural indicators:
+/// - Contains "-" or "–" (en-dash) indicating a range
+/// - Contains "and", "&", or "," indicating multiple values
+/// - Has multiple number sequences
+fn is_plural_value(value: &str) -> bool {
+    // Check for range indicators
+    if value.contains('-') || value.contains('–') || value.contains('—') {
+        return true;
+    }
+    // Check for "and", "&", or comma
+    if value.contains(" and ") || value.contains(" & ") || value.contains('&') {
+        return true;
+    }
+    // Check for comma-separated values (but not decimal numbers)
+    if value.contains(", ") {
+        return true;
+    }
+    false
 }
 
 /// Evaluate a date element.
@@ -1571,6 +1851,39 @@ fn format_day(day: i32, form: quarto_csl::DatePartForm, limit_ordinals_to_day_1:
     }
 }
 
+/// Convert a year suffix number to a letter (1=a, 2=b, ..., 26=z, 27=aa, 28=ab, ...).
+///
+/// This follows the CSL spec where suffixes beyond 'z' continue as 'aa', 'ab', etc.
+fn suffix_to_letter(suffix: i32) -> String {
+    if suffix <= 0 {
+        return String::new();
+    }
+
+    let suffix = suffix as u32;
+
+    // For suffixes 1-26, return a single letter
+    if suffix <= 26 {
+        let letter = (b'a' + (suffix - 1) as u8) as char;
+        return letter.to_string();
+    }
+
+    // For suffixes > 26, use multi-letter suffixes
+    // 27 = aa, 28 = ab, ..., 52 = az, 53 = ba, ...
+    let mut result = String::new();
+    let mut n = suffix - 1; // Convert to 0-indexed
+
+    loop {
+        let remainder = n % 26;
+        result.insert(0, (b'a' + remainder as u8) as char);
+        if n < 26 {
+            break;
+        }
+        n = n / 26 - 1; // Adjust for 1-indexed letters
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1647,7 +1960,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(format_single_name(&name, &options, false), "Smith");
+        assert_eq!(format_single_name(&name, &options, false, None, true), "Smith");
     }
 
     #[test]
@@ -1661,8 +1974,26 @@ mod tests {
         let options = quarto_csl::InheritableNameOptions::default();
 
         // Normal order: Given Family
-        assert_eq!(format_single_name(&name, &options, false), "John Smith");
+        assert_eq!(format_single_name(&name, &options, false, None, true), "John Smith");
         // Inverted order: Family, Given
-        assert_eq!(format_single_name(&name, &options, true), "Smith, John");
+        assert_eq!(format_single_name(&name, &options, true, None, true), "Smith, John");
+    }
+
+    #[test]
+    fn test_suffix_to_letter() {
+        // Basic single letters
+        assert_eq!(suffix_to_letter(1), "a");
+        assert_eq!(suffix_to_letter(2), "b");
+        assert_eq!(suffix_to_letter(26), "z");
+
+        // Multi-letter suffixes beyond z
+        assert_eq!(suffix_to_letter(27), "aa");
+        assert_eq!(suffix_to_letter(28), "ab");
+        assert_eq!(suffix_to_letter(52), "az");
+        assert_eq!(suffix_to_letter(53), "ba");
+
+        // Edge cases
+        assert_eq!(suffix_to_letter(0), "");
+        assert_eq!(suffix_to_letter(-1), "");
     }
 }

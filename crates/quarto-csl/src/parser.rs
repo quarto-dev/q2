@@ -494,7 +494,9 @@ impl CslParser {
         let children = element.all_children();
         if children.is_empty() {
             // Simple term with text content
-            value = element.text().map(|s| s.to_string());
+            // If the element has no text, treat it as an explicitly empty term
+            // (e.g., <term name="page"></term> means "page" term is empty)
+            value = Some(element.text().unwrap_or("").to_string());
         } else {
             for child in children {
                 match child.name.as_str() {
@@ -623,6 +625,9 @@ impl CslParser {
             .get_attr(element, "year-suffix-delimiter")
             .map(|a| a.value.clone());
 
+        // Parse disambiguation strategy
+        let disambiguation = self.parse_disambiguation_strategy(element);
+
         let elements = self.parse_elements(layout_element)?;
 
         Ok(Layout {
@@ -635,8 +640,54 @@ impl CslParser {
             cite_group_delimiter,
             after_collapse_delimiter,
             year_suffix_delimiter,
+            disambiguation,
             source_info: element.source_info.clone(),
         })
+    }
+
+    /// Parse disambiguation strategy from a citation element.
+    fn parse_disambiguation_strategy(&self, element: &XmlElement) -> DisambiguationStrategy {
+        let add_names = self
+            .get_attr(element, "disambiguate-add-names")
+            .map(|a| a.value == "true")
+            .unwrap_or(false);
+
+        let add_year_suffix = self
+            .get_attr(element, "disambiguate-add-year-suffix")
+            .map(|a| a.value == "true")
+            .unwrap_or(false);
+
+        // disambiguate-add-givenname enables given name disambiguation
+        // givenname-disambiguation-rule specifies the rule (defaults to by-cite)
+        let add_givenname = self
+            .get_attr(element, "disambiguate-add-givenname")
+            .and_then(|a| {
+                if a.value == "true" {
+                    let rule = self
+                        .get_attr(element, "givenname-disambiguation-rule")
+                        .map(|r| match r.value.as_str() {
+                            "all-names" => GivenNameDisambiguationRule::AllNames,
+                            "all-names-with-initials" => {
+                                GivenNameDisambiguationRule::AllNamesWithInitials
+                            }
+                            "primary-name" => GivenNameDisambiguationRule::PrimaryName,
+                            "primary-name-with-initials" => {
+                                GivenNameDisambiguationRule::PrimaryNameWithInitials
+                            }
+                            _ => GivenNameDisambiguationRule::ByCite, // default
+                        })
+                        .unwrap_or(GivenNameDisambiguationRule::ByCite);
+                    Some(rule)
+                } else {
+                    None
+                }
+            });
+
+        DisambiguationStrategy {
+            add_names,
+            add_givenname,
+            add_year_suffix,
+        }
     }
 
     /// Parse inheritable name options from an element (style, citation, bibliography).
@@ -1271,6 +1322,8 @@ impl CslParser {
                 .get_attr(element, "strip-periods")
                 .map(|a| a.value == "true")
                 .unwrap_or(false),
+            // Delimiter is set at evaluation time, not parsed from CSL
+            delimiter: None,
         }
     }
 

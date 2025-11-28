@@ -45,6 +45,7 @@
 //! let formatted = processor.process_citation(&citation)?;
 //! ```
 
+pub mod disambiguation;
 pub mod error;
 pub mod locale;
 pub mod locale_parser;

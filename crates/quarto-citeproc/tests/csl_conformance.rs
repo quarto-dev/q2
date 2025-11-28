@@ -172,23 +172,25 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
     // Process based on mode
     let actual = match test.mode.as_str() {
         "citation" => {
-            let mut outputs = Vec::new();
-            for citation in &citations {
-                // Use the new pipeline: Output → Inlines → CSL HTML
-                let output_ast = processor
-                    .process_citation_to_output(citation)
-                    .map_err(|e| format!("Citation error: {:?}", e))?;
-                let inlines = output_ast.to_inlines();
-                let html = render_inlines_to_csl_html(&inlines);
-                outputs.push(html);
-            }
+            // Use disambiguation-aware processing for all citations
+            let output_asts = processor
+                .process_citations_with_disambiguation_to_outputs(&citations)
+                .map_err(|e| format!("Citation error: {:?}", e))?;
+
+            let outputs: Vec<String> = output_asts
+                .into_iter()
+                .map(|output_ast| {
+                    let inlines = output_ast.to_inlines();
+                    render_inlines_to_csl_html(&inlines)
+                })
+                .collect();
             outputs.join("\n")
         }
         "bibliography" => {
-            // Process citations first to assign initial citation numbers
-            // This is needed for citation-number sorting to work correctly
-            for citation in &citations {
-                let _ = processor.process_citation_to_output(citation);
+            // Process citations first with disambiguation to assign initial citation numbers
+            // and year suffixes. This is needed for citation-number sorting and disambiguation.
+            if !citations.is_empty() {
+                let _ = processor.process_citations_with_disambiguation_to_outputs(&citations);
             }
 
             // Use generate_bibliography_to_outputs to get entries in sorted order

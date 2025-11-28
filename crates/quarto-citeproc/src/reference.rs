@@ -6,6 +6,34 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
+/// Disambiguation state for a reference.
+///
+/// This is computed during citation processing to resolve ambiguous citations.
+#[derive(Debug, Clone, Default)]
+pub struct DisambiguationData {
+    /// Assigned year suffix (1=a, 2=b, etc.). None means no suffix assigned.
+    pub year_suffix: Option<i32>,
+    /// Hints for expanding names (per-name map).
+    pub name_hints: HashMap<String, NameHint>,
+    /// Override for et-al-use-first (show more names for disambiguation).
+    pub et_al_names: Option<u32>,
+    /// Whether the disambiguate="true" condition should match.
+    pub disamb_condition: bool,
+}
+
+/// Hint for how to expand a name for disambiguation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameHint {
+    /// Add initials to this name.
+    AddInitials,
+    /// Add full given name to this name.
+    AddGivenName,
+    /// Add initials only if this is the primary (first) name.
+    AddInitialsIfPrimary,
+    /// Add full given name only if this is the primary (first) name.
+    AddGivenNameIfPrimary,
+}
+
 /// A bibliographic reference in CSL-JSON format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reference {
@@ -102,6 +130,10 @@ pub struct Reference {
     // Other fields captured in a map for extensibility
     #[serde(flatten)]
     pub other: HashMap<String, serde_json::Value>,
+
+    /// Disambiguation state (computed at runtime, not serialized).
+    #[serde(skip)]
+    pub disambiguation: Option<DisambiguationData>,
 }
 
 /// A string or number value (CSL allows both for some fields).
@@ -146,7 +178,7 @@ where
 }
 
 /// A name in CSL-JSON format.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq, Hash)]
 pub struct Name {
     /// Family name (surname).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -427,7 +459,21 @@ impl Reference {
             "volume" => self.volume.as_ref().map(|v| v.as_str()),
             "issue" => self.issue.as_ref().map(|v| v.as_str()),
             "page" => self.page.clone(),
-            "page-first" => self.page_first.clone(),
+            "page-first" => {
+                // If page-first is explicitly set, use it
+                // Otherwise compute from page by extracting the first number
+                self.page_first.clone().or_else(|| {
+                    self.page.as_ref().and_then(|p| {
+                        // Extract first number from page range (e.g., "22-45" -> "22")
+                        let first: String = p.chars().take_while(|c| c.is_ascii_digit()).collect();
+                        if first.is_empty() {
+                            None
+                        } else {
+                            Some(first)
+                        }
+                    })
+                })
+            }
             "number-of-pages" => self.number_of_pages.as_ref().map(|v| v.as_str()),
             "chapter-number" => self.chapter.as_ref().map(|v| v.as_str()),
             "abstract" => self.abstract_.clone(),

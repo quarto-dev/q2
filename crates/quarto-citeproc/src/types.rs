@@ -531,6 +531,224 @@ impl Processor {
         // Fall back to style options
         self.style.options.limit_day_ordinals_to_day_1
     }
+
+    /// Get the bibliography sort key for a reference.
+    ///
+    /// This is used for year suffix assignment, which needs to follow
+    /// bibliography order.
+    pub fn get_bib_sort_key(&self, id: &str) -> Vec<SortKeyValue> {
+        let bib = match &self.style.bibliography {
+            Some(b) => b,
+            None => return vec![],
+        };
+
+        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        self.compute_sort_keys(id, sort_keys)
+    }
+
+    /// Set the year suffix for a reference.
+    ///
+    /// This updates the reference's disambiguation data with the assigned suffix.
+    pub fn set_year_suffix(&mut self, id: &str, suffix: i32) {
+        if let Some(reference) = self.references.get_mut(id) {
+            let disamb = reference
+                .disambiguation
+                .get_or_insert_with(crate::reference::DisambiguationData::default);
+            disamb.year_suffix = Some(suffix);
+        }
+    }
+
+    /// Set the et-al names override for a reference.
+    ///
+    /// This sets the number of names to show instead of using et-al truncation.
+    pub fn set_et_al_names(&mut self, id: &str, count: u32) {
+        if let Some(reference) = self.references.get_mut(id) {
+            let disamb = reference
+                .disambiguation
+                .get_or_insert_with(crate::reference::DisambiguationData::default);
+            disamb.et_al_names = Some(count);
+        }
+    }
+
+    /// Set a name hint for disambiguation.
+    ///
+    /// This stores a hint for how to render a specific name for a reference.
+    pub fn set_name_hint(
+        &mut self,
+        id: &str,
+        name: &crate::reference::Name,
+        hint: crate::reference::NameHint,
+    ) {
+        if let Some(reference) = self.references.get_mut(id) {
+            let disamb = reference
+                .disambiguation
+                .get_or_insert_with(crate::reference::DisambiguationData::default);
+            // Use a key based on family name (or literal) to identify the name
+            let key = name
+                .family
+                .clone()
+                .or_else(|| name.literal.clone())
+                .unwrap_or_default();
+            disamb.name_hints.insert(key, hint);
+        }
+    }
+
+    /// Set the disambiguate condition for a reference.
+    ///
+    /// This marks whether `disambiguate="true"` conditions should match.
+    pub fn set_disamb_condition(&mut self, id: &str, value: bool) {
+        if let Some(reference) = self.references.get_mut(id) {
+            let disamb = reference
+                .disambiguation
+                .get_or_insert_with(crate::reference::DisambiguationData::default);
+            disamb.disamb_condition = value;
+        }
+    }
+
+    /// Get a mutable reference to a reference by ID.
+    pub fn get_reference_mut(&mut self, id: &str) -> Option<&mut Reference> {
+        self.references.get_mut(id)
+    }
+
+    /// Get all reference IDs.
+    pub fn reference_ids(&self) -> impl Iterator<Item = &str> {
+        self.references.keys().map(|s| s.as_str())
+    }
+
+    /// Process multiple citations with disambiguation enabled.
+    ///
+    /// This is the main API for processing citations when disambiguation is needed.
+    /// It performs a two-pass rendering:
+    /// 1. First pass: render all citations to detect ambiguities
+    /// 2. Apply disambiguation methods (year suffixes, name expansion, etc.)
+    /// 3. Second pass: re-render with disambiguation applied
+    ///
+    /// # Returns
+    /// A vector of formatted citation strings, one per input citation.
+    pub fn process_citations_with_disambiguation(
+        &mut self,
+        citations: &[Citation],
+    ) -> Result<Vec<String>> {
+        // Use the Output-based version for proper name extraction
+        let outputs = self.process_citations_with_disambiguation_to_outputs(citations)?;
+        Ok(outputs.iter().map(|o| o.render()).collect())
+    }
+
+    /// Process multiple citations with disambiguation, returning Output AST.
+    ///
+    /// This is the lower-level version that returns the intermediate representation.
+    /// It uses the Output AST for proper name extraction during disambiguation.
+    ///
+    /// Note: This function ALWAYS performs disambiguation detection, even if no
+    /// explicit methods (year-suffix, add-names, add-givenname) are enabled.
+    /// This is required for the `<if disambiguate="true">` condition to work.
+    ///
+    /// The disambiguation algorithm follows CSL spec order:
+    /// 1. Apply givenname disambiguation (global or by-cite)
+    /// 2. Re-render and refresh ambiguities
+    /// 3. If still ambiguous, add names (expand et-al)
+    /// 4. Re-render and refresh ambiguities
+    /// 5. If still ambiguous, add year suffixes
+    /// 6. Set disambiguate condition for any remaining ambiguities
+    pub fn process_citations_with_disambiguation_to_outputs(
+        &mut self,
+        citations: &[Citation],
+    ) -> Result<Vec<crate::output::Output>> {
+        use crate::disambiguation::{
+            apply_global_name_disambiguation, assign_year_suffixes, extract_disamb_data,
+            find_ambiguities, set_disambiguate_condition, try_add_given_names_with_rule,
+            try_add_names,
+        };
+        use quarto_csl::GivenNameDisambiguationRule;
+
+        let strategy = &self.style.citation.disambiguation;
+        let add_names = strategy.add_names;
+        let add_givenname = strategy.add_givenname;
+        let add_year_suffix = strategy.add_year_suffix;
+
+        // First pass: render all citations
+        let mut outputs: Vec<crate::output::Output> = citations
+            .iter()
+            .map(|c| self.process_citation_to_output(c))
+            .collect::<Result<Vec<_>>>()?;
+
+        // Extract DisambData and find initial ambiguities
+        let mut disamb_data = extract_disamb_data(&outputs);
+        let initial_ambiguities = find_ambiguities(disamb_data.clone());
+        let mut ambiguities = initial_ambiguities.clone();
+
+        // 1. Apply global name disambiguation for non-ByCite rules
+        // This runs even without ambiguities (global name disambiguation)
+        if let Some(rule) = add_givenname {
+            if rule != GivenNameDisambiguationRule::ByCite {
+                apply_global_name_disambiguation(self, &disamb_data, rule);
+                // Re-render and refresh ambiguities
+                outputs = citations
+                    .iter()
+                    .map(|c| self.process_citation_to_output(c))
+                    .collect::<Result<Vec<_>>>()?;
+                disamb_data = extract_disamb_data(&outputs);
+                ambiguities = find_ambiguities(disamb_data.clone());
+            }
+        }
+
+        // 2. Add names (expand et-al) if still ambiguous
+        if add_names && !ambiguities.is_empty() {
+            try_add_names(self, &ambiguities, add_givenname);
+            // Re-render and refresh ambiguities
+            outputs = citations
+                .iter()
+                .map(|c| self.process_citation_to_output(c))
+                .collect::<Result<Vec<_>>>()?;
+            disamb_data = extract_disamb_data(&outputs);
+            ambiguities = find_ambiguities(disamb_data.clone());
+        }
+
+        // 3. Add given names (ByCite rule) - uses INITIAL ambiguities
+        // The ByCite rule needs to operate on the original ambiguity groups,
+        // not the refreshed ones after add_names. This is because ByCite
+        // incrementally expands givennames within the original groups.
+        if let Some(GivenNameDisambiguationRule::ByCite) = add_givenname {
+            if !initial_ambiguities.is_empty() {
+                try_add_given_names_with_rule(
+                    self,
+                    &initial_ambiguities,
+                    GivenNameDisambiguationRule::ByCite,
+                );
+                // Re-render and refresh ambiguities
+                outputs = citations
+                    .iter()
+                    .map(|c| self.process_citation_to_output(c))
+                    .collect::<Result<Vec<_>>>()?;
+                disamb_data = extract_disamb_data(&outputs);
+                ambiguities = find_ambiguities(disamb_data.clone());
+            }
+        }
+
+        // 4. Add year suffixes if still ambiguous
+        if add_year_suffix && !ambiguities.is_empty() {
+            let suffixes = assign_year_suffixes(self, &ambiguities);
+            for (item_id, suffix) in suffixes {
+                self.set_year_suffix(&item_id, suffix);
+            }
+            // Re-render and refresh ambiguities
+            outputs = citations
+                .iter()
+                .map(|c| self.process_citation_to_output(c))
+                .collect::<Result<Vec<_>>>()?;
+            disamb_data = extract_disamb_data(&outputs);
+            ambiguities = find_ambiguities(disamb_data);
+        }
+
+        // 5. Set disambiguate condition for any remaining ambiguities
+        set_disambiguate_condition(self, &ambiguities);
+
+        // Final pass: re-render with all disambiguation applied
+        citations
+            .iter()
+            .map(|c| self.process_citation_to_output(c))
+            .collect()
+    }
 }
 
 #[cfg(test)]

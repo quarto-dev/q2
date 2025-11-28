@@ -10,6 +10,8 @@
 
 **ALWAYS consult `external-sources/citeproc` (Pandoc's Haskell citeproc) as the reference implementation.** Do NOT consult citeproc-js via web searches. The Pandoc citeproc is the authoritative reference for this project.
 
+When an implementation or a bugfix seems particularly challenging, consider studying the reference implementation alongside quarto-citeproc to identify architectural differences. Our goal is to get to the same level of CSL Conformance as citeproc, and its implementation is a good guide.
+
 Key files in `external-sources/citeproc/src/`:
 - `Citeproc/Types.hs` - Core types including `Output a`, `CiteprocOutput` typeclass
 - `Citeproc/Eval.hs` - Evaluation logic including collapse, disambiguation
@@ -37,9 +39,31 @@ some tests fail with output like `(**[1]–[3]**)` instead of `<b>([1]–[3])</b
 - For tests: render to HTML to match test expectations
 - For Quarto: render to Pandoc AST or appropriate format
 
+### CSL Specification Reference
+
+Detailed CSL spec documentation has been created in `claude-notes/csl-spec/`:
+- `00-index.md` - Overview and navigation
+- `01-data-model.md` - CSL data model (references, variables)
+- `02-rendering-elements.md` - Text, number, names, dates, groups
+- `03-names.md` - Name formatting details
+- `04-disambiguation.md` - Disambiguation algorithm (critical for k-444)
+- `05-sorting.md` - Bibliography and citation sorting
+- `06-localization.md` - Locale handling
+- `07-formatting.md` - Font styles, text-case, affixes
+
+These documents are cross-referenced with the original spec at `external-sources/csl-spec/specification.rst`.
+
 ## Current State
 
-- **394 total tests passing (44.0% coverage)**
+- **390 enabled tests passing (45.5% coverage)**
+- k-444 infrastructure (in progress) - added delimiter field to Formatting struct, smart punctuation handling, substitute context inheritance
+- Up from 377 after k-443 multi-pass disambiguation - properly re-renders and refreshes ambiguities after each disambiguation step; year suffixes now correctly skip items already disambiguated by givenname expansion
+- Up from 358 after k-443 (integration fixes) - fixed layout delimiter bug (was applying layout delimiter between elements within a layout, should only join citation items)
+- Up from 346 after k-442 (disambiguation condition fix) - always detect ambiguities for `<if disambiguate="true">`
+- Up from 346 after given name disambiguation for all-names rule (proper global disambiguation)
+- Up from 405 after Output AST-based disambiguation refactoring (extracts names from Tag::Names)
+- Up from 402 after disambiguation Phase 4 (k-441) - name disambiguation infrastructure
+- Up from 394 after disambiguation Phase 1-3 (k-438, k-439, k-440)
 - Up from 348 at start of 2025-11-28 session
 - Up from 343 after k-434 (date era formatting) fix
 - Up from 332 after k-430, k-431, k-432, k-433 fixes
@@ -175,6 +199,34 @@ Required features:
 Uses `Tag::Names` and `Tag::Date` from Output AST.
 Depends on sorting being complete (year suffixes assigned in sort order).
 
+### Phase 5: Multi-Pass Rendering Architecture (k-444)
+
+**Goal**: Refactor to match Pandoc's citeproc architecture for proper delimiter handling and disambiguation.
+
+See detailed design: `claude-notes/plans/2025-11-28-multi-pass-rendering-architecture.md`
+
+**Completed work (2025-11-28)**:
+- [x] Added `delimiter` field to `Formatting` struct (`quarto-csl/src/types.rs`)
+- [x] Added `Output::formatted_with_delimiter()` helper method
+- [x] Implemented `fix_punct()` - smart punctuation collision handling (based on Pandoc citeproc)
+- [x] Implemented `join_with_smart_delim()` - delimiter insertion with punctuation awareness
+- [x] Updated `Output::render()` to use smart punctuation handling
+- [x] Added `substitute_name_options` and `in_substitute` to `EvalContext`
+- [x] Updated `evaluate_names()` to pass substitute context through
+- [x] Updated `format_names()` to inherit parent names options in substitute blocks
+- [x] Updated `evaluate_elements()` to use `formatted_with_delimiter`
+- [x] Updated citation collapse functions (`collapse_by_year`, `collapse_by_citation_number`) to use `formatted_with_delimiter`
+- [x] All 380 enabled tests continue to pass
+
+**Remaining work**:
+- [ ] Implement `CslRenderer` trait for format-agnostic output (optional)
+- [ ] Further investigation: remaining tests fail due to other issues (title-case, quote handling, moving punctuation, etc.)
+
+**Expected impact**: Unlock 80-150 additional tests by fixing:
+- Delimiter bugs (~20-30 tests)
+- Substitute inheritance (~50-100 tests)
+- Year-suffix with multi-pass (~20-30 tests)
+
 ## Files to Modify
 
 1. `crates/quarto-citeproc/src/eval.rs` - Name formatting, sorting
@@ -247,6 +299,25 @@ Depends on sorting being complete (year suffixes assigned in sort order).
 
 Analysis of 582 ignored tests revealed these blocking issues. See detailed analysis in
 `claude-notes/plans/2025-11-27-csl-failing-test-analysis.md`.
+
+## Remaining Test Analysis (2025-11-28)
+
+Updated analysis of 478 remaining failing tests: `claude-notes/plans/2025-11-28-failing-test-analysis.md`
+
+**Current Status: 390/858 tests passing (45.5%)**
+
+**Completed implementations:**
+1. ✅ **Title Case Transformation** (10 new tests) - Stop words, colons, hyphens, quotes, slashes
+   - Implemented proper English title case with stop words list
+   - First word and words after colons/dashes always capitalized
+   - Hyphenated compounds: first and last parts capitalized, middle follows stop word rules
+   - Opening quotes (curly and straight) trigger capitalization
+   - ALL-CAPS words and words with internal caps preserved
+
+**Priority order for next implementations:**
+1. **Moving Punctuation** (~15-20 tests) - CSL punctuation exchange rules
+2. **Citation Position** (~15-20 tests) - ibid, near-note detection
+3. **Flip-Flop Formatting** (~15-20 tests) - Nested formatting flip
 
 | Issue | Priority | Tests Affected | Description |
 |-------|----------|----------------|-------------|

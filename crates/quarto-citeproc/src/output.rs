@@ -125,6 +125,30 @@ impl Output {
         }
     }
 
+    /// Create a formatted node with children and a delimiter.
+    ///
+    /// The delimiter is stored in the formatting and applied at render time,
+    /// enabling smart punctuation handling.
+    pub fn formatted_with_delimiter(
+        mut formatting: Formatting,
+        children: Vec<Output>,
+        delimiter: &str,
+    ) -> Self {
+        // Filter out null children
+        let children: Vec<_> = children.into_iter().filter(|c| !c.is_null()).collect();
+        if children.is_empty() {
+            Output::Null
+        } else {
+            if !delimiter.is_empty() {
+                formatting.delimiter = Some(delimiter.to_string());
+            }
+            Output::Formatted {
+                formatting,
+                children,
+            }
+        }
+    }
+
     /// Create a tagged node.
     pub fn tagged(tag: Tag, child: Output) -> Self {
         if child.is_null() {
@@ -184,7 +208,19 @@ impl Output {
                 formatting,
                 children,
             } => {
-                let inner: String = children.iter().map(|c| c.render()).collect();
+                // Join children with delimiter if specified, using smart punctuation handling
+                let inner: String = if let Some(ref delim) = formatting.delimiter {
+                    let rendered: Vec<String> = children
+                        .iter()
+                        .map(|c| c.render())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    join_with_smart_delim(rendered, delim)
+                } else {
+                    // No delimiter - still apply punctuation fixing
+                    let rendered: Vec<String> = children.iter().map(|c| c.render()).collect();
+                    fix_punct(rendered).join("")
+                };
                 render_with_formatting(&inner, formatting)
             }
             Output::Linked { children, .. } => {
@@ -262,6 +298,64 @@ impl Output {
                 Tag::CitationNumber(n) => Some(*n),
                 _ => child.extract_citation_number(),
             },
+        }
+    }
+
+    /// Extract all tagged citation items from this output.
+    ///
+    /// Returns a vector of (item_id, item_type, output) tuples for each
+    /// Tag::Item found in the tree.
+    pub fn extract_citation_items(&self) -> Vec<(String, CitationItemType, Output)> {
+        let mut items = Vec::new();
+        self.extract_citation_items_into(&mut items);
+        items
+    }
+
+    fn extract_citation_items_into(&self, items: &mut Vec<(String, CitationItemType, Output)>) {
+        match self {
+            Output::Null | Output::Literal(_) => {}
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    child.extract_citation_items_into(items);
+                }
+            }
+            Output::InNote(child) => child.extract_citation_items_into(items),
+            Output::Tagged { tag, child } => {
+                if let Tag::Item { item_id, item_type } = tag {
+                    items.push((item_id.clone(), item_type.clone(), (**child).clone()));
+                }
+                child.extract_citation_items_into(items);
+            }
+        }
+    }
+
+    /// Extract all names (from Tag::Names tags) from this output.
+    ///
+    /// Returns a vector of Name objects found in the tree.
+    pub fn extract_all_names(&self) -> Vec<Name> {
+        let mut names = Vec::new();
+        self.extract_all_names_into(&mut names);
+        names
+    }
+
+    fn extract_all_names_into(&self, names: &mut Vec<Name>) {
+        match self {
+            Output::Null | Output::Literal(_) => {}
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    child.extract_all_names_into(names);
+                }
+            }
+            Output::InNote(child) => child.extract_all_names_into(names),
+            Output::Tagged { tag, child } => {
+                if let Tag::Names {
+                    names: tag_names, ..
+                } = tag
+                {
+                    names.extend(tag_names.iter().cloned());
+                }
+                child.extract_all_names_into(names);
+            }
         }
     }
 
@@ -561,8 +655,29 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
             formatting,
             children,
         } => {
-            // First, recursively convert children
-            let mut inner: Vec<Inline> = children.iter().flat_map(to_inlines_inner).collect();
+            // First, recursively convert children, with optional delimiter
+            let mut inner: Vec<Inline> = if let Some(ref delim) = formatting.delimiter {
+                // Join children with delimiter, filtering out empty results
+                let child_results: Vec<Vec<Inline>> = children
+                    .iter()
+                    .map(to_inlines_inner)
+                    .filter(|inlines| !inlines.is_empty())
+                    .collect();
+
+                let mut result = Vec::new();
+                for (i, child_inlines) in child_results.into_iter().enumerate() {
+                    if i > 0 && !delim.is_empty() {
+                        result.push(Inline::Str(Str {
+                            text: delim.clone(),
+                            source_info: empty_source_info(),
+                        }));
+                    }
+                    result.extend(child_inlines);
+                }
+                result
+            } else {
+                children.iter().flat_map(to_inlines_inner).collect()
+            };
 
             if inner.is_empty() {
                 return vec![];
@@ -668,6 +783,19 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
 /// Apply text case transformation to all Str nodes in an Inlines vector.
 fn apply_text_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, text_case: &quarto_csl::TextCase) {
     use quarto_csl::TextCase;
+
+    // For title case, we need to track state across all Str nodes
+    if matches!(text_case, TextCase::Title) {
+        let mut seen_first_word = false;
+        apply_title_case_to_inlines(inlines, &mut seen_first_word);
+    } else {
+        apply_text_case_to_inlines_simple(inlines, text_case);
+    }
+}
+
+/// Apply non-title text case transformations (simple per-node processing).
+fn apply_text_case_to_inlines_simple(inlines: &mut quarto_pandoc_types::Inlines, text_case: &quarto_csl::TextCase) {
+    use quarto_csl::TextCase;
     use quarto_pandoc_types::Inline;
 
     for inline in inlines.iter_mut() {
@@ -678,30 +806,130 @@ fn apply_text_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, text_c
                     TextCase::Uppercase => s.text.to_uppercase(),
                     TextCase::CapitalizeFirst => capitalize_first(&s.text),
                     TextCase::CapitalizeAll => capitalize_all(&s.text),
-                    TextCase::Title => title_case(&s.text),
+                    TextCase::Title => unreachable!(), // Handled separately
                     TextCase::Sentence => sentence_case(&s.text),
                 };
             }
-            Inline::Emph(e) => apply_text_case_to_inlines(&mut e.content, text_case),
-            Inline::Strong(s) => apply_text_case_to_inlines(&mut s.content, text_case),
-            Inline::SmallCaps(s) => apply_text_case_to_inlines(&mut s.content, text_case),
-            Inline::Superscript(s) => apply_text_case_to_inlines(&mut s.content, text_case),
-            Inline::Subscript(s) => apply_text_case_to_inlines(&mut s.content, text_case),
-            Inline::Quoted(q) => apply_text_case_to_inlines(&mut q.content, text_case),
-            Inline::Link(l) => apply_text_case_to_inlines(&mut l.content, text_case),
+            Inline::Emph(e) => apply_text_case_to_inlines_simple(&mut e.content, text_case),
+            Inline::Strong(s) => apply_text_case_to_inlines_simple(&mut s.content, text_case),
+            // SmallCaps, Superscript, Subscript are "implicit nocase" per CSL-JSON spec
+            Inline::SmallCaps(_) => {}
+            Inline::Superscript(_) => {}
+            Inline::Subscript(_) => {}
+            Inline::Quoted(q) => apply_text_case_to_inlines_simple(&mut q.content, text_case),
+            Inline::Link(l) => apply_text_case_to_inlines_simple(&mut l.content, text_case),
             Inline::Span(s) => {
-                // Check for nocase class - skip text transformation for this content
                 let (_, classes, _) = &s.attr;
-                if classes.iter().any(|c| c == "nocase") {
-                    // Don't apply case transformation to nocase spans
-                } else {
-                    apply_text_case_to_inlines(&mut s.content, text_case);
+                if !classes.iter().any(|c| c == "nocase") {
+                    apply_text_case_to_inlines_simple(&mut s.content, text_case);
                 }
             }
-            // Other inline types don't contain text we should transform
             _ => {}
         }
     }
+}
+
+/// Apply title case transformation, tracking state across all text nodes.
+fn apply_title_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, seen_first_word: &mut bool) {
+    use quarto_pandoc_types::Inline;
+
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Str(s) => {
+                s.text = title_case_with_state(&s.text, seen_first_word);
+            }
+            Inline::Emph(e) => apply_title_case_to_inlines(&mut e.content, seen_first_word),
+            Inline::Strong(s) => apply_title_case_to_inlines(&mut s.content, seen_first_word),
+            // SmallCaps, Superscript, Subscript are "implicit nocase" per CSL-JSON spec
+            // But they still "consume" the first word position if they contain text
+            Inline::SmallCaps(s) => {
+                if has_text_content(&s.content) {
+                    *seen_first_word = true;
+                }
+            }
+            Inline::Superscript(s) => {
+                if has_text_content(&s.content) {
+                    *seen_first_word = true;
+                }
+            }
+            Inline::Subscript(s) => {
+                if has_text_content(&s.content) {
+                    *seen_first_word = true;
+                }
+            }
+            Inline::Quoted(q) => apply_title_case_to_inlines(&mut q.content, seen_first_word),
+            Inline::Link(l) => apply_title_case_to_inlines(&mut l.content, seen_first_word),
+            Inline::Span(s) => {
+                let (_, classes, _) = &s.attr;
+                if classes.iter().any(|c| c == "nocase") {
+                    // nocase spans still consume the first word position
+                    if has_text_content(&s.content) {
+                        *seen_first_word = true;
+                    }
+                } else {
+                    apply_title_case_to_inlines(&mut s.content, seen_first_word);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Check if Inlines contain any actual text content.
+fn has_text_content(inlines: &quarto_pandoc_types::Inlines) -> bool {
+    use quarto_pandoc_types::Inline;
+
+    for inline in inlines.iter() {
+        match inline {
+            Inline::Str(s) => {
+                if s.text.chars().any(|c| c.is_alphabetic()) {
+                    return true;
+                }
+            }
+            Inline::Emph(e) => {
+                if has_text_content(&e.content) {
+                    return true;
+                }
+            }
+            Inline::Strong(s) => {
+                if has_text_content(&s.content) {
+                    return true;
+                }
+            }
+            Inline::SmallCaps(s) => {
+                if has_text_content(&s.content) {
+                    return true;
+                }
+            }
+            Inline::Superscript(s) => {
+                if has_text_content(&s.content) {
+                    return true;
+                }
+            }
+            Inline::Subscript(s) => {
+                if has_text_content(&s.content) {
+                    return true;
+                }
+            }
+            Inline::Quoted(q) => {
+                if has_text_content(&q.content) {
+                    return true;
+                }
+            }
+            Inline::Link(l) => {
+                if has_text_content(&l.content) {
+                    return true;
+                }
+            }
+            Inline::Span(s) => {
+                if has_text_content(&s.content) {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 /// Apply strip-periods transformation to all Str nodes in an Inlines vector.
@@ -820,6 +1048,142 @@ pub fn join_outputs(outputs: Vec<Output>, delimiter: &str) -> Output {
         formatting: Formatting::default(),
         children,
     }
+}
+
+// ============================================================================
+// Smart Punctuation Handling
+// ============================================================================
+
+/// Fix punctuation collisions between adjacent strings.
+///
+/// This implements the CSL/citeproc punctuation collision algorithm:
+/// - When two punctuation marks collide, one may be suppressed
+/// - Based on Pandoc citeproc's fixPunct function
+///
+/// Returns a vector of strings with punctuation collisions fixed.
+pub fn fix_punct(strings: Vec<String>) -> Vec<String> {
+    if strings.len() < 2 {
+        return strings;
+    }
+
+    let mut result = Vec::with_capacity(strings.len());
+    let mut iter = strings.into_iter().peekable();
+
+    while let Some(x) = iter.next() {
+        if let Some(y) = iter.peek() {
+            let x_end = x.chars().last().unwrap_or('\u{FFFD}');
+            let y_start = y.chars().next().unwrap_or('\u{FFFD}');
+
+            // Determine how to handle the punctuation collision
+            let (keep_x, keep_y) = match (x_end, y_start) {
+                // Based on Pandoc citeproc Types.hs fixPunct
+                ('!', '.') => (true, false),  // keepFirst
+                ('!', '?') => (true, true),   // keepBoth
+                ('!', ':') => (true, false),  // keepFirst
+                ('!', ',') => (true, true),   // keepBoth
+                ('!', ';') => (true, true),   // keepBoth
+                ('?', '!') => (true, true),   // keepBoth
+                ('?', '.') => (true, false),  // keepFirst
+                ('?', ':') => (true, false),  // keepFirst
+                ('?', ',') => (true, true),   // keepBoth
+                ('?', ';') => (true, true),   // keepBoth
+                ('.', '!') => (true, true),   // keepBoth
+                ('.', '?') => (true, true),   // keepBoth
+                ('.', ':') => (true, true),   // keepBoth
+                ('.', ',') => (true, true),   // keepBoth
+                ('.', ';') => (true, true),   // keepBoth
+                (':', '!') => (false, true),  // keepSecond
+                (':', '?') => (false, true),  // keepSecond
+                (':', '.') => (true, false),  // keepFirst
+                (':', ',') => (true, true),   // keepBoth
+                (':', ';') => (true, true),   // keepBoth
+                (',', '!') => (true, true),   // keepBoth
+                (',', '?') => (true, true),   // keepBoth
+                (',', ':') => (true, true),   // keepBoth
+                (',', '.') => (true, true),   // keepBoth
+                (',', ';') => (true, true),   // keepBoth
+                (';', '!') => (false, true),  // keepSecond
+                (';', '?') => (false, true),  // keepSecond
+                (';', ':') => (true, false),  // keepFirst
+                (';', '.') => (true, false),  // keepFirst
+                (';', ',') => (true, true),   // keepBoth
+                ('!', '!') => (true, false),  // keepFirst
+                ('?', '?') => (true, false),  // keepFirst
+                ('.', '.') => (true, false),  // keepFirst
+                (':', ':') => (true, false),  // keepFirst
+                (';', ';') => (true, false),  // keepFirst
+                (',', ',') => (true, false),  // keepFirst
+                (' ', ' ') => (false, true),  // keepSecond
+                (' ', ',') => (false, true),  // keepSecond
+                (' ', '.') => (false, true),  // keepSecond
+                _ => (true, true),            // keepBoth - default
+            };
+
+            if keep_x {
+                result.push(x);
+            } else {
+                // Trim the end character from x
+                let trimmed = x.chars().take(x.chars().count().saturating_sub(1)).collect::<String>();
+                if !trimmed.is_empty() {
+                    result.push(trimmed);
+                }
+            }
+
+            if !keep_y {
+                // Skip y by consuming it and using the trimmed version
+                let y_owned = iter.next().unwrap();
+                let trimmed: String = y_owned.chars().skip(1).collect();
+                if !trimmed.is_empty() {
+                    // Push back via a new iteration
+                    result.push(trimmed);
+                }
+            }
+            // If keep_y is true, y will be handled in the next iteration
+        } else {
+            // Last element - just add it
+            result.push(x);
+        }
+    }
+
+    result
+}
+
+/// Join strings with delimiter, using smart punctuation rules.
+///
+/// This implements Pandoc's addDelimiters function:
+/// - Skips delimiter before certain punctuation marks (comma, semicolon, period)
+/// - Then applies fix_punct to handle remaining collisions
+pub fn join_with_smart_delim(strings: Vec<String>, delimiter: &str) -> String {
+    if strings.is_empty() {
+        return String::new();
+    }
+
+    let non_empty: Vec<String> = strings.into_iter().filter(|s| !s.is_empty()).collect();
+
+    if non_empty.is_empty() {
+        return String::new();
+    }
+
+    if non_empty.len() == 1 {
+        return non_empty.into_iter().next().unwrap();
+    }
+
+    // Add delimiters, skipping before comma/semicolon/period
+    let mut with_delims = Vec::new();
+    for (i, s) in non_empty.into_iter().enumerate() {
+        if i > 0 && !delimiter.is_empty() {
+            // Check if this string starts with punctuation that should suppress delimiter
+            let first_char = s.chars().next().unwrap_or(' ');
+            if first_char != ',' && first_char != ';' && first_char != '.' {
+                with_delims.push(delimiter.to_string());
+            }
+        }
+        with_delims.push(s);
+    }
+
+    // Fix punctuation collisions and join
+    let fixed = fix_punct(with_delims);
+    fixed.join("")
 }
 
 // ============================================================================
@@ -951,6 +1315,15 @@ impl<'a> RichTextParser<'a> {
             return Some(Output::formatted(fmt, inner));
         }
 
+        // Small caps shorthand: <sc>...</sc> (Pandoc extension)
+        if remaining.starts_with("<sc>") {
+            self.pos += 4;
+            let inner = self.parse_children(Some("</sc>"));
+            let mut fmt = Formatting::default();
+            fmt.font_variant = Some(quarto_csl::FontVariant::SmallCaps);
+            return Some(Output::formatted(fmt, inner));
+        }
+
         // Small caps: <span style="font-variant:small-caps;">
         if remaining.starts_with("<span style=\"font-variant:small-caps;\">")
             || remaining.starts_with("<span style=\"font-variant: small-caps;\">")
@@ -994,6 +1367,7 @@ impl<'a> RichTextParser<'a> {
             || remaining.starts_with("</b>")
             || remaining.starts_with("</sup>")
             || remaining.starts_with("</sub>")
+            || remaining.starts_with("</sc>")
             || remaining.starts_with("</span>")
         {
             // Find the end of the tag
@@ -1205,11 +1579,304 @@ fn capitalize_all(s: &str) -> String {
     format!("{}{}{}", leading, capitalized, trailing)
 }
 
-/// Apply title case (capitalize major words).
+/// English stop words that should remain lowercase in title case (unless first word).
+/// Based on CSL/Chicago Manual of Style conventions.
+const TITLE_CASE_STOP_WORDS: &[&str] = &[
+    "a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into",
+    "nor", "of", "on", "or", "so", "the", "to", "up", "yet", "via", "vs", "v",
+];
+
+/// Check if a word is all uppercase (an acronym).
+fn is_all_uppercase(s: &str) -> bool {
+    let letters: String = s.chars().filter(|c| c.is_alphabetic()).collect();
+    !letters.is_empty() && letters.chars().all(|c| c.is_uppercase())
+}
+
+/// Check if a word has internal uppercase letters (like "iPhone", "macOS").
+fn has_internal_uppercase(s: &str) -> bool {
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c.is_uppercase() && i > 0 && chars[i - 1].is_alphabetic() {
+            return true;
+        }
+    }
+    false
+}
+
+/// Check if a string starts with an alphabetic character.
+fn starts_with_letter(s: &str) -> bool {
+    s.chars().next().map_or(false, |c| c.is_alphabetic())
+}
+
+/// Title case a single word (may contain hyphens or slashes).
+fn title_case_word(word: &str, force_capitalize: bool) -> String {
+    // If the word doesn't start with a letter (like "07-x"), preserve it
+    if !starts_with_letter(word) {
+        return word.to_string();
+    }
+
+    // If the word is all uppercase (like "UK", "IS"), preserve it
+    if is_all_uppercase(word) {
+        return word.to_string();
+    }
+
+    // If the word has internal uppercase (like "iPhone"), preserve it
+    if has_internal_uppercase(word) {
+        return word.to_string();
+    }
+
+    // Handle hyphenated words: "out-of-fashion" → "Out-of-Fashion"
+    // First and last parts are always capitalized, middle parts follow stop word rules
+    if word.contains('-') {
+        let parts: Vec<&str> = word.split('-').collect();
+        let len = parts.len();
+        return parts
+            .iter()
+            .enumerate()
+            .map(|(i, part)| {
+                // First part: capitalize if force_capitalize OR if it's the first part
+                // Last part: always capitalize
+                // Middle parts: follow stop word rules (not forced)
+                let is_first = i == 0;
+                let is_last = i == len - 1;
+                let force = (is_first && force_capitalize) || is_last;
+                title_case_word(part, force)
+            })
+            .collect::<Vec<_>>()
+            .join("-");
+    }
+
+    // Handle slashed words: "cat/mouse" → "Cat/Mouse"
+    if word.contains('/') {
+        return word
+            .split('/')
+            .map(|part| title_case_word(part, true))
+            .collect::<Vec<_>>()
+            .join("/");
+    }
+
+    // Check if it's a stop word (should remain lowercase unless forced)
+    let lower = word.to_lowercase();
+    if !force_capitalize && TITLE_CASE_STOP_WORDS.contains(&lower.as_str()) {
+        return lower;
+    }
+
+    // Regular word: capitalize first letter
+    capitalize_first(word)
+}
+
+/// Apply title case (capitalize major words, keep stop words lowercase).
 fn title_case(s: &str) -> String {
-    // Simplified title case - capitalize all words
-    // A proper implementation would use language-specific rules
-    capitalize_all(s)
+    if s.is_empty() {
+        return String::new();
+    }
+
+    // Preserve leading whitespace
+    let leading: String = s.chars().take_while(|c| c.is_whitespace()).collect();
+    // Preserve trailing whitespace
+    let trailing: String = s
+        .chars()
+        .rev()
+        .take_while(|c| c.is_whitespace())
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return s.to_string();
+    }
+
+    let mut result = String::new();
+    let mut force_next = true; // First word is always capitalized
+    let mut chars = trimmed.chars().peekable();
+    let mut current_word = String::new();
+
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            // End of word - process it
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                force_next = false;
+            }
+            result.push(c);
+        } else if c == ':' || c == '—' || c == '–' || c == '.' || c == '?' || c == '!' {
+            // Punctuation that forces next word capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+            }
+            result.push(c);
+            // After these punctuation marks, force capitalize next word
+            force_next = true;
+        } else if c == '\u{201C}' || c == '\u{2018}' {
+            // Opening curly quotes (left double " and left single ') force capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+            }
+            result.push(c);
+            // After opening quotes, force capitalize next word
+            force_next = true;
+        } else if c == '\u{201D}' || c == '\u{2019}' {
+            // Closing curly quotes - just output, don't force capitalize
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                force_next = false;
+            }
+            result.push(c);
+        } else if c == '"' {
+            // Straight double quotes - determine if opening or closing based on context
+            // If followed by alphanumeric (peeking), it's opening
+            // Otherwise it's closing
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+            }
+            result.push(c);
+            // Check next character to determine if this is opening or closing
+            if let Some(&next_c) = chars.peek() {
+                if next_c.is_alphanumeric() {
+                    // Opening quote - force capitalize next word
+                    force_next = true;
+                } else {
+                    // Closing quote - don't force
+                    force_next = false;
+                }
+            } else {
+                force_next = false;
+            }
+        } else if c == '\'' {
+            // Single straight quote - just include, don't affect capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                force_next = false;
+            }
+            result.push(c);
+        } else {
+            current_word.push(c);
+        }
+    }
+
+    // Handle the last word
+    if !current_word.is_empty() {
+        result.push_str(&title_case_word(&current_word, force_next));
+    }
+
+    format!("{}{}{}", leading, result, trailing)
+}
+
+/// Apply title case with external state tracking for cross-segment processing.
+/// `seen_first_word` tracks whether we've already processed the first word of the title.
+fn title_case_with_state(s: &str, seen_first_word: &mut bool) -> String {
+    if s.is_empty() {
+        return String::new();
+    }
+
+    // Preserve leading whitespace
+    let leading: String = s.chars().take_while(|c| c.is_whitespace()).collect();
+    // Preserve trailing whitespace
+    let trailing: String = s
+        .chars()
+        .rev()
+        .take_while(|c| c.is_whitespace())
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
+
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return s.to_string();
+    }
+
+    let mut result = String::new();
+    // Use external state: force_next is true only if we haven't seen the first word yet
+    let mut force_next = !*seen_first_word;
+    let mut chars = trimmed.chars().peekable();
+    let mut current_word = String::new();
+
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            // End of word - process it
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                // After processing a word, we've seen the first word
+                *seen_first_word = true;
+                force_next = false;
+            }
+            result.push(c);
+        } else if c == ':' || c == '—' || c == '–' || c == '.' || c == '?' || c == '!' {
+            // Punctuation that forces next word capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                *seen_first_word = true;
+            }
+            result.push(c);
+            // After these punctuation marks, force capitalize next word
+            force_next = true;
+        } else if c == '\u{201C}' || c == '\u{2018}' {
+            // Opening curly quotes force capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                *seen_first_word = true;
+            }
+            result.push(c);
+            force_next = true;
+        } else if c == '\u{201D}' || c == '\u{2019}' {
+            // Closing curly quotes - just output, don't force capitalize
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                *seen_first_word = true;
+                force_next = false;
+            }
+            result.push(c);
+        } else if c == '"' {
+            // Straight double quotes - determine if opening or closing based on context
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                *seen_first_word = true;
+            }
+            result.push(c);
+            if let Some(&next_c) = chars.peek() {
+                if next_c.is_alphanumeric() {
+                    force_next = true;
+                } else {
+                    force_next = false;
+                }
+            } else {
+                force_next = false;
+            }
+        } else if c == '\'' {
+            // Single straight quote - just include, don't affect capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                *seen_first_word = true;
+                force_next = false;
+            }
+            result.push(c);
+        } else {
+            current_word.push(c);
+        }
+    }
+
+    // Handle the last word
+    if !current_word.is_empty() {
+        result.push_str(&title_case_word(&current_word, force_next));
+        *seen_first_word = true;
+    }
+
+    format!("{}{}{}", leading, result, trailing)
 }
 
 /// Apply sentence case (lowercase, capitalize first word).
@@ -2036,5 +2703,83 @@ mod rich_text_tests {
         let html = render_inlines_to_csl_html(&inlines);
         // SMITH should stay unchanged due to nocase, other words should be capitalized
         assert_eq!(html, "A SMITH Pencil");
+    }
+}
+
+#[cfg(test)]
+mod punct_tests {
+    use super::*;
+
+    #[test]
+    fn test_fix_punct_double_period() {
+        let input = vec!["Hello.".to_string(), ".World".to_string()];
+        let result = fix_punct(input);
+        // Period-period -> keep first
+        assert_eq!(result.join(""), "Hello.World");
+    }
+
+    #[test]
+    fn test_fix_punct_double_comma() {
+        let input = vec!["Hello,".to_string(), ",World".to_string()];
+        let result = fix_punct(input);
+        // Comma-comma -> keep first
+        assert_eq!(result.join(""), "Hello,World");
+    }
+
+    #[test]
+    fn test_fix_punct_excl_period() {
+        let input = vec!["Hello!".to_string(), ".World".to_string()];
+        let result = fix_punct(input);
+        // Exclamation-period -> keep first
+        assert_eq!(result.join(""), "Hello!World");
+    }
+
+    #[test]
+    fn test_fix_punct_double_space() {
+        let input = vec!["Hello ".to_string(), " World".to_string()];
+        let result = fix_punct(input);
+        // Space-space -> keep second
+        assert_eq!(result.join(""), "Hello World");
+    }
+
+    #[test]
+    fn test_fix_punct_keep_both() {
+        let input = vec!["Hello".to_string(), "World".to_string()];
+        let result = fix_punct(input);
+        // No punctuation collision
+        assert_eq!(result.join(""), "HelloWorld");
+    }
+
+    #[test]
+    fn test_join_with_smart_delim_basic() {
+        let input = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        let result = join_with_smart_delim(input, ", ");
+        assert_eq!(result, "A, B, C");
+    }
+
+    #[test]
+    fn test_join_with_smart_delim_skip_before_comma() {
+        // If next element starts with comma, skip the delimiter
+        let input = vec!["A".to_string(), ", B".to_string()];
+        let result = join_with_smart_delim(input, "; ");
+        assert_eq!(result, "A, B");
+    }
+
+    #[test]
+    fn test_join_with_smart_delim_skip_before_period() {
+        // If next element starts with period, skip the delimiter
+        let input = vec!["A".to_string(), ". B".to_string()];
+        let result = join_with_smart_delim(input, ", ");
+        assert_eq!(result, "A. B");
+    }
+
+    #[test]
+    fn test_formatted_with_delimiter() {
+        let output = Output::formatted_with_delimiter(
+            Formatting::default(),
+            vec![Output::literal("A"), Output::literal("B"), Output::literal("C")],
+            ", ",
+        );
+        assert_eq!(output.render(), "A, B, C");
     }
 }

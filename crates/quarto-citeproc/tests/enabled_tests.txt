@@ -10,7 +10,7 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 394 conformance tests passing out of 896 total (~44.0%)
+# Current status: 412 conformance tests passing out of 858 total (~48.0%)
 # Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
 
 # affix
@@ -21,10 +21,14 @@ affix_InterveningEmpty
 bugreports_Abnt
 bugreports_ArabicLocale
 bugreports_AuthorYear
+bugreports_ChineseCharactersFamilyOnlyPluralLabel
+bugreports_DroppingGroupDelimiterSpace
 bugreports_EmptyIfMatchNoneFail
 bugreports_NoEventInNestedMacroWithOldProcessor
 bugreports_SimpleBib
 bugreports_SingletonIfMatchNoneFail
+bugreports_SectionAndLocator
+bugreports_SortSecondaryKey
 bugreports_UndefinedInName
 bugreports_UnisaHarvardInitialization
 bugreports_effingBug
@@ -32,6 +36,7 @@ bugreports_effingBug
 # condition
 condition_EmptyDate
 condition_EmptyIsNumericFalse
+condition_LocatorIsFalse
 condition_EmptyIsUncertainDateFalse
 condition_EmptyShortTitleFalse
 condition_FirstNullAny
@@ -136,15 +141,23 @@ date_NegativeDateSortViaMacroOnYearMonthOnly
 # disambiguate
 disambiguate_AddNamesFailure
 disambiguate_AddNamesFailureWithAddGivenname
+disambiguate_AddNamesSuccess
+disambiguate_AllNamesSimpleSequence
 disambiguate_AllNamesWithInitialsBibliography
 disambiguate_AndreaEg1c
+disambiguate_ByCiteIsDefault
 disambiguate_DifferentSpacingInInitials
 disambiguate_DisambiguateTrueAndYearSuffixOne
+disambiguate_DisambiguateWithThree
+disambiguate_ExtraTextCitation
 disambiguate_HonorFullnameInBibliography
 disambiguate_PrimaryNameWithNonDroppingParticle
 disambiguate_PrimaryNameWithParticle
 disambiguate_ThreeNoAuthorNoTitleEntries
 disambiguate_WithOriginalYear
+disambiguate_YearSuffixAndSort
+disambiguate_YearSuffixTwoPairsBibliography
+disambiguate_YearSuffixTwoPairsFirstnameBibliography
 disambiguate_YearSuffixTwoPairsFullnamesBibliography
 
 # form
@@ -157,8 +170,15 @@ form_TitleTestNoLongFalse
 integration_CitationSortTwice
 
 # label
+label_EmptyLabelVanish
+label_EmptyLabelVanishPage
+label_ImplicitForm
 label_MissingReturnsEmpty
 label_NonexistentNameVariableLabel
+label_PluralWithAmpersand
+label_PluralWithAnd
+label_PluralWithCommaAnd
+label_PluralWithCommaLocalizedAnd
 
 # locale
 locale_EmptyDate
@@ -168,6 +188,9 @@ locale_SpecificDate
 locale_SpecificTerm
 locale_TitleCaseEmptyLangEmptyLocale
 locale_UnknownTerm
+
+# locator
+locator_TermSelection
 
 # magic
 magic_AllowRepeatDateRenderings
@@ -195,6 +218,8 @@ name_HierarchicalDelimiter
 name_HyphenatedFirstname
 name_InheritAttributesEtAlStyle
 name_InitialsInitializeFalse
+name_LabelAfterPlural
+name_LabelAfterPluralDecorations
 name_InitialsInitializeFalseEmpty
 name_Institution
 name_LiteralWithComma
@@ -338,7 +363,12 @@ number_FailingDelimiters
 number_IsNumericWithAlpha
 number_LeadingZeros
 number_MixedText
+number_PageFirst
 number_SpacesMakeIsNumericFalse
+
+# page
+page_NumberPageFirst
+page_PluralDetectWithEndash
 
 # position
 position_FalseInBibliography
@@ -380,7 +410,24 @@ substitute_SubstituteOnlyOnceTerm
 substitute_SubstituteOnlyOnceVariable
 
 # textcase
+textcase_AfterQuote
+textcase_CapitalizeAll
+textcase_CapitalizeFirst
+textcase_CapitalizeFirstWithDecor
+textcase_CapitalsUntouched
+textcase_ImplicitNocase
 textcase_LastChar
+textcase_Lowercase
+textcase_SentenceCapitalization
+textcase_StopWordBeforeHyphen
+textcase_TitleCapitalization
+textcase_TitleCapitalization2
+textcase_TitleCaseNonEnglish2
+textcase_TitleCaseWithCleverBrandName
+textcase_TitleCaseWithFinalNocase
+textcase_TitleCaseWithHyphens
+textcase_TitleCaseWithInitials
+textcase_TitleCaseWithNonBreakSpace
 
 # unicode
 unicode_NonBreakingSpace
@@ -388,6 +435,9 @@ unicode_NonBreakingSpace
 # variables
 variables_TitleShortOnShortTitleNoTitle
 variables_TitleShortOnShortTitleNoTitleCondition
+
+# virtual
+virtual_PageFirst
 sort_BibliographyCitationNumberDescending
 sort_BibliographyCitationNumberDescendingSecondary
 sort_CitationNumberPrimaryAscendingViaVariableBibliography
@@ -417,3 +467,37 @@ textcase_Lowercase
 textcase_CapitalizeFirstWithDecor
 flipflop_ItalicsSimple
 flipflop_ItalicsFlipped
+disambiguate_DisambiguateTrueReflectedInBibliography
+disambiguate_AndreaEg1b
+disambiguate_AndreaEg2
+disambiguate_AndreaEg4
+disambiguate_ByCiteGivennameExpandCrossNestedNames
+disambiguate_ByCiteGivennameNoShortFormInitializeWith
+disambiguate_ByCiteGivennameShortFormInitializeWith
+disambiguate_ByCiteGivennameShortFormNoInitializeWith
+disambiguate_ByCiteMinimalGivennameExpandMinimalNames
+disambiguate_ToInitialOnly
+disambiguate_YearSuffixMacroSameYearImplicit
+bugreports_Disambiguate
+bugreports_SelfLink
+bugreports_SingleQuoteXml
+collapse_NumericDuplicate
+collapse_NumericDuplicate2
+condition_RefTypeBranching
+disambiguate_AllNamesGenerally
+disambiguate_AllNamesWithInitialsGenerally
+disambiguate_ByCiteDisambiguateCondition
+disambiguate_ByCiteRetainNamesOnFailureIfYearSuffixNotAvailable
+disambiguate_ByCiteTwoAuthorsSameFamilyName
+disambiguate_FamilyNameOnly
+disambiguate_PrimaryNameGenerally
+disambiguate_PrimaryNameWithInitialsLimitedToPrimary
+flipflop_NumericField
+flipflop_SmallCaps
+fullstyles_APA
+name_BibliographyNameFormNeverShrinks
+name_DelimiterAfterInverted
+textcase_SentenceCapitalization
+disambiguate_AllNamesBaseNameCountOnFailureIfYearSuffixAvailable
+disambiguate_ByCiteBaseNameCountOnFailureIfYearSuffixAvailable
+disambiguate_YearSuffixMacroSameYearExplicit

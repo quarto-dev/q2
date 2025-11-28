@@ -228,6 +228,35 @@ impl Default for Collapse {
     }
 }
 
+/// Disambiguation strategy for citations.
+///
+/// Controls how ambiguous citations (citations that render identically
+/// but refer to different works) are disambiguated.
+#[derive(Debug, Clone, Default)]
+pub struct DisambiguationStrategy {
+    /// Add names to et-al truncated lists until disambiguation.
+    pub add_names: bool,
+    /// Add given names (initials or full) according to the rule.
+    pub add_givenname: Option<GivenNameDisambiguationRule>,
+    /// Add year suffixes (a, b, c...) to disambiguate.
+    pub add_year_suffix: bool,
+}
+
+/// Rule for disambiguating by given name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GivenNameDisambiguationRule {
+    /// Expand all ambiguous names everywhere.
+    AllNames,
+    /// Like AllNames but use initials only.
+    AllNamesWithInitials,
+    /// Only expand the first author.
+    PrimaryName,
+    /// Like PrimaryName but use initials only.
+    PrimaryNameWithInitials,
+    /// Expand names per-citation (minimal expansion).
+    ByCite,
+}
+
 /// A layout (for citation or bibliography).
 #[derive(Debug, Clone)]
 pub struct Layout {
@@ -250,6 +279,8 @@ pub struct Layout {
     pub after_collapse_delimiter: Option<String>,
     /// Delimiter between year suffixes when collapsing.
     pub year_suffix_delimiter: Option<String>,
+    /// Disambiguation strategy (only for citation layouts).
+    pub disambiguation: DisambiguationStrategy,
     /// Source location.
     pub source_info: SourceInfo,
 }
@@ -737,6 +768,11 @@ pub struct Formatting {
     pub quotes: bool,
     /// Strip periods.
     pub strip_periods: bool,
+    /// Delimiter between children (applied at render time, not during evaluation).
+    /// This is key for proper punctuation handling - delimiters are stored as
+    /// metadata and applied when rendering, allowing smart punctuation collision
+    /// handling.
+    pub delimiter: Option<String>,
 }
 
 /// Font style.
