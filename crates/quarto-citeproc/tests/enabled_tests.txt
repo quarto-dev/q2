@@ -10,7 +10,7 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 288 conformance tests passing out of 896 total (~32.1%)
+# Current status: 314 conformance tests passing out of 896 total (~35.0%)
 # Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
 
 # affix
@@ -42,7 +42,13 @@ condition_VariableAny
 condition_VariableNone
 
 # collapse
-collapse_AuthorCollapseDifferentAuthorsOneWithEtal
+collapse_AuthorCollapse
+collapse_AuthorCollapseNoDate
+collapse_AuthorCollapseDifferentAuthorsOneWithEtAl
+collapse_CitationNumberRangesMixed
+collapse_CitationNumberRangesMixed2
+collapse_CitationNumberRangesMixed3
+collapse_CitationNumberRangesOneOnly
 
 # date
 date_Accessed
@@ -337,7 +343,6 @@ sort_CitationNumberSecondaryAscendingViaVariableBibliography
 sort_CitationNumberPrimaryDescendingViaMacroBibliography
 bugreports_SortSecondaryKeyBibliography
 bugreports_undefinedCrash
-collapse_CitationNumberRangesOneOnly
 date_IgnoreNonexistentSort
 date_KeyVariable
 sort_ConditionalMacroDates

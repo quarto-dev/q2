@@ -59,6 +59,8 @@ impl<'a> EvalContext<'a> {
 
 /// Evaluate a citation and return formatted output.
 pub fn evaluate_citation(processor: &mut Processor, citation: &Citation) -> Result<String> {
+    use quarto_csl::Collapse;
+
     // Clone layout to avoid borrow conflicts
     let layout = processor.style.citation.clone();
     let style_name_options = processor.style.name_options.clone();
@@ -120,12 +122,179 @@ pub fn evaluate_citation(processor: &mut Processor, citation: &Citation) -> Resu
         item_outputs.push(Output::sequence(parts));
     }
 
-    let combined = join_outputs(item_outputs, &delimiter);
+    // Apply collapse logic based on collapse mode
+    let combined = match layout.collapse {
+        Collapse::Year | Collapse::YearSuffix | Collapse::YearSuffixRanged => {
+            collapse_by_year(item_outputs, &layout)
+        }
+        Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
+        Collapse::None => join_outputs(item_outputs, &delimiter),
+    };
 
     // Apply layout-level formatting
     let final_output = Output::formatted(layout.formatting.clone(), vec![combined]);
 
     Ok(final_output.render())
+}
+
+/// Collapse citations by author name (year collapse).
+///
+/// Groups consecutive items by author name and suppresses repeated names.
+/// "(Smith 1900, Smith 2000)" becomes "(Smith 1900, 2000)"
+fn collapse_by_year(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> Output {
+    if item_outputs.is_empty() {
+        return Output::Null;
+    }
+
+    let delimiter = layout.delimiter.clone().unwrap_or_else(|| "; ".to_string());
+    let cite_group_delimiter = layout
+        .cite_group_delimiter
+        .clone()
+        .unwrap_or_else(|| ", ".to_string());
+
+    // Group consecutive items by their names text
+    let mut groups: Vec<Vec<Output>> = Vec::new();
+    let mut current_group: Vec<Output> = Vec::new();
+    let mut current_names: Option<String> = None;
+
+    for output in item_outputs {
+        let names = output.extract_names_text();
+
+        if current_group.is_empty() {
+            // First item in a group
+            current_names = names;
+            current_group.push(output);
+        } else if names == current_names && names.is_some() {
+            // Same author, add to current group (suppress names)
+            current_group.push(output.suppress_names());
+        } else {
+            // Different author, start a new group
+            groups.push(current_group);
+            current_names = names;
+            current_group = vec![output];
+        }
+    }
+
+    // Don't forget the last group
+    if !current_group.is_empty() {
+        groups.push(current_group);
+    }
+
+    // Join items within each group with cite-group-delimiter
+    // Join groups with the main delimiter
+    let group_outputs: Vec<Output> = groups
+        .into_iter()
+        .map(|group| join_outputs(group, &cite_group_delimiter))
+        .collect();
+
+    join_outputs(group_outputs, &delimiter)
+}
+
+/// Collapse citations by citation number (numeric collapse with ranges).
+///
+/// "[1, 2, 3, 5, 6, 7]" becomes "[1-3, 5-7]"
+fn collapse_by_citation_number(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> Output {
+    if item_outputs.is_empty() {
+        return Output::Null;
+    }
+
+    let delimiter = layout.delimiter.clone().unwrap_or_else(|| ", ".to_string());
+
+    // Extract citation numbers and their associated outputs
+    let mut numbered_items: Vec<(i32, Output)> = Vec::new();
+    for output in item_outputs {
+        if let Some(num) = output.extract_citation_number() {
+            numbered_items.push((num, output));
+        } else {
+            // No citation number - can't collapse, just include as-is
+            numbered_items.push((-1, output));
+        }
+    }
+
+    // Find consecutive ranges
+    let mut result_outputs: Vec<Output> = Vec::new();
+    let mut range_start: Option<(i32, Output)> = None;
+    let mut range_end: Option<(i32, Output)> = None;
+
+    for (num, output) in numbered_items {
+        if num == -1 {
+            // Non-numbered item, flush any range and add this item
+            if let Some((start_num, start_output)) = range_start.take() {
+                if let Some((end_num, end_output)) = range_end.take() {
+                    if end_num - start_num >= 2 {
+                        // Create a range output: render start–end
+                        result_outputs.push(create_range_output(start_output, end_output));
+                    } else {
+                        // Too short for range, add separately
+                        result_outputs.push(start_output);
+                        result_outputs.push(end_output);
+                    }
+                } else {
+                    result_outputs.push(start_output);
+                }
+            }
+            result_outputs.push(output);
+            continue;
+        }
+
+        match (range_start.as_ref(), range_end.as_ref()) {
+            (None, _) => {
+                // Start a new potential range
+                range_start = Some((num, output));
+                range_end = None;
+            }
+            (Some((start_num, _)), None) => {
+                if num == start_num + 1 {
+                    // Consecutive, extend range
+                    range_end = Some((num, output));
+                } else {
+                    // Not consecutive, flush start and begin new range
+                    let (_, start_output) = range_start.take().unwrap();
+                    result_outputs.push(start_output);
+                    range_start = Some((num, output));
+                }
+            }
+            (Some(_), Some((end_num, _))) => {
+                if num == end_num + 1 {
+                    // Extend range
+                    range_end = Some((num, output));
+                } else {
+                    // Not consecutive, flush range and begin new range
+                    let (start_num_val, start_output) = range_start.take().unwrap();
+                    let (end_num_val, end_output) = range_end.take().unwrap();
+                    if end_num_val - start_num_val >= 2 {
+                        result_outputs.push(create_range_output(start_output, end_output));
+                    } else {
+                        result_outputs.push(start_output);
+                        result_outputs.push(end_output);
+                    }
+                    range_start = Some((num, output));
+                }
+            }
+        }
+    }
+
+    // Flush any remaining range
+    if let Some((start_num, start_output)) = range_start {
+        if let Some((end_num, end_output)) = range_end {
+            if end_num - start_num >= 2 {
+                result_outputs.push(create_range_output(start_output, end_output));
+            } else {
+                result_outputs.push(start_output);
+                result_outputs.push(end_output);
+            }
+        } else {
+            result_outputs.push(start_output);
+        }
+    }
+
+    join_outputs(result_outputs, &delimiter)
+}
+
+/// Create a range output from start and end outputs.
+/// For citation numbers, this renders as "[1]–[7]" from "[1]" and "[7]".
+fn create_range_output(start: Output, end: Output) -> Output {
+    Output::sequence(vec![start, Output::literal("–"), end])
 }
 
 /// Evaluate a bibliography entry.
@@ -240,7 +409,8 @@ fn evaluate_text(
             // Special handling for citation-number
             if name == "citation-number" {
                 if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
-                    Output::literal(num.to_string())
+                    // Tag for collapse detection
+                    Output::tagged(Tag::CitationNumber(num), Output::literal(num.to_string()))
                 } else {
                     Output::Null
                 }
@@ -831,7 +1001,11 @@ fn evaluate_number(
     if num_el.variable == "citation-number" {
         if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
             // TODO: Apply number form (ordinal, roman, etc.)
-            return Ok(Output::literal(num.to_string()));
+            // Tag for collapse detection
+            return Ok(Output::tagged(
+                Tag::CitationNumber(num),
+                Output::literal(num.to_string()),
+            ));
         } else {
             return Ok(Output::Null);
         }

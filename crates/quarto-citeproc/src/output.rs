@@ -197,6 +197,236 @@ impl Output {
             }
         }
     }
+
+    /// Extract the rendered text of names (Tag::Names) from this output.
+    /// Returns None if no names are found.
+    pub fn extract_names_text(&self) -> Option<String> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(names) = child.extract_names_text() {
+                        return Some(names);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.extract_names_text(),
+            Output::Tagged { tag, child } => match tag {
+                Tag::Names { .. } => Some(child.render()),
+                _ => child.extract_names_text(),
+            },
+        }
+    }
+
+    /// Extract the rendered text of dates (Tag::Date) from this output.
+    /// Returns None if no dates are found.
+    pub fn extract_date_text(&self) -> Option<String> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(date) = child.extract_date_text() {
+                        return Some(date);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.extract_date_text(),
+            Output::Tagged { tag, child } => match tag {
+                Tag::Date(_) => Some(child.render()),
+                _ => child.extract_date_text(),
+            },
+        }
+    }
+
+    /// Extract the citation number (Tag::CitationNumber) from this output.
+    /// Returns None if no citation number is found.
+    pub fn extract_citation_number(&self) -> Option<i32> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(num) = child.extract_citation_number() {
+                        return Some(num);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.extract_citation_number(),
+            Output::Tagged { tag, child } => match tag {
+                Tag::CitationNumber(n) => Some(*n),
+                _ => child.extract_citation_number(),
+            },
+        }
+    }
+
+    /// Return a copy of this output with names (Tag::Names) suppressed (made null).
+    /// Also strips any leading whitespace that was used as a delimiter after names.
+    pub fn suppress_names(&self) -> Output {
+        let result = self.suppress_names_inner();
+        result.strip_leading_whitespace()
+    }
+
+    /// Inner implementation of suppress_names without whitespace stripping.
+    fn suppress_names_inner(&self) -> Output {
+        match self {
+            Output::Null => Output::Null,
+            Output::Literal(s) => Output::Literal(s.clone()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| c.suppress_names_inner())
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Formatted {
+                        formatting: formatting.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::Linked { url, children } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| c.suppress_names_inner())
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Linked {
+                        url: url.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::InNote(child) => {
+                let new_child = child.suppress_names_inner();
+                if new_child.is_null() {
+                    Output::Null
+                } else {
+                    Output::InNote(Box::new(new_child))
+                }
+            }
+            Output::Tagged { tag, child } => match tag {
+                Tag::Names { .. } => Output::Null, // Suppress names
+                _ => {
+                    let new_child = child.suppress_names_inner();
+                    if new_child.is_null() {
+                        Output::Null
+                    } else {
+                        Output::Tagged {
+                            tag: tag.clone(),
+                            child: Box::new(new_child),
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    /// Strip leading whitespace from this output.
+    /// This handles the case where a group delimiter remains after suppressing names.
+    fn strip_leading_whitespace(&self) -> Output {
+        match self {
+            Output::Null => Output::Null,
+            Output::Literal(s) => {
+                let trimmed = s.trim_start();
+                if trimmed.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Literal(trimmed.to_string())
+                }
+            }
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                if children.is_empty() {
+                    return Output::Null;
+                }
+
+                // Strip leading whitespace from the first child
+                let mut new_children = Vec::with_capacity(children.len());
+                let mut first = true;
+                for child in children {
+                    if first {
+                        let stripped = child.strip_leading_whitespace();
+                        if !stripped.is_null() {
+                            new_children.push(stripped);
+                            first = false;
+                        }
+                        // If stripped is null, skip it and try the next child
+                    } else {
+                        new_children.push(child.clone());
+                    }
+                }
+
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Formatted {
+                        formatting: formatting.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::Linked { url, children } => {
+                if children.is_empty() {
+                    return Output::Null;
+                }
+
+                // Strip leading whitespace from the first child
+                let mut new_children = Vec::with_capacity(children.len());
+                let mut first = true;
+                for child in children {
+                    if first {
+                        let stripped = child.strip_leading_whitespace();
+                        if !stripped.is_null() {
+                            new_children.push(stripped);
+                            first = false;
+                        }
+                    } else {
+                        new_children.push(child.clone());
+                    }
+                }
+
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Linked {
+                        url: url.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::InNote(child) => {
+                let new_child = child.strip_leading_whitespace();
+                if new_child.is_null() {
+                    Output::Null
+                } else {
+                    Output::InNote(Box::new(new_child))
+                }
+            }
+            Output::Tagged { tag, child } => {
+                let new_child = child.strip_leading_whitespace();
+                if new_child.is_null() {
+                    Output::Null
+                } else {
+                    Output::Tagged {
+                        tag: tag.clone(),
+                        child: Box::new(new_child),
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Render text with formatting applied.

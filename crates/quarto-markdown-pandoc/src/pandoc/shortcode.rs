@@ -1,30 +1,15 @@
 /*
  * shortcode.rs
  * Copyright (c) 2025 Posit, PBC
+ *
+ * This module contains conversion functions for shortcodes.
+ * The type definitions (Shortcode, ShortcodeArg) are
+ * defined in quarto-pandoc-types and re-exported from the pandoc module.
  */
 
-use crate::pandoc::inline::{Inline, Inlines, Span};
 use crate::pandoc::location::empty_source_info;
 use hashlink::LinkedHashMap;
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ShortcodeArg {
-    String(String),
-    Number(f64),
-    Boolean(bool),
-    Shortcode(Shortcode),
-    KeyValue(HashMap<String, ShortcodeArg>),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Shortcode {
-    pub is_escaped: bool,
-    pub name: String,
-    pub positional_args: Vec<ShortcodeArg>,
-    pub keyword_args: HashMap<String, ShortcodeArg>,
-}
+use quarto_pandoc_types::{AttrSourceInfo, Inline, Inlines, Shortcode, ShortcodeArg, Span};
 
 fn shortcode_value_span(str: String) -> Inline {
     let mut attr_hash = LinkedHashMap::new();
@@ -40,7 +25,7 @@ fn shortcode_value_span(str: String) -> Inline {
         ),
         content: vec![],
         source_info: empty_source_info(),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        attr_source: AttrSourceInfo::empty(),
     })
 }
 
@@ -64,7 +49,7 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
         ),
         content: vec![],
         source_info: empty_source_info(),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        attr_source: AttrSourceInfo::empty(),
     })
 }
 
@@ -158,6 +143,6 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
         ),
         content,
         source_info: empty_source_info(),
-        attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        attr_source: AttrSourceInfo::empty(),
     }
 }

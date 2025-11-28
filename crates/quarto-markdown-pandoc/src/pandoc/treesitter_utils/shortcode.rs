@@ -7,9 +7,8 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::inline::Inline;
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::shortcode::{Shortcode, ShortcodeArg};
+use crate::pandoc::{Inline, Shortcode, ShortcodeArg};
 use std::collections::HashMap;
 use std::io::Write;
 

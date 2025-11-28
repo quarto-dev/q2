@@ -3,9 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::attr::{Attr, AttrSourceInfo};
-use crate::pandoc::block::Blocks;
-use crate::pandoc::caption::Caption;
+use crate::attr::{Attr, AttrSourceInfo};
+use crate::block::Blocks;
+use crate::caption::Caption;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

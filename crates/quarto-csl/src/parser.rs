@@ -588,6 +588,30 @@ impl CslParser {
             .map(|s| self.parse_sort(s))
             .transpose()?;
 
+        // Parse collapse attributes (only meaningful for citation, but parse anyway)
+        let collapse = self
+            .get_attr(element, "collapse")
+            .map(|a| match a.value.as_str() {
+                "citation-number" => Collapse::CitationNumber,
+                "year" => Collapse::Year,
+                "year-suffix" => Collapse::YearSuffix,
+                "year-suffix-ranged" => Collapse::YearSuffixRanged,
+                _ => Collapse::None,
+            })
+            .unwrap_or(Collapse::None);
+
+        let cite_group_delimiter = self
+            .get_attr(element, "cite-group-delimiter")
+            .map(|a| a.value.clone());
+
+        let after_collapse_delimiter = self
+            .get_attr(element, "after-collapse-delimiter")
+            .map(|a| a.value.clone());
+
+        let year_suffix_delimiter = self
+            .get_attr(element, "year-suffix-delimiter")
+            .map(|a| a.value.clone());
+
         let elements = self.parse_elements(layout_element)?;
 
         Ok(Layout {
@@ -596,6 +620,10 @@ impl CslParser {
             sort,
             name_options,
             elements,
+            collapse,
+            cite_group_delimiter,
+            after_collapse_delimiter,
+            year_suffix_delimiter,
             source_info: element.source_info.clone(),
         })
     }

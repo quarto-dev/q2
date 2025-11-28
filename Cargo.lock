@@ -902,6 +902,7 @@ dependencies = [
  "insta",
  "quarto-csl",
  "quarto-error-reporting",
+ "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-xml",
  "rust-embed",
@@ -987,6 +988,7 @@ dependencies = [
  "paste",
  "quarto-error-message-macros",
  "quarto-error-reporting",
+ "quarto-pandoc-types",
  "quarto-parse-errors",
  "quarto-source-map",
  "quarto-treesitter-ast",
@@ -1007,6 +1009,15 @@ dependencies = [
  "libfuzzer-sys",
  "quarto-markdown-pandoc",
  "yaml-rust2",
+]
+
+[[package]]
+name = "quarto-pandoc-types"
+version = "0.0.0"
+dependencies = [
+ "hashlink",
+ "quarto-source-map",
+ "serde",
 ]
 
 [[package]]

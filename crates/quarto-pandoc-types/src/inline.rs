@@ -3,9 +3,9 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::attr::{Attr, AttrSourceInfo, TargetSourceInfo, is_empty_attr};
-use crate::pandoc::block::Blocks;
-use crate::pandoc::shortcode::Shortcode;
+use crate::attr::{Attr, AttrSourceInfo, TargetSourceInfo, is_empty_attr};
+use crate::block::Blocks;
+use crate::shortcode::Shortcode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -402,12 +402,12 @@ pub fn make_span_inline(
         });
     }
 
-    return Inline::Span(Span {
+    Inline::Span(Span {
         attr,
         content,
         source_info,
         attr_source,
-    });
+    })
 }
 
 pub fn make_cite_inline(
@@ -512,19 +512,10 @@ pub fn make_cite_inline(
             }
         })
         .collect();
-    return Inline::Cite(Cite {
+    Inline::Cite(Cite {
         citations,
         content: vec![],
         source_info,
-    });
-}
-
-fn make_inline_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Inline {
-    let text = node.utf8_text(input_bytes).unwrap().to_string();
-    Inline::RawInline(RawInline {
-        format: "quarto-internal-leftover".to_string(),
-        text,
-        source_info: crate::pandoc::location::node_source_info(node),
     })
 }
 

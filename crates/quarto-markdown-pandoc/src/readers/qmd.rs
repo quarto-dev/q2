@@ -189,7 +189,7 @@ pub fn read<T: Write>(
         }
     };
     // Store complete MetaMapEntry objects to preserve key_source information
-    let mut meta_from_parses: Vec<crate::pandoc::meta::MetaMapEntry> = Vec::new();
+    let mut meta_from_parses: Vec<crate::pandoc::MetaMapEntry> = Vec::new();
     // Track the source_info of the metadata block (for simple case with single block)
     let mut meta_source_info: Option<quarto_source_map::SourceInfo> = None;
     // Create a separate diagnostic collector for metadata parsing warnings

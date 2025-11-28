@@ -4,9 +4,42 @@
 **Created**: 2025-11-27
 **Status**: In Progress
 
+## Important Implementation Notes
+
+### Reference Implementation
+
+**ALWAYS consult `external-sources/citeproc` (Pandoc's Haskell citeproc) as the reference implementation.** Do NOT consult citeproc-js via web searches. The Pandoc citeproc is the authoritative reference for this project.
+
+Key files in `external-sources/citeproc/src/`:
+- `Citeproc/Types.hs` - Core types including `Output a`, `CiteprocOutput` typeclass
+- `Citeproc/Eval.hs` - Evaluation logic including collapse, disambiguation
+- `Citeproc/CslJson.hs` - HTML output format for CSL test suite
+- `Citeproc/Pandoc.hs` - Pandoc Inlines output format
+
+### Output Format Architecture
+
+Pandoc's citeproc uses a **format-agnostic design**:
+
+1. `Output a` - Parameterized AST where `a` is the output type
+2. `CiteprocOutput` typeclass - Defines formatting operations (`addFontWeight`, `addFontStyle`, etc.)
+3. **Two implementations provided:**
+   - `CslJson Text` - Renders to HTML (`<b>`, `<i>`, `<sup>`, etc.) - **used by CSL test suite**
+   - `Inlines` - Renders to Pandoc AST - used for Pandoc integration
+
+**The CSL test suite expects HTML output** because the test harness uses `CslJson Text`.
+See `external-sources/citeproc/src/Citeproc/CslJson.hs:renderCslJson` for the HTML rendering.
+
+Our current implementation hardcodes markdown output (`**bold**`, `*italic*`), which is why
+some tests fail with output like `(**[1]–[3]**)` instead of `<b>([1]–[3])</b>`.
+
+**TODO**: Implement format-agnostic output rendering:
+- Add an output format enum/trait
+- For tests: render to HTML to match test expectations
+- For Quarto: render to Pandoc AST or appropriate format
+
 ## Current State
 
-- 309/896 tests passing (~34.5%)
+- 314/896 tests passing (~35.0%)
 - Output AST architecture complete (k-423)
 - Name formatting inheritance complete
 - et-al-use-last implemented
@@ -157,5 +190,13 @@ Depends on sorting being complete (year suffixes assigned in sort order).
   - Fixed integer ID parsing in citation-items (test harness was skipping integer IDs)
   - Enabled additional passing tests
   - **Result**: 309 tests passing (up from 295)
-- [ ] Phase 3: Citation collapsing
+- [x] Phase 3: Citation collapsing (basic)
+  - Added `Collapse` enum and related attributes to Layout
+  - Implemented `collapse="year"` - groups by author, suppresses repeated names
+  - Implemented `collapse="citation-number"` - detects consecutive ranges
+  - Added Output AST helpers: `extract_names_text()`, `suppress_names()`, `extract_citation_number()`
+  - Added `Tag::CitationNumber` tagging for citation number rendering
+  - Enabled 5 new collapse tests (7 total, 2 were already passing)
+  - **Result**: 314 tests passing (up from 309)
+  - **Remaining**: Year-suffix collapse (requires disambiguation), affixes with collapse (HTML output format)
 - [ ] Phase 4: Full disambiguation

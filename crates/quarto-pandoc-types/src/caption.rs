@@ -3,8 +3,8 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::block::Blocks;
-use crate::pandoc::inline::Inlines;
+use crate::block::Blocks;
+use crate::inline::Inlines;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

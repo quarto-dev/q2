@@ -6,13 +6,12 @@
 use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
 };
-use crate::pandoc::attr::{Attr, is_empty_attr};
-use crate::pandoc::block::{Block, Blocks, DefinitionList, Div, Figure, Plain};
-use crate::pandoc::caption::Caption;
-use crate::pandoc::inline::{Inline, Inlines, Space, Span, Str, Superscript};
 use crate::pandoc::location::empty_source_info;
-use crate::pandoc::pandoc::Pandoc;
 use crate::pandoc::shortcode::shortcode_to_span;
+use crate::pandoc::{
+    is_empty_attr, Attr, Block, Blocks, Caption, DefinitionList, Div, Figure, Inline, Inlines,
+    Pandoc, Plain, Space, Span, Str, Superscript,
+};
 use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
 use hashlink::LinkedHashMap;

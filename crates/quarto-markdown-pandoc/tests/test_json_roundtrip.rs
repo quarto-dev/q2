@@ -87,7 +87,7 @@ fn test_json_roundtrip_complex_document() {
     // Create a more complex document with multiple block types
     let original = Pandoc {
         meta: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaMap {
-            entries: vec![quarto_markdown_pandoc::pandoc::meta::MetaMapEntry {
+            entries: vec![quarto_markdown_pandoc::pandoc::MetaMapEntry {
                 key: "title".to_string(),
                 key_source: quarto_source_map::SourceInfo::default(),
                 value: quarto_markdown_pandoc::pandoc::MetaValueWithSourceInfo::MetaString {

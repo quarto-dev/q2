@@ -3,11 +3,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::MetaValueWithSourceInfo;
-use crate::pandoc::block::MetaBlock;
-use crate::pandoc::inline::AsInline;
-use crate::pandoc::meta::MetaMapEntry;
-use crate::pandoc::{self, Block, Blocks, Inline, Inlines};
+use crate::pandoc::{
+    self, AsInline, Block, Blocks, Inline, Inlines, MetaBlock, MetaMapEntry,
+    MetaValueWithSourceInfo,
+};
 
 // filters are destructive and take ownership of the input
 

@@ -4,20 +4,15 @@
  */
 
 use crate::pandoc::ast_context::ASTContext;
-use crate::pandoc::attr::AttrSourceInfo;
-use crate::pandoc::block::MetaBlock;
 use crate::pandoc::location::{Location, Range};
-use crate::pandoc::meta::MetaMapEntry;
-use crate::pandoc::table::{
-    Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
-};
 use crate::pandoc::{
-    Attr, Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, Code, CodeBlock,
-    DefinitionList, Div, Emph, Figure, Header, HorizontalRule, Image, Inline, Inlines, LineBlock,
-    Link, ListAttributes, ListNumberDelim, ListNumberStyle, Math, MathType,
+    Alignment, Attr, AttrSourceInfo, Block, BlockQuote, BulletList, Caption, Cell, Citation,
+    CitationMode, Cite, Code, CodeBlock, ColSpec, ColWidth, DefinitionList, Div, Emph, Figure,
+    Header, HorizontalRule, Image, Inline, Inlines, LineBlock, Link, ListAttributes,
+    ListNumberDelim, ListNumberStyle, Math, MathType, MetaBlock, MetaMapEntry,
     MetaValueWithSourceInfo, Note, OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted,
-    RawBlock, RawInline, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
-    Superscript, Underline,
+    RawBlock, RawInline, Row, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
+    Superscript, Table, TableBody, TableFoot, TableHead, Underline,
 };
 use quarto_source_map::FileId;
 use serde_json::Value;

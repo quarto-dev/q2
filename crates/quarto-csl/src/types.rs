@@ -199,6 +199,29 @@ pub struct Macro {
     pub source_info: SourceInfo,
 }
 
+/// Citation collapse mode.
+///
+/// Controls how citations are grouped and collapsed within a single citation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Collapse {
+    /// No collapsing.
+    None,
+    /// Collapse by citation number into ranges: "[1-3]" instead of "[1, 2, 3]".
+    CitationNumber,
+    /// Collapse by author, then show years: "(Smith 1900, 2000)" instead of "(Smith 1900, Smith 2000)".
+    Year,
+    /// Collapse by author and year, show suffixes: "(Smith 2000a, b)".
+    YearSuffix,
+    /// Like YearSuffix but with ranges: "(Smith 2000a-c)".
+    YearSuffixRanged,
+}
+
+impl Default for Collapse {
+    fn default() -> Self {
+        Collapse::None
+    }
+}
+
 /// A layout (for citation or bibliography).
 #[derive(Debug, Clone)]
 pub struct Layout {
@@ -212,6 +235,15 @@ pub struct Layout {
     pub name_options: InheritableNameOptions,
     /// Elements in the layout.
     pub elements: Vec<Element>,
+    /// Citation collapse mode (only for citation layouts).
+    pub collapse: Collapse,
+    /// Delimiter between items in a collapsed group.
+    /// Defaults to ", " if not specified.
+    pub cite_group_delimiter: Option<String>,
+    /// Delimiter after a collapsed group.
+    pub after_collapse_delimiter: Option<String>,
+    /// Delimiter between year suffixes when collapsing.
+    pub year_suffix_delimiter: Option<String>,
     /// Source location.
     pub source_info: SourceInfo,
 }

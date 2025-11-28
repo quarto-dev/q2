@@ -7,11 +7,10 @@
 
 use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
 use quarto_markdown_pandoc::pandoc::location::{Location, Range, SourceInfo};
-use quarto_markdown_pandoc::pandoc::meta::{
-    MetaValueWithSourceInfo, parse_metadata_strings_with_source_info,
+use quarto_markdown_pandoc::pandoc::{
+    Inline, MetaValueWithSourceInfo, RawBlock, parse_metadata_strings_with_source_info,
     rawblock_to_meta_with_source_info,
 };
-use quarto_markdown_pandoc::pandoc::{Inline, RawBlock};
 use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
 
 #[test]

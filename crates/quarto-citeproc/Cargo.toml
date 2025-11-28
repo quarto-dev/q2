@@ -9,6 +9,7 @@ description = "Citation processing engine using CSL styles"
 [dependencies]
 quarto-csl = { path = "../quarto-csl" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-xml = { path = "../quarto-xml" }
 hashlink = "0.10.0"

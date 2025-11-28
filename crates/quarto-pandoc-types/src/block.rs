@@ -3,12 +3,12 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use crate::pandoc::MetaValueWithSourceInfo;
-use crate::pandoc::attr::{Attr, AttrSourceInfo};
-use crate::pandoc::caption::Caption;
-use crate::pandoc::inline::Inlines;
-use crate::pandoc::list::ListAttributes;
-use crate::pandoc::table::Table;
+use crate::attr::{Attr, AttrSourceInfo};
+use crate::caption::Caption;
+use crate::inline::Inlines;
+use crate::list::ListAttributes;
+use crate::meta::MetaValueWithSourceInfo;
+use crate::table::Table;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -149,13 +149,4 @@ pub struct NoteDefinitionFencedBlock {
 pub struct CaptionBlock {
     pub content: Inlines,
     pub source_info: quarto_source_map::SourceInfo,
-}
-
-fn make_block_leftover(node: &tree_sitter::Node, input_bytes: &[u8]) -> Block {
-    let text = node.utf8_text(input_bytes).unwrap().to_string();
-    Block::RawBlock(RawBlock {
-        format: "quarto-internal-leftover".to_string(),
-        text,
-        source_info: crate::pandoc::location::node_source_info(node),
-    })
 }
