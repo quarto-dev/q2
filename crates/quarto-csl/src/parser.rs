@@ -370,10 +370,16 @@ impl CslParser {
                 _ => None,
             });
 
+        let limit_day_ordinals = self
+            .get_attr(element, "limit-day-ordinals-to-day-1")
+            .map(|a| a.value == "true")
+            .unwrap_or(false);
+
         StyleOptions {
             demote_non_dropping_particle: demote,
             initialize_with_hyphen: init_hyphen,
             page_range_format: page_range,
+            limit_day_ordinals_to_day_1: limit_day_ordinals,
             source_info: Some(element.source_info.clone()),
         }
     }
@@ -446,6 +452,7 @@ impl CslParser {
 
         let mut terms = Vec::new();
         let mut date_formats = Vec::new();
+        let mut options = None;
 
         for child in element.all_children() {
             match child.name.as_str() {
@@ -459,6 +466,9 @@ impl CslParser {
                 "date" => {
                     date_formats.push(self.parse_date_format(child)?);
                 }
+                "style-options" => {
+                    options = Some(self.parse_style_options(child));
+                }
                 _ => {}
             }
         }
@@ -467,6 +477,7 @@ impl CslParser {
             lang,
             terms,
             date_formats,
+            options,
             source_info: element.source_info.clone(),
         })
     }
@@ -1000,6 +1011,10 @@ impl CslParser {
             })
             .unwrap_or_default();
 
+        let delimiter = self
+            .get_attr(element, "delimiter")
+            .map(|a| a.value.clone());
+
         let range_delimiter = self
             .get_attr(element, "range-delimiter")
             .map(|a| a.value.clone());
@@ -1016,6 +1031,7 @@ impl CslParser {
             form,
             date_parts,
             parts,
+            delimiter,
             range_delimiter,
         })
     }

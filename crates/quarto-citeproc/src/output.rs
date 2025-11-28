@@ -65,6 +65,10 @@ pub enum Tag {
     Prefix,
     /// Marks a suffix.
     Suffix,
+    /// Marks content that should not have case transformations applied.
+    NoCase,
+    /// Marks content with no decoration (reset all formatting to normal).
+    NoDecoration,
 }
 
 /// Intermediate output representation with semantic tagging.
@@ -470,7 +474,7 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
     use quarto_csl::{FontStyle, FontVariant, FontWeight, VerticalAlign};
     use quarto_pandoc_types::{
         empty_attr, Block, Emph, Inline, Link, Note, Paragraph, Quoted, QuoteType, SmallCaps,
-        Str, Strong, Subscript, Superscript,
+        Span, Str, Strong, Subscript, Superscript,
     };
 
     match output {
@@ -485,9 +489,43 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 })]
             }
         }
-        Output::Tagged { child, .. } => {
-            // Tags are transparent for rendering
-            to_inlines_inner(child)
+        Output::Tagged { tag, child } => {
+            // Most tags are transparent for rendering
+            let inner = to_inlines_inner(child);
+            match tag {
+                Tag::NoCase => {
+                    // Wrap in a Span with class "nocase" to prevent text-case transformations
+                    if inner.is_empty() {
+                        vec![]
+                    } else {
+                        // Create attr with nocase class: (id, classes, attrs)
+                        let mut attr = empty_attr();
+                        attr.1.push("nocase".to_string());
+                        vec![Inline::Span(Span {
+                            attr,
+                            content: inner,
+                            source_info: empty_source_info(),
+                            attr_source: empty_attr_source(),
+                        })]
+                    }
+                }
+                Tag::NoDecoration => {
+                    // Wrap in a Span with class "nodecoration" to reset formatting
+                    if inner.is_empty() {
+                        vec![]
+                    } else {
+                        let mut attr = empty_attr();
+                        attr.1.push("nodecoration".to_string());
+                        vec![Inline::Span(Span {
+                            attr,
+                            content: inner,
+                            source_info: empty_source_info(),
+                            attr_source: empty_attr_source(),
+                        })]
+                    }
+                }
+                _ => inner,
+            }
         }
         Output::Linked { url, children } => {
             let content: Vec<Inline> = children.iter().flat_map(to_inlines_inner).collect();
@@ -530,22 +568,44 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 return vec![];
             }
 
-            // Apply text case transformation to all Str nodes in the inner content
-            if let Some(text_case) = &formatting.text_case {
-                apply_text_case_to_inlines(&mut inner, text_case);
-            }
+            // CSL formatting order (from innermost to outermost):
+            // 1. strip-periods
+            // 2. prefix/suffix (affixesInside=true for layout elements)
+            // 3. font-style (italic)
+            // 4. text-case
+            // 5. font-variant (small-caps)
+            // 6. font-weight (bold)
+            // 7. vertical-align (sup/sub)
+            // 8. quotes
+            //
+            // See Pandoc citeproc Types.hs:addFormatting for reference.
 
-            // Apply strip periods to all Str nodes in the inner content
+            // 1. Apply strip periods
             if formatting.strip_periods {
                 apply_strip_periods_to_inlines(&mut inner);
             }
 
-            // Now wrap with formatting wrappers
-            // Order matters: innermost first
-            // font_style (italic) → font_weight (bold) → font_variant (small-caps)
-            // → vertical_align (sup/sub) → quotes
+            // 2. Apply prefix/suffix (INSIDE formatting, per CSL spec for layout elements)
+            if let Some(ref prefix) = formatting.prefix {
+                if !prefix.is_empty() {
+                    let mut result = vec![Inline::Str(Str {
+                        text: prefix.clone(),
+                        source_info: empty_source_info(),
+                    })];
+                    result.extend(inner);
+                    inner = result;
+                }
+            }
+            if let Some(ref suffix) = formatting.suffix {
+                if !suffix.is_empty() {
+                    inner.push(Inline::Str(Str {
+                        text: suffix.clone(),
+                        source_info: empty_source_info(),
+                    }));
+                }
+            }
 
-            // Apply font_style (italic)
+            // 3. Apply font_style (italic)
             if let Some(FontStyle::Italic) = formatting.font_style {
                 inner = vec![Inline::Emph(Emph {
                     content: inner,
@@ -553,15 +613,12 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 })];
             }
 
-            // Apply font_weight (bold)
-            if let Some(FontWeight::Bold) = formatting.font_weight {
-                inner = vec![Inline::Strong(Strong {
-                    content: inner,
-                    source_info: empty_source_info(),
-                })];
+            // 4. Apply text case transformation to all Str nodes
+            if let Some(text_case) = &formatting.text_case {
+                apply_text_case_to_inlines(&mut inner, text_case);
             }
 
-            // Apply font_variant (small-caps)
+            // 5. Apply font_variant (small-caps)
             if let Some(FontVariant::SmallCaps) = formatting.font_variant {
                 inner = vec![Inline::SmallCaps(SmallCaps {
                     content: inner,
@@ -569,7 +626,15 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 })];
             }
 
-            // Apply vertical_align (superscript/subscript)
+            // 6. Apply font_weight (bold)
+            if let Some(FontWeight::Bold) = formatting.font_weight {
+                inner = vec![Inline::Strong(Strong {
+                    content: inner,
+                    source_info: empty_source_info(),
+                })];
+            }
+
+            // 7. Apply vertical_align (superscript/subscript)
             match formatting.vertical_align {
                 Some(VerticalAlign::Sup) => {
                     inner = vec![Inline::Superscript(Superscript {
@@ -586,35 +651,13 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 _ => {}
             }
 
-            // Apply quotes
+            // 8. Apply quotes
             if formatting.quotes {
                 inner = vec![Inline::Quoted(Quoted {
                     quote_type: QuoteType::DoubleQuote,
                     content: inner,
                     source_info: empty_source_info(),
                 })];
-            }
-
-            // Apply prefix
-            if let Some(ref prefix) = formatting.prefix {
-                if !prefix.is_empty() {
-                    let mut result = vec![Inline::Str(Str {
-                        text: prefix.clone(),
-                        source_info: empty_source_info(),
-                    })];
-                    result.extend(inner);
-                    inner = result;
-                }
-            }
-
-            // Apply suffix
-            if let Some(ref suffix) = formatting.suffix {
-                if !suffix.is_empty() {
-                    inner.push(Inline::Str(Str {
-                        text: suffix.clone(),
-                        source_info: empty_source_info(),
-                    }));
-                }
             }
 
             inner
@@ -646,7 +689,15 @@ fn apply_text_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, text_c
             Inline::Subscript(s) => apply_text_case_to_inlines(&mut s.content, text_case),
             Inline::Quoted(q) => apply_text_case_to_inlines(&mut q.content, text_case),
             Inline::Link(l) => apply_text_case_to_inlines(&mut l.content, text_case),
-            Inline::Span(s) => apply_text_case_to_inlines(&mut s.content, text_case),
+            Inline::Span(s) => {
+                // Check for nocase class - skip text transformation for this content
+                let (_, classes, _) = &s.attr;
+                if classes.iter().any(|c| c == "nocase") {
+                    // Don't apply case transformation to nocase spans
+                } else {
+                    apply_text_case_to_inlines(&mut s.content, text_case);
+                }
+            }
             // Other inline types don't contain text we should transform
             _ => {}
         }
@@ -769,6 +820,198 @@ pub fn join_outputs(outputs: Vec<Output>, delimiter: &str) -> Output {
         formatting: Formatting::default(),
         children,
     }
+}
+
+// ============================================================================
+// CSL Rich Text Parser
+// ============================================================================
+
+/// Parse CSL-JSON rich text (HTML-like markup) into Output AST.
+///
+/// CSL-JSON text fields can contain inline HTML markup:
+/// - `<i>...</i>` - italics
+/// - `<b>...</b>` - bold
+/// - `<sup>...</sup>` - superscript
+/// - `<sub>...</sub>` - subscript
+/// - `<span style="font-variant:small-caps;">...</span>` - small caps
+/// - `<span class="nocase">...</span>` - no case transformation
+///
+/// This parser converts that markup into Output AST nodes.
+/// Malformed HTML (e.g., `</i>` without opening) is escaped.
+pub fn parse_csl_rich_text(text: &str) -> Output {
+    let mut parser = RichTextParser::new(text);
+    parser.parse()
+}
+
+struct RichTextParser<'a> {
+    input: &'a str,
+    pos: usize,
+}
+
+impl<'a> RichTextParser<'a> {
+    fn new(input: &'a str) -> Self {
+        Self { input, pos: 0 }
+    }
+
+    fn remaining(&self) -> &'a str {
+        &self.input[self.pos..]
+    }
+
+    fn parse(&mut self) -> Output {
+        let children = self.parse_children(None);
+        if children.is_empty() {
+            Output::Null
+        } else if children.len() == 1 {
+            children.into_iter().next().unwrap()
+        } else {
+            Output::sequence(children)
+        }
+    }
+
+    fn parse_children(&mut self, end_tag: Option<&str>) -> Vec<Output> {
+        let mut children = Vec::new();
+        let mut text_start = self.pos;
+
+        while self.pos < self.input.len() {
+            // Check for end tag
+            if let Some(tag) = end_tag {
+                if self.remaining().starts_with(tag) {
+                    // Flush accumulated text
+                    if self.pos > text_start {
+                        children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+                    }
+                    self.pos += tag.len();
+                    return children;
+                }
+            }
+
+            // Check for start of a tag
+            if self.remaining().starts_with('<') {
+                // Flush accumulated text
+                if self.pos > text_start {
+                    children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+                }
+
+                // Try to parse a tag
+                if let Some(output) = self.try_parse_tag() {
+                    children.push(output);
+                    text_start = self.pos;
+                } else {
+                    // Not a valid tag, treat '<' as literal but escape it
+                    children.push(Output::Literal("<".to_string()));
+                    self.pos += 1;
+                    text_start = self.pos;
+                }
+            } else {
+                self.pos += self.remaining().chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            }
+        }
+
+        // Flush remaining text
+        if self.pos > text_start {
+            children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+        }
+
+        children
+    }
+
+    fn try_parse_tag(&mut self) -> Option<Output> {
+        let remaining = self.remaining();
+
+        // Try each known tag type
+        if remaining.starts_with("<i>") {
+            self.pos += 3;
+            let inner = self.parse_children(Some("</i>"));
+            let mut fmt = Formatting::default();
+            fmt.font_style = Some(quarto_csl::FontStyle::Italic);
+            return Some(Output::formatted(fmt, inner));
+        }
+
+        if remaining.starts_with("<b>") {
+            self.pos += 3;
+            let inner = self.parse_children(Some("</b>"));
+            let mut fmt = Formatting::default();
+            fmt.font_weight = Some(quarto_csl::FontWeight::Bold);
+            return Some(Output::formatted(fmt, inner));
+        }
+
+        if remaining.starts_with("<sup>") {
+            self.pos += 5;
+            let inner = self.parse_children(Some("</sup>"));
+            let mut fmt = Formatting::default();
+            fmt.vertical_align = Some(quarto_csl::VerticalAlign::Sup);
+            return Some(Output::formatted(fmt, inner));
+        }
+
+        if remaining.starts_with("<sub>") {
+            self.pos += 5;
+            let inner = self.parse_children(Some("</sub>"));
+            let mut fmt = Formatting::default();
+            fmt.vertical_align = Some(quarto_csl::VerticalAlign::Sub);
+            return Some(Output::formatted(fmt, inner));
+        }
+
+        // Small caps: <span style="font-variant:small-caps;">
+        if remaining.starts_with("<span style=\"font-variant:small-caps;\">")
+            || remaining.starts_with("<span style=\"font-variant: small-caps;\">")
+        {
+            let tag_end = remaining.find('>').unwrap() + 1;
+            self.pos += tag_end;
+            let inner = self.parse_children(Some("</span>"));
+            let mut fmt = Formatting::default();
+            fmt.font_variant = Some(quarto_csl::FontVariant::SmallCaps);
+            return Some(Output::formatted(fmt, inner));
+        }
+
+        // No case: <span class="nocase">
+        if remaining.starts_with("<span class=\"nocase\">") {
+            self.pos += 21;
+            let inner = self.parse_children(Some("</span>"));
+            // Tag this content as NoCase to prevent case transformations
+            let inner_output = if inner.len() == 1 {
+                inner.into_iter().next().unwrap()
+            } else {
+                Output::sequence(inner)
+            };
+            return Some(Output::tagged(Tag::NoCase, inner_output));
+        }
+
+        // No decoration: <span class="nodecor"> - resets all formatting to normal
+        if remaining.starts_with("<span class=\"nodecor\">") {
+            self.pos += 22;
+            let inner = self.parse_children(Some("</span>"));
+            // Tag this content as NoDecoration to reset formatting
+            let inner_output = if inner.len() == 1 {
+                inner.into_iter().next().unwrap()
+            } else {
+                Output::sequence(inner)
+            };
+            return Some(Output::tagged(Tag::NoDecoration, inner_output));
+        }
+
+        // Stray closing tag - escape it
+        if remaining.starts_with("</i>")
+            || remaining.starts_with("</b>")
+            || remaining.starts_with("</sup>")
+            || remaining.starts_with("</sub>")
+            || remaining.starts_with("</span>")
+        {
+            // Find the end of the tag
+            if let Some(end) = remaining.find('>') {
+                let tag = &remaining[..=end];
+                self.pos += tag.len();
+                // Return escaped version
+                return Some(Output::Literal(escape_html_tag(tag)));
+            }
+        }
+
+        None
+    }
+}
+
+/// Escape an HTML tag for display (convert < > to entity references).
+fn escape_html_tag(tag: &str) -> String {
+    tag.replace('<', "&#60;").replace('>', "&#62;")
 }
 
 // ============================================================================
@@ -940,11 +1183,26 @@ fn capitalize_first(s: &str) -> String {
 }
 
 /// Capitalize the first character of each word.
+/// Preserves leading and trailing whitespace.
 fn capitalize_all(s: &str) -> String {
-    s.split_whitespace()
+    // Preserve leading whitespace
+    let leading: String = s.chars().take_while(|c| c.is_whitespace()).collect();
+    // Preserve trailing whitespace
+    let trailing: String = s.chars().rev().take_while(|c| c.is_whitespace()).collect::<String>().chars().rev().collect();
+
+    // Process the middle part
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return s.to_string(); // Just whitespace, return as-is
+    }
+
+    let capitalized = trimmed
+        .split_whitespace()
         .map(capitalize_first)
         .collect::<Vec<_>>()
-        .join(" ")
+        .join(" ");
+
+    format!("{}{}{}", leading, capitalized, trailing)
 }
 
 /// Apply title case (capitalize major words).
@@ -984,6 +1242,32 @@ pub fn join_with_delimiter(outputs: Vec<OutputBuilder>, delimiter: &str) -> Outp
 
 /// Render Pandoc Inlines to HTML using CSL conventions.
 ///
+/// Rendering context for CSL HTML output with flip-flop formatting support.
+///
+/// CSL implements "flip-flop" formatting where nested identical styles toggle:
+/// - `<i>outer <i>inner</i> outer</i>` → `<i>outer <span style="font-style:normal;">inner</span> outer</i>`
+/// - Same for bold and small-caps
+///
+/// The context tracks whether we're currently inside each formatting type.
+/// When `use_italics` is true, we're NOT inside italics (can use `<i>`).
+/// When `use_italics` is false, we're inside italics (must use normal span for nested).
+#[derive(Clone, Copy)]
+struct CslRenderContext {
+    use_italics: bool,
+    use_bold: bool,
+    use_small_caps: bool,
+}
+
+impl Default for CslRenderContext {
+    fn default() -> Self {
+        Self {
+            use_italics: true,
+            use_bold: true,
+            use_small_caps: true,
+        }
+    }
+}
+
 /// CSL test fixtures use `<i>` instead of `<em>`, `<b>` instead of `<strong>`,
 /// and `<sc>` instead of CSS-based small-caps. This writer produces output
 /// that matches the CSL test expectations.
@@ -992,13 +1276,18 @@ pub fn join_with_delimiter(outputs: Vec<OutputBuilder>, delimiter: &str) -> Outp
 /// quarto-markdown-pandoc's HTML writer.
 pub fn render_inlines_to_csl_html(inlines: &quarto_pandoc_types::Inlines) -> String {
     let mut result = String::new();
+    let ctx = CslRenderContext::default();
     for inline in inlines {
-        render_inline_to_csl_html(inline, &mut result);
+        render_inline_to_csl_html_with_ctx(inline, &mut result, ctx);
     }
     result
 }
 
-fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut String) {
+fn render_inline_to_csl_html_with_ctx(
+    inline: &quarto_pandoc_types::Inline,
+    output: &mut String,
+    ctx: CslRenderContext,
+) {
     use quarto_pandoc_types::{Block, Inline};
 
     match inline {
@@ -1016,37 +1305,89 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
             output.push_str("<br/>");
         }
         Inline::Emph(e) => {
-            output.push_str("<i>");
-            for child in &e.content {
-                render_inline_to_csl_html(child, output);
+            // Flip-flop: if we can use italics, output <i> and toggle off
+            // If we're already in italics, output normal span and toggle on
+            if ctx.use_italics {
+                output.push_str("<i>");
+                let new_ctx = CslRenderContext {
+                    use_italics: false,
+                    ..ctx
+                };
+                for child in &e.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                }
+                output.push_str("</i>");
+            } else {
+                output.push_str("<span style=\"font-style:normal;\">");
+                let new_ctx = CslRenderContext {
+                    use_italics: true,
+                    ..ctx
+                };
+                for child in &e.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                }
+                output.push_str("</span>");
             }
-            output.push_str("</i>");
         }
         Inline::Strong(s) => {
-            output.push_str("<b>");
-            for child in &s.content {
-                render_inline_to_csl_html(child, output);
+            // Flip-flop for bold
+            if ctx.use_bold {
+                output.push_str("<b>");
+                let new_ctx = CslRenderContext {
+                    use_bold: false,
+                    ..ctx
+                };
+                for child in &s.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                }
+                output.push_str("</b>");
+            } else {
+                output.push_str("<span style=\"font-weight:normal;\">");
+                let new_ctx = CslRenderContext {
+                    use_bold: true,
+                    ..ctx
+                };
+                for child in &s.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                }
+                output.push_str("</span>");
             }
-            output.push_str("</b>");
         }
         Inline::SmallCaps(s) => {
-            output.push_str("<span style=\"font-variant:small-caps;\">");
-            for child in &s.content {
-                render_inline_to_csl_html(child, output);
+            // Flip-flop for small-caps
+            if ctx.use_small_caps {
+                output.push_str("<span style=\"font-variant:small-caps;\">");
+                let new_ctx = CslRenderContext {
+                    use_small_caps: false,
+                    ..ctx
+                };
+                for child in &s.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                }
+                output.push_str("</span>");
+            } else {
+                output.push_str("<span style=\"font-variant:normal;\">");
+                let new_ctx = CslRenderContext {
+                    use_small_caps: true,
+                    ..ctx
+                };
+                for child in &s.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                }
+                output.push_str("</span>");
             }
-            output.push_str("</span>");
         }
         Inline::Superscript(s) => {
             output.push_str("<sup>");
             for child in &s.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
             output.push_str("</sup>");
         }
         Inline::Subscript(s) => {
             output.push_str("<sub>");
             for child in &s.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
             output.push_str("</sub>");
         }
@@ -1056,14 +1397,14 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
                 quarto_pandoc_types::QuoteType::DoubleQuote => {
                     output.push('"');
                     for child in &q.content {
-                        render_inline_to_csl_html(child, output);
+                        render_inline_to_csl_html_with_ctx(child, output, ctx);
                     }
                     output.push('"');
                 }
                 quarto_pandoc_types::QuoteType::SingleQuote => {
                     output.push('\'');
                     for child in &q.content {
-                        render_inline_to_csl_html(child, output);
+                        render_inline_to_csl_html_with_ctx(child, output, ctx);
                     }
                     output.push('\'');
                 }
@@ -1074,7 +1415,7 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
             output.push_str(&html_escape(&l.target.0));
             output.push_str("\">");
             for child in &l.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
             output.push_str("</a>");
         }
@@ -1084,12 +1425,12 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
                 match block {
                     Block::Paragraph(p) => {
                         for child in &p.content {
-                            render_inline_to_csl_html(child, output);
+                            render_inline_to_csl_html_with_ctx(child, output, ctx);
                         }
                     }
                     Block::Plain(p) => {
                         for child in &p.content {
-                            render_inline_to_csl_html(child, output);
+                            render_inline_to_csl_html_with_ctx(child, output, ctx);
                         }
                     }
                     // Other block types are not expected in CSL output
@@ -1098,22 +1439,53 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
             }
         }
         Inline::Span(s) => {
-            // Spans are transparent - just render children
-            for child in &s.content {
-                render_inline_to_csl_html(child, output);
+            let (_, classes, _) = &s.attr;
+            if classes.iter().any(|c| c == "nodecoration") {
+                // NoDecoration: reset all currently active formatting to normal
+                // Build a style string with normal values for all active formats
+                let mut styles = Vec::new();
+                if !ctx.use_small_caps {
+                    styles.push("font-variant:normal;");
+                }
+                if !ctx.use_bold {
+                    styles.push("font-weight:normal;");
+                }
+                if !ctx.use_italics {
+                    styles.push("font-style:normal;");
+                }
+                if !styles.is_empty() {
+                    output.push_str("<span style=\"");
+                    for style in &styles {
+                        output.push_str(style);
+                    }
+                    output.push_str("\">");
+                }
+                // Reset context to all true (not inside any formatting)
+                let reset_ctx = CslRenderContext::default();
+                for child in &s.content {
+                    render_inline_to_csl_html_with_ctx(child, output, reset_ctx);
+                }
+                if !styles.is_empty() {
+                    output.push_str("</span>");
+                }
+            } else {
+                // Other spans are transparent - just render children
+                for child in &s.content {
+                    render_inline_to_csl_html_with_ctx(child, output, ctx);
+                }
             }
         }
         Inline::Strikeout(s) => {
             output.push_str("<del>");
             for child in &s.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
             output.push_str("</del>");
         }
         Inline::Underline(u) => {
             output.push_str("<u>");
             for child in &u.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
             output.push_str("</u>");
         }
@@ -1138,14 +1510,14 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
             output.push_str("\" alt=\"");
             // Render alt text from content
             for child in &i.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
             output.push_str("\"/>");
         }
         Inline::Cite(c) => {
             // Render citations inline
             for child in &c.content {
-                render_inline_to_csl_html(child, output);
+                render_inline_to_csl_html_with_ctx(child, output, ctx);
             }
         }
         // Quarto-specific types
@@ -1162,18 +1534,93 @@ fn render_inline_to_csl_html(inline: &quarto_pandoc_types::Inline, output: &mut 
 }
 
 /// Escape HTML special characters.
+///
+/// Preserves existing numeric character references (&#NN;) and named entities (&name;)
+/// to avoid double-escaping content that's already escaped.
 fn html_escape(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
-    for c in s.chars() {
+    let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let c = chars[i];
         match c {
-            '&' => result.push_str("&amp;"),
-            '<' => result.push_str("&lt;"),
-            '>' => result.push_str("&gt;"),
-            '"' => result.push_str("&quot;"),
-            _ => result.push(c),
+            '&' => {
+                // Check if this is already an entity reference
+                if is_entity_reference(&chars[i..]) {
+                    // Copy the entity reference as-is
+                    result.push('&');
+                    i += 1;
+                    while i < chars.len() && chars[i] != ';' {
+                        result.push(chars[i]);
+                        i += 1;
+                    }
+                    if i < chars.len() {
+                        result.push(';');
+                        i += 1;
+                    }
+                } else {
+                    // Use numeric entity like Pandoc citeproc
+                    result.push_str("&#38;");
+                    i += 1;
+                }
+            }
+            '<' => {
+                // Use numeric entity like Pandoc citeproc
+                result.push_str("&#60;");
+                i += 1;
+            }
+            '>' => {
+                // Use numeric entity like Pandoc citeproc
+                result.push_str("&#62;");
+                i += 1;
+            }
+            // Note: Quotes are NOT escaped in CSL output per Pandoc citeproc behavior
+            _ => {
+                result.push(c);
+                i += 1;
+            }
         }
     }
     result
+}
+
+/// Check if the slice starting at the given position is an entity reference.
+/// Matches: &#NN; (numeric) or &name; (named)
+fn is_entity_reference(chars: &[char]) -> bool {
+    if chars.len() < 3 || chars[0] != '&' {
+        return false;
+    }
+
+    // Numeric entity: &#digits;
+    if chars[1] == '#' {
+        let mut i = 2;
+        // Could be &#xHH; (hex) or &#NN; (decimal)
+        if i < chars.len() && (chars[i] == 'x' || chars[i] == 'X') {
+            i += 1;
+            // Hex digits
+            while i < chars.len() && chars[i].is_ascii_hexdigit() {
+                i += 1;
+            }
+        } else {
+            // Decimal digits
+            while i < chars.len() && chars[i].is_ascii_digit() {
+                i += 1;
+            }
+        }
+        return i > 2 && i < chars.len() && chars[i] == ';';
+    }
+
+    // Named entity: &name;
+    if chars[1].is_ascii_alphabetic() {
+        let mut i = 2;
+        while i < chars.len() && chars[i].is_ascii_alphanumeric() {
+            i += 1;
+        }
+        return i > 1 && i < chars.len() && chars[i] == ';';
+    }
+
+    false
 }
 
 #[cfg(test)]
@@ -1524,9 +1971,70 @@ mod tests {
 
     #[test]
     fn test_to_inlines_html_escape() {
+        // Uses numeric entity references like Pandoc citeproc
         let output = Output::literal("A < B & C > D");
         let inlines = output.to_inlines();
         let html = render_inlines_to_csl_html(&inlines);
-        assert_eq!(html, "A &lt; B &amp; C &gt; D");
+        assert_eq!(html, "A &#60; B &#38; C &#62; D");
+    }
+
+    #[test]
+    fn test_to_inlines_bold_with_prefix_suffix() {
+        // CSL spec: prefix/suffix go INSIDE formatting for layout elements
+        // So bold + prefix="(" + suffix=")" should produce <b>(...)</b>
+        let mut formatting = Formatting::default();
+        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        formatting.prefix = Some("(".to_string());
+        formatting.suffix = Some(")".to_string());
+
+        let output = Output::formatted(formatting, vec![Output::literal("[1]")]);
+        let inlines = output.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+        assert_eq!(html, "<b>([1])</b>");
+    }
+
+    #[test]
+    fn test_to_inlines_italic_with_prefix_suffix() {
+        // Italic wraps the prefix/suffix
+        let mut formatting = Formatting::default();
+        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        formatting.prefix = Some("[".to_string());
+        formatting.suffix = Some("]".to_string());
+
+        let output = Output::formatted(formatting, vec![Output::literal("Title")]);
+        let inlines = output.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+        assert_eq!(html, "<i>[Title]</i>");
+    }
+}
+
+#[cfg(test)]
+mod rich_text_tests {
+    use super::*;
+
+    #[test]
+    fn test_nocase_span_preserves_spaces() {
+        let input = "a <span class=\"nocase\">SMITH</span> Pencil";
+        let output = parse_csl_rich_text(input);
+        let inlines = output.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+        // Spaces should be preserved
+        assert_eq!(html, "a SMITH Pencil");
+    }
+
+    #[test]
+    fn test_nocase_with_capitalize_all() {
+        let input = "a <span class=\"nocase\">SMITH</span> Pencil";
+        let output = parse_csl_rich_text(input);
+
+        // Apply capitalize-all formatting
+        let mut formatting = Formatting::default();
+        formatting.text_case = Some(quarto_csl::TextCase::CapitalizeAll);
+        let formatted = Output::formatted(formatting, vec![output]);
+
+        let inlines = formatted.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+        // SMITH should stay unchanged due to nocase, other words should be capitalized
+        assert_eq!(html, "A SMITH Pencil");
     }
 }

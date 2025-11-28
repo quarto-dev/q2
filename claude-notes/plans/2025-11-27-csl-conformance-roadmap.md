@@ -39,7 +39,11 @@ some tests fail with output like `(**[1]–[3]**)` instead of `<b>([1]–[3])</b
 
 ## Current State
 
-- 314/896 tests passing (~35.0%)
+- **394 total tests passing (44.0% coverage)**
+- Up from 348 at start of 2025-11-28 session
+- Up from 343 after k-434 (date era formatting) fix
+- Up from 332 after k-430, k-431, k-432, k-433 fixes
+- Output AST → Pandoc Inlines pipeline complete (k-429)
 - Output AST architecture complete (k-423)
 - Name formatting inheritance complete
 - et-al-use-last implemented
@@ -48,6 +52,39 @@ some tests fail with output like `(**[1]–[3]**)` instead of `<b>([1]–[3])</b
 - Citation sorting implemented
 - Reference insertion order preserved (using LinkedHashMap)
 - Citation-number sorting (basic) implemented
+- Negative year (BC) and ancient year (AD) formatting implemented
+- Smart date range collapsing implemented
+- Season-as-month substitution implemented
+- Raw/literal date fallback implemented
+- Day ordinal limiting (`limit-day-ordinals-to-day-1`) implemented
+
+## Recent Progress (2025-11-28 Session)
+
+### Date Test Improvements (+46 tests)
+
+1. **Made `type` field optional** in Reference struct - defaults to empty string, matching Pandoc citeproc behavior
+
+2. **Fixed UTF-8 BOM handling** in test parser - strips BOM before parsing test files
+
+3. **Season substitution** - When a date has `season` but no month in date-parts, substitute season as pseudo-month (21-24)
+   - Enabled: `date_OtherWithDate`, `date_SeasonSubstituteInGroup`
+
+4. **Raw/literal date fallback** - When `date-parts` is empty but `raw` field is present, use raw string
+   - Enabled: `date_String`
+
+5. **Smart date range collapsing** - Suppress repeated parts in date ranges:
+   - Same month+year: `10 August 2003–23 August 2003` → `10–23 August 2003`
+   - Same year: `3 August–23 October 2003` (year not repeated)
+   - Open ranges: `2003–` for ongoing dates
+   - Enabled: `date_SeasonRange2`, `date_SeasonRange3`, `date_TextFormFulldateDayRange`, `date_TextFormFulldateMonthRange`, `date_TextFormMonthdateMonthRange`, `date_TextFormYeardateYearRangeOpen`
+
+6. **Localized date formats** - All 39 locale-specific date format tests now pass
+   - Enabled: `date_LocalizedDateFormats-*` (af-ZA through zh-TW)
+
+7. **Day ordinal limiting** - `limit-day-ordinals-to-day-1="true"` style option
+   - Only day 1 gets ordinal suffix ("1st"), other days are numeric ("2", "3")
+   - Added `options` field to Locale struct for locale-level style option overrides
+   - Enabled: `date_DayOrdinalDayOneOnly`
 
 ## Test Coverage Analysis
 
@@ -55,7 +92,7 @@ some tests fail with output like `(**[1]–[3]**)` instead of `<b>([1]–[3])</b
 |----------|---------|-------|-----|----------|
 | name | 14 | 111 | 97 | 12.6% |
 | nameattr | 16 | 97 | 81 | 16.5% |
-| date | 26 | 101 | 75 | 25.7% |
+| date | 75 | 101 | 26 | 74.3% |
 | bugreports | 9 | 83 | 74 | 10.8% |
 | disambiguate | 5 | 72 | 67 | 6.9% |
 | sort | 4 | 66 | 62 | 6.1% |
@@ -64,6 +101,11 @@ some tests fail with output like `(**[1]–[3]**)` instead of `<b>([1]–[3])</b
 | collapse | 0 | 21 | 21 | 0% |
 | flipflop | 0 | 19 | 19 | 0% |
 | condition | 10 | 17 | 7 | 58.8% |
+
+### Remaining Date Tests (26 ignored)
+
+- **Year suffix** tests - Part of disambiguation system (larger feature)
+- Various edge cases and complex scenarios
 
 ## Roadmap
 
@@ -200,3 +242,24 @@ Depends on sorting being complete (year suffixes assigned in sort order).
   - **Result**: 314 tests passing (up from 309)
   - **Remaining**: Year-suffix collapse (requires disambiguation), affixes with collapse (HTML output format)
 - [ ] Phase 4: Full disambiguation
+
+## Discovered Issues (2025-11-27)
+
+Analysis of 582 ignored tests revealed these blocking issues. See detailed analysis in
+`claude-notes/plans/2025-11-27-csl-failing-test-analysis.md`.
+
+| Issue | Priority | Tests Affected | Description |
+|-------|----------|----------------|-------------|
+| k-430 | P2 | collapse_*, formatting | ✅ FIXED: Prefix/suffix ordering - now inside formatting for layout |
+| k-431 | P2 | flipflop_*, textcase_* | ✅ FIXED: HTML markup in CSL-JSON now parsed (5/6 flipflop cases pass; remaining needs k-432) |
+| k-432 | P3 | 19 flipflop_* tests | ✅ FIXED: Flip-flop formatting with CslRenderContext (2 tests pass, others need title-case fixes) |
+| k-433 | P3 | textcase_* tests | ✅ FIXED: nocase span support, quote escaping, whitespace in capitalize_all (6 new tests) |
+| k-434 | P3 | date_Negative* | ✅ FIXED: Date era formatting (BC/AD for negative years, sort key adjustment for chronological order) |
+
+### Recommended Implementation Order
+
+1. **k-430**: Prefix/suffix ordering - architectural fix, unlocks many tests
+2. **k-431**: HTML in CSL-JSON - common pattern, blocks multiple categories
+3. **k-433**: Quote escaping - quick fix for some text case tests
+4. **k-432**: Flip-flop formatting - enables 19 tests
+5. **k-434**: Date era formatting - isolated feature

@@ -50,6 +50,7 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
         lang,
         terms,
         date_formats,
+        options: None,
         source_info: root.source_info.clone(),
     })
 }

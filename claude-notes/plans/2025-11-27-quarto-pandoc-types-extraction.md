@@ -123,14 +123,14 @@ From `quarto-markdown-pandoc/src/pandoc/`:
 7. ✅ Verify quarto-markdown-pandoc builds and tests pass (428 tests)
 8. ✅ Add quarto-pandoc-types dependency to quarto-citeproc (314 tests pass)
 
-### Phase 2: Integrate with quarto-citeproc
+### Phase 2: Integrate with quarto-citeproc ✅ COMPLETED
 
-1. Add quarto-pandoc-types dependency to quarto-citeproc
-2. Implement `Output::to_inlines()` conversion
-3. Add quarto-markdown-pandoc as dev-dependency
-4. Create CSL HTML writer for tests (maps `Emph` → `<i>`, `Strong` → `<b>`)
-5. Update test harness to use: `Output → to_inlines() → CSL HTML`
-6. Verify existing tests still pass
+1. ✅ Add quarto-pandoc-types dependency to quarto-citeproc
+2. ✅ Implement `Output::to_inlines()` conversion
+3. ✅ Create CSL HTML writer for tests (maps `Emph` → `<i>`, `Strong` → `<b>`)
+4. ✅ Update test harness to use: `Output → to_inlines() → CSL HTML`
+5. ✅ Add `process_citation_to_output()` and `generate_bibliography_to_outputs()` methods
+6. ✅ Verify all 327 existing tests still pass
 
 ### Phase 3: Enable more tests
 

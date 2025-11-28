@@ -423,11 +423,13 @@ fn evaluate_text(
                     Output::Null
                 }
             } else if let Some(value) = ctx.reference.get_variable(name) {
+                // Parse CSL rich text (HTML-like markup) from the value
+                let parsed = crate::output::parse_csl_rich_text(&value);
                 // Tag title for potential hyperlinking
                 if name == "title" {
-                    Output::tagged(Tag::Title, Output::literal(value))
+                    Output::tagged(Tag::Title, parsed)
                 } else {
-                    Output::literal(value)
+                    parsed
                 }
             } else {
                 Output::Null
@@ -1064,7 +1066,7 @@ fn evaluate_date(
         return Ok(Output::Null);
     };
 
-    // Handle literal dates
+    // Handle literal dates (always takes precedence)
     if let Some(ref literal) = date_var.literal {
         let output = Output::literal(literal);
         return Ok(Output::tagged(
@@ -1073,7 +1075,16 @@ fn evaluate_date(
         ));
     }
 
+    // Try to get structured date parts
     let Some(start_parts) = date_var.parts() else {
+        // No structured date - fall back to raw (unparsed) date string if available
+        if let Some(ref raw) = date_var.raw {
+            let output = Output::literal(raw);
+            return Ok(Output::tagged(
+                Tag::Date(date_el.variable.clone()),
+                output,
+            ));
+        }
         return Ok(Output::Null);
     };
 
@@ -1106,24 +1117,29 @@ fn evaluate_date(
         }
     };
 
-    // Render the start date
-    let start_output = render_date_parts(ctx, &start_parts, &format_parts, &should_include_part);
+    // Get the delimiter between date parts
+    let date_delimiter = date_el.delimiter.as_deref();
 
     // Build the final date output
     let date_output = if let Some(end_parts) = date_var.end_parts() {
         // Get range delimiter (default "–" en-dash)
         let range_delimiter = date_el.range_delimiter.as_deref().unwrap_or("–");
 
-        // Render the end date
-        let end_output = render_date_parts(ctx, &end_parts, &format_parts, &should_include_part);
-
-        Output::sequence(vec![
-            start_output,
-            Output::literal(range_delimiter),
-            end_output,
-        ])
+        // Smart date range collapsing: suppress parts that are the same between start and end
+        // For example: "10 August 2003–23 August 2003" becomes "10–23 August 2003"
+        render_date_range(
+            ctx,
+            &start_parts,
+            &end_parts,
+            &format_parts,
+            &should_include_part,
+            date_delimiter,
+            range_delimiter,
+        )
     } else {
         // Single date
+        let start_output =
+            render_date_parts(ctx, &start_parts, &format_parts, &should_include_part, date_delimiter);
         if format_parts.is_empty() {
             // Just render the year if no format parts
             if let Some(year) = start_parts.year {
@@ -1153,6 +1169,7 @@ fn render_date_parts<F>(
     parts: &crate::reference::DateParts,
     format_parts: &[&quarto_csl::DatePart],
     should_include: &F,
+    delimiter: Option<&str>,
 ) -> Output
 where
     F: Fn(quarto_csl::DatePartName, &crate::reference::DateParts) -> bool,
@@ -1167,7 +1184,40 @@ where
         }
 
         let value = match part.name {
-            DatePartName::Year => parts.year.map(|y| y.to_string()),
+            DatePartName::Year => {
+                parts.year.map(|y| {
+                    // For negative years, use absolute value and add era suffix
+                    // For years 0 < n < 1000, add AD suffix
+                    // Note: The default terms in CSL have a leading space for readability.
+                    // When there's a delimiter between date parts, we strip the leading space
+                    // to avoid awkward output like "100 BC-7-13". Without a delimiter,
+                    // we keep the space for proper separation like "499 AD".
+                    let (display_year, era_suffix) = if y < 0 {
+                        let bc = ctx
+                            .get_term("bc", quarto_csl::TermForm::Long, false)
+                            .unwrap_or_else(|| "BC".to_string());
+                        let bc = if delimiter.is_some() {
+                            bc.trim_start().to_string()
+                        } else {
+                            bc
+                        };
+                        ((-y).to_string(), bc)
+                    } else if y > 0 && y < 1000 {
+                        let ad = ctx
+                            .get_term("ad", quarto_csl::TermForm::Long, false)
+                            .unwrap_or_else(|| "AD".to_string());
+                        let ad = if delimiter.is_some() {
+                            ad.trim_start().to_string()
+                        } else {
+                            ad
+                        };
+                        (y.to_string(), ad)
+                    } else {
+                        (y.to_string(), String::new())
+                    };
+                    format!("{}{}", display_year, era_suffix)
+                })
+            }
             DatePartName::Month => {
                 parts.month.and_then(|m| {
                     let form = part.form.unwrap_or(DatePartForm::Long);
@@ -1177,12 +1227,20 @@ where
             DatePartName::Day => {
                 parts.day.map(|d| {
                     let form = part.form.unwrap_or(DatePartForm::Numeric);
-                    format_day(d, form)
+                    let limit_ordinals = ctx.processor.limit_day_ordinals_to_day_1();
+                    format_day(d, form, limit_ordinals)
                 })
             }
         };
 
         if let Some(v) = value {
+            // Add delimiter before this part (except for the first part)
+            if !outputs.is_empty() {
+                if let Some(d) = delimiter {
+                    outputs.push(Output::literal(d));
+                }
+            }
+
             // Apply prefix
             if let Some(ref prefix) = part.formatting.prefix {
                 outputs.push(Output::literal(prefix));
@@ -1199,6 +1257,249 @@ where
             // Apply suffix
             if let Some(ref suffix) = part.formatting.suffix {
                 outputs.push(Output::literal(suffix));
+            }
+        }
+    }
+
+    Output::sequence(outputs)
+}
+
+/// Render a date range with smart collapsing of repeated parts.
+///
+/// For example:
+/// - "10 August 2003–23 August 2003" becomes "10–23 August 2003" (same month+year)
+/// - "3 August 2003–23 October 2003" becomes "3 August–23 October 2003" (same year)
+/// - "10 August 2003–23 October 2004" stays as is (different year)
+fn render_date_range<F>(
+    ctx: &EvalContext,
+    start_parts: &crate::reference::DateParts,
+    end_parts: &crate::reference::DateParts,
+    format_parts: &[&quarto_csl::DatePart],
+    should_include: &F,
+    delimiter: Option<&str>,
+    range_delimiter: &str,
+) -> Output
+where
+    F: Fn(quarto_csl::DatePartName, &crate::reference::DateParts) -> bool,
+{
+    use quarto_csl::DatePartName;
+
+    // Check for open-ended range (year=0 means open)
+    let is_open_range = end_parts.year == Some(0)
+        && end_parts.month.is_none()
+        && end_parts.day.is_none();
+
+    if is_open_range {
+        // Open range: just render start date with trailing range delimiter
+        let start_output = render_date_parts(ctx, start_parts, format_parts, should_include, delimiter);
+        return Output::sequence(vec![start_output, Output::literal(range_delimiter)]);
+    }
+
+    // Determine which date parts are the same between start and end
+    // We compare in hierarchical order: year > month > day
+    let year_same = start_parts.year == end_parts.year;
+    let month_same = start_parts.month == end_parts.month;
+    let day_same = start_parts.day == end_parts.day;
+
+    // A part is considered "same" only if all higher-level parts are also same
+    // e.g., month is "same" only if year is also same
+    let is_same = |name: DatePartName| -> bool {
+        match name {
+            DatePartName::Year => year_same,
+            DatePartName::Month => year_same && month_same,
+            DatePartName::Day => year_same && month_same && day_same,
+        }
+    };
+
+    // Filter format_parts to only those that should be included
+    let active_parts: Vec<_> = format_parts
+        .iter()
+        .filter(|p| should_include(p.name, start_parts) || should_include(p.name, end_parts))
+        .copied()
+        .collect();
+
+    // Find the split point: first part that differs (in format order)
+    // Parts before this are "leading same", parts after include "differing" and "trailing same"
+    let first_diff_idx = active_parts
+        .iter()
+        .position(|p| !is_same(p.name))
+        .unwrap_or(active_parts.len());
+
+    // If all parts are the same, just render the start date (no range needed)
+    if first_diff_idx == active_parts.len() {
+        return render_date_parts(ctx, start_parts, &active_parts, should_include, delimiter);
+    }
+
+    // Find where trailing same parts begin (after all differing parts)
+    // We scan from first_diff_idx to find where parts become same again
+    let trailing_same_idx = active_parts[first_diff_idx..]
+        .iter()
+        .rposition(|p| !is_same(p.name))
+        .map(|i| first_diff_idx + i + 1)
+        .unwrap_or(active_parts.len());
+
+    // Split into: leading_same, differing (includes the range), trailing_same
+    let leading_same = &active_parts[..first_diff_idx];
+    let differing = &active_parts[first_diff_idx..trailing_same_idx];
+    let trailing_same = &active_parts[trailing_same_idx..];
+
+    let mut outputs = Vec::new();
+
+    // Render leading same parts (from start date)
+    if !leading_same.is_empty() {
+        let leading = render_date_parts(ctx, start_parts, leading_same, should_include, delimiter);
+        if !leading.is_null() {
+            outputs.push(leading);
+        }
+    }
+
+    // Render differing parts as a range
+    if !differing.is_empty() {
+        // Render start's differing parts (without trailing suffix on last part)
+        let start_diff = render_date_parts_for_range(
+            ctx,
+            start_parts,
+            differing,
+            should_include,
+            delimiter,
+            true, // strip last suffix
+            false, // don't strip first prefix
+        );
+
+        // Render end's differing parts (without leading prefix on first part)
+        let end_diff = render_date_parts_for_range(
+            ctx,
+            end_parts,
+            differing,
+            should_include,
+            delimiter,
+            false, // don't strip last suffix
+            true,  // strip first prefix
+        );
+
+        if !start_diff.is_null() || !end_diff.is_null() {
+            // Add delimiter before range if we have leading parts
+            if !outputs.is_empty() {
+                if let Some(d) = delimiter {
+                    outputs.push(Output::literal(d));
+                }
+            }
+            outputs.push(start_diff);
+            outputs.push(Output::literal(range_delimiter));
+            outputs.push(end_diff);
+        }
+    }
+
+    // Render trailing same parts (from start date, since they're the same)
+    if !trailing_same.is_empty() {
+        let trailing = render_date_parts(ctx, start_parts, trailing_same, should_include, delimiter);
+        if !trailing.is_null() {
+            // The first trailing part should have its prefix since differing parts had suffix stripped
+            outputs.push(trailing);
+        }
+    }
+
+    Output::sequence(outputs)
+}
+
+/// Render date parts with optional prefix/suffix stripping for range formatting.
+fn render_date_parts_for_range<F>(
+    ctx: &EvalContext,
+    parts: &crate::reference::DateParts,
+    format_parts: &[&quarto_csl::DatePart],
+    should_include: &F,
+    delimiter: Option<&str>,
+    strip_last_suffix: bool,
+    strip_first_prefix: bool,
+) -> Output
+where
+    F: Fn(quarto_csl::DatePartName, &crate::reference::DateParts) -> bool,
+{
+    use quarto_csl::{DatePartForm, DatePartName};
+
+    let mut outputs = Vec::new();
+    let num_parts = format_parts.len();
+
+    for (idx, part) in format_parts.iter().enumerate() {
+        if !should_include(part.name, parts) {
+            continue;
+        }
+
+        let value = match part.name {
+            DatePartName::Year => {
+                parts.year.map(|y| {
+                    let (display_year, era_suffix) = if y < 0 {
+                        let bc = ctx
+                            .get_term("bc", quarto_csl::TermForm::Long, false)
+                            .unwrap_or_else(|| "BC".to_string());
+                        let bc = if delimiter.is_some() {
+                            bc.trim_start().to_string()
+                        } else {
+                            bc
+                        };
+                        ((-y).to_string(), bc)
+                    } else if y > 0 && y < 1000 {
+                        let ad = ctx
+                            .get_term("ad", quarto_csl::TermForm::Long, false)
+                            .unwrap_or_else(|| "AD".to_string());
+                        let ad = if delimiter.is_some() {
+                            ad.trim_start().to_string()
+                        } else {
+                            ad
+                        };
+                        (y.to_string(), ad)
+                    } else {
+                        (y.to_string(), String::new())
+                    };
+                    format!("{}{}", display_year, era_suffix)
+                })
+            }
+            DatePartName::Month => {
+                parts.month.and_then(|m| {
+                    let form = part.form.unwrap_or(DatePartForm::Long);
+                    format_month_or_season(ctx, m, form)
+                })
+            }
+            DatePartName::Day => {
+                parts.day.map(|d| {
+                    let form = part.form.unwrap_or(DatePartForm::Numeric);
+                    let limit_ordinals = ctx.processor.limit_day_ordinals_to_day_1();
+                    format_day(d, form, limit_ordinals)
+                })
+            }
+        };
+
+        if let Some(v) = value {
+            let is_first = outputs.is_empty();
+            let is_last = idx == num_parts - 1;
+
+            // Add delimiter before this part (except for the first part)
+            if !is_first {
+                if let Some(d) = delimiter {
+                    outputs.push(Output::literal(d));
+                }
+            }
+
+            // Apply prefix (skip if strip_first_prefix and this is first)
+            if !(strip_first_prefix && is_first) {
+                if let Some(ref prefix) = part.formatting.prefix {
+                    outputs.push(Output::literal(prefix));
+                }
+            }
+
+            // Apply the value
+            let final_value = if part.strip_periods {
+                v.replace('.', "")
+            } else {
+                v
+            };
+            outputs.push(Output::literal(final_value));
+
+            // Apply suffix (skip if strip_last_suffix and this is last)
+            if !(strip_last_suffix && is_last) {
+                if let Some(ref suffix) = part.formatting.suffix {
+                    outputs.push(Output::literal(suffix));
+                }
             }
         }
     }
@@ -1245,13 +1546,18 @@ fn format_month_or_season(
 }
 
 /// Format a day value according to the specified form.
-fn format_day(day: i32, form: quarto_csl::DatePartForm) -> String {
+/// If `limit_ordinals_to_day_1` is true, only day 1 gets an ordinal suffix.
+fn format_day(day: i32, form: quarto_csl::DatePartForm, limit_ordinals_to_day_1: bool) -> String {
     use quarto_csl::DatePartForm;
 
     match form {
         DatePartForm::Numeric | DatePartForm::Long | DatePartForm::Short => day.to_string(),
         DatePartForm::NumericLeadingZeros => format!("{:02}", day),
         DatePartForm::Ordinal => {
+            // If limit_ordinals_to_day_1 is set, only day 1 gets an ordinal suffix
+            if limit_ordinals_to_day_1 && day != 1 {
+                return day.to_string();
+            }
             // Simple English ordinal suffixes for now
             // TODO: Use locale for ordinal suffixes
             let suffix = match day % 10 {

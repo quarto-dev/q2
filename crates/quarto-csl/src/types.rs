@@ -63,6 +63,10 @@ pub struct StyleOptions {
     pub initialize_with_hyphen: bool,
     /// Page range format.
     pub page_range_format: Option<PageRangeFormat>,
+    /// Limit day ordinals to day 1 only.
+    /// When true, only the 1st day gets an ordinal suffix (e.g., "1st"),
+    /// other days are rendered as plain numbers (e.g., "2", "3").
+    pub limit_day_ordinals_to_day_1: bool,
     /// Source location.
     pub source_info: Option<SourceInfo>,
 }
@@ -135,6 +139,8 @@ pub struct Locale {
     pub terms: Vec<Term>,
     /// Date formats.
     pub date_formats: Vec<DateFormat>,
+    /// Style options that can be overridden in locale.
+    pub options: Option<StyleOptions>,
     /// Source location.
     pub source_info: SourceInfo,
 }
@@ -577,6 +583,8 @@ pub struct DateElement {
     pub date_parts: DatePartsFilter,
     /// Date parts (inline definitions, used to override locale formats).
     pub parts: Vec<DatePart>,
+    /// Delimiter between date parts.
+    pub delimiter: Option<String>,
     /// Date range delimiter.
     pub range_delimiter: Option<String>,
 }

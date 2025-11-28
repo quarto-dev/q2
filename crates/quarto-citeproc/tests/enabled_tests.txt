@@ -10,7 +10,7 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 314 conformance tests passing out of 896 total (~35.0%)
+# Current status: 394 conformance tests passing out of 896 total (~44.0%)
 # Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
 
 # affix
@@ -52,11 +52,53 @@ collapse_CitationNumberRangesOneOnly
 
 # date
 date_Accessed
-date_InPress
+date_DateAD
+date_DateBC
 date_DateNoDateWithTest
+date_DayOrdinalDayOneOnly
 date_DisappearingBug
+date_InPress
 date_January
 date_LiteralFailGracefullyIfNoValue
+date_LocalizedDateFormats-af-ZA
+date_LocalizedDateFormats-ar-AR
+date_LocalizedDateFormats-bg-BG
+date_LocalizedDateFormats-ca-AD
+date_LocalizedDateFormats-cs-CZ
+date_LocalizedDateFormats-da-DK
+date_LocalizedDateFormats-de-AT
+date_LocalizedDateFormats-de-CH
+date_LocalizedDateFormats-de-DE
+date_LocalizedDateFormats-el-GR
+date_LocalizedDateFormats-en-US
+date_LocalizedDateFormats-es-ES
+date_LocalizedDateFormats-et-EE
+date_LocalizedDateFormats-fr-FR
+date_LocalizedDateFormats-he-IL
+date_LocalizedDateFormats-hu-HU
+date_LocalizedDateFormats-is-IS
+date_LocalizedDateFormats-it-IT
+date_LocalizedDateFormats-ja-JP
+date_LocalizedDateFormats-kh-KH
+date_LocalizedDateFormats-ko-KR
+date_LocalizedDateFormats-mn-MN
+date_LocalizedDateFormats-nb-NO
+date_LocalizedDateFormats-nl-NL
+date_LocalizedDateFormats-pl-PL
+date_LocalizedDateFormats-pt-BR
+date_LocalizedDateFormats-pt-PT
+date_LocalizedDateFormats-ro-RO
+date_LocalizedDateFormats-ru-RU
+date_LocalizedDateFormats-sk-SK
+date_LocalizedDateFormats-sl-SL
+date_LocalizedDateFormats-sr-RS
+date_LocalizedDateFormats-sv-SE
+date_LocalizedDateFormats-th-TH
+date_LocalizedDateFormats-tr-TR
+date_LocalizedDateFormats-uk-UA
+date_LocalizedDateFormats-vi-VN
+date_LocalizedDateFormats-zh-CN
+date_LocalizedDateFormats-zh-TW
 date_LocalizedNumericDefault
 date_LocalizedNumericDefaultMissingDay
 date_LocalizedNumericDefaultWithAffixes
@@ -74,10 +116,22 @@ date_LongMonth
 date_MaskNonexistentWithCondition
 date_NoDate
 date_OtherAlone
+date_OtherWithDate
 date_SeasonRange1
+date_SeasonRange2
+date_SeasonRange3
+date_SeasonSubstituteInGroup
+date_String
+date_TextFormFulldateDayRange
+date_TextFormFulldateMonthRange
 date_TextFormFulldateYearRange
+date_TextFormMonthdateMonthRange
 date_TextFormMonthdateYearRange
 date_TextFormYeardateYearRange
+date_TextFormYeardateYearRangeOpen
+date_NegativeDateSort
+date_NegativeDateSortViaMacro
+date_NegativeDateSortViaMacroOnYearMonthOnly
 
 # disambiguate
 disambiguate_AddNamesFailure
@@ -354,3 +408,12 @@ condition_VariableAll
 condition_MatchAll
 condition_NameAndTextVars
 disambiguate_ByCiteTwoAuthorsSameCite
+collapse_CitationNumberRangesWithAffixes
+collapse_CitationNumberRangesWithAffixesGrouped
+collapse_CitationNumberRangesWithAffixesNoCollapse
+textcase_CapitalizeAll
+textcase_CapitalizeFirst
+textcase_Lowercase
+textcase_CapitalizeFirstWithDecor
+flipflop_ItalicsSimple
+flipflop_ItalicsFlipped

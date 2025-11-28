@@ -15,7 +15,8 @@ pub struct Reference {
     pub id: String,
 
     /// Reference type (e.g., "book", "article-journal", "chapter").
-    #[serde(rename = "type")]
+    /// Defaults to empty string if not provided (matching Pandoc citeproc behavior).
+    #[serde(rename = "type", default)]
     pub ref_type: String,
 
     // Standard CSL variables - text
@@ -361,12 +362,24 @@ impl<'de> Deserialize<'de> for DatePartValue {
 
 impl DateVariable {
     /// Get the date parts if available.
+    /// If a season is specified but no month is present in date-parts,
+    /// the season is converted to a pseudo-month (season + 20) per CSL spec.
     pub fn parts(&self) -> Option<DateParts> {
         self.date_parts.as_ref().and_then(|parts| {
-            parts.first().map(|p| DateParts {
-                year: p.first().copied(),
-                month: p.get(1).copied(),
-                day: p.get(2).copied(),
+            parts.first().map(|p| {
+                let year = p.first().copied();
+                let month_from_parts = p.get(1).copied();
+                // If there's no month but there's a season, use season as pseudo-month
+                // Seasons are 1=spring, 2=summer, 3=fall/autumn, 4=winter
+                // Pseudo-months are 21=spring, 22=summer, 23=fall, 24=winter
+                let month = month_from_parts.or_else(|| {
+                    self.season.map(|s| 20 + s)
+                });
+                DateParts {
+                    year,
+                    month,
+                    day: p.get(2).copied(),
+                }
             })
         })
     }

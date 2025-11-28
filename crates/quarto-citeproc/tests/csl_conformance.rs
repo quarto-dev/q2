@@ -82,6 +82,9 @@ impl CslTest {
 
 /// Parse sections from test file content.
 fn parse_sections(content: &str) -> HashMap<String, String> {
+    // Strip UTF-8 BOM if present
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+
     let mut sections = HashMap::new();
     let mut current_section: Option<String> = None;
     let mut current_content = String::new();

@@ -433,11 +433,14 @@ impl Processor {
             "issued" | "accessed" | "event-date" | "original-date" | "submitted" => {
                 if let Some(date) = reference.get_date(var) {
                     // Format as YYYY-MM-DD for sorting
+                    // Add 5000 to year to handle BC dates correctly (same approach as Pandoc citeproc)
+                    // This way: -100 becomes 4900, -44 becomes 4956, 54 becomes 5054, etc.
                     if let Some(parts) = date.date_parts.as_ref().and_then(|p| p.first()) {
                         let year = parts.first().copied().unwrap_or(0);
+                        let sort_year = year + 5000;
                         let month = parts.get(1).copied().unwrap_or(0);
                         let day = parts.get(2).copied().unwrap_or(0);
-                        format!("{:04}-{:02}-{:02}", year, month, day)
+                        format!("{:04}-{:02}-{:02}", sort_year, month, day)
                     } else {
                         String::new()
                     }
@@ -513,6 +516,20 @@ impl Processor {
 
         // Fall back to locale manager
         self.locales.get_date_format(form)
+    }
+
+    /// Check if day ordinals should be limited to day 1 only.
+    /// This checks locale overrides first, then falls back to style options.
+    pub fn limit_day_ordinals_to_day_1(&self) -> bool {
+        // First check style-level locale overrides
+        for locale in &self.style.locales {
+            if let Some(ref opts) = locale.options {
+                return opts.limit_day_ordinals_to_day_1;
+            }
+        }
+
+        // Fall back to style options
+        self.style.options.limit_day_ordinals_to_day_1
     }
 }
 
