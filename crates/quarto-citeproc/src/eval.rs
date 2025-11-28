@@ -57,8 +57,11 @@ impl<'a> EvalContext<'a> {
     }
 }
 
-/// Evaluate a citation and return formatted output.
-pub fn evaluate_citation(processor: &mut Processor, citation: &Citation) -> Result<String> {
+/// Evaluate a citation and return the Output AST.
+pub fn evaluate_citation_to_output(
+    processor: &mut Processor,
+    citation: &Citation,
+) -> Result<Output> {
     use quarto_csl::Collapse;
 
     // Clone layout to avoid borrow conflicts
@@ -132,9 +135,7 @@ pub fn evaluate_citation(processor: &mut Processor, citation: &Citation) -> Resu
     };
 
     // Apply layout-level formatting
-    let final_output = Output::formatted(layout.formatting.clone(), vec![combined]);
-
-    Ok(final_output.render())
+    Ok(Output::formatted(layout.formatting.clone(), vec![combined]))
 }
 
 /// Collapse citations by author name (year collapse).
@@ -297,11 +298,20 @@ fn create_range_output(start: Output, end: Output) -> Output {
     Output::sequence(vec![start, Output::literal("–"), end])
 }
 
-/// Evaluate a bibliography entry.
+/// Evaluate a bibliography entry and return formatted output as a String.
 pub fn evaluate_bibliography_entry(
     processor: &mut Processor,
     reference: &Reference,
 ) -> Result<String> {
+    let output = evaluate_bibliography_entry_to_output(processor, reference)?;
+    Ok(output.render())
+}
+
+/// Evaluate a bibliography entry and return the Output AST.
+pub fn evaluate_bibliography_entry_to_output(
+    processor: &mut Processor,
+    reference: &Reference,
+) -> Result<Output> {
     // Clone layout to avoid borrow conflicts
     let layout = processor
         .style
@@ -316,9 +326,7 @@ pub fn evaluate_bibliography_entry(
     let output = evaluate_layout(&mut ctx, &layout)?;
 
     // Apply layout-level formatting
-    let final_output = Output::formatted(layout.formatting.clone(), vec![output]);
-
-    Ok(final_output.render())
+    Ok(Output::formatted(layout.formatting.clone(), vec![output]))
 }
 
 /// Evaluate a macro for sorting purposes.

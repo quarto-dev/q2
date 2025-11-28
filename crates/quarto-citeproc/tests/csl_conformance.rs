@@ -12,6 +12,7 @@
 
 use std::collections::HashMap;
 
+use quarto_citeproc::output::render_inlines_to_csl_html;
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
 
@@ -170,10 +171,13 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
         "citation" => {
             let mut outputs = Vec::new();
             for citation in &citations {
-                let output = processor
-                    .process_citation(citation)
+                // Use the new pipeline: Output → Inlines → CSL HTML
+                let output_ast = processor
+                    .process_citation_to_output(citation)
                     .map_err(|e| format!("Citation error: {:?}", e))?;
-                outputs.push(output);
+                let inlines = output_ast.to_inlines();
+                let html = render_inlines_to_csl_html(&inlines);
+                outputs.push(html);
             }
             outputs.join("\n")
         }
@@ -181,16 +185,23 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
             // Process citations first to assign initial citation numbers
             // This is needed for citation-number sorting to work correctly
             for citation in &citations {
-                let _ = processor.process_citation(citation);
+                let _ = processor.process_citation_to_output(citation);
             }
 
-            // Use generate_bibliography to get entries in sorted order
+            // Use generate_bibliography_to_outputs to get entries in sorted order
+            // with Output AST
             let entries = processor
-                .generate_bibliography()
+                .generate_bibliography_to_outputs()
                 .map_err(|e| format!("Bibliography error: {:?}", e))?;
+
+            // Convert each entry through the new pipeline: Output → Inlines → CSL HTML
             let outputs: Vec<String> = entries
                 .into_iter()
-                .map(|(_, formatted)| format_bib_entry(&formatted))
+                .map(|(_, output)| {
+                    let inlines = output.to_inlines();
+                    let html = render_inlines_to_csl_html(&inlines);
+                    format_bib_entry(&html)
+                })
                 .collect();
             format_bibliography(&outputs)
         }

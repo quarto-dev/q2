@@ -207,9 +207,20 @@ impl Processor {
     /// Process a citation and return formatted output.
     ///
     /// Returns a string representation of the formatted citation.
-    /// In the future, this will return Pandoc Inlines.
     pub fn process_citation(&mut self, citation: &Citation) -> Result<String> {
-        crate::eval::evaluate_citation(self, citation)
+        let output = self.process_citation_to_output(citation)?;
+        Ok(output.render())
+    }
+
+    /// Process a citation and return the Output AST.
+    ///
+    /// This is the lower-level API that returns the intermediate representation.
+    /// Use `to_inlines()` on the result to convert to Pandoc Inlines.
+    pub fn process_citation_to_output(
+        &mut self,
+        citation: &Citation,
+    ) -> Result<crate::output::Output> {
+        crate::eval::evaluate_citation_to_output(self, citation)
     }
 
     /// Generate a bibliography entry for a reference.
@@ -227,6 +238,26 @@ impl Processor {
             .clone();
 
         crate::eval::evaluate_bibliography_entry(self, &reference).map(Some)
+    }
+
+    /// Generate a bibliography entry for a reference, returning the Output AST.
+    pub fn format_bibliography_entry_to_output(
+        &mut self,
+        id: &str,
+    ) -> Result<Option<crate::output::Output>> {
+        if self.style.bibliography.is_none() {
+            return Ok(None);
+        }
+
+        let reference = self
+            .get_reference(id)
+            .ok_or_else(|| crate::Error::ReferenceNotFound {
+                id: id.to_string(),
+                location: None,
+            })?
+            .clone();
+
+        crate::eval::evaluate_bibliography_entry_to_output(self, &reference).map(Some)
     }
 
     /// Generate the full bibliography.
@@ -281,6 +312,69 @@ impl Processor {
         for id in &final_ids {
             if let Some(formatted) = self.format_bibliography_entry(id)? {
                 entries.push((id.clone(), formatted));
+            }
+        }
+
+        Ok(entries)
+    }
+
+    /// Generate the full bibliography, returning Output AST for each entry.
+    ///
+    /// This is the lower-level API that returns the intermediate representation.
+    /// Use `to_inlines()` on each Output to convert to Pandoc Inlines.
+    pub fn generate_bibliography_to_outputs(
+        &mut self,
+    ) -> Result<Vec<(String, crate::output::Output)>> {
+        let bib = match &self.style.bibliography {
+            Some(b) => b,
+            None => return Ok(Vec::new()),
+        };
+
+        // LinkedHashMap preserves insertion order
+        let ids: Vec<String> = self.references.keys().cloned().collect();
+
+        // Get sort keys from bibliography
+        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+
+        // Check if any sort key uses citation-number
+        let uses_citation_number = sort_keys.iter().any(|k| {
+            matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number")
+        });
+
+        // If there are sort keys, sort the IDs; otherwise preserve insertion order
+        let final_ids = if sort_keys.is_empty() {
+            ids
+        } else {
+            // Compute sort key values for each reference
+            let mut sorted_ids: Vec<(String, Vec<SortKeyValue>)> = ids
+                .into_iter()
+                .map(|id| {
+                    let keys = self.compute_sort_keys(&id, sort_keys);
+                    (id, keys)
+                })
+                .collect();
+
+            // Sort by the computed keys
+            sorted_ids.sort_by(|a, b| compare_sort_keys(&a.1, &b.1));
+
+            sorted_ids.into_iter().map(|(id, _)| id).collect()
+        };
+
+        // Determine whether to reassign citation numbers:
+        // - If citation-number is the ONLY sort key, don't reassign (keep original numbers)
+        // - If there are multiple sort keys or citation-number is secondary, reassign
+        let is_citation_number_only = sort_keys.len() == 1
+            && matches!(&sort_keys[0].key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number");
+
+        if uses_citation_number && !sort_keys.is_empty() && !is_citation_number_only {
+            self.reassign_citation_numbers(&final_ids);
+        }
+
+        // Format entries in order
+        let mut entries = Vec::new();
+        for id in &final_ids {
+            if let Some(output) = self.format_bibliography_entry_to_output(id)? {
+                entries.push((id.clone(), output));
             }
         }
 
