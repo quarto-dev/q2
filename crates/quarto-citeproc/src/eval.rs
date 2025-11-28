@@ -36,6 +36,8 @@ struct EvalContext<'a> {
     /// Locator label type from citation item (e.g., "page", "chapter").
     /// If not specified, defaults to "page" when locator is present.
     locator_label: Option<&'a str>,
+    /// Citation position (for note-style citations).
+    position: Option<quarto_csl::Position>,
 }
 
 impl<'a> EvalContext<'a> {
@@ -53,6 +55,7 @@ impl<'a> EvalContext<'a> {
             in_substitute: false,
             locator: None,
             locator_label: None,
+            position: None,
         }
     }
 
@@ -63,6 +66,18 @@ impl<'a> EvalContext<'a> {
         inherited_name_options: &'a InheritableNameOptions,
         citation_item: &'a CitationItem,
     ) -> Self {
+        // Convert numeric position to Position enum
+        // 0 = First, 1 = Subsequent, 2 = Ibid, 3 = IbidWithLocator, 4 = NearNote
+        // Default to First if no position specified (first citation of a reference)
+        let position = Some(match citation_item.position {
+            Some(0) | None => quarto_csl::Position::First,
+            Some(1) => quarto_csl::Position::Subsequent,
+            Some(2) => quarto_csl::Position::Ibid,
+            Some(3) => quarto_csl::Position::IbidWithLocator,
+            Some(4) => quarto_csl::Position::NearNote,
+            Some(_) => quarto_csl::Position::First, // Unknown position, default to first
+        });
+
         Self {
             processor,
             reference,
@@ -71,6 +86,7 @@ impl<'a> EvalContext<'a> {
             in_substitute: false,
             locator: citation_item.locator.as_deref(),
             locator_label: citation_item.label.as_deref(),
+            position,
         }
     }
 
@@ -176,14 +192,18 @@ pub fn evaluate_citation_to_output(
         let output = evaluate_layout(&mut ctx, &layout)?;
 
         // Apply prefix/suffix from citation item
+        // If there's no prefix, capitalize the first letter of the output (sentence-initial capitalization)
         let mut parts = Vec::new();
         if let Some(ref prefix) = item.prefix {
             parts.push(Output::tagged(
                 Tag::Prefix,
                 Output::sequence(vec![Output::literal(prefix), Output::literal(" ")]),
             ));
+            parts.push(output);
+        } else {
+            // Capitalize first letter when no prefix
+            parts.push(output.capitalize_first());
         }
-        parts.push(output);
         if let Some(ref suffix) = item.suffix {
             parts.push(Output::tagged(
                 Tag::Suffix,
@@ -1229,8 +1249,66 @@ fn evaluate_condition(
                 vars.iter().any(|v| is_uncertain_date(v))
             }
         }
-        ConditionType::Locator(_) => false, // TODO: Implement locator checking
-        ConditionType::Position(_) => false, // TODO: Implement position checking
+        ConditionType::Locator(locator_types) => {
+            // Check if the locator label matches any of the specified types
+            if let Some(label) = ctx.get_locator_label() {
+                if use_all {
+                    locator_types.iter().all(|t| t == label)
+                } else {
+                    locator_types.iter().any(|t| t == label)
+                }
+            } else {
+                false
+            }
+        }
+        ConditionType::Position(positions) => {
+            // Check if the citation position matches any of the specified positions.
+            // CSL positions have an implicit hierarchy:
+            // - "first" matches only First
+            // - "subsequent" matches Subsequent, Ibid, IbidWithLocator (any non-first)
+            // - "ibid" matches Ibid and IbidWithLocator
+            // - "ibid-with-locator" matches only IbidWithLocator
+            // - "near-note" matches NearNote
+            let matches_position = |required: &quarto_csl::Position| -> bool {
+                match ctx.position {
+                    Some(quarto_csl::Position::First) => {
+                        matches!(required, quarto_csl::Position::First)
+                    }
+                    Some(quarto_csl::Position::Subsequent) => {
+                        matches!(required, quarto_csl::Position::Subsequent)
+                    }
+                    Some(quarto_csl::Position::Ibid) => {
+                        matches!(
+                            required,
+                            quarto_csl::Position::Subsequent | quarto_csl::Position::Ibid
+                        )
+                    }
+                    Some(quarto_csl::Position::IbidWithLocator) => {
+                        matches!(
+                            required,
+                            quarto_csl::Position::Subsequent
+                                | quarto_csl::Position::Ibid
+                                | quarto_csl::Position::IbidWithLocator
+                        )
+                    }
+                    Some(quarto_csl::Position::NearNote) => {
+                        matches!(required, quarto_csl::Position::NearNote)
+                    }
+                    None => {
+                        // No position set means position conditions don't apply
+                        // (e.g., in bibliography context or when position info is missing)
+                        // All position checks should return false
+                        false
+                    }
+                }
+            };
+
+            if use_all {
+                positions.iter().all(|p| matches_position(p))
+            } else {
+                positions.iter().any(|p| matches_position(p))
+            }
+        }
         ConditionType::Disambiguate(expected) => {
             // Check if the reference has been marked for disambiguation
             ctx.reference
@@ -1316,6 +1394,7 @@ fn evaluate_label(
 /// Plural indicators:
 /// - Contains "-" or "–" (en-dash) indicating a range
 /// - Contains "and", "&", or "," indicating multiple values
+/// - Contains localized "and" words (et, und, y, e, etc.)
 /// - Has multiple number sequences
 fn is_plural_value(value: &str) -> bool {
     // Check for range indicators
@@ -1324,6 +1403,15 @@ fn is_plural_value(value: &str) -> bool {
     }
     // Check for "and", "&", or comma
     if value.contains(" and ") || value.contains(" & ") || value.contains('&') {
+        return true;
+    }
+    // Check for localized "and" words
+    // Common translations: et (French/Latin), und (German), y (Spanish), e (Italian/Portuguese)
+    if value.contains(" et ")
+        || value.contains(" und ")
+        || value.contains(" y ")
+        || value.contains(" e ")
+    {
         return true;
     }
     // Check for comma-separated values (but not decimal numbers)

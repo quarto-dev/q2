@@ -266,6 +266,7 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
                             .get("suffix")
                             .and_then(|s| s.as_str())
                             .map(|s| s.to_string()),
+                        position: v.get("position").and_then(|p| p.as_i64()).map(|n| n as i32),
                         ..Default::default()
                     })
                 })
@@ -317,6 +318,7 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
                             .get("suffix")
                             .and_then(|s| s.as_str())
                             .map(|s| s.to_string()),
+                        position: v.get("position").and_then(|p| p.as_i64()).map(|n| n as i32),
                         ..Default::default()
                     })
                 })

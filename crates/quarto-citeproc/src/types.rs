@@ -109,6 +109,11 @@ pub struct CitationItem {
     /// Author only (no date/title).
     #[serde(rename = "author-only", skip_serializing_if = "Option::is_none")]
     pub author_only: Option<bool>,
+
+    /// Citation position (for note-style citations).
+    /// 0 = first, 1 = subsequent, 2 = ibid, 3 = ibid-with-locator, 4 = near-note
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub position: Option<i32>,
 }
 
 /// Citation processor that applies CSL styles to references.

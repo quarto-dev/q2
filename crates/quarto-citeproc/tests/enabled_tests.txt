@@ -10,7 +10,7 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 412 conformance tests passing out of 858 total (~48.0%)
+# Current status: 419 conformance tests passing out of 858 total (~48.8%)
 # Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
 
 # affix
@@ -19,6 +19,7 @@ affix_InterveningEmpty
 
 # bugreports
 bugreports_Abnt
+bugreports_AccidentalAllCaps
 bugreports_ArabicLocale
 bugreports_AuthorYear
 bugreports_ChineseCharactersFamilyOnlyPluralLabel
@@ -179,10 +180,13 @@ label_PluralWithAmpersand
 label_PluralWithAnd
 label_PluralWithCommaAnd
 label_PluralWithCommaLocalizedAnd
+label_PluralWithLocalizedAnd
 
 # locale
 locale_EmptyDate
+locale_EmptyPlusOverrideStyleOpt
 locale_EmptyPlusOverrideTerm
+locale_EmptyStyleOpt
 locale_EmptyTerm
 locale_SpecificDate
 locale_SpecificTerm
@@ -372,8 +376,11 @@ page_PluralDetectWithEndash
 
 # position
 position_FalseInBibliography
+position_IbidWithLocator
+position_IfIbidIsTrueThenSubsequentIsTrue
 position_NearNoteFalse
 position_NearNoteUnsupported
+position_TrueInCitation
 
 # punctuation
 punctuation_DateStripPeriods

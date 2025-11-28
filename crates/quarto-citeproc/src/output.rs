@@ -199,6 +199,155 @@ impl Output {
         }
     }
 
+    /// Capitalize the first term in the output content.
+    ///
+    /// This is used for sentence-initial capitalization in citations.
+    /// Only capitalizes content tagged as Term (locale terms like "ibid", "et al").
+    /// Literal values from `<text value="..."/>` are NOT capitalized.
+    pub fn capitalize_first(self) -> Self {
+        self.capitalize_first_inner().0
+    }
+
+    /// Internal helper that returns (modified_output, did_find_content).
+    /// Only capitalizes content inside Tag::Term nodes at the very start.
+    /// Returns true in the second element if we found any non-empty content
+    /// (whether we capitalized it or not), signaling to stop searching.
+    fn capitalize_first_inner(self) -> (Self, bool) {
+        match self {
+            Output::Null => (Output::Null, false),
+            // Don't capitalize bare literals - they come from <text value="..."/>
+            // But DO signal that we found content, so we stop looking
+            Output::Literal(s) => {
+                let found_content = !s.is_empty();
+                (Output::Literal(s), found_content)
+            }
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let mut new_children = Vec::with_capacity(children.len());
+                let mut capitalized = false;
+                for child in children {
+                    if capitalized {
+                        new_children.push(child);
+                    } else {
+                        let (new_child, did_cap) = child.capitalize_first_inner();
+                        new_children.push(new_child);
+                        capitalized = did_cap;
+                    }
+                }
+                (
+                    Output::Formatted {
+                        formatting,
+                        children: new_children,
+                    },
+                    capitalized,
+                )
+            }
+            Output::Linked { url, children } => {
+                let mut new_children = Vec::with_capacity(children.len());
+                let mut capitalized = false;
+                for child in children {
+                    if capitalized {
+                        new_children.push(child);
+                    } else {
+                        let (new_child, did_cap) = child.capitalize_first_inner();
+                        new_children.push(new_child);
+                        capitalized = did_cap;
+                    }
+                }
+                (Output::Linked { url, children: new_children }, capitalized)
+            }
+            Output::InNote(child) => {
+                let (new_child, did_cap) = child.capitalize_first_inner();
+                (Output::InNote(Box::new(new_child)), did_cap)
+            }
+            Output::Tagged { tag, child } => {
+                // Only capitalize specific citation terms at sentence start
+                // (ibid, idem, infra, supra, op. cit., loc. cit., etc.)
+                // NOT labels like "pages", "chapters", etc.
+                let should_capitalize = match &tag {
+                    Tag::Term(name) => matches!(
+                        name.as_str(),
+                        "ibid" | "ibidem" | "idem" | "infra" | "supra" | "op. cit." | "loc. cit."
+                    ),
+                    _ => false,
+                };
+
+                if should_capitalize {
+                    let capitalized_child = capitalize_literal(*child);
+                    (
+                        Output::Tagged {
+                            tag,
+                            child: Box::new(capitalized_child),
+                        },
+                        true,
+                    )
+                } else {
+                    // For other tags, recurse into child
+                    let (new_child, did_cap) = child.capitalize_first_inner();
+                    (
+                        Output::Tagged {
+                            tag,
+                            child: Box::new(new_child),
+                        },
+                        did_cap,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/// Capitalize the first letter of a literal Output.
+/// Recursively finds the first literal and capitalizes it.
+fn capitalize_literal(output: Output) -> Output {
+    match output {
+        Output::Null => Output::Null,
+        Output::Literal(s) => {
+            if s.is_empty() {
+                Output::Literal(s)
+            } else {
+                let mut chars = s.chars();
+                let first = chars.next().unwrap();
+                let rest: String = chars.collect();
+                Output::Literal(format!("{}{}", first.to_uppercase(), rest))
+            }
+        }
+        Output::Formatted {
+            formatting,
+            mut children,
+        } => {
+            // Capitalize first non-empty child
+            for child in children.iter_mut() {
+                if !child.is_null() {
+                    *child = capitalize_literal(std::mem::replace(child, Output::Null));
+                    break;
+                }
+            }
+            Output::Formatted {
+                formatting,
+                children,
+            }
+        }
+        Output::Linked { url, mut children } => {
+            for child in children.iter_mut() {
+                if !child.is_null() {
+                    *child = capitalize_literal(std::mem::replace(child, Output::Null));
+                    break;
+                }
+            }
+            Output::Linked { url, children }
+        }
+        Output::InNote(child) => Output::InNote(Box::new(capitalize_literal(*child))),
+        Output::Tagged { tag, child } => Output::Tagged {
+            tag,
+            child: Box::new(capitalize_literal(*child)),
+        },
+    }
+}
+
+impl Output {
     /// Render the output to a plain string.
     pub fn render(&self) -> String {
         match self {
@@ -1006,9 +1155,9 @@ fn render_with_formatting(text: &str, formatting: &Formatting) -> String {
         _ => weighted,
     };
 
-    // Apply quotes
+    // Apply quotes (Unicode curly quotes as per CSL locale conventions)
     let quoted = if formatting.quotes {
-        format!("\"{}\"", aligned)
+        format!("\u{201C}{}\u{201D}", aligned) // "..."
     } else {
         aligned
     };
@@ -1494,7 +1643,7 @@ impl OutputBuilder {
     pub fn to_string_with_quotes(&self, quotes: bool) -> String {
         let inner = self.to_string();
         if quotes {
-            format!("\"{}\"", inner)
+            format!("\u{201C}{}\u{201D}", inner) // "..."
         } else {
             inner
         }
@@ -2059,21 +2208,21 @@ fn render_inline_to_csl_html_with_ctx(
             output.push_str("</sub>");
         }
         Inline::Quoted(q) => {
-            // Use ASCII quotes for CSL test compatibility
+            // Use Unicode curly quotes as per CSL locale conventions
             match q.quote_type {
                 quarto_pandoc_types::QuoteType::DoubleQuote => {
-                    output.push('"');
+                    output.push('\u{201C}'); // " left double quotation mark
                     for child in &q.content {
                         render_inline_to_csl_html_with_ctx(child, output, ctx);
                     }
-                    output.push('"');
+                    output.push('\u{201D}'); // " right double quotation mark
                 }
                 quarto_pandoc_types::QuoteType::SingleQuote => {
-                    output.push('\'');
+                    output.push('\u{2018}'); // ' left single quotation mark
                     for child in &q.content {
                         render_inline_to_csl_html_with_ctx(child, output, ctx);
                     }
-                    output.push('\'');
+                    output.push('\u{2019}'); // ' right single quotation mark
                 }
             }
         }
@@ -2574,7 +2723,8 @@ mod tests {
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         let inlines = output.to_inlines();
         let html = render_inlines_to_csl_html(&inlines);
-        assert_eq!(html, "\"Title\"");
+        // Unicode curly quotes as per CSL locale conventions
+        assert_eq!(html, "\u{201C}Title\u{201D}");
     }
 
     #[test]
