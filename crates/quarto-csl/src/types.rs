@@ -439,6 +439,16 @@ pub struct TextElement {
     pub source: TextSource,
 }
 
+/// Variable form (for text variables).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VariableForm {
+    /// Long form (default) - use the variable as-is.
+    #[default]
+    Long,
+    /// Short form - use the `-short` variant (e.g., `title-short` for `title`).
+    Short,
+}
+
 /// Text source variants.
 #[derive(Debug, Clone)]
 pub enum TextSource {
@@ -446,6 +456,8 @@ pub enum TextSource {
     Variable {
         name: String,
         name_source: SourceInfo,
+        /// Variable form (long or short).
+        form: VariableForm,
     },
     /// Macro reference.
     Macro {

@@ -535,7 +535,7 @@ fn evaluate_text(
     _formatting: &Formatting,
 ) -> Result<Output> {
     let output = match &text_el.source {
-        TextSource::Variable { name, .. } => {
+        TextSource::Variable { name, form, .. } => {
             // Special handling for citation-number
             if name == "citation-number" {
                 if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
@@ -557,17 +557,30 @@ fn evaluate_text(
                 } else {
                     Output::Null
                 }
-            } else if let Some(value) = ctx.get_variable(name) {
-                // Parse CSL rich text (HTML-like markup) from the value
-                let parsed = crate::output::parse_csl_rich_text(&value);
-                // Tag title for potential hyperlinking
-                if name == "title" {
-                    Output::tagged(Tag::Title, parsed)
-                } else {
-                    parsed
-                }
             } else {
-                Output::Null
+                // For short form, try {name}-short first, then fall back to {name}
+                // Note: journalAbbreviation is handled as an alias for container-title-short
+                // at parse time (see Reference struct), so no special case needed here.
+                let value = if *form == quarto_csl::VariableForm::Short {
+                    let short_name = format!("{}-short", name);
+                    ctx.get_variable(&short_name)
+                        .or_else(|| ctx.get_variable(name))
+                } else {
+                    ctx.get_variable(name)
+                };
+
+                if let Some(value) = value {
+                    // Parse CSL rich text (HTML-like markup) from the value
+                    let parsed = crate::output::parse_csl_rich_text(&value);
+                    // Tag title for potential hyperlinking
+                    if name == "title" {
+                        Output::tagged(Tag::Title, parsed)
+                    } else {
+                        parsed
+                    }
+                } else {
+                    Output::Null
+                }
             }
         }
         TextSource::Macro { name, .. } => {

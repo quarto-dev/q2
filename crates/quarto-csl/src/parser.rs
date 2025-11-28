@@ -843,9 +843,17 @@ impl CslParser {
 
     fn parse_text_element(&self, element: &XmlElement) -> Result<TextElement> {
         let source = if let Some(attr) = self.get_attr(element, "variable") {
+            let form = self
+                .get_attr(element, "form")
+                .map(|a| match a.value.as_str() {
+                    "short" => VariableForm::Short,
+                    _ => VariableForm::Long,
+                })
+                .unwrap_or(VariableForm::Long);
             TextSource::Variable {
                 name: attr.value.clone(),
                 name_source: attr.value_source.clone(),
+                form,
             }
         } else if let Some(attr) = self.get_attr(element, "macro") {
             TextSource::Macro {

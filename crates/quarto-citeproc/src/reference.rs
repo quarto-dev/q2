@@ -54,7 +54,16 @@ pub struct Reference {
     pub title_short: Option<String>,
     #[serde(rename = "container-title", skip_serializing_if = "Option::is_none")]
     pub container_title: Option<String>,
-    #[serde(rename = "container-title-short", skip_serializing_if = "Option::is_none")]
+    /// Short form of container title.
+    ///
+    /// Legacy citeproc-js used "journalAbbreviation" for this field, so we accept
+    /// that as an alias for backwards compatibility.
+    /// See: https://github.com/jgm/citeproc/blob/master/src/Citeproc/Types.hs
+    #[serde(
+        rename = "container-title-short",
+        alias = "journalAbbreviation",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub container_title_short: Option<String>,
     #[serde(rename = "collection-title", skip_serializing_if = "Option::is_none")]
     pub collection_title: Option<String>,
