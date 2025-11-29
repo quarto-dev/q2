@@ -3,7 +3,7 @@
 //! Locale files are standalone XML files that define language-specific
 //! terms, date formats, and style options.
 
-use quarto_csl::{DateFormat, DateForm, DatePart, DatePartForm, DatePartName, Formatting, Locale, Term, TermForm};
+use quarto_csl::{DateFormat, DateForm, DatePart, DatePartForm, DatePartName, Formatting, Locale, StyleOptions, Term, TermForm};
 use quarto_xml::{parse, XmlElement};
 
 /// Parse a locale XML file.
@@ -25,6 +25,7 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
 
     let mut terms = Vec::new();
     let mut date_formats = Vec::new();
+    let mut options = None;
 
     for child in root.all_children() {
         match child.name.as_str() {
@@ -42,6 +43,9 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
                     date_formats.push(date_fmt);
                 }
             }
+            "style-options" => {
+                options = Some(parse_style_options(child));
+            }
             _ => {}
         }
     }
@@ -50,9 +54,29 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
         lang,
         terms,
         date_formats,
-        options: None,
+        options,
         source_info: root.source_info.clone(),
     })
+}
+
+/// Parse style-options element from a locale.
+fn parse_style_options(element: &XmlElement) -> StyleOptions {
+    let punct_in_quote = element
+        .attributes
+        .iter()
+        .find(|a| a.name == "punctuation-in-quote")
+        .map(|a| a.value == "true")
+        .unwrap_or(false);
+
+    StyleOptions {
+        demote_non_dropping_particle: quarto_csl::DemoteNonDroppingParticle::DisplayAndSort,
+        initialize_with_hyphen: true,
+        page_range_format: None,
+        limit_day_ordinals_to_day_1: false,
+        punctuation_in_quote: punct_in_quote,
+        uses_year_suffix_variable: false,
+        source_info: Some(element.source_info.clone()),
+    }
 }
 
 fn parse_term(element: &XmlElement) -> Result<Term, String> {

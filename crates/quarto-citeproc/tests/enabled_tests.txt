@@ -588,3 +588,25 @@ name_namepartAffixesNameAsSortOrder
 name_namepartAffixesNameAsSortOrderDemoteNonDroppingParticle
 nameorder_Long
 name_WithNonBreakingSpace
+
+# Page range en-dash fix (k-457)
+bugreports_ContextualPluralWithMainItemFields
+bugreports_NumberInMacroWithVerticalAlign
+label_PluralPagesWithAlphaPrefix
+locale_PageRangeDelimiterTermFrenchUndef
+locale_PageRangeDelimiterTermUndefined
+locator_SingularEmbeddedLabelAfterPlural
+magic_NumberRangeEnglish
+magic_NumberRangeFrench
+magic_TextRangeEnglish
+magic_TextRangeFrench
+number_PageRange
+number_StrangeError
+page_NoOption
+plural_LabelForced
+
+# Punctuation-in-quote fix (k-458)
+bugreports_ContentPunctuationDuplicate1
+magic_PunctuationInQuoteDefaultEnglishDelimiter
+magic_PunctuationInQuoteDelimiterTrue
+quotes_PunctuationNasty

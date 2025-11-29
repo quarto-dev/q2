@@ -204,6 +204,19 @@ impl<'a> EvalContext<'a> {
             None
         }
     }
+
+    /// Get the page-range-delimiter from the locale, defaulting to en-dash.
+    ///
+    /// The page-range-delimiter term specifies the delimiter used between
+    /// page numbers in a range (e.g., "1–5"). If not defined in the locale,
+    /// defaults to en-dash (–, U+2013).
+    fn get_page_range_delimiter(&self) -> String {
+        use quarto_csl::TermForm;
+        self.processor
+            .locales
+            .get_term("page-range-delimiter", TermForm::Long, false)
+            .unwrap_or_else(|| "\u{2013}".to_string()) // Default to en-dash
+    }
 }
 
 /// Evaluate a citation and return the Output AST.
@@ -778,13 +791,29 @@ fn evaluate_text(
                 ctx.record_var_call(value.is_some());
 
                 if let Some(value) = value {
-                    // Parse CSL rich text (HTML-like markup) from the value
-                    let parsed = crate::output::parse_csl_rich_text(&value);
-                    // Tag title for potential hyperlinking
-                    if name == "title" {
-                        Output::tagged(Tag::Title, parsed)
+                    // Special handling for page-like variables: format ranges with en-dash
+                    // This applies to:
+                    // - "page" variable
+                    // - "locator" variable when its label is "page" (or unspecified, which defaults to page)
+                    let is_page_like = name == "page"
+                        || (name == "locator"
+                            && ctx.get_locator_label().map_or(true, |l| l == "page"));
+
+                    if is_page_like {
+                        let delimiter = ctx.get_page_range_delimiter();
+                        let formatted = format_page_range(&value, &delimiter);
+                        Output::tagged(Tag::Locator, crate::output::parse_csl_rich_text(&formatted))
                     } else {
-                        parsed
+                        // Parse CSL rich text (HTML-like markup) from the value
+                        let parsed = crate::output::parse_csl_rich_text(&value);
+                        // Tag title for potential hyperlinking
+                        if name == "title" {
+                            Output::tagged(Tag::Title, parsed)
+                        } else if name == "locator" {
+                            Output::tagged(Tag::Locator, parsed)
+                        } else {
+                            parsed
+                        }
                     }
                 } else {
                     Output::Null
@@ -2042,7 +2071,12 @@ fn evaluate_number(
 
     if let Some(value) = value {
         // TODO: Apply number form (ordinal, roman, etc.)
-        Ok(Output::literal(value))
+
+        // The <number> element should format all ranges with en-dash,
+        // not just page-like variables. This applies to edition, volume, issue, etc.
+        let delimiter = ctx.get_page_range_delimiter();
+        let formatted = format_page_range(&value, &delimiter);
+        Ok(Output::literal(formatted))
     } else {
         Ok(Output::Null)
     }
@@ -2740,6 +2774,77 @@ fn suffix_to_letter(suffix: i32) -> String {
     }
 
     result
+}
+
+/// Format a page range value by converting hyphens to the page-range-delimiter.
+///
+/// This follows Pandoc citeproc's pageRange function:
+/// - Splits the input on commas and ampersands (preserving them as literal separators)
+/// - For each segment, if it contains a hyphen (but not escaped `\-`), the hyphen
+///   is replaced with the page-range-delimiter (default: en-dash)
+/// - Escaped hyphens `\-` are converted to literal hyphens
+/// - Spaces around separators are preserved
+///
+/// The `page_range_delimiter` should typically be the locale's "page-range-delimiter"
+/// term, defaulting to en-dash (–) if not specified.
+fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
+    // Check for escaped hyphen - if present, we need special handling
+    let has_escaped = value.contains("\\-");
+
+    // Split on comma and ampersand, keeping the delimiters and surrounding spaces
+    let mut result = String::new();
+    let mut current = String::new();
+
+    for c in value.chars() {
+        if c == ',' || c == '&' {
+            // Process the accumulated segment (preserve trailing spaces in result)
+            result.push_str(&format_page_segment(&current, page_range_delimiter, has_escaped));
+            current.clear();
+            result.push(c);
+        } else {
+            current.push(c);
+        }
+    }
+
+    // Process any remaining segment
+    result.push_str(&format_page_segment(&current, page_range_delimiter, has_escaped));
+
+    result
+}
+
+/// Format a single page segment (part between comma/ampersand separators).
+/// Preserves leading and trailing whitespace.
+fn format_page_segment(segment: &str, delimiter: &str, has_escaped: bool) -> String {
+    // Preserve leading and trailing whitespace
+    let leading: String = segment.chars().take_while(|c| c.is_whitespace()).collect();
+    let trailing: String = segment.chars().rev().take_while(|c| c.is_whitespace()).collect::<String>().chars().rev().collect();
+    let trimmed = segment.trim();
+
+    if trimmed.is_empty() {
+        return segment.to_string();
+    }
+
+    if has_escaped && trimmed.contains("\\-") {
+        // Has escaped hyphen - don't treat as range, just replace \- with -
+        return format!("{}{}{}", leading, trimmed.replace("\\-", "-"), trailing);
+    }
+
+    // Check for range indicator (hyphen or en-dash)
+    let is_dash = |c: char| c == '-' || c == '\u{2013}';
+
+    if let Some(pos) = trimmed.find(is_dash) {
+        // Split on the dash
+        let (start, rest) = trimmed.split_at(pos);
+        let end = rest.trim_start_matches(is_dash);
+
+        // Only treat as range if both parts are non-empty
+        if !start.trim().is_empty() && !end.trim().is_empty() {
+            return format!("{}{}{}{}{}", leading, start.trim(), delimiter, end.trim(), trailing);
+        }
+    }
+
+    // Not a range, return with preserved whitespace
+    format!("{}{}{}", leading, trimmed, trailing)
 }
 
 #[cfg(test)]

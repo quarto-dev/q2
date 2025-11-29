@@ -2127,10 +2127,22 @@ fn recurse_punct_in_quotes(output: Output) -> Output {
         Output::Formatted {
             formatting,
             children,
-        } => Output::Formatted {
-            formatting,
-            children: move_punct_in_children(children),
-        },
+        } => {
+            // First, process children
+            let processed_children = move_punct_in_children(children);
+
+            // Then, check if delimiter starts with punctuation that should move into quotes.
+            // For each child that ends with a quoted element (except the last),
+            // we may need to move the delimiter's leading punctuation into the quote.
+            // We use a custom delimiter per-child if needed.
+            let (final_children, final_formatting) =
+                move_delimiter_punct_into_quotes(processed_children, formatting);
+
+            Output::Formatted {
+                formatting: final_formatting,
+                children: final_children,
+            }
+        }
         Output::Linked { url, children } => Output::Linked {
             url,
             children: move_punct_in_children(children),
@@ -2138,13 +2150,66 @@ fn recurse_punct_in_quotes(output: Output) -> Output {
         Output::InNote(child) => {
             Output::InNote(Box::new(move_punctuation_inside_quotes(*child)))
         }
-        Output::Tagged { tag, child } => Output::Tagged {
-            tag,
-            child: Box::new(move_punctuation_inside_quotes(*child)),
-        },
+        Output::Tagged { tag, child } => {
+            // Don't apply punctuation-in-quote inside Prefix or Suffix tags.
+            // These contain user-specified content where punctuation should stay as typed.
+            let should_recurse = !matches!(tag, Tag::Prefix | Tag::Suffix);
+            Output::Tagged {
+                tag,
+                child: Box::new(if should_recurse {
+                    move_punctuation_inside_quotes(*child)
+                } else {
+                    *child
+                }),
+            }
+        }
         // Literal and Null don't have children
         other => other,
     }
+}
+
+/// Move delimiter punctuation into trailing quoted elements.
+///
+/// When a delimiter starts with `.` or `,` and a child ends with a quoted element,
+/// we move that punctuation into the quote. The delimiter is kept intact;
+/// the smart punctuation handling at render time will skip redundant punctuation
+/// when the content already ends with that punctuation inside a quote.
+fn move_delimiter_punct_into_quotes(
+    mut children: Vec<Output>,
+    formatting: Formatting,
+) -> (Vec<Output>, Formatting) {
+    let Some(ref delim) = formatting.delimiter else {
+        return (children, formatting);
+    };
+
+    let first_char = delim.chars().next();
+    if !matches!(first_char, Some('.') | Some(',')) {
+        return (children, formatting);
+    }
+
+    let punct = first_char.unwrap();
+
+    // Check each child except the last - if it ends with a quoted element,
+    // move the delimiter's leading punctuation into the quote
+    for i in 0..children.len().saturating_sub(1) {
+        if let Some(quoted_path) = find_trailing_quoted(&children[i]) {
+            // Check if the quoted content doesn't already end with this punctuation
+            if !ends_with_punct_in_path(&children[i], &quoted_path, punct) {
+                // Move punctuation into the quote
+                children[i] = insert_punct_in_path(
+                    std::mem::replace(&mut children[i], Output::Null),
+                    &quoted_path,
+                    punct,
+                );
+            }
+        }
+    }
+
+    // Keep the delimiter intact - the smart punctuation handling at render time
+    // will handle collisions between the quoted content's trailing punctuation
+    // and the delimiter's leading punctuation.
+
+    (children, formatting)
 }
 
 /// Extract leading punctuation (. or ,) from an Output node.

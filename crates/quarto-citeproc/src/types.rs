@@ -746,7 +746,8 @@ impl Processor {
     }
 
     /// Check if punctuation should be moved inside quotes.
-    /// This checks locale overrides first, then falls back to style options.
+    /// This checks style-level locale overrides first, then external locale files,
+    /// then falls back to style options.
     /// When true, periods and commas following a closing quote are moved inside.
     pub fn punctuation_in_quote(&self) -> bool {
         // First check style-level locale overrides
@@ -754,6 +755,11 @@ impl Processor {
             if let Some(ref opts) = locale.options {
                 return opts.punctuation_in_quote;
             }
+        }
+
+        // Check external locale files
+        if let Some(punct_in_quote) = self.locales.get_punctuation_in_quote() {
+            return punct_in_quote;
         }
 
         // Fall back to style options

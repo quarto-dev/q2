@@ -126,6 +126,39 @@ impl LocaleManager {
         self.locales.insert(lang, locale);
     }
 
+    /// Get the punctuation-in-quote option from the locale.
+    /// Returns None if no locale has this option set.
+    pub fn get_punctuation_in_quote(&self) -> Option<bool> {
+        // Try the default locale
+        if let Some(locale) = self.locales.get(&self.default_locale) {
+            if let Some(ref opts) = locale.options {
+                return Some(opts.punctuation_in_quote);
+            }
+        }
+
+        // Try base language
+        if let Some(base) = self.default_locale.split('-').next() {
+            if base != self.default_locale {
+                if let Some(locale) = self.locales.get(base) {
+                    if let Some(ref opts) = locale.options {
+                        return Some(opts.punctuation_in_quote);
+                    }
+                }
+            }
+        }
+
+        // Fall back to en-US
+        if self.default_locale != "en-US" {
+            if let Some(locale) = self.locales.get("en-US") {
+                if let Some(ref opts) = locale.options {
+                    return Some(opts.punctuation_in_quote);
+                }
+            }
+        }
+
+        None
+    }
+
     /// Get a date format from the locale.
     pub fn get_date_format(&self, form: quarto_csl::DateForm) -> Option<&quarto_csl::DateFormat> {
         // Try the default locale
@@ -344,5 +377,21 @@ mod tests {
 
         // We should have at least 50 locale files
         assert!(count >= 50, "Expected at least 50 locale files, got {}", count);
+    }
+
+    #[test]
+    fn test_punctuation_in_quote_en_us() {
+        let manager = LocaleManager::new(Some("en-US".to_string()));
+        let result = manager.get_punctuation_in_quote();
+        println!("en-US punctuation_in_quote: {:?}", result);
+        assert_eq!(result, Some(true));
+    }
+
+    #[test]
+    fn test_punctuation_in_quote_en_gb() {
+        let manager = LocaleManager::new(Some("en-GB".to_string()));
+        let result = manager.get_punctuation_in_quote();
+        println!("en-GB punctuation_in_quote: {:?}", result);
+        assert_eq!(result, Some(false));
     }
 }
