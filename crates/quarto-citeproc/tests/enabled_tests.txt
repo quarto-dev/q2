@@ -10,14 +10,13 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 466/858 conformance tests passing (~54.3%)
+# Current status: 524/858 conformance tests passing (~61.1%)
 # Last updated: 2025-11-28
-# Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
-
+# Note: Implemented VarCount group suppression; fixed number-of-volumes label plural handling
+# Added 58 tests that started passing after group suppression + numeric variable fixes
 # affix
 affix_TextNodeWithMacro
 affix_InterveningEmpty
-
 # bugreports
 bugreports_Abnt
 bugreports_ArabicLocale
@@ -33,7 +32,6 @@ bugreports_SortSecondaryKey
 bugreports_UndefinedInName
 bugreports_UnisaHarvardInitialization
 bugreports_effingBug
-
 # condition
 condition_EmptyDate
 condition_EmptyIsNumericFalse
@@ -46,7 +44,6 @@ condition_NumeralIsNumeric
 condition_TextIsNotNumeric
 condition_VariableAny
 condition_VariableNone
-
 # collapse
 collapse_AuthorCollapse
 collapse_AuthorCollapseNoDate
@@ -55,7 +52,6 @@ collapse_CitationNumberRangesMixed
 collapse_CitationNumberRangesMixed2
 collapse_CitationNumberRangesMixed3
 collapse_CitationNumberRangesOneOnly
-
 # date
 date_Accessed
 date_DateAD
@@ -138,7 +134,6 @@ date_TextFormYeardateYearRangeOpen
 date_NegativeDateSort
 date_NegativeDateSortViaMacro
 date_NegativeDateSortViaMacroOnYearMonthOnly
-
 # disambiguate
 disambiguate_AddNamesFailure
 disambiguate_AddNamesFailureWithAddGivenname
@@ -160,16 +155,12 @@ disambiguate_ThreeNoAuthorNoTitleEntries
 disambiguate_YearSuffixTwoPairsBibliography
 disambiguate_YearSuffixTwoPairsFirstnameBibliography
 # disambiguate_YearSuffixTwoPairsFullnamesBibliography - disabled: fullnames disambiguation not fully implemented
-
 # form
 form_TitleTestNoLongFalse
-
 # group
 # group_SuppressTermInMacro - disabled: exposes group suppression bug (was passing incorrectly before locale loading)
-
 # integration
 integration_CitationSortTwice
-
 # label
 label_EmptyLabelVanish
 label_EmptyLabelVanishPage
@@ -181,7 +172,6 @@ label_PluralWithAnd
 label_PluralWithCommaAnd
 label_PluralWithCommaLocalizedAnd
 label_PluralWithLocalizedAnd
-
 # locale
 locale_EmptyDate
 locale_EmptyPlusOverrideStyleOpt
@@ -192,14 +182,11 @@ locale_SpecificDate
 locale_SpecificTerm
 locale_TitleCaseEmptyLangEmptyLocale
 locale_UnknownTerm
-
 # locator
 locator_TermSelection
-
 # magic
 magic_AllowRepeatDateRenderings
 magic_StripPeriodsExcludeAffixes
-
 # name
 name_Delimiter
 name_EtAlUseLast
@@ -253,7 +240,6 @@ name_WesternTwoAuthors
 name_EditorTranslatorBoth
 name_EditorTranslatorSameEmptyTerm
 name_EditorTranslatorWithTranslatorOnlyBib
-
 # nameattr
 # name-as-sort-order
 nameattr_NameAsSortOrderOnBibliographyInBibliography
@@ -357,15 +343,12 @@ nameattr_NameFormOnCitationInBibliography
 nameattr_NameFormOnCitationInCitation
 nameattr_NameFormOnStyleInBibliography
 nameattr_NameFormOnStyleInCitation
-
 # nameorder
 nameorder_Short
 nameorder_ShortDemoteDisplayAndSort
 nameorder_ShortNameAsSortDemoteNever
-
 # namespaces
 namespaces_NonNada3
-
 # number
 number_FailingDelimiters
 number_IsNumericWithAlpha
@@ -373,11 +356,9 @@ number_LeadingZeros
 number_MixedText
 number_PageFirst
 number_SpacesMakeIsNumericFalse
-
 # page
 page_NumberPageFirst
 page_PluralDetectWithEndash
-
 # position
 position_FalseInBibliography
 position_IbidWithLocator
@@ -385,12 +366,10 @@ position_IfIbidIsTrueThenSubsequentIsTrue
 position_NearNoteFalse
 position_NearNoteUnsupported
 position_TrueInCitation
-
 # punctuation
 punctuation_DateStripPeriods
 punctuation_DoNotSuppressColonAfterPeriod
 punctuation_NoSuppressOfPeriodBeforeSemicolon
-
 # sort
 sort_BibliographyResortOnUpdate
 sort_CaseInsensitiveBibliography
@@ -410,16 +389,13 @@ sort_NameVariable
 sort_StatusFieldDescending
 sort_StripMarkup
 sort_TestInheritance
-
 # sortseparator
 sortseparator_SortSeparatorEmpty
-
 # substitute
 substitute_RepeatedNamesOk
 substitute_SubstituteOnlyOnceString
 substitute_SubstituteOnlyOnceTerm
 substitute_SubstituteOnlyOnceVariable
-
 # textcase
 textcase_AfterQuote
 textcase_CapitalizeAll
@@ -439,14 +415,10 @@ textcase_TitleCaseWithFinalNocase
 textcase_TitleCaseWithHyphens
 textcase_TitleCaseWithInitials
 textcase_TitleCaseWithNonBreakSpace
-
 # unicode
 unicode_NonBreakingSpace
-
 # variables
 variables_TitleShortOnShortTitleNoTitle
-variables_TitleShortOnShortTitleNoTitleCondition
-
 # virtual
 virtual_PageFirst
 sort_BibliographyCitationNumberDescending
@@ -564,3 +536,62 @@ name_FormattingOfParticles
 name_ParticleFormatting
 textcase_Uppercase
 name_AsianGlyphs
+label_PluralNumberOfVolumes
+bugreports_badcitationupdate
+bugreports_delimiteronlayout
+bugreports_demopagefullcitecruftonsubsequent
+bugreports_duplicateterminalpunctuationinbibliography
+bugreports_greekstyleproblems
+bugreports_greekstyletwoeditors
+bugreports_labelsoutofplace
+bugreports_matchedauthoranddate
+bugreports_styleerror001
+bugreports_undefinedbeforeval
+bugreports_undefinedinname2
+bugreports_undefinedinname3
+bugreports_yearsuffixinharvard1
+bugreports_yearsuffixlingers
+condition_singletonifmatchnone
+date_accessedcrash
+date_yearsuffiximplicitwithnodate
+date_yearsuffixwithnodate
+disambiguate_failwithyearsuffix
+disambiguate_implicityearsuffixonceonly
+disambiguate_lastonlyfailwithbycite
+disambiguate_notextelementusesyearsuffixvariable
+disambiguate_yearsuffixfiftytwoentries
+disambiguate_yearsuffixfiftytwoentriesbycite
+disambiguate_yearsuffixmidinsert
+etal_citationandbibliographydecorationsinbibliography
+etal_usezerofirst
+fullstyles_chicagonotewithbibliographywithpublisher
+group_complexnesting
+group_legalwithauthordate
+group_suppressterminmacro
+group_suppresswithemptynesteddatenode
+integration_ibidwithdifferentlocators
+integration_subsequentwheninterveningfootnote
+magic_nameparticle
+name_citegroupdelimiterwithyearcollapse
+name_nondroppingparticledefault
+name_parsedcommadelimiteddroppingparticlesortorderingwithoutaffixes
+name_parseddroppingparticlewithaffixes
+name_parseduppercasenondroppingparticle
+name_tworolessamerenderingseparaterolelabels
+name_westernprimaryfontstyle
+name_westernprimaryfontstyletwoauthors
+nameattr_namesdelimiteronbibliographyincitation
+nameattr_namesdelimiteroncitationinbibliography
+nameattr_namesdelimiteronnamesinbibliography
+nameattr_namesdelimiteronnamesincitation
+nameorder_longnameassortdemotedisplayandsort
+nameorder_longnameassortdemotenever
+position_ifibidwithlocatoristruethenibidistrue
+position_nearnotewithplugin
+punctuation_semicolondelimiter
+sort_citationnumberprimaryascendingviamacrocitation
+sort_citationnumberprimaryascendingviavariablecitation
+sort_citationnumberprimarydescendingviamacrocitation
+sort_citationnumberprimarydescendingviavariablecitation
+sort_substitutetitle
+variables_titleshortonshorttitlenotitlegroup

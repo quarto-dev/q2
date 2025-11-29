@@ -518,11 +518,21 @@ impl Reference {
             "note" => self.note.clone(),
             "language" => self.language.clone(),
             "source" => self.source.clone(),
-            // Check other fields
-            _ => self
-                .other
-                .get(name)
-                .and_then(|v| v.as_str().map(|s| s.to_string())),
+            // Check other fields (handle both strings and numbers)
+            _ => self.other.get(name).and_then(|v| {
+                if let Some(s) = v.as_str() {
+                    Some(s.to_string())
+                } else if let Some(n) = v.as_i64() {
+                    Some(n.to_string())
+                } else if let Some(n) = v.as_u64() {
+                    Some(n.to_string())
+                } else if let Some(n) = v.as_f64() {
+                    // Format floats without trailing zeros
+                    Some(format!("{}", n))
+                } else {
+                    None
+                }
+            }),
         }
     }
 

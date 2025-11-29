@@ -17,6 +17,16 @@ use quarto_csl::{
     TextElement, TextSource,
 };
 
+/// Tracks variable access for group suppression logic.
+/// A group is suppressed if it calls at least one variable but all called variables are empty.
+#[derive(Clone, Copy, Default)]
+struct VarCount {
+    /// Total number of variables called
+    called: u32,
+    /// Number of variables that were non-empty
+    non_empty: u32,
+}
+
 /// Evaluation context for processing a single reference.
 struct EvalContext<'a> {
     /// The processor (provides style, locales, references).
@@ -43,6 +53,9 @@ struct EvalContext<'a> {
     /// Whether year suffix has been rendered for this reference.
     /// Year suffix should only appear once per reference (CSL 0.8.1 legacy mode).
     year_suffix_rendered: Cell<bool>,
+    /// Variable access tracking for group suppression.
+    /// A group/macro is suppressed if it calls variables but all are empty.
+    var_count: VarCount,
 }
 
 impl<'a> EvalContext<'a> {
@@ -62,6 +75,7 @@ impl<'a> EvalContext<'a> {
             locator_label: None,
             positions: Vec::new(), // No positions in bibliography context
             year_suffix_rendered: Cell::new(false),
+            var_count: VarCount::default(),
         }
     }
 
@@ -90,7 +104,26 @@ impl<'a> EvalContext<'a> {
             locator_label: citation_item.label.as_deref(),
             positions,
             year_suffix_rendered: Cell::new(false),
+            var_count: VarCount::default(),
         }
+    }
+
+    /// Record that a variable was called.
+    fn record_var_call(&mut self, non_empty: bool) {
+        self.var_count.called += 1;
+        if non_empty {
+            self.var_count.non_empty += 1;
+        }
+    }
+
+    /// Get current variable count (for group suppression).
+    fn get_var_count(&self) -> VarCount {
+        self.var_count
+    }
+
+    /// Restore variable count (for group suppression).
+    fn set_var_count(&mut self, count: VarCount) {
+        self.var_count = count;
     }
 
     /// Get the effective formatting (merged from stack).
@@ -561,14 +594,18 @@ fn evaluate_text(
         TextSource::Variable { name, form, .. } => {
             // Special handling for citation-number
             if name == "citation-number" {
-                if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
+                let result = if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
                     // Tag for collapse detection
                     Output::tagged(Tag::CitationNumber(num), Output::literal(num.to_string()))
                 } else {
                     Output::Null
-                }
+                };
+                ctx.record_var_call(!result.is_null());
+                result
             } else if name == "year-suffix" {
                 // Year suffix from disambiguation (1=a, 2=b, etc.)
+                // NOTE: year-suffix does NOT count as a variable for group suppression purposes
+                // (per Haskell citeproc: "we don't update var count here; this doesn't count as a variable")
                 if let Some(suffix) = ctx
                     .reference
                     .disambiguation
@@ -592,6 +629,9 @@ fn evaluate_text(
                     ctx.get_variable(name)
                 };
 
+                // Record variable call for group suppression
+                ctx.record_var_call(value.is_some());
+
                 if let Some(value) = value {
                     // Parse CSL rich text (HTML-like markup) from the value
                     let parsed = crate::output::parse_csl_rich_text(&value);
@@ -608,9 +648,31 @@ fn evaluate_text(
         }
         TextSource::Macro { name, .. } => {
             // Look up and evaluate the macro
+            // Macros use group suppression: if the macro calls variables but all are empty,
+            // the entire macro output is suppressed.
             if let Some(macro_def) = ctx.processor.style.macros.get(name).cloned() {
+                let old_var_count = ctx.get_var_count();
                 let delimiter = "".to_string();
-                evaluate_elements(ctx, &macro_def.elements, &delimiter)?
+                let result = evaluate_elements(ctx, &macro_def.elements, &delimiter)?;
+                let new_var_count = ctx.get_var_count();
+
+                // Check if macro should be suppressed:
+                // - It called at least one variable (new_called > old_called)
+                // - But none were non-empty (new_non_empty == old_non_empty)
+                let vars_called = new_var_count.called > old_var_count.called;
+                let all_empty = new_var_count.non_empty == old_var_count.non_empty;
+
+                if vars_called && all_empty {
+                    // Suppress the macro - restore var count and return null
+                    ctx.set_var_count(old_var_count);
+                    Output::Null
+                } else {
+                    // Macro is non-empty - treat it as a non-empty variable for parent group
+                    if !result.is_null() {
+                        ctx.record_var_call(true);
+                    }
+                    result
+                }
             } else {
                 Output::Null
             }
@@ -639,7 +701,13 @@ fn evaluate_names(
     let mut var_outputs: Vec<Output> = Vec::new();
 
     for var in &names_el.variables {
-        if let Some(names) = ctx.reference.get_names(var) {
+        let names = ctx.reference.get_names(var);
+        let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
+
+        // Record variable call for group suppression
+        ctx.record_var_call(has_names);
+
+        if let Some(names) = names {
             if !names.is_empty() {
                 // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
@@ -1381,17 +1449,35 @@ fn initialize_name(given: &str, initialize_with: &str) -> String {
 }
 
 /// Evaluate a group element.
+///
+/// Groups use suppression logic: if a group calls at least one variable but all
+/// called variables are empty, the entire group is suppressed (returns Null).
 fn evaluate_group(
     ctx: &mut EvalContext,
     group_el: &GroupElement,
     _formatting: &Formatting,
 ) -> Result<Output> {
+    // Save current variable count before evaluating group
+    let old_var_count = ctx.get_var_count();
+
     let delimiter = group_el.delimiter.clone().unwrap_or_default();
     let output = evaluate_elements(ctx, &group_el.elements, &delimiter)?;
 
-    // Groups are suppressed if all child elements are empty
-    // This is a key CSL behavior
-    Ok(output)
+    let new_var_count = ctx.get_var_count();
+
+    // Check if group should be suppressed:
+    // - It called at least one variable (new_called > old_called)
+    // - But none were non-empty (new_non_empty == old_non_empty)
+    let vars_called = new_var_count.called > old_var_count.called;
+    let all_empty = new_var_count.non_empty == old_var_count.non_empty;
+
+    if vars_called && all_empty {
+        // Suppress the group - restore var count and return null
+        ctx.set_var_count(old_var_count);
+        Ok(Output::Null)
+    } else {
+        Ok(output)
+    }
 }
 
 /// Evaluate a choose element (conditionals).
@@ -1569,19 +1655,21 @@ fn evaluate_number(
 ) -> Result<Output> {
     // Special handling for citation-number
     if num_el.variable == "citation-number" {
-        if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
+        let result = if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
             // TODO: Apply number form (ordinal, roman, etc.)
             // Tag for collapse detection
-            return Ok(Output::tagged(
-                Tag::CitationNumber(num),
-                Output::literal(num.to_string()),
-            ));
+            Output::tagged(Tag::CitationNumber(num), Output::literal(num.to_string()))
         } else {
-            return Ok(Output::Null);
-        }
+            Output::Null
+        };
+        ctx.record_var_call(!result.is_null());
+        return Ok(result);
     }
 
-    if let Some(value) = ctx.get_variable(&num_el.variable) {
+    let value = ctx.get_variable(&num_el.variable);
+    ctx.record_var_call(value.is_some());
+
+    if let Some(value) = value {
         // TODO: Apply number form (ordinal, roman, etc.)
         Ok(Output::literal(value))
     } else {
@@ -1618,7 +1706,7 @@ fn evaluate_label(
             // Check if the value indicates plural (ranges, "and", multiple values)
             value_for_plural
                 .as_ref()
-                .map(|v| is_plural_value(v))
+                .map(|v| is_plural_value(v, &term_name))
                 .unwrap_or(false)
         }
     };
@@ -1632,17 +1720,37 @@ fn evaluate_label(
 
 /// Check if a value indicates plural (for locator/page labels).
 ///
-/// Plural indicators:
-/// - Contains "-" or "–" (en-dash) indicating a range
-/// - Contains "and", "&", or "," indicating multiple values
-/// - Contains localized "and" words (et, und, y, e, etc.)
-/// - Has multiple number sequences
-fn is_plural_value(value: &str) -> bool {
-    // Check for range indicators
-    if value.contains('-') || value.contains('–') || value.contains('—') {
+/// Plural indicators depend on the variable:
+/// - For number-of-volumes: numeric value != 1 and != 0 means plural
+/// - For other variables (locators, pages): multiple numbers indicate plural
+///   (ranges like "1-5", lists like "1, 5", etc.)
+///
+/// Following Haskell citeproc's determinePlural logic.
+fn is_plural_value(value: &str, variable: &str) -> bool {
+    // Special case for number-of-volumes: numeric value > 1 means plural
+    // (This is a count, not a page/locator reference)
+    if variable == "number-of-volumes" {
+        if let Ok(n) = value.trim().parse::<i64>() {
+            return n != 1 && n != 0;
+        }
+        // Non-numeric number-of-volumes is treated as singular
+        return false;
+    }
+
+    // For locators/pages: check for escaped hyphen (literal hyphen, not range)
+    // In CSL, \- means a literal hyphen that doesn't indicate a range
+    if value.contains("\\-") {
+        return false;
+    }
+
+    // Count number sequences in the value
+    // Ranges like "1-5" or "1–5" or lists like "1, 5" have multiple numbers
+    let num_count = count_number_sequences(value);
+    if num_count > 1 {
         return true;
     }
-    // Check for "and", "&", or comma
+
+    // Check for "and", "&" indicating multiple values
     if value.contains(" and ") || value.contains(" & ") || value.contains('&') {
         return true;
     }
@@ -1655,11 +1763,28 @@ fn is_plural_value(value: &str) -> bool {
     {
         return true;
     }
-    // Check for comma-separated values (but not decimal numbers)
-    if value.contains(", ") {
-        return true;
-    }
+
     false
+}
+
+/// Count the number of separate number sequences in a string.
+/// For example: "101" = 1, "101-105" = 2, "1, 5, 10" = 3
+fn count_number_sequences(value: &str) -> usize {
+    let mut count = 0;
+    let mut in_number = false;
+
+    for c in value.chars() {
+        if c.is_ascii_digit() {
+            if !in_number {
+                count += 1;
+                in_number = true;
+            }
+        } else {
+            in_number = false;
+        }
+    }
+
+    count
 }
 
 /// Evaluate a date element.
@@ -1671,7 +1796,10 @@ fn evaluate_date(
     use crate::reference::DateParts;
     use quarto_csl::{DatePartName, DatePartsFilter};
 
-    let Some(date_var) = ctx.reference.get_date(&date_el.variable) else {
+    let date_var = ctx.reference.get_date(&date_el.variable);
+    ctx.record_var_call(date_var.is_some());
+
+    let Some(date_var) = date_var else {
         return Ok(Output::Null);
     };
 
