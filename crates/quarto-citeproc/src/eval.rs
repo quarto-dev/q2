@@ -41,6 +41,9 @@ struct EvalContext<'a> {
     substitute_name_options: Option<InheritableNameOptions>,
     /// Whether we're currently inside a substitute block.
     in_substitute: bool,
+    /// Whether we're currently evaluating sort keys (not just rendering in sort order).
+    /// This affects demote-non-dropping-particle="sort-only" behavior.
+    in_sort_key: bool,
     // Citation item context (set when processing a citation, None for bibliography)
     /// Locator value from citation item (e.g., "42-45").
     locator: Option<&'a str>,
@@ -71,6 +74,7 @@ impl<'a> EvalContext<'a> {
             inherited_name_options,
             substitute_name_options: None,
             in_substitute: false,
+            in_sort_key: false,
             locator: None,
             locator_label: None,
             positions: Vec::new(), // No positions in bibliography context
@@ -100,6 +104,7 @@ impl<'a> EvalContext<'a> {
             inherited_name_options,
             substitute_name_options: None,
             in_substitute: false,
+            in_sort_key: false,
             locator: citation_item.locator.as_deref(),
             locator_label: citation_item.label.as_deref(),
             positions,
@@ -1007,6 +1012,9 @@ fn format_names(
     // Get demote-non-dropping-particle option from style
     let demote_ndp = ctx.processor.style.options.demote_non_dropping_particle;
 
+    // Get initialize-with-hyphen option from style (defaults to true)
+    let init_with_hyphen = ctx.processor.style.options.initialize_with_hyphen;
+
     for (i, n) in names.iter().take(names_to_show).enumerate() {
         // Literal names are never inverted
         let is_literal = n.literal.is_some();
@@ -1025,11 +1033,13 @@ fn format_names(
             n,
             &effective_options,
             inverted,
+            ctx.in_sort_key,
             disamb,
             is_primary,
             family_formatting,
             given_formatting,
             demote_ndp,
+            init_with_hyphen,
         ));
         is_inverted.push(inverted);
     }
@@ -1141,11 +1151,13 @@ fn format_names(
                 &names[names.len() - 1],
                 &effective_options,
                 name_as_sort_order == Some(NameAsSortOrder::All),
+                ctx.in_sort_key,
                 disamb,
                 false, // not primary
                 family_formatting,
                 given_formatting,
                 demote_ndp,
+                init_with_hyphen,
             );
             let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
             if use_delim {
@@ -1185,11 +1197,13 @@ fn format_single_name(
     name: &crate::reference::Name,
     options: &quarto_csl::InheritableNameOptions,
     inverted: bool,
+    in_sort_key: bool,
     disamb: Option<&crate::reference::DisambiguationData>,
     is_primary: bool,
     family_formatting: Option<&Formatting>,
     given_formatting: Option<&Formatting>,
     demote_non_dropping_particle: quarto_csl::DemoteNonDroppingParticle,
+    initialize_with_hyphen: bool,
 ) -> Output {
     use crate::reference::NameHint;
     use quarto_csl::DemoteNonDroppingParticle;
@@ -1252,39 +1266,125 @@ fn format_single_name(
         }
         quarto_csl::NameForm::Long | quarto_csl::NameForm::Count => {
             // Determine if non-dropping particle should be demoted (moved from family to given)
+            // Per Haskell citeproc, demote decision depends on both option and context:
             // - Never: particle stays with family name always
-            // - SortOnly: demote in sort/inverted order only
-            // - DisplayAndSort: demote in both display and sort
+            // - SortOnly: demote ONLY when computing sort keys (in_sort_key=true), not during display
+            //   Note: "name-as-sort-order" makes names render inverted, but that's different from
+            //   actually computing sort keys. inSortKey is true only during sort key evaluation.
+            // - DisplayAndSort: demote in both display and sort contexts (when inverted OR in sort key)
             let demote_particle = match demote_non_dropping_particle {
                 DemoteNonDroppingParticle::Never => false,
-                DemoteNonDroppingParticle::SortOnly => inverted,
-                DemoteNonDroppingParticle::DisplayAndSort => true,
+                DemoteNonDroppingParticle::SortOnly => in_sort_key,
+                DemoteNonDroppingParticle::DisplayAndSort => inverted || in_sort_key,
             };
+
+            // Split family_formatting into font styling (for individual elements) and affixes (for wrapper)
+            // This matches Haskell citeproc's approach: familyFormatting vs familyAffixes
+            let (family_font_styling, family_affixes): (Option<Formatting>, Option<Formatting>) =
+                if let Some(fmt) = family_formatting {
+                    // Font styling: everything except prefix/suffix
+                    let font_styling = Formatting {
+                        prefix: None,
+                        suffix: None,
+                        ..fmt.clone()
+                    };
+                    // Affixes: only prefix/suffix
+                    let affixes = if fmt.prefix.is_some() || fmt.suffix.is_some() {
+                        Some(Formatting {
+                            prefix: fmt.prefix.clone(),
+                            suffix: fmt.suffix.clone(),
+                            ..Formatting::default()
+                        })
+                    } else {
+                        None
+                    };
+                    // Only include font_styling if it has actual styling
+                    let has_font_styling = font_styling.font_style.is_some()
+                        || font_styling.font_weight.is_some()
+                        || font_styling.font_variant.is_some()
+                        || font_styling.text_decoration.is_some()
+                        || font_styling.vertical_align.is_some()
+                        || font_styling.text_case.is_some()
+                        || font_styling.display.is_some()
+                        || font_styling.quotes
+                        || font_styling.strip_periods;
+                    (if has_font_styling { Some(font_styling) } else { None }, affixes)
+                } else {
+                    (None, None)
+                };
 
             // Build family part
             // If demoting, non-dropping particle is NOT included in family
+            // Apply font styling to individual parts, then wrap with affixes
             let family_part: Option<Output> = {
                 let mut fp: Vec<Output> = Vec::new();
                 if !demote_particle {
                     if let Some(ref ndp) = name.non_dropping_particle {
-                        fp.push(Output::literal(ndp.clone()));
+                        let base = Output::literal(ndp.clone());
+                        let formatted = if let Some(ref fmt) = family_font_styling {
+                            Output::formatted(fmt.clone(), vec![base])
+                        } else {
+                            base
+                        };
+                        fp.push(formatted);
                     }
                 }
                 if let Some(ref family) = name.family {
-                    fp.push(Output::literal(family.clone()));
+                    let base = Output::literal(family.clone());
+                    let formatted = if let Some(ref fmt) = family_font_styling {
+                        Output::formatted(fmt.clone(), vec![base])
+                    } else {
+                        base
+                    };
+                    fp.push(formatted);
                 }
                 if fp.is_empty() {
                     None
                 } else {
-                    let base = Output::formatted_with_delimiter(Formatting::default(), fp, " ");
-                    // Apply family_formatting if specified (e.g., text-case="uppercase")
-                    if let Some(fmt) = family_formatting {
-                        Some(Output::formatted(fmt.clone(), vec![base]))
+                    let combined = Output::formatted_with_delimiter(Formatting::default(), fp, " ");
+                    // Wrap with familyAffixes (prefix/suffix only) if present
+                    if let Some(ref affixes) = family_affixes {
+                        Some(Output::formatted(affixes.clone(), vec![combined]))
                     } else {
-                        Some(base)
+                        Some(combined)
                     }
                 }
             };
+
+            // Split given_formatting into font styling (for individual elements) and affixes (for wrapper)
+            // This matches Haskell citeproc's approach: givenFormatting vs givenAffixes
+            let (given_font_styling, given_affixes): (Option<Formatting>, Option<Formatting>) =
+                if let Some(fmt) = given_formatting {
+                    // Font styling: everything except prefix/suffix
+                    let font_styling = Formatting {
+                        prefix: None,
+                        suffix: None,
+                        ..fmt.clone()
+                    };
+                    // Affixes: only prefix/suffix
+                    let affixes = if fmt.prefix.is_some() || fmt.suffix.is_some() {
+                        Some(Formatting {
+                            prefix: fmt.prefix.clone(),
+                            suffix: fmt.suffix.clone(),
+                            ..Formatting::default()
+                        })
+                    } else {
+                        None
+                    };
+                    // Only include font_styling if it has actual styling
+                    let has_font_styling = font_styling.font_style.is_some()
+                        || font_styling.font_weight.is_some()
+                        || font_styling.font_variant.is_some()
+                        || font_styling.text_decoration.is_some()
+                        || font_styling.vertical_align.is_some()
+                        || font_styling.text_case.is_some()
+                        || font_styling.display.is_some()
+                        || font_styling.quotes
+                        || font_styling.strip_periods;
+                    (if has_font_styling { Some(font_styling) } else { None }, affixes)
+                } else {
+                    (None, None)
+                };
 
             // Build given part (possibly initialized)
             // CSL rule: if a name has only a given name (no family name), don't initialize it
@@ -1300,7 +1400,7 @@ fn format_single_name(
                     given.clone()
                 } else if let Some(ref init) = initialize_with {
                     if should_initialize {
-                        initialize_name(given, init)
+                        initialize_name(given, init, initialize_with_hyphen)
                     } else {
                         // initialize="false": normalize with initialize-with pattern but don't break into initials
                         normalize_given_name(given, init)
@@ -1309,8 +1409,8 @@ fn format_single_name(
                     given.clone()
                 };
                 let base = Output::literal(given_text);
-                // Apply given_formatting if specified (e.g., font-style="italic")
-                if let Some(fmt) = given_formatting {
+                // Apply font styling only (not affixes) - affixes wrap the combined given+particle
+                if let Some(ref fmt) = given_font_styling {
                     Output::formatted(fmt.clone(), vec![base])
                 } else {
                     base
@@ -1320,22 +1420,37 @@ fn format_single_name(
             // Build suffix part
             let suffix_part: Option<Output> = name.suffix.as_ref().map(|s| Output::literal(s.clone()));
 
-            // Build dropping particle part (not included in family formatting)
-            let dropping_particle_part: Option<Output> = name.dropping_particle.as_ref().map(|dp| Output::literal(dp.clone()));
+            // Build dropping particle part with font styling (not affixes)
+            let dropping_particle_part: Option<Output> = name.dropping_particle.as_ref().map(|dp| {
+                let base = Output::literal(dp.clone());
+                if let Some(ref fmt) = given_font_styling {
+                    Output::formatted(fmt.clone(), vec![base])
+                } else {
+                    base
+                }
+            });
 
-            // Build demoted non-dropping particle part (when demoted, goes after given)
+            // Build demoted non-dropping particle part with FAMILY font styling (when demoted, goes after given)
+            // Per Haskell citeproc: non-dropping particle always uses familyFormatting, even when demoted
             let demoted_ndp_part: Option<Output> = if demote_particle {
-                name.non_dropping_particle.as_ref().map(|ndp| Output::literal(ndp.clone()))
+                name.non_dropping_particle.as_ref().map(|ndp| {
+                    let base = Output::literal(ndp.clone());
+                    if let Some(ref fmt) = family_font_styling {
+                        Output::formatted(fmt.clone(), vec![base])
+                    } else {
+                        base
+                    }
+                })
             } else {
                 None
             };
 
             if inverted {
-                // Sort order: "Family, Given" or "Family, Given, Suffix"
-                // For Byzantine (Western) names: use sort_separator (default ", ")
-                // For non-Byzantine (CJK, etc.): use space only (no comma)
-                // In sort order, dropping particle goes after given name
-                // Structure: [family_part, sort_separator, given_part, " ", dropping_particle, ", ", suffix_part]
+                // Sort order: "Family, Given [particles]" or "Family, Given [particles], Suffix"
+                // Following Haskell citeproc pattern:
+                // - familyAffixes [ family ] <:> givenAffixes [ given <+> droppingParticle <+> ndp ] <:> suffix
+                // Where given, droppingParticle, ndp each have givenFormatting (font styling only)
+                // And the combined result is wrapped with givenAffixes (prefix/suffix only)
                 let mut parts: Vec<Output> = Vec::new();
 
                 // Non-Byzantine names don't use comma in sort order
@@ -1349,27 +1464,41 @@ fn format_single_name(
                     parts.push(family);
                 }
 
+                // Build the given part with particles, then wrap with affixes
+                let mut given_parts: Vec<Output> = Vec::new();
                 if let Some(given) = given_part {
+                    given_parts.push(given);
+                }
+
+                // Dropping particle goes after given (already has font styling applied)
+                if let Some(dp) = dropping_particle_part {
+                    if !given_parts.is_empty() {
+                        given_parts.push(Output::literal(" ".to_string()));
+                    }
+                    given_parts.push(dp);
+                }
+
+                // Demoted non-dropping particle goes after dropping particle (already has font styling applied)
+                if let Some(ndp) = demoted_ndp_part.clone() {
+                    if !given_parts.is_empty() {
+                        given_parts.push(Output::literal(" ".to_string()));
+                    }
+                    given_parts.push(ndp);
+                }
+
+                // Combine given parts and wrap with affixes if present
+                if !given_parts.is_empty() {
                     if !parts.is_empty() {
                         parts.push(Output::literal(effective_separator.clone()));
                     }
-                    parts.push(given);
-                }
-
-                // Dropping particle goes after given
-                if let Some(dp) = dropping_particle_part {
-                    if !parts.is_empty() {
-                        parts.push(Output::literal(" ".to_string()));
-                    }
-                    parts.push(dp);
-                }
-
-                // Demoted non-dropping particle goes after dropping particle
-                if let Some(ndp) = demoted_ndp_part.clone() {
-                    if !parts.is_empty() {
-                        parts.push(Output::literal(" ".to_string()));
-                    }
-                    parts.push(ndp);
+                    let given_combined = Output::sequence(given_parts);
+                    // Wrap with givenAffixes (prefix/suffix only) if present
+                    let wrapped = if let Some(ref affixes) = given_affixes {
+                        Output::formatted(affixes.clone(), vec![given_combined])
+                    } else {
+                        given_combined
+                    };
+                    parts.push(wrapped);
                 }
 
                 if let Some(suffix) = suffix_part {
@@ -1462,91 +1591,156 @@ fn format_single_name_to_string(
     is_primary: bool,
 ) -> String {
     // Use default SortOnly for tests (most common case)
+    // Use true for initialize_with_hyphen (the default)
+    // Use false for in_sort_key (test helper is for display, not sort key computation)
     format_single_name(
         name,
         options,
         inverted,
+        false, // in_sort_key
         disamb,
         is_primary,
         None,
         None,
         quarto_csl::DemoteNonDroppingParticle::SortOnly,
+        true, // initialize_with_hyphen default
     )
     .render()
 }
 
 /// Normalize a given name without breaking into initials (for initialize="false").
-/// Replaces periods with the initialize-with separator while preserving the original characters.
-/// E.g., "M.E" with " " -> "M E", "Ph.M.E." with " " -> "Ph M E"
-/// E.g., "M.E" with "" -> "ME", "Ph.M.E." with "" -> "PhME"
-/// E.g., "John M.E." with "" -> "John ME" (space before initials preserved)
+/// This follows Pandoc's citeproc algorithm:
+/// - Parse into tokens (single letters at period/space boundaries are "initials")
+/// - Initials get initialize-with appended
+/// - Multi-letter words get space appended
+/// - Consecutive uppercase (like "ME") is preserved unchanged
+///
+/// Examples with initialize-with=". ":
+/// - "M.E" -> "M. E." (both are initials)
+/// - "M E" -> "M. E." (both are initials)
+/// - "John M.E." -> "John M. E." (John is a word, M and E are initials)
+/// - "ME" -> "ME" (consecutive uppercase, unchanged)
 fn normalize_given_name(given: &str, initialize_with: &str) -> String {
-    // When initialize-with is empty:
-    // - Remove periods
-    // - Remove spaces between initial-like parts (short segments)
-    // - Keep spaces between full words and initials
-    // When initialize-with is a space:
-    // - Replace periods with spaces and normalize
+    // Parse the string into tokens, tracking whether each is an "initial" (Left) or "word" (Right)
+    // A token is an "initial" if it's a single letter that ends at a period, space, or end of string
+    // A token is a "word" if it's multiple letters
 
-    if initialize_with.is_empty() {
-        // Special handling for empty initialize-with
-        // Split into parts, process each, then join intelligently
-        let parts: Vec<&str> = given.split_whitespace().collect();
-        let processed: Vec<String> = parts
-            .iter()
-            .map(|p| p.replace('.', ""))
-            .filter(|p| !p.is_empty())
-            .collect();
-
-        // Join parts: use empty string between short parts (<=2 chars), space otherwise
-        if processed.is_empty() {
-            return String::new();
-        }
-
-        let mut result = processed[0].clone();
-        for i in 1..processed.len() {
-            let prev = &processed[i - 1];
-            let curr = &processed[i];
-            // Use space if either part is longer than 2 chars (likely a full word)
-            if prev.len() > 2 || curr.len() > 2 {
-                result.push(' ');
-            }
-            result.push_str(curr);
-        }
-        result
-    } else {
-        // Non-empty initialize-with: replace periods with it and normalize spaces
-        let mut result = String::new();
-        let chars: Vec<char> = given.chars().collect();
-        let len = chars.len();
-
-        for (i, &c) in chars.iter().enumerate() {
-            if c == '.' {
-                // Check if this is a trailing period (at the end)
-                if i == len - 1 {
-                    // Skip trailing period
-                    continue;
-                }
-                // Replace period with initialize-with
-                result.push_str(initialize_with);
-            } else {
-                result.push(c);
-            }
-        }
-
-        // Normalize whitespace: collapse multiple spaces into one
-        result
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
+    #[derive(Debug)]
+    enum Token {
+        Initial(String),      // Single letter at period/space/end boundary
+        Word(String),         // Multi-letter sequence
+        Unchanged(String),    // Consecutive uppercase like "ME" - preserve as-is
     }
+
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut current = String::new();
+
+    let chars: Vec<char> = given.chars().collect();
+
+    for &c in chars.iter() {
+        match c {
+            '.' => {
+                // Period ends a token
+                if !current.is_empty() {
+                    // At a period boundary, short tokens (≤2 chars) are initials
+                    // Longer tokens starting with uppercase that contain lowercase are words
+                    if current.len() <= 2 {
+                        // Short tokens at period boundary are initials (e.g., "M", "Ph")
+                        tokens.push(Token::Initial(current.clone()));
+                    } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+                        && current.chars().skip(1).any(|c| c.is_lowercase()) {
+                        // Mixed case word like "John" - it's a word
+                        tokens.push(Token::Word(current.clone()));
+                    } else {
+                        // Other cases (all uppercase, etc.) - treat as initial
+                        tokens.push(Token::Initial(current.clone()));
+                    }
+                    current.clear();
+                }
+            }
+            ' ' => {
+                // Space ends a token
+                if !current.is_empty() {
+                    if current.len() == 1 && current.chars().next().map_or(false, |c| c.is_uppercase()) {
+                        tokens.push(Token::Initial(current.clone()));
+                    } else if current.len() > 1 && current.chars().all(|c| c.is_uppercase()) {
+                        // Consecutive uppercase at space boundary - preserve unchanged
+                        tokens.push(Token::Unchanged(current.clone()));
+                    } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+                        && current.chars().skip(1).any(|c| c.is_lowercase()) {
+                        // Mixed case starting with uppercase (like "John") - it's a word
+                        tokens.push(Token::Word(current.clone()));
+                    } else {
+                        tokens.push(Token::Word(current.clone()));
+                    }
+                    current.clear();
+                }
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+
+    // Handle final token
+    if !current.is_empty() {
+        if current.len() == 1 && current.chars().next().map_or(false, |c| c.is_uppercase()) {
+            tokens.push(Token::Initial(current));
+        } else if current.len() > 1 && current.chars().all(|c| c.is_uppercase()) {
+            // Consecutive uppercase at end without period - preserve unchanged
+            tokens.push(Token::Unchanged(current));
+        } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+            && current.len() <= 2 {
+            // Short mixed case like "Me" at end - preserve with trailing period if original had it
+            tokens.push(Token::Unchanged(current));
+        } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+            && current.chars().skip(1).any(|c| c.is_lowercase()) {
+            tokens.push(Token::Word(current));
+        } else {
+            tokens.push(Token::Unchanged(current));
+        }
+    }
+
+    // Now build the result
+    let mut result = String::new();
+    for (i, token) in tokens.iter().enumerate() {
+        match token {
+            Token::Initial(s) => {
+                result.push_str(s);
+                result.push_str(initialize_with);
+            }
+            Token::Word(s) => {
+                result.push_str(s);
+                // Add space after words, unless it's the last token
+                if i < tokens.len() - 1 {
+                    result.push(' ');
+                }
+            }
+            Token::Unchanged(s) => {
+                result.push_str(s);
+                // For unchanged tokens at the end, check if original had trailing period
+                // If so, preserve it
+                if i == tokens.len() - 1 && given.ends_with('.') {
+                    result.push('.');
+                }
+            }
+        }
+    }
+
+    // Trim trailing space
+    result.trim_end().to_string()
 }
 
 /// Initialize a given name (e.g., "John William" -> "J. W.").
-fn initialize_name(given: &str, initialize_with: &str) -> String {
-    // Initialize each whitespace-separated part, preserving hyphens
-    // "John-Lee William" with ". " -> "J.-L. W."
-    // "John Quiggly" with "" -> "JQ"
+///
+/// The `initialize_with_hyphen` parameter controls how hyphenated names are handled:
+/// - For "Guo-Ping" (both parts uppercase):
+///   - true: "G.-P." (preserves hyphen before second initial)
+///   - false: "G.P." (no hyphen)
+/// - For "Guo-ping" (second part lowercase): "G." (lowercase parts are skipped)
+fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: bool) -> String {
+    // Initialize each whitespace-separated part
+    // Hyphenated parts with lowercase after the hyphen are skipped (e.g., Ji-ping -> J.)
     let trimmed = initialize_with.trim_end();
 
     given
@@ -1554,12 +1748,34 @@ fn initialize_name(given: &str, initialize_with: &str) -> String {
         .map(|word| {
             // Check if this word contains a hyphen
             if word.contains('-') {
-                // Initialize each hyphenated part: "John-Lee" -> "J.-L."
-                word.split('-')
-                    .filter_map(|part| part.chars().next())
-                    .map(|c| format!("{}{}", c.to_uppercase(), trimmed))
-                    .collect::<Vec<_>>()
-                    .join("-")
+                // Split on hyphen and process each part
+                let parts: Vec<&str> = word.split('-').collect();
+                let mut result = String::new();
+
+                for (i, part) in parts.iter().enumerate() {
+                    if let Some(first_char) = part.chars().next() {
+                        if i == 0 {
+                            // First part: always include its initial
+                            result.push_str(&format!(
+                                "{}{}",
+                                first_char.to_uppercase(),
+                                trimmed
+                            ));
+                        } else if first_char.is_uppercase() {
+                            // Subsequent part with uppercase: include based on hyphen option
+                            if initialize_with_hyphen {
+                                result.push('-');
+                            }
+                            result.push_str(&format!(
+                                "{}{}",
+                                first_char.to_uppercase(),
+                                trimmed
+                            ));
+                        }
+                        // Lowercase parts after hyphen are skipped entirely
+                    }
+                }
+                result
             } else {
                 // Simple word: "John" -> "J."
                 word.chars()
@@ -2553,9 +2769,20 @@ mod tests {
     #[test]
     fn test_initialize_name() {
         // Note: trailing space is trimmed
-        assert_eq!(initialize_name("John", ". "), "J.");
-        assert_eq!(initialize_name("John William", ". "), "J. W.");
-        assert_eq!(initialize_name("J.", ". "), "J.");
+        // Basic initialization with initialize_with_hyphen=true (default)
+        assert_eq!(initialize_name("John", ". ", true), "J.");
+        assert_eq!(initialize_name("John William", ". ", true), "J. W.");
+        assert_eq!(initialize_name("J.", ". ", true), "J.");
+
+        // Hyphenated names with uppercase second part
+        assert_eq!(initialize_name("John-Lee", ". ", true), "J.-L.");
+        assert_eq!(initialize_name("John-Lee", ". ", false), "J.L.");
+
+        // Hyphenated names with lowercase second part - skipped entirely
+        assert_eq!(initialize_name("Guo-ping", ". ", true), "G.");
+        assert_eq!(initialize_name("Guo-ping", ". ", false), "G.");
+        assert_eq!(initialize_name("Guo-ping", "", true), "G");
+        assert_eq!(initialize_name("Guo-ping", "", false), "G");
     }
 
     #[test]

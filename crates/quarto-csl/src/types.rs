@@ -80,14 +80,16 @@ pub struct StyleOptions {
 }
 
 /// Demote non-dropping particle option.
+///
+/// Default is `DisplayAndSort` per CSL spec and Haskell citeproc.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DemoteNonDroppingParticle {
     /// Never demote.
     Never,
     /// Demote for sorting only.
-    #[default]
     SortOnly,
     /// Demote for display and sorting.
+    #[default]
     DisplayAndSort,
 }
 

@@ -249,6 +249,70 @@ impl Name {
             .unwrap_or(false)
     }
 
+    /// Extract dropping and non-dropping particles from given/family names.
+    ///
+    /// Following CSL-JSON spec: lowercase elements at the end of the given name
+    /// are treated as "dropping" particles, and lowercase elements at the start
+    /// of the family name are treated as "non-dropping" particles.
+    ///
+    /// This mutates the Name in place, populating the particle fields.
+    pub fn extract_particles(&mut self) {
+        // Extract dropping particle from end of given name
+        // e.g., "Givenname al" -> given="Givenname", dropping_particle="al"
+        if self.dropping_particle.is_none() {
+            if let Some(given) = self.given.clone() {
+                // Don't process quoted names (CSL-JSON convention for literal names)
+                if given.starts_with('"') && given.ends_with('"') {
+                    self.given = Some(given[1..given.len()-1].to_string());
+                } else {
+                    let words: Vec<&str> = given.split_whitespace().collect();
+                    if words.len() > 1 {
+                        // Find where particle words begin (all lowercase or particle punctuation)
+                        let break_point = words.iter().position(|w| {
+                            w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
+                        });
+
+                        if let Some(idx) = break_point {
+                            // Check if ALL remaining words are particle-like
+                            let all_particles = words[idx..].iter().all(|w| {
+                                w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
+                            });
+
+                            if all_particles && idx > 0 {
+                                self.given = Some(words[..idx].join(" "));
+                                self.dropping_particle = Some(words[idx..].join(" "));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract non-dropping particle from start of family name
+        // e.g., "van Gogh" -> non_dropping_particle="van", family="Gogh"
+        if self.non_dropping_particle.is_none() {
+            if let Some(family) = self.family.clone() {
+                // Don't process quoted names
+                if family.starts_with('"') && family.ends_with('"') {
+                    self.family = Some(family[1..family.len()-1].to_string());
+                } else {
+                    let words: Vec<&str> = family.split_whitespace().collect();
+                    if words.len() > 1 {
+                        // Find how many leading words are particle-like
+                        let particle_count = words.iter().take_while(|w| {
+                            w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
+                        }).count();
+
+                        if particle_count > 0 && particle_count < words.len() {
+                            self.non_dropping_particle = Some(words[..particle_count].join(" "));
+                            self.family = Some(words[particle_count..].join(" "));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /// Get the display name in "family, given" format.
     pub fn display_name(&self) -> String {
         if let Some(ref lit) = self.literal {
@@ -563,6 +627,32 @@ impl Reference {
         }
     }
 
+    /// Extract particles from all name fields.
+    ///
+    /// This should be called after parsing CSL-JSON to split embedded particles
+    /// from given/family names into their proper fields.
+    pub fn extract_all_particles(&mut self) {
+        // Helper to extract particles from a Vec<Name>
+        fn extract_from_names(names: &mut Option<Vec<Name>>) {
+            if let Some(names) = names {
+                for name in names.iter_mut() {
+                    name.extract_particles();
+                }
+            }
+        }
+
+        extract_from_names(&mut self.author);
+        extract_from_names(&mut self.editor);
+        extract_from_names(&mut self.translator);
+        extract_from_names(&mut self.container_author);
+        extract_from_names(&mut self.collection_editor);
+        extract_from_names(&mut self.director);
+        extract_from_names(&mut self.interviewer);
+        extract_from_names(&mut self.recipient);
+        extract_from_names(&mut self.reviewed_author);
+        extract_from_names(&mut self.composer);
+    }
+
     /// Get a date variable by name.
     pub fn get_date(&self, name: &str) -> Option<&DateVariable> {
         match name {
@@ -670,6 +760,12 @@ impl Reference {
 /// - Arabic (U+0600-U+06FF)
 /// - Thai (U+0E01-U+0E5B)
 /// - Special characters and directional marks
+/// Check if a character is particle punctuation.
+/// Used for detecting particles in names (e.g., apostrophe in "d'Artagnan").
+fn is_particle_punct(c: char) -> bool {
+    c == '\'' || c == '\u{2019}' || c == '-' || c == '\u{2013}' || c == '.'
+}
+
 fn is_byzantine_char(c: char) -> bool {
     c == '-'
         || c.is_ascii_alphanumeric()

@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 545
-# Disabled: 313
+# Enabled: 554
+# Disabled: 304
 #
 [enabled]
 affix_commaafterquote
@@ -36,6 +36,7 @@ bugreports_greekstyletwoeditors
 bugreports_labelsoutofplace
 bugreports_matchedauthoranddate
 bugreports_noeventinnestedmacrowitholdprocessor
+bugreports_parsename
 bugreports_processorhang1
 bugreports_sectionandlocator
 bugreports_selflink
@@ -311,6 +312,7 @@ name_articularwithcommanameassortorder
 name_asianglyphs
 name_bibliographynameformnevershrinks
 name_celticclanname
+name_celtsandtoffsnohyphens
 name_celtsandtoffswithhyphens
 name_citegroupdelimiterwithyearcollapse
 name_delimiter
@@ -328,10 +330,13 @@ name_hyphenatedfirstname
 name_inheritattributesetalstyle
 name_initialsinitializefalse
 name_initialsinitializefalseempty
+name_initialsinitializefalseperiod
+name_initialsinitializefalseperiodspace
 name_institution
 name_labelafterplural
 name_labelafterpluraldecorations
 name_literalwithcomma
+name_lowercasesurnamesuffix
 name_multipleliteral
 name_nonamenode
 name_nondroppingparticledefault
@@ -340,11 +345,15 @@ name_onlygivenname
 name_overridinghierarchicaldelimiter
 name_parsedcommadelimiteddroppingparticlesortorderingwithoutaffixes
 name_parseddroppingparticlewithaffixes
+name_parsednondroppingparticlewithaffixes
 name_parseduppercasenondroppingparticle
+name_parsenames
 name_particlecaps1
 name_particlecaps2
+name_particlecaps3
 name_particleformatting
 name_particleparse1
+name_particlesdemotenondroppingnever
 name_periodafterinitials
 name_romaniantwo
 name_semicolonwithand

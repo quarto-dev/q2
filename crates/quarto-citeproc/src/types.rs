@@ -357,7 +357,11 @@ impl Processor {
     }
 
     /// Add a reference to the processor.
-    pub fn add_reference(&mut self, reference: Reference) {
+    pub fn add_reference(&mut self, mut reference: Reference) {
+        // Extract particles from name fields at parse time (matches Haskell citeproc behavior)
+        // e.g., "Givenname al" -> given="Givenname", dropping_particle="al"
+        // e.g., "van Gogh" -> non_dropping_particle="van", family="Gogh"
+        reference.extract_all_particles();
         self.references.insert(reference.id.clone(), reference);
     }
 
