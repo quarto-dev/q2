@@ -6,8 +6,12 @@ use quarto_source_map::SourceInfo;
 use quarto_xml::{XmlAttribute, XmlElement, XmlWithSourceInfo};
 use std::collections::{HashMap, HashSet};
 
-/// Check if the style explicitly uses the year-suffix variable.
+/// Check if the style explicitly uses the year-suffix or citation-label variable.
 /// When true, year suffix should not be added implicitly to dates.
+///
+/// This returns true if the style uses either:
+/// - `year-suffix` variable: explicitly renders year suffix
+/// - `citation-label` variable: implicitly includes year suffix in the label
 fn check_uses_year_suffix(
     citation: &Layout,
     bibliography: Option<&Layout>,
@@ -17,7 +21,9 @@ fn check_uses_year_suffix(
         match &el.element_type {
             ElementType::Text(text) => {
                 if let TextSource::Variable { name, .. } = &text.source {
-                    if name == "year-suffix" {
+                    // Both year-suffix and citation-label handle year suffixes
+                    // When either is used, we shouldn't add implicit year suffixes to dates
+                    if name == "year-suffix" || name == "citation-label" {
                         return true;
                     }
                 }

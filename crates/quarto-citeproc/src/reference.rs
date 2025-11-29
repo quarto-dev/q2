@@ -518,6 +518,16 @@ impl Reference {
             "note" => self.note.clone(),
             "language" => self.language.clone(),
             "source" => self.source.clone(),
+            // Citation label: check if explicitly provided in data, otherwise generate
+            "citation-label" => {
+                // First check if citation-label is explicitly provided in the data
+                if let Some(label) = self.other.get("citation-label").and_then(|v| v.as_str()) {
+                    Some(label.to_string())
+                } else {
+                    // Generate from author names + year
+                    Some(self.generate_citation_label())
+                }
+            }
             // Check other fields (handle both strings and numbers)
             _ => self.other.get(name).and_then(|v| {
                 if let Some(s) = v.as_str() {
@@ -564,6 +574,85 @@ impl Reference {
             _ => None,
         }
     }
+
+    /// Generate a citation label (trigraph) for this reference.
+    ///
+    /// The citation label is constructed from author names + year:
+    /// - 1 author: first 4 chars of family name
+    /// - 2-3 authors: first 2 chars of each family name
+    /// - 4+ authors: first 1 char of first 4 family names
+    /// - Plus: last 2 digits of year
+    ///
+    /// Examples:
+    /// - "Asthma, Albert (1900)" → "Asth00"
+    /// - "Roe + Noakes (1978)" → "RoNo78"
+    /// - "von Dipheria + Eczema + Flatulence + Goiter (1926)" → "DEFG26"
+    ///
+    /// Note: This does NOT include the year suffix (a, b, c...). That is added
+    /// during rendering when the citation-label variable is accessed.
+    pub fn generate_citation_label(&self) -> String {
+        let namepart = self.generate_citation_label_namepart();
+        let yearpart = self.generate_citation_label_yearpart();
+        format!("{}{}", namepart, yearpart)
+    }
+
+    /// Generate the name part of a citation label.
+    fn generate_citation_label_namepart(&self) -> String {
+        // Get author names, falling back to editor, translator, etc.
+        // This matches Pandoc citeproc's behavior which prefers author,
+        // then falls back to the first available name variable.
+        let names = self
+            .author
+            .as_ref()
+            .or(self.editor.as_ref())
+            .or(self.translator.as_ref())
+            .or(self.collection_editor.as_ref())
+            .or(self.container_author.as_ref())
+            .or(self.director.as_ref())
+            .or(self.interviewer.as_ref())
+            .or(self.recipient.as_ref())
+            .or(self.reviewed_author.as_ref())
+            .or(self.composer.as_ref());
+
+        let Some(names) = names else {
+            return "Xyz".to_string();
+        };
+
+        if names.is_empty() {
+            return "Xyz".to_string();
+        }
+
+        // Determine how many characters to take from each name
+        let chars_per_name = match names.len() {
+            1 => 4,
+            2 | 3 => 2,
+            _ => 1, // 4 or more authors
+        };
+
+        names
+            .iter()
+            .take(4) // At most 4 names contribute
+            .filter_map(|name| {
+                // Get family name, stripping any embedded particle
+                // e.g., "von Dipheria" -> "Dipheria" -> "D"
+                name.family.as_ref().map(|f| strip_particle(f))
+            })
+            .map(|family| {
+                // Take first N chars, handling Unicode properly
+                family.chars().take(chars_per_name).collect::<String>()
+            })
+            .collect()
+    }
+
+    /// Generate the year part of a citation label.
+    fn generate_citation_label_yearpart(&self) -> String {
+        self.issued
+            .as_ref()
+            .and_then(|d| d.parts())
+            .and_then(|p| p.year)
+            .map(|y| format!("{:02}", y.abs() % 100))
+            .unwrap_or_default()
+    }
 }
 
 /// Check if a character is "Byzantine" (Romanesque/Western).
@@ -596,6 +685,77 @@ fn is_byzantine_char(c: char) -> bool {
         || (c >= '\u{2018}' && c <= '\u{2019}') // Curly quotes
         || (c >= '\u{021a}' && c <= '\u{021b}') // Romanian letters
         || (c >= '\u{202a}' && c <= '\u{202e}') // Directional formatting
+}
+
+/// Strip common particles from the beginning of a family name.
+///
+/// This handles cases where particles are embedded in the family name
+/// (e.g., "von Dipheria") rather than being in the separate
+/// `non_dropping_particle` or `dropping_particle` fields.
+///
+/// Based on the particle patterns from CSL spec and citeproc implementations.
+fn strip_particle(family: &str) -> &str {
+    // Common particles (lowercase). Order matters for multi-word particles.
+    const PARTICLES: &[&str] = &[
+        // Multi-word particles first (longer matches before shorter)
+        "van de ",
+        "van der ",
+        "van den ",
+        "van het ",
+        "von der ",
+        "von dem ",
+        "von zu ",
+        "auf den ",
+        "in de ",
+        "in 't ",
+        "in het ",
+        "uit de ",
+        "uit den ",
+        "op de ",
+        // Single-word particles
+        "von ",
+        "van ",
+        "de ",
+        "di ",
+        "da ",
+        "del ",
+        "dela ",
+        "della ",
+        "dello ",
+        "den ",
+        "der ",
+        "des ",
+        "du ",
+        "la ",
+        "le ",
+        "lo ",
+        "les ",
+        "ten ",
+        "ter ",
+        "te ",
+        "auf ",
+        "zum ",
+        "zur ",
+        "vom ",
+        "am ",
+        "el ",
+        "al ",
+        "il ",
+        "dos ",
+        "das ",
+        // With apostrophe (these end with the particle including apostrophe)
+        "l'",
+        "d'",
+        "'t ",
+    ];
+
+    let lower = family.to_lowercase();
+    for particle in PARTICLES {
+        if lower.starts_with(particle) {
+            return &family[particle.len()..];
+        }
+    }
+    family
 }
 
 #[cfg(test)]
@@ -726,5 +886,135 @@ mod tests {
             ..Default::default()
         };
         assert!(!no_family.is_byzantine());
+    }
+
+    #[test]
+    fn test_citation_label_one_author() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "author": [{"family": "Asthma", "given": "Albert"}],
+            "issued": {"date-parts": [[1900]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        assert_eq!(reference.generate_citation_label(), "Asth00");
+    }
+
+    #[test]
+    fn test_citation_label_two_authors() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "author": [
+                {"family": "Roe", "given": "Jane"},
+                {"family": "Noakes", "given": "Richard"}
+            ],
+            "issued": {"date-parts": [[1978]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        assert_eq!(reference.generate_citation_label(), "RoNo78");
+    }
+
+    #[test]
+    fn test_citation_label_three_authors() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "author": [
+                {"family": "Bronchitis", "given": "Buffy"},
+                {"family": "Cholera", "given": "Cleopatra"},
+                {"family": "Dengue", "given": "Diana"}
+            ],
+            "issued": {"date-parts": [[1998]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        assert_eq!(reference.generate_citation_label(), "BrChDe98");
+    }
+
+    #[test]
+    fn test_citation_label_four_plus_authors() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "author": [
+                {"family": "von Dipheria", "given": "Doug"},
+                {"family": "Eczema", "given": "Elihugh"},
+                {"family": "Flatulence", "given": "Frankie"},
+                {"family": "Goiter", "given": "Gus"},
+                {"family": "Hiccups", "given": "Harvey"}
+            ],
+            "issued": {"date-parts": [[1926]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        // "von Dipheria" should be stripped to "Dipheria" -> "D"
+        assert_eq!(reference.generate_citation_label(), "DEFG26");
+    }
+
+    #[test]
+    fn test_citation_label_data_override() {
+        // When citation-label is provided in data, use it
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "citation-label": "CustomLabel",
+            "author": [{"family": "Ignored", "given": "Author"}],
+            "issued": {"date-parts": [[2000]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        // Should use the data-provided label, not generate one
+        assert_eq!(
+            reference.get_variable("citation-label"),
+            Some("CustomLabel".to_string())
+        );
+    }
+
+    #[test]
+    fn test_citation_label_no_authors() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "title": "Anonymous Work",
+            "issued": {"date-parts": [[2020]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        // Falls back to "Xyz" when no authors
+        assert_eq!(reference.generate_citation_label(), "Xyz20");
+    }
+
+    #[test]
+    fn test_citation_label_no_year() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "author": [{"family": "Smith", "given": "John"}]
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        // No year means empty year part
+        assert_eq!(reference.generate_citation_label(), "Smit");
+    }
+
+    #[test]
+    fn test_citation_label_short_name() {
+        let json = r#"{
+            "id": "item1",
+            "type": "book",
+            "author": [{"family": "Li", "given": "Wei"}],
+            "issued": {"date-parts": [[2005]]}
+        }"#;
+        let reference: Reference = serde_json::from_str(json).unwrap();
+        // Short name takes as many chars as available
+        assert_eq!(reference.generate_citation_label(), "Li05");
+    }
+
+    #[test]
+    fn test_strip_particle() {
+        assert_eq!(strip_particle("von Beethoven"), "Beethoven");
+        assert_eq!(strip_particle("van Gogh"), "Gogh");
+        assert_eq!(strip_particle("de la Cruz"), "la Cruz"); // Only strips first particle
+        assert_eq!(strip_particle("van der Berg"), "Berg");
+        assert_eq!(strip_particle("l'Amour"), "Amour");
+        assert_eq!(strip_particle("d'Artagnan"), "Artagnan");
+        assert_eq!(strip_particle("Smith"), "Smith"); // No particle
+        assert_eq!(strip_particle("Von Trapp"), "Trapp"); // Case-insensitive
     }
 }

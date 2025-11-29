@@ -704,6 +704,35 @@ fn evaluate_text(
                 } else {
                     Output::Null
                 }
+            } else if name == "citation-label" {
+                // Citation label needs year suffix appended (like in Pandoc citeproc)
+                // Get the base label (either from data or generated)
+                let base_label = ctx.get_variable("citation-label");
+                ctx.record_var_call(base_label.is_some());
+
+                if let Some(label) = base_label {
+                    // Get year suffix if present
+                    let suffix_output = ctx
+                        .reference
+                        .disambiguation
+                        .as_ref()
+                        .and_then(|d| d.year_suffix)
+                        .map(|suffix| {
+                            let letter = suffix_to_letter(suffix);
+                            Output::tagged(Tag::YearSuffix(suffix), Output::literal(letter))
+                        });
+
+                    let label_output = Output::literal(label);
+
+                    // Combine base label with year suffix
+                    if let Some(suffix) = suffix_output {
+                        Output::sequence(vec![label_output, suffix])
+                    } else {
+                        label_output
+                    }
+                } else {
+                    Output::Null
+                }
             } else {
                 // For short form, try {name}-short first, then fall back to {name}
                 // Note: journalAbbreviation is handled as an alias for container-title-short

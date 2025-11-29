@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 540
-# Disabled: 318
+# Enabled: 545
+# Disabled: 313
 #
 [enabled]
 affix_commaafterquote
@@ -198,6 +198,8 @@ disambiguate_byciteminimalgivennameexpandminimalnames
 disambiguate_byciteretainnamesonfailureifyearsuffixnotavailable
 disambiguate_bycitetwoauthorssamecite
 disambiguate_bycitetwoauthorssamefamilyname
+disambiguate_citationlabeldefault
+disambiguate_citationlabelindata
 disambiguate_differentspacingininitials
 disambiguate_disambiguatetrueandyearsuffixone
 disambiguate_disambiguatetruereflectedinbibliography
@@ -216,6 +218,7 @@ disambiguate_primarynamewithnondroppingparticle
 disambiguate_primarynamewithparticle
 disambiguate_threenoauthornotitleentries
 disambiguate_toinitialonly
+disambiguate_trigraph
 disambiguate_yearsuffixandsort
 disambiguate_yearsuffixfiftytwoentries
 disambiguate_yearsuffixfiftytwoentriesbycite
@@ -281,6 +284,8 @@ locator_termselection
 locator_workaroundtestforsubverbo
 magic_allowrepeatdaterenderings
 magic_capitalizefirstoccurringnameparticle
+magic_citationlabelinbibliography
+magic_citationlabelincitation
 magic_entryspacingdouble
 magic_hangingindent
 magic_linespacingdouble
