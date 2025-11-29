@@ -558,3 +558,4 @@ position_NearNoteSameNote
 name_FormattingOfParticles
 name_ParticleFormatting
 textcase_Uppercase
+name_AsianGlyphs

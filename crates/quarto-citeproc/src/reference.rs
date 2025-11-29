@@ -209,6 +209,17 @@ pub struct Name {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
 
+    /// Whether suffix requires a comma before it.
+    /// If true: "Smith, Jr." - If false or None: "Smith Jr."
+    /// This is typically set when parsing names from BibTeX or other formats.
+    #[serde(rename = "comma-suffix", skip_serializing_if = "Option::is_none")]
+    pub comma_suffix: Option<bool>,
+
+    /// Whether this name has static ordering (doesn't follow normal given/family rules).
+    /// Used for CJK names and other non-Western name ordering conventions.
+    #[serde(rename = "static-ordering", skip_serializing_if = "Option::is_none")]
+    pub static_ordering: Option<bool>,
+
     /// Literal name (for institutional names or when family/given doesn't apply).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub literal: Option<String>,
@@ -222,6 +233,20 @@ impl Name {
     /// Check if this is a literal (institutional) name.
     pub fn is_literal(&self) -> bool {
         self.literal.is_some()
+    }
+
+    /// Check if this is a "Byzantine" (Western/Romanesque) name.
+    ///
+    /// Byzantine names use Western conventions (comma in sort order, etc.).
+    /// Non-Byzantine names (like CJK names) use different formatting rules.
+    ///
+    /// A name is Byzantine if its family name contains any Romanesque character,
+    /// which includes Latin, Greek, Cyrillic, Hebrew, Arabic, Thai, and related scripts.
+    pub fn is_byzantine(&self) -> bool {
+        self.family
+            .as_ref()
+            .map(|family| family.chars().any(is_byzantine_char))
+            .unwrap_or(false)
     }
 
     /// Get the display name in "family, given" format.
@@ -531,6 +556,38 @@ impl Reference {
     }
 }
 
+/// Check if a character is "Byzantine" (Romanesque/Western).
+///
+/// Based on citeproc-js's ROMANESQUE_REGEX. A name containing any Byzantine
+/// character is considered Western and uses Western formatting conventions.
+///
+/// Byzantine characters include:
+/// - ASCII letters and digits (a-z, A-Z, 0-9)
+/// - Hyphen
+/// - Latin Extended (U+00C0-U+017F)
+/// - Greek (U+0370-U+03FF, U+1F00-U+1FFF)
+/// - Cyrillic (U+0400-U+052F)
+/// - Hebrew (U+0590-U+05D4, U+05D6-U+05FF)
+/// - Arabic (U+0600-U+06FF)
+/// - Thai (U+0E01-U+0E5B)
+/// - Special characters and directional marks
+fn is_byzantine_char(c: char) -> bool {
+    c == '-'
+        || c.is_ascii_alphanumeric()
+        || (c >= '\u{00c0}' && c <= '\u{017f}') // Latin Extended
+        || (c >= '\u{0370}' && c <= '\u{03ff}') // Greek
+        || (c >= '\u{0400}' && c <= '\u{052f}') // Cyrillic
+        || (c >= '\u{0590}' && c <= '\u{05d4}') // Hebrew (part 1)
+        || (c >= '\u{05d6}' && c <= '\u{05ff}') // Hebrew (part 2)
+        || (c >= '\u{0600}' && c <= '\u{06ff}') // Arabic
+        || (c >= '\u{0e01}' && c <= '\u{0e5b}') // Thai
+        || (c >= '\u{1f00}' && c <= '\u{1fff}') // Greek Extended
+        || (c >= '\u{200c}' && c <= '\u{200e}') // Zero-width characters
+        || (c >= '\u{2018}' && c <= '\u{2019}') // Curly quotes
+        || (c >= '\u{021a}' && c <= '\u{021b}') // Romanian letters
+        || (c >= '\u{202a}' && c <= '\u{202e}') // Directional formatting
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -610,5 +667,54 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(name.display_name(), "van Beethoven, Ludwig");
+    }
+
+    #[test]
+    fn test_byzantine_name_detection() {
+        // Western name (Byzantine)
+        let western = Name {
+            family: Some("Smith".to_string()),
+            given: Some("John".to_string()),
+            ..Default::default()
+        };
+        assert!(western.is_byzantine());
+
+        // Chinese name (non-Byzantine)
+        let chinese = Name {
+            family: Some("毛".to_string()),
+            given: Some("泽东".to_string()),
+            ..Default::default()
+        };
+        assert!(!chinese.is_byzantine());
+
+        // Japanese name (non-Byzantine)
+        let japanese = Name {
+            family: Some("山田".to_string()),
+            given: Some("太郎".to_string()),
+            ..Default::default()
+        };
+        assert!(!japanese.is_byzantine());
+
+        // Greek name (Byzantine - Greek is included)
+        let greek = Name {
+            family: Some("Αλέξανδρος".to_string()),
+            ..Default::default()
+        };
+        assert!(greek.is_byzantine());
+
+        // Cyrillic name (Byzantine)
+        let russian = Name {
+            family: Some("Достоевский".to_string()),
+            given: Some("Фёдор".to_string()),
+            ..Default::default()
+        };
+        assert!(russian.is_byzantine());
+
+        // No family name
+        let no_family = Name {
+            given: Some("Madonna".to_string()),
+            ..Default::default()
+        };
+        assert!(!no_family.is_byzantine());
     }
 }

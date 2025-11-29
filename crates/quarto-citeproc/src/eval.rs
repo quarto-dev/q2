@@ -1104,9 +1104,18 @@ fn format_single_name(
 
             if inverted {
                 // Sort order: "Family, Given" or "Family, Given, Suffix"
+                // For Byzantine (Western) names: use sort_separator (default ", ")
+                // For non-Byzantine (CJK, etc.): use space only (no comma)
                 // In sort order, dropping particle goes after given name
                 // Structure: [family_part, sort_separator, given_part, " ", dropping_particle, ", ", suffix_part]
                 let mut parts: Vec<Output> = Vec::new();
+
+                // Non-Byzantine names don't use comma in sort order
+                let effective_separator = if name.is_byzantine() {
+                    sort_separator.clone()
+                } else {
+                    " ".to_string()
+                };
 
                 if let Some(family) = family_part {
                     parts.push(family);
@@ -1114,7 +1123,7 @@ fn format_single_name(
 
                 if let Some(given) = given_part {
                     if !parts.is_empty() {
-                        parts.push(Output::literal(sort_separator.clone()));
+                        parts.push(Output::literal(effective_separator.clone()));
                     }
                     parts.push(given);
                 }
@@ -1128,38 +1137,64 @@ fn format_single_name(
 
                 if let Some(suffix) = suffix_part {
                     if !parts.is_empty() {
-                        parts.push(Output::literal(", ".to_string()));
+                        // Use comma before suffix if comma_suffix is true
+                        let separator = if name.comma_suffix.unwrap_or(true) {
+                            ", "
+                        } else {
+                            " "
+                        };
+                        parts.push(Output::literal(separator.to_string()));
                     }
                     parts.push(suffix);
                 }
 
                 Output::sequence(parts)
             } else {
-                // Display order: "Given Dropping-particle Family" or "Given Dropping-particle Family, Suffix"
-                // CSL display order: Given + dropping-particle + non-dropping-particle + Family
+                // Display order depends on whether name is Byzantine (Western) or not
+                // Byzantine: "Given Dropping-particle Family" (with spaces)
+                // Non-Byzantine (CJK, etc.): "FamilyGiven" (no spaces, family first)
+                let is_byzantine = name.is_byzantine();
                 let mut parts: Vec<Output> = Vec::new();
 
-                if let Some(given) = given_part {
-                    parts.push(given);
+                if is_byzantine {
+                    // Western display order: Given + dropping-particle + Family
+                    if let Some(given) = given_part {
+                        parts.push(given);
+                    }
+
+                    // Dropping particle goes between given and family (not part of family formatting)
+                    if let Some(dp) = dropping_particle_part {
+                        parts.push(dp);
+                    }
+
+                    if let Some(family) = family_part {
+                        parts.push(family);
+                    }
+                } else {
+                    // Non-Byzantine display order: Family + Given (no particles typically)
+                    if let Some(family) = family_part {
+                        parts.push(family);
+                    }
+
+                    if let Some(given) = given_part {
+                        parts.push(given);
+                    }
                 }
 
-                // Dropping particle goes between given and family (not part of family formatting)
-                if let Some(dp) = dropping_particle_part {
-                    parts.push(dp);
-                }
-
-                if let Some(family) = family_part {
-                    parts.push(family);
-                }
-
-                // Join with space delimiter
-                let main_part = Output::formatted_with_delimiter(Formatting::default(), parts, " ");
+                // Delimiter: space for Byzantine, none for non-Byzantine (CJK)
+                let delimiter = if is_byzantine { " " } else { "" };
+                let main_part = Output::formatted_with_delimiter(Formatting::default(), parts, delimiter);
 
                 if let Some(suffix) = suffix_part {
-                    // Add ", Suffix"
+                    // Use comma before suffix if comma_suffix is true (default: true)
+                    let separator = if name.comma_suffix.unwrap_or(true) {
+                        ", "
+                    } else {
+                        " "
+                    };
                     Output::sequence(vec![
                         main_part,
-                        Output::literal(", ".to_string()),
+                        Output::literal(separator.to_string()),
                         suffix,
                     ])
                 } else {
