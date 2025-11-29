@@ -10,7 +10,7 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 458/858 conformance tests passing (~53.4%)
+# Current status: 466/858 conformance tests passing (~54.3%)
 # Last updated: 2025-11-28
 # Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
 
@@ -249,6 +249,10 @@ name_SubstituteOnNumberGroupSpanFail
 name_WesternArticularLowercase
 name_WesternSimple
 name_WesternTwoAuthors
+# Editor/translator with label before name (2025-11-28)
+name_EditorTranslatorBoth
+name_EditorTranslatorSameEmptyTerm
+name_EditorTranslatorWithTranslatorOnlyBib
 
 # nameattr
 # name-as-sort-order

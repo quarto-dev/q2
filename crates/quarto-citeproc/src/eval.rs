@@ -632,9 +632,12 @@ fn evaluate_text(
 fn evaluate_names(
     ctx: &mut EvalContext,
     names_el: &NamesElement,
-    _formatting: &Formatting,
+    formatting: &Formatting,
 ) -> Result<Output> {
-    // Try each variable in order until we find one with names
+    // Collect outputs for ALL variables that have names
+    // Each variable gets its own label (if labels are enabled)
+    let mut var_outputs: Vec<Output> = Vec::new();
+
     for var in &names_el.variables {
         if let Some(names) = ctx.reference.get_names(var) {
             if !names.is_empty() {
@@ -649,7 +652,7 @@ fn evaluate_names(
                 );
 
                 // Check for label
-                if let Some(ref label) = names_el.label {
+                let var_with_label = if let Some(ref label) = names_el.label {
                     // Determine plural based on name count
                     let is_plural = match label.plural {
                         quarto_csl::LabelPlural::Always => true,
@@ -657,20 +660,34 @@ fn evaluate_names(
                         quarto_csl::LabelPlural::Contextual => names.len() > 1,
                     };
 
-                    // Look up the term for this variable (e.g., "editor" -> "editor" term)
+                    // Look up the term for this variable (e.g., "editor" -> "Ed." term)
                     if let Some(term) = ctx.get_term(var, label.form, is_plural) {
                         let label_output = Output::formatted(
                             label.formatting.clone(),
                             vec![Output::literal(term)],
                         );
-                        // Combine names + label
-                        return Ok(Output::sequence(vec![names_output, label_output]));
+                        // Combine label + names or names + label based on CSL order
+                        if names_el.label_before_name {
+                            Output::sequence(vec![label_output, names_output])
+                        } else {
+                            Output::sequence(vec![names_output, label_output])
+                        }
+                    } else {
+                        names_output
                     }
-                }
+                } else {
+                    names_output
+                };
 
-                return Ok(names_output);
+                var_outputs.push(var_with_label);
             }
         }
+    }
+
+    // If we found names, join them with the delimiter
+    if !var_outputs.is_empty() {
+        let delimiter = formatting.delimiter.as_deref().unwrap_or("");
+        return Ok(crate::output::join_outputs(var_outputs, delimiter));
     }
 
     // No names found - try substitute if present

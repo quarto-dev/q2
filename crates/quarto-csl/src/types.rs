@@ -535,6 +535,9 @@ pub struct NamesElement {
     pub et_al: Option<EtAl>,
     /// Label for the names.
     pub label: Option<NamesLabel>,
+    /// Whether the label appears before the name in the CSL.
+    /// If true, output is "Ed. by John Doe", otherwise "John Doe (ed.)".
+    pub label_before_name: bool,
     /// Substitute elements if names are empty.
     pub substitute: Option<Vec<Element>>,
 }

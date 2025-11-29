@@ -1,5 +1,19 @@
 # Citeproc Rust Port Implementation Notes
 
+## CRITICAL: Test Regression Policy
+
+**NEVER end a session with fewer passing tests than when you started.**
+
+Before making changes to quarto-citeproc:
+1. Run `cargo nextest run -p quarto-citeproc` and note the passing test count
+2. Check the header of `tests/enabled_tests.txt` for the baseline (e.g., "463/858")
+3. After ALL changes, verify the test count is >= the starting count
+4. If tests regressed, FIX THEM before ending the session
+
+Always verify test counts before and after implementation work.
+
+---
+
 ## Critical Design Decisions for Rust Implementation
 
 ### 1. Output Type System - Trait vs Enum vs Generic

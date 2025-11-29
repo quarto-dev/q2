@@ -996,12 +996,19 @@ impl CslParser {
         let mut et_al = None;
         let mut label = None;
         let mut substitute = None;
+        // Track whether label appears before name in the CSL source.
+        // If we see <label> before <name>, the label should be rendered first.
+        let mut label_before_name = false;
 
         for child in element.all_children() {
             match child.name.as_str() {
                 "name" => name = Some(self.parse_name(child)?),
                 "et-al" => et_al = Some(self.parse_et_al(child)),
-                "label" => label = Some(self.parse_names_label(child)?),
+                "label" => {
+                    label = Some(self.parse_names_label(child)?);
+                    // If we haven't seen <name> yet, label comes before name
+                    label_before_name = name.is_none();
+                }
                 "substitute" => substitute = Some(self.parse_elements(child)?),
                 _ => {}
             }
@@ -1012,6 +1019,7 @@ impl CslParser {
             name,
             et_al,
             label,
+            label_before_name,
             substitute,
         })
     }
@@ -1427,8 +1435,8 @@ impl CslParser {
                 .get_attr(element, "strip-periods")
                 .map(|a| a.value == "true")
                 .unwrap_or(false),
-            // Delimiter is set at evaluation time, not parsed from CSL
-            delimiter: None,
+            // Delimiter between children (e.g., between multiple name variables)
+            delimiter: self.get_attr(element, "delimiter").map(|a| a.value.clone()),
         }
     }
 
