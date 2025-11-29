@@ -10,7 +10,8 @@
 # Lines starting with # are comments
 # NOTE: Test names are case-insensitive (matching is done in lowercase).
 #
-# Current status: 462 conformance tests passing out of 858 total (~53.8%)
+# Current status: 458/858 conformance tests passing (~53.4%)
+# Last updated: 2025-11-28
 # Note: group_SuppressTermInMacro was removed (exposes group suppression bug)
 
 # affix

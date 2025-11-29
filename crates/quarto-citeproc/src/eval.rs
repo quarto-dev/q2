@@ -803,6 +803,9 @@ fn format_names(
     let family_formatting = names_el.name.as_ref().and_then(|n| n.family_formatting.as_ref());
     let given_formatting = names_el.name.as_ref().and_then(|n| n.given_formatting.as_ref());
 
+    // Get demote-non-dropping-particle option from style
+    let demote_ndp = ctx.processor.style.options.demote_non_dropping_particle;
+
     for (i, n) in names.iter().take(names_to_show).enumerate() {
         // Literal names are never inverted
         let is_literal = n.literal.is_some();
@@ -825,6 +828,7 @@ fn format_names(
             is_primary,
             family_formatting,
             given_formatting,
+            demote_ndp,
         ));
         is_inverted.push(inverted);
     }
@@ -940,6 +944,7 @@ fn format_names(
                 false, // not primary
                 family_formatting,
                 given_formatting,
+                demote_ndp,
             );
             let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
             if use_delim {
@@ -983,8 +988,10 @@ fn format_single_name(
     is_primary: bool,
     family_formatting: Option<&Formatting>,
     given_formatting: Option<&Formatting>,
+    demote_non_dropping_particle: quarto_csl::DemoteNonDroppingParticle,
 ) -> Output {
     use crate::reference::NameHint;
+    use quarto_csl::DemoteNonDroppingParticle;
 
     // Handle literal names
     if let Some(ref lit) = name.literal {
@@ -1043,11 +1050,24 @@ fn format_single_name(
             }
         }
         quarto_csl::NameForm::Long | quarto_csl::NameForm::Count => {
-            // Build family part (non-dropping particle + family name)
+            // Determine if non-dropping particle should be demoted (moved from family to given)
+            // - Never: particle stays with family name always
+            // - SortOnly: demote in sort/inverted order only
+            // - DisplayAndSort: demote in both display and sort
+            let demote_particle = match demote_non_dropping_particle {
+                DemoteNonDroppingParticle::Never => false,
+                DemoteNonDroppingParticle::SortOnly => inverted,
+                DemoteNonDroppingParticle::DisplayAndSort => true,
+            };
+
+            // Build family part
+            // If demoting, non-dropping particle is NOT included in family
             let family_part: Option<Output> = {
                 let mut fp: Vec<Output> = Vec::new();
-                if let Some(ref ndp) = name.non_dropping_particle {
-                    fp.push(Output::literal(ndp.clone()));
+                if !demote_particle {
+                    if let Some(ref ndp) = name.non_dropping_particle {
+                        fp.push(Output::literal(ndp.clone()));
+                    }
                 }
                 if let Some(ref family) = name.family {
                     fp.push(Output::literal(family.clone()));
@@ -1102,6 +1122,13 @@ fn format_single_name(
             // Build dropping particle part (not included in family formatting)
             let dropping_particle_part: Option<Output> = name.dropping_particle.as_ref().map(|dp| Output::literal(dp.clone()));
 
+            // Build demoted non-dropping particle part (when demoted, goes after given)
+            let demoted_ndp_part: Option<Output> = if demote_particle {
+                name.non_dropping_particle.as_ref().map(|ndp| Output::literal(ndp.clone()))
+            } else {
+                None
+            };
+
             if inverted {
                 // Sort order: "Family, Given" or "Family, Given, Suffix"
                 // For Byzantine (Western) names: use sort_separator (default ", ")
@@ -1128,11 +1155,20 @@ fn format_single_name(
                     parts.push(given);
                 }
 
+                // Dropping particle goes after given
                 if let Some(dp) = dropping_particle_part {
                     if !parts.is_empty() {
                         parts.push(Output::literal(" ".to_string()));
                     }
                     parts.push(dp);
+                }
+
+                // Demoted non-dropping particle goes after dropping particle
+                if let Some(ndp) = demoted_ndp_part.clone() {
+                    if !parts.is_empty() {
+                        parts.push(Output::literal(" ".to_string()));
+                    }
+                    parts.push(ndp);
                 }
 
                 if let Some(suffix) = suffix_part {
@@ -1216,7 +1252,18 @@ fn format_single_name_to_string(
     disamb: Option<&crate::reference::DisambiguationData>,
     is_primary: bool,
 ) -> String {
-    format_single_name(name, options, inverted, disamb, is_primary, None, None).render()
+    // Use default SortOnly for tests (most common case)
+    format_single_name(
+        name,
+        options,
+        inverted,
+        disamb,
+        is_primary,
+        None,
+        None,
+        quarto_csl::DemoteNonDroppingParticle::SortOnly,
+    )
+    .render()
 }
 
 /// Normalize a given name without breaking into initials (for initialize="false").
