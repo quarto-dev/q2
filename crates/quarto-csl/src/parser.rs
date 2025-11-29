@@ -1077,6 +1077,33 @@ impl CslParser {
             .get_attr(element, "sort-separator")
             .map(|a| a.value.clone());
 
+        // Parse <name-part> child elements for per-part formatting
+        let mut family_formatting = None;
+        let mut given_formatting = None;
+        for child in element.all_children() {
+            if child.name == "name-part" {
+                if let Some(name_attr) = self.get_attr(child, "name") {
+                    let formatting = self.parse_formatting(child);
+                    // Only store if there's actual formatting
+                    let has_formatting = formatting.font_style.is_some()
+                        || formatting.font_weight.is_some()
+                        || formatting.font_variant.is_some()
+                        || formatting.text_decoration.is_some()
+                        || formatting.vertical_align.is_some()
+                        || formatting.text_case.is_some()
+                        || formatting.prefix.is_some()
+                        || formatting.suffix.is_some();
+                    if has_formatting {
+                        match name_attr.value.as_str() {
+                            "family" => family_formatting = Some(formatting),
+                            "given" => given_formatting = Some(formatting),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Name {
             and,
             delimiter,
@@ -1090,6 +1117,8 @@ impl CslParser {
             form,
             name_as_sort_order,
             sort_separator,
+            family_formatting,
+            given_formatting,
             source_info: Some(element.source_info.clone()),
         })
     }

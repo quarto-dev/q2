@@ -11,3 +11,271 @@
 # When the publisher field is empty, both commas appear. This is technically
 # "correct" per the CSL spec but is an artifact of poor style design.
 bugreports_AccidentalAllCaps
+
+# ==============================================================================
+# Tests that Pandoc's citeproc (external-sources/citeproc) also fails
+# These are documented as "expected failures" in test/Spec.hs
+# Added 2025-11-28
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Affix handling - punctuation and delimiter collisions
+# ------------------------------------------------------------------------------
+
+# Moving punctuation: expected "quote", Hello vs actual "quote," Hello
+# Pandoc citeproc doesn't move punctuation outside quotes in this context
+affix_CommaAfterQuote
+
+# Delimiter collision with affixes produces ", ;" instead of clean output
+affix_WithCommas
+
+# ------------------------------------------------------------------------------
+# Bug reports - various edge cases and style-specific issues
+# ------------------------------------------------------------------------------
+
+# Citation deletion/overwriting not fully supported
+bugreports_AutomaticallyDeleteItemsFails
+
+# Sorting order with anonymous authors differs
+bugreports_ChicagoAuthorDateLooping
+
+# Subsequent citation formatting - should show short form, shows full
+bugreports_DemoPageFullCiteCruftOnSubsequent
+
+# Ibid with title disambiguation - should suppress title on ibid
+bugreports_EnvAndUrb
+
+# Date trailing output after year
+bugreports_LegislationCrash
+
+# Year suffix assignment and whitespace handling in display blocks
+bugreports_NoCaseEscape
+
+# Citation overwrite ordering differs
+bugreports_OverwriteCitationItems
+
+# Curly vs straight quote character escaping in XML
+bugreports_SingleQuoteXml
+
+# Whitespace handling in display blocks with small-caps
+bugreports_SmallCapsEscape
+
+# Month abbreviation: "Jun" vs "June" - locale term form
+bugreports_SortedIeeeItalicsFail
+
+# ikey-based disambiguation not supported
+bugreports_ikeyOne
+
+# ------------------------------------------------------------------------------
+# Collapse - year suffix and author collapsing edge cases
+# ------------------------------------------------------------------------------
+
+# Trailing comma with collapse when date is missing: "(Smith 2000, )"
+collapse_AuthorCollapseNoDateSorted
+
+# ------------------------------------------------------------------------------
+# Date formatting - negative years and year suffixes
+# ------------------------------------------------------------------------------
+
+# Space before BC/AD: "100BC" vs "100 BC"
+date_NegativeDateSort
+date_NegativeDateSortViaMacro
+date_NegativeDateSortViaMacroOnYearMonthOnly
+
+# Year suffix with "n.d." (no date): "n.d.-a" vs "n.d."
+date_YearSuffixImplicitWithNoDate
+date_YearSuffixWithNoDate
+
+# ------------------------------------------------------------------------------
+# Disambiguation - complex name and year suffix disambiguation
+# ------------------------------------------------------------------------------
+
+# Spacing in initials doesn't trigger disambiguation
+disambiguate_DifferentSpacingInInitials
+
+# Disambiguation algorithm edge case causing different suffix assignment
+disambiguate_DisambiguationHang
+
+# Incremental text disambiguation shows edition when it shouldn't
+disambiguate_IncrementalExtraText
+
+# Initialize-with doesn't trigger disambiguation when it should
+disambiguate_InitializeWithButNoDisambiguation
+
+# Particle handling in primary name disambiguation
+disambiguate_PrimaryNameWithNonDroppingParticle
+disambiguate_PrimaryNameWithParticle
+
+# Institution name year collapse uses different delimiter (; vs ,)
+disambiguate_YearCollapseWithInstitution
+
+# Two-level year suffix (et al groups) not fully supported
+disambiguate_YearSuffixAtTwoLevels
+
+# Et al subsequent with year suffix uses different delimiter (; vs ,)
+disambiguate_YearSuffixWithEtAlSubequent
+disambiguate_YearSuffixWithEtAlSubsequent
+
+# ------------------------------------------------------------------------------
+# Flip-flop formatting - nested style toggling
+# ------------------------------------------------------------------------------
+
+# Quote style and apostrophe in leading markup
+flipflop_LeadingMarkupWithApostrophe
+
+# Numeric field with superscript escaping
+flipflop_NumericField
+
+# Title case with orphan quotes - "Under" vs "under"
+flipflop_OrphanQuote
+
+# ------------------------------------------------------------------------------
+# Full styles - complete style tests with multiple features
+# ------------------------------------------------------------------------------
+
+# En-dash vs hyphen in page ranges: "3-4" vs "3–4"
+fullstyles_ABdNT
+
+# Subsequent author substitute (---) not implemented
+fullstyles_ChicagoAuthorDateSimple
+
+# ------------------------------------------------------------------------------
+# Integration - multi-citation and cross-reference features
+# ------------------------------------------------------------------------------
+
+# First-reference-note-number tracking when citations reordered
+integration_FirstReferenceNoteNumberPositionChange
+
+# Ibid detection after citation insertion
+integration_IbidOnInsert
+
+# ------------------------------------------------------------------------------
+# Label - term form and formatting
+# ------------------------------------------------------------------------------
+
+# Newline appearing in editor-translator label output
+label_EditorTranslator1
+
+# ------------------------------------------------------------------------------
+# Magic - special punctuation and term handling
+# ------------------------------------------------------------------------------
+
+# First occurring term should be capitalized: "And" vs "and"
+magic_CapitalizeFirstOccurringTerm
+
+# Nested quote punctuation placement
+magic_PunctuationInQuoteNested
+
+# Translator vs author in subsequent-author-substitute: "trans." vs "tran."
+magic_SubsequentAuthorSubstituteNotFooled
+
+# Ibid capitalization after prefix: "Ibid." vs "ibid."
+magic_TermCapitalizationWithPrefix
+
+# ------------------------------------------------------------------------------
+# Name formatting - delimiters, particles, and special characters
+# ------------------------------------------------------------------------------
+
+# Year suffix collapse ordering across cite groups
+name_CiteGroupDelimiterWithYearSuffixCollapse2
+
+# Delimiter after inverted institutional name
+name_DelimiterAfterInverted
+
+# Space before Chinese "et al." equivalent
+name_EtAlWithCombined
+
+# Hebrew "and" conjunction: letter vav handling
+name_HebrewAnd
+
+# Markup (bold) in initialized names - entity escaping
+name_InTextMarkupInitialize
+name_InTextMarkupNormalizeInitials
+
+# ------------------------------------------------------------------------------
+# Number formatting - ordinals and plurals
+# ------------------------------------------------------------------------------
+
+# Ordinal vs plain number in page ranges
+number_OrdinalSpacing
+
+# Plural detection heuristics for hyphenated ranges (not in CSL spec)
+# See test/NOTES.md: "logic will only set plurals where there is a numeric
+# unit on either side of a hyphen or en-dash"
+number_PlainHyphenOrEnDashAlwaysPlural
+
+# ------------------------------------------------------------------------------
+# Position - ibid, first, subsequent, near-note detection
+# Pandoc citeproc has 50% failure rate in this category
+# ------------------------------------------------------------------------------
+
+# Ibid capitalization: "Ibid." vs "ibid."
+position_FirstTrueOnlyOnce
+position_IbidWithLocator
+position_IbidWithMultipleSoloCitesInBackref
+position_IfIbidWithLocatorIsTrueThenIbidIsTrue
+
+# In-text ibid detection - should be ibid, shows full citation
+position_IbidInText
+
+# Supra note number tracking: "supra note 1" vs "supra"
+position_IbidSeparateCiteSameNote
+
+# Near-note detection within same note
+position_NearNoteSameNote
+
+# Note number reset across documents/sections
+position_ResetNoteNumbers
+
+# ------------------------------------------------------------------------------
+# Punctuation - quote and delimiter interactions
+# ------------------------------------------------------------------------------
+
+# Full "punctuation-in-quote" rules - complex punctuation movement
+punctuation_FullMontyQuotesIn
+
+# ------------------------------------------------------------------------------
+# Quotes - nested quote handling
+# ------------------------------------------------------------------------------
+
+# Nested quote characters when quotes-under-quotes is false
+quotes_QuotesUnderQuotesFalse
+
+# ------------------------------------------------------------------------------
+# Sort - citation numbering and author substitution
+# ------------------------------------------------------------------------------
+
+# Citation number renumbering after descending sort
+# Numbers should be reassigned 1,2,3... but stay in original order
+sort_BibliographyCitationNumberDescending
+sort_BibliographyCitationNumberDescendingViaCompositeMacro
+sort_BibliographyCitationNumberDescendingViaMacro
+
+# Subsequent author substitute (---) with year suffix
+sort_ChicagoYearSuffix1
+sort_ChicagoYearSuffix2
+
+# Apostrophe spacing in name particles: "de' Frinkle" vs "de'Frinkle"
+sort_LeadingApostropheOnNameParticle
+
+# Omitted bibliography reference handling (no printed form)
+sort_OmittedBibRefMixedNumericStyle
+sort_OmittedBibRefNonNumericStyle
+
+# Citation range affected by sort order
+sort_RangeUnaffected
+
+# ------------------------------------------------------------------------------
+# Substitute - fallback element handling
+# ------------------------------------------------------------------------------
+
+# Empty term in substitute produces no output
+substitute_SubstituteOnlyOnceTermEmpty
+
+# ------------------------------------------------------------------------------
+# Testers - Zotero plugin auto-generated tests
+# ------------------------------------------------------------------------------
+
+# HTML entity escaping: <sup> rendered as &#60;sup&#62; instead of actual tags
+testers_FirstAutoGeneratedZoteroPluginTest
+testers_SecondAutoGeneratedZoteroPluginTest

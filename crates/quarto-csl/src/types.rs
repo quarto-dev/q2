@@ -567,6 +567,10 @@ pub struct Name {
     pub name_as_sort_order: Option<NameAsSortOrder>,
     /// Sort separator.
     pub sort_separator: Option<String>,
+    /// Formatting for family name part (from `<name-part name="family">`).
+    pub family_formatting: Option<Formatting>,
+    /// Formatting for given name part (from `<name-part name="given">`).
+    pub given_formatting: Option<Formatting>,
     /// Source location.
     pub source_info: Option<SourceInfo>,
 }

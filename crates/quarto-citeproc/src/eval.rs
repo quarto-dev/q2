@@ -638,14 +638,14 @@ fn evaluate_names(
     for var in &names_el.variables {
         if let Some(names) = ctx.reference.get_names(var) {
             if !names.is_empty() {
-                // Format the names
+                // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
                 let names_output = Output::tagged(
                     Tag::Names {
                         variable: var.clone(),
                         names: names.to_vec(),
                     },
-                    Output::literal(formatted),
+                    formatted,
                 );
 
                 // Check for label
@@ -715,7 +715,7 @@ fn format_names(
     ctx: &EvalContext,
     names: &[crate::reference::Name],
     names_el: &NamesElement,
-) -> String {
+) -> Output {
     use quarto_csl::{DelimiterPrecedesLast, NameAsSortOrder};
 
     // Merge name element options with inherited options (name takes precedence)
@@ -793,11 +793,15 @@ fn format_names(
 
     // Format individual names, tracking which ones are actually inverted
     // Literal names are never inverted even with name-as-sort-order="all"
-    let mut formatted_names: Vec<String> = Vec::new();
+    let mut formatted_names: Vec<Output> = Vec::new();
     let mut is_inverted: Vec<bool> = Vec::new();
 
     // Get disambiguation hints for names
     let disamb = ctx.reference.disambiguation.as_ref();
+
+    // Get name-part formatting from the Name element (if present)
+    let family_formatting = names_el.name.as_ref().and_then(|n| n.family_formatting.as_ref());
+    let given_formatting = names_el.name.as_ref().and_then(|n| n.given_formatting.as_ref());
 
     for (i, n) in names.iter().take(names_to_show).enumerate() {
         // Literal names are never inverted
@@ -813,7 +817,15 @@ fn format_names(
         };
         // Check if there's a disambiguation hint for this name
         let is_primary = i == 0;
-        formatted_names.push(format_single_name(n, &effective_options, inverted, disamb, is_primary));
+        formatted_names.push(format_single_name(
+            n,
+            &effective_options,
+            inverted,
+            disamb,
+            is_primary,
+            family_formatting,
+            given_formatting,
+        ));
         is_inverted.push(inverted);
     }
 
@@ -841,53 +853,79 @@ fn format_names(
     // Exception: et-al-use-last still uses the ellipsis format, not "and"
     let use_and_connector = !show_et_al;
 
-    // Join names
-    let mut result = if formatted_names.is_empty() {
-        String::new()
+    // Build the output - we construct an Output tree that preserves structure
+    // while producing the same rendered result as before
+    let mut result_parts: Vec<Output> = Vec::new();
+
+    if formatted_names.is_empty() {
+        // No names - return null
+        return Output::Null;
     } else if formatted_names.len() == 1 {
-        formatted_names[0].clone()
+        result_parts.push(formatted_names.into_iter().next().unwrap());
     } else if formatted_names.len() == 2 {
+        let mut iter = formatted_names.into_iter();
+        let first = iter.next().unwrap();
+        let second = iter.next().unwrap();
+
         if use_and_connector {
             if let Some(ref and) = and_word {
                 let use_delim = should_include_delimiter(delimiter_precedes_last, 2);
                 if use_delim {
-                    format!(
-                        "{}{}{}{}",
-                        formatted_names[0],
-                        delimiter.trim_end(),
-                        if and.is_empty() { "" } else { " " },
-                        format!("{} {}", and, formatted_names[1])
-                    )
+                    // "Name1, and Name2"
+                    result_parts.push(first);
+                    result_parts.push(Output::literal(format!("{} {} ", delimiter.trim_end(), and)));
+                    result_parts.push(second);
                 } else {
-                    format!("{} {} {}", formatted_names[0], and, formatted_names[1])
+                    // "Name1 and Name2"
+                    result_parts.push(first);
+                    result_parts.push(Output::literal(format!(" {} ", and)));
+                    result_parts.push(second);
                 }
             } else {
-                formatted_names.join(&delimiter)
+                // No "and" - just delimiter: "Name1, Name2"
+                result_parts.push(first);
+                result_parts.push(Output::literal(delimiter.clone()));
+                result_parts.push(second);
             }
         } else {
-            formatted_names.join(&delimiter)
+            // Not using "and" connector (et-al truncation) - just delimiter
+            result_parts.push(first);
+            result_parts.push(Output::literal(delimiter.clone()));
+            result_parts.push(second);
         }
     } else {
+        // 3+ names
         let last_idx = formatted_names.len() - 1;
-        let init = formatted_names[..last_idx].join(&delimiter);
-        if use_and_connector {
-            if let Some(ref and) = and_word {
-                let use_delim = should_include_delimiter(delimiter_precedes_last, formatted_names.len());
-                if use_delim {
-                    format!(
-                        "{}{} {} {}",
-                        init, delimiter.trim_end(), and, formatted_names[last_idx]
-                    )
+        let mut iter = formatted_names.into_iter().enumerate();
+
+        while let Some((i, name_output)) = iter.next() {
+            if i == last_idx {
+                // Last name
+                if use_and_connector {
+                    if let Some(ref and) = and_word {
+                        let use_delim = should_include_delimiter(delimiter_precedes_last, last_idx + 1);
+                        if use_delim {
+                            result_parts.push(Output::literal(format!("{} {} ", delimiter.trim_end(), and)));
+                        } else {
+                            result_parts.push(Output::literal(format!(" {} ", and)));
+                        }
+                    } else {
+                        result_parts.push(Output::literal(delimiter.clone()));
+                    }
                 } else {
-                    format!("{} {} {}", init, and, formatted_names[last_idx])
+                    result_parts.push(Output::literal(delimiter.clone()));
                 }
+                result_parts.push(name_output);
             } else {
-                format!("{}{}{}", init, delimiter, formatted_names[last_idx])
+                // Not the last name
+                result_parts.push(name_output);
+                if i < last_idx - 1 {
+                    // Add delimiter between non-last names
+                    result_parts.push(Output::literal(delimiter.clone()));
+                }
             }
-        } else {
-            format!("{}{}{}", init, delimiter, formatted_names[last_idx])
         }
-    };
+    }
 
     // Handle et-al
     if show_et_al {
@@ -900,49 +938,57 @@ fn format_names(
                 name_as_sort_order == Some(NameAsSortOrder::All),
                 disamb,
                 false, // not primary
+                family_formatting,
+                given_formatting,
             );
-            let use_delim = should_include_delimiter(delimiter_precedes_et_al, formatted_names.len() + 1);
+            let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
             if use_delim {
-                result = format!("{}{} … {}", result, delimiter.trim_end(), last_name);
+                result_parts.push(Output::literal(format!("{} … ", delimiter.trim_end())));
             } else {
-                result = format!("{} … {}", result, last_name);
+                result_parts.push(Output::literal(" … ".to_string()));
             }
+            result_parts.push(last_name);
         } else {
             // Regular et al.
             let et_al = ctx
                 .get_term("et-al", quarto_csl::TermForm::Long, false)
                 .unwrap_or_else(|| "et al.".to_string());
-            let use_delim = should_include_delimiter(delimiter_precedes_et_al, formatted_names.len() + 1);
+            let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
             if use_delim {
-                result = format!("{}{} {}", result, delimiter.trim_end(), et_al);
+                result_parts.push(Output::literal(format!("{} {}", delimiter.trim_end(), et_al)));
             } else {
-                result = format!("{} {}", result, et_al);
+                result_parts.push(Output::literal(format!(" {}", et_al)));
             }
         }
     }
 
-    result
+    Output::sequence(result_parts)
 }
 
-/// Format a single name.
+/// Format a single name, returning structured Output.
 ///
 /// If `inverted` is true, format as "Family, Given" (sort order).
 /// Otherwise, format as "Given Family" (display order).
 ///
 /// If disambiguation data is provided and contains a hint for this name,
 /// the form and initialization may be overridden to show given names.
+///
+/// This returns an `Output` AST rather than a plain string, enabling
+/// per-name-part formatting (e.g., uppercase family names) in future phases.
 fn format_single_name(
     name: &crate::reference::Name,
     options: &quarto_csl::InheritableNameOptions,
     inverted: bool,
     disamb: Option<&crate::reference::DisambiguationData>,
     is_primary: bool,
-) -> String {
+    family_formatting: Option<&Formatting>,
+    given_formatting: Option<&Formatting>,
+) -> Output {
     use crate::reference::NameHint;
 
     // Handle literal names
     if let Some(ref lit) = name.literal {
-        return lit.clone();
+        return Output::literal(lit.clone());
     }
 
     // Look up disambiguation hint for this name
@@ -979,27 +1025,44 @@ fn format_single_name(
 
     match form {
         quarto_csl::NameForm::Short => {
-            // Short form: family name only
-            let mut parts = Vec::new();
+            // Short form: family name only (non-dropping particle + family)
+            let mut parts: Vec<Output> = Vec::new();
             if let Some(ref ndp) = name.non_dropping_particle {
-                parts.push(ndp.clone());
+                parts.push(Output::literal(ndp.clone()));
             }
             if let Some(ref family) = name.family {
-                parts.push(family.clone());
+                parts.push(Output::literal(family.clone()));
             }
-            parts.join(" ")
+            // Join with space delimiter
+            let base = Output::formatted_with_delimiter(Formatting::default(), parts, " ");
+            // Apply family_formatting if specified (Short form only shows family name)
+            if let Some(fmt) = family_formatting {
+                Output::formatted(fmt.clone(), vec![base])
+            } else {
+                base
+            }
         }
         quarto_csl::NameForm::Long | quarto_csl::NameForm::Count => {
             // Build family part (non-dropping particle + family name)
-            let family_part = {
-                let mut fp = Vec::new();
+            let family_part: Option<Output> = {
+                let mut fp: Vec<Output> = Vec::new();
                 if let Some(ref ndp) = name.non_dropping_particle {
-                    fp.push(ndp.clone());
+                    fp.push(Output::literal(ndp.clone()));
                 }
                 if let Some(ref family) = name.family {
-                    fp.push(family.clone());
+                    fp.push(Output::literal(family.clone()));
                 }
-                fp.join(" ")
+                if fp.is_empty() {
+                    None
+                } else {
+                    let base = Output::formatted_with_delimiter(Formatting::default(), fp, " ");
+                    // Apply family_formatting if specified (e.g., text-case="uppercase")
+                    if let Some(fmt) = family_formatting {
+                        Some(Output::formatted(fmt.clone(), vec![base]))
+                    } else {
+                        Some(base)
+                    }
+                }
             };
 
             // Build given part (possibly initialized)
@@ -1007,8 +1070,8 @@ fn format_single_name(
             // because that given name IS their name (e.g., "Banksy", "Cher")
             // force_no_initialize is set by disambiguation hints (AddGivenName) to show full names
             let should_initialize = options.initialize.unwrap_or(true) && !force_no_initialize;
-            let given_part = name.given.as_ref().map(|given| {
-                if name.family.is_none() {
+            let given_part: Option<Output> = name.given.as_ref().map(|given| {
+                let given_text = if name.family.is_none() {
                     // No family name - given name is their full name, don't initialize
                     given.clone()
                 } else if force_no_initialize {
@@ -1023,49 +1086,102 @@ fn format_single_name(
                     }
                 } else {
                     given.clone()
+                };
+                let base = Output::literal(given_text);
+                // Apply given_formatting if specified (e.g., font-style="italic")
+                if let Some(fmt) = given_formatting {
+                    Output::formatted(fmt.clone(), vec![base])
+                } else {
+                    base
                 }
             });
 
             // Build suffix part
-            let suffix_part = name.suffix.clone();
+            let suffix_part: Option<Output> = name.suffix.as_ref().map(|s| Output::literal(s.clone()));
+
+            // Build dropping particle part (not included in family formatting)
+            let dropping_particle_part: Option<Output> = name.dropping_particle.as_ref().map(|dp| Output::literal(dp.clone()));
 
             if inverted {
                 // Sort order: "Family, Given" or "Family, Given, Suffix"
-                let mut result = family_part;
+                // In sort order, dropping particle goes after given name
+                // Structure: [family_part, sort_separator, given_part, " ", dropping_particle, ", ", suffix_part]
+                let mut parts: Vec<Output> = Vec::new();
+
+                if let Some(family) = family_part {
+                    parts.push(family);
+                }
+
                 if let Some(given) = given_part {
-                    if !result.is_empty() && !given.is_empty() {
-                        result = format!("{}{}{}", result, sort_separator, given);
-                    } else if !given.is_empty() {
-                        result = given;
+                    if !parts.is_empty() {
+                        parts.push(Output::literal(sort_separator.clone()));
                     }
+                    parts.push(given);
                 }
+
+                if let Some(dp) = dropping_particle_part {
+                    if !parts.is_empty() {
+                        parts.push(Output::literal(" ".to_string()));
+                    }
+                    parts.push(dp);
+                }
+
                 if let Some(suffix) = suffix_part {
-                    if !result.is_empty() {
-                        result = format!("{}, {}", result, suffix);
+                    if !parts.is_empty() {
+                        parts.push(Output::literal(", ".to_string()));
                     }
+                    parts.push(suffix);
                 }
-                result
+
+                Output::sequence(parts)
             } else {
-                // Display order: "Given Family" or "Given Family, Suffix"
-                let mut parts = Vec::new();
+                // Display order: "Given Dropping-particle Family" or "Given Dropping-particle Family, Suffix"
+                // CSL display order: Given + dropping-particle + non-dropping-particle + Family
+                let mut parts: Vec<Output> = Vec::new();
+
                 if let Some(given) = given_part {
-                    if !given.is_empty() {
-                        parts.push(given);
-                    }
+                    parts.push(given);
                 }
-                if !family_part.is_empty() {
-                    parts.push(family_part);
+
+                // Dropping particle goes between given and family (not part of family formatting)
+                if let Some(dp) = dropping_particle_part {
+                    parts.push(dp);
                 }
-                let mut result = parts.join(" ");
+
+                if let Some(family) = family_part {
+                    parts.push(family);
+                }
+
+                // Join with space delimiter
+                let main_part = Output::formatted_with_delimiter(Formatting::default(), parts, " ");
+
                 if let Some(suffix) = suffix_part {
-                    if !result.is_empty() {
-                        result = format!("{}, {}", result, suffix);
-                    }
+                    // Add ", Suffix"
+                    Output::sequence(vec![
+                        main_part,
+                        Output::literal(", ".to_string()),
+                        suffix,
+                    ])
+                } else {
+                    main_part
                 }
-                result
             }
         }
     }
+}
+
+/// Format a single name to a string (convenience wrapper for tests and compatibility).
+///
+/// This is a thin wrapper around the Output-returning version that renders to string.
+#[cfg(test)]
+fn format_single_name_to_string(
+    name: &crate::reference::Name,
+    options: &quarto_csl::InheritableNameOptions,
+    inverted: bool,
+    disamb: Option<&crate::reference::DisambiguationData>,
+    is_primary: bool,
+) -> String {
+    format_single_name(name, options, inverted, disamb, is_primary, None, None).render()
 }
 
 /// Normalize a given name without breaking into initials (for initialize="false").
@@ -2104,7 +2220,7 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(format_single_name(&name, &options, false, None, true), "Smith");
+        assert_eq!(format_single_name_to_string(&name, &options, false, None, true), "Smith");
     }
 
     #[test]
@@ -2118,9 +2234,9 @@ mod tests {
         let options = quarto_csl::InheritableNameOptions::default();
 
         // Normal order: Given Family
-        assert_eq!(format_single_name(&name, &options, false, None, true), "John Smith");
+        assert_eq!(format_single_name_to_string(&name, &options, false, None, true), "John Smith");
         // Inverted order: Family, Given
-        assert_eq!(format_single_name(&name, &options, true, None, true), "Smith, John");
+        assert_eq!(format_single_name_to_string(&name, &options, true, None, true), "Smith, John");
     }
 
     #[test]
