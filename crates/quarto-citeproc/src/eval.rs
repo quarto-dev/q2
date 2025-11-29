@@ -1527,13 +1527,8 @@ fn format_single_name(
 
                 if let Some(suffix) = suffix_part {
                     if !parts.is_empty() {
-                        // Use comma before suffix if comma_suffix is true
-                        let separator = if name.comma_suffix.unwrap_or(true) {
-                            ", "
-                        } else {
-                            " "
-                        };
-                        parts.push(Output::literal(separator.to_string()));
+                        // In sort order, always use sort_separator before suffix (like Pandoc's <:>)
+                        parts.push(Output::literal(effective_separator.clone()));
                     }
                     parts.push(suffix);
                 }
@@ -1550,7 +1545,13 @@ fn format_single_name(
                     // Western display order: Given + dropping-particle + Family
                     // Use smart spacing: no space after apostrophe, hyphen, en-dash, or NBSP
                     if let Some(given) = given_part {
-                        parts.push(given);
+                        // Apply given_affixes (prefix/suffix from name-part formatting)
+                        let wrapped = if let Some(ref affixes) = given_affixes {
+                            Output::formatted(affixes.clone(), vec![given])
+                        } else {
+                            given
+                        };
+                        parts.push(wrapped);
                     }
 
                     // Dropping particle goes between given and family (not part of family formatting)
@@ -1576,7 +1577,13 @@ fn format_single_name(
                     }
 
                     if let Some(given) = given_part {
-                        parts.push(given);
+                        // Apply given_affixes (prefix/suffix from name-part formatting)
+                        let wrapped = if let Some(ref affixes) = given_affixes {
+                            Output::formatted(affixes.clone(), vec![given])
+                        } else {
+                            given
+                        };
+                        parts.push(wrapped);
                     }
                 }
 
@@ -1584,8 +1591,8 @@ fn format_single_name(
                 let main_part = Output::sequence(parts);
 
                 if let Some(suffix) = suffix_part {
-                    // Use comma before suffix if comma_suffix is true (default: true)
-                    let separator = if name.comma_suffix.unwrap_or(true) {
+                    // Use comma before suffix if comma_suffix is true (default: false per CSL spec)
+                    let separator = if name.comma_suffix.unwrap_or(false) {
                         ", "
                     } else {
                         " "

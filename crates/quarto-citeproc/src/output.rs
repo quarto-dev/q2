@@ -2230,7 +2230,16 @@ fn ends_with_punct(children: &[Output], punct: char) -> bool {
 fn output_ends_with_char(output: &Output, c: char) -> bool {
     match output {
         Output::Literal(s) => s.ends_with(c),
-        Output::Formatted { children, .. } => ends_with_punct(children, c),
+        Output::Formatted { formatting, children } => {
+            // If there's a suffix, check the suffix for the ending character
+            if let Some(ref suffix) = formatting.suffix {
+                if !suffix.is_empty() {
+                    return suffix.ends_with(c);
+                }
+            }
+            // Otherwise check children
+            ends_with_punct(children, c)
+        }
         Output::Tagged { child, .. } => output_ends_with_char(child, c),
         Output::Linked { children, .. } => ends_with_punct(children, c),
         Output::InNote(child) => output_ends_with_char(child, c),
@@ -2852,8 +2861,8 @@ fn title_case(s: &str) -> String {
                 force_next = false;
             }
             result.push(c);
-        } else if c == ':' || c == '—' || c == '–' || c == '.' || c == '?' || c == '!' {
-            // Punctuation that forces next word capitalization
+        } else if c == ':' || c == '.' || c == '?' || c == '!' {
+            // Sentence-ending punctuation forces next word capitalization
             if !current_word.is_empty() {
                 result.push_str(&title_case_word(&current_word, force_next));
                 current_word.clear();
@@ -2861,6 +2870,16 @@ fn title_case(s: &str) -> String {
             result.push(c);
             // After these punctuation marks, force capitalize next word
             force_next = true;
+        } else if c == '—' || c == '–' {
+            // Em-dash and en-dash are word breaks but do NOT force capitalization
+            // (unlike sentence-ending punctuation). Regular hyphen is handled as
+            // part of the word by title_case_word.
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+            }
+            result.push(c);
+            force_next = false;
         } else if c == '\u{201C}' || c == '\u{2018}' {
             // Opening curly quotes (left double " and left single ') force capitalization
             if !current_word.is_empty() {
@@ -2870,14 +2889,18 @@ fn title_case(s: &str) -> String {
             result.push(c);
             // After opening quotes, force capitalize next word
             force_next = true;
-        } else if c == '\u{201D}' || c == '\u{2019}' {
-            // Closing curly quotes - just output, don't force capitalize
+        } else if c == '\u{201D}' {
+            // Closing curly double quote - just output, don't force capitalize
             if !current_word.is_empty() {
                 result.push_str(&title_case_word(&current_word, force_next));
                 current_word.clear();
                 force_next = false;
             }
             result.push(c);
+        } else if c == '\u{2019}' || c == '\'' || c == '`' {
+            // Apostrophes (curly and straight) and backticks are part of the word
+            // e.g., "Shafi'i", "don't", "Shafi`i"
+            current_word.push(c);
         } else if c == '"' {
             // Straight double quotes - determine if opening or closing based on context
             // If followed by alphanumeric (peeking), it's opening
@@ -2899,14 +2922,6 @@ fn title_case(s: &str) -> String {
             } else {
                 force_next = false;
             }
-        } else if c == '\'' {
-            // Single straight quote - just include, don't affect capitalization
-            if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
-                current_word.clear();
-                force_next = false;
-            }
-            result.push(c);
         } else {
             current_word.push(c);
         }
@@ -2962,8 +2977,8 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
                 force_next = false;
             }
             result.push(c);
-        } else if c == ':' || c == '—' || c == '–' || c == '.' || c == '?' || c == '!' {
-            // Punctuation that forces next word capitalization
+        } else if c == ':' || c == '.' || c == '?' || c == '!' {
+            // Sentence-ending punctuation forces next word capitalization
             if !current_word.is_empty() {
                 result.push_str(&title_case_word(&current_word, force_next));
                 current_word.clear();
@@ -2972,6 +2987,15 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
             result.push(c);
             // After these punctuation marks, force capitalize next word
             force_next = true;
+        } else if c == '—' || c == '–' {
+            // Em-dash and en-dash are word breaks but do NOT force capitalization
+            if !current_word.is_empty() {
+                result.push_str(&title_case_word(&current_word, force_next));
+                current_word.clear();
+                *seen_first_word = true;
+            }
+            result.push(c);
+            force_next = false;
         } else if c == '\u{201C}' || c == '\u{2018}' {
             // Opening curly quotes force capitalization
             if !current_word.is_empty() {
@@ -2981,8 +3005,8 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
             }
             result.push(c);
             force_next = true;
-        } else if c == '\u{201D}' || c == '\u{2019}' {
-            // Closing curly quotes - just output, don't force capitalize
+        } else if c == '\u{201D}' {
+            // Closing curly double quote - just output, don't force capitalize
             if !current_word.is_empty() {
                 result.push_str(&title_case_word(&current_word, force_next));
                 current_word.clear();
@@ -2990,6 +3014,9 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
                 force_next = false;
             }
             result.push(c);
+        } else if c == '\u{2019}' || c == '\'' || c == '`' {
+            // Apostrophes (curly and straight) and backticks are part of the word
+            current_word.push(c);
         } else if c == '"' {
             // Straight double quotes - determine if opening or closing based on context
             if !current_word.is_empty() {
@@ -3007,15 +3034,6 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
             } else {
                 force_next = false;
             }
-        } else if c == '\'' {
-            // Single straight quote - just include, don't affect capitalization
-            if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
-                current_word.clear();
-                *seen_first_word = true;
-                force_next = false;
-            }
-            result.push(c);
         } else {
             current_word.push(c);
         }

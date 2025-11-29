@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 564
-# Disabled: 294
+# Enabled: 572
+# Disabled: 286
 #
 [enabled]
 affix_commaafterquote
@@ -172,6 +172,7 @@ date_textformyeardateyearrangeopen
 date_yearsuffiximplicitwithnodate
 date_yearsuffiximplicitwithnodateoneonly
 date_yearsuffixwithnodate
+decorations_andtermunaffectedbynamedecorations
 decorations_simpleflipflop
 decorations_simplequotes
 disambiguate_addnamesfailure
@@ -310,6 +311,7 @@ name_andtextdelimiterprecedeslastalways
 name_apostropheingivenname
 name_arabicshortforms
 name_articularnameassortorder
+name_articularplain
 name_articularshortform
 name_articularshortformcommasuffix
 name_articularwithcomma
@@ -343,6 +345,8 @@ name_labelafterpluraldecorations
 name_literalwithcomma
 name_lowercasesurnamesuffix
 name_multipleliteral
+name_namepartaffixesnameassortorder
+name_namepartaffixesnameassortorderdemotenondroppingparticle
 name_nonamenode
 name_nondroppingparticledefault
 name_onlyfamilyname
@@ -376,6 +380,7 @@ name_westernprimaryfontstyle
 name_westernprimaryfontstyletwoauthors
 name_westernsimple
 name_westerntwoauthors
+name_withnonbreakingspace
 nameattr_andonbibliographyinbibliography
 nameattr_andonbibliographyincitation
 nameattr_andoncitationinbibliography
@@ -469,6 +474,7 @@ nameattr_sortseparatoronnamesinbibliography
 nameattr_sortseparatoronnamesincitation
 nameattr_sortseparatoronstyleinbibliography
 nameattr_sortseparatoronstyleincitation
+nameorder_long
 nameorder_longnameassortdemotedisplayandsort
 nameorder_longnameassortdemotenever
 nameorder_short
@@ -551,6 +557,7 @@ textcase_implicitnocase
 textcase_inquotes
 textcase_lastchar
 textcase_lowercase
+textcase_nospacebeforeapostrophe
 textcase_sentencecapitalization
 textcase_skipnameparticlesintitlecase
 textcase_stopwordbeforehyphen
@@ -565,6 +572,7 @@ textcase_titlecasewithinitials
 textcase_titlecasewithnonbreakspace
 textcase_titlecasewithvolumetitle
 textcase_titlewithcircumflex
+textcase_titlewithemdash
 textcase_titlewithendash
 textcase_uppercase
 unicode_nonbreakingspace

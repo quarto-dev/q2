@@ -14,6 +14,25 @@ reference for this project.
 When the CSL test suite and Pandoc's citeproc disagree, we follow Pandoc's behavior.
 Tests that Pandoc also fails are candidates for our `deferred_tests.txt`.
 
+## Work Selection Policy
+
+**Only work on "unknown" tests - never on deferred tests.**
+
+Tests have three states:
+- **Enabled**: Tests we expect to pass. Run with every build.
+- **Deferred**: Tests we've attempted and consciously decided to skip. Do NOT work on these.
+- **Unknown**: Tests we haven't attempted yet. This is where work should focus.
+
+The workflow is:
+1. Pick an unknown test
+2. Attempt to fix it
+3. If successful → enable it
+4. If too difficult/blocked → defer it (with user approval)
+5. Move to the next unknown test
+
+Once all unknown tests are addressed (either enabled or deferred), we can revisit
+deferred tests in priority order.
+
 ## Quick Start for New Sessions
 
 ### 1. Check Current Status
@@ -35,10 +54,10 @@ cargo nextest run -p quarto-citeproc
 # Check beads for assigned tasks
 bd ready
 
-# See test breakdown by category
+# See test breakdown by category (focus on "Unknown" counts)
 python3 scripts/csl-test-helper.py status
 
-# Check a specific category
+# Check a specific category - look for "?" (unknown) tests
 python3 scripts/csl-test-helper.py category name --run
 
 # Find quick wins (tests that pass but aren't enabled)
@@ -48,8 +67,8 @@ python3 scripts/csl-test-helper.py quick-wins
 python3 scripts/csl-test-helper.py regressions
 ```
 
-Before working on a failing test, check if it's in `tests/deferred_tests.txt` -
-these are intentionally skipped.
+**IMPORTANT**: Only work on tests marked with `?` (unknown). Skip tests already
+in `deferred_tests.txt` - those have been consciously decided to skip.
 
 ### 3. Inspect and Run Tests
 
@@ -164,6 +183,15 @@ References (JSON) ──parse──> Vec<Reference> ─┘                      
 
 ## Debugging a Failing Test
 
+### Step 0: Check if Deferred (MUST DO FIRST)
+
+```bash
+grep -i "<testname>" crates/quarto-citeproc/tests/deferred_tests.txt
+```
+
+**If found, STOP.** Do not work on deferred tests. Move to a different unknown test.
+Deferred tests have already been attempted and consciously skipped.
+
 ### Step 1: Understand the Test
 
 ```bash
@@ -177,15 +205,7 @@ cat crates/quarto-citeproc/test-data/csl-suite/<testname>.txt
 # - RESULT: What's expected?
 ```
 
-### Step 2: Check if Intentionally Deferred
-
-```bash
-grep -i "<testname>" crates/quarto-citeproc/tests/deferred_tests.txt
-```
-
-If found, read the reason. Don't work on deferred tests without user approval.
-
-### Step 3: Check Reference Implementation
+### Step 2: Check Reference Implementation
 
 ```bash
 # Search Pandoc's citeproc for relevant code
@@ -197,7 +217,7 @@ grep -i "<testname>" external-sources/citeproc/test/Spec.hs
 
 If Pandoc also fails, consider deferring rather than implementing differently.
 
-### Step 4: Find Similar Passing Tests
+### Step 3: Find Similar Passing Tests
 
 ```bash
 # Find tests with similar names
@@ -209,7 +229,7 @@ grep -i "<category>" crates/quarto-citeproc/tests/enabled_tests.txt
 
 Study passing tests to understand what patterns work.
 
-### Step 5: Debug with Print Statements
+### Step 4: Debug with Print Statements
 
 The evaluation code is in `crates/quarto-citeproc/src/eval.rs`. Key functions:
 - `evaluate_layout()` - Entry point for citation/bibliography
@@ -220,11 +240,25 @@ The evaluation code is in `crates/quarto-citeproc/src/eval.rs`. Key functions:
 
 Add `eprintln!` statements to trace execution. The test harness captures stderr.
 
-### Step 6: Make Minimal Changes
+### Step 5: Make Minimal Changes
 
 - Fix one thing at a time
 - Run tests frequently
 - Don't break passing tests
+
+### Step 6: If Fix is Too Difficult
+
+If after investigation you determine the fix requires:
+- A major new feature (e.g., subsequent-author-substitute, citation collapsing)
+- Disproportionate effort for an edge case
+- Changes that would break other tests
+
+Then propose deferring the test to the user with:
+1. Clear explanation of what's needed
+2. Whether Pandoc also fails (check `external-sources/citeproc/test/Spec.hs`)
+3. Rough estimate of effort
+
+**Wait for user approval before adding to `deferred_tests.txt`.**
 
 ## CSL Test Helper Utility
 
@@ -354,21 +388,33 @@ Original spec: `external-sources/csl-spec/specification.rst`
 
 ## Deferred Tests Policy
 
-**Adding tests to `deferred_tests.txt` requires user approval.**
+**Deferred tests are OFF LIMITS for regular work.**
 
-These are tests we've decided to intentionally skip, not "not yet attempted" tests.
+The `deferred_tests.txt` file contains tests we've already attempted and consciously
+decided to skip. Do not work on these tests during normal development.
 
-### Before Proposing to Defer
+### Three Test States
 
-1. Investigate the test thoroughly
-2. Understand why it fails and what would fix it
-3. Check if Pandoc's citeproc also fails it
-4. Ask the user for approval with rationale
+| State | Meaning | Action |
+|-------|---------|--------|
+| **Enabled** | Expected to pass | Maintain - don't break these |
+| **Unknown** | Not yet attempted | **Work on these** |
+| **Deferred** | Attempted and skipped | Do not touch |
+
+### When to Defer a Test
+
+Only propose deferring after you've:
+1. Investigated the test thoroughly
+2. Understood why it fails and what would fix it
+3. Checked if Pandoc's citeproc also fails it
+4. Determined the fix is blocked or requires major new features
+
+**Always get user approval before adding to `deferred_tests.txt`.**
 
 ### Valid Reasons for Deferring
 
 - Pandoc's citeproc also fails (we aim for parity, not perfection)
-- CSL style quirk producing technically-correct but undesirable output
+- Requires a major unimplemented feature (e.g., citation collapsing)
 - Edge case requiring disproportionate effort
 - Test conflicts with more important behaviors
 
@@ -383,6 +429,13 @@ These are tests we've decided to intentionally skip, not "not yet attempted" tes
 # Additional context if needed
 test_name
 ```
+
+### Revisiting Deferred Tests
+
+Only revisit deferred tests when:
+1. All unknown tests have been addressed (enabled or deferred)
+2. A major feature has been implemented that unblocks multiple deferred tests
+3. User explicitly requests work on a specific deferred test
 
 ## Common Pitfalls
 
