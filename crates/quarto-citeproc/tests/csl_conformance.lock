@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 522
-# Disabled: 336
+# Enabled: 537
+# Disabled: 321
 #
 [enabled]
 affix_commaafterquote
@@ -16,6 +16,7 @@ affix_spacewithquotes
 affix_textnodewithmacro
 affix_wordprocessoraffixnospace
 bugreports_abnt
+bugreports_apostropheonparticle
 bugreports_arabiclocale
 bugreports_authorposition
 bugreports_authoryear
@@ -171,11 +172,20 @@ decorations_simpleflipflop
 decorations_simplequotes
 disambiguate_addnamesfailure
 disambiguate_addnamesfailurewithaddgivenname
+disambiguate_addnamessuccess
+disambiguate_allnamesbasenamecountonfailureifyearsuffixavailable
 disambiguate_allnamesgenerally
 disambiguate_allnamessimplesequence
 disambiguate_allnameswithinitialsbibliography
 disambiguate_allnameswithinitialsgenerally
+disambiguate_andreaeg1a
+disambiguate_andreaeg1b
 disambiguate_andreaeg1c
+disambiguate_andreaeg2
+disambiguate_andreaeg3
+disambiguate_andreaeg4
+disambiguate_andreaeg5
+disambiguate_bycitebasenamecountonfailureifyearsuffixavailable
 disambiguate_bycitedisambiguatecondition
 disambiguate_bycitegivennameexpandcrossnestednames
 disambiguate_bycitegivennamenoshortforminitializewith
@@ -204,11 +214,16 @@ disambiguate_primarynamewithnondroppingparticle
 disambiguate_primarynamewithparticle
 disambiguate_threenoauthornotitleentries
 disambiguate_toinitialonly
+disambiguate_yearsuffixandsort
 disambiguate_yearsuffixfiftytwoentries
 disambiguate_yearsuffixfiftytwoentriesbycite
+disambiguate_yearsuffixmacrosameyearexplicit
+disambiguate_yearsuffixmacrosameyearimplicit
 disambiguate_yearsuffixmidinsert
 disambiguate_yearsuffixtwopairsbibliography
 disambiguate_yearsuffixtwopairsfirstnamebibliography
+disambiguate_yearsuffixtwopairsfullnamesbibliography
+disambiguate_yearsuffixwithmixedcreatortypes
 display_displayblock
 display_lostsuffix
 display_secondfieldalignclone

@@ -103,52 +103,35 @@ pub fn extract_disamb_data_with_processor(
 /// Returns groups of citations that render identically but refer to different works.
 /// Each inner Vec contains DisambData for citations that are ambiguous with each other.
 ///
-/// This function uses a two-stage approach:
-/// 1. First, group by author family names (to handle collapsed citations)
-/// 2. Then, within each name group, check if rendered text is ambiguous
+/// This matches Pandoc's `getAmbiguities` function: simply group by rendered text
+/// and return groups with multiple unique item IDs. The previous two-stage approach
+/// (grouping by author names first) was incorrect because it prevented detecting
+/// ambiguity between items with different authors but identical rendered output
+/// (e.g., "Smith et al." from two different author lists).
 pub fn find_ambiguities(items: Vec<DisambData>) -> Vec<Vec<DisambData>> {
-    // First, group items by author family names (handles collapse cases)
-    // Items with the same authors should be checked for year-suffix ambiguity
-    let mut name_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
+    // Group by rendered text only - this is what Pandoc does
+    // See: external-sources/citeproc/src/Citeproc/Eval.hs getAmbiguities (line 732)
+    let mut render_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
 
     for data in items {
-        // Create a key from family names (for collapse-aware grouping)
-        let family_names: Vec<&str> = data
-            .names
-            .iter()
-            .filter_map(|n| n.family.as_ref().map(|s| s.as_str()))
-            .collect();
-        let name_key = family_names.join("|");
-        name_groups.entry(name_key).or_default().push(data);
+        render_groups
+            .entry(data.rendered.clone())
+            .or_default()
+            .push(data);
     }
 
-    // For each name group, check for rendered text ambiguity OR
-    // same-author-same-year ambiguity (for year suffix)
-    let mut result = Vec::new();
-
-    for (_name_key, group) in name_groups {
-        // Now group by rendered text within the name group
-        let mut render_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
-        for data in group {
-            render_groups
-                .entry(data.rendered.clone())
-                .or_default()
-                .push(data);
-        }
-
-        // Find groups with >1 unique item
-        for sub_group in render_groups.into_values() {
+    // Return groups with >1 unique item ID
+    // (Same rendered text but different reference IDs = ambiguous)
+    render_groups
+        .into_values()
+        .filter(|group| {
             let mut unique_ids: Vec<&str> =
-                sub_group.iter().map(|d| d.item_id.as_str()).collect();
+                group.iter().map(|d| d.item_id.as_str()).collect();
             unique_ids.sort();
             unique_ids.dedup();
-            if unique_ids.len() > 1 {
-                result.push(sub_group);
-            }
-        }
-    }
-
-    result
+            unique_ids.len() > 1
+        })
+        .collect()
 }
 
 /// Find year-suffix ambiguities: items by the same author in the same year.
@@ -191,6 +174,154 @@ pub fn find_year_suffix_ambiguities(
 
     // Filter to groups with >1 unique item
     groups
+        .into_values()
+        .filter(|group| {
+            let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
+            unique_ids.sort();
+            unique_ids.dedup();
+            unique_ids.len() > 1
+        })
+        .collect()
+}
+
+/// Find year-suffix ambiguities using FULL author match (family + given names).
+///
+/// This is more precise than `find_year_suffix_ambiguities` because it only groups
+/// items that have truly identical author lists, not just matching family names.
+/// This prevents adding year suffixes when given names differ (e.g., "A. Smith 2001"
+/// vs "B. Smith 2001" should be disambiguated by givenname, not year suffix).
+///
+/// This function is needed for collapsed citations where the rendered text may differ
+/// due to author name suppression (e.g., "Brown, 2006; Brown, 2006" becomes
+/// "Brown, 2006, 2006" where the second item has no author in rendered text).
+pub fn find_year_suffix_with_full_author_match(
+    items: Vec<DisambData>,
+    processor: &crate::types::Processor,
+) -> Vec<Vec<DisambData>> {
+    // Group by full author list (family + given) + year
+    let mut groups: HashMap<String, Vec<DisambData>> = HashMap::new();
+
+    for data in items {
+        // Get year from reference
+        let year: Option<i32> = processor
+            .get_reference(&data.item_id)
+            .and_then(|r| r.issued.as_ref())
+            .and_then(|d| d.date_parts.as_ref())
+            .and_then(|parts| parts.first())
+            .and_then(|part| part.first().copied());
+
+        // Create key from FULL author names (family + given) + year
+        // This ensures "A. Smith" and "B. Smith" are in different groups
+        let author_key: String = data
+            .names
+            .iter()
+            .map(|n| {
+                let family = n.family.as_deref().unwrap_or("");
+                let given = n.given.as_deref().unwrap_or("");
+                format!("{}|{}", family, given)
+            })
+            .collect::<Vec<_>>()
+            .join("||");
+
+        let key = match year {
+            Some(y) => format!("{}#{}", author_key, y),
+            None => format!("{}#NOYEAR", author_key),
+        };
+
+        groups.entry(key).or_default().push(data);
+    }
+
+    // Filter to groups with >1 unique item
+    groups
+        .into_values()
+        .filter(|group| {
+            let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
+            unique_ids.sort();
+            unique_ids.dedup();
+            unique_ids.len() > 1
+        })
+        .collect()
+}
+
+/// Merge two sets of ambiguity groups, combining items that appear in either set.
+///
+/// This is used to combine rendered-text-based ambiguities with author+year-based
+/// ambiguities, ensuring year suffixes are added when needed for either case.
+pub fn merge_ambiguity_groups(
+    groups1: &[Vec<DisambData>],
+    groups2: &[Vec<DisambData>],
+) -> Vec<Vec<DisambData>> {
+    // Collect all item IDs from both sets
+    let mut all_items: HashMap<String, DisambData> = HashMap::new();
+    let mut item_groups: HashMap<String, HashSet<String>> = HashMap::new();
+
+    // Process groups1
+    for (group_idx, group) in groups1.iter().enumerate() {
+        let group_key = format!("g1_{}", group_idx);
+        for data in group {
+            all_items.insert(data.item_id.clone(), data.clone());
+            item_groups
+                .entry(data.item_id.clone())
+                .or_default()
+                .insert(group_key.clone());
+        }
+    }
+
+    // Process groups2
+    for (group_idx, group) in groups2.iter().enumerate() {
+        let group_key = format!("g2_{}", group_idx);
+        for data in group {
+            all_items.insert(data.item_id.clone(), data.clone());
+            item_groups
+                .entry(data.item_id.clone())
+                .or_default()
+                .insert(group_key.clone());
+        }
+    }
+
+    // Use union-find to merge items that share any group
+    let mut parent: HashMap<String, String> = HashMap::new();
+    for id in all_items.keys() {
+        parent.insert(id.clone(), id.clone());
+    }
+
+    fn find(parent: &mut HashMap<String, String>, x: &str) -> String {
+        if parent[x] != x {
+            let p = find(parent, &parent[x].clone());
+            parent.insert(x.to_string(), p.clone());
+            p
+        } else {
+            x.to_string()
+        }
+    }
+
+    fn union(parent: &mut HashMap<String, String>, x: &str, y: &str) {
+        let px = find(parent, x);
+        let py = find(parent, y);
+        if px != py {
+            parent.insert(px, py);
+        }
+    }
+
+    // Union items that share any group
+    for group in groups1.iter().chain(groups2.iter()) {
+        if group.len() > 1 {
+            let first = &group[0].item_id;
+            for item in group.iter().skip(1) {
+                union(&mut parent, first, &item.item_id);
+            }
+        }
+    }
+
+    // Collect items by their root
+    let mut result_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
+    for (id, data) in all_items {
+        let root = find(&mut parent, &id);
+        result_groups.entry(root).or_default().push(data);
+    }
+
+    // Filter to groups with >1 unique item and return
+    result_groups
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();

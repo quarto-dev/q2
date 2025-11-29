@@ -1366,16 +1366,25 @@ fn format_single_name(
 
                 if is_byzantine {
                     // Western display order: Given + dropping-particle + Family
+                    // Use smart spacing: no space after apostrophe, hyphen, en-dash, or NBSP
                     if let Some(given) = given_part {
                         parts.push(given);
                     }
 
                     // Dropping particle goes between given and family (not part of family formatting)
                     if let Some(dp) = dropping_particle_part {
+                        // Add space before dropping particle unless previous ends with no-space char
+                        if !parts.is_empty() && !crate::output::ends_with_no_space_char(parts.last().unwrap()) {
+                            parts.push(Output::literal(" ".to_string()));
+                        }
                         parts.push(dp);
                     }
 
                     if let Some(family) = family_part {
+                        // Add space before family unless previous ends with no-space char
+                        if !parts.is_empty() && !crate::output::ends_with_no_space_char(parts.last().unwrap()) {
+                            parts.push(Output::literal(" ".to_string()));
+                        }
                         parts.push(family);
                     }
                 } else {
@@ -1389,9 +1398,8 @@ fn format_single_name(
                     }
                 }
 
-                // Delimiter: space for Byzantine, none for non-Byzantine (CJK)
-                let delimiter = if is_byzantine { " " } else { "" };
-                let main_part = Output::formatted_with_delimiter(Formatting::default(), parts, delimiter);
+                // For non-Byzantine, we already have no delimiter. For Byzantine, we added spaces manually.
+                let main_part = Output::sequence(parts);
 
                 if let Some(suffix) = suffix_part {
                     // Use comma before suffix if comma_suffix is true (default: true)

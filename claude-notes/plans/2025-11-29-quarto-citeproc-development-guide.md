@@ -19,14 +19,14 @@ Tests that Pandoc also fails are candidates for our `deferred_tests.txt`.
 ### 1. Check Current Status
 
 ```bash
-# View current test counts (authoritative source)
+# Get full test status overview with category breakdown
+python3 scripts/csl-test-helper.py status
+
+# Or quick check via lockfile
 head -10 crates/quarto-citeproc/tests/csl_conformance.lock
 
-# Run all tests - these should pass
+# Run all enabled tests - these should pass
 cargo nextest run -p quarto-citeproc
-
-# Run just the validation test to see counts
-cargo nextest run -p quarto-citeproc csl_validate_manifest
 ```
 
 ### 2. Find Work
@@ -35,17 +35,32 @@ cargo nextest run -p quarto-citeproc csl_validate_manifest
 # Check beads for assigned tasks
 bd ready
 
-# Or explore failing tests by category
-cargo nextest run -p quarto-citeproc -- --include-ignored 2>&1 | grep FAIL | head -20
+# See test breakdown by category
+python3 scripts/csl-test-helper.py status
+
+# Check a specific category
+python3 scripts/csl-test-helper.py category name --run
+
+# Find quick wins (tests that pass but aren't enabled)
+python3 scripts/csl-test-helper.py quick-wins
+
+# Check for regressions
+python3 scripts/csl-test-helper.py regressions
 ```
 
 Before working on a failing test, check if it's in `tests/deferred_tests.txt` -
 these are intentionally skipped.
 
-### 3. Run a Specific Test
+### 3. Inspect and Run Tests
 
 ```bash
-# Run an enabled test
+# Inspect a specific test (shows status, expected/actual diff, Pandoc comparison)
+python3 scripts/csl-test-helper.py inspect name_AfterInvertedName --diff
+
+# Also show the CSL style
+python3 scripts/csl-test-helper.py inspect name_AfterInvertedName --diff --csl
+
+# Run an enabled test directly
 cargo nextest run -p quarto-citeproc csl_name_westersimple
 
 # Run an ignored (disabled) test
@@ -55,7 +70,20 @@ cargo nextest run -p quarto-citeproc csl_name_sometest -- --include-ignored
 cargo nextest run -p quarto-citeproc csl_name_ -- --include-ignored
 ```
 
-### 4. Read a Test File
+### 4. Enable New Tests
+
+```bash
+# Add passing tests to enabled list
+python3 scripts/csl-test-helper.py enable test_name1 test_name2
+
+# Update the lockfile
+UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
+
+# Verify all tests pass
+cargo nextest run -p quarto-citeproc
+```
+
+### 5. Read a Test File
 
 Test files are in `crates/quarto-citeproc/test-data/csl-suite/`. Format:
 
@@ -197,6 +225,60 @@ Add `eprintln!` statements to trace execution. The test harness captures stderr.
 - Fix one thing at a time
 - Run tests frequently
 - Don't break passing tests
+
+## CSL Test Helper Utility
+
+The `scripts/csl-test-helper.py` utility simplifies test management. It handles
+all the annoying normalization issues (case, hyphens vs underscores) automatically.
+
+### Commands Reference
+
+```bash
+# Overall status - shows counts and category breakdown
+python3 scripts/csl-test-helper.py status
+
+# Category analysis - see all tests in a category
+python3 scripts/csl-test-helper.py category <name>         # List tests
+python3 scripts/csl-test-helper.py category <name> --run   # Run and show pass/fail
+
+# Quick wins - find tests that pass but aren't enabled
+python3 scripts/csl-test-helper.py quick-wins
+
+# Regressions - find enabled tests that now fail
+python3 scripts/csl-test-helper.py regressions
+
+# Inspect a specific test
+python3 scripts/csl-test-helper.py inspect <test>          # Basic info
+python3 scripts/csl-test-helper.py inspect <test> --diff   # Show expected vs actual
+python3 scripts/csl-test-helper.py inspect <test> --csl    # Show the CSL style
+python3 scripts/csl-test-helper.py inspect <test> --input  # Show input JSON
+
+# Run tests matching a pattern
+python3 scripts/csl-test-helper.py run <pattern> --include-ignored -v
+
+# Enable tests (adds to enabled_tests.txt)
+python3 scripts/csl-test-helper.py enable test1 test2 test3
+```
+
+### Example Workflow
+
+```bash
+# 1. Start by checking overall status
+python3 scripts/csl-test-helper.py status
+
+# 2. Pick a category to work on
+python3 scripts/csl-test-helper.py category name --run
+
+# 3. Investigate a failing test
+python3 scripts/csl-test-helper.py inspect name_SomeTest --diff --csl
+
+# 4. After fixing, check for quick wins
+python3 scripts/csl-test-helper.py quick-wins
+
+# 5. Enable any newly-passing tests
+python3 scripts/csl-test-helper.py enable name_SomeTest
+UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
+```
 
 ## Testing Workflow
 

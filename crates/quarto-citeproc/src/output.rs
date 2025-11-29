@@ -2163,6 +2163,30 @@ fn output_ends_with_char(output: &Output, c: char) -> bool {
     }
 }
 
+/// Check if an Output ends with a character that suppresses the following space.
+///
+/// Per CSL spec (and Pandoc citeproc behavior), when joining name parts with spaces,
+/// no space should be added after these characters:
+/// - ' (apostrophe U+0027)
+/// - ' (right single quotation mark U+2019)
+/// - - (hyphen-minus U+002D)
+/// - – (en dash U+2013)
+/// - (non-breaking space U+00A0)
+///
+/// This is important for name particles like "d'" (as in "d'Artagnan") or
+/// hyphenated names.
+pub fn ends_with_no_space_char(output: &Output) -> bool {
+    const NO_SPACE_CHARS: &[char] = &[
+        '\'',      // apostrophe U+0027
+        '\u{2019}', // right single quotation mark
+        '-',       // hyphen-minus
+        '\u{2013}', // en dash
+        '\u{00A0}', // non-breaking space
+    ];
+
+    NO_SPACE_CHARS.iter().any(|&c| output_ends_with_char(output, c))
+}
+
 // ============================================================================
 // CSL Rich Text Parser
 // ============================================================================

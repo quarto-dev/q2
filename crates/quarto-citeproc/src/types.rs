@@ -880,8 +880,9 @@ impl Processor {
     ) -> Result<Vec<crate::output::Output>> {
         use crate::disambiguation::{
             apply_global_name_disambiguation, assign_year_suffixes, extract_disamb_data,
-            extract_disamb_data_with_processor, find_ambiguities, find_year_suffix_ambiguities,
-            set_disambiguate_condition, try_add_given_names_with_rule, try_add_names,
+            extract_disamb_data_with_processor, find_ambiguities,
+            find_year_suffix_with_full_author_match, set_disambiguate_condition,
+            try_add_given_names_with_rule, try_add_names,
         };
         use quarto_csl::GivenNameDisambiguationRule;
 
@@ -998,12 +999,33 @@ impl Processor {
         }
 
         // 4. Add year suffixes if enabled
-        // Use find_year_suffix_ambiguities to detect same-author-same-year cases
-        // even when collapsing might hide the author name in some renderings
+        // We need to handle two cases:
+        // a) Items that are still ambiguous by rendered text (in `ambiguities`)
+        // b) Items with identical authors (same family AND given names) + same year,
+        //    which may not appear in `ambiguities` due to collapsed output hiding
+        //    the ambiguity (e.g., "Brown, 2006; Brown, 2006" collapses to "Brown, 2006, 2006")
+        //
+        // The old approach (using find_year_suffix_ambiguities with only family names)
+        // was too aggressive - it would add suffixes even when given names differ
+        // (e.g., "A. Smith 2001" vs "B. Smith 2001" don't need suffixes).
+        //
+        // The new approach:
+        // - Use rendered-text ambiguities when available (preserves citation order)
+        // - Fall back to full-author-match only when rendered text doesn't catch it
+        //   (happens with collapsed citations)
         if add_year_suffix {
-            let year_suffix_ambiguities = find_year_suffix_ambiguities(disamb_data.clone(), self);
-            if !year_suffix_ambiguities.is_empty() {
-                let suffixes = assign_year_suffixes(self, &year_suffix_ambiguities);
+            // Prefer rendered-text ambiguities (preserves citation order properly)
+            // Only use full-author-match as fallback for collapsed citations
+            let year_suffix_groups = if !ambiguities.is_empty() {
+                ambiguities.clone()
+            } else {
+                // No rendered-text ambiguities - check for collapsed citation case
+                // where items with identical authors + year need year suffixes
+                find_year_suffix_with_full_author_match(disamb_data.clone(), self)
+            };
+
+            if !year_suffix_groups.is_empty() {
+                let suffixes = assign_year_suffixes(self, &year_suffix_groups);
                 for (item_id, suffix) in suffixes {
                     self.set_year_suffix(&item_id, suffix);
                 }
