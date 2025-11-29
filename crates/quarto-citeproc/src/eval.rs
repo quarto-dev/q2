@@ -132,10 +132,34 @@ impl<'a> EvalContext<'a> {
     }
 
     /// Get the effective formatting (merged from stack).
+    /// Also handles language-aware title case: if text_case is TitleCase but
+    /// the reference is non-English, title case is skipped (CSL spec 2.4.2).
     fn effective_formatting(&self, element_formatting: &Formatting) -> Formatting {
-        // For now, just use the element's formatting
-        // TODO: Properly merge formatting from parent elements
-        element_formatting.clone()
+        let mut formatting = element_formatting.clone();
+
+        // Title case only applies to English references (CSL spec 2.4.2)
+        // If text_case is Title and reference is non-English, skip title case
+        if formatting.text_case == Some(quarto_csl::TextCase::Title) {
+            if !self.is_english_reference() {
+                formatting.text_case = None;
+            }
+        }
+
+        formatting
+    }
+
+    /// Check if the current reference is in English.
+    /// Returns true if: language field is missing or starts with "en".
+    /// Returns false if: language field is present and doesn't start with "en".
+    fn is_english_reference(&self) -> bool {
+        match &self.reference.language {
+            Some(lang) => {
+                let lang_lower = lang.to_lowercase();
+                lang_lower.starts_with("en")
+            }
+            // No language field means assume English (default behavior)
+            None => true,
+        }
     }
 
     /// Get a term from the locale.

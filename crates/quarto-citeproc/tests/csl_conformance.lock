@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 554
-# Disabled: 304
+# Enabled: 564
+# Disabled: 294
 #
 [enabled]
 affix_commaafterquote
@@ -46,6 +46,7 @@ bugreports_singletonifmatchnonefail
 bugreports_sortsecondarykey
 bugreports_sortsecondarykeybibliography
 bugreports_styleerror001
+bugreports_titlecase
 bugreports_undefinedbeforeval
 bugreports_undefinedcrash
 bugreports_undefinedinname
@@ -280,6 +281,10 @@ locale_specificdate
 locale_specificstyleopt
 locale_specificterm
 locale_titlecaseemptylangemptylocale
+locale_titlecasegarbagelangemptylocale
+locale_titlecasegarbagelangenglishlocale
+locale_titlecasegarbagelangnonenglishlocale
+locale_titlecasenonenglishlangupperemptylocale
 locale_unknownterm
 locator_termselection
 locator_workaroundtestforsubverbo
@@ -543,19 +548,24 @@ textcase_capitalizefirst
 textcase_capitalizefirstwithdecor
 textcase_capitalsuntouched
 textcase_implicitnocase
+textcase_inquotes
 textcase_lastchar
 textcase_lowercase
 textcase_sentencecapitalization
+textcase_skipnameparticlesintitlecase
 textcase_stopwordbeforehyphen
 textcase_titlecapitalization
 textcase_titlecapitalization2
+textcase_titlecasenonenglish
 textcase_titlecasenonenglish2
 textcase_titlecasewithcleverbrandname
 textcase_titlecasewithfinalnocase
 textcase_titlecasewithhyphens
 textcase_titlecasewithinitials
 textcase_titlecasewithnonbreakspace
+textcase_titlecasewithvolumetitle
 textcase_titlewithcircumflex
+textcase_titlewithendash
 textcase_uppercase
 unicode_nonbreakingspace
 variables_titleshortonshorttitlenotitle

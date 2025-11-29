@@ -1158,11 +1158,132 @@ fn apply_text_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, text_c
     use quarto_csl::TextCase;
 
     // For title case, we need to track state across all Str nodes
+    // and detect the last word for capitalization
     if matches!(text_case, TextCase::Title) {
         let mut seen_first_word = false;
-        apply_title_case_to_inlines(inlines, &mut seen_first_word);
+        // Find the index of the last Str that contains word content
+        let last_word_index = find_last_word_str_index(inlines);
+        apply_title_case_to_inlines_with_last(inlines, &mut seen_first_word, last_word_index, &mut 0);
     } else {
         apply_text_case_to_inlines_simple(inlines, text_case);
+    }
+}
+
+/// Find the index of the last Str node that contains word characters.
+/// Returns None if no such node exists.
+fn find_last_word_str_index(inlines: &quarto_pandoc_types::Inlines) -> Option<usize> {
+    use quarto_pandoc_types::Inline;
+
+    let mut last_index: Option<usize> = None;
+    let mut current_index = 0;
+
+    fn visit(inline: &quarto_pandoc_types::Inline, current_index: &mut usize, last_index: &mut Option<usize>) {
+        match inline {
+            Inline::Str(s) => {
+                // Check if this Str contains any word characters
+                if s.text.chars().any(|c| c.is_alphabetic()) {
+                    *last_index = Some(*current_index);
+                }
+                *current_index += 1;
+            }
+            Inline::Emph(e) => {
+                for child in &e.content {
+                    visit(child, current_index, last_index);
+                }
+            }
+            Inline::Strong(s) => {
+                for child in &s.content {
+                    visit(child, current_index, last_index);
+                }
+            }
+            Inline::Quoted(q) => {
+                for child in &q.content {
+                    visit(child, current_index, last_index);
+                }
+            }
+            Inline::Link(l) => {
+                for child in &l.content {
+                    visit(child, current_index, last_index);
+                }
+            }
+            Inline::Span(s) => {
+                for child in &s.content {
+                    visit(child, current_index, last_index);
+                }
+            }
+            // SmallCaps, Superscript, Subscript are "implicit nocase" - don't count them
+            // for last word detection since they won't be transformed
+            _ => {}
+        }
+    }
+
+    for inline in inlines.iter() {
+        visit(inline, &mut current_index, &mut last_index);
+    }
+
+    last_index
+}
+
+/// Apply title case transformation with last-word tracking.
+/// `last_word_index` is the index of the last Str node containing word content.
+/// `current_index` tracks the current Str node index during traversal.
+fn apply_title_case_to_inlines_with_last(
+    inlines: &mut quarto_pandoc_types::Inlines,
+    seen_first_word: &mut bool,
+    last_word_index: Option<usize>,
+    current_index: &mut usize,
+) {
+    use quarto_pandoc_types::Inline;
+
+    for inline in inlines.iter_mut() {
+        match inline {
+            Inline::Str(s) => {
+                let is_last_word_segment = last_word_index == Some(*current_index);
+                s.text = title_case_with_state_and_last(&s.text, seen_first_word, is_last_word_segment);
+                *current_index += 1;
+            }
+            Inline::Emph(e) => {
+                apply_title_case_to_inlines_with_last(&mut e.content, seen_first_word, last_word_index, current_index);
+            }
+            Inline::Strong(s) => {
+                apply_title_case_to_inlines_with_last(&mut s.content, seen_first_word, last_word_index, current_index);
+            }
+            // SmallCaps, Superscript, Subscript are "implicit nocase" per CSL-JSON spec
+            // But they still "consume" the first word position if they contain text
+            Inline::SmallCaps(s) => {
+                if has_text_content(&s.content) {
+                    *seen_first_word = true;
+                }
+            }
+            Inline::Superscript(s) => {
+                if has_text_content(&s.content) {
+                    *seen_first_word = true;
+                }
+            }
+            Inline::Subscript(s) => {
+                if has_text_content(&s.content) {
+                    *seen_first_word = true;
+                }
+            }
+            Inline::Quoted(q) => {
+                apply_title_case_to_inlines_with_last(&mut q.content, seen_first_word, last_word_index, current_index);
+            }
+            Inline::Link(l) => {
+                apply_title_case_to_inlines_with_last(&mut l.content, seen_first_word, last_word_index, current_index);
+            }
+            Inline::Span(s) => {
+                let (_, classes, _) = &s.attr;
+                if classes.iter().any(|c| c == "nocase") {
+                    // nocase spans still consume the first word position
+                    if has_text_content(&s.content) {
+                        *seen_first_word = true;
+                    }
+                } else {
+                    apply_title_case_to_inlines_with_last(&mut s.content, seen_first_word, last_word_index, current_index);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1195,52 +1316,6 @@ fn apply_text_case_to_inlines_simple(inlines: &mut quarto_pandoc_types::Inlines,
                 let (_, classes, _) = &s.attr;
                 if !classes.iter().any(|c| c == "nocase") {
                     apply_text_case_to_inlines_simple(&mut s.content, text_case);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// Apply title case transformation, tracking state across all text nodes.
-fn apply_title_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, seen_first_word: &mut bool) {
-    use quarto_pandoc_types::Inline;
-
-    for inline in inlines.iter_mut() {
-        match inline {
-            Inline::Str(s) => {
-                s.text = title_case_with_state(&s.text, seen_first_word);
-            }
-            Inline::Emph(e) => apply_title_case_to_inlines(&mut e.content, seen_first_word),
-            Inline::Strong(s) => apply_title_case_to_inlines(&mut s.content, seen_first_word),
-            // SmallCaps, Superscript, Subscript are "implicit nocase" per CSL-JSON spec
-            // But they still "consume" the first word position if they contain text
-            Inline::SmallCaps(s) => {
-                if has_text_content(&s.content) {
-                    *seen_first_word = true;
-                }
-            }
-            Inline::Superscript(s) => {
-                if has_text_content(&s.content) {
-                    *seen_first_word = true;
-                }
-            }
-            Inline::Subscript(s) => {
-                if has_text_content(&s.content) {
-                    *seen_first_word = true;
-                }
-            }
-            Inline::Quoted(q) => apply_title_case_to_inlines(&mut q.content, seen_first_word),
-            Inline::Link(l) => apply_title_case_to_inlines(&mut l.content, seen_first_word),
-            Inline::Span(s) => {
-                let (_, classes, _) = &s.attr;
-                if classes.iter().any(|c| c == "nocase") {
-                    // nocase spans still consume the first word position
-                    if has_text_content(&s.content) {
-                        *seen_first_word = true;
-                    }
-                } else {
-                    apply_title_case_to_inlines(&mut s.content, seen_first_word);
                 }
             }
             _ => {}
@@ -2648,11 +2723,17 @@ fn capitalize_all(s: &str) -> String {
     format!("{}{}{}", leading, capitalized, trailing)
 }
 
-/// English stop words that should remain lowercase in title case (unless first word).
-/// Based on CSL/Chicago Manual of Style conventions.
+/// English stop words that should remain lowercase in title case (unless first/last word).
+/// Based on CSL/Chicago Manual of Style conventions, matching Pandoc's citeproc.
 const TITLE_CASE_STOP_WORDS: &[&str] = &[
-    "a", "an", "and", "as", "at", "but", "by", "for", "from", "in", "into",
-    "nor", "of", "on", "or", "so", "the", "to", "up", "yet", "via", "vs", "v",
+    // Standard English stop words
+    "a", "an", "and", "as", "at", "but", "by", "down", "for", "from", "in", "into",
+    "nor", "of", "on", "onto", "or", "over", "so", "the", "till", "to", "up",
+    "via", "with", "yet",
+    // Name particles (should stay lowercase in middle position)
+    "von", "van", "de", "d", "l",
+    // Additional stop words from Pandoc's citeproc
+    "about",
 ];
 
 /// Check if a word is all uppercase (an acronym).
@@ -2831,17 +2912,18 @@ fn title_case(s: &str) -> String {
         }
     }
 
-    // Handle the last word
+    // Handle the last word - always capitalize (CSL spec: stop words capitalized at start/end)
     if !current_word.is_empty() {
-        result.push_str(&title_case_word(&current_word, force_next));
+        result.push_str(&title_case_word(&current_word, true));
     }
 
     format!("{}{}{}", leading, result, trailing)
 }
 
-/// Apply title case with external state tracking for cross-segment processing.
-/// `seen_first_word` tracks whether we've already processed the first word of the title.
-fn title_case_with_state(s: &str, seen_first_word: &mut bool) -> String {
+/// Apply title case with state tracking and last-segment awareness.
+/// When `is_last_segment` is true, the final word in this segment will be
+/// force-capitalized (CSL spec: stop words capitalized at start/end).
+fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_segment: bool) -> String {
     if s.is_empty() {
         return String::new();
     }
@@ -2939,9 +3021,10 @@ fn title_case_with_state(s: &str, seen_first_word: &mut bool) -> String {
         }
     }
 
-    // Handle the last word
+    // Handle the last word - if this is the last segment, force capitalize
     if !current_word.is_empty() {
-        result.push_str(&title_case_word(&current_word, force_next));
+        let force = force_next || is_last_segment;
+        result.push_str(&title_case_word(&current_word, force));
         *seen_first_word = true;
     }
 
@@ -4027,5 +4110,53 @@ mod punct_tests {
             ", ",
         );
         assert_eq!(output.render(), "A, B, C");
+    }
+
+    // ========================================================================
+    // Title case tests
+    // ========================================================================
+
+    #[test]
+    fn test_title_case_last_word_capitalized() {
+        // Last word should ALWAYS be capitalized, even if it's a stop word
+        // CSL spec: "stop words are lowercased unless they are the first or last word"
+        assert_eq!(
+            title_case("intercultural research for"),
+            "Intercultural Research For"
+        );
+        // "the" at the end should be capitalized because it's the last word
+        assert_eq!(title_case("a book about the"), "A Book about The");
+    }
+
+    #[test]
+    fn test_title_case_last_word_stop_word() {
+        // Stop words at the end should be capitalized
+        assert_eq!(title_case("what is this for"), "What Is This For");
+        assert_eq!(title_case("something to think about"), "Something to Think About");
+        assert_eq!(title_case("the way things are"), "The Way Things Are");
+    }
+
+    #[test]
+    fn test_title_case_name_particles() {
+        // Name particles (von, van, de, d) should be treated as stop words
+        // They stay lowercase in middle position, capitalize at start/end
+        assert_eq!(title_case("john von doe a life"), "John von Doe a Life");
+        assert_eq!(title_case("john van doe a life"), "John van Doe a Life");
+        assert_eq!(title_case("john de doe a life"), "John de Doe a Life");
+    }
+
+    #[test]
+    fn test_title_case_about_is_stop_word() {
+        // "about" should be a stop word (lowercase in middle)
+        assert_eq!(title_case("an about up life"), "An about up Life");
+    }
+
+    #[test]
+    fn test_title_case_after_colon() {
+        // First word after colon should be capitalized
+        assert_eq!(
+            title_case("john von doe: an about up life"),
+            "John von Doe: An about up Life"
+        );
     }
 }
