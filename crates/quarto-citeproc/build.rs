@@ -3,14 +3,20 @@
 //! This script scans test-data/csl-suite/ for test files and generates
 //! test functions. Tests not listed in tests/enabled_tests.txt are
 //! generated with #[ignore].
+//!
+//! It also generates a validation test that checks:
+//! - No duplicate entries in enabled_tests.txt
+//! - All entries in enabled_tests.txt correspond to actual test files
+//! - The state matches the committed lockfile (tests/csl_conformance.lock)
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::path::Path;
 
 fn main() {
     println!("cargo:rerun-if-changed=tests/enabled_tests.txt");
+    println!("cargo:rerun-if-changed=tests/csl_conformance.lock");
     println!("cargo:rerun-if-changed=test-data/csl-suite");
 
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -19,10 +25,7 @@ fn main() {
     let test_dir = Path::new(&manifest_dir).join("test-data/csl-suite");
     let enabled_file = Path::new(&manifest_dir).join("tests/enabled_tests.txt");
 
-    // Load enabled tests
-    let enabled_tests = load_enabled_tests(&enabled_file);
-
-    // Collect test files
+    // Collect test files first (needed for validation)
     let mut test_files: Vec<_> = fs::read_dir(&test_dir)
         .expect("Failed to read test-data/csl-suite")
         .filter_map(|entry| entry.ok())
@@ -37,6 +40,37 @@ fn main() {
 
     // Sort for deterministic output
     test_files.sort_by_key(|e| e.path());
+
+    // Build set of valid test names (lowercase)
+    let valid_tests: HashSet<String> = test_files
+        .iter()
+        .map(|e| {
+            e.path()
+                .file_stem()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_lowercase()
+        })
+        .collect();
+
+    // Load enabled tests with validation
+    let (enabled_tests, duplicates, nonexistent) =
+        load_and_validate_enabled_tests(&enabled_file, &valid_tests);
+
+    // Emit warnings for issues (will show during compilation)
+    for dup in &duplicates {
+        println!(
+            "cargo:warning=Duplicate test in enabled_tests.txt: {}",
+            dup
+        );
+    }
+    for bad in &nonexistent {
+        println!(
+            "cargo:warning=Non-existent test in enabled_tests.txt: {}",
+            bad
+        );
+    }
 
     // Generate test functions
     let mut generated = String::new();
@@ -70,6 +104,30 @@ fn csl_{}() {{
         ));
     }
 
+    // Generate the validation test
+    let enabled_sorted: Vec<&String> = {
+        let mut v: Vec<_> = enabled_tests.iter().collect();
+        v.sort();
+        v
+    };
+    let duplicates_sorted: Vec<&String> = {
+        let mut v: Vec<_> = duplicates.iter().collect();
+        v.sort();
+        v
+    };
+    let nonexistent_sorted: Vec<&String> = {
+        let mut v: Vec<_> = nonexistent.iter().collect();
+        v.sort();
+        v
+    };
+
+    generated.push_str(&generate_validation_test(
+        test_files.len(),
+        &enabled_sorted,
+        &duplicates_sorted,
+        &nonexistent_sorted,
+    ));
+
     let out_path = Path::new(&out_dir).join("generated_csl_tests.rs");
     fs::write(&out_path, generated).expect("Failed to write generated tests");
 
@@ -83,20 +141,209 @@ fn csl_{}() {{
     fs::write(&count_path, count_info).expect("Failed to write test counts");
 }
 
-/// Load enabled test names from the manifest file.
-/// Test names are normalized to lowercase for case-insensitive matching.
-fn load_enabled_tests(path: &Path) -> HashSet<String> {
+/// Load enabled test names from the manifest file with validation.
+/// Returns: (unique enabled tests, duplicates found, non-existent tests)
+fn load_and_validate_enabled_tests(
+    path: &Path,
+    valid_tests: &HashSet<String>,
+) -> (HashSet<String>, Vec<String>, Vec<String>) {
     if !path.exists() {
-        return HashSet::new();
+        return (HashSet::new(), Vec::new(), Vec::new());
     }
 
-    fs::read_to_string(path)
-        .unwrap_or_default()
-        .lines()
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(|s| s.to_lowercase())
-        .collect()
+    let mut enabled = HashSet::new();
+    let mut duplicates = Vec::new();
+    let mut nonexistent = Vec::new();
+    let mut seen_counts: HashMap<String, usize> = HashMap::new();
+
+    for line in fs::read_to_string(path).unwrap_or_default().lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+
+        let name = line.to_lowercase();
+
+        // Track occurrences
+        let count = seen_counts.entry(name.clone()).or_insert(0);
+        *count += 1;
+
+        if *count == 2 {
+            // First duplicate occurrence
+            duplicates.push(name.clone());
+        }
+
+        // Check if test exists
+        if !valid_tests.contains(&name) {
+            if !nonexistent.contains(&name) {
+                nonexistent.push(name.clone());
+            }
+        }
+
+        enabled.insert(name);
+    }
+
+    (enabled, duplicates, nonexistent)
+}
+
+/// Generate the validation test function.
+fn generate_validation_test(
+    suite_total: usize,
+    enabled: &[&String],
+    duplicates: &[&String],
+    nonexistent: &[&String],
+) -> String {
+    let enabled_count = enabled.len();
+    let disabled_count = suite_total - enabled_count;
+
+    // Build the expected lockfile content
+    let mut expected_lockfile = String::new();
+    expected_lockfile.push_str("# CSL Conformance Test Lockfile\n");
+    expected_lockfile.push_str("# Auto-generated - do not edit manually\n");
+    expected_lockfile.push_str(
+        "# To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest\n",
+    );
+    expected_lockfile.push_str("#\n");
+    expected_lockfile.push_str(&format!("# Suite total: {}\n", suite_total));
+    expected_lockfile.push_str(&format!("# Enabled: {}\n", enabled_count));
+    expected_lockfile.push_str(&format!("# Disabled: {}\n", disabled_count));
+    expected_lockfile.push_str("#\n");
+    expected_lockfile.push_str("[enabled]\n");
+    for name in enabled {
+        expected_lockfile.push_str(name);
+        expected_lockfile.push('\n');
+    }
+
+    // Escape the lockfile content for embedding in Rust
+    let escaped_lockfile = expected_lockfile
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+
+    // Build duplicates array
+    let duplicates_array = if duplicates.is_empty() {
+        "Vec::new()".to_string()
+    } else {
+        let items: Vec<String> = duplicates.iter().map(|s| format!("\"{}\"", s)).collect();
+        format!("vec![{}]", items.join(", "))
+    };
+
+    // Build nonexistent array
+    let nonexistent_array = if nonexistent.is_empty() {
+        "Vec::new()".to_string()
+    } else {
+        let items: Vec<String> = nonexistent.iter().map(|s| format!("\"{}\"", s)).collect();
+        format!("vec![{}]", items.join(", "))
+    };
+
+    format!(
+        r##"
+/// Validation test for CSL test manifest.
+/// This test ensures enabled_tests.txt is valid and matches the lockfile.
+#[test]
+fn csl_validate_manifest() {{
+    let duplicates: Vec<&str> = {duplicates};
+    let nonexistent: Vec<&str> = {nonexistent};
+
+    // Check for duplicates
+    if !duplicates.is_empty() {{
+        panic!(
+            "Duplicate entries in enabled_tests.txt:\n  {{}}\n\nRemove the duplicates and try again.",
+            duplicates.join("\n  ")
+        );
+    }}
+
+    // Check for non-existent tests
+    if !nonexistent.is_empty() {{
+        panic!(
+            "Non-existent tests in enabled_tests.txt:\n  {{}}\n\nThese test files do not exist in test-data/csl-suite/. Remove or fix them.",
+            nonexistent.join("\n  ")
+        );
+    }}
+
+    // Compare against lockfile
+    let expected = "{expected}";
+    let lockfile_path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/csl_conformance.lock");
+
+    // Check if we should auto-update the lockfile
+    let auto_update = std::env::var("UPDATE_CSL_LOCKFILE").is_ok();
+
+    let actual = match std::fs::read_to_string(lockfile_path) {{
+        Ok(content) => content,
+        Err(_) if auto_update => {{
+            // Create the lockfile
+            std::fs::write(lockfile_path, expected).expect("Failed to write lockfile");
+            eprintln!("\nCreated lockfile: tests/csl_conformance.lock");
+            eprintln!("  Suite total: {suite_total}");
+            eprintln!("  Enabled: {enabled_count}");
+            eprintln!("  Disabled: {disabled_count}");
+            return;
+        }}
+        Err(_) => {{
+            eprintln!("\nLockfile not found: tests/csl_conformance.lock\n");
+            eprintln!("Run with UPDATE_CSL_LOCKFILE=1 to create it:");
+            eprintln!("  UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest\n");
+            panic!("Lockfile not found");
+        }}
+    }};
+
+    if actual != expected {{
+        if auto_update {{
+            // Show what changed before updating
+            let actual_lines: Vec<&str> = actual.lines().collect();
+            let expected_lines: Vec<&str> = expected.lines().collect();
+
+            let actual_enabled = actual_lines.iter().find(|l| l.starts_with("# Enabled:"));
+            let expected_enabled = expected_lines.iter().find(|l| l.starts_with("# Enabled:"));
+
+            eprintln!("\nUpdating lockfile: tests/csl_conformance.lock");
+            if actual_enabled != expected_enabled {{
+                eprintln!("  Count changed:");
+                eprintln!("    Before: {{:?}}", actual_enabled.unwrap_or(&"(none)"));
+                eprintln!("    After:  {{:?}}", expected_enabled.unwrap_or(&"(none)"));
+            }}
+
+            std::fs::write(lockfile_path, expected).expect("Failed to write lockfile");
+            eprintln!("  Lockfile updated successfully.");
+            return;
+        }}
+
+        // Show a simple diff summary
+        let actual_lines: Vec<&str> = actual.lines().collect();
+        let expected_lines: Vec<&str> = expected.lines().collect();
+
+        // Find enabled count lines for quick comparison
+        let actual_enabled = actual_lines.iter().find(|l| l.starts_with("# Enabled:"));
+        let expected_enabled = expected_lines.iter().find(|l| l.starts_with("# Enabled:"));
+
+        eprintln!("\nLockfile mismatch: tests/csl_conformance.lock\n");
+        if actual_enabled != expected_enabled {{
+            eprintln!("Count changed:");
+            eprintln!("  Lockfile: {{:?}}", actual_enabled.unwrap_or(&"(none)"));
+            eprintln!("  Actual:   {{:?}}", expected_enabled.unwrap_or(&"(none)"));
+            eprintln!();
+        }}
+
+        eprintln!("Run with UPDATE_CSL_LOCKFILE=1 to update:");
+        eprintln!("  UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest\n");
+
+        panic!("Lockfile mismatch - see above for update instructions");
+    }}
+
+    // All good!
+    eprintln!("\nCSL test manifest validated successfully!");
+    eprintln!("  Suite total: {suite_total}");
+    eprintln!("  Enabled: {enabled_count}");
+    eprintln!("  Disabled: {disabled_count}");
+}}
+"##,
+        duplicates = duplicates_array,
+        nonexistent = nonexistent_array,
+        expected = escaped_lockfile,
+        suite_total = suite_total,
+        enabled_count = enabled_count,
+        disabled_count = disabled_count,
+    )
 }
 
 /// Sanitize a test name for use as a Rust identifier.

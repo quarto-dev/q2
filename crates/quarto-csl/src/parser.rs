@@ -695,6 +695,15 @@ impl CslParser {
         // Parse disambiguation strategy
         let disambiguation = self.parse_disambiguation_strategy(element);
 
+        // Parse second-field-align (bibliography only)
+        let second_field_align = self
+            .get_attr(element, "second-field-align")
+            .and_then(|a| match a.value.as_str() {
+                "flush" => Some(SecondFieldAlign::Flush),
+                "margin" => Some(SecondFieldAlign::Margin),
+                _ => None,
+            });
+
         let elements = self.parse_elements(layout_element)?;
 
         Ok(Layout {
@@ -709,6 +718,7 @@ impl CslParser {
             year_suffix_delimiter,
             disambiguation,
             near_note_distance,
+            second_field_align,
             source_info: element.source_info.clone(),
         })
     }

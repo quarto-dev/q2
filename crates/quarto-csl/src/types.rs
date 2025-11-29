@@ -265,6 +265,19 @@ pub enum GivenNameDisambiguationRule {
     ByCite,
 }
 
+/// Second-field-align option for bibliography layouts.
+///
+/// This option creates a two-column layout in the bibliography where the first
+/// element (typically citation-number or label) is in a left margin column,
+/// and the rest of the content is in a right-aligned inline column.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SecondFieldAlign {
+    /// Flush: The second field starts immediately after the first.
+    Flush,
+    /// Margin: The second field is aligned to a margin position.
+    Margin,
+}
+
 /// A layout (for citation or bibliography).
 #[derive(Debug, Clone)]
 pub struct Layout {
@@ -292,6 +305,10 @@ pub struct Layout {
     /// Maximum distance (in notes) for near-note position detection.
     /// Defaults to 5 per CSL spec.
     pub near_note_distance: u32,
+    /// Second-field-align option (bibliography only).
+    /// When set, the first element of each entry is wrapped in a left-margin div,
+    /// and the rest is wrapped in a right-inline div.
+    pub second_field_align: Option<SecondFieldAlign>,
     /// Source location.
     pub source_info: SourceInfo,
 }

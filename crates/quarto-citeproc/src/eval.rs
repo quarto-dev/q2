@@ -494,8 +494,95 @@ pub fn evaluate_bibliography_entry_to_output(
     let mut ctx = EvalContext::new(processor, reference, &name_options);
     let output = evaluate_layout(&mut ctx, &layout)?;
 
+    // Apply second-field-align transformation if enabled
+    let output = if layout.second_field_align.is_some() {
+        apply_second_field_align(output)
+    } else {
+        output
+    };
+
     // Apply layout-level formatting
     Ok(Output::formatted(layout.formatting.clone(), vec![output]))
+}
+
+/// Apply second-field-align transformation to a bibliography entry output.
+///
+/// This takes the first element of the entry and wraps it with `Display::LeftMargin`,
+/// then wraps all remaining elements with `Display::RightInline`.
+///
+/// This creates the two-column layout used in styles like IEEE where the citation
+/// number is in a left margin column and the rest of the content is inline.
+fn apply_second_field_align(output: Output) -> Output {
+    use quarto_csl::Formatting;
+
+    // Extract the children from the output
+    let children = match &output {
+        Output::Formatted { children, .. } => children.clone(),
+        Output::Tagged { child, .. } => {
+            // If tagged, look inside
+            return Output::Tagged {
+                tag: match &output {
+                    Output::Tagged { tag, .. } => tag.clone(),
+                    _ => unreachable!(),
+                },
+                child: Box::new(apply_second_field_align(*child.clone())),
+            };
+        }
+        _ => return output, // Nothing to split
+    };
+
+    if children.is_empty() {
+        return output;
+    }
+
+    // Find the first non-null child
+    let mut first_idx = None;
+    for (i, child) in children.iter().enumerate() {
+        if !child.is_null() {
+            first_idx = Some(i);
+            break;
+        }
+    }
+
+    let Some(first_idx) = first_idx else {
+        return output; // All children are null
+    };
+
+    // Split into first element and rest
+    let first = children[first_idx].clone();
+    let rest: Vec<_> = children[first_idx + 1..]
+        .iter()
+        .filter(|c| !c.is_null())
+        .cloned()
+        .collect();
+
+    // Wrap first element with Display::LeftMargin
+    let left_margin = Output::Formatted {
+        formatting: Formatting {
+            display: Some(quarto_csl::Display::LeftMargin),
+            ..Formatting::default()
+        },
+        children: vec![first],
+    };
+
+    // Wrap rest with Display::RightInline (only if there's content)
+    if rest.is_empty() {
+        left_margin
+    } else {
+        let right_inline = Output::Formatted {
+            formatting: Formatting {
+                display: Some(quarto_csl::Display::RightInline),
+                ..Formatting::default()
+            },
+            children: rest,
+        };
+
+        // Return a sequence containing both
+        Output::Formatted {
+            formatting: Formatting::default(),
+            children: vec![left_margin, right_inline],
+        }
+    }
 }
 
 /// Evaluate a macro for sorting purposes.
