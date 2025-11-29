@@ -11,6 +11,7 @@ use crate::output::{Output, Tag};
 use crate::reference::Reference;
 use crate::types::{Citation, CitationItem, Processor};
 use crate::Result;
+use std::cell::Cell;
 use quarto_csl::{
     Element, ElementType, Formatting, GroupElement, InheritableNameOptions, Layout, NamesElement,
     TextElement, TextSource,
@@ -39,6 +40,9 @@ struct EvalContext<'a> {
     /// Citation positions (for note-style citations).
     /// Multiple positions can be true simultaneously (e.g., [NearNote, Ibid, Subsequent]).
     positions: Vec<quarto_csl::Position>,
+    /// Whether year suffix has been rendered for this reference.
+    /// Year suffix should only appear once per reference (CSL 0.8.1 legacy mode).
+    year_suffix_rendered: Cell<bool>,
 }
 
 impl<'a> EvalContext<'a> {
@@ -57,6 +61,7 @@ impl<'a> EvalContext<'a> {
             locator: None,
             locator_label: None,
             positions: Vec::new(), // No positions in bibliography context
+            year_suffix_rendered: Cell::new(false),
         }
     }
 
@@ -84,6 +89,7 @@ impl<'a> EvalContext<'a> {
             locator: citation_item.locator.as_deref(),
             locator_label: citation_item.label.as_deref(),
             positions,
+            year_suffix_rendered: Cell::new(false),
         }
     }
 
@@ -1543,10 +1549,40 @@ fn evaluate_date(
     if date_output.is_null() {
         Ok(Output::Null)
     } else {
+        // Append year suffix for disambiguation (like citeproc does)
+        // Only add implicit year suffix if:
+        // 1. The style doesn't explicitly use year-suffix variable
+        // 2. Year suffix hasn't already been rendered for this reference
+        let uses_year_suffix_var = ctx.processor.style.options.uses_year_suffix_variable;
+        let already_rendered = ctx.year_suffix_rendered.get();
+        let year_suffix_output = if !uses_year_suffix_var && !already_rendered {
+            if let Some(suffix) = ctx
+                .reference
+                .disambiguation
+                .as_ref()
+                .and_then(|d| d.year_suffix)
+            {
+                // Mark as rendered so subsequent dates don't get the suffix
+                ctx.year_suffix_rendered.set(true);
+                let letter = suffix_to_letter(suffix);
+                Output::tagged(Tag::YearSuffix(suffix), Output::literal(letter))
+            } else {
+                Output::Null
+            }
+        } else {
+            Output::Null
+        };
+
+        let final_output = if year_suffix_output.is_null() {
+            date_output
+        } else {
+            Output::sequence(vec![date_output, year_suffix_output])
+        };
+
         // Tag the date output for disambiguation
         Ok(Output::tagged(
             Tag::Date(date_el.variable.clone()),
-            date_output,
+            final_output,
         ))
     }
 }

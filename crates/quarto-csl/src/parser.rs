@@ -6,6 +6,54 @@ use quarto_source_map::SourceInfo;
 use quarto_xml::{XmlAttribute, XmlElement, XmlWithSourceInfo};
 use std::collections::{HashMap, HashSet};
 
+/// Check if the style explicitly uses the year-suffix variable.
+/// When true, year suffix should not be added implicitly to dates.
+fn check_uses_year_suffix(
+    citation: &Layout,
+    bibliography: Option<&Layout>,
+    macros: &HashMap<String, Macro>,
+) -> bool {
+    fn check_element(el: &Element, macros: &HashMap<String, Macro>) -> bool {
+        match &el.element_type {
+            ElementType::Text(text) => {
+                if let TextSource::Variable { name, .. } = &text.source {
+                    if name == "year-suffix" {
+                        return true;
+                    }
+                }
+                if let TextSource::Macro { name, .. } = &text.source {
+                    if let Some(m) = macros.get(name) {
+                        return m.elements.iter().any(|e| check_element(e, macros));
+                    }
+                }
+                false
+            }
+            ElementType::Group(group) => {
+                group.elements.iter().any(|e| check_element(e, macros))
+            }
+            ElementType::Choose(choose) => choose
+                .branches
+                .iter()
+                .any(|branch| branch.elements.iter().any(|e| check_element(e, macros))),
+            _ => false,
+        }
+    }
+
+    // Check citation layout
+    if citation.elements.iter().any(|e| check_element(e, macros)) {
+        return true;
+    }
+
+    // Check bibliography layout if present
+    if let Some(bib) = bibliography {
+        if bib.elements.iter().any(|e| check_element(e, macros)) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Parse a CSL style from a string.
 ///
 /// This is the main entry point for parsing CSL files. It parses the XML
@@ -328,6 +376,12 @@ impl CslParser {
             location: element.source_info.clone(),
         })?;
 
+        // Check if the style explicitly uses year-suffix variable
+        let uses_year_suffix = check_uses_year_suffix(&citation, bibliography.as_ref(), &macros);
+
+        let mut options = options;
+        options.uses_year_suffix_variable = uses_year_suffix;
+
         Ok(Style {
             version,
             version_source,
@@ -386,6 +440,7 @@ impl CslParser {
             page_range_format: page_range,
             limit_day_ordinals_to_day_1: limit_day_ordinals,
             punctuation_in_quote,
+            uses_year_suffix_variable: false, // Will be set during full style parse
             source_info: Some(element.source_info.clone()),
         }
     }

@@ -72,6 +72,9 @@ pub struct StyleOptions {
     /// are moved inside the quote (American English style).
     /// Defaults to false (British English style).
     pub punctuation_in_quote: bool,
+    /// Whether the style explicitly uses the year-suffix variable.
+    /// When true, year suffix is not added implicitly to dates.
+    pub uses_year_suffix_variable: bool,
     /// Source location.
     pub source_info: Option<SourceInfo>,
 }

@@ -57,23 +57,142 @@ pub fn extract_disamb_data(outputs: &[Output]) -> Vec<DisambData> {
     result
 }
 
+/// Extract DisambData from all citation items, using the processor to get
+/// names from references directly (needed when collapsing may hide names).
+///
+/// This version is more robust for year-suffix disambiguation because
+/// it ensures all items have their names even when cite-group-delimiter
+/// collapsing suppresses repeated author names.
+pub fn extract_disamb_data_with_processor(
+    outputs: &[Output],
+    processor: &crate::types::Processor,
+) -> Vec<DisambData> {
+    let mut result = Vec::new();
+
+    for output in outputs {
+        // Extract all tagged items from this output
+        for (item_id, item_type, item_output) in output.extract_citation_items() {
+            // Only include normal citations (not author-only or suppress-author)
+            if item_type == CitationItemType::NormalCite {
+                // Get names from the reference rather than the output
+                // This handles cases where collapsing suppresses author names
+                let names = if let Some(reference) = processor.get_reference(&item_id) {
+                    reference
+                        .author
+                        .as_ref()
+                        .map(|a| a.clone())
+                        .unwrap_or_default()
+                } else {
+                    item_output.extract_all_names()
+                };
+
+                result.push(DisambData {
+                    item_id,
+                    names,
+                    rendered: item_output.render(),
+                });
+            }
+        }
+    }
+
+    result
+}
+
 /// Find groups of ambiguous citations.
 ///
 /// Returns groups of citations that render identically but refer to different works.
 /// Each inner Vec contains DisambData for citations that are ambiguous with each other.
+///
+/// This function uses a two-stage approach:
+/// 1. First, group by author family names (to handle collapsed citations)
+/// 2. Then, within each name group, check if rendered text is ambiguous
 pub fn find_ambiguities(items: Vec<DisambData>) -> Vec<Vec<DisambData>> {
-    // Group items by rendered text
+    // First, group items by author family names (handles collapse cases)
+    // Items with the same authors should be checked for year-suffix ambiguity
+    let mut name_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
+
+    for data in items {
+        // Create a key from family names (for collapse-aware grouping)
+        let family_names: Vec<&str> = data
+            .names
+            .iter()
+            .filter_map(|n| n.family.as_ref().map(|s| s.as_str()))
+            .collect();
+        let name_key = family_names.join("|");
+        name_groups.entry(name_key).or_default().push(data);
+    }
+
+    // For each name group, check for rendered text ambiguity OR
+    // same-author-same-year ambiguity (for year suffix)
+    let mut result = Vec::new();
+
+    for (_name_key, group) in name_groups {
+        // Now group by rendered text within the name group
+        let mut render_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
+        for data in group {
+            render_groups
+                .entry(data.rendered.clone())
+                .or_default()
+                .push(data);
+        }
+
+        // Find groups with >1 unique item
+        for sub_group in render_groups.into_values() {
+            let mut unique_ids: Vec<&str> =
+                sub_group.iter().map(|d| d.item_id.as_str()).collect();
+            unique_ids.sort();
+            unique_ids.dedup();
+            if unique_ids.len() > 1 {
+                result.push(sub_group);
+            }
+        }
+    }
+
+    result
+}
+
+/// Find year-suffix ambiguities: items by the same author in the same year.
+///
+/// This is specifically for year-suffix disambiguation, where we need to
+/// identify works by the same author in the same year, even if their
+/// rendered output differs due to collapsing.
+pub fn find_year_suffix_ambiguities(
+    items: Vec<DisambData>,
+    processor: &crate::types::Processor,
+) -> Vec<Vec<DisambData>> {
+    // Group by author family names + year
     let mut groups: HashMap<String, Vec<DisambData>> = HashMap::new();
 
     for data in items {
-        groups.entry(data.rendered.clone()).or_default().push(data);
+        // Get year from reference
+        // date_parts is Vec<Vec<i32>> where inner vec is [year, month?, day?]
+        let year: Option<i32> = processor
+            .get_reference(&data.item_id)
+            .and_then(|r| r.issued.as_ref())
+            .and_then(|d| d.date_parts.as_ref())
+            .and_then(|parts| parts.first())
+            .and_then(|part| part.first().copied());
+
+        // Create key from author family names + year
+        let family_names: Vec<&str> = data
+            .names
+            .iter()
+            .filter_map(|n| n.family.as_ref().map(|s| s.as_str()))
+            .collect();
+        let name_part = family_names.join("|");
+
+        let key = match year {
+            Some(y) => format!("{}#{}", name_part, y),
+            None => format!("{}#NOYEAR", name_part),
+        };
+
+        groups.entry(key).or_default().push(data);
     }
 
-    // Filter to only groups with >1 unique item (actual ambiguities)
+    // Filter to groups with >1 unique item
     groups
         .into_values()
         .filter(|group| {
-            // Count unique item IDs in this group
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
             unique_ids.sort();
             unique_ids.dedup();
@@ -117,9 +236,11 @@ pub fn try_add_names(
 
         // Try increasing et_al_use_first from 1 up to max_names
         for n in 1..=max_names {
-            // Check which items would be disambiguated at this level
+            // Check which items (that are still undisambiguated) would be disambiguated at this level
+            // Important: only check items still in item_ids, not already-disambiguated items
             let disambiguated: Vec<&str> = group
                 .iter()
+                .filter(|d| item_ids.contains(d.item_id.as_str())) // Only check remaining items
                 .filter(|d| is_disambiguated_at_name_count(d, group, n, givenname_rule))
                 .map(|d| d.item_id.as_str())
                 .collect();
@@ -345,30 +466,44 @@ pub fn assign_year_suffixes(
     let mut suffixes: HashMap<String, i32> = HashMap::new();
 
     for group in ambiguities {
-        // Collect unique item IDs in this ambiguous group
-        let mut item_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-        item_ids.sort();
-        item_ids.dedup();
+        // Collect unique item IDs in citation order (order they appear in the group)
+        // This preserves the citation order, which is the default tiebreaker
+        let mut seen = std::collections::HashSet::new();
+        let mut item_ids_in_citation_order: Vec<&str> = Vec::new();
+        for d in group {
+            if seen.insert(d.item_id.as_str()) {
+                item_ids_in_citation_order.push(d.item_id.as_str());
+            }
+        }
 
-        if item_ids.len() < 2 {
+        if item_ids_in_citation_order.len() < 2 {
             continue; // Not actually ambiguous
         }
 
-        // Sort items by bibliography order
-        let mut sorted_items: Vec<_> = item_ids
+        // Build items with sort keys, preserving citation order index for tiebreaking
+        let mut sorted_items: Vec<_> = item_ids_in_citation_order
             .iter()
-            .filter_map(|id| {
+            .enumerate()
+            .filter_map(|(citation_order, id)| {
                 processor.get_reference(id).map(|_r| {
                     let sort_key = processor.get_bib_sort_key(id);
-                    (id, sort_key)
+                    (id, sort_key, citation_order)
                 })
             })
             .collect();
 
-        sorted_items.sort_by(|a, b| crate::types::compare_sort_keys(&a.1, &b.1));
+        // Sort by bibliography sort key, then by citation order as tiebreaker
+        sorted_items.sort_by(|a, b| {
+            let key_cmp = crate::types::compare_sort_keys(&a.1, &b.1);
+            if key_cmp == std::cmp::Ordering::Equal {
+                a.2.cmp(&b.2) // Use citation order as tiebreaker
+            } else {
+                key_cmp
+            }
+        });
 
         // Assign sequential suffixes
-        for (idx, (id, _)) in sorted_items.iter().enumerate() {
+        for (idx, (id, _, _)) in sorted_items.iter().enumerate() {
             suffixes.insert((*id).to_string(), (idx + 1) as i32);
         }
     }

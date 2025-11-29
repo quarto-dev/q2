@@ -880,8 +880,8 @@ impl Processor {
     ) -> Result<Vec<crate::output::Output>> {
         use crate::disambiguation::{
             apply_global_name_disambiguation, assign_year_suffixes, extract_disamb_data,
-            find_ambiguities, set_disambiguate_condition, try_add_given_names_with_rule,
-            try_add_names,
+            extract_disamb_data_with_processor, find_ambiguities, find_year_suffix_ambiguities,
+            set_disambiguate_condition, try_add_given_names_with_rule, try_add_names,
         };
         use quarto_csl::GivenNameDisambiguationRule;
 
@@ -943,7 +943,9 @@ impl Processor {
             .collect::<Result<Vec<_>>>()?;
 
         // Extract DisambData and find initial ambiguities
-        let mut disamb_data = extract_disamb_data(&outputs);
+        // Use extract_disamb_data_with_processor to get names from references directly
+        // This handles cases where collapsing may suppress author names in the output
+        let mut disamb_data = extract_disamb_data_with_processor(&outputs, self);
         let initial_ambiguities = find_ambiguities(disamb_data.clone());
         let mut ambiguities = initial_ambiguities.clone();
 
@@ -995,19 +997,24 @@ impl Processor {
             }
         }
 
-        // 4. Add year suffixes if still ambiguous
-        if add_year_suffix && !ambiguities.is_empty() {
-            let suffixes = assign_year_suffixes(self, &ambiguities);
-            for (item_id, suffix) in suffixes {
-                self.set_year_suffix(&item_id, suffix);
+        // 4. Add year suffixes if enabled
+        // Use find_year_suffix_ambiguities to detect same-author-same-year cases
+        // even when collapsing might hide the author name in some renderings
+        if add_year_suffix {
+            let year_suffix_ambiguities = find_year_suffix_ambiguities(disamb_data.clone(), self);
+            if !year_suffix_ambiguities.is_empty() {
+                let suffixes = assign_year_suffixes(self, &year_suffix_ambiguities);
+                for (item_id, suffix) in suffixes {
+                    self.set_year_suffix(&item_id, suffix);
+                }
+                // Re-render and refresh ambiguities
+                outputs = citations_with_positions
+                    .iter()
+                    .map(|c| self.process_citation_to_output(c))
+                    .collect::<Result<Vec<_>>>()?;
+                disamb_data = extract_disamb_data(&outputs);
+                ambiguities = find_ambiguities(disamb_data);
             }
-            // Re-render and refresh ambiguities
-            outputs = citations_with_positions
-                .iter()
-                .map(|c| self.process_citation_to_output(c))
-                .collect::<Result<Vec<_>>>()?;
-            disamb_data = extract_disamb_data(&outputs);
-            ambiguities = find_ambiguities(disamb_data);
         }
 
         // 5. Set disambiguate condition for any remaining ambiguities

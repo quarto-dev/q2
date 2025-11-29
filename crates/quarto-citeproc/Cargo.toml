@@ -16,6 +16,7 @@ hashlink = "0.10.0"
 rust-embed = { version = "8", features = ["include-exclude"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+similar = "2"
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -23,3 +24,7 @@ insta = { workspace = true }
 
 [build-dependencies]
 glob = "0.3"
+
+[[bin]]
+name = "csl_conformance_report"
+path = "src/bin/csl_conformance_report.rs"
