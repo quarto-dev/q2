@@ -1041,6 +1041,14 @@ impl CslParser {
     }
 
     fn parse_name(&self, element: &XmlElement) -> Result<Name> {
+        // Parse formatting attributes (prefix, suffix, etc.) from the <name> element
+        let formatting = self.parse_formatting(element);
+        let formatting = if formatting.has_any_formatting() {
+            Some(formatting)
+        } else {
+            None
+        };
+
         let and = self.get_attr(element, "and").map(|a| match a.value.as_str() {
             "symbol" => NameAnd::Symbol,
             _ => NameAnd::Text,
@@ -1143,6 +1151,7 @@ impl CslParser {
             sort_separator,
             family_formatting,
             given_formatting,
+            formatting,
             source_info: Some(element.source_info.clone()),
         })
     }

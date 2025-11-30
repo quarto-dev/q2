@@ -27,6 +27,125 @@ struct VarCount {
     non_empty: u32,
 }
 
+/// Pre-computed context for rendering a list of names.
+///
+/// This struct encapsulates the merged name options and et-al computation,
+/// avoiding duplication between `format_names` and `get_names_count`.
+struct NameRenderingContext {
+    /// Merged effective name options (from element, substitute context, and inherited).
+    effective_options: InheritableNameOptions,
+    /// Number of names to display (after et-al truncation and disambiguation).
+    names_to_show: usize,
+    /// Whether to show "et al." after the displayed names.
+    show_et_al: bool,
+    /// Whether et-al-use-last is enabled (show "... Name" instead of "... et al.").
+    et_al_use_last: bool,
+}
+
+impl NameRenderingContext {
+    /// Create a new NameRenderingContext by computing effective options and et-al truncation.
+    fn new(
+        ctx: &EvalContext,
+        names: &[crate::reference::Name],
+        names_el: &NamesElement,
+    ) -> Self {
+        // Merge name element options with inherited options (name takes precedence)
+        // When inside a substitute block, also consider the parent names element's options
+        let effective_options = if let Some(name) = names_el.name.as_ref() {
+            // This names element has its own <name> - use it, but merge with inherited
+            InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
+        } else if ctx.in_substitute {
+            // Inside substitute and no <name> on this element - inherit from parent
+            if let Some(ref parent_opts) = ctx.substitute_name_options {
+                parent_opts.clone()
+            } else {
+                ctx.inherited_name_options.clone()
+            }
+        } else {
+            ctx.inherited_name_options.clone()
+        };
+
+        // et-al handling
+        // CSL spec: truncation only happens if BOTH et-al-min AND et-al-use-first are specified
+        let et_al_min = effective_options.et_al_min;
+        let et_al_use_first = effective_options.et_al_use_first;
+        let et_al_use_last = effective_options.et_al_use_last.unwrap_or(false);
+
+        // Check for disambiguation override of et-al-use-first
+        let disamb_et_al_names = ctx
+            .reference
+            .disambiguation
+            .as_ref()
+            .and_then(|d| d.et_al_names);
+
+        let use_et_al = match (et_al_min, et_al_use_first) {
+            (Some(min), Some(_)) => names.len() as u32 >= min,
+            _ => false,
+        };
+
+        let names_to_show = if let Some(disamb_count) = disamb_et_al_names {
+            // Disambiguation override - show this many names (but use et-al if still truncating)
+            (disamb_count as usize).min(names.len())
+        } else if use_et_al {
+            (et_al_use_first.unwrap_or(1) as usize).min(names.len())
+        } else {
+            names.len()
+        };
+
+        // Determine if we still need et-al after disambiguation override
+        let show_et_al = if disamb_et_al_names.is_some() {
+            // With disambiguation override, still show et-al if we're not showing all names
+            names_to_show < names.len()
+        } else {
+            use_et_al
+        };
+
+        Self {
+            effective_options,
+            names_to_show,
+            show_et_al,
+            et_al_use_last,
+        }
+    }
+
+    /// Get the delimiter between names.
+    fn delimiter(&self) -> String {
+        self.effective_options
+            .delimiter
+            .clone()
+            .unwrap_or_else(|| ", ".to_string())
+    }
+
+    /// Get the "and" word (if configured).
+    fn and_word(&self, ctx: &EvalContext) -> Option<String> {
+        self.effective_options.and.as_ref().map(|a| match a {
+            quarto_csl::NameAnd::Text => ctx
+                .get_term("and", quarto_csl::TermForm::Long, false)
+                .unwrap_or_else(|| "and".to_string()),
+            quarto_csl::NameAnd::Symbol => "&".to_string(),
+        })
+    }
+
+    /// Get delimiter-precedes-last option.
+    fn delimiter_precedes_last(&self) -> quarto_csl::DelimiterPrecedesLast {
+        self.effective_options
+            .delimiter_precedes_last
+            .unwrap_or(quarto_csl::DelimiterPrecedesLast::Contextual)
+    }
+
+    /// Get delimiter-precedes-et-al option.
+    fn delimiter_precedes_et_al(&self) -> quarto_csl::DelimiterPrecedesLast {
+        self.effective_options
+            .delimiter_precedes_et_al
+            .unwrap_or(quarto_csl::DelimiterPrecedesLast::Contextual)
+    }
+
+    /// Get name-as-sort-order option.
+    fn name_as_sort_order(&self) -> Option<quarto_csl::NameAsSortOrder> {
+        self.effective_options.name_as_sort_order
+    }
+}
+
 /// Evaluation context for processing a single reference.
 struct EvalContext<'a> {
     /// The processor (provides style, locales, references).
@@ -39,8 +158,16 @@ struct EvalContext<'a> {
     /// When inside a substitute block, this holds the name options from the
     /// parent <names> element that should be inherited by child <names>.
     substitute_name_options: Option<InheritableNameOptions>,
+    /// Label from parent <names> element for substitute inheritance.
+    /// When inside a substitute block, child <names> without their own label inherit this.
+    substitute_label: Option<quarto_csl::NamesLabel>,
+    /// Whether the parent's label appears before the name in substitute context.
+    substitute_label_before_name: bool,
     /// Whether we're currently inside a substitute block.
     in_substitute: bool,
+    /// Variables that have been rendered via substitute and should be quashed
+    /// (not rendered again in the same citation/bibliography entry).
+    substituted_variables: std::collections::HashSet<String>,
     /// Whether we're currently evaluating sort keys (not just rendering in sort order).
     /// This affects demote-non-dropping-particle="sort-only" behavior.
     in_sort_key: bool,
@@ -73,7 +200,10 @@ impl<'a> EvalContext<'a> {
             reference,
             inherited_name_options,
             substitute_name_options: None,
+            substitute_label: None,
+            substitute_label_before_name: false,
             in_substitute: false,
+            substituted_variables: std::collections::HashSet::new(),
             in_sort_key: false,
             locator: None,
             locator_label: None,
@@ -103,7 +233,10 @@ impl<'a> EvalContext<'a> {
             reference,
             inherited_name_options,
             substitute_name_options: None,
+            substitute_label: None,
+            substitute_label_before_name: false,
             in_substitute: false,
+            substituted_variables: std::collections::HashSet::new(),
             in_sort_key: false,
             locator: citation_item.locator.as_deref(),
             locator_label: citation_item.label.as_deref(),
@@ -175,7 +308,13 @@ impl<'a> EvalContext<'a> {
     /// Get a variable value, checking citation item context first, then reference.
     ///
     /// Citation item variables (locator, label) take precedence when available.
+    /// Variables that were rendered via substitute are quashed (return None).
     fn get_variable(&self, name: &str) -> Option<String> {
+        // Check if this variable was rendered via substitute and should be quashed
+        if self.substituted_variables.contains(name) {
+            return None;
+        }
+
         match name {
             "locator" => self.locator.map(|s| s.to_string()),
             "label" => self
@@ -817,6 +956,16 @@ fn evaluate_text(
                 ctx.record_var_call(value.is_some());
 
                 if let Some(value) = value {
+                    // Mark variable as substituted if we're in substitute context
+                    // This prevents the variable from being rendered again
+                    if ctx.in_substitute {
+                        ctx.substituted_variables.insert(name.to_string());
+                        // Also mark the short form variant if we used it
+                        if *form == quarto_csl::VariableForm::Short {
+                            ctx.substituted_variables.insert(format!("{}-short", name));
+                        }
+                    }
+
                     // Special handling for page-like variables: format ranges with en-dash
                     // This applies to:
                     // - "page" variable
@@ -942,6 +1091,18 @@ fn evaluate_names(
 
                 // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
+
+                // Apply the <name> element's formatting (prefix, suffix, etc.) if present
+                let formatted = if let Some(ref name_el) = names_el.name {
+                    if let Some(ref fmt) = name_el.formatting {
+                        Output::formatted(fmt.clone(), vec![formatted])
+                    } else {
+                        formatted
+                    }
+                } else {
+                    formatted
+                };
+
                 let names_output = Output::tagged(
                     Tag::Names {
                         variable: var.clone(),
@@ -950,8 +1111,22 @@ fn evaluate_names(
                     formatted,
                 );
 
-                // Check for label
-                let var_with_label = if let Some(ref label) = names_el.label {
+                // Check for label - use the element's own label, or inherit from parent
+                // in substitute context if no local label is defined
+                let (effective_label, effective_label_before_name) =
+                    if let Some(ref label) = names_el.label {
+                        (Some(label.clone()), names_el.label_before_name)
+                    } else if ctx.in_substitute {
+                        // Inherit label from parent <names> in substitute context
+                        (
+                            ctx.substitute_label.clone(),
+                            ctx.substitute_label_before_name,
+                        )
+                    } else {
+                        (None, false)
+                    };
+
+                let var_with_label = if let Some(ref label) = effective_label {
                     // Determine plural based on name count
                     let is_plural = match label.plural {
                         quarto_csl::LabelPlural::Always => true,
@@ -961,12 +1136,35 @@ fn evaluate_names(
 
                     // Look up the term for this variable (e.g., "editor" -> "Ed." term)
                     if let Some(term) = ctx.get_term(var, label.form, is_plural) {
-                        let label_output = Output::formatted(
-                            label.formatting.clone(),
-                            vec![Output::literal(term)],
-                        );
+                        // Apply formatting to term only (not prefix/suffix)
+                        // Prefix/suffix should be rendered outside the formatting
+                        let mut term_formatting = label.formatting.clone();
+                        let prefix = term_formatting.prefix.take();
+                        let suffix = term_formatting.suffix.take();
+
+                        // Build the label output: prefix + formatted_term + suffix
+                        let formatted_term = if term_formatting.has_any_formatting() {
+                            Output::formatted(term_formatting, vec![Output::literal(term)])
+                        } else {
+                            Output::literal(term)
+                        };
+
+                        let label_output = if prefix.is_some() || suffix.is_some() {
+                            let mut parts = Vec::new();
+                            if let Some(p) = prefix {
+                                parts.push(Output::literal(p));
+                            }
+                            parts.push(formatted_term);
+                            if let Some(s) = suffix {
+                                parts.push(Output::literal(s));
+                            }
+                            Output::sequence(parts)
+                        } else {
+                            formatted_term
+                        };
+
                         // Combine label + names or names + label based on CSL order
-                        if names_el.label_before_name {
+                        if effective_label_before_name {
                             Output::sequence(vec![label_output, names_output])
                         } else {
                             Output::sequence(vec![names_output, label_output])
@@ -993,6 +1191,8 @@ fn evaluate_names(
     if let Some(ref substitute) = names_el.substitute {
         // Save the current substitute context
         let prev_substitute_options = ctx.substitute_name_options.clone();
+        let prev_substitute_label = ctx.substitute_label.clone();
+        let prev_substitute_label_before_name = ctx.substitute_label_before_name;
         let prev_in_substitute = ctx.in_substitute;
 
         // Set up substitute context with the parent names element's options
@@ -1003,6 +1203,9 @@ fn evaluate_names(
             ctx.inherited_name_options.clone()
         };
         ctx.substitute_name_options = Some(parent_options);
+        // Store the parent's label for inheritance by child <names> elements
+        ctx.substitute_label = names_el.label.clone();
+        ctx.substitute_label_before_name = names_el.label_before_name;
         ctx.in_substitute = true;
 
         let mut result = Output::Null;
@@ -1016,6 +1219,8 @@ fn evaluate_names(
 
         // Restore previous substitute context
         ctx.substitute_name_options = prev_substitute_options;
+        ctx.substitute_label = prev_substitute_label;
+        ctx.substitute_label_before_name = prev_substitute_label_before_name;
         ctx.in_substitute = prev_in_substitute;
 
         if !result.is_null() {
@@ -1033,45 +1238,8 @@ fn get_names_count(
     names: &[crate::reference::Name],
     names_el: &NamesElement,
 ) -> usize {
-    // Get effective options (same logic as format_names)
-    let effective_options = if let Some(name) = names_el.name.as_ref() {
-        InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
-    } else if ctx.in_substitute {
-        if let Some(ref parent_opts) = ctx.substitute_name_options {
-            parent_opts.clone()
-        } else {
-            ctx.inherited_name_options.clone()
-        }
-    } else {
-        ctx.inherited_name_options.clone()
-    };
-
-    // et-al handling - same as format_names
-    let et_al_min = effective_options.et_al_min;
-    let et_al_use_first = effective_options.et_al_use_first;
-
-    // Check for disambiguation override
-    let disamb_et_al_names = ctx
-        .reference
-        .disambiguation
-        .as_ref()
-        .and_then(|d| d.et_al_names);
-
-    let use_et_al = match (et_al_min, et_al_use_first) {
-        (Some(min), Some(_)) => names.len() as u32 >= min,
-        _ => false,
-    };
-
-    let names_to_show = if let Some(disamb_count) = disamb_et_al_names {
-        disamb_count as usize
-    } else if use_et_al {
-        et_al_use_first.unwrap_or(1) as usize
-    } else {
-        names.len()
-    };
-
-    // Return the count of names that would be rendered
-    names_to_show.min(names.len())
+    let name_ctx = NameRenderingContext::new(ctx, names, names_el);
+    name_ctx.names_to_show
 }
 
 /// Format a list of names according to CSL rules.
@@ -1082,78 +1250,18 @@ fn format_names(
 ) -> Output {
     use quarto_csl::{DelimiterPrecedesLast, NameAsSortOrder};
 
-    // Merge name element options with inherited options (name takes precedence)
-    // When inside a substitute block, also consider the parent names element's options
-    let effective_options = if let Some(name) = names_el.name.as_ref() {
-        // This names element has its own <name> - use it, but merge with inherited
-        InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
-    } else if ctx.in_substitute {
-        // Inside substitute and no <name> on this element - inherit from parent
-        if let Some(ref parent_opts) = ctx.substitute_name_options {
-            parent_opts.clone()
-        } else {
-            ctx.inherited_name_options.clone()
-        }
-    } else {
-        ctx.inherited_name_options.clone()
-    };
+    // Use NameRenderingContext for option resolution and et-al computation
+    let name_ctx = NameRenderingContext::new(ctx, names, names_el);
 
-    // Get formatting options from merged effective options
-    let delimiter = effective_options
-        .delimiter
-        .clone()
-        .unwrap_or_else(|| ", ".to_string());
-
-    let and_word = effective_options.and.as_ref().map(|a| match a {
-        quarto_csl::NameAnd::Text => ctx
-            .get_term("and", quarto_csl::TermForm::Long, false)
-            .unwrap_or_else(|| "and".to_string()),
-        quarto_csl::NameAnd::Symbol => "&".to_string(),
-    });
-
-    let delimiter_precedes_last = effective_options
-        .delimiter_precedes_last
-        .unwrap_or(DelimiterPrecedesLast::Contextual);
-
-    let delimiter_precedes_et_al = effective_options
-        .delimiter_precedes_et_al
-        .unwrap_or(DelimiterPrecedesLast::Contextual);
-
-    let name_as_sort_order = effective_options.name_as_sort_order;
-
-    // et-al handling
-    // CSL spec: truncation only happens if BOTH et-al-min AND et-al-use-first are specified
-    let et_al_min = effective_options.et_al_min;
-    let et_al_use_first = effective_options.et_al_use_first;
-    let et_al_use_last = effective_options.et_al_use_last.unwrap_or(false);
-
-    // Check for disambiguation override of et-al-use-first
-    let disamb_et_al_names = ctx
-        .reference
-        .disambiguation
-        .as_ref()
-        .and_then(|d| d.et_al_names);
-
-    let use_et_al = match (et_al_min, et_al_use_first) {
-        (Some(min), Some(_)) => names.len() as u32 >= min,
-        _ => false,
-    };
-    let names_to_show = if let Some(disamb_count) = disamb_et_al_names {
-        // Disambiguation override - show this many names (but use et-al if still truncating)
-        disamb_count as usize
-    } else if use_et_al {
-        et_al_use_first.unwrap_or(1) as usize
-    } else {
-        names.len()
-    };
-
-    // Determine if we still need et-al after disambiguation override
-    let show_et_al = if disamb_et_al_names.is_some() {
-        // With disambiguation override, still show et-al if we're not showing all names
-        names_to_show < names.len()
-    } else {
-        use_et_al
-    };
+    // Extract values we need from the context
+    let delimiter = name_ctx.delimiter();
+    let and_word = name_ctx.and_word(ctx);
+    let delimiter_precedes_last = name_ctx.delimiter_precedes_last();
+    let delimiter_precedes_et_al = name_ctx.delimiter_precedes_et_al();
+    let name_as_sort_order = name_ctx.name_as_sort_order();
+    let names_to_show = name_ctx.names_to_show;
+    let show_et_al = name_ctx.show_et_al;
+    let et_al_use_last = name_ctx.et_al_use_last;
 
     // Format individual names, tracking which ones are actually inverted
     // Literal names are never inverted even with name-as-sort-order="all"
@@ -1189,7 +1297,7 @@ fn format_names(
         let is_primary = i == 0;
         formatted_names.push(format_single_name(
             n,
-            &effective_options,
+            &name_ctx.effective_options,
             inverted,
             ctx.in_sort_key,
             disamb,
@@ -1307,7 +1415,7 @@ fn format_names(
             // The last name is not primary for disambiguation purposes
             let last_name = format_single_name(
                 &names[names.len() - 1],
-                &effective_options,
+                &name_ctx.effective_options,
                 name_as_sort_order == Some(NameAsSortOrder::All),
                 ctx.in_sort_key,
                 disamb,
@@ -1367,8 +1475,14 @@ fn format_single_name(
     use quarto_csl::DemoteNonDroppingParticle;
 
     // Handle literal names
+    // For literal names, apply family_formatting (Pandoc treats literal as "family-only")
     if let Some(ref lit) = name.literal {
-        return Output::literal(lit.clone());
+        let base = Output::literal(lit.clone());
+        return if let Some(fmt) = family_formatting {
+            Output::formatted(fmt.clone(), vec![base])
+        } else {
+            base
+        };
     }
 
     // Look up disambiguation hint for this name

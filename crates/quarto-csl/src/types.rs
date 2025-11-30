@@ -593,6 +593,9 @@ pub struct Name {
     pub family_formatting: Option<Formatting>,
     /// Formatting for given name part (from `<name-part name="given">`).
     pub given_formatting: Option<Formatting>,
+    /// Formatting for the entire name output (prefix, suffix, etc. from `<name>` element).
+    /// Used to wrap the complete formatted names output.
+    pub formatting: Option<Formatting>,
     /// Source location.
     pub source_info: Option<SourceInfo>,
 }
@@ -822,6 +825,24 @@ pub struct Formatting {
     /// metadata and applied when rendering, allowing smart punctuation collision
     /// handling.
     pub delimiter: Option<String>,
+}
+
+impl Formatting {
+    /// Check if this formatting has any non-default values.
+    pub fn has_any_formatting(&self) -> bool {
+        self.font_style.is_some()
+            || self.font_variant.is_some()
+            || self.font_weight.is_some()
+            || self.text_decoration.is_some()
+            || self.vertical_align.is_some()
+            || self.text_case.is_some()
+            || self.prefix.is_some()
+            || self.suffix.is_some()
+            || self.display.is_some()
+            || self.quotes
+            || self.strip_periods
+            || self.delimiter.is_some()
+    }
 }
 
 /// Font style.

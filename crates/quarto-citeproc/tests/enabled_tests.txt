@@ -639,3 +639,9 @@ name_AuthorCountWithSameVarContentAndCombinedTermSucceed
 name_AuthorCountWithMultipleVariables
 name_AuthorCountWithSameVarContentAndCombinedTermFail
 name_AuthorEditorCount
+
+# Literal name text-case fix 2025-11-29
+name_InstitutionDecoration
+name_SubstituteOnNamesSpanGroupSpanFail
+name_SubstituteInheritLabel
+name_QuashOrdinaryVariableRenderedViaSubstitute

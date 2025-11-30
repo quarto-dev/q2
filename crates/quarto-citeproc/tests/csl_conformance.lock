@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 609
-# Disabled: 249
+# Enabled: 613
+# Disabled: 245
 #
 [enabled]
 affix_commaafterquote
@@ -369,6 +369,7 @@ name_initialsinitializetrueempty
 name_initialsinitializetrueperiod
 name_initialsinitializetrueperiodspace
 name_institution
+name_institutiondecoration
 name_labelafterplural
 name_labelafterpluraldecorations
 name_literalwithcomma
@@ -394,15 +395,18 @@ name_particleformatting
 name_particleparse1
 name_particlesdemotenondroppingnever
 name_periodafterinitials
+name_quashordinaryvariablerenderedviasubstitute
 name_romaniantwo
 name_semicolonwithand
 name_splitinitials
+name_substituteinheritlabel
 name_substitutemacroinheritdecorations
 name_substitutename
 name_substituteondategroupspanfail
 name_substituteongroupspangroupspanfail
 name_substituteonmacrogroupspanfail
 name_substituteonnamessingletongroupspanfail
+name_substituteonnamesspangroupspanfail
 name_substituteonnamesspannamesspanfail
 name_substituteonnumbergroupspanfail
 name_tworolessamerenderingseparaterolelabels
