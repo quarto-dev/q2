@@ -60,10 +60,7 @@ fn main() {
 
     // Emit warnings for issues (will show during compilation)
     for dup in &duplicates {
-        println!(
-            "cargo:warning=Duplicate test in enabled_tests.txt: {}",
-            dup
-        );
+        println!("cargo:warning=Duplicate test in enabled_tests.txt: {}", dup);
     }
     for bad in &nonexistent {
         println!(

@@ -57,5 +57,5 @@ mod eval;
 
 // Re-export main types
 pub use error::{Error, Result};
-pub use reference::{Reference, Name, DateParts};
+pub use reference::{DateParts, Name, Reference};
 pub use types::{Citation, CitationItem, Processor};

@@ -1,8 +1,8 @@
 //! Core types for citation processing.
 
+use crate::Result;
 use crate::locale::LocaleManager;
 use crate::reference::Reference;
-use crate::Result;
 use hashlink::LinkedHashMap;
 use quarto_csl::Style;
 use serde::{Deserialize, Serialize};
@@ -153,7 +153,11 @@ pub fn bitmask_to_positions(value: i32) -> Vec<quarto_csl::Position> {
             0 => vec![Position::First],
             1 => vec![Position::Subsequent],
             2 => vec![Position::Ibid, Position::Subsequent],
-            3 => vec![Position::IbidWithLocator, Position::Ibid, Position::Subsequent],
+            3 => vec![
+                Position::IbidWithLocator,
+                Position::Ibid,
+                Position::Subsequent,
+            ],
             4 => vec![Position::NearNote, Position::Subsequent],
             _ => vec![Position::First],
         }
@@ -498,9 +502,9 @@ impl Processor {
         let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
 
         // Check if any sort key uses citation-number
-        let uses_citation_number = sort_keys.iter().any(|k| {
-            matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number")
-        });
+        let uses_citation_number = sort_keys.iter().any(
+            |k| matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number"),
+        );
 
         // If there are sort keys, sort the IDs; otherwise preserve insertion order
         let final_ids = if sort_keys.is_empty() {
@@ -561,9 +565,9 @@ impl Processor {
         let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
 
         // Check if any sort key uses citation-number
-        let uses_citation_number = sort_keys.iter().any(|k| {
-            matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number")
-        });
+        let uses_citation_number = sort_keys.iter().any(
+            |k| matches!(&k.key, quarto_csl::SortKeyType::Variable(v) if v == "citation-number"),
+        );
 
         // If there are sort keys, sort the IDs; otherwise preserve insertion order
         let final_ids = if sort_keys.is_empty() {
@@ -639,14 +643,12 @@ impl Processor {
     fn get_sort_value_for_variable(&self, reference: &Reference, var: &str) -> String {
         match var {
             // Name variables - extract family names for sorting
-            "author" | "editor" | "translator" | "director" | "interviewer"
-            | "illustrator" | "composer" | "collection-editor" | "container-author" => {
+            "author" | "editor" | "translator" | "director" | "interviewer" | "illustrator"
+            | "composer" | "collection-editor" | "container-author" => {
                 if let Some(names) = reference.get_names(var) {
                     names
                         .iter()
-                        .filter_map(|n| {
-                            n.literal.as_ref().or(n.family.as_ref()).cloned()
-                        })
+                        .filter_map(|n| n.literal.as_ref().or(n.family.as_ref()).cloned())
                         .collect::<Vec<_>>()
                         .join(" ")
                 } else {
@@ -1038,15 +1040,14 @@ impl Processor {
                 find_year_suffix_with_full_author_match(disamb_data.clone(), self);
 
             // Merge both sets of ambiguity groups
-            let year_suffix_groups = if !rendered_ambiguities.is_empty()
-                && !author_year_ambiguities.is_empty()
-            {
-                merge_ambiguity_groups(rendered_ambiguities, &author_year_ambiguities)
-            } else if !rendered_ambiguities.is_empty() {
-                rendered_ambiguities.clone()
-            } else {
-                author_year_ambiguities
-            };
+            let year_suffix_groups =
+                if !rendered_ambiguities.is_empty() && !author_year_ambiguities.is_empty() {
+                    merge_ambiguity_groups(rendered_ambiguities, &author_year_ambiguities)
+                } else if !rendered_ambiguities.is_empty() {
+                    rendered_ambiguities.clone()
+                } else {
+                    author_year_ambiguities
+                };
 
             if !year_suffix_groups.is_empty() {
                 let suffixes = assign_year_suffixes(self, &year_suffix_groups);

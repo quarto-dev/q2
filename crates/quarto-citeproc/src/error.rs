@@ -14,10 +14,7 @@ pub enum Error {
     CslError(quarto_csl::Error),
 
     /// Locale file parsing error.
-    LocaleParseError {
-        locale: String,
-        message: String,
-    },
+    LocaleParseError { locale: String, message: String },
 
     /// Reference not found.
     ReferenceNotFound {
@@ -33,10 +30,7 @@ pub enum Error {
     },
 
     /// Missing required field in reference.
-    MissingRequiredField {
-        id: String,
-        field: String,
-    },
+    MissingRequiredField { id: String, field: String },
 
     /// Invalid date format.
     InvalidDate {
@@ -63,7 +57,11 @@ impl fmt::Display for Error {
                 write!(f, "Reference '{}' not found", id)
             }
             Error::InvalidReference { id, field, message } => {
-                write!(f, "Invalid reference '{}' field '{}': {}", id, field, message)
+                write!(
+                    f,
+                    "Invalid reference '{}' field '{}': {}",
+                    id, field, message
+                )
             }
             Error::MissingRequiredField { id, field } => {
                 write!(f, "Reference '{}' missing required field '{}'", id, field)
@@ -121,10 +119,7 @@ impl Error {
             Error::InvalidReference { id, field, message } => {
                 DiagnosticMessageBuilder::error("Invalid Reference")
                     .with_code("Q-10-3")
-                    .problem(format!(
-                        "Reference '{}' has invalid field '{}'",
-                        id, field
-                    ))
+                    .problem(format!("Reference '{}' has invalid field '{}'", id, field))
                     .add_detail(message.clone())
                     .build()
             }

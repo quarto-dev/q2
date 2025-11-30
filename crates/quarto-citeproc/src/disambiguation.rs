@@ -125,8 +125,7 @@ pub fn find_ambiguities(items: Vec<DisambData>) -> Vec<Vec<DisambData>> {
     render_groups
         .into_values()
         .filter(|group| {
-            let mut unique_ids: Vec<&str> =
-                group.iter().map(|d| d.item_id.as_str()).collect();
+            let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
             unique_ids.sort();
             unique_ids.dedup();
             unique_ids.len() > 1
@@ -344,7 +343,10 @@ pub fn merge_ambiguity_groups(
     // Sort groups by first appearance order
     groups_with_order.sort_by_key(|(pos, _)| *pos);
 
-    groups_with_order.into_iter().map(|(_, group)| group).collect()
+    groups_with_order
+        .into_iter()
+        .map(|(_, group)| group)
+        .collect()
 }
 
 /// Find groups of ambiguous citations (simple version from strings without names).
@@ -671,10 +673,7 @@ pub fn set_disambiguate_condition(processor: &mut Processor, ambiguities: &[Vec<
 /// This is the legacy entry point that works with pre-rendered strings.
 /// Prefer `disambiguate_citations_from_outputs` when Output ASTs are available.
 #[allow(dead_code)]
-pub fn disambiguate_citations(
-    processor: &mut Processor,
-    citation_renderings: &[(String, String)],
-) {
+pub fn disambiguate_citations(processor: &mut Processor, citation_renderings: &[(String, String)]) {
     let strategy = &processor.style.citation.disambiguation;
     let add_names = strategy.add_names;
     let add_givenname = strategy.add_givenname;
@@ -692,7 +691,14 @@ pub fn disambiguate_citations(
     }
 
     // Legacy version: no global name disambiguation (no names available)
-    apply_disambiguation(processor, ambiguities, &[], add_names, add_givenname, add_year_suffix);
+    apply_disambiguation(
+        processor,
+        ambiguities,
+        &[],
+        add_names,
+        add_givenname,
+        add_year_suffix,
+    );
 }
 
 /// Apply disambiguation to a processor's references using Output ASTs.
@@ -718,7 +724,14 @@ pub fn disambiguate_citations_from_outputs(processor: &mut Processor, outputs: &
     // Apply disambiguation (global name disambiguation runs even without ambiguities)
     // Note: We always run this, even if no explicit methods are enabled, because
     // the disambiguate condition (`<if disambiguate="true">`) needs to be set.
-    apply_disambiguation(processor, ambiguities, &disamb_data, add_names, add_givenname, add_year_suffix);
+    apply_disambiguation(
+        processor,
+        ambiguities,
+        &disamb_data,
+        add_names,
+        add_givenname,
+        add_year_suffix,
+    );
 }
 
 /// Apply disambiguation methods to resolve ambiguities.
@@ -786,12 +799,10 @@ pub fn apply_global_name_disambiguation(
     // For PrimaryName variants, only consider first names
     let relevant_names: Vec<(&str, &Name)> = match rule {
         GivenNameDisambiguationRule::PrimaryName
-        | GivenNameDisambiguationRule::PrimaryNameWithInitials => {
-            all_disamb_data
-                .iter()
-                .filter_map(|d| d.names.first().map(|n| (d.item_id.as_str(), n)))
-                .collect()
-        }
+        | GivenNameDisambiguationRule::PrimaryNameWithInitials => all_disamb_data
+            .iter()
+            .filter_map(|d| d.names.first().map(|n| (d.item_id.as_str(), n)))
+            .collect(),
         _ => all_names,
     };
 
@@ -805,10 +816,7 @@ pub fn apply_global_name_disambiguation(
                 Some(ndp) => format!("{} {}", ndp, family),
                 None => family.clone(),
             };
-            family_groups
-                .entry(key)
-                .or_default()
-                .push((item_id, name));
+            family_groups.entry(key).or_default().push((item_id, name));
         }
     }
 
@@ -844,7 +852,8 @@ pub fn apply_global_name_disambiguation(
 
         // Check if initials would disambiguate
         // Initials disambiguate if there are as many unique initials as unique full names
-        let initials_disambiguate = unique_initials.len() >= unique_full_given.len() && unique_initials.len() > 1;
+        let initials_disambiguate =
+            unique_initials.len() >= unique_full_given.len() && unique_initials.len() > 1;
 
         if use_initials_only {
             // For WithInitials variants, only add initials (don't add full given names)
@@ -938,7 +947,7 @@ mod tests {
 
     #[test]
     fn test_extract_disamb_data_from_output() {
-        use crate::output::{Output, Tag, CitationItemType};
+        use crate::output::{CitationItemType, Output, Tag};
         use crate::reference::Name;
 
         // Build an output tree like what evaluate_citation_to_output produces
@@ -1004,6 +1013,10 @@ mod tests {
 
         let ambiguities = find_ambiguities(disamb_data);
         assert_eq!(ambiguities.len(), 1, "Should find 1 ambiguity group");
-        assert_eq!(ambiguities[0].len(), 2, "Ambiguity group should have 2 items");
+        assert_eq!(
+            ambiguities[0].len(),
+            2,
+            "Ambiguity group should have 2 items"
+        );
     }
 }

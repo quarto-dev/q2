@@ -107,13 +107,10 @@ fn main() {
     } else {
         ReportMode::Enabled
     };
-    print!("{}", generate_html_report(
-        total_tests,
-        &passing,
-        &failing,
-        &skipped,
-        mode,
-    ));
+    print!(
+        "{}",
+        generate_html_report(total_tests, &passing, &failing, &skipped, mode,)
+    );
 }
 
 #[derive(Clone, Copy)]
@@ -145,7 +142,8 @@ fn generate_html_report(
         ReportMode::Enabled => "CSL Conformance Test Report (Enabled Tests)",
     };
 
-    html.push_str(&format!(r#"<!DOCTYPE html>
+    html.push_str(&format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -279,14 +277,28 @@ fn generate_html_report(
 </head>
 <body>
     <h1>{title}</h1>
-"#));
+"#
+    ));
 
     // Summary stats
-    let pass_pct = if total > 0 { passing.len() * 100 / total } else { 0 };
-    let fail_pct = if total > 0 { failing.len() * 100 / total } else { 0 };
-    let skip_pct = if total > 0 { skipped.len() * 100 / total } else { 0 };
+    let pass_pct = if total > 0 {
+        passing.len() * 100 / total
+    } else {
+        0
+    };
+    let fail_pct = if total > 0 {
+        failing.len() * 100 / total
+    } else {
+        0
+    };
+    let skip_pct = if total > 0 {
+        skipped.len() * 100 / total
+    } else {
+        0
+    };
 
-    html.push_str(&format!(r#"
+    html.push_str(&format!(
+        r#"
     <div class="summary">
         <div class="stat-card">
             <div class="number">{}</div>
@@ -316,9 +328,12 @@ fn generate_html_report(
         passing.len(),
         failing.len(),
         skipped.len(),
-        pass_pct, passing.len(),
-        fail_pct, failing.len(),
-        skip_pct, skipped.len(),
+        pass_pct,
+        passing.len(),
+        fail_pct,
+        failing.len(),
+        skip_pct,
+        skipped.len(),
     ));
 
     // Failing tests section
@@ -326,7 +341,8 @@ fn generate_html_report(
         html.push_str(&format!("<h2>Failing Tests ({})</h2>\n", failing.len()));
         for test in failing {
             let diff_html = generate_diff_html(&test.expected, &test.actual);
-            html.push_str(&format!(r#"
+            html.push_str(&format!(
+                r#"
     <div class="failed-test">
         <div class="failed-test-header">{}<span class="mode-badge">{}</span></div>
         <div class="content">
@@ -343,26 +359,38 @@ fn generate_html_report(
 
     // Passing tests section (collapsed)
     if !passing.is_empty() {
-        html.push_str(&format!(r#"
+        html.push_str(&format!(
+            r#"
     <details class="collapsible-section">
         <summary><h2 style="display: inline">Passing Tests ({})</h2></summary>
         <div class="test-list">
-"#, passing.len()));
+"#,
+            passing.len()
+        ));
         for name in passing {
-            html.push_str(&format!("            <div class=\"test-item\">{}</div>\n", html_escape(name)));
+            html.push_str(&format!(
+                "            <div class=\"test-item\">{}</div>\n",
+                html_escape(name)
+            ));
         }
         html.push_str("        </div>\n    </details>\n");
     }
 
     // Skipped tests section (collapsed)
     if !skipped.is_empty() {
-        html.push_str(&format!(r#"
+        html.push_str(&format!(
+            r#"
     <details class="collapsible-section">
         <summary><h2 style="display: inline">Skipped Tests ({})</h2></summary>
         <div class="test-list">
-"#, skipped.len()));
+"#,
+            skipped.len()
+        ));
         for name in skipped {
-            html.push_str(&format!("            <div class=\"test-item\">{}</div>\n", html_escape(name)));
+            html.push_str(&format!(
+                "            <div class=\"test-item\">{}</div>\n",
+                html_escape(name)
+            ));
         }
         html.push_str("        </div>\n    </details>\n");
     }
@@ -579,10 +607,12 @@ fn run_csl_test(test: &CslTest) -> Result<(), TestResult> {
                 let _ = processor.process_citations_with_disambiguation_to_outputs(&citations);
             }
 
-            let entries = processor.generate_bibliography_to_outputs().map_err(|e| TestResult {
-                expected: test.result.clone(),
-                actual: format!("Bibliography error: {:?}", e),
-            })?;
+            let entries = processor
+                .generate_bibliography_to_outputs()
+                .map_err(|e| TestResult {
+                    expected: test.result.clone(),
+                    actual: format!("Bibliography error: {:?}", e),
+                })?;
 
             let outputs: Vec<String> = entries
                 .into_iter()
@@ -679,12 +709,16 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
     }])
 }
 
-fn parse_complex_citations_format(outer_array: &[serde_json::Value]) -> Result<Vec<Citation>, String> {
+fn parse_complex_citations_format(
+    outer_array: &[serde_json::Value],
+) -> Result<Vec<Citation>, String> {
     let mut citations = Vec::new();
 
     for entry in outer_array {
         let entry_array = entry.as_array().ok_or("CITATIONS entry must be an array")?;
-        let citation_obj = entry_array.first().ok_or("CITATIONS entry must have citation object")?;
+        let citation_obj = entry_array
+            .first()
+            .ok_or("CITATIONS entry must have citation object")?;
 
         let citation_id = citation_obj
             .get("citationID")
@@ -719,11 +753,15 @@ fn parse_complex_citations_format(outer_array: &[serde_json::Value]) -> Result<V
     Ok(citations)
 }
 
-fn parse_simple_citations_format(outer_array: &[serde_json::Value]) -> Result<Vec<Citation>, String> {
+fn parse_simple_citations_format(
+    outer_array: &[serde_json::Value],
+) -> Result<Vec<Citation>, String> {
     let mut citations = Vec::new();
 
     for cite_group in outer_array {
-        let group_array = cite_group.as_array().ok_or("Citation group must be an array")?;
+        let group_array = cite_group
+            .as_array()
+            .ok_or("Citation group must be an array")?;
 
         let items: Vec<CitationItem> = group_array
             .iter()
@@ -786,10 +824,22 @@ fn parse_citation_item(v: &serde_json::Value) -> Option<CitationItem> {
 
     Some(CitationItem {
         id,
-        locator: v.get("locator").and_then(|l| l.as_str()).map(|s| s.to_string()),
-        label: v.get("label").and_then(|l| l.as_str()).map(|s| s.to_string()),
-        prefix: v.get("prefix").and_then(|p| p.as_str()).map(|s| s.to_string()),
-        suffix: v.get("suffix").and_then(|s| s.as_str()).map(|s| s.to_string()),
+        locator: v
+            .get("locator")
+            .and_then(|l| l.as_str())
+            .map(|s| s.to_string()),
+        label: v
+            .get("label")
+            .and_then(|l| l.as_str())
+            .map(|s| s.to_string()),
+        prefix: v
+            .get("prefix")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string()),
+        suffix: v
+            .get("suffix")
+            .and_then(|s| s.as_str())
+            .map(|s| s.to_string()),
         position: v.get("position").and_then(|p| p.as_i64()).map(|n| n as i32),
         ..Default::default()
     })

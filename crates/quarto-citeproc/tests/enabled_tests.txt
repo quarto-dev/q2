@@ -675,3 +675,6 @@ label_NoFirstCharCapWithInTextClass
 date_EmptyStrings
 date_RangeDelimiter
 flipflop_Apostrophes
+label_PluralWithLocalizedAmpersand
+name_namepartAffixes
+name_ParsedDroppingParticleWithApostrophe

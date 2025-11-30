@@ -7,15 +7,15 @@
 //! semantic information for post-processing (disambiguation, hyperlinking, etc.),
 //! then renders to the final string format.
 
+use crate::Result;
 use crate::output::{Output, Tag};
 use crate::reference::Reference;
 use crate::types::{Citation, CitationItem, Processor};
-use crate::Result;
-use std::cell::Cell;
 use quarto_csl::{
     Element, ElementType, Formatting, GroupElement, InheritableNameOptions, Layout, NamesElement,
     TextElement, TextSource,
 };
+use std::cell::Cell;
 
 /// Tracks variable access for group suppression logic.
 /// A group is suppressed if it calls at least one variable but all called variables are empty.
@@ -44,11 +44,7 @@ struct NameRenderingContext {
 
 impl NameRenderingContext {
     /// Create a new NameRenderingContext by computing effective options and et-al truncation.
-    fn new(
-        ctx: &EvalContext,
-        names: &[crate::reference::Name],
-        names_el: &NamesElement,
-    ) -> Self {
+    fn new(ctx: &EvalContext, names: &[crate::reference::Name], names_el: &NamesElement) -> Self {
         // Merge name element options with inherited options (name takes precedence)
         // When inside a substitute block, also consider the parent names element's options
         let effective_options = if let Some(name) = names_el.name.as_ref() {
@@ -296,12 +292,7 @@ impl<'a> EvalContext<'a> {
     }
 
     /// Get a term from the locale.
-    fn get_term(
-        &self,
-        name: &str,
-        form: quarto_csl::TermForm,
-        plural: bool,
-    ) -> Option<String> {
+    fn get_term(&self, name: &str, form: quarto_csl::TermForm, plural: bool) -> Option<String> {
         self.processor.get_term(name, form, plural)
     }
 
@@ -316,7 +307,21 @@ impl<'a> EvalContext<'a> {
         }
 
         match name {
-            "locator" => self.locator.map(|s| s.to_string()),
+            "locator" => self.locator.map(|s| {
+                // If the locator contains '&', replace it with the localized "and" symbol term
+                // This follows Pandoc citeproc's handleAmpersands behavior
+                if s.contains('&') {
+                    if let Some(and_symbol) =
+                        self.get_term("and", quarto_csl::TermForm::Symbol, false)
+                    {
+                        s.replace('&', &and_symbol)
+                    } else {
+                        s.to_string()
+                    }
+                } else {
+                    s.to_string()
+                }
+            }),
             "label" => self
                 .locator_label
                 .or_else(|| {
@@ -497,11 +502,9 @@ fn evaluate_citation_to_output_impl(
                 collapse_by_year(item_outputs, &layout)
             }
             Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
-            Collapse::None => Output::formatted_with_delimiter(
-                Formatting::default(),
-                item_outputs,
-                &delimiter,
-            ),
+            Collapse::None => {
+                Output::formatted_with_delimiter(Formatting::default(), item_outputs, &delimiter)
+            }
         }
     } else {
         // No collapsing - just join items with delimiter (for disambiguation detection)
@@ -888,7 +891,8 @@ fn evaluate_text(
         TextSource::Variable { name, form, .. } => {
             // Special handling for citation-number
             if name == "citation-number" {
-                let result = if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
+                let result = if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id)
+                {
                     // Tag for collapse detection
                     Output::tagged(Tag::CitationNumber(num), Output::literal(num.to_string()))
                 } else {
@@ -1088,7 +1092,6 @@ fn evaluate_names(
 
         if let Some(names) = names {
             if !names.is_empty() {
-
                 // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
 
@@ -1272,8 +1275,14 @@ fn format_names(
     let disamb = ctx.reference.disambiguation.as_ref();
 
     // Get name-part formatting from the Name element (if present)
-    let family_formatting = names_el.name.as_ref().and_then(|n| n.family_formatting.as_ref());
-    let given_formatting = names_el.name.as_ref().and_then(|n| n.given_formatting.as_ref());
+    let family_formatting = names_el
+        .name
+        .as_ref()
+        .and_then(|n| n.family_formatting.as_ref());
+    let given_formatting = names_el
+        .name
+        .as_ref()
+        .and_then(|n| n.given_formatting.as_ref());
 
     // Get demote-non-dropping-particle option from style
     let demote_ndp = ctx.processor.style.options.demote_non_dropping_particle;
@@ -1354,7 +1363,11 @@ fn format_names(
                 if use_delim {
                     // "Name1, and Name2"
                     result_parts.push(first);
-                    result_parts.push(Output::literal(format!("{} {} ", delimiter.trim_end(), and)));
+                    result_parts.push(Output::literal(format!(
+                        "{} {} ",
+                        delimiter.trim_end(),
+                        and
+                    )));
                     result_parts.push(second);
                 } else {
                     // "Name1 and Name2"
@@ -1384,9 +1397,14 @@ fn format_names(
                 // Last name
                 if use_and_connector {
                     if let Some(ref and) = and_word {
-                        let use_delim = should_include_delimiter(delimiter_precedes_last, last_idx + 1);
+                        let use_delim =
+                            should_include_delimiter(delimiter_precedes_last, last_idx + 1);
                         if use_delim {
-                            result_parts.push(Output::literal(format!("{} {} ", delimiter.trim_end(), and)));
+                            result_parts.push(Output::literal(format!(
+                                "{} {} ",
+                                delimiter.trim_end(),
+                                and
+                            )));
                         } else {
                             result_parts.push(Output::literal(format!(" {} ", and)));
                         }
@@ -1439,7 +1457,11 @@ fn format_names(
                 .unwrap_or_else(|| "et al.".to_string());
             let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
             if use_delim {
-                result_parts.push(Output::literal(format!("{} {}", delimiter.trim_end(), et_al)));
+                result_parts.push(Output::literal(format!(
+                    "{} {}",
+                    delimiter.trim_end(),
+                    et_al
+                )));
             } else {
                 result_parts.push(Output::literal(format!(" {}", et_al)));
             }
@@ -1486,7 +1508,11 @@ fn format_single_name(
     }
 
     // Look up disambiguation hint for this name
-    let name_key = name.family.clone().or_else(|| name.literal.clone()).unwrap_or_default();
+    let name_key = name
+        .family
+        .clone()
+        .or_else(|| name.literal.clone())
+        .unwrap_or_default();
     let hint = disamb.and_then(|d| d.name_hints.get(&name_key));
 
     // Determine effective form based on disambiguation hint
@@ -1580,15 +1606,23 @@ fn format_single_name(
                         || font_styling.display.is_some()
                         || font_styling.quotes
                         || font_styling.strip_periods;
-                    (if has_font_styling { Some(font_styling) } else { None }, affixes)
+                    (
+                        if has_font_styling {
+                            Some(font_styling)
+                        } else {
+                            None
+                        },
+                        affixes,
+                    )
                 } else {
                     (None, None)
                 };
 
-            // Build family part
-            // If demoting, non-dropping particle is NOT included in family
-            // Apply font styling to individual parts, then wrap with affixes
-            let family_part: Option<Output> = {
+            // Build family "core" part (non-dropping particle + family name)
+            // If demoting, non-dropping particle is NOT included
+            // Apply font styling to individual parts, but DON'T apply affixes yet
+            // Affixes are applied differently for inverted vs display order
+            let family_core: Option<Output> = {
                 let mut fp: Vec<Output> = Vec::new();
                 if !demote_particle {
                     if let Some(ref ndp) = name.non_dropping_particle {
@@ -1613,15 +1647,23 @@ fn format_single_name(
                 if fp.is_empty() {
                     None
                 } else {
-                    let combined = Output::formatted_with_delimiter(Formatting::default(), fp, " ");
-                    // Wrap with familyAffixes (prefix/suffix only) if present
-                    if let Some(ref affixes) = family_affixes {
-                        Some(Output::formatted(affixes.clone(), vec![combined]))
-                    } else {
-                        Some(combined)
-                    }
+                    Some(Output::formatted_with_delimiter(
+                        Formatting::default(),
+                        fp,
+                        " ",
+                    ))
                 }
             };
+
+            // For inverted order, family_part = family_core wrapped with affixes (ndp + family only)
+            // For display order, we'll build a larger unit before applying affixes
+            let family_part_for_inverted: Option<Output> = family_core.clone().map(|core| {
+                if let Some(ref affixes) = family_affixes {
+                    Output::formatted(affixes.clone(), vec![core])
+                } else {
+                    core
+                }
+            });
 
             // Split given_formatting into font styling (for individual elements) and affixes (for wrapper)
             // This matches Haskell citeproc's approach: givenFormatting vs givenAffixes
@@ -1653,7 +1695,14 @@ fn format_single_name(
                         || font_styling.display.is_some()
                         || font_styling.quotes
                         || font_styling.strip_periods;
-                    (if has_font_styling { Some(font_styling) } else { None }, affixes)
+                    (
+                        if has_font_styling {
+                            Some(font_styling)
+                        } else {
+                            None
+                        },
+                        affixes,
+                    )
                 } else {
                     (None, None)
                 };
@@ -1690,17 +1739,19 @@ fn format_single_name(
             });
 
             // Build suffix part
-            let suffix_part: Option<Output> = name.suffix.as_ref().map(|s| Output::literal(s.clone()));
+            let suffix_part: Option<Output> =
+                name.suffix.as_ref().map(|s| Output::literal(s.clone()));
 
             // Build dropping particle part with font styling (not affixes)
-            let dropping_particle_part: Option<Output> = name.dropping_particle.as_ref().map(|dp| {
-                let base = Output::literal(dp.clone());
-                if let Some(ref fmt) = given_font_styling {
-                    Output::formatted(fmt.clone(), vec![base])
-                } else {
-                    base
-                }
-            });
+            let dropping_particle_part: Option<Output> =
+                name.dropping_particle.as_ref().map(|dp| {
+                    let base = Output::literal(dp.clone());
+                    if let Some(ref fmt) = given_font_styling {
+                        Output::formatted(fmt.clone(), vec![base])
+                    } else {
+                        base
+                    }
+                });
 
             // Build demoted non-dropping particle part with FAMILY font styling (when demoted, goes after given)
             // Per Haskell citeproc: non-dropping particle always uses familyFormatting, even when demoted
@@ -1732,7 +1783,7 @@ fn format_single_name(
                     " ".to_string()
                 };
 
-                if let Some(family) = family_part {
+                if let Some(family) = family_part_for_inverted {
                     parts.push(family);
                 }
 
@@ -1790,10 +1841,15 @@ fn format_single_name(
                 let mut parts: Vec<Output> = Vec::new();
 
                 if is_byzantine {
-                    // Western display order: Given + dropping-particle + Family
-                    // Use smart spacing: no space after apostrophe, hyphen, en-dash, or NBSP
+                    // Western display order per Haskell citeproc:
+                    // givenAffixes [ given ] <+>
+                    // familyAffixes [ droppingParticle <+> ndp <+> family <+> suffix ]
+                    //
+                    // Key insight: familyAffixes wraps the ENTIRE family unit including
+                    // dropping particle and suffix, not just ndp + family.
+
+                    // Part 1: Given name wrapped with givenAffixes
                     if let Some(given) = given_part {
-                        // Apply given_affixes (prefix/suffix from name-part formatting)
                         let wrapped = if let Some(ref affixes) = given_affixes {
                             Output::formatted(affixes.clone(), vec![given])
                         } else {
@@ -1802,25 +1858,62 @@ fn format_single_name(
                         parts.push(wrapped);
                     }
 
-                    // Dropping particle goes between given and family (not part of family formatting)
+                    // Part 2: Build family unit (dp + ndp + family + suffix) and wrap with familyAffixes
+                    let mut family_unit_parts: Vec<Output> = Vec::new();
+
+                    // Dropping particle (with given font styling, per Haskell)
                     if let Some(dp) = dropping_particle_part {
-                        // Add space before dropping particle unless previous ends with no-space char
-                        if !parts.is_empty() && !crate::output::ends_with_no_space_char(parts.last().unwrap()) {
-                            parts.push(Output::literal(" ".to_string()));
-                        }
-                        parts.push(dp);
+                        family_unit_parts.push(dp);
                     }
 
-                    if let Some(family) = family_part {
-                        // Add space before family unless previous ends with no-space char
-                        if !parts.is_empty() && !crate::output::ends_with_no_space_char(parts.last().unwrap()) {
-                            parts.push(Output::literal(" ".to_string()));
+                    // Non-dropping particle + family (from family_core, already has family font styling)
+                    if let Some(core) = family_core.clone() {
+                        if !family_unit_parts.is_empty() {
+                            // Add space before core unless previous ends with no-space char
+                            if !crate::output::ends_with_no_space_char(
+                                family_unit_parts.last().unwrap(),
+                            ) {
+                                family_unit_parts.push(Output::literal(" ".to_string()));
+                            }
                         }
-                        parts.push(family);
+                        family_unit_parts.push(core);
                     }
+
+                    // Suffix (with appropriate separator)
+                    if let Some(suffix) = suffix_part.clone() {
+                        if !family_unit_parts.is_empty() {
+                            let separator = if name.comma_suffix.unwrap_or(false) {
+                                ", "
+                            } else {
+                                " "
+                            };
+                            family_unit_parts.push(Output::literal(separator.to_string()));
+                        }
+                        family_unit_parts.push(suffix);
+                    }
+
+                    // Wrap the entire family unit with familyAffixes
+                    if !family_unit_parts.is_empty() {
+                        if !parts.is_empty() {
+                            // Add space between given and family unit
+                            if !crate::output::ends_with_no_space_char(parts.last().unwrap()) {
+                                parts.push(Output::literal(" ".to_string()));
+                            }
+                        }
+                        let family_unit = Output::sequence(family_unit_parts);
+                        let wrapped = if let Some(ref affixes) = family_affixes {
+                            Output::formatted(affixes.clone(), vec![family_unit])
+                        } else {
+                            family_unit
+                        };
+                        parts.push(wrapped);
+                    }
+
+                    Output::sequence(parts)
                 } else {
                     // Non-Byzantine display order: Family + Given (no particles typically)
-                    if let Some(family) = family_part {
+                    // Use family_part_for_inverted which has affixes applied to just ndp + family
+                    if let Some(family) = family_part_for_inverted {
                         parts.push(family);
                     }
 
@@ -1833,25 +1926,8 @@ fn format_single_name(
                         };
                         parts.push(wrapped);
                     }
-                }
 
-                // For non-Byzantine, we already have no delimiter. For Byzantine, we added spaces manually.
-                let main_part = Output::sequence(parts);
-
-                if let Some(suffix) = suffix_part {
-                    // Use comma before suffix if comma_suffix is true (default: false per CSL spec)
-                    let separator = if name.comma_suffix.unwrap_or(false) {
-                        ", "
-                    } else {
-                        " "
-                    };
-                    Output::sequence(vec![
-                        main_part,
-                        Output::literal(separator.to_string()),
-                        suffix,
-                    ])
-                } else {
-                    main_part
+                    Output::sequence(parts)
                 }
             }
         }
@@ -1906,9 +1982,9 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
 
     #[derive(Debug)]
     enum Token {
-        Initial(String),      // Single letter at period/space/end boundary
-        Word(String),         // Multi-letter sequence
-        Unchanged(String),    // Consecutive uppercase like "ME" - preserve as-is
+        Initial(String),   // Single letter at period/space/end boundary
+        Word(String),      // Multi-letter sequence
+        Unchanged(String), // Consecutive uppercase like "ME" - preserve as-is
     }
 
     let mut tokens: Vec<Token> = Vec::new();
@@ -1927,7 +2003,8 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
                         // Short tokens at period boundary are initials (e.g., "M", "Ph")
                         tokens.push(Token::Initial(current.clone()));
                     } else if current.chars().next().map_or(false, |c| c.is_uppercase())
-                        && current.chars().skip(1).any(|c| c.is_lowercase()) {
+                        && current.chars().skip(1).any(|c| c.is_lowercase())
+                    {
                         // Mixed case word like "John" - it's a word
                         tokens.push(Token::Word(current.clone()));
                     } else {
@@ -1940,13 +2017,16 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
             ' ' => {
                 // Space ends a token
                 if !current.is_empty() {
-                    if current.len() == 1 && current.chars().next().map_or(false, |c| c.is_uppercase()) {
+                    if current.len() == 1
+                        && current.chars().next().map_or(false, |c| c.is_uppercase())
+                    {
                         tokens.push(Token::Initial(current.clone()));
                     } else if current.len() > 1 && current.chars().all(|c| c.is_uppercase()) {
                         // Consecutive uppercase at space boundary - preserve unchanged
                         tokens.push(Token::Unchanged(current.clone()));
                     } else if current.chars().next().map_or(false, |c| c.is_uppercase())
-                        && current.chars().skip(1).any(|c| c.is_lowercase()) {
+                        && current.chars().skip(1).any(|c| c.is_lowercase())
+                    {
                         // Mixed case starting with uppercase (like "John") - it's a word
                         tokens.push(Token::Word(current.clone()));
                     } else {
@@ -1968,12 +2048,12 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
         } else if current.len() > 1 && current.chars().all(|c| c.is_uppercase()) {
             // Consecutive uppercase at end without period - preserve unchanged
             tokens.push(Token::Unchanged(current));
-        } else if current.chars().next().map_or(false, |c| c.is_uppercase())
-            && current.len() <= 2 {
+        } else if current.chars().next().map_or(false, |c| c.is_uppercase()) && current.len() <= 2 {
             // Short mixed case like "Me" at end - preserve with trailing period if original had it
             tokens.push(Token::Unchanged(current));
         } else if current.chars().next().map_or(false, |c| c.is_uppercase())
-            && current.chars().skip(1).any(|c| c.is_lowercase()) {
+            && current.chars().skip(1).any(|c| c.is_lowercase())
+        {
             tokens.push(Token::Word(current));
         } else {
             tokens.push(Token::Unchanged(current));
@@ -2031,10 +2111,10 @@ fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: b
 
     #[derive(Debug)]
     enum Token {
-        Initial(String),     // Already an initial (came before a period or single char before space)
-        Word(String),        // A full word to be initialized
-        Particle(String),    // A lowercase particle (de, von, van) to be preserved as-is
-        HyphenPart(String),  // Part after a hyphen (needs special handling)
+        Initial(String), // Already an initial (came before a period or single char before space)
+        Word(String),    // A full word to be initialized
+        Particle(String), // A lowercase particle (de, von, van) to be preserved as-is
+        HyphenPart(String), // Part after a hyphen (needs special handling)
     }
 
     // Helper to classify a string as Word or Particle
@@ -2116,7 +2196,8 @@ fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: b
         match token {
             Token::Initial(s) => {
                 // Add space if after particle or if initialize_with ends with space
-                if prev_was_particle || (prev_was_initial_or_word && initialize_with.ends_with(' ')) {
+                if prev_was_particle || (prev_was_initial_or_word && initialize_with.ends_with(' '))
+                {
                     result.push(' ');
                 }
                 // Initial: output as-is with suffix
@@ -2127,7 +2208,8 @@ fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: b
             }
             Token::Word(s) => {
                 // Add space if after particle or if initialize_with ends with space
-                if prev_was_particle || (prev_was_initial_or_word && initialize_with.ends_with(' ')) {
+                if prev_was_particle || (prev_was_initial_or_word && initialize_with.ends_with(' '))
+                {
                     result.push(' ');
                 }
                 // Word: initialize to first char(s) with suffix
@@ -2217,10 +2299,7 @@ fn evaluate_group(
 }
 
 /// Evaluate a choose element (conditionals).
-fn evaluate_choose(
-    ctx: &mut EvalContext,
-    choose_el: &quarto_csl::ChooseElement,
-) -> Result<Output> {
+fn evaluate_choose(ctx: &mut EvalContext, choose_el: &quarto_csl::ChooseElement) -> Result<Output> {
     for branch in &choose_el.branches {
         // Else branch has no conditions
         if branch.conditions.is_empty() {
@@ -2359,9 +2438,7 @@ fn evaluate_condition(
                         ctx.positions.contains(&Position::Ibid)
                             || ctx.positions.contains(&Position::IbidWithLocator)
                     }
-                    Position::IbidWithLocator => {
-                        ctx.positions.contains(&Position::IbidWithLocator)
-                    }
+                    Position::IbidWithLocator => ctx.positions.contains(&Position::IbidWithLocator),
                     Position::NearNote => ctx.positions.contains(&Position::NearNote),
                 }
             };
@@ -2398,7 +2475,8 @@ fn evaluate_number(
             let get_ordinal_term = |name: &str| -> Option<String> {
                 processor.get_term(name, quarto_csl::TermForm::Long, false)
             };
-            let formatted = format_number_with_form(&num.to_string(), num_el.form, get_ordinal_term);
+            let formatted =
+                format_number_with_form(&num.to_string(), num_el.form, get_ordinal_term);
             // Tag for collapse detection
             Output::tagged(Tag::CitationNumber(num), Output::literal(formatted))
         } else {
@@ -2454,7 +2532,10 @@ fn evaluate_label(
             None => return Ok(Output::Null), // No locator, no label
         }
     } else {
-        (label_el.variable.clone(), ctx.get_variable(&label_el.variable))
+        (
+            label_el.variable.clone(),
+            ctx.get_variable(&label_el.variable),
+        )
     };
 
     // Determine if plural
@@ -2565,10 +2646,7 @@ fn evaluate_date(
     // Handle literal dates (always takes precedence)
     if let Some(ref literal) = date_var.literal {
         let output = Output::literal(literal);
-        return Ok(Output::tagged(
-            Tag::Date(date_el.variable.clone()),
-            output,
-        ));
+        return Ok(Output::tagged(Tag::Date(date_el.variable.clone()), output));
     }
 
     // Try to get structured date parts
@@ -2576,10 +2654,7 @@ fn evaluate_date(
         // No structured date - fall back to raw (unparsed) date string if available
         if let Some(ref raw) = date_var.raw {
             let output = Output::literal(raw);
-            return Ok(Output::tagged(
-                Tag::Date(date_el.variable.clone()),
-                output,
-            ));
+            return Ok(Output::tagged(Tag::Date(date_el.variable.clone()), output));
         }
         return Ok(Output::Null);
     };
@@ -2593,7 +2668,9 @@ fn evaluate_date(
     let include_day = matches!(date_el.date_parts, DatePartsFilter::YearMonthDay);
 
     // Get the date format from the locale if form is specified
-    let locale_format = date_el.form.and_then(|form| ctx.processor.get_date_format(form));
+    let locale_format = date_el
+        .form
+        .and_then(|form| ctx.processor.get_date_format(form));
 
     // Build format parts list
     let format_parts: Vec<_> = if let Some(locale_fmt) = locale_format {
@@ -2638,8 +2715,13 @@ fn evaluate_date(
         )
     } else {
         // Single date
-        let start_output =
-            render_date_parts(ctx, &start_parts, &format_parts, &should_include_part, date_delimiter);
+        let start_output = render_date_parts(
+            ctx,
+            &start_parts,
+            &format_parts,
+            &should_include_part,
+            date_delimiter,
+        );
         if format_parts.is_empty() {
             // Just render the year if no format parts
             if let Some(year) = start_parts.year {
@@ -2748,19 +2830,15 @@ where
                     format!("{}{}", display_year, era_suffix)
                 })
             }
-            DatePartName::Month => {
-                parts.month.and_then(|m| {
-                    let form = part.form.unwrap_or(DatePartForm::Long);
-                    format_month_or_season(ctx, m, form)
-                })
-            }
-            DatePartName::Day => {
-                parts.day.map(|d| {
-                    let form = part.form.unwrap_or(DatePartForm::Numeric);
-                    let limit_ordinals = ctx.processor.limit_day_ordinals_to_day_1();
-                    format_day(d, form, limit_ordinals)
-                })
-            }
+            DatePartName::Month => parts.month.and_then(|m| {
+                let form = part.form.unwrap_or(DatePartForm::Long);
+                format_month_or_season(ctx, m, form)
+            }),
+            DatePartName::Day => parts.day.map(|d| {
+                let form = part.form.unwrap_or(DatePartForm::Numeric);
+                let limit_ordinals = ctx.processor.limit_day_ordinals_to_day_1();
+                format_day(d, form, limit_ordinals)
+            }),
         };
 
         if let Some(v) = value {
@@ -2815,9 +2893,8 @@ where
     use quarto_csl::DatePartName;
 
     // Check for open-ended range (year=0 means open)
-    let is_open_range = end_parts.year == Some(0)
-        && end_parts.month.is_none()
-        && end_parts.day.is_none();
+    let is_open_range =
+        end_parts.year == Some(0) && end_parts.month.is_none() && end_parts.day.is_none();
 
     if is_open_range {
         // Open range: just render start date with trailing range delimiter
@@ -2827,7 +2904,8 @@ where
             .find(|p| p.name == DatePartName::Year)
             .and_then(|p| p.range_delimiter.as_deref())
             .unwrap_or(default_range_delimiter);
-        let start_output = render_date_parts(ctx, start_parts, format_parts, should_include, delimiter);
+        let start_output =
+            render_date_parts(ctx, start_parts, format_parts, should_include, delimiter);
         return Output::sequence(vec![start_output, Output::literal(open_range_delim)]);
     }
 
@@ -2912,7 +2990,7 @@ where
             differing,
             should_include,
             delimiter,
-            true, // strip last suffix
+            true,  // strip last suffix
             false, // don't strip first prefix
         );
 
@@ -2942,7 +3020,8 @@ where
 
     // Render trailing same parts (from start date, since they're the same)
     if !trailing_same.is_empty() {
-        let trailing = render_date_parts(ctx, start_parts, trailing_same, should_include, delimiter);
+        let trailing =
+            render_date_parts(ctx, start_parts, trailing_same, should_include, delimiter);
         if !trailing.is_null() {
             // Add delimiter between differing parts and trailing same parts
             if !outputs.is_empty() {
@@ -2981,47 +3060,41 @@ where
         }
 
         let value = match part.name {
-            DatePartName::Year => {
-                parts.year.map(|y| {
-                    let (display_year, era_suffix) = if y < 0 {
-                        let bc = ctx
-                            .get_term("bc", quarto_csl::TermForm::Long, false)
-                            .unwrap_or_else(|| "BC".to_string());
-                        let bc = if delimiter.is_some() {
-                            bc.trim_start().to_string()
-                        } else {
-                            bc
-                        };
-                        ((-y).to_string(), bc)
-                    } else if y > 0 && y < 1000 {
-                        let ad = ctx
-                            .get_term("ad", quarto_csl::TermForm::Long, false)
-                            .unwrap_or_else(|| "AD".to_string());
-                        let ad = if delimiter.is_some() {
-                            ad.trim_start().to_string()
-                        } else {
-                            ad
-                        };
-                        (y.to_string(), ad)
+            DatePartName::Year => parts.year.map(|y| {
+                let (display_year, era_suffix) = if y < 0 {
+                    let bc = ctx
+                        .get_term("bc", quarto_csl::TermForm::Long, false)
+                        .unwrap_or_else(|| "BC".to_string());
+                    let bc = if delimiter.is_some() {
+                        bc.trim_start().to_string()
                     } else {
-                        (y.to_string(), String::new())
+                        bc
                     };
-                    format!("{}{}", display_year, era_suffix)
-                })
-            }
-            DatePartName::Month => {
-                parts.month.and_then(|m| {
-                    let form = part.form.unwrap_or(DatePartForm::Long);
-                    format_month_or_season(ctx, m, form)
-                })
-            }
-            DatePartName::Day => {
-                parts.day.map(|d| {
-                    let form = part.form.unwrap_or(DatePartForm::Numeric);
-                    let limit_ordinals = ctx.processor.limit_day_ordinals_to_day_1();
-                    format_day(d, form, limit_ordinals)
-                })
-            }
+                    ((-y).to_string(), bc)
+                } else if y > 0 && y < 1000 {
+                    let ad = ctx
+                        .get_term("ad", quarto_csl::TermForm::Long, false)
+                        .unwrap_or_else(|| "AD".to_string());
+                    let ad = if delimiter.is_some() {
+                        ad.trim_start().to_string()
+                    } else {
+                        ad
+                    };
+                    (y.to_string(), ad)
+                } else {
+                    (y.to_string(), String::new())
+                };
+                format!("{}{}", display_year, era_suffix)
+            }),
+            DatePartName::Month => parts.month.and_then(|m| {
+                let form = part.form.unwrap_or(DatePartForm::Long);
+                format_month_or_season(ctx, m, form)
+            }),
+            DatePartName::Day => parts.day.map(|d| {
+                let form = part.form.unwrap_or(DatePartForm::Numeric);
+                let limit_ordinals = ctx.processor.limit_day_ordinals_to_day_1();
+                format_day(d, form, limit_ordinals)
+            }),
         };
 
         if let Some(v) = value {
@@ -3304,7 +3377,11 @@ fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
     for c in value.chars() {
         if c == ',' || c == '&' {
             // Process the accumulated segment (preserve trailing spaces in result)
-            result.push_str(&format_page_segment(&current, page_range_delimiter, has_escaped));
+            result.push_str(&format_page_segment(
+                &current,
+                page_range_delimiter,
+                has_escaped,
+            ));
             current.clear();
             result.push(c);
         } else {
@@ -3313,7 +3390,11 @@ fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
     }
 
     // Process any remaining segment
-    result.push_str(&format_page_segment(&current, page_range_delimiter, has_escaped));
+    result.push_str(&format_page_segment(
+        &current,
+        page_range_delimiter,
+        has_escaped,
+    ));
 
     result
 }
@@ -3323,7 +3404,14 @@ fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
 fn format_page_segment(segment: &str, delimiter: &str, has_escaped: bool) -> String {
     // Preserve leading and trailing whitespace
     let leading: String = segment.chars().take_while(|c| c.is_whitespace()).collect();
-    let trailing: String = segment.chars().rev().take_while(|c| c.is_whitespace()).collect::<String>().chars().rev().collect();
+    let trailing: String = segment
+        .chars()
+        .rev()
+        .take_while(|c| c.is_whitespace())
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
     let trimmed = segment.trim();
 
     if trimmed.is_empty() {
@@ -3345,7 +3433,14 @@ fn format_page_segment(segment: &str, delimiter: &str, has_escaped: bool) -> Str
 
         // Only treat as range if both parts are non-empty
         if !start.trim().is_empty() && !end.trim().is_empty() {
-            return format!("{}{}{}{}{}", leading, start.trim(), delimiter, end.trim(), trailing);
+            return format!(
+                "{}{}{}{}{}",
+                leading,
+                start.trim(),
+                delimiter,
+                end.trim(),
+                trailing
+            );
         }
     }
 
@@ -3440,7 +3535,10 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(format_single_name_to_string(&name, &options, false, None, true), "Smith");
+        assert_eq!(
+            format_single_name_to_string(&name, &options, false, None, true),
+            "Smith"
+        );
     }
 
     #[test]
@@ -3454,9 +3552,15 @@ mod tests {
         let options = quarto_csl::InheritableNameOptions::default();
 
         // Normal order: Given Family
-        assert_eq!(format_single_name_to_string(&name, &options, false, None, true), "John Smith");
+        assert_eq!(
+            format_single_name_to_string(&name, &options, false, None, true),
+            "John Smith"
+        );
         // Inverted order: Family, Given
-        assert_eq!(format_single_name_to_string(&name, &options, true, None, true), "Smith, John");
+        assert_eq!(
+            format_single_name_to_string(&name, &options, true, None, true),
+            "Smith, John"
+        );
     }
 
     #[test]

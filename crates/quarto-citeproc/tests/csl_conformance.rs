@@ -337,9 +337,7 @@ fn parse_complex_citations_format(
     let mut citations = Vec::new();
 
     for entry in outer_array {
-        let entry_array = entry
-            .as_array()
-            .ok_or("CITATIONS entry must be an array")?;
+        let entry_array = entry.as_array().ok_or("CITATIONS entry must be an array")?;
 
         // First element is the citation object
         let citation_obj = entry_array
@@ -389,7 +387,9 @@ fn parse_simple_citations_format(
     let mut citations = Vec::new();
 
     for cite_group in outer_array {
-        let group_array = cite_group.as_array().ok_or("Citation group must be an array")?;
+        let group_array = cite_group
+            .as_array()
+            .ok_or("Citation group must be an array")?;
 
         let items: Vec<CitationItem> = group_array
             .iter()
@@ -473,10 +473,7 @@ fn parse_citation_item(v: &serde_json::Value) -> Option<CitationItem> {
             .get("suffix")
             .and_then(|s| s.as_str())
             .map(|s| s.to_string()),
-        position: v
-            .get("position")
-            .and_then(|p| p.as_i64())
-            .map(|n| n as i32),
+        position: v.get("position").and_then(|p| p.as_i64()).map(|n| n as i32),
         ..Default::default()
     })
 }
@@ -486,9 +483,7 @@ fn format_bib_entry(entry: &str) -> String {
     // Different display attributes use different formatting:
     // - left-margin/right-inline: newline after opening, 4-space indent before content
     // - indent/block: content inline with opening, only newline before closing
-    if entry.contains("class=\"csl-left-margin\"")
-        || entry.contains("class=\"csl-right-inline\"")
-    {
+    if entry.contains("class=\"csl-left-margin\"") || entry.contains("class=\"csl-right-inline\"") {
         // SecondFieldAlign style: newline and indent before inner divs
         format!("  <div class=\"csl-entry\">\n    {}\n  </div>", entry)
     } else if entry.contains("class=\"csl-indent\"") || entry.contains("class=\"csl-block\"") {

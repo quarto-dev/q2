@@ -3,8 +3,11 @@
 //! Locale files are standalone XML files that define language-specific
 //! terms, date formats, and style options.
 
-use quarto_csl::{DateFormat, DateForm, DatePart, DatePartForm, DatePartName, Formatting, Locale, StyleOptions, Term, TermForm};
-use quarto_xml::{parse, XmlElement};
+use quarto_csl::{
+    DateForm, DateFormat, DatePart, DatePartForm, DatePartName, Formatting, Locale, StyleOptions,
+    Term, TermForm,
+};
+use quarto_xml::{XmlElement, parse};
 
 /// Parse a locale XML file.
 pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
@@ -13,7 +16,10 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
     let root = &doc.root;
 
     if root.name != "locale" {
-        return Err(format!("Expected <locale> root element, found <{}>", root.name));
+        return Err(format!(
+            "Expected <locale> root element, found <{}>",
+            root.name
+        ));
     }
 
     // Get lang from xml:lang attribute
@@ -260,7 +266,11 @@ mod tests {
         assert_eq!(locale.terms.len(), 4);
 
         // Check simple term
-        let and_term = locale.terms.iter().find(|t| t.name == "and" && t.form == TermForm::Long).unwrap();
+        let and_term = locale
+            .terms
+            .iter()
+            .find(|t| t.name == "and" && t.form == TermForm::Long)
+            .unwrap();
         assert_eq!(and_term.value, Some("and".to_string()));
 
         // Check plural term
@@ -269,7 +279,11 @@ mod tests {
         assert_eq!(editor_term.multiple, Some("editors".to_string()));
 
         // Check symbol form
-        let and_symbol = locale.terms.iter().find(|t| t.name == "and" && t.form == TermForm::Symbol).unwrap();
+        let and_symbol = locale
+            .terms
+            .iter()
+            .find(|t| t.name == "and" && t.form == TermForm::Symbol)
+            .unwrap();
         assert_eq!(and_symbol.value, Some("&".to_string()));
     }
 

@@ -246,7 +246,10 @@ pub struct Name {
     pub dropping_particle: Option<String>,
 
     /// Non-dropping particle (e.g., "van" in "Vincent van Gogh").
-    #[serde(rename = "non-dropping-particle", skip_serializing_if = "Option::is_none")]
+    #[serde(
+        rename = "non-dropping-particle",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub non_dropping_particle: Option<String>,
 
     /// Suffix (e.g., "Jr.", "III").
@@ -307,7 +310,7 @@ impl Name {
             if let Some(given) = self.given.clone() {
                 // Don't process quoted names (CSL-JSON convention for literal names)
                 if given.starts_with('"') && given.ends_with('"') {
-                    self.given = Some(given[1..given.len()-1].to_string());
+                    self.given = Some(given[1..given.len() - 1].to_string());
                 } else {
                     let words: Vec<&str> = given.split_whitespace().collect();
                     if words.len() > 1 {
@@ -338,14 +341,17 @@ impl Name {
             if let Some(family) = self.family.clone() {
                 // Don't process quoted names
                 if family.starts_with('"') && family.ends_with('"') {
-                    self.family = Some(family[1..family.len()-1].to_string());
+                    self.family = Some(family[1..family.len() - 1].to_string());
                 } else {
                     let words: Vec<&str> = family.split_whitespace().collect();
                     if words.len() > 1 {
                         // Find how many leading words are particle-like
-                        let particle_count = words.iter().take_while(|w| {
-                            w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
-                        }).count();
+                        let particle_count = words
+                            .iter()
+                            .take_while(|w| {
+                                w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
+                            })
+                            .count();
 
                         if particle_count > 0 && particle_count < words.len() {
                             self.non_dropping_particle = Some(words[..particle_count].join(" "));
@@ -562,9 +568,7 @@ impl DateVariable {
                 // If there's no month but there's a season, use season as pseudo-month
                 // Seasons are 1=spring, 2=summer, 3=fall/autumn, 4=winter
                 // Pseudo-months are 21=spring, 22=summer, 23=fall, 24=winter
-                let month = month_from_parts.or_else(|| {
-                    self.season.map(|s| 20 + s)
-                });
+                let month = month_from_parts.or_else(|| self.season.map(|s| 20 + s));
                 DateParts {
                     year,
                     month,
@@ -624,11 +628,7 @@ impl Reference {
                     self.page.as_ref().and_then(|p| {
                         // Extract first number from page range (e.g., "22-45" -> "22")
                         let first: String = p.chars().take_while(|c| c.is_ascii_digit()).collect();
-                        if first.is_empty() {
-                            None
-                        } else {
-                            Some(first)
-                        }
+                        if first.is_empty() { None } else { Some(first) }
                     })
                 })
             }
@@ -854,55 +854,14 @@ fn strip_particle(family: &str) -> &str {
     // Common particles (lowercase). Order matters for multi-word particles.
     const PARTICLES: &[&str] = &[
         // Multi-word particles first (longer matches before shorter)
-        "van de ",
-        "van der ",
-        "van den ",
-        "van het ",
-        "von der ",
-        "von dem ",
-        "von zu ",
-        "auf den ",
-        "in de ",
-        "in 't ",
-        "in het ",
-        "uit de ",
-        "uit den ",
-        "op de ",
+        "van de ", "van der ", "van den ", "van het ", "von der ", "von dem ", "von zu ",
+        "auf den ", "in de ", "in 't ", "in het ", "uit de ", "uit den ", "op de ",
         // Single-word particles
-        "von ",
-        "van ",
-        "de ",
-        "di ",
-        "da ",
-        "del ",
-        "dela ",
-        "della ",
-        "dello ",
-        "den ",
-        "der ",
-        "des ",
-        "du ",
-        "la ",
-        "le ",
-        "lo ",
-        "les ",
-        "ten ",
-        "ter ",
-        "te ",
-        "auf ",
-        "zum ",
-        "zur ",
-        "vom ",
-        "am ",
-        "el ",
-        "al ",
-        "il ",
-        "dos ",
-        "das ",
+        "von ", "van ", "de ", "di ", "da ", "del ", "dela ", "della ", "dello ", "den ", "der ",
+        "des ", "du ", "la ", "le ", "lo ", "les ", "ten ", "ter ", "te ", "auf ", "zum ", "zur ",
+        "vom ", "am ", "el ", "al ", "il ", "dos ", "das ",
         // With apostrophe (these end with the particle including apostrophe)
-        "l'",
-        "d'",
-        "'t ",
+        "l'", "d'", "'t ",
     ];
 
     let lower = family.to_lowercase();

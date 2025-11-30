@@ -51,10 +51,7 @@ pub enum Tag {
     /// A single formatted name.
     Name(Name),
     /// A group of names from a variable.
-    Names {
-        variable: String,
-        names: Vec<Name>,
-    },
+    Names { variable: String, names: Vec<Name> },
     /// A formatted date (variable name like "issued", "accessed").
     Date(String),
     /// Year suffix for disambiguation (a, b, c, ...).
@@ -83,19 +80,13 @@ pub enum Output {
         children: Vec<Output>,
     },
     /// A hyperlink wrapping children.
-    Linked {
-        url: String,
-        children: Vec<Output>,
-    },
+    Linked { url: String, children: Vec<Output> },
     /// Content that should appear in a footnote.
     InNote(Box<Output>),
     /// Literal text content.
     Literal(String),
     /// Semantically tagged content for post-processing.
-    Tagged {
-        tag: Tag,
-        child: Box<Output>,
-    },
+    Tagged { tag: Tag, child: Box<Output> },
     /// Empty/null output.
     Null,
 }
@@ -256,7 +247,13 @@ impl Output {
                         capitalized = did_cap;
                     }
                 }
-                (Output::Linked { url, children: new_children }, capitalized)
+                (
+                    Output::Linked {
+                        url,
+                        children: new_children,
+                    },
+                    capitalized,
+                )
             }
             Output::InNote(child) => {
                 let (new_child, did_cap) = child.capitalize_first_inner();
@@ -733,8 +730,8 @@ fn empty_target_source() -> quarto_pandoc_types::TargetSourceInfo {
 fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
     use quarto_csl::{FontStyle, FontVariant, FontWeight, VerticalAlign};
     use quarto_pandoc_types::{
-        empty_attr, Block, Emph, Inline, Link, Note, Paragraph, Quoted, QuoteType, SmallCaps,
-        Span, Str, Strong, Subscript, Superscript,
+        Block, Emph, Inline, Link, Note, Paragraph, QuoteType, Quoted, SmallCaps, Span, Str,
+        Strong, Subscript, Superscript, empty_attr,
     };
 
     match output {
@@ -1154,7 +1151,10 @@ fn extract_display_regions(output: &Output) -> Vec<DisplayRegion> {
 }
 
 /// Apply text case transformation to all Str nodes in an Inlines vector.
-fn apply_text_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, text_case: &quarto_csl::TextCase) {
+fn apply_text_case_to_inlines(
+    inlines: &mut quarto_pandoc_types::Inlines,
+    text_case: &quarto_csl::TextCase,
+) {
     use quarto_csl::TextCase;
 
     // For title case, we need to track state across all Str nodes
@@ -1163,7 +1163,12 @@ fn apply_text_case_to_inlines(inlines: &mut quarto_pandoc_types::Inlines, text_c
         let mut seen_first_word = false;
         // Find the index of the last Str that contains word content
         let last_word_index = find_last_word_str_index(inlines);
-        apply_title_case_to_inlines_with_last(inlines, &mut seen_first_word, last_word_index, &mut 0);
+        apply_title_case_to_inlines_with_last(
+            inlines,
+            &mut seen_first_word,
+            last_word_index,
+            &mut 0,
+        );
     } else {
         apply_text_case_to_inlines_simple(inlines, text_case);
     }
@@ -1177,7 +1182,11 @@ fn find_last_word_str_index(inlines: &quarto_pandoc_types::Inlines) -> Option<us
     let mut last_index: Option<usize> = None;
     let mut current_index = 0;
 
-    fn visit(inline: &quarto_pandoc_types::Inline, current_index: &mut usize, last_index: &mut Option<usize>) {
+    fn visit(
+        inline: &quarto_pandoc_types::Inline,
+        current_index: &mut usize,
+        last_index: &mut Option<usize>,
+    ) {
         match inline {
             Inline::Str(s) => {
                 // Check if this Str contains any word characters
@@ -1239,14 +1248,25 @@ fn apply_title_case_to_inlines_with_last(
         match inline {
             Inline::Str(s) => {
                 let is_last_word_segment = last_word_index == Some(*current_index);
-                s.text = title_case_with_state_and_last(&s.text, seen_first_word, is_last_word_segment);
+                s.text =
+                    title_case_with_state_and_last(&s.text, seen_first_word, is_last_word_segment);
                 *current_index += 1;
             }
             Inline::Emph(e) => {
-                apply_title_case_to_inlines_with_last(&mut e.content, seen_first_word, last_word_index, current_index);
+                apply_title_case_to_inlines_with_last(
+                    &mut e.content,
+                    seen_first_word,
+                    last_word_index,
+                    current_index,
+                );
             }
             Inline::Strong(s) => {
-                apply_title_case_to_inlines_with_last(&mut s.content, seen_first_word, last_word_index, current_index);
+                apply_title_case_to_inlines_with_last(
+                    &mut s.content,
+                    seen_first_word,
+                    last_word_index,
+                    current_index,
+                );
             }
             // SmallCaps, Superscript, Subscript are "implicit nocase" per CSL-JSON spec
             // But they still "consume" the first word position if they contain text
@@ -1266,10 +1286,20 @@ fn apply_title_case_to_inlines_with_last(
                 }
             }
             Inline::Quoted(q) => {
-                apply_title_case_to_inlines_with_last(&mut q.content, seen_first_word, last_word_index, current_index);
+                apply_title_case_to_inlines_with_last(
+                    &mut q.content,
+                    seen_first_word,
+                    last_word_index,
+                    current_index,
+                );
             }
             Inline::Link(l) => {
-                apply_title_case_to_inlines_with_last(&mut l.content, seen_first_word, last_word_index, current_index);
+                apply_title_case_to_inlines_with_last(
+                    &mut l.content,
+                    seen_first_word,
+                    last_word_index,
+                    current_index,
+                );
             }
             Inline::Span(s) => {
                 let (_, classes, _) = &s.attr;
@@ -1279,7 +1309,12 @@ fn apply_title_case_to_inlines_with_last(
                         *seen_first_word = true;
                     }
                 } else {
-                    apply_title_case_to_inlines_with_last(&mut s.content, seen_first_word, last_word_index, current_index);
+                    apply_title_case_to_inlines_with_last(
+                        &mut s.content,
+                        seen_first_word,
+                        last_word_index,
+                        current_index,
+                    );
                 }
             }
             _ => {}
@@ -1288,7 +1323,10 @@ fn apply_title_case_to_inlines_with_last(
 }
 
 /// Apply non-title text case transformations (simple per-node processing).
-fn apply_text_case_to_inlines_simple(inlines: &mut quarto_pandoc_types::Inlines, text_case: &quarto_csl::TextCase) {
+fn apply_text_case_to_inlines_simple(
+    inlines: &mut quarto_pandoc_types::Inlines,
+    text_case: &quarto_csl::TextCase,
+) {
     use quarto_csl::TextCase;
     use quarto_pandoc_types::Inline;
 
@@ -1525,53 +1563,56 @@ pub fn fix_punct(strings: Vec<String>) -> Vec<String> {
             // Determine how to handle the punctuation collision
             let (keep_x, keep_y) = match (x_end, y_start) {
                 // Based on Pandoc citeproc Types.hs fixPunct
-                ('!', '.') => (true, false),  // keepFirst
-                ('!', '?') => (true, true),   // keepBoth
-                ('!', ':') => (true, false),  // keepFirst
-                ('!', ',') => (true, true),   // keepBoth
-                ('!', ';') => (true, true),   // keepBoth
-                ('?', '!') => (true, true),   // keepBoth
-                ('?', '.') => (true, false),  // keepFirst
-                ('?', ':') => (true, false),  // keepFirst
-                ('?', ',') => (true, true),   // keepBoth
-                ('?', ';') => (true, true),   // keepBoth
-                ('.', '!') => (true, true),   // keepBoth
-                ('.', '?') => (true, true),   // keepBoth
-                ('.', ':') => (true, true),   // keepBoth
-                ('.', ',') => (true, true),   // keepBoth
-                ('.', ';') => (true, true),   // keepBoth
-                (':', '!') => (false, true),  // keepSecond
-                (':', '?') => (false, true),  // keepSecond
-                (':', '.') => (true, false),  // keepFirst
-                (':', ',') => (true, true),   // keepBoth
-                (':', ';') => (true, true),   // keepBoth
-                (',', '!') => (true, true),   // keepBoth
-                (',', '?') => (true, true),   // keepBoth
-                (',', ':') => (true, true),   // keepBoth
-                (',', '.') => (true, true),   // keepBoth
-                (',', ';') => (true, true),   // keepBoth
-                (';', '!') => (false, true),  // keepSecond
-                (';', '?') => (false, true),  // keepSecond
-                (';', ':') => (true, false),  // keepFirst
-                (';', '.') => (true, false),  // keepFirst
-                (';', ',') => (true, true),   // keepBoth
-                ('!', '!') => (true, false),  // keepFirst
-                ('?', '?') => (true, false),  // keepFirst
-                ('.', '.') => (true, false),  // keepFirst
-                (':', ':') => (true, false),  // keepFirst
-                (';', ';') => (true, false),  // keepFirst
-                (',', ',') => (true, false),  // keepFirst
-                (' ', ' ') => (false, true),  // keepSecond
-                (' ', ',') => (false, true),  // keepSecond
-                (' ', '.') => (false, true),  // keepSecond
-                _ => (true, true),            // keepBoth - default
+                ('!', '.') => (true, false), // keepFirst
+                ('!', '?') => (true, true),  // keepBoth
+                ('!', ':') => (true, false), // keepFirst
+                ('!', ',') => (true, true),  // keepBoth
+                ('!', ';') => (true, true),  // keepBoth
+                ('?', '!') => (true, true),  // keepBoth
+                ('?', '.') => (true, false), // keepFirst
+                ('?', ':') => (true, false), // keepFirst
+                ('?', ',') => (true, true),  // keepBoth
+                ('?', ';') => (true, true),  // keepBoth
+                ('.', '!') => (true, true),  // keepBoth
+                ('.', '?') => (true, true),  // keepBoth
+                ('.', ':') => (true, true),  // keepBoth
+                ('.', ',') => (true, true),  // keepBoth
+                ('.', ';') => (true, true),  // keepBoth
+                (':', '!') => (false, true), // keepSecond
+                (':', '?') => (false, true), // keepSecond
+                (':', '.') => (true, false), // keepFirst
+                (':', ',') => (true, true),  // keepBoth
+                (':', ';') => (true, true),  // keepBoth
+                (',', '!') => (true, true),  // keepBoth
+                (',', '?') => (true, true),  // keepBoth
+                (',', ':') => (true, true),  // keepBoth
+                (',', '.') => (true, true),  // keepBoth
+                (',', ';') => (true, true),  // keepBoth
+                (';', '!') => (false, true), // keepSecond
+                (';', '?') => (false, true), // keepSecond
+                (';', ':') => (true, false), // keepFirst
+                (';', '.') => (true, false), // keepFirst
+                (';', ',') => (true, true),  // keepBoth
+                ('!', '!') => (true, false), // keepFirst
+                ('?', '?') => (true, false), // keepFirst
+                ('.', '.') => (true, false), // keepFirst
+                (':', ':') => (true, false), // keepFirst
+                (';', ';') => (true, false), // keepFirst
+                (',', ',') => (true, false), // keepFirst
+                (' ', ' ') => (false, true), // keepSecond
+                (' ', ',') => (false, true), // keepSecond
+                (' ', '.') => (false, true), // keepSecond
+                _ => (true, true),           // keepBoth - default
             };
 
             if keep_x {
                 result.push(x);
             } else {
                 // Trim the end character from x
-                let trimmed = x.chars().take(x.chars().count().saturating_sub(1)).collect::<String>();
+                let trimmed = x
+                    .chars()
+                    .take(x.chars().count().saturating_sub(1))
+                    .collect::<String>();
                 if !trimmed.is_empty() {
                     result.push(trimmed);
                 }
@@ -1640,46 +1681,46 @@ pub fn join_with_smart_delim(strings: Vec<String>, delimiter: &str) -> String {
 fn punct_collision_rule(x_end: char, y_start: char) -> (bool, bool) {
     match (x_end, y_start) {
         // Based on Pandoc citeproc Types.hs fixPunct
-        ('!', '.') => (true, false),  // keepFirst
-        ('!', '?') => (true, true),   // keepBoth
-        ('!', ':') => (true, false),  // keepFirst
-        ('!', ',') => (true, true),   // keepBoth
-        ('!', ';') => (true, true),   // keepBoth
-        ('?', '!') => (true, true),   // keepBoth
-        ('?', '.') => (true, false),  // keepFirst
-        ('?', ':') => (true, false),  // keepFirst
-        ('?', ',') => (true, true),   // keepBoth
-        ('?', ';') => (true, true),   // keepBoth
-        ('.', '!') => (true, true),   // keepBoth
-        ('.', '?') => (true, true),   // keepBoth
-        ('.', ':') => (true, true),   // keepBoth
-        ('.', ',') => (true, true),   // keepBoth
-        ('.', ';') => (true, true),   // keepBoth
-        (':', '!') => (false, true),  // keepSecond
-        (':', '?') => (false, true),  // keepSecond
-        (':', '.') => (true, false),  // keepFirst
-        (':', ',') => (true, true),   // keepBoth
-        (':', ';') => (true, true),   // keepBoth
-        (',', '!') => (true, true),   // keepBoth
-        (',', '?') => (true, true),   // keepBoth
-        (',', ':') => (true, true),   // keepBoth
-        (',', '.') => (true, true),   // keepBoth
-        (',', ';') => (true, true),   // keepBoth
-        (';', '!') => (false, true),  // keepSecond
-        (';', '?') => (false, true),  // keepSecond
-        (';', ':') => (true, false),  // keepFirst
-        (';', '.') => (true, false),  // keepFirst
-        (';', ',') => (true, true),   // keepBoth
-        ('!', '!') => (true, false),  // keepFirst
-        ('?', '?') => (true, false),  // keepFirst
-        ('.', '.') => (true, false),  // keepFirst
-        (':', ':') => (true, false),  // keepFirst
-        (';', ';') => (true, false),  // keepFirst
-        (',', ',') => (true, false),  // keepFirst
-        (' ', ' ') => (false, true),  // keepSecond
-        (' ', ',') => (false, true),  // keepSecond
-        (' ', '.') => (false, true),  // keepSecond
-        _ => (true, true),            // keepBoth - default
+        ('!', '.') => (true, false), // keepFirst
+        ('!', '?') => (true, true),  // keepBoth
+        ('!', ':') => (true, false), // keepFirst
+        ('!', ',') => (true, true),  // keepBoth
+        ('!', ';') => (true, true),  // keepBoth
+        ('?', '!') => (true, true),  // keepBoth
+        ('?', '.') => (true, false), // keepFirst
+        ('?', ':') => (true, false), // keepFirst
+        ('?', ',') => (true, true),  // keepBoth
+        ('?', ';') => (true, true),  // keepBoth
+        ('.', '!') => (true, true),  // keepBoth
+        ('.', '?') => (true, true),  // keepBoth
+        ('.', ':') => (true, true),  // keepBoth
+        ('.', ',') => (true, true),  // keepBoth
+        ('.', ';') => (true, true),  // keepBoth
+        (':', '!') => (false, true), // keepSecond
+        (':', '?') => (false, true), // keepSecond
+        (':', '.') => (true, false), // keepFirst
+        (':', ',') => (true, true),  // keepBoth
+        (':', ';') => (true, true),  // keepBoth
+        (',', '!') => (true, true),  // keepBoth
+        (',', '?') => (true, true),  // keepBoth
+        (',', ':') => (true, true),  // keepBoth
+        (',', '.') => (true, true),  // keepBoth
+        (',', ';') => (true, true),  // keepBoth
+        (';', '!') => (false, true), // keepSecond
+        (';', '?') => (false, true), // keepSecond
+        (';', ':') => (true, false), // keepFirst
+        (';', '.') => (true, false), // keepFirst
+        (';', ',') => (true, true),  // keepBoth
+        ('!', '!') => (true, false), // keepFirst
+        ('?', '?') => (true, false), // keepFirst
+        ('.', '.') => (true, false), // keepFirst
+        (':', ':') => (true, false), // keepFirst
+        (';', ';') => (true, false), // keepFirst
+        (',', ',') => (true, false), // keepFirst
+        (' ', ' ') => (false, true), // keepSecond
+        (' ', ',') => (false, true), // keepSecond
+        (' ', '.') => (false, true), // keepSecond
+        _ => (true, true),           // keepBoth - default
     }
 }
 
@@ -1694,7 +1735,9 @@ fn punct_collision_rule(x_end: char, y_start: char) -> (bool, bool) {
 /// list of rendered siblings, not on the final flattened output. This preserves
 /// intentional punctuation sequences (like `, , ` from separate delimiters)
 /// while still fixing collisions at affix boundaries.
-fn fix_punct_siblings(siblings: Vec<Vec<quarto_pandoc_types::Inline>>) -> Vec<Vec<quarto_pandoc_types::Inline>> {
+fn fix_punct_siblings(
+    siblings: Vec<Vec<quarto_pandoc_types::Inline>>,
+) -> Vec<Vec<quarto_pandoc_types::Inline>> {
     use quarto_pandoc_types::Inline;
 
     if siblings.len() < 2 {
@@ -2147,9 +2190,7 @@ fn recurse_punct_in_quotes(output: Output) -> Output {
             url,
             children: move_punct_in_children(children),
         },
-        Output::InNote(child) => {
-            Output::InNote(Box::new(move_punctuation_inside_quotes(*child)))
-        }
+        Output::InNote(child) => Output::InNote(Box::new(move_punctuation_inside_quotes(*child))),
         Output::Tagged { tag, child } => {
             // Don't apply punctuation-in-quote inside Prefix or Suffix tags.
             // These contain user-specified content where punctuation should stay as typed.
@@ -2295,7 +2336,10 @@ fn ends_with_punct(children: &[Output], punct: char) -> bool {
 fn output_ends_with_char(output: &Output, c: char) -> bool {
     match output {
         Output::Literal(s) => s.ends_with(c),
-        Output::Formatted { formatting, children } => {
+        Output::Formatted {
+            formatting,
+            children,
+        } => {
             // If there's a suffix, check the suffix for the ending character
             if let Some(ref suffix) = formatting.suffix {
                 if !suffix.is_empty() {
@@ -2326,14 +2370,16 @@ fn output_ends_with_char(output: &Output, c: char) -> bool {
 /// hyphenated names.
 pub fn ends_with_no_space_char(output: &Output) -> bool {
     const NO_SPACE_CHARS: &[char] = &[
-        '\'',      // apostrophe U+0027
+        '\'',       // apostrophe U+0027
         '\u{2019}', // right single quotation mark
-        '-',       // hyphen-minus
+        '-',        // hyphen-minus
         '\u{2013}', // en dash
         '\u{00A0}', // non-breaking space
     ];
 
-    NO_SPACE_CHARS.iter().any(|&c| output_ends_with_char(output, c))
+    NO_SPACE_CHARS
+        .iter()
+        .any(|&c| output_ends_with_char(output, c))
 }
 
 // ============================================================================
@@ -2392,7 +2438,9 @@ impl<'a> RichTextParser<'a> {
                 if self.remaining().starts_with(tag) {
                     // Flush accumulated text
                     if self.pos > text_start {
-                        children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+                        children.push(Output::Literal(
+                            self.input[text_start..self.pos].to_string(),
+                        ));
                     }
                     self.pos += tag.len();
                     return children;
@@ -2403,7 +2451,9 @@ impl<'a> RichTextParser<'a> {
             if self.remaining().starts_with('<') {
                 // Flush accumulated text
                 if self.pos > text_start {
-                    children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+                    children.push(Output::Literal(
+                        self.input[text_start..self.pos].to_string(),
+                    ));
                 }
 
                 // Try to parse a tag
@@ -2435,13 +2485,17 @@ impl<'a> RichTextParser<'a> {
                 } else {
                     None
                 };
-                let is_followed_by_non_space = next_char.map(|c| !c.is_whitespace()).unwrap_or(false);
-                let is_preceded_by_alphanumeric = prev_char.map(|c| c.is_alphanumeric()).unwrap_or(false);
+                let is_followed_by_non_space =
+                    next_char.map(|c| !c.is_whitespace()).unwrap_or(false);
+                let is_preceded_by_alphanumeric =
+                    prev_char.map(|c| c.is_alphanumeric()).unwrap_or(false);
 
                 if is_followed_by_non_space && !is_preceded_by_alphanumeric {
                     // Flush accumulated text
                     if self.pos > text_start {
-                        children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+                        children.push(Output::Literal(
+                            self.input[text_start..self.pos].to_string(),
+                        ));
                     }
 
                     // Try to parse as quoted content
@@ -2458,13 +2512,20 @@ impl<'a> RichTextParser<'a> {
                     self.pos += 1;
                 }
             } else {
-                self.pos += self.remaining().chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+                self.pos += self
+                    .remaining()
+                    .chars()
+                    .next()
+                    .map(|c| c.len_utf8())
+                    .unwrap_or(1);
             }
         }
 
         // Flush remaining text
         if self.pos > text_start {
-            children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
+            children.push(Output::Literal(
+                self.input[text_start..self.pos].to_string(),
+            ));
         }
 
         children
@@ -2795,7 +2856,14 @@ fn capitalize_all(s: &str) -> String {
     // Preserve leading whitespace
     let leading: String = s.chars().take_while(|c| c.is_whitespace()).collect();
     // Preserve trailing whitespace
-    let trailing: String = s.chars().rev().take_while(|c| c.is_whitespace()).collect::<String>().chars().rev().collect();
+    let trailing: String = s
+        .chars()
+        .rev()
+        .take_while(|c| c.is_whitespace())
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect();
 
     // Process the middle part
     let trimmed = s.trim();
@@ -2816,12 +2884,10 @@ fn capitalize_all(s: &str) -> String {
 /// Based on CSL/Chicago Manual of Style conventions, matching Pandoc's citeproc.
 const TITLE_CASE_STOP_WORDS: &[&str] = &[
     // Standard English stop words
-    "a", "an", "and", "as", "at", "but", "by", "down", "for", "from", "in", "into",
-    "nor", "of", "on", "onto", "or", "over", "so", "the", "till", "to", "up",
-    "via", "with", "yet",
+    "a", "an", "and", "as", "at", "but", "by", "down", "for", "from", "in", "into", "nor", "of",
+    "on", "onto", "or", "over", "so", "the", "till", "to", "up", "via", "with", "yet",
     // Name particles (should stay lowercase in middle position)
-    "von", "van", "de", "d", "l",
-    // Additional stop words from Pandoc's citeproc
+    "von", "van", "de", "d", "l", // Additional stop words from Pandoc's citeproc
     "about",
 ];
 
@@ -3074,7 +3140,11 @@ fn title_case(s: &str) -> String {
 /// Apply title case with state tracking and last-segment awareness.
 /// When `is_last_segment` is true, the final word in this segment will be
 /// force-capitalized (CSL spec: stop words capitalized at start/end).
-fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_segment: bool) -> String {
+fn title_case_with_state_and_last(
+    s: &str,
+    seen_first_word: &mut bool,
+    is_last_segment: bool,
+) -> String {
     if s.is_empty() {
         return String::new();
     }
@@ -3878,11 +3948,7 @@ mod tests {
 
     #[test]
     fn test_join_outputs_skips_null() {
-        let outputs = vec![
-            Output::literal("A"),
-            Output::Null,
-            Output::literal("C"),
-        ];
+        let outputs = vec![Output::literal("A"), Output::Null, Output::literal("C")];
         let joined = join_outputs(outputs, ", ");
         assert_eq!(joined.render(), "A, C");
     }
@@ -3973,7 +4039,10 @@ mod tests {
         let output = Output::formatted(formatting, vec![Output::literal("Author")]);
         let inlines = output.to_inlines();
         let html = render_inlines_to_csl_html(&inlines);
-        assert_eq!(html, "<span style=\"font-variant:small-caps;\">Author</span>");
+        assert_eq!(
+            html,
+            "<span style=\"font-variant:small-caps;\">Author</span>"
+        );
     }
 
     #[test]
@@ -4186,7 +4255,7 @@ mod punct_tests {
 
     #[test]
     fn test_punctuation_in_quote() {
-        use super::{move_punctuation_inside_quotes, Output, Tag};
+        use super::{Output, Tag, move_punctuation_inside_quotes};
         use quarto_csl::Formatting;
 
         // Helper to create a quoted output
@@ -4229,10 +4298,8 @@ mod punct_tests {
         assert_eq!(result.render(), "\u{201C}The Title.\u{201D} And more");
 
         // Test: complex suffix with nested quotes (like `. And "so it goes"`)
-        let complex_suffix = Output::sequence(vec![
-            Output::literal(". And "),
-            quoted("so it goes"),
-        ]);
+        let complex_suffix =
+            Output::sequence(vec![Output::literal(". And "), quoted("so it goes")]);
         let input = Output::sequence(vec![
             quoted("The Title"),
             Output::tagged(Tag::Suffix, complex_suffix),
@@ -4244,10 +4311,8 @@ mod punct_tests {
         );
 
         // Test: full citation structure with Item wrapper (matches actual citation output)
-        let complex_suffix = Output::sequence(vec![
-            Output::literal(". And "),
-            quoted("so it goes"),
-        ]);
+        let complex_suffix =
+            Output::sequence(vec![Output::literal(". And "), quoted("so it goes")]);
         let inner = Output::sequence(vec![
             quoted("The Title"),
             Output::tagged(Tag::Suffix, complex_suffix),
@@ -4309,7 +4374,11 @@ mod punct_tests {
     fn test_formatted_with_delimiter() {
         let output = Output::formatted_with_delimiter(
             Formatting::default(),
-            vec![Output::literal("A"), Output::literal("B"), Output::literal("C")],
+            vec![
+                Output::literal("A"),
+                Output::literal("B"),
+                Output::literal("C"),
+            ],
             ", ",
         );
         assert_eq!(output.render(), "A, B, C");
@@ -4335,7 +4404,10 @@ mod punct_tests {
     fn test_title_case_last_word_stop_word() {
         // Stop words at the end should be capitalized
         assert_eq!(title_case("what is this for"), "What Is This For");
-        assert_eq!(title_case("something to think about"), "Something to Think About");
+        assert_eq!(
+            title_case("something to think about"),
+            "Something to Think About"
+        );
         assert_eq!(title_case("the way things are"), "The Way Things Are");
     }
 

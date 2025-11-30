@@ -376,7 +376,11 @@ mod tests {
         }
 
         // We should have at least 50 locale files
-        assert!(count >= 50, "Expected at least 50 locale files, got {}", count);
+        assert!(
+            count >= 50,
+            "Expected at least 50 locale files, got {}",
+            count
+        );
     }
 
     #[test]
