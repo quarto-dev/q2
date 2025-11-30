@@ -2656,18 +2656,38 @@ impl<'a> RichTextParser<'a> {
     /// Try to parse quoted content starting at the current position.
     /// The quote_char is the opening quote character (' or ").
     /// Returns formatted output with quotes=true if successful.
+    ///
+    /// This follows Pandoc's citeproc behavior:
+    /// - Reject empty quoted strings ('' or "")
+    /// - A closing quote must NOT be followed by alphanumeric (to avoid matching
+    ///   mid-word apostrophes like "don't" or "l'ami")
     fn try_parse_quoted(&mut self, quote_char: char) -> Option<Output> {
         // Skip the opening quote
         self.pos += 1;
+
+        // Reject empty quoted strings - if immediately followed by closing quote,
+        // this is not a valid quote (e.g., '' in l''' should not be parsed as empty quoted)
+        // See Pandoc citeproc pCslQuoted: "fail unexpected close quote"
+        if self.remaining().starts_with(quote_char) {
+            self.pos -= 1; // Reset to before opening quote
+            return None;
+        }
+
         let content_start = self.pos;
 
         // Find the closing quote
-        let mut depth = 1;
         while self.pos < self.input.len() {
             let c = self.remaining().chars().next()?;
             if c == quote_char {
-                depth -= 1;
-                if depth == 0 {
+                // Check if this could be a closing quote.
+                // A closing quote must NOT be followed by alphanumeric.
+                // This avoids matching mid-word apostrophes like "don't" or "l'ami".
+                // See Pandoc citeproc pCslText: apostrophe handling
+                let next_after_quote = self.remaining().chars().nth(1);
+                let is_valid_closing_quote =
+                    next_after_quote.map(|c| !c.is_alphanumeric()).unwrap_or(true);
+
+                if is_valid_closing_quote {
                     // Found closing quote
                     let content = &self.input[content_start..self.pos];
                     self.pos += 1; // Skip closing quote
@@ -3357,16 +3377,21 @@ pub fn join_with_delimiter(outputs: Vec<OutputBuilder>, delimiter: &str) -> Outp
 ///
 /// CSL implements "flip-flop" formatting where nested identical styles toggle:
 /// - `<i>outer <i>inner</i> outer</i>` → `<i>outer <span style="font-style:normal;">inner</span> outer</i>`
-/// - Same for bold and small-caps
+/// - Same for bold, small-caps, and quotes
 ///
 /// The context tracks whether we're currently inside each formatting type.
 /// When `use_italics` is true, we're NOT inside italics (can use `<i>`).
 /// When `use_italics` is false, we're inside italics (must use normal span for nested).
+///
+/// For quotes, `use_outer_quotes` tracks nesting level:
+/// - true: use outer quotes ("..."), then toggle to false for nested
+/// - false: use inner quotes ('...'), then toggle back to true for nested
 #[derive(Clone, Copy)]
 struct CslRenderContext {
     use_italics: bool,
     use_bold: bool,
     use_small_caps: bool,
+    use_outer_quotes: bool,
 }
 
 impl Default for CslRenderContext {
@@ -3375,6 +3400,7 @@ impl Default for CslRenderContext {
             use_italics: true,
             use_bold: true,
             use_small_caps: true,
+            use_outer_quotes: true,
         }
     }
 }
@@ -3558,22 +3584,31 @@ fn render_inline_to_csl_html_with_ctx(
             output.push_str("</sub>");
         }
         Inline::Quoted(q) => {
-            // Use Unicode curly quotes as per CSL locale conventions
-            match q.quote_type {
-                quarto_pandoc_types::QuoteType::DoubleQuote => {
-                    output.push('\u{201C}'); // " left double quotation mark
-                    for child in &q.content {
-                        render_inline_to_csl_html_with_ctx(child, output, ctx);
-                    }
-                    output.push('\u{201D}'); // " right double quotation mark
+            // Flip-flop quotes: outer quotes use double, inner quotes use single
+            // This matches Pandoc citeproc's renderCslJson behavior.
+            // Note: We ignore q.quote_type and use context-based flip-flopping.
+            if ctx.use_outer_quotes {
+                // Use outer (double) quotes
+                output.push('\u{201C}'); // " left double quotation mark
+                let new_ctx = CslRenderContext {
+                    use_outer_quotes: false, // Nested quotes will use inner (single)
+                    ..ctx
+                };
+                for child in &q.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
                 }
-                quarto_pandoc_types::QuoteType::SingleQuote => {
-                    output.push('\u{2018}'); // ' left single quotation mark
-                    for child in &q.content {
-                        render_inline_to_csl_html_with_ctx(child, output, ctx);
-                    }
-                    output.push('\u{2019}'); // ' right single quotation mark
+                output.push('\u{201D}'); // " right double quotation mark
+            } else {
+                // Use inner (single) quotes
+                output.push('\u{2018}'); // ' left single quotation mark
+                let new_ctx = CslRenderContext {
+                    use_outer_quotes: true, // Nested quotes will flip back to outer (double)
+                    ..ctx
+                };
+                for child in &q.content {
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
                 }
+                output.push('\u{2019}'); // ' right single quotation mark
             }
         }
         Inline::Link(l) => {

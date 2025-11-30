@@ -688,3 +688,6 @@ position_IbidWithPrefixFullStop
 bugreports_CapsAfterOneWordPrefix
 flipflop_BoldfaceNodeLevelMarkup
 magic_TermCapitalizationWithPrefix
+flipflop_ApostropheInsideTag
+flipflop_QuotesNodeLevelMarkup
+flipflop_SingleBeforeColon
