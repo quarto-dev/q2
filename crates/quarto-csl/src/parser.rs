@@ -1162,6 +1162,7 @@ impl CslParser {
     fn parse_et_al(&self, element: &XmlElement) -> EtAl {
         EtAl {
             term: self.get_attr(element, "term").map(|a| a.value.clone()),
+            formatting: Some(self.parse_formatting(element)),
         }
     }
 

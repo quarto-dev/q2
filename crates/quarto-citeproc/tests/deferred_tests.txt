@@ -328,3 +328,11 @@ number_SeparateOrdinalNamespaces
 # has no date), CSL requires outputting "[CSL STYLE ERROR: reference with no printed form.]"
 # We currently produce empty output. Proper error handling deferred for later.
 date_DateNoDateNoTest
+
+# ------------------------------------------------------------------------------
+# Affixes outside formatting - requires affixesInside architecture
+# ------------------------------------------------------------------------------
+
+# Suffix should be placed outside font-style formatting (e.g., <i>title</i>. not <i>title.</i>)
+# Requires implementing formatAffixesInside flag like Pandoc citeproc
+simplespace_case1

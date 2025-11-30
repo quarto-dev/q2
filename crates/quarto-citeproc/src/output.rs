@@ -3590,6 +3590,10 @@ fn render_inline_to_csl_html_with_ctx(
             if classes.iter().any(|c| c == "nodecoration") {
                 // NoDecoration: reset all currently active formatting to normal
                 // Build a style string with normal values for all active formats
+                // The context uses inverted semantics:
+                //   use_italics=true means NOT inside italics (can use <i>)
+                //   use_italics=false means inside italics (need to reset)
+                // So we emit font-style:normal when !ctx.use_italics (we ARE inside italics)
                 let mut styles = Vec::new();
                 if !ctx.use_small_caps {
                     styles.push("font-variant:normal;");
@@ -4183,6 +4187,142 @@ mod rich_text_tests {
         let html = render_inlines_to_csl_html(&inlines);
         // SMITH should stay unchanged due to nocase, other words should be capitalized
         assert_eq!(html, "A SMITH Pencil");
+    }
+
+    #[test]
+    fn test_nodecor_with_italic_formatting() {
+        // Test that nodecor flips italic to normal when inside italic formatting
+        let input = r#"Lessard <span class="nodecor">v.</span> Schmidt"#;
+        let output = parse_csl_rich_text(input);
+
+        // Apply italic formatting
+        let mut formatting = Formatting::default();
+        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatted = Output::formatted(formatting, vec![output]);
+
+        let inlines = formatted.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+        // The v. should be in a span with font-style:normal to flip the italic
+        assert_eq!(
+            html,
+            r#"<i>Lessard <span style="font-style:normal;">v.</span> Schmidt</i>"#
+        );
+    }
+
+    #[test]
+    fn test_nodecor_debug_structure() {
+        // Debug test to understand the Output structure
+        let input = r#"Lessard <span class="nodecor">v.</span> Schmidt"#;
+        let output = parse_csl_rich_text(input);
+
+        // Check the structure - Output::sequence creates a Formatted with default formatting
+        match &output {
+            Output::Formatted { children, .. } => {
+                assert_eq!(children.len(), 3, "Expected 3 children in sequence: {:?}", children);
+                // Check that one of them is a Tagged with NoDecoration
+                let has_nodecor = children.iter().any(|c| {
+                    matches!(c, Output::Tagged { tag: Tag::NoDecoration, .. })
+                });
+                assert!(has_nodecor, "Expected a NoDecoration tag in the output: {:?}", children);
+            }
+            other => panic!("Expected Formatted (sequence), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_nodecor_from_json_reference() {
+        use crate::reference::Reference;
+
+        // Parse a reference from JSON like the CSL tests do
+        let json = r#"{
+            "id": "ITEM-1",
+            "title": "Lessard <span class=\"nodecor\">v.</span> Schmidt",
+            "type": "legal_case"
+        }"#;
+
+        let reference: Reference = serde_json::from_str(json).unwrap();
+
+        // Get the title value
+        let title = reference.get_variable("title").expect("title should exist");
+
+        // Verify the raw title value contains the nodecor span
+        assert!(
+            title.contains(r#"<span class="nodecor">"#),
+            "Title should contain nodecor span, got: {}",
+            title
+        );
+
+        // Parse it and check the structure
+        let output = parse_csl_rich_text(&title);
+
+        // Apply italic formatting
+        let mut formatting = Formatting::default();
+        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatted = Output::formatted(formatting, vec![output]);
+
+        let inlines = formatted.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+
+        // The v. should be in a span with font-style:normal
+        assert_eq!(
+            html,
+            r#"<i>Lessard <span style="font-style:normal;">v.</span> Schmidt</i>"#,
+            "HTML output doesn't match expected"
+        );
+    }
+
+    #[test]
+    fn test_nodecor_full_csl_pipeline() {
+        use crate::reference::Reference;
+        use crate::types::Processor;
+
+        // Minimal CSL style with italic title
+        let csl = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="note" version="1.0">
+  <info>
+    <id />
+    <title />
+    <updated>2009-08-10T04:49:00+09:00</updated>
+  </info>
+  <bibliography>
+    <layout>
+      <text variable="title" font-style="italic"/>
+    </layout>
+  </bibliography>
+</style>"#;
+
+        let style = quarto_csl::parse_csl(csl).expect("CSL parse error");
+        let mut processor = Processor::new(style);
+
+        // Add reference with nodecor markup in title
+        let reference: Reference = serde_json::from_str(r#"{
+            "id": "ITEM-1",
+            "title": "Lessard <span class=\"nodecor\">v.</span> Schmidt",
+            "type": "legal_case"
+        }"#).unwrap();
+
+        processor.add_reference(reference);
+
+        // Generate bibliography
+        let entries = processor
+            .generate_bibliography_to_outputs()
+            .expect("Bibliography error");
+
+        assert_eq!(entries.len(), 1, "Should have one entry");
+
+        let (_, output) = &entries[0];
+        let blocks = output.to_blocks();
+        let html = render_blocks_to_csl_html(&blocks);
+
+        // Debug output
+        eprintln!("Bibliography HTML: {}", html);
+
+        // Check that the nodecor span is being rendered with font-style:normal
+        assert!(
+            html.contains(r#"<span style="font-style:normal;">v.</span>"#),
+            "Expected nodecor flip-flop, got: {}",
+            html
+        );
     }
 }
 

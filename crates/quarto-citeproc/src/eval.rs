@@ -450,7 +450,37 @@ fn evaluate_citation_to_output_impl(
                 parsed_prefix
             };
             parts.push(Output::tagged(Tag::Prefix, prefix_with_sep));
-            parts.push(output);
+
+            // Per Pandoc citeproc: In note styles, if the prefix ends with a sentence-ending
+            // pattern and has more than one word (i.e., it's a complete sentence), capitalize
+            // the first letter of the citation output. This handles cases like:
+            //   prefix: ". He said \"Please work.\" " -> "Ibid." (not "ibid.")
+            // Check if prefix ends with sentence-ending punctuation followed by optional
+            // quote(s) and trailing space.
+            let is_note_style = processor.style.class == quarto_csl::StyleClass::Note;
+            let ends_with_sentence = {
+                let trimmed = prefix.trim_end();
+                // Check last char(s) after trimming trailing whitespace
+                trimmed.ends_with('.')
+                    || trimmed.ends_with('!')
+                    || trimmed.ends_with('?')
+                    // Also check for quote after punctuation (e.g., '."' or ".'" or "."")
+                    || trimmed.ends_with(".\"")
+                    || trimmed.ends_with(".'")
+                    || trimmed.ends_with("!\u{201D}") // !"
+                    || trimmed.ends_with(".\u{201D}") // ."
+                    || trimmed.ends_with("?\u{201D}") // ?"
+                    || trimmed.ends_with("!\u{2019}") // !'
+                    || trimmed.ends_with(".\u{2019}") // .'
+                    || trimmed.ends_with("?\u{2019}") // ?'
+            };
+            let has_multiple_words = prefix.split_whitespace().count() > 1;
+
+            if is_note_style && ends_with_sentence && has_multiple_words {
+                parts.push(output.capitalize_first());
+            } else {
+                parts.push(output);
+            }
         } else {
             // Capitalize first letter when no prefix
             parts.push(output.capitalize_first());
@@ -1458,18 +1488,30 @@ fn format_names(
             result_parts.push(last_name);
         } else {
             // Regular et al.
-            let et_al = ctx
+            let et_al_term = ctx
                 .get_term("et-al", quarto_csl::TermForm::Long, false)
                 .unwrap_or_else(|| "et al.".to_string());
+
+            // Get formatting from the <et-al> element if present
+            let et_al_formatting = names_el
+                .et_al
+                .as_ref()
+                .and_then(|ea| ea.formatting.clone())
+                .unwrap_or_default();
+
+            // Create the formatted et-al output
+            let et_al_output =
+                Output::formatted(et_al_formatting, vec![Output::literal(et_al_term)]);
+
             let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
             if use_delim {
-                result_parts.push(Output::literal(format!(
-                    "{} {}",
-                    delimiter.trim_end(),
-                    et_al
-                )));
+                // Add delimiter and space before et-al
+                result_parts.push(Output::literal(format!("{} ", delimiter.trim_end())));
+                result_parts.push(et_al_output);
             } else {
-                result_parts.push(Output::literal(format!(" {}", et_al)));
+                // Just add space before et-al
+                result_parts.push(Output::literal(" ".to_string()));
+                result_parts.push(et_al_output);
             }
         }
     }

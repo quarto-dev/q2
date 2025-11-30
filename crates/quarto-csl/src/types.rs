@@ -642,6 +642,8 @@ pub enum NameForm {
 pub struct EtAl {
     /// Term to use (default "et-al").
     pub term: Option<String>,
+    /// Formatting to apply to the et-al term.
+    pub formatting: Option<Formatting>,
 }
 
 /// Label in names element.
