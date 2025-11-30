@@ -1824,54 +1824,171 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
 ///   - true: "G.-P." (preserves hyphen before second initial)
 ///   - false: "G.P." (no hyphen)
 /// - For "Guo-ping" (second part lowercase): "G." (lowercase parts are skipped)
+///
+/// Pre-existing initials are recognized by periods in the input:
+/// - "J.J." -> "JJ" (with initialize_with="")
+/// - "J. J." -> "J. J." (with initialize_with=". ")
 fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: bool) -> String {
-    // Initialize each whitespace-separated part
-    // Hyphenated parts with lowercase after the hyphen are skipped (e.g., Ji-ping -> J.)
-    let trimmed = initialize_with.trim_end();
+    // Parse the given name into tokens: either initials (already abbreviated) or words (to be initialized)
+    // Following Pandoc's algorithm:
+    // - Text before a '.' is an initial
+    // - A single character before a space is an initial
+    // - Multiple characters before a space is a word
+    // - '-' introduces a hyphenated continuation
 
-    given
-        .split_whitespace()
-        .map(|word| {
-            // Check if this word contains a hyphen
-            if word.contains('-') {
-                // Split on hyphen and process each part
-                let parts: Vec<&str> = word.split('-').collect();
-                let mut result = String::new();
+    #[derive(Debug)]
+    enum Token {
+        Initial(String),     // Already an initial (came before a period or single char before space)
+        Word(String),        // A full word to be initialized
+        Particle(String),    // A lowercase particle (de, von, van) to be preserved as-is
+        HyphenPart(String),  // Part after a hyphen (needs special handling)
+    }
 
-                for (i, part) in parts.iter().enumerate() {
-                    if let Some(first_char) = part.chars().next() {
-                        if i == 0 {
-                            // First part: always include its initial
-                            result.push_str(&format!(
-                                "{}{}",
-                                first_char.to_uppercase(),
-                                trimmed
-                            ));
-                        } else if first_char.is_uppercase() {
-                            // Subsequent part with uppercase: include based on hyphen option
-                            if initialize_with_hyphen {
-                                result.push('-');
-                            }
-                            result.push_str(&format!(
-                                "{}{}",
-                                first_char.to_uppercase(),
-                                trimmed
-                            ));
-                        }
-                        // Lowercase parts after hyphen are skipped entirely
+    // Helper to classify a string as Word or Particle
+    fn classify_word(s: &str) -> Token {
+        // If all lowercase and not single char, it's a particle (de, von, van, etc.)
+        if s.len() > 1 && s.chars().all(|c| c.is_lowercase()) {
+            Token::Particle(s.to_string())
+        } else if s.len() == 1 {
+            Token::Initial(s.to_string())
+        } else {
+            Token::Word(s.to_string())
+        }
+    }
+
+    let mut tokens: Vec<Token> = Vec::new();
+    let mut current = String::new();
+    let mut after_hyphen = false;
+
+    for c in given.chars() {
+        match c {
+            '.' => {
+                // Period marks the preceding content as an initial
+                if !current.is_empty() {
+                    if after_hyphen {
+                        tokens.push(Token::HyphenPart(current.clone()));
+                        after_hyphen = false;
+                    } else {
+                        tokens.push(Token::Initial(current.clone()));
                     }
+                    current.clear();
                 }
-                result
-            } else {
-                // Simple word: "John" -> "J."
-                word.chars()
-                    .next()
-                    .map(|c| format!("{}{}", c.to_uppercase(), trimmed))
-                    .unwrap_or_default()
             }
-        })
-        .collect::<Vec<_>>()
-        .join(if initialize_with.ends_with(' ') { " " } else { "" })
+            ' ' => {
+                // Space ends the current token
+                if !current.is_empty() {
+                    if after_hyphen {
+                        tokens.push(Token::HyphenPart(current.clone()));
+                        after_hyphen = false;
+                    } else {
+                        tokens.push(classify_word(&current));
+                    }
+                    current.clear();
+                }
+            }
+            '-' => {
+                // Hyphen: emit current token and mark that next part is after hyphen
+                if !current.is_empty() {
+                    if after_hyphen {
+                        tokens.push(Token::HyphenPart(current.clone()));
+                    } else {
+                        tokens.push(classify_word(&current));
+                    }
+                    current.clear();
+                }
+                after_hyphen = true;
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+
+    // Handle final token
+    if !current.is_empty() {
+        if after_hyphen {
+            tokens.push(Token::HyphenPart(current));
+        } else {
+            tokens.push(classify_word(&current));
+        }
+    }
+
+    // Now render the tokens with initialize_with suffix
+    let trimmed = initialize_with.trim_end();
+    let mut result = String::new();
+    let mut prev_was_initial_or_word = false;
+    let mut prev_was_particle = false;
+
+    for token in &tokens {
+        match token {
+            Token::Initial(s) => {
+                // Add space if after particle or if initialize_with ends with space
+                if prev_was_particle || (prev_was_initial_or_word && initialize_with.ends_with(' ')) {
+                    result.push(' ');
+                }
+                // Initial: output as-is with suffix
+                result.push_str(s);
+                result.push_str(trimmed);
+                prev_was_initial_or_word = true;
+                prev_was_particle = false;
+            }
+            Token::Word(s) => {
+                // Add space if after particle or if initialize_with ends with space
+                if prev_was_particle || (prev_was_initial_or_word && initialize_with.ends_with(' ')) {
+                    result.push(' ');
+                }
+                // Word: initialize to first char(s) with suffix
+                // Special case: "long abbreviation" pattern like "TSerendorjiin" -> "Ts"
+                // If word starts with uppercase, followed by uppercase, followed by all lowercase,
+                // output first char uppercase + second char lowercase
+                let chars: Vec<char> = s.chars().collect();
+                if chars.len() >= 2
+                    && chars[0].is_uppercase()
+                    && chars[1].is_uppercase()
+                    && chars.len() > 2
+                    && chars[2..].iter().all(|c| c.is_lowercase())
+                {
+                    // Long abbreviation: "TSerendorjiin" -> "Ts"
+                    result.push_str(&chars[0].to_uppercase().to_string());
+                    result.push_str(&chars[1].to_lowercase().to_string());
+                    result.push_str(trimmed);
+                } else if let Some(first_char) = chars.first() {
+                    // Normal case: just first char
+                    result.push_str(&first_char.to_uppercase().to_string());
+                    result.push_str(trimmed);
+                }
+                prev_was_initial_or_word = true;
+                prev_was_particle = false;
+            }
+            Token::Particle(s) => {
+                // Particle: preserve as-is (de, von, van, etc.)
+                // Add space before if needed
+                if prev_was_initial_or_word || prev_was_particle {
+                    result.push(' ');
+                }
+                result.push_str(s);
+                prev_was_initial_or_word = false;
+                prev_was_particle = true;
+            }
+            Token::HyphenPart(s) => {
+                // Hyphenated part: check if first char is uppercase
+                if let Some(first_char) = s.chars().next() {
+                    if first_char.is_uppercase() {
+                        if initialize_with_hyphen {
+                            result.push('-');
+                        }
+                        result.push_str(&first_char.to_uppercase().to_string());
+                        result.push_str(trimmed);
+                    }
+                    // Lowercase parts after hyphen are skipped (e.g., Ji-ping -> J.)
+                }
+                prev_was_initial_or_word = true;
+                prev_was_particle = false;
+            }
+        }
+    }
+
+    result
 }
 
 /// Evaluate a group element.

@@ -440,7 +440,15 @@ Only revisit deferred tests when:
 ## Common Pitfalls
 
 1. **Test name case**: Names in `enabled_tests.txt` are case-insensitive
-2. **Test counts**: The 858 is CSL tests only; nextest shows +73 unit tests +1 validation
+2. **Test counts confusion**: There are multiple numbers that can cause confusion:
+   - **858**: Total CSL conformance tests in `test-data/csl-suite/`
+   - **~73**: Unit tests in the crate (not CSL conformance tests)
+   - **1**: The `csl_validate_manifest` test
+   - When `cargo nextest run` reports "N tests run, M skipped":
+     - N = enabled CSL tests + unit tests + validate_manifest
+     - M = disabled/ignored CSL tests
+   - When `csl-test-helper.py status` reports "N enabled", that's CSL tests only
+   - **Bottom line**: Don't compare `nextest` totals to `csl-test-helper.py` totals directly
 3. **Deferred overlap**: A test can be in both `enabled_tests.txt` and `deferred_tests.txt` if it was enabled then later deferred
 4. **Output format**: Tests expect "CSL HTML" (`<i>`, `<b>`), not Markdown
 5. **Pandoc differences**: When in doubt, check what Pandoc does

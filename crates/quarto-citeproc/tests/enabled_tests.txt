@@ -611,3 +611,24 @@ magic_PunctuationInQuoteDefaultEnglishDelimiter
 magic_PunctuationInQuoteDelimiterTrue
 quotes_PunctuationNasty
 bugreports_DisambiguationAddNames
+
+# Quick wins enabled 2025-11-29
+bugreports_CollapseFailure
+bugreports_disambigHang
+bugreports_DisambiguationAddNamesBibliography
+disambiguate_SetsOfNames
+
+# Initial handling fix 2025-11-29
+name_InitialsInitializeTrue
+name_InitialsInitializeTrueEmpty
+name_InitialsInitializeTruePeriod
+name_InitialsInitializeTruePeriodSpace
+name_SplitInitials
+textcase_RepeatedTitleBug
+
+# Long abbreviation fix 2025-11-29
+name_LongAbbreviation
+
+# Particle handling fix 2025-11-29
+name_CeltsAndToffsCrowdedInitials
+name_CeltsAndToffsSpacedInitials

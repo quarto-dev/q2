@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 591
-# Disabled: 267
+# Enabled: 604
+# Disabled: 254
 #
 [enabled]
 affix_commaafterquote
@@ -22,13 +22,16 @@ bugreports_authorposition
 bugreports_authoryear
 bugreports_badcitationupdate
 bugreports_chinesecharactersfamilyonlyplurallabel
+bugreports_collapsefailure
 bugreports_containertitleshort
 bugreports_contentpunctuationduplicate1
 bugreports_contextualpluralwithmainitemfields
 bugreports_delimiteronlayout
 bugreports_demopagefullcitecruftonsubsequent
+bugreports_disambighang
 bugreports_disambiguate
 bugreports_disambiguationaddnames
+bugreports_disambiguationaddnamesbibliography
 bugreports_droppinggroupdelimiterspace
 bugreports_duplicateterminalpunctuationinbibliography
 bugreports_effingbug
@@ -223,6 +226,7 @@ disambiguate_primarynamegenerally
 disambiguate_primarynamewithinitialslimitedtoprimary
 disambiguate_primarynamewithnondroppingparticle
 disambiguate_primarynamewithparticle
+disambiguate_setsofnames
 disambiguate_threenoauthornotitleentries
 disambiguate_toinitialonly
 disambiguate_trigraph
@@ -333,7 +337,9 @@ name_articularwithcommanameassortorder
 name_asianglyphs
 name_bibliographynameformnevershrinks
 name_celticclanname
+name_celtsandtoffscrowdedinitials
 name_celtsandtoffsnohyphens
+name_celtsandtoffsspacedinitials
 name_celtsandtoffswithhyphens
 name_citegroupdelimiterwithyearcollapse
 name_delimiter
@@ -353,10 +359,15 @@ name_initialsinitializefalse
 name_initialsinitializefalseempty
 name_initialsinitializefalseperiod
 name_initialsinitializefalseperiodspace
+name_initialsinitializetrue
+name_initialsinitializetrueempty
+name_initialsinitializetrueperiod
+name_initialsinitializetrueperiodspace
 name_institution
 name_labelafterplural
 name_labelafterpluraldecorations
 name_literalwithcomma
+name_longabbreviation
 name_lowercasesurnamesuffix
 name_multipleliteral
 name_namepartaffixesnameassortorder
@@ -380,6 +391,7 @@ name_particlesdemotenondroppingnever
 name_periodafterinitials
 name_romaniantwo
 name_semicolonwithand
+name_splitinitials
 name_substitutemacroinheritdecorations
 name_substitutename
 name_substituteondategroupspanfail
@@ -577,6 +589,7 @@ textcase_inquotes
 textcase_lastchar
 textcase_lowercase
 textcase_nospacebeforeapostrophe
+textcase_repeatedtitlebug
 textcase_sentencecapitalization
 textcase_skipnameparticlesintitlecase
 textcase_stopwordbeforehyphen
