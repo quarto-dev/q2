@@ -1069,7 +1069,7 @@ fn evaluate_text(
                 Output::Null
             }
         }
-        TextSource::Value { value } => Output::literal(value),
+        TextSource::Value { value } => crate::output::parse_csl_rich_text(value),
     };
 
     Ok(output)

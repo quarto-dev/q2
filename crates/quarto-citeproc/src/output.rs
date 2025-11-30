@@ -1080,8 +1080,27 @@ fn extract_display_regions(output: &Output) -> Vec<DisplayRegion> {
             content: output.clone(),
         }],
         Output::Tagged { child, .. } => {
-            // Tags are transparent - look inside
-            extract_display_regions(child)
+            // Tags like NoDecoration and NoCase must be preserved as-is.
+            // They are inline-level markup that should not be stripped during
+            // display region extraction. If there's a display attribute nested
+            // inside (unusual), we still preserve the tag wrapper.
+            //
+            // Check if the child has any display regions that need extraction.
+            // If all child regions have no display, preserve the whole Tagged node.
+            // If there are display regions inside, we need to return those (losing
+            // the tag at block level is acceptable since display creates blocks).
+            let child_regions = extract_display_regions(child);
+            if child_regions.iter().all(|r| r.display.is_none()) {
+                // No display in child - preserve the whole Tagged node
+                vec![DisplayRegion {
+                    display: None,
+                    content: output.clone(),
+                }]
+            } else {
+                // There's display inside - return child regions
+                // (Tag may be lost but display creates block-level structure)
+                child_regions
+            }
         }
         Output::Linked { .. } | Output::InNote(_) => vec![DisplayRegion {
             display: None,
@@ -4218,12 +4237,27 @@ mod rich_text_tests {
         // Check the structure - Output::sequence creates a Formatted with default formatting
         match &output {
             Output::Formatted { children, .. } => {
-                assert_eq!(children.len(), 3, "Expected 3 children in sequence: {:?}", children);
+                assert_eq!(
+                    children.len(),
+                    3,
+                    "Expected 3 children in sequence: {:?}",
+                    children
+                );
                 // Check that one of them is a Tagged with NoDecoration
                 let has_nodecor = children.iter().any(|c| {
-                    matches!(c, Output::Tagged { tag: Tag::NoDecoration, .. })
+                    matches!(
+                        c,
+                        Output::Tagged {
+                            tag: Tag::NoDecoration,
+                            ..
+                        }
+                    )
                 });
-                assert!(has_nodecor, "Expected a NoDecoration tag in the output: {:?}", children);
+                assert!(
+                    has_nodecor,
+                    "Expected a NoDecoration tag in the output: {:?}",
+                    children
+                );
             }
             other => panic!("Expected Formatted (sequence), got {:?}", other),
         }
@@ -4265,8 +4299,7 @@ mod rich_text_tests {
 
         // The v. should be in a span with font-style:normal
         assert_eq!(
-            html,
-            r#"<i>Lessard <span style="font-style:normal;">v.</span> Schmidt</i>"#,
+            html, r#"<i>Lessard <span style="font-style:normal;">v.</span> Schmidt</i>"#,
             "HTML output doesn't match expected"
         );
     }
@@ -4284,6 +4317,11 @@ mod rich_text_tests {
     <title />
     <updated>2009-08-10T04:49:00+09:00</updated>
   </info>
+  <citation>
+    <layout>
+      <text variable="title"/>
+    </layout>
+  </citation>
   <bibliography>
     <layout>
       <text variable="title" font-style="italic"/>
@@ -4295,11 +4333,14 @@ mod rich_text_tests {
         let mut processor = Processor::new(style);
 
         // Add reference with nodecor markup in title
-        let reference: Reference = serde_json::from_str(r#"{
+        let reference: Reference = serde_json::from_str(
+            r#"{
             "id": "ITEM-1",
             "title": "Lessard <span class=\"nodecor\">v.</span> Schmidt",
             "type": "legal_case"
-        }"#).unwrap();
+        }"#,
+        )
+        .unwrap();
 
         processor.add_reference(reference);
 
@@ -4572,6 +4613,40 @@ mod punct_tests {
         assert_eq!(
             title_case("john von doe: an about up life"),
             "John von Doe: An about up Life"
+        );
+    }
+}
+
+#[cfg(test)]
+mod test_xml_entity_decoding {
+    use super::parse_csl_rich_text;
+
+    #[test]
+    fn test_rich_text_bold_tag() {
+        // Test that <b>friend</b> gets parsed as bold formatting
+        let input = "<b>friend</b>";
+        let output = parse_csl_rich_text(input);
+
+        // Should be formatted with bold
+        let inlines = output.to_inlines();
+        let html = super::render_inlines_to_csl_html(&inlines);
+
+        assert_eq!(html, "<b>friend</b>", "Bold tag should be preserved");
+    }
+
+    #[test]
+    fn test_entity_decoded_bold_tag() {
+        // This simulates what we get when XML parser decodes &#60;b&#62;friend&#60;/b&#62;
+        // After decoding: <b>friend</b>
+        let input = "<b>friend</b>"; // This is what XML should give us
+        let output = parse_csl_rich_text(input);
+
+        let inlines = output.to_inlines();
+        let html = super::render_inlines_to_csl_html(&inlines);
+
+        assert_eq!(
+            html, "<b>friend</b>",
+            "Decoded entity should be parsed as bold"
         );
     }
 }

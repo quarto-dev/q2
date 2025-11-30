@@ -380,10 +380,11 @@ impl Name {
                     // 3. "before" is all particle characters (lowercase + punct)
                     if !before.is_empty()
                         && !after.is_empty()
-                        && before.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
+                        && before
+                            .chars()
+                            .all(|c| c.is_lowercase() || is_particle_punct(c))
                     {
-                        self.non_dropping_particle =
-                            Some(format!("{}{}", before, punct_char));
+                        self.non_dropping_particle = Some(format!("{}{}", before, punct_char));
                         self.family = Some(after.to_string());
                     }
                 }
