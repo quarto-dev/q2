@@ -39,7 +39,8 @@ pub enum NameHint {
 pub struct Reference {
     /// Unique identifier for this reference.
     /// CSL-JSON allows both string and integer IDs, so we accept both.
-    #[serde(deserialize_with = "deserialize_string_or_int")]
+    /// If not provided, defaults to an empty string (some CSL tests omit the id).
+    #[serde(deserialize_with = "deserialize_optional_string_or_int", default)]
     pub id: String,
 
     /// Reference type (e.g., "book", "article-journal", "chapter").
@@ -171,18 +172,61 @@ impl StringOrNumber {
     }
 }
 
-/// Deserialize a value that can be either a string or an integer into a String.
-/// CSL-JSON allows reference IDs to be either strings or integers.
-fn deserialize_string_or_int<'de, D>(deserializer: D) -> Result<String, D::Error>
+/// Deserialize an optional value that can be a string, integer, or missing.
+/// Returns empty string if missing or null.
+fn deserialize_optional_string_or_int<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
-    use serde::de::Error;
     let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
     match value {
         serde_json::Value::String(s) => Ok(s),
         serde_json::Value::Number(n) => Ok(n.to_string()),
-        _ => Err(Error::custom("expected string or number for id")),
+        serde_json::Value::Null => Ok(String::new()),
+        _ => Ok(String::new()),
+    }
+}
+
+/// Deserialize a boolean that can be either true/false or 1/0.
+/// CSL-JSON allows `"circa": 1` as equivalent to `"circa": true`.
+fn deserialize_bool_or_int<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Bool(b) => Ok(Some(b)),
+        serde_json::Value::Number(n) => {
+            // 0 = false, any other number = true
+            Ok(Some(n.as_i64().map(|i| i != 0).unwrap_or(false)))
+        }
+        serde_json::Value::Null => Ok(None),
+        _ => Ok(None),
+    }
+}
+
+/// Deserialize a season value that can be an integer or (erroneously) a string.
+/// Some CSL test data has strings like "22:56:08" in the season field (for time).
+/// We ignore non-integer values rather than failing.
+fn deserialize_season<'de, D>(deserializer: D) -> Result<Option<i32>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value: serde_json::Value = Deserialize::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(n) => Ok(n.as_i64().map(|i| i as i32)),
+        serde_json::Value::Null => Ok(None),
+        // Strings that look like times (e.g., "22:56:08") - just ignore
+        serde_json::Value::String(s) => {
+            // Try to parse as integer first
+            if let Ok(i) = s.parse::<i32>() {
+                Ok(Some(i))
+            } else {
+                // Non-numeric string (like time) - ignore it
+                Ok(None)
+            }
+        }
+        _ => Ok(None),
     }
 }
 
@@ -369,11 +413,21 @@ pub struct DateVariable {
     pub raw: Option<String>,
 
     /// Season (1=spring, 2=summer, 3=fall, 4=winter).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Some CSL test data misuses this field for time strings; we accept those gracefully.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_season",
+        default
+    )]
     pub season: Option<i32>,
 
     /// Circa flag (approximate date).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// CSL-JSON allows both boolean (true/false) and integer (1/0) values.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_bool_or_int",
+        default
+    )]
     pub circa: Option<bool>,
 }
 
@@ -400,7 +454,8 @@ where
             let mut outer = Vec::new();
 
             while let Some(inner_value) = seq.next_element::<Vec<DatePartValue>>()? {
-                let inner: Vec<i32> = inner_value.into_iter().map(|v| v.0).collect();
+                // Filter out None values (from empty strings) like Pandoc's removeEmptyStrings
+                let inner: Vec<i32> = inner_value.into_iter().filter_map(|v| v.0).collect();
                 outer.push(inner);
             }
 
@@ -444,7 +499,8 @@ where
 }
 
 /// A date part value that can be either a string or integer.
-struct DatePartValue(i32);
+/// Empty strings are represented as None and filtered out during deserialization.
+struct DatePartValue(Option<i32>);
 
 impl<'de> Deserialize<'de> for DatePartValue {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -466,22 +522,26 @@ impl<'de> Deserialize<'de> for DatePartValue {
             where
                 E: de::Error,
             {
-                Ok(DatePartValue(v as i32))
+                Ok(DatePartValue(Some(v as i32)))
             }
 
             fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
-                Ok(DatePartValue(v as i32))
+                Ok(DatePartValue(Some(v as i32)))
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
+                // Empty strings are filtered out (like Pandoc's removeEmptyStrings)
+                if v.is_empty() {
+                    return Ok(DatePartValue(None));
+                }
                 v.parse::<i32>()
-                    .map(DatePartValue)
+                    .map(|i| DatePartValue(Some(i)))
                     .map_err(|_| de::Error::custom(format!("invalid date part: {}", v)))
             }
         }

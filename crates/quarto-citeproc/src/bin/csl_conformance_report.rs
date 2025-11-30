@@ -1,8 +1,9 @@
 //! Generate an HTML report of CSL conformance test status.
 //!
 //! Usage:
-//!   cargo run --bin csl_conformance_report > report.html           # Enabled tests only
-//!   cargo run --bin csl_conformance_report -- --all > report.html  # All tests
+//!   cargo run --bin csl_conformance_report > report.html               # Enabled tests only
+//!   cargo run --bin csl_conformance_report -- --all > report.html      # All tests (including deferred)
+//!   cargo run --bin csl_conformance_report -- --unknown > report.html  # Enabled + unknown (excluding deferred)
 
 use std::collections::HashSet;
 use std::env;
@@ -19,13 +20,16 @@ use similar::{ChangeTag, TextDiff};
 fn main() {
     let args: Vec<String> = env::args().collect();
     let run_all = args.iter().any(|a| a == "--all");
+    let run_unknown = args.iter().any(|a| a == "--unknown");
 
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     let test_dir = Path::new(manifest_dir).join("test-data/csl-suite");
     let enabled_file = Path::new(manifest_dir).join("tests/enabled_tests.txt");
+    let deferred_file = Path::new(manifest_dir).join("tests/deferred_tests.txt");
 
-    // Load enabled tests
+    // Load enabled and deferred tests
     let enabled_tests = load_enabled_tests(&enabled_file);
+    let deferred_tests = load_enabled_tests(&deferred_file);
 
     // Collect all test files
     let mut test_files: Vec<_> = fs::read_dir(&test_dir)
@@ -51,11 +55,25 @@ fn main() {
     for entry in &test_files {
         let path = entry.path();
         let file_name = path.file_stem().unwrap().to_str().unwrap();
+        let name_lower = file_name.to_lowercase();
 
-        // Check if enabled (or run all)
-        let is_enabled = enabled_tests.contains(&file_name.to_lowercase());
+        // Check test status
+        let is_enabled = enabled_tests.contains(&name_lower);
+        let is_deferred = deferred_tests.contains(&name_lower);
 
-        if !run_all && !is_enabled {
+        // Determine if we should run this test based on flags:
+        // - Default (no flags): run only enabled tests
+        // - --all: run all tests (including deferred)
+        // - --unknown: run enabled + unknown (excluding deferred)
+        let should_run = if run_all {
+            true
+        } else if run_unknown {
+            !is_deferred // run everything except deferred
+        } else {
+            is_enabled // default: only enabled
+        };
+
+        if !should_run {
             skipped.push(file_name.to_string());
             continue;
         }
@@ -82,13 +100,27 @@ fn main() {
     }
 
     // Generate HTML report
+    let mode = if run_all {
+        ReportMode::All
+    } else if run_unknown {
+        ReportMode::Unknown
+    } else {
+        ReportMode::Enabled
+    };
     print!("{}", generate_html_report(
         total_tests,
         &passing,
         &failing,
         &skipped,
-        run_all,
+        mode,
     ));
+}
+
+#[derive(Clone, Copy)]
+enum ReportMode {
+    Enabled,
+    All,
+    Unknown,
 }
 
 struct FailedTest {
@@ -103,14 +135,14 @@ fn generate_html_report(
     passing: &[String],
     failing: &[FailedTest],
     skipped: &[String],
-    run_all: bool,
+    mode: ReportMode,
 ) -> String {
     let mut html = String::new();
 
-    let title = if run_all {
-        "CSL Conformance Test Report (All Tests)"
-    } else {
-        "CSL Conformance Test Report (Enabled Tests)"
+    let title = match mode {
+        ReportMode::All => "CSL Conformance Test Report (All Tests)",
+        ReportMode::Unknown => "CSL Conformance Test Report (Enabled + Unknown Tests)",
+        ReportMode::Enabled => "CSL Conformance Test Report (Enabled Tests)",
     };
 
     html.push_str(&format!(r#"<!DOCTYPE html>

@@ -2614,7 +2614,11 @@ fn evaluate_date(
     };
 
     // Get the delimiter between date parts
-    let date_delimiter = date_el.delimiter.as_deref();
+    // Prefer style's delimiter, fall back to locale's delimiter
+    let date_delimiter = date_el
+        .delimiter
+        .as_deref()
+        .or_else(|| locale_format.and_then(|f| f.delimiter.as_deref()));
 
     // Build the final date output
     let date_output = if let Some(end_parts) = date_var.end_parts() {
@@ -2803,7 +2807,7 @@ fn render_date_range<F>(
     format_parts: &[&quarto_csl::DatePart],
     should_include: &F,
     delimiter: Option<&str>,
-    range_delimiter: &str,
+    default_range_delimiter: &str,
 ) -> Output
 where
     F: Fn(quarto_csl::DatePartName, &crate::reference::DateParts) -> bool,
@@ -2817,8 +2821,14 @@ where
 
     if is_open_range {
         // Open range: just render start date with trailing range delimiter
+        // For open ranges, use the year's range delimiter (or default)
+        let open_range_delim = format_parts
+            .iter()
+            .find(|p| p.name == DatePartName::Year)
+            .and_then(|p| p.range_delimiter.as_deref())
+            .unwrap_or(default_range_delimiter);
         let start_output = render_date_parts(ctx, start_parts, format_parts, should_include, delimiter);
-        return Output::sequence(vec![start_output, Output::literal(range_delimiter)]);
+        return Output::sequence(vec![start_output, Output::literal(open_range_delim)]);
     }
 
     // Determine which date parts are the same between start and end
@@ -2855,6 +2865,20 @@ where
     if first_diff_idx == active_parts.len() {
         return render_date_parts(ctx, start_parts, &active_parts, should_include, delimiter);
     }
+
+    // Get range delimiter from the most significant differing date part.
+    // Significance order: Year > Month > Day (like Pandoc's sortOn dpName).
+    // This determines which range delimiter to use when multiple parts differ.
+    let range_delimiter = active_parts
+        .iter()
+        .filter(|p| !is_same(p.name))
+        .min_by_key(|p| match p.name {
+            DatePartName::Year => 0,
+            DatePartName::Month => 1,
+            DatePartName::Day => 2,
+        })
+        .and_then(|p| p.range_delimiter.as_deref())
+        .unwrap_or(default_range_delimiter);
 
     // Find where trailing same parts begin (after all differing parts)
     // We scan from first_diff_idx to find where parts become same again
@@ -2920,7 +2944,12 @@ where
     if !trailing_same.is_empty() {
         let trailing = render_date_parts(ctx, start_parts, trailing_same, should_include, delimiter);
         if !trailing.is_null() {
-            // The first trailing part should have its prefix since differing parts had suffix stripped
+            // Add delimiter between differing parts and trailing same parts
+            if !outputs.is_empty() {
+                if let Some(d) = delimiter {
+                    outputs.push(Output::literal(d));
+                }
+            }
             outputs.push(trailing);
         }
     }

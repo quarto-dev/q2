@@ -2421,9 +2421,24 @@ impl<'a> RichTextParser<'a> {
                 // See: https://github.com/jgm/citeproc (parseCslJson, pCslQuoted)
                 let quote_char = self.remaining().chars().next().unwrap();
 
-                // Check if followed by non-space (opening quote heuristic)
+                // Check if this could be an opening quote vs an apostrophe.
+                // An opening quote must:
+                // 1. Be followed by a non-space character
+                // 2. NOT be preceded by an alphanumeric character (that would be an apostrophe
+                //    like in "l'Égypte" or "don't")
+                //
+                // This matches Pandoc citeproc's behavior where apostrophes are handled as
+                // part of text parsing (pCslText) and only standalone quotes trigger pCslQuoted.
                 let next_char = self.remaining().chars().nth(1);
-                if next_char.map(|c| !c.is_whitespace()).unwrap_or(false) {
+                let prev_char = if self.pos > 0 {
+                    self.input[..self.pos].chars().last()
+                } else {
+                    None
+                };
+                let is_followed_by_non_space = next_char.map(|c| !c.is_whitespace()).unwrap_or(false);
+                let is_preceded_by_alphanumeric = prev_char.map(|c| c.is_alphanumeric()).unwrap_or(false);
+
+                if is_followed_by_non_space && !is_preceded_by_alphanumeric {
                     // Flush accumulated text
                     if self.pos > text_start {
                         children.push(Output::Literal(self.input[text_start..self.pos].to_string()));
@@ -2439,7 +2454,7 @@ impl<'a> RichTextParser<'a> {
                         text_start = self.pos - 1; // Include the quote char
                     }
                 } else {
-                    // Quote followed by space - treat as literal
+                    // Apostrophe or quote followed by space - treat as literal
                     self.pos += 1;
                 }
             } else {
@@ -2914,6 +2929,7 @@ fn title_case(s: &str) -> String {
 
     let mut result = String::new();
     let mut force_next = true; // First word is always capitalized
+    let mut skip_next_transform = false; // After apostrophe, leave next word as-is
     let mut chars = trimmed.chars().peekable();
     let mut current_word = String::new();
 
@@ -2921,7 +2937,12 @@ fn title_case(s: &str) -> String {
         if c.is_whitespace() {
             // End of word - process it
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 force_next = false;
             }
@@ -2929,7 +2950,12 @@ fn title_case(s: &str) -> String {
         } else if c == ':' || c == '.' || c == '?' || c == '!' {
             // Sentence-ending punctuation forces next word capitalization
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
             }
             result.push(c);
@@ -2940,7 +2966,12 @@ fn title_case(s: &str) -> String {
             // (unlike sentence-ending punctuation). Regular hyphen is handled as
             // part of the word by title_case_word.
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
             }
             result.push(c);
@@ -2948,7 +2979,12 @@ fn title_case(s: &str) -> String {
         } else if c == '\u{201C}' || c == '\u{2018}' {
             // Opening curly quotes (left double " and left single ') force capitalization
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
             }
             result.push(c);
@@ -2957,21 +2993,51 @@ fn title_case(s: &str) -> String {
         } else if c == '\u{201D}' {
             // Closing curly double quote - just output, don't force capitalize
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 force_next = false;
             }
             result.push(c);
         } else if c == '\u{2019}' || c == '\'' || c == '`' {
-            // Apostrophes (curly and straight) and backticks are part of the word
-            // e.g., "Shafi'i", "don't", "Shafi`i"
-            current_word.push(c);
+            // Apostrophes (curly and straight) and backticks act as word separators
+            // for title case purposes, matching Pandoc citeproc's behavior.
+            // This ensures proper handling of:
+            // - French articles: "l'Égypte" - "l" is a stop word (stays lowercase),
+            //   "Égypte" keeps its original case
+            // - Names with apostrophes: "Shafi'i" - both parts keep their case
+            //
+            // Process current word first
+            if !current_word.is_empty() {
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
+                current_word.clear();
+            }
+            // Output the apostrophe
+            result.push(c);
+            // After an apostrophe, the next word is NOT transformed at all
+            // (it's not a "word end" in Pandoc's state machine, so the next
+            // chunk keeps its original case)
+            skip_next_transform = true;
+            force_next = false;
         } else if c == '"' {
             // Straight double quotes - determine if opening or closing based on context
             // If followed by alphanumeric (peeking), it's opening
             // Otherwise it's closing
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
             }
             result.push(c);
@@ -2993,8 +3059,13 @@ fn title_case(s: &str) -> String {
     }
 
     // Handle the last word - always capitalize (CSL spec: stop words capitalized at start/end)
+    // unless we're in skip mode (after apostrophe)
     if !current_word.is_empty() {
-        result.push_str(&title_case_word(&current_word, true));
+        if skip_next_transform {
+            result.push_str(&current_word);
+        } else {
+            result.push_str(&title_case_word(&current_word, true));
+        }
     }
 
     format!("{}{}{}", leading, result, trailing)
@@ -3028,6 +3099,7 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
     let mut result = String::new();
     // Use external state: force_next is true only if we haven't seen the first word yet
     let mut force_next = !*seen_first_word;
+    let mut skip_next_transform = false; // After apostrophe, leave next word as-is
     let mut chars = trimmed.chars().peekable();
     let mut current_word = String::new();
 
@@ -3035,7 +3107,12 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
         if c.is_whitespace() {
             // End of word - process it
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 // After processing a word, we've seen the first word
                 *seen_first_word = true;
@@ -3045,7 +3122,12 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
         } else if c == ':' || c == '.' || c == '?' || c == '!' {
             // Sentence-ending punctuation forces next word capitalization
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 *seen_first_word = true;
             }
@@ -3055,7 +3137,12 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
         } else if c == '—' || c == '–' {
             // Em-dash and en-dash are word breaks but do NOT force capitalization
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 *seen_first_word = true;
             }
@@ -3064,7 +3151,12 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
         } else if c == '\u{201C}' || c == '\u{2018}' {
             // Opening curly quotes force capitalization
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 *seen_first_word = true;
             }
@@ -3073,19 +3165,42 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
         } else if c == '\u{201D}' {
             // Closing curly double quote - just output, don't force capitalize
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 *seen_first_word = true;
                 force_next = false;
             }
             result.push(c);
         } else if c == '\u{2019}' || c == '\'' || c == '`' {
-            // Apostrophes (curly and straight) and backticks are part of the word
-            current_word.push(c);
+            // Apostrophes (curly and straight) and backticks act as word separators
+            // for title case purposes, matching Pandoc citeproc's behavior.
+            if !current_word.is_empty() {
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
+                current_word.clear();
+                *seen_first_word = true;
+            }
+            result.push(c);
+            // After an apostrophe, the next word is NOT transformed at all
+            skip_next_transform = true;
+            force_next = false;
         } else if c == '"' {
             // Straight double quotes - determine if opening or closing based on context
             if !current_word.is_empty() {
-                result.push_str(&title_case_word(&current_word, force_next));
+                if skip_next_transform {
+                    result.push_str(&current_word);
+                    skip_next_transform = false;
+                } else {
+                    result.push_str(&title_case_word(&current_word, force_next));
+                }
                 current_word.clear();
                 *seen_first_word = true;
             }
@@ -3105,9 +3220,14 @@ fn title_case_with_state_and_last(s: &str, seen_first_word: &mut bool, is_last_s
     }
 
     // Handle the last word - if this is the last segment, force capitalize
+    // unless we're in skip mode (after apostrophe)
     if !current_word.is_empty() {
-        let force = force_next || is_last_segment;
-        result.push_str(&title_case_word(&current_word, force));
+        if skip_next_transform {
+            result.push_str(&current_word);
+        } else {
+            let force = force_next || is_last_segment;
+            result.push_str(&title_case_word(&current_word, force));
+        }
         *seen_first_word = true;
     }
 

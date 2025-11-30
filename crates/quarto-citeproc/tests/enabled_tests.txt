@@ -668,3 +668,10 @@ textcase_UppercaseNumber
 # Ordinal support 2025-11-30
 number_SimpleNumberOrdinalLong
 number_SimpleNumberOrdinalShort
+date_Uncertain
+disambiguate_ByCiteIncremental1
+flipflop_StartingApostrophe
+label_NoFirstCharCapWithInTextClass
+date_EmptyStrings
+date_RangeDelimiter
+flipflop_Apostrophes

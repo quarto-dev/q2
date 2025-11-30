@@ -605,6 +605,8 @@ impl CslParser {
             })
             .unwrap_or(DateForm::Text);
 
+        let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
+
         let mut parts = Vec::new();
         for child in element.all_children() {
             if child.name == "date-part" {
@@ -615,6 +617,7 @@ impl CslParser {
         Ok(DateFormat {
             form,
             parts,
+            delimiter,
             source_info: element.source_info.clone(),
         })
     }

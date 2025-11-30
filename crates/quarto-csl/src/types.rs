@@ -190,6 +190,8 @@ pub struct DateFormat {
     pub form: DateForm,
     /// Date parts.
     pub parts: Vec<DatePart>,
+    /// Delimiter between date parts.
+    pub delimiter: Option<String>,
     /// Source location.
     pub source_info: SourceInfo,
 }

@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 630
-# Disabled: 228
+# Enabled: 637
+# Disabled: 221
 #
 [enabled]
 affix_commaafterquote
@@ -99,6 +99,7 @@ date_datebc
 date_datenodatewithtest
 date_dayordinaldayoneonly
 date_disappearingbug
+date_emptystrings
 date_ignorenonexistentsort
 date_inpress
 date_january
@@ -164,6 +165,7 @@ date_negativedatesortviamacroonyearmonthonly
 date_nodate
 date_otheralone
 date_otherwithdate
+date_rangedelimiter
 date_seasonrange1
 date_seasonrange2
 date_seasonrange3
@@ -176,6 +178,7 @@ date_textformmonthdatemonthrange
 date_textformmonthdateyearrange
 date_textformyeardateyearrange
 date_textformyeardateyearrangeopen
+date_uncertain
 date_yearsuffiximplicitwithnodate
 date_yearsuffiximplicitwithnodateoneonly
 date_yearsuffixwithnodate
@@ -203,6 +206,7 @@ disambiguate_bycitegivennameexpandcrossnestednames
 disambiguate_bycitegivennamenoshortforminitializewith
 disambiguate_bycitegivennameshortforminitializewith
 disambiguate_bycitegivennameshortformnoinitializewith
+disambiguate_byciteincremental1
 disambiguate_byciteisdefault
 disambiguate_byciteminimalgivennameexpandminimalnames
 disambiguate_byciteretainnamesonfailureifyearsuffixnotavailable
@@ -246,6 +250,7 @@ display_lostsuffix
 display_secondfieldalignclone
 etal_citationandbibliographydecorationsinbibliography
 etal_usezerofirst
+flipflop_apostrophes
 flipflop_completeciteinprefix
 flipflop_italicsflipped
 flipflop_italicssimple
@@ -255,6 +260,7 @@ flipflop_longcomplexprefix
 flipflop_numericfield
 flipflop_singlequotesonitalics
 flipflop_smallcaps
+flipflop_startingapostrophe
 form_titleshort
 form_titleshortnolong
 form_titletestnolongfalse
@@ -276,6 +282,7 @@ label_emptylabelvanish
 label_emptylabelvanishpage
 label_implicitform
 label_missingreturnsempty
+label_nofirstcharcapwithintextclass
 label_nonexistentnamevariablelabel
 label_pluralnumberofvolumes
 label_pluralpageswithalphaprefix
