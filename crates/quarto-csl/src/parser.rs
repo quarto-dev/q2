@@ -423,7 +423,8 @@ impl CslParser {
         let page_range = self
             .get_attr(element, "page-range-format")
             .and_then(|a| match a.value.as_str() {
-                "chicago" | "chicago-15" | "chicago-16" => Some(PageRangeFormat::Chicago),
+                "chicago" | "chicago-15" => Some(PageRangeFormat::Chicago15),
+                "chicago-16" => Some(PageRangeFormat::Chicago16),
                 "expanded" => Some(PageRangeFormat::Expanded),
                 "minimal" => Some(PageRangeFormat::Minimal),
                 "minimal-two" => Some(PageRangeFormat::MinimalTwo),

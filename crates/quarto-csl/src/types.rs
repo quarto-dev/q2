@@ -96,9 +96,17 @@ pub enum DemoteNonDroppingParticle {
 /// Page range format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PageRangeFormat {
-    Chicago,
+    /// Chicago Manual of Style 15th edition (and earlier "chicago" format).
+    /// More aggressive abbreviation for 4-digit numbers with many changed digits.
+    Chicago15,
+    /// Chicago Manual of Style 16th edition.
+    /// Simpler rules - always use minimal-two except for special cases.
+    Chicago16,
+    /// Expand abbreviated ranges to full form with prefixes on both numbers.
     Expanded,
+    /// Keep only the changed digits (minimum 1).
     Minimal,
+    /// Keep at least 2 digits in the second number.
     MinimalTwo,
 }
 

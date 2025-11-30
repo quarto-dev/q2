@@ -356,8 +356,8 @@ impl<'a> EvalContext<'a> {
     /// defaults to en-dash (–, U+2013).
     fn get_page_range_delimiter(&self) -> String {
         use quarto_csl::TermForm;
+        // Use processor.get_term() to check style-level locale overrides first
         self.processor
-            .locales
             .get_term("page-range-delimiter", TermForm::Long, false)
             .unwrap_or_else(|| "\u{2013}".to_string()) // Default to en-dash
     }
@@ -1012,7 +1012,8 @@ fn evaluate_text(
 
                     if is_page_like {
                         let delimiter = ctx.get_page_range_delimiter();
-                        let formatted = format_page_range(&value, &delimiter);
+                        let page_range_format = ctx.processor.style.options.page_range_format;
+                        let formatted = format_page_range(&value, &delimiter, page_range_format);
                         Output::tagged(Tag::Locator, crate::output::parse_csl_rich_text(&formatted))
                     } else {
                         // Parse CSL rich text (HTML-like markup) from the value
@@ -2585,9 +2586,16 @@ fn evaluate_number(
         // not just page-like variables. This applies to edition, volume, issue, etc.
         // Note: For roman numerals, we've already converted, so range formatting
         // only applies to numeric form.
+        // Note: page-range-format abbreviation only applies to "page" variable,
+        // so we pass None for other variables to just get delimiter replacement.
         let formatted = if num_el.form == quarto_csl::NumberForm::Numeric {
             let delimiter = ctx.get_page_range_delimiter();
-            format_page_range(&with_form, &delimiter)
+            let page_range_format = if num_el.variable == "page" {
+                ctx.processor.style.options.page_range_format
+            } else {
+                None
+            };
+            format_page_range(&with_form, &delimiter, page_range_format)
         } else {
             with_form
         };
@@ -3443,13 +3451,21 @@ where
     n.to_string()
 }
 
-///   is replaced with the page-range-delimiter (default: en-dash)
-/// - Escaped hyphens `\-` are converted to literal hyphens
+/// Format page ranges according to the style's page-range-format option.
+///
+/// This function handles:
+/// - Multiple ranges separated by comma or ampersand
+/// - Page range abbreviation based on format (minimal, chicago, expanded, etc.)
+/// - Escaped hyphens `\-` which are converted to literal hyphens
 /// - Spaces around separators are preserved
 ///
 /// The `page_range_delimiter` should typically be the locale's "page-range-delimiter"
 /// term, defaulting to en-dash (–) if not specified.
-fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
+fn format_page_range(
+    value: &str,
+    page_range_delimiter: &str,
+    format: Option<quarto_csl::PageRangeFormat>,
+) -> String {
     // Check for escaped hyphen - if present, we need special handling
     let has_escaped = value.contains("\\-");
 
@@ -3464,6 +3480,7 @@ fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
                 &current,
                 page_range_delimiter,
                 has_escaped,
+                format,
             ));
             current.clear();
             result.push(c);
@@ -3477,6 +3494,7 @@ fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
         &current,
         page_range_delimiter,
         has_escaped,
+        format,
     ));
 
     result
@@ -3484,7 +3502,12 @@ fn format_page_range(value: &str, page_range_delimiter: &str) -> String {
 
 /// Format a single page segment (part between comma/ampersand separators).
 /// Preserves leading and trailing whitespace.
-fn format_page_segment(segment: &str, delimiter: &str, has_escaped: bool) -> String {
+fn format_page_segment(
+    segment: &str,
+    delimiter: &str,
+    has_escaped: bool,
+    format: Option<quarto_csl::PageRangeFormat>,
+) -> String {
     // Preserve leading and trailing whitespace
     let leading: String = segment.chars().take_while(|c| c.is_whitespace()).collect();
     let trailing: String = segment
@@ -3515,20 +3538,237 @@ fn format_page_segment(segment: &str, delimiter: &str, has_escaped: bool) -> Str
         let end = rest.trim_start_matches(is_dash);
 
         // Only treat as range if both parts are non-empty
-        if !start.trim().is_empty() && !end.trim().is_empty() {
-            return format!(
-                "{}{}{}{}{}",
-                leading,
-                start.trim(),
-                delimiter,
-                end.trim(),
-                trailing
-            );
+        let start = start.trim();
+        let end = end.trim();
+        if !start.is_empty() && !end.is_empty() {
+            let formatted = format_page_range_pair(start, end, delimiter, format);
+            return format!("{}{}{}", leading, formatted, trailing);
         }
     }
 
     // Not a range, return with preserved whitespace
     format!("{}{}{}", leading, trimmed, trailing)
+}
+
+/// Format a page range pair (start-end) according to the page-range-format.
+///
+/// This implements the CSL page range abbreviation algorithms:
+/// - `None`: Just join with delimiter, no abbreviation
+/// - `Minimal`: Keep only the changed digits (minimum 1)
+/// - `MinimalTwo`: Keep at least 2 digits in the second number
+/// - `Chicago`: Chicago Manual of Style 15th edition rules
+/// - `Expanded`: Expand abbreviated ranges to full form with prefixes
+fn format_page_range_pair(
+    start: &str,
+    end: &str,
+    delimiter: &str,
+    format: Option<quarto_csl::PageRangeFormat>,
+) -> String {
+    use quarto_csl::PageRangeFormat;
+
+    // Extract prefix (everything except trailing digits) and trailing digits
+    // This matches Pandoc's `dropWhileEnd isDigit` approach.
+    // Examples:
+    //   "456K200" → prefix = "456K", digits = "200"
+    //   "N110"    → prefix = "N", digits = "110"
+    //   "99"      → prefix = "", digits = "99"
+    //   "xxv"     → prefix = "xxv", digits = "" (non-numeric, like roman numerals)
+    let (start_prefix, start_digits) = split_prefix_digits(start);
+    let (end_prefix, end_digits) = split_prefix_digits(end);
+
+    // If BOTH parts are purely non-numeric (like roman numerals "xxv-xxviii"),
+    // they form a valid range - just join with delimiter.
+    if start_digits.is_empty() && end_digits.is_empty() {
+        return format!("{}{}{}", start, delimiter, end);
+    }
+
+    // If prefixes differ AND at least one part has digits, this is NOT a valid page range.
+    // Per CSL spec, preserve the original hyphen character (don't use en-dash).
+    // Examples: "N110-P5" (different letter prefixes), "110-N6" (one has prefix, one doesn't)
+    if start_prefix != end_prefix {
+        return format!("{}-{}", start, end);
+    }
+
+    let prefix = start_prefix;
+
+    // If one has digits and one doesn't (but prefixes matched above - unusual case),
+    // just join with delimiter.
+    if start_digits.is_empty() || end_digits.is_empty() {
+        return format!("{}{}{}", start, delimiter, end);
+    }
+
+    // Expand the end number if it's shorter than start (abbreviated in input)
+    let end_expanded = if end_digits.len() < start_digits.len() {
+        let borrow_len = start_digits.len() - end_digits.len();
+        format!("{}{}", &start_digits[..borrow_len], end_digits)
+    } else {
+        end_digits.to_string()
+    };
+
+    match format {
+        None => {
+            // No format specified: just replace delimiter, preserve original abbreviation
+            format!("{}{}{}{}", start, delimiter, prefix, end_digits)
+        }
+        Some(PageRangeFormat::Expanded) => {
+            // Expanded: show full numbers with prefixes on both
+            format!("{}{}{}{}", start, delimiter, prefix, end_expanded)
+        }
+        Some(PageRangeFormat::Minimal) => {
+            // Minimal: keep only changed digits (minimum 1)
+            let abbreviated = minimal_abbreviate(start_digits, &end_expanded, 1);
+            format!("{}{}{}", start, delimiter, abbreviated)
+        }
+        Some(PageRangeFormat::MinimalTwo) => {
+            // MinimalTwo: keep at least 2 digits
+            let abbreviated = minimal_abbreviate(start_digits, &end_expanded, 2);
+            format!("{}{}{}", start, delimiter, abbreviated)
+        }
+        Some(PageRangeFormat::Chicago15) => {
+            // Chicago Manual of Style 15th edition
+            let abbreviated = chicago15_abbreviate(start_digits, &end_expanded);
+            format!("{}{}{}", start, delimiter, abbreviated)
+        }
+        Some(PageRangeFormat::Chicago16) => {
+            // Chicago Manual of Style 16th edition
+            let abbreviated = chicago16_abbreviate(start_digits, &end_expanded);
+            format!("{}{}{}", start, delimiter, abbreviated)
+        }
+    }
+}
+
+/// Split a page number into prefix (non-trailing-digits) and trailing digits.
+/// For example: "456K200" → ("456K", "200"), "xxv" → ("xxv", "")
+fn split_prefix_digits(s: &str) -> (&str, &str) {
+    // Find where trailing digits start
+    let digit_start = s
+        .char_indices()
+        .rev()
+        .take_while(|(_, c)| c.is_ascii_digit())
+        .last()
+        .map(|(i, _)| i)
+        .unwrap_or(s.len());
+
+    (&s[..digit_start], &s[digit_start..])
+}
+
+/// Minimal abbreviation: keep only the differing suffix, with minimum threshold digits.
+fn minimal_abbreviate(start: &str, end: &str, threshold: usize) -> String {
+    // If end is longer than start, this isn't an abbreviated range - return as-is
+    if end.len() > start.len() {
+        return end.to_string();
+    }
+
+    // Find common prefix length
+    let common_len = start
+        .chars()
+        .zip(end.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+
+    // The rest of the end number after the common prefix
+    let rest_len = end.len() - common_len;
+
+    if rest_len < threshold && end.len() >= threshold {
+        // If the differing part is shorter than threshold, take last `threshold` chars
+        end.chars().skip(end.len() - threshold).collect()
+    } else {
+        // Otherwise, take the differing part
+        end.chars().skip(common_len).collect()
+    }
+}
+
+/// Chicago Manual of Style 15th edition abbreviation rules.
+///
+/// Rules:
+/// - Less than 3 digits: use all digits
+/// - Ends in 00: use all digits
+/// - 01-09 range in last two digits: use changed digits only (minimal with threshold 1)
+/// - 4 digits with 3+ changed: use all digits (this rule is 15th edition specific)
+/// - Otherwise: use at least 2 digits (minimal with threshold 2)
+fn chicago15_abbreviate(start: &str, end: &str) -> String {
+    // If end is longer than start, this isn't an abbreviated range - return as-is
+    if end.len() > start.len() {
+        return end.to_string();
+    }
+
+    let start_len = start.len();
+
+    // Less than 3 digits: use all
+    if start_len < 3 {
+        return end.to_string();
+    }
+
+    // Ends in 00: use all
+    if start.ends_with("00") {
+        return end.to_string();
+    }
+
+    // Check if both have 0 as the tens digit (01-09 pattern)
+    // This means we're in a range like 101-109, 201-208, etc.
+    if start_len >= 2 && end.len() >= 2 {
+        let start_tens = start.chars().nth(start_len - 2);
+        let end_tens = end.chars().nth(end.len() - 2);
+        if start_tens == Some('0') && end_tens == Some('0') {
+            // Use minimal with threshold 1
+            return minimal_abbreviate(start, end, 1);
+        }
+    }
+
+    // Chicago 15th edition specific: 4-digit numbers with 3+ changed digits use all
+    if start_len == 4 {
+        let changed = start
+            .chars()
+            .zip(end.chars())
+            .filter(|(a, b)| a != b)
+            .count();
+        if changed >= 3 {
+            return end.to_string();
+        }
+    }
+
+    // Default: minimal with threshold 2
+    minimal_abbreviate(start, end, 2)
+}
+
+/// Chicago Manual of Style 16th edition abbreviation rules.
+///
+/// Rules (simpler than 15th edition):
+/// - Less than 3 digits: use all digits
+/// - Ends in 00: use all digits
+/// - 01-09 range in last two digits: use changed digits only (minimal with threshold 1)
+/// - Otherwise: use at least 2 digits (minimal with threshold 2)
+fn chicago16_abbreviate(start: &str, end: &str) -> String {
+    // If end is longer than start, this isn't an abbreviated range - return as-is
+    if end.len() > start.len() {
+        return end.to_string();
+    }
+
+    let start_len = start.len();
+
+    // Less than 3 digits: use all
+    if start_len < 3 {
+        return end.to_string();
+    }
+
+    // Ends in 00: use all
+    if start.ends_with("00") {
+        return end.to_string();
+    }
+
+    // Check if both have 0 as the tens digit (01-09 pattern)
+    // This means we're in a range like 101-109, 201-208, etc.
+    if start_len >= 2 && end.len() >= 2 {
+        let start_tens = start.chars().nth(start_len - 2);
+        let end_tens = end.chars().nth(end.len() - 2);
+        if start_tens == Some('0') && end_tens == Some('0') {
+            // Use minimal with threshold 1
+            return minimal_abbreviate(start, end, 1);
+        }
+    }
+
+    // Default: minimal with threshold 2
+    minimal_abbreviate(start, end, 2)
 }
 
 #[cfg(test)]

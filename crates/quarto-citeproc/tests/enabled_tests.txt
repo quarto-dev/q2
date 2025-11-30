@@ -706,3 +706,11 @@ simplespace_case1
 sort_VariousNameMacros1
 sort_VariousNameMacros2
 sort_VariousNameMacros3
+page_Chicago
+page_Chicago16
+page_ChicagoWeird
+page_Expand
+page_ExpandWeirdComposite
+page_Minimal
+page_WithLocaleAndWeirdDelimiter
+locale_PageRangeDelimiterTermDefined
