@@ -821,6 +821,8 @@ pub fn evaluate_macro_for_sort(
     let name_options = layout_name_options.merge(&style_name_options);
 
     let mut ctx = EvalContext::new(&mut temp_processor, reference, &name_options);
+    // Mark this as a sort key evaluation so demote-non-dropping-particle works correctly
+    ctx.in_sort_key = true;
     let output = evaluate_elements(&mut ctx, elements, "")?;
 
     Ok(output.render())
@@ -1293,8 +1295,12 @@ fn format_names(
     for (i, n) in names.iter().take(names_to_show).enumerate() {
         // Literal names are never inverted
         let is_literal = n.literal.is_some();
+        // Per Haskell citeproc: when computing sort keys (in_sort_key=true),
+        // names are always rendered in sort order (family first), regardless of name-as-sort-order
         let inverted = if is_literal {
             false
+        } else if ctx.in_sort_key {
+            true
         } else {
             match name_as_sort_order {
                 Some(NameAsSortOrder::All) => true,
@@ -1471,6 +1477,15 @@ fn format_names(
     Output::sequence(result_parts)
 }
 
+/// Check if a string ends with a character that should NOT be followed by a space.
+/// Per Haskell citeproc: apostrophe, curly apostrophe, hyphen, en-dash, or non-breaking space.
+/// Used when joining non-dropping particle with family name.
+fn ends_with_particle_punct(s: &str) -> bool {
+    s.chars().last().map_or(false, |c| {
+        c == '\'' || c == '\u{2019}' || c == '-' || c == '\u{2013}' || c == '\u{00a0}'
+    })
+}
+
 /// Format a single name, returning structured Output.
 ///
 /// If `inverted` is true, format as "Family, Given" (sort order).
@@ -1553,8 +1568,20 @@ fn format_single_name(
             if let Some(ref family) = name.family {
                 parts.push(Output::literal(family.clone()));
             }
-            // Join with space delimiter
-            let base = Output::formatted_with_delimiter(Formatting::default(), parts, " ");
+            // Join with space delimiter, unless ndp ends with particle punctuation
+            // Per Haskell citeproc: no space after apostrophe, hyphen, etc.
+            let delimiter = if name
+                .non_dropping_particle
+                .as_ref()
+                .map_or(false, |ndp| ends_with_particle_punct(ndp))
+            {
+                ""
+            } else if name.is_byzantine() {
+                " "
+            } else {
+                ""
+            };
+            let base = Output::formatted_with_delimiter(Formatting::default(), parts, delimiter);
             // Apply family_formatting if specified (Short form only shows family name)
             if let Some(fmt) = family_formatting {
                 Output::formatted(fmt.clone(), vec![base])
@@ -1647,10 +1674,24 @@ fn format_single_name(
                 if fp.is_empty() {
                     None
                 } else {
+                    // Determine delimiter: no space if ndp ends with particle punctuation
+                    // Per Haskell citeproc: apostrophe, hyphen, etc. aren't followed by space
+                    let delimiter = if !demote_particle
+                        && name
+                            .non_dropping_particle
+                            .as_ref()
+                            .map_or(false, |ndp| ends_with_particle_punct(ndp))
+                    {
+                        ""
+                    } else if name.is_byzantine() {
+                        " "
+                    } else {
+                        ""
+                    };
                     Some(Output::formatted_with_delimiter(
                         Formatting::default(),
                         fp,
-                        " ",
+                        delimiter,
                     ))
                 }
             };

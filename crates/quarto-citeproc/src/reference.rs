@@ -361,6 +361,34 @@ impl Name {
                 }
             }
         }
+
+        // If no space-separated non-dropping particle found, try punctuation-connected extraction
+        // e.g., "d'Aubignac" -> non_dropping_particle="d'", family="Aubignac"
+        // e.g., "al-One" -> non_dropping_particle="al-", family="One"
+        // Reference: Haskell citeproc Types.hs:1253-1258
+        if self.non_dropping_particle.is_none() {
+            if let Some(family) = self.family.clone() {
+                // Find first particle punctuation character
+                if let Some(punct_idx) = family.find(is_particle_punct) {
+                    let before = &family[..punct_idx];
+                    let punct_char = family[punct_idx..].chars().next().unwrap();
+                    let after = &family[punct_idx + punct_char.len_utf8()..];
+
+                    // Only extract if:
+                    // 1. "before" is not empty (must have particle text)
+                    // 2. "after" is not empty (must have actual family name)
+                    // 3. "before" is all particle characters (lowercase + punct)
+                    if !before.is_empty()
+                        && !after.is_empty()
+                        && before.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
+                    {
+                        self.non_dropping_particle =
+                            Some(format!("{}{}", before, punct_char));
+                        self.family = Some(after.to_string());
+                    }
+                }
+            }
+        }
     }
 
     /// Get the display name in "family, given" format.
