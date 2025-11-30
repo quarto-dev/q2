@@ -224,6 +224,27 @@ pub fn evaluate_citation_to_output(
     processor: &mut Processor,
     citation: &Citation,
 ) -> Result<Output> {
+    evaluate_citation_to_output_impl(processor, citation, true)
+}
+
+/// Evaluate a citation WITHOUT applying collapse logic.
+///
+/// This is used for disambiguation detection, which needs to see each item's
+/// full rendered form before any name suppression from collapsing.
+/// Pandoc's citeproc runs disambiguation before collapsing, so this matches that behavior.
+pub fn evaluate_citation_to_output_no_collapse(
+    processor: &mut Processor,
+    citation: &Citation,
+) -> Result<Output> {
+    evaluate_citation_to_output_impl(processor, citation, false)
+}
+
+/// Internal implementation that optionally applies collapse logic.
+fn evaluate_citation_to_output_impl(
+    processor: &mut Processor,
+    citation: &Citation,
+    apply_collapse: bool,
+) -> Result<Output> {
     use quarto_csl::Collapse;
 
     // Clone layout to avoid borrow conflicts
@@ -330,17 +351,22 @@ pub fn evaluate_citation_to_output(
         item_outputs.push(tagged_output);
     }
 
-    // Apply collapse logic based on collapse mode
-    let combined = match layout.collapse {
-        Collapse::Year | Collapse::YearSuffix | Collapse::YearSuffixRanged => {
-            collapse_by_year(item_outputs, &layout)
+    // Apply collapse logic based on collapse mode (unless disabled for disambiguation)
+    let combined = if apply_collapse {
+        match layout.collapse {
+            Collapse::Year | Collapse::YearSuffix | Collapse::YearSuffixRanged => {
+                collapse_by_year(item_outputs, &layout)
+            }
+            Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
+            Collapse::None => Output::formatted_with_delimiter(
+                Formatting::default(),
+                item_outputs,
+                &delimiter,
+            ),
         }
-        Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
-        Collapse::None => Output::formatted_with_delimiter(
-            Formatting::default(),
-            item_outputs,
-            &delimiter,
-        ),
+    } else {
+        // No collapsing - just join items with delimiter (for disambiguation detection)
+        Output::formatted_with_delimiter(Formatting::default(), item_outputs, &delimiter)
     };
 
     // Apply layout-level formatting

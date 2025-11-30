@@ -247,35 +247,34 @@ pub fn find_year_suffix_with_full_author_match(
 ///
 /// This is used to combine rendered-text-based ambiguities with author+year-based
 /// ambiguities, ensuring year suffixes are added when needed for either case.
+///
+/// IMPORTANT: This preserves the order of items from groups1 (first priority) and
+/// groups2 (second priority) because year suffix assignment depends on citation order.
 pub fn merge_ambiguity_groups(
     groups1: &[Vec<DisambData>],
     groups2: &[Vec<DisambData>],
 ) -> Vec<Vec<DisambData>> {
-    // Collect all item IDs from both sets
+    // Collect all item IDs in order of first appearance (preserves citation order)
+    let mut item_order: Vec<String> = Vec::new();
     let mut all_items: HashMap<String, DisambData> = HashMap::new();
-    let mut item_groups: HashMap<String, HashSet<String>> = HashMap::new();
 
-    // Process groups1
-    for (group_idx, group) in groups1.iter().enumerate() {
-        let group_key = format!("g1_{}", group_idx);
+    // Process groups1 first (primary source, preserves citation order)
+    for group in groups1.iter() {
         for data in group {
+            if !all_items.contains_key(&data.item_id) {
+                item_order.push(data.item_id.clone());
+            }
             all_items.insert(data.item_id.clone(), data.clone());
-            item_groups
-                .entry(data.item_id.clone())
-                .or_default()
-                .insert(group_key.clone());
         }
     }
 
-    // Process groups2
-    for (group_idx, group) in groups2.iter().enumerate() {
-        let group_key = format!("g2_{}", group_idx);
+    // Process groups2 (secondary source)
+    for group in groups2.iter() {
         for data in group {
+            if !all_items.contains_key(&data.item_id) {
+                item_order.push(data.item_id.clone());
+            }
             all_items.insert(data.item_id.clone(), data.clone());
-            item_groups
-                .entry(data.item_id.clone())
-                .or_default()
-                .insert(group_key.clone());
         }
     }
 
@@ -313,15 +312,17 @@ pub fn merge_ambiguity_groups(
         }
     }
 
-    // Collect items by their root
+    // Collect items by their root, preserving the original item order
     let mut result_groups: HashMap<String, Vec<DisambData>> = HashMap::new();
-    for (id, data) in all_items {
-        let root = find(&mut parent, &id);
-        result_groups.entry(root).or_default().push(data);
+    for id in &item_order {
+        if let Some(data) = all_items.get(id) {
+            let root = find(&mut parent, id);
+            result_groups.entry(root).or_default().push(data.clone());
+        }
     }
 
-    // Filter to groups with >1 unique item and return
-    result_groups
+    // Collect groups in deterministic order (by first item's position in item_order)
+    let mut groups_with_order: Vec<(usize, Vec<DisambData>)> = result_groups
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
@@ -329,7 +330,21 @@ pub fn merge_ambiguity_groups(
             unique_ids.dedup();
             unique_ids.len() > 1
         })
-        .collect()
+        .map(|group| {
+            // Find the earliest position of any item in this group
+            let min_pos = group
+                .iter()
+                .filter_map(|d| item_order.iter().position(|id| id == &d.item_id))
+                .min()
+                .unwrap_or(usize::MAX);
+            (min_pos, group)
+        })
+        .collect();
+
+    // Sort groups by first appearance order
+    groups_with_order.sort_by_key(|(pos, _)| *pos);
+
+    groups_with_order.into_iter().map(|(_, group)| group).collect()
 }
 
 /// Find groups of ambiguous citations (simple version from strings without names).

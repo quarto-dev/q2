@@ -150,6 +150,14 @@ Expected: « text »
 ## Progress
 
 - [x] Initial analysis complete
-- [ ] Page range en-dash fix
-- [ ] Punctuation-in-quote fix
-- [ ] Year-suffix disambiguation fix
+- [x] Page range en-dash fix (k-457, CLOSED) - 14 tests enabled
+- [x] Punctuation-in-quote fix (k-458, CLOSED) - 4 tests enabled
+- [ ] Year-suffix disambiguation fix (k-459, OPEN)
+
+## Session Notes
+
+See `claude-notes/plans/2025-11-29-session-handoff-notes.md` for detailed technical notes from the 2025-11-29 session, including:
+- Files modified
+- Technical insights learned
+- Recommended approach for disambiguation work
+- Useful commands

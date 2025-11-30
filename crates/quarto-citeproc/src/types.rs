@@ -436,6 +436,17 @@ impl Processor {
         crate::eval::evaluate_citation_to_output(self, citation)
     }
 
+    /// Process a citation WITHOUT applying collapse logic.
+    ///
+    /// This is used for disambiguation detection, which needs to see each item's
+    /// full rendered form before any name suppression from collapsing.
+    fn process_citation_to_output_no_collapse(
+        &mut self,
+        citation: &Citation,
+    ) -> Result<crate::output::Output> {
+        crate::eval::evaluate_citation_to_output_no_collapse(self, citation)
+    }
+
     /// Generate a bibliography entry for a reference.
     pub fn format_bibliography_entry(&mut self, id: &str) -> Result<Option<String>> {
         if self.style.bibliography.is_none() {
@@ -891,8 +902,8 @@ impl Processor {
         use crate::disambiguation::{
             apply_global_name_disambiguation, assign_year_suffixes, extract_disamb_data,
             extract_disamb_data_with_processor, find_ambiguities,
-            find_year_suffix_with_full_author_match, set_disambiguate_condition,
-            try_add_given_names_with_rule, try_add_names,
+            find_year_suffix_with_full_author_match, merge_ambiguity_groups,
+            set_disambiguate_condition, try_add_given_names_with_rule, try_add_names,
         };
         use quarto_csl::GivenNameDisambiguationRule;
 
@@ -947,15 +958,16 @@ impl Processor {
             })
             .collect();
 
-        // First pass: render all citations with calculated positions
+        // First pass: render all citations WITHOUT collapsing for disambiguation detection
+        // Pandoc's citeproc runs disambiguation before collapsing, so we need to see
+        // each item's full rendered form (without name suppression from collapsing)
+        // to correctly detect ambiguities.
         let mut outputs: Vec<crate::output::Output> = citations_with_positions
             .iter()
-            .map(|c| self.process_citation_to_output(c))
+            .map(|c| self.process_citation_to_output_no_collapse(c))
             .collect::<Result<Vec<_>>>()?;
 
         // Extract DisambData and find initial ambiguities
-        // Use extract_disamb_data_with_processor to get names from references directly
-        // This handles cases where collapsing may suppress author names in the output
         let mut disamb_data = extract_disamb_data_with_processor(&outputs, self);
         let initial_ambiguities = find_ambiguities(disamb_data.clone());
         let mut ambiguities = initial_ambiguities.clone();
@@ -965,10 +977,10 @@ impl Processor {
         if let Some(rule) = add_givenname {
             if rule != GivenNameDisambiguationRule::ByCite {
                 apply_global_name_disambiguation(self, &disamb_data, rule);
-                // Re-render and refresh ambiguities
+                // Re-render (without collapse) and refresh ambiguities
                 outputs = citations_with_positions
                     .iter()
-                    .map(|c| self.process_citation_to_output(c))
+                    .map(|c| self.process_citation_to_output_no_collapse(c))
                     .collect::<Result<Vec<_>>>()?;
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data.clone());
@@ -978,10 +990,10 @@ impl Processor {
         // 2. Add names (expand et-al) if still ambiguous
         if add_names && !ambiguities.is_empty() {
             try_add_names(self, &ambiguities, add_givenname);
-            // Re-render and refresh ambiguities
+            // Re-render (without collapse) and refresh ambiguities
             outputs = citations_with_positions
                 .iter()
-                .map(|c| self.process_citation_to_output(c))
+                .map(|c| self.process_citation_to_output_no_collapse(c))
                 .collect::<Result<Vec<_>>>()?;
             disamb_data = extract_disamb_data(&outputs);
             ambiguities = find_ambiguities(disamb_data.clone());
@@ -998,10 +1010,10 @@ impl Processor {
                     &initial_ambiguities,
                     GivenNameDisambiguationRule::ByCite,
                 );
-                // Re-render and refresh ambiguities
+                // Re-render (without collapse) and refresh ambiguities
                 outputs = citations_with_positions
                     .iter()
-                    .map(|c| self.process_citation_to_output(c))
+                    .map(|c| self.process_citation_to_output_no_collapse(c))
                     .collect::<Result<Vec<_>>>()?;
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data.clone());
@@ -1010,28 +1022,30 @@ impl Processor {
 
         // 4. Add year suffixes if enabled
         // We need to handle two cases:
-        // a) Items that are still ambiguous by rendered text (in `ambiguities`)
-        // b) Items with identical authors (same family AND given names) + same year,
-        //    which may not appear in `ambiguities` due to collapsed output hiding
-        //    the ambiguity (e.g., "Brown, 2006; Brown, 2006" collapses to "Brown, 2006, 2006")
+        // a) Items that render identically (same author-rendered + same year)
+        //    These are detected by rendered-text ambiguities (now working correctly
+        //    since disambiguation runs before collapsing)
+        // b) Items with same author + same year but different non-disambiguating parts
+        //    (e.g., different accessed dates) - these need author+year grouping
         //
-        // The old approach (using find_year_suffix_ambiguities with only family names)
-        // was too aggressive - it would add suffixes even when given names differ
-        // (e.g., "A. Smith 2001" vs "B. Smith 2001" don't need suffixes).
-        //
-        // The new approach:
-        // - Use rendered-text ambiguities when available (preserves citation order)
-        // - Fall back to full-author-match only when rendered text doesn't catch it
-        //   (happens with collapsed citations)
+        // We merge both approaches to cover all cases.
         if add_year_suffix {
-            // Prefer rendered-text ambiguities (preserves citation order properly)
-            // Only use full-author-match as fallback for collapsed citations
-            let year_suffix_groups = if !ambiguities.is_empty() {
-                ambiguities.clone()
+            // Get rendered-text ambiguities (handles case a)
+            let rendered_ambiguities = &ambiguities;
+
+            // Get author+year ambiguities (handles case b)
+            let author_year_ambiguities =
+                find_year_suffix_with_full_author_match(disamb_data.clone(), self);
+
+            // Merge both sets of ambiguity groups
+            let year_suffix_groups = if !rendered_ambiguities.is_empty()
+                && !author_year_ambiguities.is_empty()
+            {
+                merge_ambiguity_groups(rendered_ambiguities, &author_year_ambiguities)
+            } else if !rendered_ambiguities.is_empty() {
+                rendered_ambiguities.clone()
             } else {
-                // No rendered-text ambiguities - check for collapsed citation case
-                // where items with identical authors + year need year suffixes
-                find_year_suffix_with_full_author_match(disamb_data.clone(), self)
+                author_year_ambiguities
             };
 
             if !year_suffix_groups.is_empty() {
@@ -1039,10 +1053,10 @@ impl Processor {
                 for (item_id, suffix) in suffixes {
                     self.set_year_suffix(&item_id, suffix);
                 }
-                // Re-render and refresh ambiguities
+                // Re-render (without collapse) and refresh ambiguities
                 outputs = citations_with_positions
                     .iter()
-                    .map(|c| self.process_citation_to_output(c))
+                    .map(|c| self.process_citation_to_output_no_collapse(c))
                     .collect::<Result<Vec<_>>>()?;
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data);
@@ -1052,7 +1066,7 @@ impl Processor {
         // 5. Set disambiguate condition for any remaining ambiguities
         set_disambiguate_condition(self, &ambiguities);
 
-        // Final pass: re-render with all disambiguation applied
+        // Final pass: re-render WITH collapsing applied (and all disambiguation)
         citations_with_positions
             .iter()
             .map(|c| self.process_citation_to_output(c))
