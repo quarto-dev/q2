@@ -1159,6 +1159,28 @@ fn apply_text_case_to_inlines(
     }
 }
 
+/// Count the number of Str nodes in an Inlines structure.
+/// Used to keep indices in sync when skipping protected content.
+fn count_str_nodes(inlines: &quarto_pandoc_types::Inlines) -> usize {
+    use quarto_pandoc_types::Inline;
+
+    fn count(inline: &Inline) -> usize {
+        match inline {
+            Inline::Str(_) => 1,
+            Inline::Emph(e) => e.content.iter().map(count).sum(),
+            Inline::Strong(s) => s.content.iter().map(count).sum(),
+            Inline::Quoted(q) => q.content.iter().map(count).sum(),
+            Inline::Link(l) => l.content.iter().map(count).sum(),
+            Inline::Span(s) => s.content.iter().map(count).sum(),
+            // SmallCaps, Superscript, Subscript don't contribute to count
+            // because find_last_word_str_index also skips them
+            _ => 0,
+        }
+    }
+
+    inlines.iter().map(count).sum()
+}
+
 /// Find the index of the last Str node that contains word characters.
 /// Returns None if no such node exists.
 fn find_last_word_str_index(inlines: &quarto_pandoc_types::Inlines) -> Option<usize> {
@@ -1288,11 +1310,16 @@ fn apply_title_case_to_inlines_with_last(
             }
             Inline::Span(s) => {
                 let (_, classes, _) = &s.attr;
-                if classes.iter().any(|c| c == "nocase") {
-                    // nocase spans still consume the first word position
+                // nocase and nodecoration spans are protected from text-case transformations
+                // per CSL-JSON spec and Pandoc citeproc behavior
+                if classes.iter().any(|c| c == "nocase" || c == "nodecoration") {
+                    // These spans still consume the first word position
                     if has_text_content(&s.content) {
                         *seen_first_word = true;
                     }
+                    // Increment current_index by the number of Str nodes inside
+                    // to keep in sync with find_last_word_str_index
+                    *current_index += count_str_nodes(&s.content);
                 } else {
                     apply_title_case_to_inlines_with_last(
                         &mut s.content,
@@ -1337,7 +1364,9 @@ fn apply_text_case_to_inlines_simple(
             Inline::Link(l) => apply_text_case_to_inlines_simple(&mut l.content, text_case),
             Inline::Span(s) => {
                 let (_, classes, _) = &s.attr;
-                if !classes.iter().any(|c| c == "nocase") {
+                // nocase and nodecoration spans are protected from text-case transformations
+                // per CSL-JSON spec and Pandoc citeproc behavior
+                if !classes.iter().any(|c| c == "nocase" || c == "nodecoration") {
                     apply_text_case_to_inlines_simple(&mut s.content, text_case);
                 }
             }

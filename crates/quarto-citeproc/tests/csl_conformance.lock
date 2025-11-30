@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 654
-# Disabled: 204
+# Enabled: 668
+# Disabled: 190
 #
 [enabled]
 affix_commaafterquote
@@ -34,6 +34,7 @@ bugreports_disambiguate
 bugreports_disambiguationaddnames
 bugreports_disambiguationaddnamesbibliography
 bugreports_droppinggroupdelimiterspace
+bugreports_duplicatespaces3
 bugreports_duplicateterminalpunctuationinbibliography
 bugreports_effingbug
 bugreports_emptyifmatchnonefail
@@ -260,6 +261,7 @@ flipflop_completeciteinprefix
 flipflop_italicsflipped
 flipflop_italicssimple
 flipflop_italicswithok
+flipflop_italicswithokandtextcase
 flipflop_leadingmarkupwithapostrophe
 flipflop_leadingsinglequote
 flipflop_longcomplexprefix
@@ -331,12 +333,18 @@ magic_nameparticle
 magic_numberrangeenglish
 magic_numberrangefrench
 magic_punctuationinquotedefaultenglishdelimiter
+magic_punctuationinquotedefaultenglishsuffix
 magic_punctuationinquotedelimitertrue
 magic_punctuationinquotefalse
 magic_punctuationinquotefalsesuppressextra
+magic_punctuationinquotesuffixtrue
 magic_punctuationinquotetruesuppressextra
+magic_quotesandbraces1
+magic_quotesandbraces2
 magic_secondfieldalign
 magic_stripperiodsexcludeaffixes
+magic_stripperiodsfalse
+magic_stripperiodstrue
 magic_stripperiodstrueshortform
 magic_suppresslayoutdelimiterifprefixcomma
 magic_termcapitalizationwithprefix
@@ -547,6 +555,7 @@ number_leadingzeros
 number_mixedtext
 number_pagefirst
 number_pagerange
+number_preservedelimiter
 number_simplenumberarabic
 number_simplenumberordinallong
 number_simplenumberordinalshort
@@ -584,10 +593,12 @@ punctuation_donotsuppresscolonafterperiod
 punctuation_fieldduplicates
 punctuation_fullmontyfield
 punctuation_fullmontyplain
+punctuation_fullmontyquotesout
 punctuation_nosuppressofperiodbeforesemicolon
 punctuation_semicolondelimiter
 quotes_punctuation
 quotes_punctuationnasty
+simplespace_case1
 sort_bibliographycitationnumberdescending
 sort_bibliographycitationnumberdescendingsecondary
 sort_bibliographyresortonupdate
@@ -623,6 +634,9 @@ sort_statusfielddescending
 sort_stripmarkup
 sort_substitutetitle
 sort_testinheritance
+sort_variousnamemacros1
+sort_variousnamemacros2
+sort_variousnamemacros3
 sortseparator_sortseparatorempty
 substitute_repeatednamesok
 substitute_substituteonlyoncestring
