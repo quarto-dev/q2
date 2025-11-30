@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 689
-# Disabled: 169
+# Enabled: 701
+# Disabled: 157
 #
 [enabled]
 affix_commaafterquote
@@ -19,6 +19,7 @@ bugreports_abnt
 bugreports_allcapsleakage
 bugreports_apostropheonparticle
 bugreports_arabiclocale
+bugreports_asmjournals
 bugreports_authorposition
 bugreports_authoryear
 bugreports_badcitationupdate
@@ -35,6 +36,7 @@ bugreports_disambiguate
 bugreports_disambiguationaddnames
 bugreports_disambiguationaddnamesbibliography
 bugreports_droppinggroupdelimiterspace
+bugreports_duplicatespaces
 bugreports_duplicatespaces3
 bugreports_duplicateterminalpunctuationinbibliography
 bugreports_effingbug
@@ -43,6 +45,7 @@ bugreports_fourandfour
 bugreports_frenchapostrophe
 bugreports_greekstyleproblems
 bugreports_greekstyletwoeditors
+bugreports_ieeepunctuation
 bugreports_labelsoutofplace
 bugreports_matchedauthoranddate
 bugreports_noeventinnestedmacrowitholdprocessor
@@ -72,6 +75,7 @@ bugreports_yearsuffixlingers
 collapse_authorcollapse
 collapse_authorcollapsedifferentauthorsonewithetal
 collapse_authorcollapsenodate
+collapse_authorcollapsenodatesorted
 collapse_citationnumberrangesmixed
 collapse_citationnumberrangesmixed2
 collapse_citationnumberrangesmixed3
@@ -172,6 +176,8 @@ date_negativedatesort
 date_negativedatesortviamacro
 date_negativedatesortviamacroonyearmonthonly
 date_nodate
+date_nonexistentsortreversebibliography
+date_nonexistentsortreversecitation
 date_otheralone
 date_otherwithdate
 date_rangedelimiter
@@ -179,6 +185,8 @@ date_seasonrange1
 date_seasonrange2
 date_seasonrange3
 date_seasonsubstituteingroup
+date_sortemptydatesbibliography
+date_sortemptydatescitation
 date_string
 date_textformfulldatedayrange
 date_textformfulldatemonthrange
@@ -257,6 +265,7 @@ disambiguate_yearsuffixwithmixedcreatortypes
 display_displayblock
 display_lostsuffix
 display_secondfieldalignclone
+display_secondfieldalignmigratepunctuation
 etal_citationandbibliographydecorationsinbibliography
 etal_citationandbibliographydecorationsincitation
 etal_shortformofname
@@ -639,6 +648,7 @@ sort_citationnumbersecondaryascendingviavariablebibliography
 sort_citationsecondarykey
 sort_conditionalmacrodates
 sort_daledalebout
+sort_datemacrosortwithsecondfieldalign
 sort_datevariable
 sort_datevariablemixedelementsascendinga
 sort_datevariablemixedelementsascendingb
@@ -651,6 +661,8 @@ sort_localizeddatelimitedparts
 sort_nameimplicitsortorderandform
 sort_nameparticleinnamesortfalse
 sort_namevariable
+sort_quotes
+sort_statusfieldascending
 sort_statusfielddescending
 sort_stripmarkup
 sort_substitutetitle

@@ -258,6 +258,10 @@ sort_ChicagoYearSuffix2
 # Apostrophe spacing in name particles: "de' Frinkle" vs "de'Frinkle"
 sort_LeadingApostropheOnNameParticle
 
+# Danish locale collation for name particles (d', de', in 't, 't)
+# Pandoc citeproc also fails this test
+sort_LeadingA
+
 # Omitted bibliography reference handling (no printed form)
 sort_OmittedBibRefMixedNumericStyle
 sort_OmittedBibRefNonNumericStyle

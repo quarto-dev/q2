@@ -735,14 +735,21 @@ pub fn evaluate_bibliography_entry_to_output(
     let output = evaluate_layout(&mut ctx, &layout)?;
 
     // Apply second-field-align transformation if enabled
-    let output = if layout.second_field_align.is_some() {
-        apply_second_field_align(output)
+    // When second-field-align is used, the layout suffix needs to be moved INSIDE
+    // the right-inline div, not applied to the outer wrapper.
+    // See: display_SecondFieldAlignMigratePunctuation.txt
+    let (output, formatting) = if layout.second_field_align.is_some() {
+        let aligned = apply_second_field_align(output, layout.formatting.suffix.as_deref());
+        // Remove suffix from formatting since it's now inside right-inline
+        let mut formatting = layout.formatting.clone();
+        formatting.suffix = None;
+        (aligned, formatting)
     } else {
-        output
+        (output, layout.formatting.clone())
     };
 
     // Apply layout-level formatting
-    Ok(Output::formatted(layout.formatting.clone(), vec![output]))
+    Ok(Output::formatted(formatting, vec![output]))
 }
 
 /// Apply second-field-align transformation to a bibliography entry output.
@@ -752,7 +759,11 @@ pub fn evaluate_bibliography_entry_to_output(
 ///
 /// This creates the two-column layout used in styles like IEEE where the citation
 /// number is in a left margin column and the rest of the content is inline.
-fn apply_second_field_align(output: Output) -> Output {
+///
+/// The `layout_suffix` parameter is the suffix from the layout formatting (e.g., ".")
+/// which needs to be moved INSIDE the right-inline div rather than wrapping everything.
+/// See: display_SecondFieldAlignMigratePunctuation.txt
+fn apply_second_field_align(output: Output, layout_suffix: Option<&str>) -> Output {
     use quarto_csl::Formatting;
 
     // Extract the children from the output
@@ -765,7 +776,7 @@ fn apply_second_field_align(output: Output) -> Output {
                     Output::Tagged { tag, .. } => tag.clone(),
                     _ => unreachable!(),
                 },
-                child: Box::new(apply_second_field_align(*child.clone())),
+                child: Box::new(apply_second_field_align(*child.clone(), layout_suffix)),
             };
         }
         _ => return output, // Nothing to split
@@ -809,9 +820,11 @@ fn apply_second_field_align(output: Output) -> Output {
     if rest.is_empty() {
         left_margin
     } else {
+        // Apply the layout suffix to the right-inline formatting
         let right_inline = Output::Formatted {
             formatting: Formatting {
                 display: Some(quarto_csl::Display::RightInline),
+                suffix: layout_suffix.map(|s| s.to_string()),
                 ..Formatting::default()
             },
             children: rest,

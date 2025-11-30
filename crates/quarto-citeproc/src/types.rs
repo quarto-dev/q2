@@ -20,14 +20,34 @@ pub struct SortKeyValue {
 }
 
 /// Compare two sets of sort keys.
+/// Per CSL spec and Pandoc citeproc: empty/missing values sort AFTER non-empty values.
+/// The descending flag only affects comparison of non-empty values, not empty-vs-non-empty.
 pub fn compare_sort_keys(a: &[SortKeyValue], b: &[SortKeyValue]) -> Ordering {
     for (ka, kb) in a.iter().zip(b.iter()) {
         // Normalize for comparison: lowercase and strip non-alphabetic leading/trailing chars
         let va = normalize_for_sort(&ka.value);
         let vb = normalize_for_sort(&kb.value);
-        let cmp = va.cmp(&vb);
+
+        // Empty values sort AFTER non-empty values (like Haskell's Nothing vs Just)
+        // This is NOT affected by the descending flag - empty always sorts last.
+        // See: sort_StatusFieldAscending.txt, sort_StatusFieldDescending.txt
+        let cmp = match (va.is_empty(), vb.is_empty()) {
+            (true, true) => Ordering::Equal,
+            (true, false) => Ordering::Greater, // empty sorts after non-empty (always)
+            (false, true) => Ordering::Less,    // non-empty sorts before empty (always)
+            (false, false) => {
+                // Only reverse for descending when BOTH values are non-empty
+                let value_cmp = va.cmp(&vb);
+                if ka.descending {
+                    value_cmp.reverse()
+                } else {
+                    value_cmp
+                }
+            }
+        };
+
         if cmp != Ordering::Equal {
-            return if ka.descending { cmp.reverse() } else { cmp };
+            return cmp;
         }
     }
     // If all compared keys are equal, compare by length (more keys = greater)
@@ -49,20 +69,38 @@ fn strip_html_tags(s: &str) -> String {
     result
 }
 
+/// Check if a character is a word separator for sort key normalization.
+/// Based on Haskell citeproc's normalizeSortKey: splits on spaces, quotes (various types),
+/// commas, and Arabic transliteration marks.
+/// Also includes brackets which the old implementation filtered out.
+fn is_sort_word_separator(c: char) -> bool {
+    c.is_whitespace()
+        || c == '\'' // ASCII single quote
+        || c == '\u{2019}' // RIGHT SINGLE QUOTATION MARK
+        || c == '\u{2018}' // LEFT SINGLE QUOTATION MARK
+        || c == '\u{201C}' // LEFT DOUBLE QUOTATION MARK
+        || c == '\u{201D}' // RIGHT DOUBLE QUOTATION MARK
+        || c == '"'  // ASCII double quote
+        || c == ','
+        || c == '[' // brackets (previously filtered out)
+        || c == ']'
+        || c == '\u{02BE}' // MODIFIER LETTER RIGHT HALF RING (ayn in transliterated Arabic)
+        || c == '\u{02BF}' // MODIFIER LETTER LEFT HALF RING (hamza in transliterated Arabic)
+}
+
 /// Normalize a string for sort comparison.
-/// Strips HTML tags, leading/trailing punctuation (but not alphanumerics), and lowercases.
+/// Based on Haskell citeproc's normalizeSortKey: strips HTML tags, splits on word separators
+/// (quotes, commas, spaces, etc.), case-folds, and joins with spaces.
 fn normalize_for_sort(s: &str) -> String {
     // First strip HTML tags
     let s = strip_html_tags(s);
-    // Strip leading punctuation (like brackets, quotes) but keep letters AND digits
-    let s = s.trim_start_matches(|c: char| !c.is_alphanumeric());
-    // Strip trailing punctuation (but keep letters and digits)
-    let s = s.trim_end_matches(|c: char| !c.is_alphanumeric());
-    // Lowercase and remove internal brackets for comparison
-    s.to_lowercase()
-        .chars()
-        .filter(|c| *c != '[' && *c != ']')
-        .collect()
+    // Split on word separators (like Haskell's T.split isWordSep), filter empty, join
+    // This handles quotes, commas, spaces, and special marks
+    s.split(is_sort_word_separator)
+        .filter(|word| !word.is_empty())
+        .map(|word| word.to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// A citation request.
