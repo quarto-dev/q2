@@ -2438,9 +2438,12 @@ fn evaluate_condition(
 
     // Helper to check if a variable is numeric
     // Uses unified get_variable which checks citation item context first
+    // Implements CSL is-numeric semantics: strips leading/trailing letters from each
+    // chunk (split by commas, hyphens, ampersands, en-dashes) and checks if cores are all digits.
+    // This allows "5th", "3rd", "1-10" to be numeric.
     let is_numeric = |v: &str| {
         ctx.get_variable(v)
-            .map(|s| s.chars().all(|c| c.is_ascii_digit() || c == '-'))
+            .map(|s| is_numeric_string(&s))
             .unwrap_or(false)
     };
 
@@ -2728,14 +2731,20 @@ fn evaluate_date(
     use quarto_csl::{DatePartName, DatePartsFilter};
 
     let date_var = ctx.reference.get_date(&date_el.variable);
-    ctx.record_var_call(date_var.is_some());
+
+    // Don't record var call yet - we need to check if the date actually produces output
+    // For dates, the "non_empty" status depends on whether the requested parts exist,
+    // not just whether the date variable exists. A date with only year should not
+    // count as non-empty if we're only asking for the month.
 
     let Some(date_var) = date_var else {
+        ctx.record_var_call(false);
         return Ok(Output::Null);
     };
 
     // Handle literal dates (always takes precedence)
     if let Some(ref literal) = date_var.literal {
+        ctx.record_var_call(true);
         let output = Output::literal(literal);
         return Ok(Output::tagged(Tag::Date(date_el.variable.clone()), output));
     }
@@ -2744,9 +2753,11 @@ fn evaluate_date(
     let Some(start_parts) = date_var.parts() else {
         // No structured date - fall back to raw (unparsed) date string if available
         if let Some(ref raw) = date_var.raw {
+            ctx.record_var_call(true);
             let output = Output::literal(raw);
             return Ok(Output::tagged(Tag::Date(date_el.variable.clone()), output));
         }
+        ctx.record_var_call(false);
         return Ok(Output::Null);
     };
 
@@ -2763,14 +2774,33 @@ fn evaluate_date(
         .form
         .and_then(|form| ctx.processor.get_date_format(form));
 
-    // Build format parts list
-    let format_parts: Vec<_> = if let Some(locale_fmt) = locale_format {
-        locale_fmt.parts.iter().collect()
+    // Build format parts list, merging locale parts with inline overrides.
+    // Per CSL spec: when using a localized date format (form="text" or "numeric"),
+    // inline date-part elements override attributes of the locale's date parts.
+    // The inline part's attributes take precedence, but locale's formatting is merged.
+    let format_parts: Vec<quarto_csl::DatePart> = if let Some(locale_fmt) = locale_format {
+        // Start with locale's parts, apply overrides from inline parts
+        locale_fmt
+            .parts
+            .iter()
+            .map(|locale_part| {
+                // Find matching inline override by name
+                if let Some(inline_part) = date_el.parts.iter().find(|p| p.name == locale_part.name)
+                {
+                    // Merge: inline attributes override locale attributes,
+                    // but locale formatting is the base, overridden by inline formatting
+                    merge_date_parts(locale_part, inline_part)
+                } else {
+                    locale_part.clone()
+                }
+            })
+            .collect()
     } else if !date_el.parts.is_empty() {
-        date_el.parts.iter().collect()
+        date_el.parts.clone()
     } else {
         Vec::new()
     };
+    let format_parts_refs: Vec<_> = format_parts.iter().collect();
 
     // Helper to check if a part should be included
     let should_include_part = |name: DatePartName, parts: &DateParts| -> bool {
@@ -2799,7 +2829,7 @@ fn evaluate_date(
             ctx,
             &start_parts,
             &end_parts,
-            &format_parts,
+            &format_parts_refs,
             &should_include_part,
             date_delimiter,
             range_delimiter,
@@ -2809,11 +2839,11 @@ fn evaluate_date(
         let start_output = render_date_parts(
             ctx,
             &start_parts,
-            &format_parts,
+            &format_parts_refs,
             &should_include_part,
             date_delimiter,
         );
-        if format_parts.is_empty() {
+        if format_parts_refs.is_empty() {
             // Just render the year if no format parts
             if let Some(year) = start_parts.year {
                 Output::literal(year.to_string())
@@ -2826,8 +2856,13 @@ fn evaluate_date(
     };
 
     if date_output.is_null() {
+        // Date variable exists but produces no output (e.g., asking for month when only year exists)
+        ctx.record_var_call(false);
         Ok(Output::Null)
     } else {
+        // Date produces output - record as non-empty
+        ctx.record_var_call(true);
+
         // Append year suffix for disambiguation (like citeproc does)
         // Only add implicit year suffix if:
         // 1. The style doesn't explicitly use year-suffix variable
@@ -2940,23 +2975,17 @@ where
                 }
             }
 
-            // Apply prefix
-            if let Some(ref prefix) = part.formatting.prefix {
-                outputs.push(Output::literal(prefix));
-            }
-
             // Apply the value (with any strip-periods handling)
             let final_value = if part.strip_periods {
                 v.replace('.', "")
             } else {
                 v
             };
-            outputs.push(Output::literal(final_value));
 
-            // Apply suffix
-            if let Some(ref suffix) = part.formatting.suffix {
-                outputs.push(Output::literal(suffix));
-            }
+            // Apply formatting (including text-case, prefix, suffix) via Output::formatted
+            // This ensures text transforms like uppercase are applied
+            let formatted_output = Output::formatted(part.formatting.clone(), vec![Output::literal(final_value)]);
+            outputs.push(formatted_output);
         }
     }
 
@@ -3224,6 +3253,60 @@ where
     }
 
     Output::sequence(outputs)
+}
+
+/// Merge a locale date part with an inline override.
+///
+/// Per CSL spec, when using a localized date format with inline date-part overrides:
+/// - The inline part's non-formatting attributes (form, range_delimiter, strip_periods) override
+/// - The formatting is merged: locale's formatting is the base, inline's formatting overrides
+///
+/// This matches Pandoc citeproc's `addOverride` function behavior where:
+/// `x{ dpFormatting = dpFormatting olddp <> dpFormatting x }`
+fn merge_date_parts(
+    locale_part: &quarto_csl::DatePart,
+    inline_part: &quarto_csl::DatePart,
+) -> quarto_csl::DatePart {
+    quarto_csl::DatePart {
+        name: locale_part.name,
+        // Use inline's form if specified, otherwise locale's
+        form: inline_part.form.or(locale_part.form),
+        // Merge formatting: locale is base, inline overrides
+        formatting: merge_formatting(&locale_part.formatting, &inline_part.formatting),
+        // Use inline's range_delimiter if specified, otherwise locale's
+        range_delimiter: inline_part
+            .range_delimiter
+            .clone()
+            .or_else(|| locale_part.range_delimiter.clone()),
+        // Use inline's strip_periods if true, otherwise locale's
+        strip_periods: inline_part.strip_periods || locale_part.strip_periods,
+        source_info: locale_part.source_info.clone(),
+    }
+}
+
+/// Merge two Formatting structs, where override values take precedence over base values.
+fn merge_formatting(
+    base: &quarto_csl::Formatting,
+    override_fmt: &quarto_csl::Formatting,
+) -> quarto_csl::Formatting {
+    quarto_csl::Formatting {
+        font_style: override_fmt.font_style.or(base.font_style),
+        font_variant: override_fmt.font_variant.or(base.font_variant),
+        font_weight: override_fmt.font_weight.or(base.font_weight),
+        text_decoration: override_fmt.text_decoration.or(base.text_decoration),
+        vertical_align: override_fmt.vertical_align.or(base.vertical_align),
+        text_case: override_fmt.text_case.or(base.text_case),
+        prefix: override_fmt.prefix.clone().or_else(|| base.prefix.clone()),
+        suffix: override_fmt.suffix.clone().or_else(|| base.suffix.clone()),
+        display: override_fmt.display.or(base.display),
+        quotes: override_fmt.quotes || base.quotes,
+        strip_periods: override_fmt.strip_periods || base.strip_periods,
+        delimiter: override_fmt
+            .delimiter
+            .clone()
+            .or_else(|| base.delimiter.clone()),
+        affixes_inside: override_fmt.affixes_inside || base.affixes_inside,
+    }
 }
 
 /// Format a month or season value according to the specified form.
@@ -3771,6 +3854,55 @@ fn chicago16_abbreviate(start: &str, end: &str) -> String {
     minimal_abbreviate(start, end, 2)
 }
 
+/// Check if a string value represents a numeric value according to CSL.
+///
+/// This implements the CSL is-numeric test, which matches Pandoc citeproc's behavior:
+/// 1. Split the string by `,`, `-`, `&`, and en-dash (`\u{2013}`)
+/// 2. For each chunk:
+///    - Trim whitespace
+///    - Strip leading letters (a-z, A-Z)
+///    - Strip trailing letters (a-z, A-Z)
+///    - The remaining core must be non-empty and all digits
+/// 3. All chunks must pass for the string to be "numeric"
+///
+/// Examples of numeric strings: "5", "5th", "3rd", "1-10", "5, 10, 15"
+/// Examples of non-numeric strings: "Fifth", "5a5", "annotated edition"
+pub fn is_numeric_string(s: &str) -> bool {
+    // Split by delimiters: comma, hyphen, ampersand, en-dash
+    let chunks = s.split(|c| c == ',' || c == '-' || c == '&' || c == '\u{2013}');
+
+    let mut has_chunks = false;
+    for chunk in chunks {
+        has_chunks = true;
+        if !is_numeric_chunk(chunk) {
+            return false;
+        }
+    }
+
+    // Empty string has no chunks and is not numeric
+    has_chunks
+}
+
+/// Check if a single chunk (after splitting by delimiters) is numeric.
+///
+/// Algorithm:
+/// 1. Trim whitespace
+/// 2. Strip leading letters
+/// 3. Strip trailing letters
+/// 4. The core must be non-empty and consist entirely of digits
+fn is_numeric_chunk(chunk: &str) -> bool {
+    let trimmed = chunk.trim();
+
+    // Strip leading letters
+    let after_leading = trimmed.trim_start_matches(|c: char| c.is_ascii_alphabetic());
+
+    // Strip trailing letters
+    let core = after_leading.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+
+    // Core must be non-empty and all digits
+    !core.is_empty() && core.chars().all(|c| c.is_ascii_digit())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3902,5 +4034,80 @@ mod tests {
         // Edge cases
         assert_eq!(suffix_to_letter(0), "");
         assert_eq!(suffix_to_letter(-1), "");
+    }
+
+    #[test]
+    fn test_is_numeric_string() {
+        // Basic numeric values
+        assert!(is_numeric_string("5"));
+        assert!(is_numeric_string("123"));
+
+        // Numbers with ordinal suffixes (the key fix)
+        assert!(is_numeric_string("5th"));
+        assert!(is_numeric_string("3rd"));
+        assert!(is_numeric_string("1st"));
+        assert!(is_numeric_string("2nd"));
+
+        // Numbers with prefixes
+        assert!(is_numeric_string("vol5"));
+        assert!(is_numeric_string("ch10"));
+
+        // Numbers with both prefix and suffix
+        assert!(is_numeric_string("vol5th")); // vol + 5 + th
+
+        // Ranges with hyphens
+        assert!(is_numeric_string("1-10"));
+        assert!(is_numeric_string("5th-10th"));
+        assert!(is_numeric_string("1-2-3"));
+
+        // Comma-separated values
+        assert!(is_numeric_string("5, 10, 15"));
+        assert!(is_numeric_string("5th, 10th"));
+
+        // Ampersand-separated values
+        assert!(is_numeric_string("5 & 10"));
+
+        // En-dash ranges
+        assert!(is_numeric_string("5\u{2013}10"));
+
+        // Non-numeric strings
+        assert!(!is_numeric_string("Fifth")); // No digits at all
+        assert!(!is_numeric_string("annotated edition")); // Letters with space, no core digits
+        assert!(!is_numeric_string("5a5")); // Letter in the middle
+        assert!(!is_numeric_string("abc")); // Pure letters
+        assert!(!is_numeric_string("")); // Empty string
+        assert!(!is_numeric_string("   ")); // Only whitespace
+        assert!(!is_numeric_string("Fifth ed.")); // "Fifth " has no digits after stripping
+
+        // Edge case: version strings with complex structure
+        assert!(!is_numeric_string("version: 2002, amended effective June 1"));
+    }
+
+    #[test]
+    fn test_is_numeric_chunk() {
+        // Basic digits
+        assert!(is_numeric_chunk("5"));
+        assert!(is_numeric_chunk("123"));
+
+        // With leading letters
+        assert!(is_numeric_chunk("vol5"));
+
+        // With trailing letters
+        assert!(is_numeric_chunk("5th"));
+
+        // With both
+        assert!(is_numeric_chunk("vol5th"));
+
+        // With whitespace
+        assert!(is_numeric_chunk("  5  "));
+        assert!(is_numeric_chunk("  5th  "));
+
+        // No digits
+        assert!(!is_numeric_chunk("abc"));
+        assert!(!is_numeric_chunk(""));
+        assert!(!is_numeric_chunk("   "));
+
+        // Letter in the middle
+        assert!(!is_numeric_chunk("5a5"));
     }
 }

@@ -730,17 +730,64 @@ impl Processor {
     }
 
     /// Get a date format from the locale.
+    ///
+    /// This follows the CSL spec locale priority order:
+    /// 1. Style locale with exact language match (e.g., xml:lang="en-US" for en-US)
+    /// 2. Style locale with base language match (e.g., xml:lang="en" for en-US)
+    /// 3. Style locale with no language (fallback locale)
+    /// 4. External locale files from the locale manager
     pub fn get_date_format(&self, form: quarto_csl::DateForm) -> Option<&quarto_csl::DateFormat> {
-        // First check style-level locale overrides
+        // Get the effective language for locale lookup
+        let effective_lang = self
+            .style
+            .default_locale
+            .as_deref()
+            .unwrap_or("en-US");
+
+        // Extract base language (e.g., "en" from "en-US")
+        let base_lang = effective_lang.split('-').next().unwrap_or(effective_lang);
+
+        // Priority 1: Exact language match (e.g., xml:lang="en-US" for en-US)
         for locale in &self.style.locales {
-            for df in &locale.date_formats {
-                if df.form == form {
-                    return Some(df);
+            if let Some(ref lang) = locale.lang {
+                if lang == effective_lang {
+                    for df in &locale.date_formats {
+                        if df.form == form {
+                            return Some(df);
+                        }
+                    }
                 }
             }
         }
 
-        // Fall back to locale manager
+        // Priority 2: Base language match (e.g., xml:lang="en" for en-US)
+        // Only if it differs from the exact match
+        if base_lang != effective_lang {
+            for locale in &self.style.locales {
+                if let Some(ref lang) = locale.lang {
+                    if lang == base_lang {
+                        for df in &locale.date_formats {
+                            if df.form == form {
+                                return Some(df);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Priority 3: Style locale with no xml:lang (fallback locale)
+        for locale in &self.style.locales {
+            if locale.lang.is_none() {
+                for df in &locale.date_formats {
+                    if df.form == form {
+                        return Some(df);
+                    }
+                }
+            }
+        }
+
+        // Fall back to locale manager (external locale files)
         self.locales.get_date_format(form)
     }
 

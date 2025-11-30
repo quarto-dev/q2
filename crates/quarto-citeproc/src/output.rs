@@ -2527,8 +2527,27 @@ pub fn ends_with_no_space_char(output: &Output) -> bool {
 /// This parser converts that markup into Output AST nodes.
 /// Malformed HTML (e.g., `</i>` without opening) is escaped.
 pub fn parse_csl_rich_text(text: &str) -> Output {
-    let mut parser = RichTextParser::new(text);
+    // Apply French typography rules before parsing
+    let transformed = apply_french_typography(text);
+    let mut parser = RichTextParser::new(&transformed);
     parser.parse()
+}
+
+/// Apply French typography rules: convert regular spaces to narrow no-break spaces (U+202F)
+/// in contexts where French orthography requires them.
+///
+/// This follows the citeproc reference implementation which applies these transformations:
+/// - `" ;"` → `"\u{202F};"` (narrow space before semicolon)
+/// - `" ?"` → `"\u{202F}?"` (narrow space before question mark)
+/// - `" !"` → `"\u{202F}!"` (narrow space before exclamation mark)
+/// - `" »"` → `"\u{202F}»"` (narrow space before closing guillemet)
+/// - `"« "` → `"«\u{202F}"` (narrow space after opening guillemet)
+fn apply_french_typography(text: &str) -> String {
+    text.replace(" ;", "\u{202F};")
+        .replace(" ?", "\u{202F}?")
+        .replace(" !", "\u{202F}!")
+        .replace(" »", "\u{202F}»")
+        .replace("« ", "«\u{202F}")
 }
 
 struct RichTextParser<'a> {
@@ -4294,8 +4313,8 @@ mod tests {
 
     #[test]
     fn test_to_inlines_bold_with_prefix_suffix() {
-        // CSL spec: prefix/suffix go INSIDE formatting for layout elements
-        // So bold + prefix="(" + suffix=")" should produce <b>(...)</b>
+        // Default Formatting has affixes_inside=false, so affixes go OUTSIDE formatting
+        // bold + prefix="(" + suffix=")" + "[1]" → "(<b>[1]</b>)"
         let mut formatting = Formatting::default();
         formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
         formatting.prefix = Some("(".to_string());
@@ -4304,12 +4323,13 @@ mod tests {
         let output = Output::formatted(formatting, vec![Output::literal("[1]")]);
         let inlines = output.to_inlines();
         let html = render_inlines_to_csl_html(&inlines);
-        assert_eq!(html, "<b>([1])</b>");
+        assert_eq!(html, "(<b>[1]</b>)");
     }
 
     #[test]
     fn test_to_inlines_italic_with_prefix_suffix() {
-        // Italic wraps the prefix/suffix
+        // Default Formatting has affixes_inside=false, so affixes go OUTSIDE formatting
+        // italic + prefix="[" + suffix="]" + "Title" → "[<i>Title</i>]"
         let mut formatting = Formatting::default();
         formatting.font_style = Some(quarto_csl::FontStyle::Italic);
         formatting.prefix = Some("[".to_string());
@@ -4318,7 +4338,23 @@ mod tests {
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         let inlines = output.to_inlines();
         let html = render_inlines_to_csl_html(&inlines);
-        assert_eq!(html, "<i>[Title]</i>");
+        assert_eq!(html, "[<i>Title</i>]");
+    }
+
+    #[test]
+    fn test_to_inlines_affixes_inside_true() {
+        // For layout elements, affixes_inside=true, so affixes go INSIDE formatting
+        // bold + prefix="(" + suffix=")" + "[1]" → "<b>([1])</b>"
+        let mut formatting = Formatting::default();
+        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        formatting.prefix = Some("(".to_string());
+        formatting.suffix = Some(")".to_string());
+        formatting.affixes_inside = true;
+
+        let output = Output::formatted(formatting, vec![Output::literal("[1]")]);
+        let inlines = output.to_inlines();
+        let html = render_inlines_to_csl_html(&inlines);
+        assert_eq!(html, "<b>([1])</b>");
     }
 }
 

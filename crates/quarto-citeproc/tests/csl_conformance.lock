@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 676
-# Disabled: 182
+# Enabled: 685
+# Disabled: 173
 #
 [enabled]
 affix_commaafterquote
@@ -88,6 +88,7 @@ condition_matchall
 condition_nameandtextvars
 condition_numberisnumeric
 condition_numeralisnumeric
+condition_numeralwithtextisnumeric
 condition_reftypebranching
 condition_singletonifmatchnone
 condition_textisnotnumeric
@@ -156,9 +157,12 @@ date_localizednumericyearwithaffixes
 date_localizedtextdefault
 date_localizedtextdefaultmissingday
 date_localizedtextdefaultwithaffixes
+date_localizedtextinstylelocalewithtextcase
+date_localizedtextmonthformoverride
 date_localizedtextyear
 date_localizedtextyearmonth
 date_localizedtextyearwithaffixes
+date_localizedwithinstyleformatting
 date_longmonth
 date_masknonexistentwithcondition
 date_negativedatesort
@@ -281,11 +285,13 @@ group_complexnesting
 group_legalwithauthordate
 group_shortoutputonly
 group_suppressterminmacro
+group_suppresstermwhennooutputfrompartialdate
 group_suppresswithemptynesteddatenode
 integration_citationsort
 integration_citationsorttwice
 integration_ibidwithdifferentlocators
 integration_subsequentwheninterveningfootnote
+label_collapsedpagenumberpluraldetection
 label_compactnamesafterfullnames
 label_editortranslator2
 label_emptylabelvanish
@@ -303,6 +309,7 @@ label_pluralwithcommalocalizedand
 label_pluralwithlocalizedampersand
 label_pluralwithlocalizedand
 locale_emptydate
+locale_emptyplusoverridedate
 locale_emptyplusoverridestyleopt
 locale_emptyplusoverrideterm
 locale_emptystyleopt
@@ -553,6 +560,7 @@ namespaces_nonnada3
 number_failingdelimiters
 number_isnumericwithalpha
 number_leadingzeros
+number_mixedpagerange
 number_mixedtext
 number_pagefirst
 number_pagerange
@@ -599,6 +607,7 @@ punctuation_delimiterwithstripperiodsandsubstitute2
 punctuation_delimiterwithstripperiodsandsubstitute3
 punctuation_donotsuppresscolonafterperiod
 punctuation_fieldduplicates
+punctuation_frenchorthography
 punctuation_fullmontyfield
 punctuation_fullmontyplain
 punctuation_fullmontyquotesout
