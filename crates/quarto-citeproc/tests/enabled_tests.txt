@@ -723,3 +723,7 @@ date_LocalizedTextMonthFormOverride
 date_LocalizedWithInStyleFormatting
 locale_EmptyPlusOverrideDate
 punctuation_FrenchOrthography
+bugreports_AllCapsLeakage
+bugreports_FrenchApostrophe
+magic_SuperscriptChars
+bugreports_NumberAffixEscape

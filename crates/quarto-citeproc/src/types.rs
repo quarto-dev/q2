@@ -2,6 +2,7 @@
 
 use crate::Result;
 use crate::locale::LocaleManager;
+use crate::output::QuoteConfig;
 use crate::reference::Reference;
 use hashlink::LinkedHashMap;
 use quarto_csl::Style;
@@ -738,11 +739,7 @@ impl Processor {
     /// 4. External locale files from the locale manager
     pub fn get_date_format(&self, form: quarto_csl::DateForm) -> Option<&quarto_csl::DateFormat> {
         // Get the effective language for locale lookup
-        let effective_lang = self
-            .style
-            .default_locale
-            .as_deref()
-            .unwrap_or("en-US");
+        let effective_lang = self.style.default_locale.as_deref().unwrap_or("en-US");
 
         // Extract base language (e.g., "en" from "en-US")
         let base_lang = effective_lang.split('-').next().unwrap_or(effective_lang);
@@ -824,6 +821,14 @@ impl Processor {
 
         // Fall back to style options
         self.style.options.punctuation_in_quote
+    }
+
+    /// Get locale-specific quote configuration.
+    ///
+    /// This returns the appropriate quote characters for the current locale,
+    /// allowing proper rendering of quotation marks (e.g., English "..." vs French « ... »).
+    pub fn get_quote_config(&self) -> QuoteConfig {
+        self.locales.get_quote_config()
     }
 
     /// Get the bibliography sort key for a reference.

@@ -4,6 +4,7 @@
 //! language-specific terms (like "and", "et al.") and date formats.
 
 use crate::locale_parser::parse_locale_xml;
+use crate::output::QuoteConfig;
 use quarto_csl::{Locale, Term, TermForm};
 use rust_embed::Embed;
 use std::collections::HashMap;
@@ -157,6 +158,35 @@ impl LocaleManager {
         }
 
         None
+    }
+
+    /// Get locale-specific quote configuration.
+    ///
+    /// Looks up the quote terms from the locale:
+    /// - `open-quote` / `close-quote` for outer (primary) quotes
+    /// - `open-inner-quote` / `close-inner-quote` for inner (secondary) quotes
+    ///
+    /// Falls back to English curly quotes if terms are not found.
+    pub fn get_quote_config(&self) -> QuoteConfig {
+        let outer_open = self
+            .get_term("open-quote", TermForm::Long, false)
+            .unwrap_or_else(|| "\u{201C}".to_string()); // "
+        let outer_close = self
+            .get_term("close-quote", TermForm::Long, false)
+            .unwrap_or_else(|| "\u{201D}".to_string()); // "
+        let inner_open = self
+            .get_term("open-inner-quote", TermForm::Long, false)
+            .unwrap_or_else(|| "\u{2018}".to_string()); // '
+        let inner_close = self
+            .get_term("close-inner-quote", TermForm::Long, false)
+            .unwrap_or_else(|| "\u{2019}".to_string()); // '
+
+        QuoteConfig {
+            outer_open,
+            outer_close,
+            inner_open,
+            inner_close,
+        }
     }
 
     /// Get a date format from the locale.
@@ -397,5 +427,38 @@ mod tests {
         let result = manager.get_punctuation_in_quote();
         println!("en-GB punctuation_in_quote: {:?}", result);
         assert_eq!(result, Some(false));
+    }
+
+    #[test]
+    fn test_get_quote_config_english() {
+        let manager = LocaleManager::new(Some("en-US".to_string()));
+        let quotes = manager.get_quote_config();
+        // English uses curly double quotes for outer, curly single for inner
+        assert_eq!(quotes.outer_open, "\u{201C}"); // "
+        assert_eq!(quotes.outer_close, "\u{201D}"); // "
+        assert_eq!(quotes.inner_open, "\u{2018}"); // '
+        assert_eq!(quotes.inner_close, "\u{2019}"); // '
+    }
+
+    #[test]
+    fn test_get_quote_config_french() {
+        let manager = LocaleManager::new(Some("fr-FR".to_string()));
+        let quotes = manager.get_quote_config();
+        println!(
+            "French quotes: outer_open={:?}, outer_close={:?}",
+            quotes.outer_open, quotes.outer_close
+        );
+        // French uses guillemets with non-breaking space
+        // The locale file has: <term name="open-quote">«&#160;</term>
+        assert!(
+            quotes.outer_open.contains('«'),
+            "Expected French open-quote to contain «, got {:?}",
+            quotes.outer_open
+        );
+        assert!(
+            quotes.outer_close.contains('»'),
+            "Expected French close-quote to contain », got {:?}",
+            quotes.outer_close
+        );
     }
 }

@@ -13,7 +13,8 @@
 use std::collections::HashMap;
 
 use quarto_citeproc::output::{
-    move_punctuation_inside_quotes, render_blocks_to_csl_html, render_inlines_to_csl_html,
+    move_punctuation_inside_quotes, render_blocks_to_csl_html_with_locale,
+    render_inlines_to_csl_html_with_locale,
 };
 use quarto_citeproc::{Citation, CitationItem, Processor, Reference};
 use quarto_csl::parse_csl;
@@ -173,6 +174,7 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
 
     // Check locale options for post-processing
     let punct_in_quote = processor.punctuation_in_quote();
+    let quote_config = processor.get_quote_config();
 
     // Check if this is a complex CITATIONS format test (needs incremental output)
     let is_incremental = test.citations.is_some() && is_complex_citations_format(test);
@@ -195,7 +197,7 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
                         output_ast
                     };
                     let inlines = processed.to_inlines();
-                    render_inlines_to_csl_html(&inlines)
+                    render_inlines_to_csl_html_with_locale(&inlines, &quote_config)
                 })
                 .collect();
 
@@ -232,7 +234,7 @@ pub fn run_csl_test(test: &CslTest) -> Result<(), String> {
                     };
                     // Use to_blocks() to handle display attributes
                     let blocks = processed.to_blocks();
-                    let html = render_blocks_to_csl_html(&blocks);
+                    let html = render_blocks_to_csl_html_with_locale(&blocks, &quote_config);
                     format_bib_entry(&html)
                 })
                 .collect();

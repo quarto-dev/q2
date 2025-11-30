@@ -2984,7 +2984,8 @@ where
 
             // Apply formatting (including text-case, prefix, suffix) via Output::formatted
             // This ensures text transforms like uppercase are applied
-            let formatted_output = Output::formatted(part.formatting.clone(), vec![Output::literal(final_value)]);
+            let formatted_output =
+                Output::formatted(part.formatting.clone(), vec![Output::literal(final_value)]);
             outputs.push(formatted_output);
         }
     }
@@ -4080,7 +4081,9 @@ mod tests {
         assert!(!is_numeric_string("Fifth ed.")); // "Fifth " has no digits after stripping
 
         // Edge case: version strings with complex structure
-        assert!(!is_numeric_string("version: 2002, amended effective June 1"));
+        assert!(!is_numeric_string(
+            "version: 2002, amended effective June 1"
+        ));
     }
 
     #[test]

@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 685
-# Disabled: 173
+# Enabled: 689
+# Disabled: 169
 #
 [enabled]
 affix_commaafterquote
@@ -16,6 +16,7 @@ affix_spacewithquotes
 affix_textnodewithmacro
 affix_wordprocessoraffixnospace
 bugreports_abnt
+bugreports_allcapsleakage
 bugreports_apostropheonparticle
 bugreports_arabiclocale
 bugreports_authorposition
@@ -39,11 +40,13 @@ bugreports_duplicateterminalpunctuationinbibliography
 bugreports_effingbug
 bugreports_emptyifmatchnonefail
 bugreports_fourandfour
+bugreports_frenchapostrophe
 bugreports_greekstyleproblems
 bugreports_greekstyletwoeditors
 bugreports_labelsoutofplace
 bugreports_matchedauthoranddate
 bugreports_noeventinnestedmacrowitholdprocessor
+bugreports_numberaffixescape
 bugreports_numberinmacrowithverticalalign
 bugreports_parsename
 bugreports_processorhang1
@@ -354,6 +357,7 @@ magic_stripperiodsexcludeaffixes
 magic_stripperiodsfalse
 magic_stripperiodstrue
 magic_stripperiodstrueshortform
+magic_superscriptchars
 magic_suppresslayoutdelimiterifprefixcomma
 magic_termcapitalizationwithprefix
 magic_textrangeenglish

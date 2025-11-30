@@ -2812,8 +2812,9 @@ impl<'a> RichTextParser<'a> {
                 // This avoids matching mid-word apostrophes like "don't" or "l'ami".
                 // See Pandoc citeproc pCslText: apostrophe handling
                 let next_after_quote = self.remaining().chars().nth(1);
-                let is_valid_closing_quote =
-                    next_after_quote.map(|c| !c.is_alphanumeric()).unwrap_or(true);
+                let is_valid_closing_quote = next_after_quote
+                    .map(|c| !c.is_alphanumeric())
+                    .unwrap_or(true);
 
                 if is_valid_closing_quote {
                     // Found closing quote
@@ -3499,6 +3500,154 @@ pub fn join_with_delimiter(outputs: Vec<OutputBuilder>, delimiter: &str) -> Outp
 // CSL HTML writer for tests
 // ============================================================================
 
+/// Configuration for locale-specific quote characters.
+///
+/// Different locales use different quotation marks:
+/// - English: "..." '...'
+/// - French: « ... » "..."
+/// - German: „..." ‚...'
+///
+/// The quote terms are looked up from the locale:
+/// - `open-quote` / `close-quote` for outer (primary) quotes
+/// - `open-inner-quote` / `close-inner-quote` for inner (secondary) quotes
+#[derive(Debug, Clone)]
+pub struct QuoteConfig {
+    /// Opening character(s) for outer (primary) quotes
+    pub outer_open: String,
+    /// Closing character(s) for outer (primary) quotes
+    pub outer_close: String,
+    /// Opening character(s) for inner (secondary/nested) quotes
+    pub inner_open: String,
+    /// Closing character(s) for inner (secondary/nested) quotes
+    pub inner_close: String,
+}
+
+impl Default for QuoteConfig {
+    /// Default to English curly quotes.
+    fn default() -> Self {
+        Self {
+            outer_open: "\u{201C}".to_string(), // " left double quotation mark
+            outer_close: "\u{201D}".to_string(), // " right double quotation mark
+            inner_open: "\u{2018}".to_string(), // ' left single quotation mark
+            inner_close: "\u{2019}".to_string(), // ' right single quotation mark
+        }
+    }
+}
+
+/// Convert Unicode superscript characters to their base form.
+///
+/// Returns Some(base_string) if the character is a known superscript character,
+/// None otherwise. This matches Pandoc citeproc's `superscriptChars` map.
+fn superscript_char_to_base(c: char) -> Option<&'static str> {
+    match c {
+        '\u{00AA}' => Some("a"),        // ª
+        '\u{00B2}' => Some("2"),        // ²
+        '\u{00B3}' => Some("3"),        // ³
+        '\u{00B9}' => Some("1"),        // ¹
+        '\u{00BA}' => Some("o"),        // º
+        '\u{02B0}' => Some("h"),        // ʰ
+        '\u{02B1}' => Some("\u{0266}"), // ʱ -> ɦ
+        '\u{02B2}' => Some("j"),        // ʲ
+        '\u{02B3}' => Some("r"),        // ʳ
+        '\u{02B4}' => Some("\u{0279}"), // ʴ -> ɹ
+        '\u{02B5}' => Some("\u{027B}"), // ʵ -> ɻ
+        '\u{02B6}' => Some("\u{0281}"), // ʶ -> ʁ
+        '\u{02B7}' => Some("w"),        // ʷ
+        '\u{02B8}' => Some("y"),        // ʸ
+        '\u{02E0}' => Some("\u{0263}"), // ˠ -> ɣ
+        '\u{02E1}' => Some("l"),        // ˡ
+        '\u{02E2}' => Some("s"),        // ˢ
+        '\u{02E3}' => Some("x"),        // ˣ
+        '\u{02E4}' => Some("\u{0295}"), // ˤ -> ʕ
+        '\u{1D2C}' => Some("A"),        // ᴬ
+        '\u{1D2D}' => Some("\u{00C6}"), // ᴭ -> Æ
+        '\u{1D2E}' => Some("B"),        // ᴮ
+        '\u{1D30}' => Some("D"),        // ᴰ
+        '\u{1D31}' => Some("E"),        // ᴱ
+        '\u{1D32}' => Some("\u{018E}"), // ᴲ -> Ǝ
+        '\u{1D33}' => Some("G"),        // ᴳ
+        '\u{1D34}' => Some("H"),        // ᴴ
+        '\u{1D35}' => Some("I"),        // ᴵ
+        '\u{1D36}' => Some("J"),        // ᴶ
+        '\u{1D37}' => Some("K"),        // ᴷ
+        '\u{1D38}' => Some("L"),        // ᴸ
+        '\u{1D39}' => Some("M"),        // ᴹ
+        '\u{1D3A}' => Some("N"),        // ᴺ
+        '\u{1D3C}' => Some("O"),        // ᴼ
+        '\u{1D3D}' => Some("\u{0222}"), // ᴽ -> Ȣ
+        '\u{1D3E}' => Some("P"),        // ᴾ
+        '\u{1D3F}' => Some("R"),        // ᴿ
+        '\u{1D40}' => Some("T"),        // ᵀ
+        '\u{1D41}' => Some("U"),        // ᵁ
+        '\u{1D42}' => Some("W"),        // ᵂ
+        '\u{1D43}' => Some("a"),        // ᵃ
+        '\u{1D44}' => Some("\u{0250}"), // ᵄ -> ɐ
+        '\u{1D45}' => Some("\u{0251}"), // ᵅ -> ɑ
+        '\u{1D46}' => Some("\u{1D02}"), // ᵆ -> ᴂ
+        '\u{1D47}' => Some("b"),        // ᵇ
+        '\u{1D48}' => Some("d"),        // ᵈ
+        '\u{1D49}' => Some("e"),        // ᵉ
+        '\u{1D4A}' => Some("\u{0259}"), // ᵊ -> ə
+        '\u{1D4B}' => Some("\u{025B}"), // ᵋ -> ɛ
+        '\u{1D4C}' => Some("\u{025C}"), // ᵌ -> ɜ
+        '\u{1D4D}' => Some("g"),        // ᵍ
+        '\u{1D4F}' => Some("k"),        // ᵏ
+        '\u{1D50}' => Some("m"),        // ᵐ
+        '\u{1D51}' => Some("\u{014B}"), // ᵑ -> ŋ
+        '\u{1D52}' => Some("o"),        // ᵒ
+        '\u{1D53}' => Some("\u{0254}"), // ᵓ -> ɔ
+        '\u{1D54}' => Some("\u{1D16}"), // ᵔ -> ᴖ
+        '\u{1D55}' => Some("\u{1D17}"), // ᵕ -> ᴗ
+        '\u{1D56}' => Some("p"),        // ᵖ
+        '\u{1D57}' => Some("t"),        // ᵗ
+        '\u{1D58}' => Some("u"),        // ᵘ
+        '\u{1D59}' => Some("\u{1D1D}"), // ᵙ -> ᴝ
+        '\u{1D5A}' => Some("\u{026F}"), // ᵚ -> ɯ
+        '\u{1D5B}' => Some("v"),        // ᵛ
+        '\u{1D5C}' => Some("\u{1D25}"), // ᵜ -> ᴥ
+        '\u{1D5D}' => Some("\u{03B2}"), // ᵝ -> β
+        '\u{1D5E}' => Some("\u{03B3}"), // ᵞ -> γ
+        '\u{1D5F}' => Some("\u{03B4}"), // ᵟ -> δ
+        '\u{1D60}' => Some("\u{03C6}"), // ᵠ -> φ
+        '\u{1D61}' => Some("\u{03C7}"), // ᵡ -> χ
+        '\u{2070}' => Some("0"),        // ⁰
+        '\u{2071}' => Some("i"),        // ⁱ
+        '\u{2074}' => Some("4"),        // ⁴
+        '\u{2075}' => Some("5"),        // ⁵
+        '\u{2076}' => Some("6"),        // ⁶
+        '\u{2077}' => Some("7"),        // ⁷
+        '\u{2078}' => Some("8"),        // ⁸
+        '\u{2079}' => Some("9"),        // ⁹
+        '\u{207A}' => Some("+"),        // ⁺
+        '\u{207B}' => Some("\u{2212}"), // ⁻ -> −
+        '\u{207C}' => Some("="),        // ⁼
+        '\u{207D}' => Some("("),        // ⁽
+        '\u{207E}' => Some(")"),        // ⁾
+        '\u{207F}' => Some("n"),        // ⁿ
+        '\u{2120}' => Some("SM"),       // ℠
+        '\u{2122}' => Some("TM"),       // ™
+        '\u{3192}' => Some("\u{4E00}"), // ㆒ -> 一
+        '\u{3193}' => Some("\u{4E8C}"), // ㆓ -> 二
+        '\u{3194}' => Some("\u{4E09}"), // ㆔ -> 三
+        '\u{3195}' => Some("\u{56DB}"), // ㆕ -> 四
+        '\u{3196}' => Some("\u{4E0A}"), // ㆖ -> 上
+        '\u{3197}' => Some("\u{4E2D}"), // ㆗ -> 中
+        '\u{3198}' => Some("\u{4E0B}"), // ㆘ -> 下
+        '\u{3199}' => Some("\u{7532}"), // ㆙ -> 甲
+        '\u{319A}' => Some("\u{4E59}"), // ㆚ -> 乙
+        '\u{319B}' => Some("\u{4E19}"), // ㆛ -> 丙
+        '\u{319C}' => Some("\u{4E01}"), // ㆜ -> 丁
+        '\u{319D}' => Some("\u{5929}"), // ㆝ -> 天
+        '\u{319E}' => Some("\u{5730}"), // ㆞ -> 地
+        '\u{319F}' => Some("\u{4EBA}"), // ㆟ -> 人
+        '\u{02C0}' => Some("\u{0294}"), // ˀ -> ʔ
+        '\u{02C1}' => Some("\u{0295}"), // ˁ -> ʕ
+        '\u{06E5}' => Some("\u{0648}"), // ۥ -> و
+        '\u{06E6}' => Some("\u{064A}"), // ۦ -> ي
+        _ => None,
+    }
+}
+
 /// Render Pandoc Inlines to HTML using CSL conventions.
 ///
 /// Rendering context for CSL HTML output with flip-flop formatting support.
@@ -3539,11 +3688,26 @@ impl Default for CslRenderContext {
 ///
 /// This is intended for testing only - production code should use
 /// quarto-markdown-pandoc's HTML writer.
+///
+/// Uses default English quotes. For locale-specific quotes, use
+/// `render_inlines_to_csl_html_with_locale` instead.
 pub fn render_inlines_to_csl_html(inlines: &quarto_pandoc_types::Inlines) -> String {
+    render_inlines_to_csl_html_with_locale(inlines, &QuoteConfig::default())
+}
+
+/// Render Pandoc Inlines to CSL HTML with locale-specific quotes.
+///
+/// This variant uses the provided `QuoteConfig` for quote characters,
+/// enabling proper rendering of locale-specific quotation marks
+/// (e.g., English "..." vs French « ... »).
+pub fn render_inlines_to_csl_html_with_locale(
+    inlines: &quarto_pandoc_types::Inlines,
+    quotes: &QuoteConfig,
+) -> String {
     let mut result = String::new();
     let ctx = CslRenderContext::default();
     for inline in inlines {
-        render_inline_to_csl_html_with_ctx(inline, &mut result, ctx);
+        render_inline_to_csl_html_with_ctx(inline, &mut result, ctx, quotes);
     }
     result
 }
@@ -3552,12 +3716,26 @@ pub fn render_inlines_to_csl_html(inlines: &quarto_pandoc_types::Inlines) -> Str
 ///
 /// This handles the display attribute by rendering Divs with the appropriate
 /// CSS classes. For testing only.
+///
+/// Uses default English quotes. For locale-specific quotes, use
+/// `render_blocks_to_csl_html_with_locale` instead.
 pub fn render_blocks_to_csl_html(blocks: &[quarto_pandoc_types::Block]) -> String {
+    render_blocks_to_csl_html_with_locale(blocks, &QuoteConfig::default())
+}
+
+/// Render Pandoc Blocks to CSL HTML with locale-specific quotes.
+///
+/// This variant uses the provided `QuoteConfig` for quote characters,
+/// enabling proper rendering of locale-specific quotation marks.
+pub fn render_blocks_to_csl_html_with_locale(
+    blocks: &[quarto_pandoc_types::Block],
+    quotes: &QuoteConfig,
+) -> String {
     let mut result = String::new();
     let ctx = CslRenderContext::default();
 
     for block in blocks {
-        render_block_to_csl_html(block, &mut result, ctx);
+        render_block_to_csl_html(block, &mut result, ctx, quotes);
     }
 
     result
@@ -3567,18 +3745,19 @@ fn render_block_to_csl_html(
     block: &quarto_pandoc_types::Block,
     output: &mut String,
     ctx: CslRenderContext,
+    quotes: &QuoteConfig,
 ) {
     use quarto_pandoc_types::Block;
 
     match block {
         Block::Plain(p) => {
             for inline in &p.content {
-                render_inline_to_csl_html_with_ctx(inline, output, ctx);
+                render_inline_to_csl_html_with_ctx(inline, output, ctx, quotes);
             }
         }
         Block::Paragraph(p) => {
             for inline in &p.content {
-                render_inline_to_csl_html_with_ctx(inline, output, ctx);
+                render_inline_to_csl_html_with_ctx(inline, output, ctx, quotes);
             }
         }
         Block::Div(d) => {
@@ -3590,7 +3769,7 @@ fn render_block_to_csl_html(
                 output.push_str("\">");
             }
             for inner_block in &d.content {
-                render_block_to_csl_html(inner_block, output, ctx);
+                render_block_to_csl_html(inner_block, output, ctx, quotes);
             }
             if classes.first().is_some() {
                 output.push_str("</div>");
@@ -3605,11 +3784,24 @@ fn render_inline_to_csl_html_with_ctx(
     inline: &quarto_pandoc_types::Inline,
     output: &mut String,
     ctx: CslRenderContext,
+    quotes: &QuoteConfig,
 ) {
     use quarto_pandoc_types::{Block, Inline};
 
     match inline {
         Inline::Str(s) => {
+            // Check if this is a single Unicode superscript character that should
+            // be converted to <sup> tags. This matches Pandoc citeproc's behavior.
+            let mut chars = s.text.chars();
+            if let (Some(first), None) = (chars.next(), chars.next()) {
+                if let Some(base) = superscript_char_to_base(first) {
+                    output.push_str("<sup>");
+                    output.push_str(&html_escape(base));
+                    output.push_str("</sup>");
+                    return;
+                }
+            }
+
             // Convert straight apostrophes to curly (typographic) apostrophes
             // and escape HTML special characters
             let text = s.text.replace('\'', "\u{2019}"); // ' -> '
@@ -3634,7 +3826,7 @@ fn render_inline_to_csl_html_with_ctx(
                     ..ctx
                 };
                 for child in &e.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
                 output.push_str("</i>");
             } else {
@@ -3644,7 +3836,7 @@ fn render_inline_to_csl_html_with_ctx(
                     ..ctx
                 };
                 for child in &e.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
                 output.push_str("</span>");
             }
@@ -3658,7 +3850,7 @@ fn render_inline_to_csl_html_with_ctx(
                     ..ctx
                 };
                 for child in &s.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
                 output.push_str("</b>");
             } else {
@@ -3668,7 +3860,7 @@ fn render_inline_to_csl_html_with_ctx(
                     ..ctx
                 };
                 for child in &s.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
                 output.push_str("</span>");
             }
@@ -3682,7 +3874,7 @@ fn render_inline_to_csl_html_with_ctx(
                     ..ctx
                 };
                 for child in &s.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
                 output.push_str("</span>");
             } else {
@@ -3692,7 +3884,7 @@ fn render_inline_to_csl_html_with_ctx(
                     ..ctx
                 };
                 for child in &s.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
                 output.push_str("</span>");
             }
@@ -3700,43 +3892,44 @@ fn render_inline_to_csl_html_with_ctx(
         Inline::Superscript(s) => {
             output.push_str("<sup>");
             for child in &s.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
             output.push_str("</sup>");
         }
         Inline::Subscript(s) => {
             output.push_str("<sub>");
             for child in &s.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
             output.push_str("</sub>");
         }
         Inline::Quoted(q) => {
-            // Flip-flop quotes: outer quotes use double, inner quotes use single
+            // Flip-flop quotes: outer quotes use locale-specific characters,
+            // inner quotes use the inner quote characters from locale.
             // This matches Pandoc citeproc's renderCslJson behavior.
             // Note: We ignore q.quote_type and use context-based flip-flopping.
             if ctx.use_outer_quotes {
-                // Use outer (double) quotes
-                output.push('\u{201C}'); // " left double quotation mark
+                // Use outer (primary) quotes from locale
+                output.push_str(&quotes.outer_open);
                 let new_ctx = CslRenderContext {
-                    use_outer_quotes: false, // Nested quotes will use inner (single)
+                    use_outer_quotes: false, // Nested quotes will use inner
                     ..ctx
                 };
                 for child in &q.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
-                output.push('\u{201D}'); // " right double quotation mark
+                output.push_str(&quotes.outer_close);
             } else {
-                // Use inner (single) quotes
-                output.push('\u{2018}'); // ' left single quotation mark
+                // Use inner (secondary) quotes from locale
+                output.push_str(&quotes.inner_open);
                 let new_ctx = CslRenderContext {
-                    use_outer_quotes: true, // Nested quotes will flip back to outer (double)
+                    use_outer_quotes: true, // Nested quotes will flip back to outer
                     ..ctx
                 };
                 for child in &q.content {
-                    render_inline_to_csl_html_with_ctx(child, output, new_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, new_ctx, quotes);
                 }
-                output.push('\u{2019}'); // ' right single quotation mark
+                output.push_str(&quotes.inner_close);
             }
         }
         Inline::Link(l) => {
@@ -3744,7 +3937,7 @@ fn render_inline_to_csl_html_with_ctx(
             output.push_str(&html_escape(&l.target.0));
             output.push_str("\">");
             for child in &l.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
             output.push_str("</a>");
         }
@@ -3754,12 +3947,12 @@ fn render_inline_to_csl_html_with_ctx(
                 match block {
                     Block::Paragraph(p) => {
                         for child in &p.content {
-                            render_inline_to_csl_html_with_ctx(child, output, ctx);
+                            render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
                         }
                     }
                     Block::Plain(p) => {
                         for child in &p.content {
-                            render_inline_to_csl_html_with_ctx(child, output, ctx);
+                            render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
                         }
                     }
                     // Other block types are not expected in CSL output
@@ -3796,7 +3989,7 @@ fn render_inline_to_csl_html_with_ctx(
                 // Reset context to all true (not inside any formatting)
                 let reset_ctx = CslRenderContext::default();
                 for child in &s.content {
-                    render_inline_to_csl_html_with_ctx(child, output, reset_ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, reset_ctx, quotes);
                 }
                 if !styles.is_empty() {
                     output.push_str("</span>");
@@ -3804,21 +3997,21 @@ fn render_inline_to_csl_html_with_ctx(
             } else {
                 // Other spans are transparent - just render children
                 for child in &s.content {
-                    render_inline_to_csl_html_with_ctx(child, output, ctx);
+                    render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
                 }
             }
         }
         Inline::Strikeout(s) => {
             output.push_str("<del>");
             for child in &s.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
             output.push_str("</del>");
         }
         Inline::Underline(u) => {
             output.push_str("<u>");
             for child in &u.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
             output.push_str("</u>");
         }
@@ -3843,14 +4036,14 @@ fn render_inline_to_csl_html_with_ctx(
             output.push_str("\" alt=\"");
             // Render alt text from content
             for child in &i.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
             output.push_str("\"/>");
         }
         Inline::Cite(c) => {
             // Render citations inline
             for child in &c.content {
-                render_inline_to_csl_html_with_ctx(child, output, ctx);
+                render_inline_to_csl_html_with_ctx(child, output, ctx, quotes);
             }
         }
         // Quarto-specific types
