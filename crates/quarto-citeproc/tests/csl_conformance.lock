@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 653
-# Disabled: 205
+# Enabled: 654
+# Disabled: 204
 #
 [enabled]
 affix_commaafterquote
@@ -259,6 +259,7 @@ flipflop_boldfacenodelevelmarkup
 flipflop_completeciteinprefix
 flipflop_italicsflipped
 flipflop_italicssimple
+flipflop_italicswithok
 flipflop_leadingmarkupwithapostrophe
 flipflop_leadingsinglequote
 flipflop_longcomplexprefix

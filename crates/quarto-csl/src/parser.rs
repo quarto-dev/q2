@@ -652,10 +652,16 @@ impl CslParser {
             layout_el[0]
         };
 
-        let layout_formatting = if layout_el.is_empty() {
-            formatting.clone()
-        } else {
-            self.parse_formatting(layout_element)
+        let layout_formatting = {
+            let mut fmt = if layout_el.is_empty() {
+                formatting.clone()
+            } else {
+                self.parse_formatting(layout_element)
+            };
+            // Layout elements should have affixes inside formatting
+            // (per CSL spec and Pandoc citeproc reference)
+            fmt.affixes_inside = true;
+            fmt
         };
 
         let layout_delimiter = if layout_el.is_empty() {
@@ -1466,6 +1472,8 @@ impl CslParser {
                 .unwrap_or(false),
             // Delimiter between children (e.g., between multiple name variables)
             delimiter: self.get_attr(element, "delimiter").map(|a| a.value.clone()),
+            // Default to false; set to true for layout elements in parse_layout
+            affixes_inside: false,
         }
     }
 

@@ -829,6 +829,10 @@ pub struct Formatting {
     /// metadata and applied when rendering, allowing smart punctuation collision
     /// handling.
     pub delimiter: Option<String>,
+    /// When true, affixes go inside formatting (for layout elements).
+    /// When false, affixes go outside formatting (for regular text elements).
+    /// This matches Pandoc citeproc's `formatAffixesInside` flag.
+    pub affixes_inside: bool,
 }
 
 impl Formatting {

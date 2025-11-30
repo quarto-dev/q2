@@ -871,13 +871,14 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
 
             // CSL formatting order (from innermost to outermost):
             // 1. strip-periods
-            // 2. prefix/suffix (affixesInside=true for layout elements)
+            // 2. prefix/suffix (when affixes_inside=true, for layout elements)
             // 3. font-style (italic)
             // 4. text-case
             // 5. font-variant (small-caps)
             // 6. font-weight (bold)
             // 7. vertical-align (sup/sub)
             // 8. quotes
+            // 9. prefix/suffix (when affixes_inside=false, for regular elements)
             //
             // See Pandoc citeproc Types.hs:addFormatting for reference.
 
@@ -886,49 +887,9 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                 apply_strip_periods_to_inlines(&mut inner);
             }
 
-            // 2. Apply prefix/suffix (INSIDE formatting, per CSL spec for layout elements)
-            if let Some(ref prefix) = formatting.prefix {
-                if !prefix.is_empty() {
-                    let mut result = vec![Inline::Str(Str {
-                        text: prefix.clone(),
-                        source_info: empty_source_info(),
-                    })];
-                    result.extend(inner);
-                    inner = result;
-                }
-            }
-            if let Some(ref suffix) = formatting.suffix {
-                if !suffix.is_empty() {
-                    // Check for punctuation collision between content and suffix
-                    let content_end = get_trailing_char(&inner);
-                    let suffix_start = suffix.chars().next();
-                    if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
-                        let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
-                        if !keep_x_end {
-                            trim_trailing_char(&mut inner);
-                        }
-                        if keep_y_start {
-                            inner.push(Inline::Str(Str {
-                                text: suffix.clone(),
-                                source_info: empty_source_info(),
-                            }));
-                        } else {
-                            // Skip first char of suffix
-                            let trimmed_suffix: String = suffix.chars().skip(1).collect();
-                            if !trimmed_suffix.is_empty() {
-                                inner.push(Inline::Str(Str {
-                                    text: trimmed_suffix,
-                                    source_info: empty_source_info(),
-                                }));
-                            }
-                        }
-                    } else {
-                        inner.push(Inline::Str(Str {
-                            text: suffix.clone(),
-                            source_info: empty_source_info(),
-                        }));
-                    }
-                }
+            // 2. Apply prefix/suffix INSIDE formatting (for layout elements)
+            if formatting.affixes_inside {
+                apply_affixes(&mut inner, &formatting.prefix, &formatting.suffix);
             }
 
             // 3. Apply font_style (italic)
@@ -984,6 +945,11 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                     content: inner,
                     source_info: empty_source_info(),
                 })];
+            }
+
+            // 9. Apply prefix/suffix OUTSIDE formatting (for regular elements)
+            if !formatting.affixes_inside {
+                apply_affixes(&mut inner, &formatting.prefix, &formatting.suffix);
             }
 
             inner
@@ -1997,6 +1963,64 @@ fn trim_leading_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
     }
 }
 
+/// Apply prefix and suffix to inlines with smart punctuation handling.
+///
+/// This is used in `to_inlines` to apply affixes either inside or outside
+/// formatting based on the `affixes_inside` flag.
+fn apply_affixes(
+    inner: &mut Vec<quarto_pandoc_types::Inline>,
+    prefix: &Option<String>,
+    suffix: &Option<String>,
+) {
+    use quarto_pandoc_types::{Inline, Str};
+
+    // Apply prefix
+    if let Some(prefix) = prefix {
+        if !prefix.is_empty() {
+            let mut result = vec![Inline::Str(Str {
+                text: prefix.clone(),
+                source_info: empty_source_info(),
+            })];
+            result.append(inner);
+            *inner = result;
+        }
+    }
+
+    // Apply suffix with punctuation collision handling
+    if let Some(suffix) = suffix {
+        if !suffix.is_empty() {
+            let content_end = get_trailing_char(inner);
+            let suffix_start = suffix.chars().next();
+            if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
+                let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
+                if !keep_x_end {
+                    trim_trailing_char(inner);
+                }
+                if keep_y_start {
+                    inner.push(Inline::Str(Str {
+                        text: suffix.clone(),
+                        source_info: empty_source_info(),
+                    }));
+                } else {
+                    // Skip first char of suffix
+                    let trimmed_suffix: String = suffix.chars().skip(1).collect();
+                    if !trimmed_suffix.is_empty() {
+                        inner.push(Inline::Str(Str {
+                            text: trimmed_suffix,
+                            source_info: empty_source_info(),
+                        }));
+                    }
+                }
+            } else {
+                inner.push(Inline::Str(Str {
+                    text: suffix.clone(),
+                    source_info: empty_source_info(),
+                }));
+            }
+        }
+    }
+}
+
 /// Move periods and commas from after closing quotes to inside them.
 ///
 /// This implements the CSL `punctuation-in-quote` locale option, which
@@ -2197,8 +2221,16 @@ fn recurse_punct_in_quotes(output: Output) -> Output {
             // For each child that ends with a quoted element (except the last),
             // we may need to move the delimiter's leading punctuation into the quote.
             // We use a custom delimiter per-child if needed.
-            let (final_children, final_formatting) =
+            let (final_children, mut final_formatting) =
                 move_delimiter_punct_into_quotes(processed_children, formatting);
+
+            // Also check if this node has quotes=true and a suffix starting with punctuation.
+            // If so, move the punctuation into the content and strip it from the suffix.
+            let final_children = if final_formatting.quotes {
+                move_suffix_punct_into_quoted_content(final_children, &mut final_formatting)
+            } else {
+                final_children
+            };
 
             Output::Formatted {
                 formatting: final_formatting,
@@ -2270,6 +2302,54 @@ fn move_delimiter_punct_into_quotes(
     // and the delimiter's leading punctuation.
 
     (children, formatting)
+}
+
+/// Move suffix punctuation into quoted content.
+///
+/// When a Formatted node has quotes=true and a suffix starting with `.` or `,`,
+/// this moves the punctuation to the end of the content (inside the quotes)
+/// and strips it from the suffix. This implements the punctuation-in-quote
+/// rule for suffixes when affixes are applied outside quotes.
+fn move_suffix_punct_into_quoted_content(
+    mut children: Vec<Output>,
+    formatting: &mut Formatting,
+) -> Vec<Output> {
+    // Check if suffix starts with punctuation
+    let Some(ref suffix) = formatting.suffix else {
+        return children;
+    };
+
+    let first_char = suffix.chars().next();
+    if !matches!(first_char, Some('.') | Some(',')) {
+        return children;
+    }
+
+    let punct = first_char.unwrap();
+
+    // Check if content already ends with this punctuation
+    if ends_with_punct(&children, punct) {
+        // Just strip the punctuation from the suffix (it's already there)
+        let new_suffix: String = suffix.chars().skip(1).collect();
+        formatting.suffix = if new_suffix.is_empty() {
+            None
+        } else {
+            Some(new_suffix)
+        };
+        return children;
+    }
+
+    // Add the punctuation to the end of the content
+    children.push(Output::Literal(punct.to_string()));
+
+    // Strip the punctuation from the suffix
+    let new_suffix: String = suffix.chars().skip(1).collect();
+    formatting.suffix = if new_suffix.is_empty() {
+        None
+    } else {
+        Some(new_suffix)
+    };
+
+    children
 }
 
 /// Extract leading punctuation (. or ,) from an Output node.

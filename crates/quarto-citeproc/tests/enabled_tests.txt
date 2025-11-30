@@ -691,3 +691,4 @@ magic_TermCapitalizationWithPrefix
 flipflop_ApostropheInsideTag
 flipflop_QuotesNodeLevelMarkup
 flipflop_SingleBeforeColon
+flipflop_ItalicsWithOk
