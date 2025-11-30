@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 613
-# Disabled: 245
+# Enabled: 630
+# Disabled: 228
 #
 [enabled]
 affix_commaafterquote
@@ -227,6 +227,7 @@ disambiguate_primarynamewithinitialslimitedtoprimary
 disambiguate_primarynamewithnondroppingparticle
 disambiguate_primarynamewithparticle
 disambiguate_setsofnames
+disambiguate_skipaccessedyearsuffix
 disambiguate_threenoauthornotitleentries
 disambiguate_toinitialonly
 disambiguate_trigraph
@@ -269,6 +270,7 @@ integration_citationsort
 integration_citationsorttwice
 integration_ibidwithdifferentlocators
 integration_subsequentwheninterveningfootnote
+label_compactnamesafterfullnames
 label_editortranslator2
 label_emptylabelvanish
 label_emptylabelvanishpage
@@ -372,6 +374,7 @@ name_institution
 name_institutiondecoration
 name_labelafterplural
 name_labelafterpluraldecorations
+name_labelformatbug
 name_literalwithcomma
 name_longabbreviation
 name_lowercasesurnamesuffix
@@ -523,12 +526,21 @@ number_mixedtext
 number_pagefirst
 number_pagerange
 number_simplenumberarabic
+number_simplenumberordinallong
+number_simplenumberordinalshort
+number_simplenumberroman
 number_spacesmakeisnumericfalse
 number_strangeerror
 page_nooption
 page_numberpagefirst
 page_pluraldetectwithendash
 plural_labelforced
+plural_namelabelalways
+plural_namelabelcontextualplural
+plural_namelabelcontextualsingular
+plural_namelabeldefaultplural
+plural_namelabeldefaultsingular
+plural_namelabelnever
 position_falseinbibliography
 position_firsttrueonlyonce
 position_ibidintext
@@ -541,7 +553,11 @@ position_nearnoteunsupported
 position_nearnotewithplugin
 position_trueincitation
 punctuation_datestripperiods
+punctuation_delimiterwithstripperiodsandsubstitute1
+punctuation_delimiterwithstripperiodsandsubstitute2
+punctuation_delimiterwithstripperiodsandsubstitute3
 punctuation_donotsuppresscolonafterperiod
+punctuation_fieldduplicates
 punctuation_fullmontyfield
 punctuation_fullmontyplain
 punctuation_nosuppressofperiodbeforesemicolon
@@ -616,6 +632,7 @@ textcase_titlewithcircumflex
 textcase_titlewithemdash
 textcase_titlewithendash
 textcase_uppercase
+textcase_uppercasenumber
 unicode_nonbreakingspace
 variables_titleshortonshorttitlenotitle
 variables_titleshortonshorttitlenotitlegroup

@@ -2392,9 +2392,15 @@ fn evaluate_number(
     // Special handling for citation-number
     if num_el.variable == "citation-number" {
         let result = if let Some(num) = ctx.processor.get_citation_number(&ctx.reference.id) {
-            // TODO: Apply number form (ordinal, roman, etc.)
+            // Apply number form (ordinal, roman, etc.)
+            // Create closure for term lookup using processor reference
+            let processor = &ctx.processor;
+            let get_ordinal_term = |name: &str| -> Option<String> {
+                processor.get_term(name, quarto_csl::TermForm::Long, false)
+            };
+            let formatted = format_number_with_form(&num.to_string(), num_el.form, get_ordinal_term);
             // Tag for collapse detection
-            Output::tagged(Tag::CitationNumber(num), Output::literal(num.to_string()))
+            Output::tagged(Tag::CitationNumber(num), Output::literal(formatted))
         } else {
             Output::Null
         };
@@ -2406,12 +2412,24 @@ fn evaluate_number(
     ctx.record_var_call(value.is_some());
 
     if let Some(value) = value {
-        // TODO: Apply number form (ordinal, roman, etc.)
+        // Apply number form (roman, ordinal, etc.)
+        // Create closure for term lookup using processor reference
+        let processor = &ctx.processor;
+        let get_ordinal_term = |name: &str| -> Option<String> {
+            processor.get_term(name, quarto_csl::TermForm::Long, false)
+        };
+        let with_form = format_number_with_form(&value, num_el.form, get_ordinal_term);
 
         // The <number> element should format all ranges with en-dash,
         // not just page-like variables. This applies to edition, volume, issue, etc.
-        let delimiter = ctx.get_page_range_delimiter();
-        let formatted = format_page_range(&value, &delimiter);
+        // Note: For roman numerals, we've already converted, so range formatting
+        // only applies to numeric form.
+        let formatted = if num_el.form == quarto_csl::NumberForm::Numeric {
+            let delimiter = ctx.get_page_range_delimiter();
+            format_page_range(&with_form, &delimiter)
+        } else {
+            with_form
+        };
         Ok(Output::literal(formatted))
     } else {
         Ok(Output::Null)
@@ -3117,6 +3135,129 @@ fn suffix_to_letter(suffix: i32) -> String {
 /// This follows Pandoc citeproc's pageRange function:
 /// - Splits the input on commas and ampersands (preserving them as literal separators)
 /// - For each segment, if it contains a hyphen (but not escaped `\-`), the hyphen
+/// Convert an integer to lowercase Roman numerals.
+///
+/// This follows Pandoc's citeproc implementation. Numbers >= 4000 or <= 0
+/// are returned as-is (as decimal strings).
+fn to_roman_numeral(mut x: i64) -> String {
+    if x <= 0 || x >= 4000 {
+        return x.to_string();
+    }
+
+    let mut result = String::new();
+
+    // Process each Roman numeral value from largest to smallest
+    let numerals = [
+        (1000, "m"),
+        (900, "cm"),
+        (500, "d"),
+        (400, "cd"),
+        (100, "c"),
+        (90, "xc"),
+        (50, "l"),
+        (40, "xl"),
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    ];
+
+    for (value, numeral) in numerals {
+        while x >= value {
+            result.push_str(numeral);
+            x -= value;
+        }
+    }
+
+    result
+}
+
+/// Format a number value according to its NumberForm.
+///
+/// Handles:
+/// - Numeric: plain number (default)
+/// - Roman: lowercase roman numerals (xlii for 42)
+/// - Ordinal: number with ordinal suffix (1st, 2nd, 3rd, etc.)
+/// - LongOrdinal: spelled-out ordinal for 1-10 (first, second, third, etc.),
+///   falls back to ordinal for numbers > 10
+///
+/// The `get_term` closure is used to look up ordinal terms from the locale.
+fn format_number_with_form<F>(value: &str, form: quarto_csl::NumberForm, get_term: F) -> String
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match form {
+        quarto_csl::NumberForm::Numeric => value.to_string(),
+        quarto_csl::NumberForm::Roman => {
+            // Try to parse as integer and convert to Roman
+            // If it's not a simple integer, return as-is
+            if let Ok(n) = value.trim().parse::<i64>() {
+                to_roman_numeral(n)
+            } else {
+                value.to_string()
+            }
+        }
+        quarto_csl::NumberForm::LongOrdinal => {
+            // For long-ordinal, numbers 1-10 are spelled out, others fall back to ordinal
+            if let Ok(n) = value.trim().parse::<i64>() {
+                if n >= 1 && n <= 10 {
+                    // Try to look up "long-ordinal-01" through "long-ordinal-10"
+                    let term_name = format!("long-ordinal-{:02}", n);
+                    if let Some(spelled_out) = get_term(&term_name) {
+                        return spelled_out;
+                    }
+                }
+                // Fall back to regular ordinal for n > 10 or if term not found
+                format_ordinal(n, &get_term)
+            } else {
+                value.to_string()
+            }
+        }
+        quarto_csl::NumberForm::Ordinal => {
+            if let Ok(n) = value.trim().parse::<i64>() {
+                format_ordinal(n, &get_term)
+            } else {
+                value.to_string()
+            }
+        }
+    }
+}
+
+/// Format a number as an ordinal (e.g., 1st, 2nd, 3rd, 42nd).
+///
+/// Looks up ordinal suffixes from the locale:
+/// - "ordinal" is the default suffix (e.g., "th" in English)
+/// - "ordinal-NN" overrides for specific numbers (e.g., "ordinal-01" = "st")
+/// - For numbers > 10, uses last digit matching (e.g., 42 matches "ordinal-02")
+/// - Special cases: 11, 12, 13 use the default suffix in English
+fn format_ordinal<F>(n: i64, get_term: &F) -> String
+where
+    F: Fn(&str) -> Option<String>,
+{
+    // Try exact match first for small numbers (e.g., "ordinal-11", "ordinal-12", "ordinal-13")
+    // These are special cases in English where 11th, 12th, 13th don't follow the pattern
+    let two_digit_term = format!("ordinal-{:02}", n.abs() % 100);
+    if let Some(suffix) = get_term(&two_digit_term) {
+        return format!("{}{}", n, suffix);
+    }
+
+    // Try last-digit match (e.g., 42 -> "ordinal-02")
+    let last_digit = n.abs() % 10;
+    let one_digit_term = format!("ordinal-{:02}", last_digit);
+    if let Some(suffix) = get_term(&one_digit_term) {
+        return format!("{}{}", n, suffix);
+    }
+
+    // Fall back to default ordinal suffix
+    if let Some(suffix) = get_term("ordinal") {
+        return format!("{}{}", n, suffix);
+    }
+
+    // If no ordinal terms found at all, just return the number
+    n.to_string()
+}
+
 ///   is replaced with the page-range-delimiter (default: en-dash)
 /// - Escaped hyphens `\-` are converted to literal hyphens
 /// - Spaces around separators are preserved
