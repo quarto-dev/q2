@@ -900,6 +900,36 @@ fn evaluate_names(
     // Each variable gets its own label (if labels are enabled)
     let mut var_outputs: Vec<Output> = Vec::new();
 
+    // Check if form="count" is set - if so, we output count instead of formatted names
+    let is_count_form = names_el
+        .name
+        .as_ref()
+        .and_then(|n| n.form)
+        .map(|f| f == quarto_csl::NameForm::Count)
+        .unwrap_or(false);
+
+    // For form="count", we sum counts across all variables
+    if is_count_form {
+        let mut total_count: usize = 0;
+        for var in &names_el.variables {
+            let names = ctx.reference.get_names(var);
+            let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
+            ctx.record_var_call(has_names);
+
+            if let Some(names) = names {
+                if !names.is_empty() {
+                    total_count += get_names_count(ctx, names, names_el);
+                }
+            }
+        }
+        // Output the total count (empty string if 0)
+        if total_count > 0 {
+            return Ok(Output::literal(total_count.to_string()));
+        } else {
+            return Ok(Output::Null);
+        }
+    }
+
     for var in &names_el.variables {
         let names = ctx.reference.get_names(var);
         let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
@@ -909,6 +939,7 @@ fn evaluate_names(
 
         if let Some(names) = names {
             if !names.is_empty() {
+
                 // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
                 let names_output = Output::tagged(
@@ -993,6 +1024,54 @@ fn evaluate_names(
     }
 
     Ok(Output::Null)
+}
+
+/// Get the count of names that would be rendered (after et-al truncation).
+/// Used when `form="count"` is specified on the name element.
+fn get_names_count(
+    ctx: &EvalContext,
+    names: &[crate::reference::Name],
+    names_el: &NamesElement,
+) -> usize {
+    // Get effective options (same logic as format_names)
+    let effective_options = if let Some(name) = names_el.name.as_ref() {
+        InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
+    } else if ctx.in_substitute {
+        if let Some(ref parent_opts) = ctx.substitute_name_options {
+            parent_opts.clone()
+        } else {
+            ctx.inherited_name_options.clone()
+        }
+    } else {
+        ctx.inherited_name_options.clone()
+    };
+
+    // et-al handling - same as format_names
+    let et_al_min = effective_options.et_al_min;
+    let et_al_use_first = effective_options.et_al_use_first;
+
+    // Check for disambiguation override
+    let disamb_et_al_names = ctx
+        .reference
+        .disambiguation
+        .as_ref()
+        .and_then(|d| d.et_al_names);
+
+    let use_et_al = match (et_al_min, et_al_use_first) {
+        (Some(min), Some(_)) => names.len() as u32 >= min,
+        _ => false,
+    };
+
+    let names_to_show = if let Some(disamb_count) = disamb_et_al_names {
+        disamb_count as usize
+    } else if use_et_al {
+        et_al_use_first.unwrap_or(1) as usize
+    } else {
+        names.len()
+    };
+
+    // Return the count of names that would be rendered
+    names_to_show.min(names.len())
 }
 
 /// Format a list of names according to CSL rules.

@@ -632,3 +632,10 @@ name_LongAbbreviation
 # Particle handling fix 2025-11-29
 name_CeltsAndToffsCrowdedInitials
 name_CeltsAndToffsSpacedInitials
+
+# form=count feature 2025-11-29
+name_AuthorCount
+name_AuthorCountWithSameVarContentAndCombinedTermSucceed
+name_AuthorCountWithMultipleVariables
+name_AuthorCountWithSameVarContentAndCombinedTermFail
+name_AuthorEditorCount
