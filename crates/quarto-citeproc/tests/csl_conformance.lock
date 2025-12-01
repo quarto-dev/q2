@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 722
-# Disabled: 136
+# Enabled: 726
+# Disabled: 132
 #
 [enabled]
 affix_commaafterquote
@@ -19,6 +19,7 @@ bugreports_abnt
 bugreports_allcapsleakage
 bugreports_apostropheonparticle
 bugreports_arabiclocale
+bugreports_asaspacing
 bugreports_asmjournals
 bugreports_authorposition
 bugreports_authoryear
@@ -38,6 +39,7 @@ bugreports_disambiguationaddnames
 bugreports_disambiguationaddnamesbibliography
 bugreports_droppinggroupdelimiterspace
 bugreports_duplicatespaces
+bugreports_duplicatespaces2
 bugreports_duplicatespaces3
 bugreports_duplicateterminalpunctuationinbibliography
 bugreports_effingbug
@@ -58,6 +60,7 @@ bugreports_processorhang1
 bugreports_sectionandlocator
 bugreports_selflink
 bugreports_simplebib
+bugreports_singlequote
 bugreports_singlequotexml
 bugreports_singletonifmatchnonefail
 bugreports_sortsecondarykey
@@ -291,6 +294,7 @@ flipflop_leadingmarkupwithapostrophe
 flipflop_leadingsinglequote
 flipflop_longcomplexprefix
 flipflop_numericfield
+flipflop_quotesinfieldnotonnode
 flipflop_quotesnodelevelmarkup
 flipflop_singlebeforecolon
 flipflop_singlequotesonitalics

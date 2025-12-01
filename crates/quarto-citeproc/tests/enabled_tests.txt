@@ -760,3 +760,7 @@ sort_NumberOfAuthorsAsKey
 sort_NamesUseLast
 locale_ForceEmptyEtAlTerm
 bugreports_parenthesis
+bugreports_AsaSpacing
+bugreports_DuplicateSpaces2
+bugreports_SingleQuote
+flipflop_QuotesInFieldNotOnNode

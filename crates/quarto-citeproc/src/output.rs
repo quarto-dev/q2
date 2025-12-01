@@ -2499,7 +2499,10 @@ fn recurse_punct_in_quotes(output: Output) -> Output {
             let final_children = if final_formatting.quotes {
                 move_suffix_punct_into_quoted_content(final_children, &mut final_formatting)
             } else {
-                final_children
+                // Even if this node doesn't have quotes=true, if it has a suffix starting
+                // with punctuation and its trailing child is/contains a quoted element,
+                // we should move the suffix punctuation into that quoted element.
+                move_suffix_punct_into_quoted_child(final_children, &mut final_formatting)
             };
 
             Output::Formatted {
@@ -2619,6 +2622,106 @@ fn move_suffix_punct_into_quoted_content(
         Some(new_suffix)
     };
 
+    children
+}
+
+/// Move suffix punctuation into a trailing quoted child element.
+///
+/// When a Formatted node has a suffix starting with `.` or `,` and its trailing
+/// child is or contains a quoted element, move the punctuation into that quoted
+/// element and strip it from the suffix.
+///
+/// This handles the case where the suffix is on a parent node, not directly on
+/// the quoted node (e.g., `<text macro="title" suffix="."/>` where the macro
+/// expands to `<text variable="title" quotes="true"/>`).
+fn move_suffix_punct_into_quoted_child(
+    children: Vec<Output>,
+    formatting: &mut Formatting,
+) -> Vec<Output> {
+    // Check if suffix starts with punctuation
+    let Some(ref suffix) = formatting.suffix else {
+        return children;
+    };
+
+    let first_char = suffix.chars().next();
+    if !matches!(first_char, Some('.') | Some(',')) {
+        return children;
+    }
+
+    let punct = first_char.unwrap();
+
+    // Find if there's a trailing quoted element in the children
+    let Some(quoted_path) = find_trailing_quoted_in_children(&children) else {
+        return children;
+    };
+
+    // Check if the quoted content already ends with this punctuation
+    if ends_with_punct_in_children_path(&children, &quoted_path, punct) {
+        // Just strip the punctuation from the suffix (it's already there)
+        let new_suffix: String = suffix.chars().skip(1).collect();
+        formatting.suffix = if new_suffix.is_empty() {
+            None
+        } else {
+            Some(new_suffix)
+        };
+        return children;
+    }
+
+    // Insert the punctuation into the trailing quoted element
+    let new_children = insert_punct_in_children_path(children, &quoted_path, punct);
+
+    // Strip the punctuation from the suffix
+    let new_suffix: String = suffix.chars().skip(1).collect();
+    formatting.suffix = if new_suffix.is_empty() {
+        None
+    } else {
+        Some(new_suffix)
+    };
+
+    new_children
+}
+
+/// Find the path to a trailing quoted element in a list of children.
+fn find_trailing_quoted_in_children(children: &[Output]) -> Option<QuotedPath> {
+    // Find the last non-null child
+    for (i, child) in children.iter().enumerate().rev() {
+        if !child.is_null() {
+            if let Some(mut path) = find_trailing_quoted(child) {
+                path.insert(0, i);
+                return Some(path);
+            }
+            break;
+        }
+    }
+    None
+}
+
+/// Check if the quoted element at the given path in children ends with punctuation.
+fn ends_with_punct_in_children_path(children: &[Output], path: &[usize], punct: char) -> bool {
+    if path.is_empty() {
+        return false;
+    }
+    let idx = path[0];
+    if let Some(child) = children.get(idx) {
+        return ends_with_punct_in_path(child, &path[1..], punct);
+    }
+    false
+}
+
+/// Insert punctuation into the quoted element at the given path in children.
+fn insert_punct_in_children_path(
+    mut children: Vec<Output>,
+    path: &[usize],
+    punct: char,
+) -> Vec<Output> {
+    if path.is_empty() {
+        return children;
+    }
+    let idx = path[0];
+    if idx < children.len() {
+        let child = std::mem::replace(&mut children[idx], Output::Null);
+        children[idx] = insert_punct_in_path(child, &path[1..], punct);
+    }
     children
 }
 
