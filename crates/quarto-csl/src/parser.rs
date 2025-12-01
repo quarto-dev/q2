@@ -899,9 +899,25 @@ impl CslParser {
             })
             .unwrap_or_default();
 
+        // Parse name override attributes for sort keys.
+        // These map to et-al-min/et-al-use-first/et-al-use-last internally and affect
+        // all names generated via macros called by this key.
+        let names_min = self
+            .get_attr(element, "names-min")
+            .and_then(|a| a.value.parse().ok());
+        let names_use_first = self
+            .get_attr(element, "names-use-first")
+            .and_then(|a| a.value.parse().ok());
+        let names_use_last = self
+            .get_attr(element, "names-use-last")
+            .map(|a| a.value == "true");
+
         Ok(SortKey {
             key,
             sort_order,
+            names_min,
+            names_use_first,
+            names_use_last,
             source_info: element.source_info.clone(),
         })
     }

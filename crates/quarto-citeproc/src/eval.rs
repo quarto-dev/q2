@@ -1145,10 +1145,14 @@ fn apply_second_field_align(output: Output, layout_suffix: Option<&str>) -> Outp
 ///
 /// This evaluates the macro's elements and returns the plain text result
 /// (stripped of formatting) for use as a sort key.
+///
+/// The `sort_key` parameter provides name formatting overrides (names-min,
+/// names-use-first, names-use-last) that affect all names generated via macros.
 pub fn evaluate_macro_for_sort(
     processor: &Processor,
     reference: &Reference,
     elements: &[Element],
+    sort_key: &quarto_csl::SortKey,
 ) -> Result<String> {
     // Create a temporary mutable processor for evaluation
     // This is a bit awkward but necessary due to the EvalContext design
@@ -1164,7 +1168,18 @@ pub fn evaluate_macro_for_sort(
         .as_ref()
         .map(|b| b.name_options.clone())
         .unwrap_or_default();
-    let name_options = layout_name_options.merge(&style_name_options);
+
+    // Build name options from sort key overrides.
+    // These map to et-al-min, et-al-use-first, et-al-use-last.
+    let sort_key_name_options = quarto_csl::InheritableNameOptions {
+        et_al_min: sort_key.names_min,
+        et_al_use_first: sort_key.names_use_first,
+        et_al_use_last: sort_key.names_use_last,
+        ..Default::default()
+    };
+
+    // Merge name options: sort_key > layout > style (higher priority first)
+    let name_options = sort_key_name_options.merge(&layout_name_options.merge(&style_name_options));
 
     let mut ctx = EvalContext::new(&mut temp_processor, reference, &name_options);
     // Mark this as a sort key evaluation so demote-non-dropping-particle works correctly
@@ -1398,27 +1413,47 @@ fn evaluate_names(
     names_el: &NamesElement,
     formatting: &Formatting,
 ) -> Result<Output> {
-    // Collect outputs for ALL variables that have names
-    // Each variable gets its own label (if labels are enabled)
-    let mut var_outputs: Vec<Output> = Vec::new();
+    // Check if form="count" is set - consider both explicit and inherited form
+    // In substitute context, inherit form from parent names element
+    let explicit_form = names_el.name.as_ref().and_then(|n| n.form);
+    let inherited_form = ctx.substitute_name_options.as_ref().and_then(|opts| opts.form);
 
-    // Check if form="count" is set - if so, we output count instead of formatted names
-    let is_count_form = names_el
-        .name
-        .as_ref()
-        .and_then(|n| n.form)
-        .map(|f| f == quarto_csl::NameForm::Count)
-        .unwrap_or(false);
+    let is_count_form = if let Some(form) = explicit_form {
+        // Explicit form on this element
+        form == quarto_csl::NameForm::Count
+    } else if ctx.in_substitute {
+        // No explicit form - check inherited from substitute context
+        inherited_form
+            .map(|f| f == quarto_csl::NameForm::Count)
+            .unwrap_or(false)
+    } else {
+        false
+    };
 
-    // For form="count", we sum counts across all variables
+    // Step 1: Check if ALL primary variables are empty
+    // We need to record var calls for group suppression regardless
+    let mut all_empty = true;
+    for var in &names_el.variables {
+        let names = ctx.reference.get_names(var);
+        let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
+        ctx.record_var_call(has_names);
+        if has_names {
+            all_empty = false;
+        }
+    }
+
+    // Step 2: If all variables are empty, try substitute
+    // (The substitute inherits form="count" through substitute_name_options)
+    if all_empty {
+        return evaluate_names_substitute(ctx, names_el);
+    }
+
+    // Step 3: We have names - handle form="count" or format normally
     if is_count_form {
+        // For form="count", sum counts across all variables
         let mut total_count: usize = 0;
         for var in &names_el.variables {
-            let names = ctx.reference.get_names(var);
-            let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
-            ctx.record_var_call(has_names);
-
-            if let Some(names) = names {
+            if let Some(names) = ctx.reference.get_names(var) {
                 if !names.is_empty() {
                     total_count += get_names_count(ctx, names, names_el);
                 }
@@ -1432,14 +1467,11 @@ fn evaluate_names(
         }
     }
 
+    // Step 4: Format names normally (non-count form)
+    // Note: var calls were already recorded in step 1
+    let mut var_outputs: Vec<Output> = Vec::new();
     for var in &names_el.variables {
-        let names = ctx.reference.get_names(var);
-        let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
-
-        // Record variable call for group suppression
-        ctx.record_var_call(has_names);
-
-        if let Some(names) = names {
+        if let Some(names) = ctx.reference.get_names(var) {
             if !names.is_empty() {
                 // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
@@ -1533,54 +1565,57 @@ fn evaluate_names(
         }
     }
 
-    // If we found names, join them with the delimiter
-    if !var_outputs.is_empty() {
-        let delimiter = formatting.delimiter.as_deref().unwrap_or("");
-        return Ok(crate::output::join_outputs(var_outputs, delimiter));
-    }
+    // We get here only when all_empty=false, so var_outputs should have content
+    // Join with the delimiter and return
+    let delimiter = formatting.delimiter.as_deref().unwrap_or("");
+    Ok(crate::output::join_outputs(var_outputs, delimiter))
+}
 
-    // No names found - try substitute if present
-    if let Some(ref substitute) = names_el.substitute {
-        // Save the current substitute context
-        let prev_substitute_options = ctx.substitute_name_options.clone();
-        let prev_substitute_label = ctx.substitute_label.clone();
-        let prev_substitute_label_before_name = ctx.substitute_label_before_name;
-        let prev_in_substitute = ctx.in_substitute;
+/// Try substitute elements when primary name variables are empty.
+/// This is called when all primary variables in a <names> element have no names.
+fn evaluate_names_substitute(
+    ctx: &mut EvalContext,
+    names_el: &NamesElement,
+) -> Result<Output> {
+    let Some(ref substitute) = names_el.substitute else {
+        return Ok(Output::Null);
+    };
 
-        // Set up substitute context with the parent names element's options
-        // so that child <names> elements can inherit name formatting
-        let parent_options = if let Some(name) = names_el.name.as_ref() {
-            InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
-        } else {
-            ctx.inherited_name_options.clone()
-        };
-        ctx.substitute_name_options = Some(parent_options);
-        // Store the parent's label for inheritance by child <names> elements
-        ctx.substitute_label = names_el.label.clone();
-        ctx.substitute_label_before_name = names_el.label_before_name;
-        ctx.in_substitute = true;
+    // Save the current substitute context
+    let prev_substitute_options = ctx.substitute_name_options.clone();
+    let prev_substitute_label = ctx.substitute_label.clone();
+    let prev_substitute_label_before_name = ctx.substitute_label_before_name;
+    let prev_in_substitute = ctx.in_substitute;
 
-        let mut result = Output::Null;
-        for element in substitute {
-            let sub_output = evaluate_element(ctx, element)?;
-            if !sub_output.is_null() {
-                result = sub_output;
-                break;
-            }
-        }
+    // Set up substitute context with the parent names element's options
+    // so that child <names> elements can inherit name formatting (including form="count")
+    let parent_options = if let Some(name) = names_el.name.as_ref() {
+        InheritableNameOptions::from_name(name).merge(ctx.inherited_name_options)
+    } else {
+        ctx.inherited_name_options.clone()
+    };
+    ctx.substitute_name_options = Some(parent_options);
+    // Store the parent's label for inheritance by child <names> elements
+    ctx.substitute_label = names_el.label.clone();
+    ctx.substitute_label_before_name = names_el.label_before_name;
+    ctx.in_substitute = true;
 
-        // Restore previous substitute context
-        ctx.substitute_name_options = prev_substitute_options;
-        ctx.substitute_label = prev_substitute_label;
-        ctx.substitute_label_before_name = prev_substitute_label_before_name;
-        ctx.in_substitute = prev_in_substitute;
-
-        if !result.is_null() {
-            return Ok(result);
+    let mut result = Output::Null;
+    for element in substitute {
+        let sub_output = evaluate_element(ctx, element)?;
+        if !sub_output.is_null() {
+            result = sub_output;
+            break;
         }
     }
 
-    Ok(Output::Null)
+    // Restore previous substitute context
+    ctx.substitute_name_options = prev_substitute_options;
+    ctx.substitute_label = prev_substitute_label;
+    ctx.substitute_label_before_name = prev_substitute_label_before_name;
+    ctx.in_substitute = prev_in_substitute;
+
+    Ok(result)
 }
 
 /// Get the count of names that would be rendered (after et-al truncation).

@@ -103,6 +103,30 @@ fn normalize_for_sort(s: &str) -> String {
         .join(" ")
 }
 
+/// Convert a date part (year, month, day) to a sortable string.
+/// Following Pandoc citeproc's dateToText:
+/// - Positive years: P{9-digit-year}{2-digit-month}{2-digit-day}
+/// - Negative (BC) years: N{999999999+year}{2-digit-month}{2-digit-day}
+/// This ensures negative years sort before positive, and within each category
+/// dates sort chronologically.
+fn date_part_to_sort_string(year: i32, month: i32, day: i32) -> String {
+    let (prefix, sort_year) = if year < 0 {
+        // Negative (BC) years: N prefix, offset to make them sort correctly
+        // -100 → N999999899, -1 → N999999998, 0 → P000000000
+        ('N', (999_999_999 + year) as u32)
+    } else {
+        // Positive (AD) years: P prefix
+        ('P', year as u32)
+    };
+    format!(
+        "{}{:09}{:02}{:02}",
+        prefix,
+        sort_year,
+        month.max(0) as u32,
+        day.max(0) as u32
+    )
+}
+
 /// A citation request.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Citation {
@@ -667,7 +691,7 @@ impl Processor {
                         self.get_sort_value_for_variable(reference, var)
                     }
                     quarto_csl::SortKeyType::Macro(name) => {
-                        self.get_sort_value_for_macro(reference, name)
+                        self.get_sort_value_for_macro(reference, name, key)
                     }
                 };
                 SortKeyValue {
@@ -695,17 +719,24 @@ impl Processor {
                 }
             }
             // Date variables - format as sortable string
+            // Following Pandoc citeproc: concatenate ALL date parts (for date ranges)
+            // Format: P{9-digit-year}{2-digit-month}{2-digit-day} for positive years
+            //         N{999999999+year}{2-digit-month}{2-digit-day} for negative (BC) years
+            // This ensures: negative years sort before positive, and within each category
+            // dates sort chronologically.
             "issued" | "accessed" | "event-date" | "original-date" | "submitted" => {
                 if let Some(date) = reference.get_date(var) {
-                    // Format as YYYY-MM-DD for sorting
-                    // Add 5000 to year to handle BC dates correctly (same approach as Pandoc citeproc)
-                    // This way: -100 becomes 4900, -44 becomes 4956, 54 becomes 5054, etc.
-                    if let Some(parts) = date.date_parts.as_ref().and_then(|p| p.first()) {
-                        let year = parts.first().copied().unwrap_or(0);
-                        let sort_year = year + 5000;
-                        let month = parts.get(1).copied().unwrap_or(0);
-                        let day = parts.get(2).copied().unwrap_or(0);
-                        format!("{:04}-{:02}-{:02}", sort_year, month, day)
+                    if let Some(all_parts) = date.date_parts.as_ref() {
+                        // Concatenate sortable strings for ALL date parts (handles ranges)
+                        all_parts
+                            .iter()
+                            .map(|parts| {
+                                let year = parts.first().copied().unwrap_or(0);
+                                let month = parts.get(1).copied().unwrap_or(0);
+                                let day = parts.get(2).copied().unwrap_or(0);
+                                date_part_to_sort_string(year, month, day)
+                            })
+                            .collect::<String>()
                     } else {
                         String::new()
                     }
@@ -729,13 +760,18 @@ impl Processor {
     }
 
     /// Get the sort value by evaluating a macro.
-    fn get_sort_value_for_macro(&self, reference: &Reference, macro_name: &str) -> String {
+    fn get_sort_value_for_macro(
+        &self,
+        reference: &Reference,
+        macro_name: &str,
+        sort_key: &quarto_csl::SortKey,
+    ) -> String {
         // Evaluate the macro and return plain text (stripping formatting)
         // For now, just try to evaluate it using the bibliography context
         if let Some(macro_def) = self.style.macros.get(macro_name) {
             // Create a minimal context and evaluate
-            // This is a simplified version - full implementation would need proper context
-            crate::eval::evaluate_macro_for_sort(self, reference, &macro_def.elements)
+            // The sort_key carries name formatting overrides (names-min, etc.)
+            crate::eval::evaluate_macro_for_sort(self, reference, &macro_def.elements, sort_key)
                 .unwrap_or_default()
         } else {
             String::new()

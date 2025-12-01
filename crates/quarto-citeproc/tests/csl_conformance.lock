@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 716
-# Disabled: 142
+# Enabled: 720
+# Disabled: 138
 #
 [enabled]
 affix_commaafterquote
@@ -668,6 +668,8 @@ sort_datevariablemixedelementsascendinga
 sort_datevariablemixedelementsascendingb
 sort_datevariablemixedelementsdescendinga
 sort_datevariablemixedelementsdescendingb
+sort_datevariablerange
+sort_datevariablerangemixed
 sort_etaluselast
 sort_familyonly
 sort_groupedbyauthorstring
@@ -675,7 +677,9 @@ sort_latinunicode
 sort_localizeddatelimitedparts
 sort_nameimplicitsortorderandform
 sort_nameparticleinnamesortfalse
+sort_namesuselast
 sort_namevariable
+sort_numberofauthorsaskey
 sort_quotes
 sort_statusfieldascending
 sort_statusfielddescending

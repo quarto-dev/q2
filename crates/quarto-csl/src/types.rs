@@ -423,6 +423,15 @@ pub struct SortKey {
     pub key: SortKeyType,
     /// Sort order.
     pub sort_order: SortOrder,
+    /// Override for et-al-min when evaluating this key.
+    /// Maps from the CSL `names-min` attribute.
+    pub names_min: Option<u32>,
+    /// Override for et-al-use-first when evaluating this key.
+    /// Maps from the CSL `names-use-first` attribute.
+    pub names_use_first: Option<u32>,
+    /// Override for et-al-use-last when evaluating this key.
+    /// Maps from the CSL `names-use-last` attribute.
+    pub names_use_last: Option<bool>,
     /// Source location.
     pub source_info: SourceInfo,
 }
