@@ -10,7 +10,7 @@
 //! The `Output` type is rendered to final formats via the `render()` method.
 
 use crate::reference::Name;
-use quarto_csl::Formatting;
+use quarto_csl::{Formatting, SubsequentAuthorSubstituteRule};
 
 // ============================================================================
 // Output AST - Tagged intermediate representation
@@ -571,6 +571,365 @@ impl Output {
                 }
                 child.extract_all_names_into(names);
             }
+        }
+    }
+
+    /// Extract (names, raw_output) from the first Tag::Names in the tree.
+    ///
+    /// Used for subsequent-author-substitute to compare names between entries.
+    /// Returns None if no Tag::Names is found.
+    pub fn extract_first_names(&self) -> Option<(Vec<Name>, Output)> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(result) = child.extract_first_names() {
+                        return Some(result);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.extract_first_names(),
+            Output::Tagged { tag, child } => match tag {
+                Tag::Names { names, .. } => Some((names.clone(), (**child).clone())),
+                _ => child.extract_first_names(),
+            },
+        }
+    }
+
+    /// Replace names in the first Tag::Names element using complete-all rule.
+    ///
+    /// The entire name content is replaced with the substitute string,
+    /// but cs:names affixes are preserved.
+    pub fn replace_names_complete_all(&self, substitute: &str) -> Output {
+        self.replace_names_complete_all_inner(substitute, true)
+    }
+
+    fn replace_names_complete_all_inner(&self, substitute: &str, replace_first: bool) -> Output {
+        match self {
+            Output::Null => Output::Null,
+            Output::Literal(s) => Output::Literal(s.clone()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let mut found = false;
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| {
+                        if replace_first && !found {
+                            let result = c.replace_names_complete_all_inner(substitute, true);
+                            if c.extract_first_names().is_some() {
+                                found = true;
+                            }
+                            result
+                        } else {
+                            c.clone()
+                        }
+                    })
+                    .collect();
+                Output::Formatted {
+                    formatting: formatting.clone(),
+                    children: new_children,
+                }
+            }
+            Output::Linked { url, children } => {
+                let mut found = false;
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| {
+                        if replace_first && !found {
+                            let result = c.replace_names_complete_all_inner(substitute, true);
+                            if c.extract_first_names().is_some() {
+                                found = true;
+                            }
+                            result
+                        } else {
+                            c.clone()
+                        }
+                    })
+                    .collect();
+                Output::Linked {
+                    url: url.clone(),
+                    children: new_children,
+                }
+            }
+            Output::InNote(child) => {
+                Output::InNote(Box::new(child.replace_names_complete_all_inner(substitute, replace_first)))
+            }
+            Output::Tagged { tag, child } => match tag {
+                Tag::Names { variable, names } if replace_first => {
+                    // Keep the Tag::Names wrapper (preserves affixes from cs:names element),
+                    // but replace the child content with the substitute literal.
+                    // If names is empty (substitute element was used), just replace everything.
+                    if names.is_empty() {
+                        Output::Tagged {
+                            tag: Tag::Names {
+                                variable: variable.clone(),
+                                names: names.clone(),
+                            },
+                            child: Box::new(Output::Literal(substitute.to_string())),
+                        }
+                    } else {
+                        // For names, we need to keep labels but replace names.
+                        // Look for Tag::Name children and replace them with the substitute,
+                        // keeping other content (like labels).
+                        let new_child = Self::remove_names_keep_rest(child, substitute);
+                        Output::Tagged {
+                            tag: Tag::Names {
+                                variable: variable.clone(),
+                                names: names.clone(),
+                            },
+                            child: Box::new(new_child),
+                        }
+                    }
+                }
+                _ => Output::Tagged {
+                    tag: tag.clone(),
+                    child: Box::new(child.replace_names_complete_all_inner(substitute, replace_first)),
+                },
+            },
+        }
+    }
+
+    /// Helper: Remove Tag::Name elements and prepend substitute text, keeping other content.
+    fn remove_names_keep_rest(output: &Output, substitute: &str) -> Output {
+        match output {
+            Output::Null => Output::Literal(substitute.to_string()),
+            Output::Literal(_) => Output::Literal(substitute.to_string()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| Self::remove_name_nodes(c))
+                    .filter(|c| !c.is_null())
+                    .collect();
+                // Prepend substitute to the remaining content
+                let mut result = vec![Output::Literal(substitute.to_string())];
+                result.extend(new_children);
+                Output::Formatted {
+                    formatting: formatting.clone(),
+                    children: result,
+                }
+            }
+            Output::Tagged { tag, child } => match tag {
+                Tag::Name(_) => Output::Literal(substitute.to_string()),
+                _ => {
+                    let new_child = Self::remove_names_keep_rest(child, substitute);
+                    Output::Tagged {
+                        tag: tag.clone(),
+                        child: Box::new(new_child),
+                    }
+                }
+            },
+            _ => Output::Literal(substitute.to_string()),
+        }
+    }
+
+    /// Helper: Remove all Tag::Name nodes from the output tree.
+    fn remove_name_nodes(output: &Output) -> Output {
+        match output {
+            Output::Null => Output::Null,
+            Output::Literal(s) => Output::Literal(s.clone()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| Self::remove_name_nodes(c))
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Formatted {
+                        formatting: formatting.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::Linked { url, children } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| Self::remove_name_nodes(c))
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Linked {
+                        url: url.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::InNote(child) => {
+                let new_child = Self::remove_name_nodes(child);
+                if new_child.is_null() {
+                    Output::Null
+                } else {
+                    Output::InNote(Box::new(new_child))
+                }
+            }
+            Output::Tagged { tag, child } => match tag {
+                Tag::Name(_) => Output::Null,
+                _ => {
+                    let new_child = Self::remove_name_nodes(child);
+                    if new_child.is_null() {
+                        Output::Null
+                    } else {
+                        Output::Tagged {
+                            tag: tag.clone(),
+                            child: Box::new(new_child),
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    /// Replace names in the first Tag::Names element using complete-each rule.
+    ///
+    /// Each individual Tag::Name within the first Tag::Names is replaced with the substitute.
+    /// E.g., "Doe, Smith" becomes "---, ---"
+    pub fn replace_names_complete_each(&self, substitute: &str, matching_names: &[Name]) -> Output {
+        self.replace_names_each_inner(substitute, matching_names, true)
+    }
+
+    /// Replace names in the first Tag::Names element using partial-each rule.
+    ///
+    /// Each matching Tag::Name (from the start of the list) is replaced with the substitute.
+    /// E.g., "Doe, Smith" following "Doe, Jones" becomes "---, Smith"
+    pub fn replace_names_partial_each(&self, substitute: &str, matching_names: &[Name]) -> Output {
+        self.replace_names_each_inner(substitute, matching_names, true)
+    }
+
+    /// Replace names in the first Tag::Names element using partial-first rule.
+    ///
+    /// Only the first name is replaced if it matches.
+    pub fn replace_names_partial_first(&self, substitute: &str, first_name: &Name) -> Output {
+        self.replace_names_each_inner(substitute, std::slice::from_ref(first_name), true)
+    }
+
+    fn replace_names_each_inner(&self, substitute: &str, names_to_replace: &[Name], replace_first: bool) -> Output {
+        match self {
+            Output::Null => Output::Null,
+            Output::Literal(s) => Output::Literal(s.clone()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let mut found = false;
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| {
+                        if replace_first && !found {
+                            let result = c.replace_names_each_inner(substitute, names_to_replace, true);
+                            if c.extract_first_names().is_some() {
+                                found = true;
+                            }
+                            result
+                        } else {
+                            c.clone()
+                        }
+                    })
+                    .collect();
+                Output::Formatted {
+                    formatting: formatting.clone(),
+                    children: new_children,
+                }
+            }
+            Output::Linked { url, children } => {
+                let mut found = false;
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| {
+                        if replace_first && !found {
+                            let result = c.replace_names_each_inner(substitute, names_to_replace, true);
+                            if c.extract_first_names().is_some() {
+                                found = true;
+                            }
+                            result
+                        } else {
+                            c.clone()
+                        }
+                    })
+                    .collect();
+                Output::Linked {
+                    url: url.clone(),
+                    children: new_children,
+                }
+            }
+            Output::InNote(child) => {
+                Output::InNote(Box::new(child.replace_names_each_inner(substitute, names_to_replace, replace_first)))
+            }
+            Output::Tagged { tag, child } => match tag {
+                Tag::Names { variable, names } if replace_first => {
+                    // Transform child, replacing each matching Tag::Name
+                    let new_child = Self::replace_name_nodes(child, substitute, names_to_replace);
+                    Output::Tagged {
+                        tag: Tag::Names {
+                            variable: variable.clone(),
+                            names: names.clone(),
+                        },
+                        child: Box::new(new_child),
+                    }
+                }
+                _ => Output::Tagged {
+                    tag: tag.clone(),
+                    child: Box::new(child.replace_names_each_inner(substitute, names_to_replace, replace_first)),
+                },
+            },
+        }
+    }
+
+    /// Helper: Replace Tag::Name nodes that match names in the list.
+    fn replace_name_nodes(output: &Output, substitute: &str, names_to_replace: &[Name]) -> Output {
+        match output {
+            Output::Null => Output::Null,
+            Output::Literal(s) => Output::Literal(s.clone()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| Self::replace_name_nodes(c, substitute, names_to_replace))
+                    .collect();
+                Output::Formatted {
+                    formatting: formatting.clone(),
+                    children: new_children,
+                }
+            }
+            Output::Linked { url, children } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| Self::replace_name_nodes(c, substitute, names_to_replace))
+                    .collect();
+                Output::Linked {
+                    url: url.clone(),
+                    children: new_children,
+                }
+            }
+            Output::InNote(child) => {
+                Output::InNote(Box::new(Self::replace_name_nodes(child, substitute, names_to_replace)))
+            }
+            Output::Tagged { tag, child } => match tag {
+                Tag::Name(name) if names_to_replace.contains(name) => {
+                    // Replace this name with the substitute
+                    Output::Tagged {
+                        tag: Tag::Name(name.clone()),
+                        child: Box::new(Output::Literal(substitute.to_string())),
+                    }
+                }
+                _ => Output::Tagged {
+                    tag: tag.clone(),
+                    child: Box::new(Self::replace_name_nodes(child, substitute, names_to_replace)),
+                },
+            },
         }
     }
 
@@ -1762,6 +2121,112 @@ pub fn join_outputs(outputs: Vec<Output>, delimiter: &str) -> Output {
         formatting: Formatting::default(),
         children,
     }
+}
+
+// ============================================================================
+// Subsequent Author Substitute
+// ============================================================================
+
+/// Apply subsequent-author-substitute to a list of bibliography entries.
+///
+/// This replaces repeated author names in consecutive bibliography entries with a
+/// substitute string (e.g., "———" or "---"), commonly used in styles like Chicago.
+///
+/// # Arguments
+/// * `entries` - Bibliography entries as (id, output) pairs
+/// * `substitute` - The substitute string to use
+/// * `rule` - The substitution rule (complete-all, complete-each, partial-each, partial-first)
+///
+/// # Returns
+/// The entries with appropriate name substitutions applied.
+pub fn apply_subsequent_author_substitute(
+    entries: Vec<(String, Output)>,
+    substitute: &str,
+    rule: SubsequentAuthorSubstituteRule,
+) -> Vec<(String, Output)> {
+    if entries.is_empty() {
+        return entries;
+    }
+
+    let mut result = Vec::with_capacity(entries.len());
+    let mut prev_names: Option<(Vec<Name>, Output)> = None;
+
+    for (id, output) in entries {
+        let current_names = output.extract_first_names();
+
+        let new_output = match (&prev_names, &current_names) {
+            (Some((prev, prev_raw)), Some((curr, _curr_raw))) => {
+                // Per Haskell citeproc: when prev names is empty (substitute was used),
+                // all rules fall back to CompleteAll behavior comparing rendered output.
+                let effective_rule = if prev.is_empty() {
+                    SubsequentAuthorSubstituteRule::CompleteAll
+                } else {
+                    rule
+                };
+
+                match effective_rule {
+                    SubsequentAuthorSubstituteRule::CompleteAll => {
+                        // Replace entire name list when ALL names match
+                        // Special case: if prev names is empty, compare rendered outputs
+                        // (this handles substitute elements like title)
+                        if prev.is_empty() {
+                            if curr.is_empty() && prev_raw.render() == _curr_raw.render() {
+                                output.replace_names_complete_all(substitute)
+                            } else {
+                                output
+                            }
+                        } else if prev == curr {
+                            output.replace_names_complete_all(substitute)
+                        } else {
+                            output
+                        }
+                    }
+                    SubsequentAuthorSubstituteRule::CompleteEach => {
+                        // Replace each name individually when ALL names match
+                        if prev == curr {
+                            output.replace_names_complete_each(substitute, curr)
+                        } else {
+                            output
+                        }
+                    }
+                    SubsequentAuthorSubstituteRule::PartialEach => {
+                        // Replace each matching name from the start
+                        let num_matching = count_matching_names(prev, curr);
+                        if num_matching > 0 {
+                            let matching_names: Vec<_> = curr.iter().take(num_matching).cloned().collect();
+                            output.replace_names_partial_each(substitute, &matching_names)
+                        } else {
+                            output
+                        }
+                    }
+                    SubsequentAuthorSubstituteRule::PartialFirst => {
+                        // Replace only the first name if it matches
+                        if !prev.is_empty() && !curr.is_empty() && prev[0] == curr[0] {
+                            output.replace_names_partial_first(substitute, &curr[0])
+                        } else {
+                            output
+                        }
+                    }
+                }
+            }
+            _ => output,
+        };
+
+        // Update prev_names for next iteration
+        prev_names = current_names;
+
+        result.push((id, new_output));
+    }
+
+    result
+}
+
+/// Count the number of matching names from the start of two name lists.
+fn count_matching_names(prev: &[Name], curr: &[Name]) -> usize {
+    prev.iter()
+        .zip(curr.iter())
+        .take_while(|(a, b)| a == b)
+        .count()
 }
 
 // ============================================================================

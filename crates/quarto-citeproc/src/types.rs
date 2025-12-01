@@ -616,16 +616,25 @@ impl Processor {
     pub fn generate_bibliography_to_outputs(
         &mut self,
     ) -> Result<Vec<(String, crate::output::Output)>> {
-        let bib = match &self.style.bibliography {
-            Some(b) => b,
-            None => return Ok(Vec::new()),
-        };
+        // Extract values from bibliography before mutable operations
+        let (sort_keys_opt, subsequent_author_substitute, subsequent_author_substitute_rule) =
+            match &self.style.bibliography {
+                Some(b) => (
+                    b.sort.clone(),
+                    b.subsequent_author_substitute.clone(),
+                    b.subsequent_author_substitute_rule,
+                ),
+                None => return Ok(Vec::new()),
+            };
 
         // LinkedHashMap preserves insertion order
         let ids: Vec<String> = self.references.keys().cloned().collect();
 
         // Get sort keys from bibliography
-        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys = sort_keys_opt
+            .as_ref()
+            .map(|s| &s.keys[..])
+            .unwrap_or(&[]);
 
         // Check if any sort key uses citation-number
         let uses_citation_number = sort_keys.iter().any(
@@ -668,6 +677,17 @@ impl Processor {
                 entries.push((id.clone(), output));
             }
         }
+
+        // Apply subsequent-author-substitute if configured
+        let entries = if let Some(ref substitute) = subsequent_author_substitute {
+            crate::output::apply_subsequent_author_substitute(
+                entries,
+                substitute,
+                subsequent_author_substitute_rule,
+            )
+        } else {
+            entries
+        };
 
         Ok(entries)
     }

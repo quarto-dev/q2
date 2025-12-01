@@ -482,8 +482,10 @@ fn evaluate_citation_to_output_impl(
                 parts.push(output);
             }
         } else {
-            // Capitalize first letter when no prefix
-            parts.push(output.capitalize_first());
+            // No prefix - do NOT capitalize. Capitalization only happens
+            // when prefix ends with sentence-ending punctuation (handled above).
+            // Per Pandoc's citeproc: items without prefix are NOT capitalized.
+            parts.push(output);
         }
         if let Some(ref suffix) = item.suffix {
             // Parse suffix for CSL rich text (quotes, HTML markup)
@@ -1615,7 +1617,22 @@ fn evaluate_names_substitute(
     ctx.substitute_label_before_name = prev_substitute_label_before_name;
     ctx.in_substitute = prev_in_substitute;
 
-    Ok(result)
+    // Wrap the substitute output in Tag::Names with empty names list.
+    // This is needed for subsequent-author-substitute to work: the feature
+    // detects Names tags and replaces them with the substitute string.
+    // Using the first variable from the names element as the variable name.
+    if result.is_null() {
+        Ok(result)
+    } else {
+        let variable = names_el.variables.first().cloned().unwrap_or_default();
+        Ok(Output::tagged(
+            Tag::Names {
+                variable,
+                names: vec![],
+            },
+            result,
+        ))
+    }
 }
 
 /// Get the count of names that would be rendered (after et-al truncation).
@@ -1692,7 +1709,7 @@ fn format_names(
         };
         // Check if there's a disambiguation hint for this name
         let is_primary = i == 0;
-        formatted_names.push(format_single_name(
+        let formatted_name = format_single_name(
             n,
             &name_ctx.effective_options,
             inverted,
@@ -1703,7 +1720,10 @@ fn format_names(
             given_formatting,
             demote_ndp,
             init_with_hyphen,
-        ));
+        );
+        // Wrap each name with Tag::Name for subsequent-author-substitute support.
+        // This allows the substitution logic to identify and replace individual names.
+        formatted_names.push(Output::tagged(Tag::Name(n.clone()), formatted_name));
         is_inverted.push(inverted);
     }
 

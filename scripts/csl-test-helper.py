@@ -424,10 +424,10 @@ def cmd_category(args):
         print(f"Results: {len(passing)} passing, {len(failing)} failing")
         print()
 
-        # Show quick wins (passing but not enabled)
-        quick_wins = passing - enabled
+        # Show quick wins (passing but not enabled AND not deferred)
+        quick_wins = passing - enabled - deferred
         if quick_wins:
-            print("Quick wins (passing but not enabled):")
+            print("Quick wins (passing but not enabled or deferred):")
             for name in sorted(quick_wins):
                 print(f"  + {name}")
             print()
@@ -462,10 +462,11 @@ def cmd_quick_wins(args):
     all_tests = get_all_test_files(root / TEST_DATA_DIR)
     passing = passing & set(all_tests.keys())
 
-    quick_wins = passing - enabled
+    # Quick wins are tests that pass but aren't enabled AND aren't deferred
+    quick_wins = passing - enabled - deferred
 
     if not quick_wins:
-        print("\nNo quick wins found - all passing tests are already enabled!")
+        print("\nNo quick wins found - all passing tests are already enabled or deferred!")
         return
 
     print(f"\nFound {len(quick_wins)} quick wins (tests that pass but aren't enabled):")

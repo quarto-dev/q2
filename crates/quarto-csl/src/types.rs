@@ -290,6 +290,23 @@ pub enum SecondFieldAlign {
     Margin,
 }
 
+/// Rule for subsequent-author-substitute in bibliography.
+///
+/// Controls how repeated author names are replaced with a substitute string
+/// (typically "———" or "---") in consecutive bibliography entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SubsequentAuthorSubstituteRule {
+    /// Replace entire name list when ALL names match (default).
+    #[default]
+    CompleteAll,
+    /// Replace each name individually when ALL names match.
+    CompleteEach,
+    /// Replace each matching name from the start.
+    PartialEach,
+    /// Replace only the first name if it matches.
+    PartialFirst,
+}
+
 /// A layout (for citation or bibliography).
 #[derive(Debug, Clone)]
 pub struct Layout {
@@ -321,6 +338,13 @@ pub struct Layout {
     /// When set, the first element of each entry is wrapped in a left-margin div,
     /// and the rest is wrapped in a right-inline div.
     pub second_field_align: Option<SecondFieldAlign>,
+    /// Subsequent author substitute string (bibliography only).
+    /// When set, repeated author names in consecutive entries are replaced
+    /// with this string (e.g., "———" or "---").
+    pub subsequent_author_substitute: Option<String>,
+    /// Rule for how to apply subsequent-author-substitute (bibliography only).
+    /// Defaults to CompleteAll if subsequent_author_substitute is set.
+    pub subsequent_author_substitute_rule: SubsequentAuthorSubstituteRule,
     /// Source location.
     pub source_info: SourceInfo,
 }

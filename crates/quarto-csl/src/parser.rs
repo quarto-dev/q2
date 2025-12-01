@@ -720,6 +720,23 @@ impl CslParser {
                 _ => None,
             });
 
+        // Parse subsequent-author-substitute (bibliography only)
+        let subsequent_author_substitute = self
+            .get_attr(element, "subsequent-author-substitute")
+            .map(|a| a.value.clone());
+
+        // Parse subsequent-author-substitute-rule (bibliography only, defaults to CompleteAll)
+        let subsequent_author_substitute_rule = self
+            .get_attr(element, "subsequent-author-substitute-rule")
+            .map(|a| match a.value.as_str() {
+                "complete-all" => SubsequentAuthorSubstituteRule::CompleteAll,
+                "complete-each" => SubsequentAuthorSubstituteRule::CompleteEach,
+                "partial-each" => SubsequentAuthorSubstituteRule::PartialEach,
+                "partial-first" => SubsequentAuthorSubstituteRule::PartialFirst,
+                _ => SubsequentAuthorSubstituteRule::CompleteAll,
+            })
+            .unwrap_or_default();
+
         let elements = self.parse_elements(layout_element)?;
 
         Ok(Layout {
@@ -735,6 +752,8 @@ impl CslParser {
             disambiguation,
             near_note_distance,
             second_field_align,
+            subsequent_author_substitute,
+            subsequent_author_substitute_rule,
             source_info: element.source_info.clone(),
         })
     }
