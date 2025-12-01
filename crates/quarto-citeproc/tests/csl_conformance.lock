@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 711
-# Disabled: 147
+# Enabled: 714
+# Disabled: 144
 #
 [enabled]
 affix_interveningempty
@@ -339,8 +339,11 @@ locale_titlecasegarbagelangenglishlocale
 locale_titlecasegarbagelangnonenglishlocale
 locale_titlecasenonenglishlangupperemptylocale
 locale_unknownterm
+locator_simplelocators
 locator_singularembeddedlabelafterplural
 locator_termselection
+locator_trickyentryforplurals
+locator_withleadingspace
 locator_workaroundtestforsubverbo
 magic_allowrepeatdaterenderings
 magic_capitalizefirstoccurringnameparticle

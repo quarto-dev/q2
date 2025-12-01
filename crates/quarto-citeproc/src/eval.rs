@@ -1377,16 +1377,25 @@ fn evaluate_text(
                     }
 
                     // Special handling for page-like variables: format ranges with en-dash
-                    // This applies to:
-                    // - "page" variable
-                    // - "locator" variable when its label is "page" (or unspecified, which defaults to page)
+                    // and optional abbreviation. This applies to:
+                    // - "page" variable: full formatting with page-range-format
+                    // - "locator" variable with page label: same as page
+                    // - "locator" variable with non-page label: en-dash only, no abbreviation
+                    //
+                    // Pandoc citeproc always calls formatPageRange for locators, just with
+                    // Nothing for page-range-format when the label isn't "page".
                     let is_page_like = name == "page"
                         || (name == "locator"
                             && ctx.get_locator_label().map_or(true, |l| l == "page"));
 
-                    if is_page_like {
+                    if name == "page" || name == "locator" {
                         let delimiter = ctx.get_page_range_delimiter();
-                        let page_range_format = ctx.processor.style.options.page_range_format;
+                        // Only apply page-range-format abbreviation for page-like locators
+                        let page_range_format = if is_page_like {
+                            ctx.processor.style.options.page_range_format
+                        } else {
+                            None
+                        };
                         let formatted = format_page_range(&value, &delimiter, page_range_format);
                         Output::tagged(Tag::Locator, crate::output::parse_csl_rich_text(&formatted))
                     } else {
@@ -1395,8 +1404,6 @@ fn evaluate_text(
                         // Tag title for potential hyperlinking
                         if name == "title" {
                             Output::tagged(Tag::Title, parsed)
-                        } else if name == "locator" {
-                            Output::tagged(Tag::Locator, parsed)
                         } else {
                             parsed
                         }
@@ -3039,13 +3046,42 @@ fn evaluate_label(
     // For locator variable, we need special handling:
     // - The term to look up is the locator label type (e.g., "page"), not "locator"
     // - Plural is determined by analyzing the locator value
+    // - Following Pandoc citeproc: suppress label if locator text already contains
+    //   a term abbreviation (e.g., "vol. 1" starts with "vol. ")
     let (term_name, value_for_plural) = if label_el.variable == "locator" {
-        // Get the locator label type (e.g., "page", "chapter")
-        let label_type = ctx.get_locator_label();
         let locator_value = ctx.locator.map(|s| s.to_string());
-        match label_type {
-            Some(lt) => (lt.to_string(), locator_value),
-            None => return Ok(Output::Null), // No locator, no label
+
+        // Get the explicitly set label (if any)
+        let explicit_label = ctx.locator_label;
+
+        match explicit_label {
+            Some(lt) => {
+                // Explicit label set - use it
+                (lt.to_string(), locator_value)
+            }
+            None => {
+                // No explicit label - check if we should suppress the default "page" label
+                // Following Pandoc's logic in Citeproc/Eval.hs:
+                // 1. If locator begins with space → no label
+                // 2. If locator starts with letters followed by ". " → no label (term abbreviation)
+                // 3. Otherwise → use "page"
+                if let Some(loc) = ctx.locator {
+                    if loc.starts_with(|c: char| c.is_whitespace()) {
+                        // Begins with space - no label
+                        return Ok(Output::Null);
+                    }
+                    // Check for term abbreviation: letters followed by ". "
+                    let after_letters: &str = loc.trim_start_matches(|c: char| c.is_alphabetic());
+                    if after_letters.starts_with(". ") {
+                        // Starts with term abbreviation like "vol. " - no label
+                        return Ok(Output::Null);
+                    }
+                    // Default to page label
+                    ("page".to_string(), locator_value)
+                } else {
+                    return Ok(Output::Null); // No locator, no label
+                }
+            }
         }
     } else {
         (
@@ -3963,7 +3999,11 @@ where
 /// - Multiple ranges separated by comma or ampersand
 /// - Page range abbreviation based on format (minimal, chicago, expanded, etc.)
 /// - Escaped hyphens `\-` which are converted to literal hyphens
-/// - Spaces around separators are preserved
+///
+/// Following Pandoc citeproc's pageRange function:
+/// - Splits on comma and ampersand into separate tokens (including separators)
+/// - Strips whitespace from each token
+/// - Re-joins tokens with a space delimiter
 ///
 /// The `page_range_delimiter` should typically be the locale's "page-range-delimiter"
 /// term, defaulting to en-dash (–) if not specified.
@@ -3975,64 +4015,80 @@ fn format_page_range(
     // Check for escaped hyphen - if present, we need special handling
     let has_escaped = value.contains("\\-");
 
-    // Split on comma and ampersand, keeping the delimiters and surrounding spaces
-    let mut result = String::new();
+    // Split into tokens, where commas and ampersands are their own tokens
+    // This mirrors Pandoc's T.groupBy approach
+    let mut tokens = Vec::new();
     let mut current = String::new();
 
     for c in value.chars() {
         if c == ',' || c == '&' {
-            // Process the accumulated segment (preserve trailing spaces in result)
-            result.push_str(&format_page_segment(
-                &current,
-                page_range_delimiter,
-                has_escaped,
-                format,
-            ));
-            current.clear();
-            result.push(c);
+            if !current.is_empty() {
+                tokens.push(current);
+                current = String::new();
+            }
+            tokens.push(c.to_string());
         } else {
             current.push(c);
         }
     }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
 
-    // Process any remaining segment
-    result.push_str(&format_page_segment(
-        &current,
-        page_range_delimiter,
-        has_escaped,
-        format,
-    ));
+    // Process each token: strip whitespace and format ranges (for non-separator tokens)
+    let formatted_tokens: Vec<String> = tokens
+        .into_iter()
+        .map(|token| {
+            let trimmed = token.trim();
+            if trimmed.is_empty() {
+                String::new()
+            } else if trimmed == "," || trimmed == "&" {
+                // Separators pass through as-is
+                trimmed.to_string()
+            } else {
+                // Format as page segment
+                format_page_segment(trimmed, page_range_delimiter, has_escaped, format)
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
 
+    // Re-join tokens with space delimiter, following Pandoc's addDelimiters logic:
+    // - Don't add delimiter before comma, semicolon, or period (these are punctuation)
+    // - Add delimiter (space) between all other adjacent tokens
+    let mut result = String::new();
+    for (i, token) in formatted_tokens.iter().enumerate() {
+        if i > 0 {
+            // Check if current token starts with punctuation that shouldn't have space before
+            let first_char = token.chars().next();
+            let is_punct = matches!(first_char, Some(',' | ';' | '.'));
+            if !is_punct {
+                result.push(' ');
+            }
+        }
+        result.push_str(token);
+    }
     result
 }
 
 /// Format a single page segment (part between comma/ampersand separators).
-/// Preserves leading and trailing whitespace.
+/// Following Pandoc citeproc's behavior, strips leading/trailing whitespace from segments.
 fn format_page_segment(
     segment: &str,
     delimiter: &str,
     has_escaped: bool,
     format: Option<quarto_csl::PageRangeFormat>,
 ) -> String {
-    // Preserve leading and trailing whitespace
-    let leading: String = segment.chars().take_while(|c| c.is_whitespace()).collect();
-    let trailing: String = segment
-        .chars()
-        .rev()
-        .take_while(|c| c.is_whitespace())
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect();
+    // Strip leading and trailing whitespace (matches Pandoc's T.strip behavior)
     let trimmed = segment.trim();
 
     if trimmed.is_empty() {
-        return segment.to_string();
+        return String::new();
     }
 
     if has_escaped && trimmed.contains("\\-") {
         // Has escaped hyphen - don't treat as range, just replace \- with -
-        return format!("{}{}{}", leading, trimmed.replace("\\-", "-"), trailing);
+        return trimmed.replace("\\-", "-");
     }
 
     // Check for range indicator (hyphen or en-dash)
@@ -4047,13 +4103,12 @@ fn format_page_segment(
         let start = start.trim();
         let end = end.trim();
         if !start.is_empty() && !end.is_empty() {
-            let formatted = format_page_range_pair(start, end, delimiter, format);
-            return format!("{}{}{}", leading, formatted, trailing);
+            return format_page_range_pair(start, end, delimiter, format);
         }
     }
 
-    // Not a range, return with preserved whitespace
-    format!("{}{}{}", leading, trimmed, trailing)
+    // Not a range, return trimmed value
+    trimmed.to_string()
 }
 
 /// Format a page range pair (start-end) according to the page-range-format.
