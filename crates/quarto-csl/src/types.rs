@@ -41,6 +41,10 @@ pub struct Style {
     /// Style-level name formatting options.
     pub name_options: InheritableNameOptions,
 
+    /// Style-level names-delimiter (delimiter between name variable groups).
+    /// Inherited by layouts if they don't specify their own.
+    pub names_delimiter: Option<String>,
+
     /// Source location of the entire style element.
     pub source_info: SourceInfo,
 }
@@ -318,6 +322,11 @@ pub struct Layout {
     pub sort: Option<Sort>,
     /// Inheritable name options (from citation/bibliography element).
     pub name_options: InheritableNameOptions,
+    /// Delimiter between name variable groups in a `<names>` element.
+    /// When a `<names>` element contains multiple variables (e.g., "author editor"),
+    /// this delimiter is used between the groups. Inherited from `names-delimiter`
+    /// attribute on citation/bibliography/style elements.
+    pub names_delimiter: Option<String>,
     /// Elements in the layout.
     pub elements: Vec<Element>,
     /// Citation collapse mode (only for citation layouts).
@@ -591,6 +600,9 @@ pub enum LabelPlural {
 pub struct NamesElement {
     /// Variable names (e.g., "author", "editor").
     pub variables: Vec<String>,
+    /// Delimiter between name variable groups.
+    /// When multiple variables are specified, this delimiter separates the groups.
+    pub delimiter: Option<String>,
     /// Name formatting.
     pub name: Option<Name>,
     /// Et-al formatting.

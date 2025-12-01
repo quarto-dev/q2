@@ -336,6 +336,11 @@ impl CslParser {
         // Parse style-level name options from attributes
         let name_options = self.parse_inheritable_name_options(element);
 
+        // Parse style-level names-delimiter
+        let names_delimiter = self
+            .get_attr(element, "names-delimiter")
+            .map(|a| a.value.clone());
+
         // Parse child elements
         let mut info = None;
         let mut locales = Vec::new();
@@ -400,6 +405,7 @@ impl CslParser {
             citation,
             bibliography,
             name_options,
+            names_delimiter,
             source_info: element.source_info.clone(),
         })
     }
@@ -737,6 +743,11 @@ impl CslParser {
             })
             .unwrap_or_default();
 
+        // Parse names-delimiter (delimiter between name variable groups in <names>)
+        let names_delimiter = self
+            .get_attr(element, "names-delimiter")
+            .map(|a| a.value.clone());
+
         let elements = self.parse_elements(layout_element)?;
 
         Ok(Layout {
@@ -744,6 +755,7 @@ impl CslParser {
             delimiter: layout_delimiter,
             sort,
             name_options,
+            names_delimiter,
             elements,
             collapse,
             cite_group_delimiter,
@@ -1053,6 +1065,11 @@ impl CslParser {
             .map(|s| s.to_string())
             .collect();
 
+        // Parse delimiter between name variable groups (e.g., between author and editor)
+        let delimiter = self
+            .get_attr(element, "delimiter")
+            .map(|a| a.value.clone());
+
         let mut name = None;
         let mut et_al = None;
         let mut label = None;
@@ -1077,6 +1094,7 @@ impl CslParser {
 
         Ok(NamesElement {
             variables,
+            delimiter,
             name,
             et_al,
             label,

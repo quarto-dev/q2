@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 705
-# Disabled: 153
+# Enabled: 711
+# Disabled: 147
 #
 [enabled]
 affix_interveningempty
@@ -368,6 +368,7 @@ magic_stripperiodsexcludeaffixes
 magic_stripperiodsfalse
 magic_stripperiodstrue
 magic_stripperiodstrueshortform
+magic_subsequentauthorsubstituteoftitlefield
 magic_superscriptchars
 magic_suppresslayoutdelimiterifprefixcomma
 magic_textrangeenglish
@@ -556,10 +557,14 @@ nameattr_nameformonnamesinbibliography
 nameattr_nameformonnamesincitation
 nameattr_nameformonstyleinbibliography
 nameattr_nameformonstyleincitation
+nameattr_namesdelimiteronbibliographyinbibliography
 nameattr_namesdelimiteronbibliographyincitation
 nameattr_namesdelimiteroncitationinbibliography
+nameattr_namesdelimiteroncitationincitation
 nameattr_namesdelimiteronnamesinbibliography
 nameattr_namesdelimiteronnamesincitation
+nameattr_namesdelimiteronstyleinbibliography
+nameattr_namesdelimiteronstyleincitation
 nameattr_sortseparatoronbibliographyinbibliography
 nameattr_sortseparatoronbibliographyincitation
 nameattr_sortseparatoroncitationinbibliography
@@ -676,6 +681,7 @@ sort_variousnamemacros2
 sort_variousnamemacros3
 sortseparator_sortseparatorempty
 substitute_repeatednamesok
+substitute_sharedmacro
 substitute_substituteonlyoncestring
 substitute_substituteonlyonceterm
 substitute_substituteonlyoncevariable

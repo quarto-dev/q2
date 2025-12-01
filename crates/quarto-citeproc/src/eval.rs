@@ -150,6 +150,9 @@ struct EvalContext<'a> {
     reference: &'a Reference,
     /// Inherited name options from citation/bibliography level.
     inherited_name_options: &'a InheritableNameOptions,
+    /// Inherited names-delimiter from citation/bibliography level.
+    /// Used as delimiter between name variable groups in <names> elements.
+    inherited_names_delimiter: Option<&'a str>,
     /// Name options from parent <names> element for substitute inheritance.
     /// When inside a substitute block, this holds the name options from the
     /// parent <names> element that should be inherited by child <names>.
@@ -190,11 +193,13 @@ impl<'a> EvalContext<'a> {
         processor: &'a mut Processor,
         reference: &'a Reference,
         inherited_name_options: &'a InheritableNameOptions,
+        inherited_names_delimiter: Option<&'a str>,
     ) -> Self {
         Self {
             processor,
             reference,
             inherited_name_options,
+            inherited_names_delimiter,
             substitute_name_options: None,
             substitute_label: None,
             substitute_label_before_name: false,
@@ -214,6 +219,7 @@ impl<'a> EvalContext<'a> {
         processor: &'a mut Processor,
         reference: &'a Reference,
         inherited_name_options: &'a InheritableNameOptions,
+        inherited_names_delimiter: Option<&'a str>,
         citation_item: &'a CitationItem,
     ) -> Self {
         use crate::types::bitmask_to_positions;
@@ -228,6 +234,7 @@ impl<'a> EvalContext<'a> {
             processor,
             reference,
             inherited_name_options,
+            inherited_names_delimiter,
             substitute_name_options: None,
             substitute_label: None,
             substitute_label_before_name: false,
@@ -431,7 +438,18 @@ fn evaluate_citation_to_output_impl(
             .clone();
 
         // Use with_citation_item to include locator/label from citation item
-        let mut ctx = EvalContext::with_citation_item(processor, &reference, &name_options, item);
+        // names_delimiter: layout (citation) > style
+        let names_delimiter = layout
+            .names_delimiter
+            .clone()
+            .or_else(|| processor.style.names_delimiter.clone());
+        let mut ctx = EvalContext::with_citation_item(
+            processor,
+            &reference,
+            &name_options,
+            names_delimiter.as_deref(),
+            item,
+        );
         let output = evaluate_layout(&mut ctx, &layout)?;
 
         // Apply prefix/suffix from citation item
@@ -1036,7 +1054,17 @@ pub fn evaluate_bibliography_entry_to_output(
 
     // Merge bibliography-level options with style-level options (bibliography takes precedence)
     let name_options = layout.name_options.merge(&style_name_options);
-    let mut ctx = EvalContext::new(processor, reference, &name_options);
+    // names_delimiter: layout (bibliography) > style
+    let names_delimiter = layout
+        .names_delimiter
+        .clone()
+        .or_else(|| processor.style.names_delimiter.clone());
+    let mut ctx = EvalContext::new(
+        processor,
+        reference,
+        &name_options,
+        names_delimiter.as_deref(),
+    );
     let output = evaluate_layout(&mut ctx, &layout)?;
 
     // Apply second-field-align transformation if enabled
@@ -1183,7 +1211,20 @@ pub fn evaluate_macro_for_sort(
     // Merge name options: sort_key > layout > style (higher priority first)
     let name_options = sort_key_name_options.merge(&layout_name_options.merge(&style_name_options));
 
-    let mut ctx = EvalContext::new(&mut temp_processor, reference, &name_options);
+    // Get names_delimiter for sort key evaluation: bibliography > style
+    let names_delimiter = temp_processor
+        .style
+        .bibliography
+        .as_ref()
+        .and_then(|b| b.names_delimiter.clone())
+        .or_else(|| temp_processor.style.names_delimiter.clone());
+
+    let mut ctx = EvalContext::new(
+        &mut temp_processor,
+        reference,
+        &name_options,
+        names_delimiter.as_deref(),
+    );
     // Mark this as a sort key evaluation so demote-non-dropping-particle works correctly
     ctx.in_sort_key = true;
     let output = evaluate_elements(&mut ctx, elements, "")?;
@@ -1568,8 +1609,13 @@ fn evaluate_names(
     }
 
     // We get here only when all_empty=false, so var_outputs should have content
-    // Join with the delimiter and return
-    let delimiter = formatting.delimiter.as_deref().unwrap_or("");
+    // Join with the delimiter between name variable groups.
+    // Priority: <names delimiter="..."> > inherited names-delimiter > ""
+    let delimiter = names_el
+        .delimiter
+        .as_deref()
+        .or(ctx.inherited_names_delimiter)
+        .unwrap_or("");
     Ok(crate::output::join_outputs(var_outputs, delimiter))
 }
 
