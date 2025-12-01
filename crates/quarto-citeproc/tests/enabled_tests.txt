@@ -758,3 +758,5 @@ sort_DateVariableRange
 sort_DateVariableRangeMixed
 sort_NumberOfAuthorsAsKey
 sort_NamesUseLast
+locale_ForceEmptyEtAlTerm
+bugreports_parenthesis

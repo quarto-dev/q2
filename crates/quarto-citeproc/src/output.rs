@@ -1675,13 +1675,6 @@ fn render_with_formatting(text: &str, formatting: &Formatting) -> String {
         return String::new();
     }
 
-    let mut result = String::new();
-
-    // Apply prefix
-    if let Some(ref prefix) = formatting.prefix {
-        result.push_str(prefix);
-    }
-
     // Apply text case
     let cased = match formatting.text_case {
         Some(TextCase::Lowercase) => text.to_lowercase(),
@@ -1726,14 +1719,22 @@ fn render_with_formatting(text: &str, formatting: &Formatting) -> String {
         aligned
     };
 
-    result.push_str(&quoted);
+    // Apply prefix with fix_punct to handle space collisions
+    // (e.g., group prefix " " followed by element prefix " (" should collapse to " (")
+    let with_prefix = if let Some(ref prefix) = formatting.prefix {
+        fix_punct(vec![prefix.clone(), quoted]).join("")
+    } else {
+        quoted
+    };
 
-    // Apply suffix
-    if let Some(ref suffix) = formatting.suffix {
-        result.push_str(suffix);
-    }
+    // Apply suffix with fix_punct to handle space collisions
+    let with_suffix = if let Some(ref suffix) = formatting.suffix {
+        fix_punct(vec![with_prefix, suffix.clone()]).join("")
+    } else {
+        with_prefix
+    };
 
-    result
+    with_suffix
 }
 
 /// Join multiple outputs with a delimiter.
@@ -2216,15 +2217,42 @@ fn apply_affixes(
 ) {
     use quarto_pandoc_types::{Inline, Str};
 
-    // Apply prefix
+    // Apply prefix with punctuation collision handling
     if let Some(prefix) = prefix {
         if !prefix.is_empty() {
-            let mut result = vec![Inline::Str(Str {
-                text: prefix.clone(),
-                source_info: empty_source_info(),
-            })];
-            result.append(inner);
-            *inner = result;
+            let prefix_end = prefix.chars().last();
+            let content_start = get_leading_char(inner);
+            if let (Some(x_end), Some(y_start)) = (prefix_end, content_start) {
+                let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
+                let actual_prefix = if keep_x_end {
+                    prefix.clone()
+                } else {
+                    // Trim last char from prefix
+                    prefix
+                        .chars()
+                        .take(prefix.chars().count().saturating_sub(1))
+                        .collect()
+                };
+                if !keep_y_start {
+                    trim_leading_char(inner);
+                }
+                if !actual_prefix.is_empty() {
+                    let mut result = vec![Inline::Str(Str {
+                        text: actual_prefix,
+                        source_info: empty_source_info(),
+                    })];
+                    result.append(inner);
+                    *inner = result;
+                }
+            } else {
+                // No collision possible, just prepend
+                let mut result = vec![Inline::Str(Str {
+                    text: prefix.clone(),
+                    source_info: empty_source_info(),
+                })];
+                result.append(inner);
+                *inner = result;
+            }
         }
     }
 

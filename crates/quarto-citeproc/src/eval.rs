@@ -1844,26 +1844,31 @@ fn format_names(
                 .get_term("et-al", quarto_csl::TermForm::Long, false)
                 .unwrap_or_else(|| "et al.".to_string());
 
-            // Get formatting from the <et-al> element if present
-            let et_al_formatting = names_el
-                .et_al
-                .as_ref()
-                .and_then(|ea| ea.formatting.clone())
-                .unwrap_or_default();
+            // Only add et-al output if the term is not empty
+            // (CSL allows overriding et-al to empty string to suppress it)
+            if !et_al_term.is_empty() {
+                // Get formatting from the <et-al> element if present
+                let et_al_formatting = names_el
+                    .et_al
+                    .as_ref()
+                    .and_then(|ea| ea.formatting.clone())
+                    .unwrap_or_default();
 
-            // Create the formatted et-al output
-            let et_al_output =
-                Output::formatted(et_al_formatting, vec![Output::literal(et_al_term)]);
+                // Create the formatted et-al output
+                let et_al_output =
+                    Output::formatted(et_al_formatting, vec![Output::literal(et_al_term)]);
 
-            let use_delim = should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
-            if use_delim {
-                // Add delimiter and space before et-al
-                result_parts.push(Output::literal(format!("{} ", delimiter.trim_end())));
-                result_parts.push(et_al_output);
-            } else {
-                // Just add space before et-al
-                result_parts.push(Output::literal(" ".to_string()));
-                result_parts.push(et_al_output);
+                let use_delim =
+                    should_include_delimiter(delimiter_precedes_et_al, names_to_show + 1);
+                if use_delim {
+                    // Add delimiter and space before et-al
+                    result_parts.push(Output::literal(format!("{} ", delimiter.trim_end())));
+                    result_parts.push(et_al_output);
+                } else {
+                    // Just add space before et-al
+                    result_parts.push(Output::literal(" ".to_string()));
+                    result_parts.push(et_al_output);
+                }
             }
         }
     }
