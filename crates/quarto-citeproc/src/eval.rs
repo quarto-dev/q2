@@ -529,11 +529,16 @@ fn evaluate_citation_to_output_impl(
     let combined = if apply_collapse {
         match layout.collapse {
             Collapse::Year | Collapse::YearSuffix | Collapse::YearSuffixRanged => {
-                collapse_by_year(item_outputs, &layout)
+                collapse_by_year(item_outputs, &layout, layout.collapse.clone())
             }
             Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
             Collapse::None => {
-                Output::formatted_with_delimiter(Formatting::default(), item_outputs, &delimiter)
+                // Even without collapse mode, cite-group-delimiter groups same-author citations
+                if layout.cite_group_delimiter.is_some() {
+                    group_by_author_with_delimiter(item_outputs, &layout)
+                } else {
+                    Output::formatted_with_delimiter(Formatting::default(), item_outputs, &delimiter)
+                }
             }
         }
     } else {
@@ -547,9 +552,307 @@ fn evaluate_citation_to_output_impl(
 
 /// Collapse citations by author name (year collapse).
 ///
-/// Groups consecutive items by author name and suppresses repeated names.
-/// "(Smith 1900, Smith 2000)" becomes "(Smith 1900, 2000)"
-fn collapse_by_year(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> Output {
+/// Groups items by author name (including non-adjacent items) and suppresses repeated names.
+/// "(Smith 1900, Jones 2000, Smith 2001)" becomes "(Smith 1900, 2001; Jones 2000)"
+///
+/// This implements Pandoc's groupWith algorithm which:
+/// 1. Takes the first item
+/// 2. Scans remaining items for matches (same author)
+/// 3. Pulls ALL matching items into the current group
+/// 4. Recurses on the remaining non-matching items
+///
+/// Items with suffix tags are not moved (they become single-item groups).
+///
+/// For YearSuffix and YearSuffixRanged collapse modes, this also collapses
+/// same-year items within each author group, showing only the suffix for
+/// subsequent items with the same year.
+fn collapse_by_year(
+    item_outputs: Vec<Output>,
+    layout: &quarto_csl::Layout,
+    collapse_mode: quarto_csl::Collapse,
+) -> Output {
+    use quarto_csl::Collapse;
+
+    if item_outputs.is_empty() {
+        return Output::Null;
+    }
+
+    let delimiter = layout.delimiter.clone().unwrap_or_else(|| "; ".to_string());
+    // cite-group-delimiter defaults to ", " if not specified, BUT for year-suffix
+    // collapsing logic, we need to know if it was explicitly set
+    let cite_group_delimiter = layout
+        .cite_group_delimiter
+        .clone()
+        .unwrap_or_else(|| ", ".to_string());
+    // For year groups within an author group, use cite-group-delimiter if set,
+    // otherwise fall back to layout delimiter
+    let year_group_delimiter = layout
+        .cite_group_delimiter
+        .clone()
+        .unwrap_or_else(|| delimiter.clone());
+    // year-suffix-delimiter fallback chain (per Pandoc citeproc):
+    // 1. year-suffix-delimiter attribute
+    // 2. cite-group-delimiter attribute
+    // 3. layout delimiter
+    let year_suffix_delimiter = layout
+        .year_suffix_delimiter
+        .clone()
+        .or_else(|| layout.cite_group_delimiter.clone())
+        .unwrap_or_else(|| delimiter.clone());
+
+    // Group items by author name using Pandoc's groupWith algorithm
+    let groups = group_by_names(item_outputs);
+
+    // For each author group, suppress names and optionally collapse year suffixes
+    let group_outputs: Vec<Output> = groups
+        .into_iter()
+        .map(|group| {
+            // First, suppress names on all but the first item
+            let items_with_suppressed_names: Vec<Output> = group
+                .into_iter()
+                .enumerate()
+                .map(|(i, output)| {
+                    if i == 0 {
+                        output
+                    } else {
+                        output.suppress_names()
+                    }
+                })
+                .collect();
+
+            // For year-suffix modes, also collapse same-year items
+            match collapse_mode {
+                Collapse::YearSuffix | Collapse::YearSuffixRanged => {
+                    let use_ranges = matches!(collapse_mode, Collapse::YearSuffixRanged);
+                    collapse_year_suffixes(
+                        items_with_suppressed_names,
+                        &cite_group_delimiter,
+                        &year_group_delimiter,
+                        &year_suffix_delimiter,
+                        use_ranges,
+                    )
+                }
+                _ => Output::formatted_with_delimiter(
+                    Formatting::default(),
+                    items_with_suppressed_names,
+                    &cite_group_delimiter,
+                ),
+            }
+        })
+        .collect();
+
+    Output::formatted_with_delimiter(Formatting::default(), group_outputs, &delimiter)
+}
+
+/// Collapse same-year items within an author group to show only year suffixes.
+///
+/// For items like "2000a, 2000b, 2000c, 2001", this produces "2000a,b,c, 2001".
+/// The first item in each year group keeps the full date, subsequent items
+/// show only their year suffix.
+///
+/// `cite_group_delimiter` - delimiter when no year-suffix collapse happens
+/// `year_group_delimiter` - delimiter between year groups when collapse happens
+/// `year_suffix_delimiter` - delimiter between suffixes within same year (e.g., ",")
+fn collapse_year_suffixes(
+    items: Vec<Output>,
+    cite_group_delimiter: &str,
+    year_group_delimiter: &str,
+    year_suffix_delimiter: &str,
+    use_ranges: bool,
+) -> Output {
+    if items.is_empty() {
+        return Output::Null;
+    }
+
+    // Group items by their date text (year), ignoring the year suffix for comparison.
+    // This allows collapsing "2000a, 2000b" even when the suffix is embedded in the date.
+    let mut year_groups: Vec<Vec<Output>> = Vec::new();
+    let mut current_group: Vec<Output> = Vec::new();
+    let mut current_date: Option<String> = None;
+    let mut had_collapse = false; // Track if any year-suffix collapse happened
+
+    for item in items {
+        // Use date without suffix for comparison so "2000a" and "2000b" are considered same year
+        let date = item.extract_date_text_without_suffix();
+
+        if current_group.is_empty() {
+            current_date = date;
+            current_group.push(item);
+        } else if date == current_date && date.is_some() {
+            // Same year - extract only the year suffix for this item
+            current_group.push(item.extract_year_suffix_only());
+            had_collapse = true; // Year-suffix collapse happened
+        } else {
+            // Different year - flush current group and start new one
+            year_groups.push(current_group);
+            current_date = date;
+            current_group = vec![item];
+        }
+    }
+
+    // Don't forget the last group
+    if !current_group.is_empty() {
+        year_groups.push(current_group);
+    }
+
+    // Apply ranging if requested (for YearSuffixRanged)
+    let formatted_groups: Vec<Output> = year_groups
+        .into_iter()
+        .map(|group| {
+            if use_ranges && group.len() >= 3 {
+                // Check if we can make a range (consecutive suffixes)
+                maybe_range_year_suffixes(group, year_suffix_delimiter)
+            } else {
+                Output::formatted_with_delimiter(
+                    Formatting::default(),
+                    group,
+                    year_suffix_delimiter,
+                )
+            }
+        })
+        .collect();
+
+    // Per Pandoc: when year-suffix collapse happens, use year_group_delimiter (layout delimiter)
+    // When no collapse happens (all items have different years), use cite_group_delimiter
+    let final_delimiter = if had_collapse {
+        year_group_delimiter
+    } else {
+        cite_group_delimiter
+    };
+    Output::formatted_with_delimiter(Formatting::default(), formatted_groups, final_delimiter)
+}
+
+/// Try to create ranges for consecutive year suffixes.
+///
+/// Groups consecutive suffixes into ranges where 3+ consecutive become a range:
+/// "a,b,c,d,e" becomes "a–e"
+/// "a,c,d,e" becomes "a,c–e" (a is isolated, c,d,e is a range)
+fn maybe_range_year_suffixes(items: Vec<Output>, delimiter: &str) -> Output {
+    if items.is_empty() {
+        return Output::Null;
+    }
+
+    // Extract year suffix values alongside items
+    let items_with_suffixes: Vec<(Output, Option<i32>)> = items
+        .into_iter()
+        .map(|o| {
+            let suffix = o.extract_year_suffix();
+            (o, suffix)
+        })
+        .collect();
+
+    // Group into consecutive runs
+    let mut runs: Vec<Vec<Output>> = Vec::new();
+    let mut current_run: Vec<Output> = Vec::new();
+    let mut prev_suffix: Option<i32> = None;
+
+    for (output, suffix) in items_with_suffixes {
+        match (prev_suffix, suffix) {
+            (None, s) => {
+                // First item
+                current_run.push(output);
+                prev_suffix = s;
+            }
+            (Some(prev), Some(curr)) if curr == prev + 1 => {
+                // Consecutive - extend current run
+                current_run.push(output);
+                prev_suffix = Some(curr);
+            }
+            _ => {
+                // Not consecutive - flush current run and start new one
+                if !current_run.is_empty() {
+                    runs.push(current_run);
+                }
+                current_run = vec![output];
+                prev_suffix = suffix;
+            }
+        }
+    }
+
+    // Don't forget the last run
+    if !current_run.is_empty() {
+        runs.push(current_run);
+    }
+
+    // Convert runs to output: 3+ consecutive become ranges, others stay as-is
+    let formatted_runs: Vec<Output> = runs
+        .into_iter()
+        .map(|run| {
+            if run.len() >= 3 {
+                // Create a range: first–last
+                let mut iter = run.into_iter();
+                let first = iter.next().unwrap();
+                let last = iter.last().unwrap();
+                Output::sequence(vec![first, Output::literal("–"), last])
+            } else {
+                // Too short for range, join with delimiter
+                Output::formatted_with_delimiter(Formatting::default(), run, delimiter)
+            }
+        })
+        .collect();
+
+    Output::formatted_with_delimiter(Formatting::default(), formatted_runs, delimiter)
+}
+
+/// Group items by author name, collecting non-adjacent same-author items.
+///
+/// This implements Pandoc's groupWith algorithm:
+/// - Items with suffix tags become single-item groups (not moved)
+/// - First item in a group can have a prefix, but subsequent items must not have prefix/suffix
+/// - Same-author items are collected into groups even if not originally adjacent
+fn group_by_names(items: Vec<Output>) -> Vec<Vec<Output>> {
+    fn group_recursive(mut items: Vec<Output>) -> Vec<Vec<Output>> {
+        if items.is_empty() {
+            return Vec::new();
+        }
+
+        let first = items.remove(0);
+
+        // If first item has a suffix, it becomes its own group
+        if first.has_suffix_tag() {
+            let mut rest = group_recursive(items);
+            rest.insert(0, vec![first]);
+            return rest;
+        }
+
+        // Find items that can be grouped (no prefix/suffix) and match the first item's names
+        let first_names = first.extract_names_text();
+
+        // Separate items into:
+        // - those that can potentially be grouped (no prefix or suffix)
+        // - those that cannot (have prefix or suffix) - these stay in order
+        let (groupable, rest): (Vec<_>, Vec<_>) = items
+            .into_iter()
+            .partition(|item| !item.has_prefix_tag() && !item.has_suffix_tag());
+
+        // From groupable items, find those with matching names
+        let (matching, non_matching): (Vec<_>, Vec<_>) = groupable
+            .into_iter()
+            .partition(|item| item.extract_names_text() == first_names && first_names.is_some());
+
+        // Build the group: first item + all matching items
+        let mut group = vec![first];
+        group.extend(matching);
+
+        // Recurse on non-matching items followed by items with prefix/suffix
+        let remaining: Vec<_> = non_matching.into_iter().chain(rest).collect();
+        let mut groups = vec![group];
+        groups.extend(group_recursive(remaining));
+        groups
+    }
+
+    group_recursive(items)
+}
+
+/// Group citations by author name using cite-group-delimiter (without collapse).
+///
+/// Unlike `collapse_by_year`, this does NOT suppress repeated names.
+/// It just groups consecutive same-author citations and uses cite-group-delimiter
+/// between items in a group, and the main delimiter between groups.
+///
+/// "Smith 2000; Smith 2001; Jones 2002" becomes "Smith 2000, Smith 2001; Jones 2002"
+/// (with cite-group-delimiter=", " and delimiter="; ")
+fn group_by_author_with_delimiter(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> Output {
     if item_outputs.is_empty() {
         return Output::Null;
     }
@@ -573,8 +876,8 @@ fn collapse_by_year(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> O
             current_names = names;
             current_group.push(output);
         } else if names == current_names && names.is_some() {
-            // Same author, add to current group (suppress names)
-            current_group.push(output.suppress_names());
+            // Same author, add to current group (but DON'T suppress names)
+            current_group.push(output);
         } else {
             // Different author, start a new group
             groups.push(current_group);

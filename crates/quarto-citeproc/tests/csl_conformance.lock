@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 701
-# Disabled: 157
+# Enabled: 716
+# Disabled: 142
 #
 [enabled]
 affix_commaafterquote
@@ -23,6 +23,7 @@ bugreports_asmjournals
 bugreports_authorposition
 bugreports_authoryear
 bugreports_badcitationupdate
+bugreports_baddelimiterbeforecollapse
 bugreports_capsafteronewordprefix
 bugreports_chinesecharactersfamilyonlyplurallabel
 bugreports_collapsefailure
@@ -85,6 +86,10 @@ collapse_citationnumberrangeswithaffixesgrouped
 collapse_citationnumberrangeswithaffixesnocollapse
 collapse_numericduplicate
 collapse_numericduplicate2
+collapse_yearsuffixcollapse
+collapse_yearsuffixcollapsenorange
+collapse_yearsuffixcollapsenoyearsuffixdelimiter
+collapse_yearsuffiximplicitcollapsenoyearsuffixdelimiter
 condition_emptydate
 condition_emptyisnumericfalse
 condition_emptyisuncertaindatefalse
@@ -171,6 +176,7 @@ date_localizedtextyearmonth
 date_localizedtextyearwithaffixes
 date_localizedwithinstyleformatting
 date_longmonth
+date_lopsideddatayearsuffixcollapse
 date_masknonexistentwithcondition
 date_negativedatesort
 date_negativedatesortviamacro
@@ -196,6 +202,7 @@ date_textformmonthdateyearrange
 date_textformyeardateyearrange
 date_textformyeardateyearrangeopen
 date_uncertain
+date_yearsuffixdelimiter
 date_yearsuffiximplicitwithnodate
 date_yearsuffiximplicitwithnodateoneonly
 date_yearsuffixwithnodate
@@ -258,6 +265,7 @@ disambiguate_yearsuffixfiftytwoentriesbycite
 disambiguate_yearsuffixmacrosameyearexplicit
 disambiguate_yearsuffixmacrosameyearimplicit
 disambiguate_yearsuffixmidinsert
+disambiguate_yearsuffixmixeddates
 disambiguate_yearsuffixtwopairsbibliography
 disambiguate_yearsuffixtwopairsfirstnamebibliography
 disambiguate_yearsuffixtwopairsfullnamesbibliography
@@ -347,6 +355,7 @@ magic_citationlabelinbibliography
 magic_citationlabelincitation
 magic_entryspacingdouble
 magic_hangingindent
+magic_implicityearsuffixdelimiter
 magic_linespacingdouble
 magic_linespacingtriplestretch
 magic_nameparticle
@@ -395,6 +404,8 @@ name_celtsandtoffsnohyphens
 name_celtsandtoffsspacedinitials
 name_celtsandtoffswithhyphens
 name_citegroupdelimiterwithyearcollapse
+name_citegroupdelimiterwithyearsuffixcollapse
+name_citegroupdelimiterwithyearsuffixcollapse3
 name_delimiter
 name_delimiterafterinverted
 name_editortranslatorboth
@@ -615,6 +626,7 @@ position_nearnoteunsupported
 position_nearnotewithplugin
 position_trueincitation
 punctuation_datestripperiods
+punctuation_defaultyearsuffixdelimiter
 punctuation_delimiterwithstripperiodsandsubstitute1
 punctuation_delimiterwithstripperiodsandsubstitute2
 punctuation_delimiterwithstripperiodsandsubstitute3
@@ -629,6 +641,7 @@ punctuation_semicolondelimiter
 quotes_punctuation
 quotes_punctuationnasty
 simplespace_case1
+sort_authordatewithyearsuffix
 sort_bibliographycitationnumberdescending
 sort_bibliographycitationnumberdescendingsecondary
 sort_bibliographyresortonupdate
@@ -646,6 +659,7 @@ sort_citationnumberprimarydescendingviavariablebibliography
 sort_citationnumberprimarydescendingviavariablecitation
 sort_citationnumbersecondaryascendingviavariablebibliography
 sort_citationsecondarykey
+sort_citegroupdelimiter
 sort_conditionalmacrodates
 sort_daledalebout
 sort_datemacrosortwithsecondfieldalign
@@ -656,6 +670,7 @@ sort_datevariablemixedelementsdescendinga
 sort_datevariablemixedelementsdescendingb
 sort_etaluselast
 sort_familyonly
+sort_groupedbyauthorstring
 sort_latinunicode
 sort_localizeddatelimitedparts
 sort_nameimplicitsortorderandform

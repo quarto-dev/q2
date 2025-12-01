@@ -426,6 +426,75 @@ impl Output {
         }
     }
 
+    /// Extract the date text WITHOUT year suffix (for year-suffix collapsing comparison).
+    ///
+    /// This renders the date but excludes any TagYearSuffix content, so we can
+    /// compare dates by year only and collapse same-year items.
+    pub fn extract_date_text_without_suffix(&self) -> Option<String> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(date) = child.extract_date_text_without_suffix() {
+                        return Some(date);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.extract_date_text_without_suffix(),
+            Output::Tagged { tag, child } => match tag {
+                Tag::Date(_) => Some(child.render_without_year_suffix()),
+                _ => child.extract_date_text_without_suffix(),
+            },
+        }
+    }
+
+    /// Render this output to a string, excluding any TagYearSuffix content.
+    fn render_without_year_suffix(&self) -> String {
+        match self {
+            Output::Null => String::new(),
+            Output::Literal(s) => s.clone(),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let child_strings: Vec<String> = children
+                    .iter()
+                    .map(|c| c.render_without_year_suffix())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                let mut result = if let Some(ref delim) = formatting.delimiter {
+                    child_strings.join(delim)
+                } else {
+                    child_strings.concat()
+                };
+                if let Some(ref prefix) = formatting.prefix {
+                    result = format!("{}{}", prefix, result);
+                }
+                if let Some(ref suffix) = formatting.suffix {
+                    result = format!("{}{}", result, suffix);
+                }
+                result
+            }
+            Output::Linked { children, .. } => {
+                children
+                    .iter()
+                    .map(|c| c.render_without_year_suffix())
+                    .collect::<Vec<_>>()
+                    .concat()
+            }
+            Output::InNote(child) => child.render_without_year_suffix(),
+            Output::Tagged { tag, child } => {
+                // Skip year suffix tags
+                if matches!(tag, Tag::YearSuffix(_)) {
+                    String::new()
+                } else {
+                    child.render_without_year_suffix()
+                }
+            }
+        }
+    }
+
     /// Extract the citation number (Tag::CitationNumber) from this output.
     /// Returns None if no citation number is found.
     pub fn extract_citation_number(&self) -> Option<i32> {
@@ -501,6 +570,150 @@ impl Output {
                     names.extend(tag_names.iter().cloned());
                 }
                 child.extract_all_names_into(names);
+            }
+        }
+    }
+
+    /// Check if this output contains a Tag::Prefix tag anywhere in its tree.
+    pub fn has_prefix_tag(&self) -> bool {
+        match self {
+            Output::Null | Output::Literal(_) => false,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                children.iter().any(|c| c.has_prefix_tag())
+            }
+            Output::InNote(child) => child.has_prefix_tag(),
+            Output::Tagged { tag, child } => {
+                matches!(tag, Tag::Prefix) || child.has_prefix_tag()
+            }
+        }
+    }
+
+    /// Check if this output contains a Tag::Suffix tag anywhere in its tree.
+    pub fn has_suffix_tag(&self) -> bool {
+        match self {
+            Output::Null | Output::Literal(_) => false,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                children.iter().any(|c| c.has_suffix_tag())
+            }
+            Output::InNote(child) => child.has_suffix_tag(),
+            Output::Tagged { tag, child } => {
+                matches!(tag, Tag::Suffix) || child.has_suffix_tag()
+            }
+        }
+    }
+
+    /// Extract the year-suffix value (Tag::YearSuffix) from this output.
+    /// Returns None if no year suffix is found.
+    pub fn extract_year_suffix(&self) -> Option<i32> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(suffix) = child.extract_year_suffix() {
+                        return Some(suffix);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.extract_year_suffix(),
+            Output::Tagged { tag, child } => match tag {
+                Tag::YearSuffix(n) => Some(*n),
+                _ => child.extract_year_suffix(),
+            },
+        }
+    }
+
+    /// Return a copy of this output with the date (Tag::Date) replaced by just
+    /// the year-suffix content (for year-suffix collapsing).
+    ///
+    /// This removes the year from the date and keeps only the suffix.
+    /// If there's no year-suffix, the date becomes null.
+    pub fn extract_year_suffix_only(&self) -> Output {
+        match self {
+            Output::Null => Output::Null,
+            Output::Literal(s) => Output::Literal(s.clone()),
+            Output::Formatted {
+                formatting,
+                children,
+            } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| c.extract_year_suffix_only())
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Formatted {
+                        formatting: formatting.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::Linked { url, children } => {
+                let new_children: Vec<_> = children
+                    .iter()
+                    .map(|c| c.extract_year_suffix_only())
+                    .filter(|c| !c.is_null())
+                    .collect();
+                if new_children.is_empty() {
+                    Output::Null
+                } else {
+                    Output::Linked {
+                        url: url.clone(),
+                        children: new_children,
+                    }
+                }
+            }
+            Output::InNote(child) => {
+                let new_child = child.extract_year_suffix_only();
+                if new_child.is_null() {
+                    Output::Null
+                } else {
+                    Output::InNote(Box::new(new_child))
+                }
+            }
+            Output::Tagged { tag, child } => match tag {
+                // For date tags, extract only the year suffix from the contents
+                Tag::Date(_) => {
+                    // Find year-suffix within this date and return just that
+                    self.find_year_suffix_output().unwrap_or(Output::Null)
+                }
+                _ => {
+                    let new_child = child.extract_year_suffix_only();
+                    if new_child.is_null() {
+                        Output::Null
+                    } else {
+                        Output::Tagged {
+                            tag: tag.clone(),
+                            child: Box::new(new_child),
+                        }
+                    }
+                }
+            },
+        }
+    }
+
+    /// Find the year-suffix Output node within this tree.
+    fn find_year_suffix_output(&self) -> Option<Output> {
+        match self {
+            Output::Null | Output::Literal(_) => None,
+            Output::Formatted { children, .. } | Output::Linked { children, .. } => {
+                for child in children {
+                    if let Some(suffix) = child.find_year_suffix_output() {
+                        return Some(suffix);
+                    }
+                }
+                None
+            }
+            Output::InNote(child) => child.find_year_suffix_output(),
+            Output::Tagged { tag, child } => {
+                if matches!(tag, Tag::YearSuffix(_)) {
+                    // Return a copy of this entire Tagged node
+                    Some(self.clone())
+                } else {
+                    child.find_year_suffix_output()
+                }
             }
         }
     }

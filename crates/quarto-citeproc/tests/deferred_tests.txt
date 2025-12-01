@@ -340,3 +340,6 @@ date_DateNoDateNoTest
 # Suffix should be placed outside font-style formatting (e.g., <i>title</i>. not <i>title.</i>)
 # Requires implementing formatAffixesInside flag like Pandoc citeproc
 simplespace_case1
+
+# Pandoc also fails this test - citation number range insertion edge case
+collapse_CitationNumberRangesInsert
