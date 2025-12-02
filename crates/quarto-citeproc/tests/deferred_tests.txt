@@ -343,3 +343,4 @@ simplespace_case1
 
 # Pandoc also fails this test - citation number range insertion edge case
 collapse_CitationNumberRangesInsert
+display_AuthorAsHeading

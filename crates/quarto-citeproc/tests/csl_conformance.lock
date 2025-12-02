@@ -3,8 +3,8 @@
 # To update: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 #
 # Suite total: 858
-# Enabled: 714
-# Disabled: 144
+# Enabled: 716
+# Disabled: 142
 #
 [enabled]
 affix_interveningempty
@@ -297,6 +297,7 @@ group_legalwithauthordate
 group_shortoutputonly
 group_suppressterminmacro
 group_suppresstermwhennooutputfrompartialdate
+group_suppressvaluewithemptysubgroup
 group_suppresswithemptynesteddatenode
 integration_citationsort
 integration_citationsorttwice
@@ -635,6 +636,7 @@ punctuation_nosuppressofperiodbeforesemicolon
 punctuation_semicolondelimiter
 quotes_punctuation
 quotes_punctuationnasty
+quotes_punctuationwithinnerquote
 sort_authordatewithyearsuffix
 sort_bibliographycitationnumberdescendingsecondary
 sort_bibliographyresortonupdate

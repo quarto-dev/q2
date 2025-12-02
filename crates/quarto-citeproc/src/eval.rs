@@ -2803,8 +2803,10 @@ fn evaluate_group(
     let all_empty = new_var_count.non_empty == old_var_count.non_empty;
 
     if vars_called && all_empty {
-        // Suppress the group - restore var count and return null
-        ctx.set_var_count(old_var_count);
+        // Suppress the group but DO NOT restore var count.
+        // Parent groups need to see that variables were called (directly or indirectly)
+        // even if they were all empty, so they can also suppress.
+        // This matches Pandoc's eGroup behavior.
         Ok(Output::Null)
     } else {
         Ok(output)

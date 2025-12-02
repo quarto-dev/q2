@@ -3076,8 +3076,15 @@ fn move_suffix_punct_into_quoted_content(
         return children;
     }
 
-    // Add the punctuation to the end of the content
-    children.push(Output::Literal(punct.to_string()));
+    // Add the punctuation inside the content.
+    // If the content ends with a quote character (either inner or outer quotes),
+    // insert the punctuation BEFORE that quote to match CSL behavior.
+    // This handles cases like 'The One' where the ' is a literal quote in the text.
+    let inserted = insert_punct_before_trailing_quote(&mut children, punct);
+    if !inserted {
+        // No trailing quote found - just append at the end
+        children.push(Output::Literal(punct.to_string()));
+    }
 
     // Strip the punctuation from the suffix
     let new_suffix: String = suffix.chars().skip(1).collect();
@@ -3088,6 +3095,85 @@ fn move_suffix_punct_into_quoted_content(
     };
 
     children
+}
+
+/// Check if a character is a quote character (single or double, curly or straight).
+fn is_quote_char(c: char) -> bool {
+    matches!(
+        c,
+        '\'' | '"' | '\u{2018}' | '\u{2019}' | '\u{201C}' | '\u{201D}' | '\u{00AB}' | '\u{00BB}'
+    )
+}
+
+/// Insert punctuation before a trailing quote character in the last literal child.
+/// Returns true if insertion was performed, false if no trailing quote was found.
+/// This recursively looks through Tagged, Formatted, and Sequence nodes to find
+/// the trailing literal.
+fn insert_punct_before_trailing_quote(children: &mut Vec<Output>, punct: char) -> bool {
+    // Find the last non-null child
+    let last_idx = children.iter().rposition(|c| !c.is_null());
+    let Some(last_idx) = last_idx else {
+        return false;
+    };
+
+    // Recursively insert punctuation before trailing quote
+    insert_punct_before_trailing_quote_in_node(&mut children[last_idx], punct)
+}
+
+/// Recursively insert punctuation before a trailing quote character.
+/// Also handles the case where trailing content is a Formatted node with quotes=true.
+fn insert_punct_before_trailing_quote_in_node(output: &mut Output, punct: char) -> bool {
+    match output {
+        Output::Literal(s) => {
+            if let Some(last_char) = s.chars().last() {
+                if is_quote_char(last_char) {
+                    // Insert punctuation before the trailing quote
+                    let mut chars: Vec<char> = s.chars().collect();
+                    let insert_pos = chars.len() - 1;
+                    chars.insert(insert_pos, punct);
+                    *s = chars.into_iter().collect();
+                    return true;
+                }
+            }
+            false
+        }
+        Output::Tagged { child, .. } => {
+            // Recurse into tagged node
+            insert_punct_before_trailing_quote_in_node(child, punct)
+        }
+        Output::Formatted {
+            formatting,
+            children,
+        } => {
+            // If this Formatted node has quotes=true, insert punctuation at the end
+            // of its content (inside the quotes)
+            if formatting.quotes {
+                // Append punctuation to the children
+                children.push(Output::Literal(punct.to_string()));
+                return true;
+            }
+
+            // Otherwise, find last non-null child and recurse
+            if let Some(last_idx) = children.iter().rposition(|c| !c.is_null()) {
+                insert_punct_before_trailing_quote_in_node(&mut children[last_idx], punct)
+            } else {
+                false
+            }
+        }
+        Output::Linked { children, .. } => {
+            // Find last non-null child and recurse
+            if let Some(last_idx) = children.iter().rposition(|c| !c.is_null()) {
+                insert_punct_before_trailing_quote_in_node(&mut children[last_idx], punct)
+            } else {
+                false
+            }
+        }
+        Output::InNote(child) => {
+            // Recurse into InNote
+            insert_punct_before_trailing_quote_in_node(child, punct)
+        }
+        _ => false,
+    }
 }
 
 /// Move suffix punctuation into a trailing quoted child element.
@@ -5745,6 +5831,46 @@ mod punct_tests {
             ", ",
         );
         assert_eq!(output.render(), "A, B, C");
+    }
+
+    #[test]
+    fn test_punctuation_in_quote_inner_quote() {
+        use super::{move_punctuation_inside_quotes, Output, Tag};
+        use quarto_csl::Formatting;
+
+        // Test case from quotes_PunctuationWithInnerQuote:
+        // Title "This is 'The One'" with quotes=true and suffix="."
+        // Expected: "This is 'The One.'" (period inside inner quote)
+
+        // Create the title content wrapped in a Title tag
+        let title_content = Output::tagged(
+            Tag::Title,
+            Output::literal("This is 'The One'"),
+        );
+
+        // Create the formatted node with quotes=true and suffix="."
+        let mut fmt = Formatting::default();
+        fmt.quotes = true;
+        fmt.suffix = Some(".".to_string());
+        let input = Output::Formatted {
+            formatting: fmt,
+            children: vec![title_content],
+        };
+
+        // Apply punctuation-in-quote transformation
+        let result = move_punctuation_inside_quotes(input);
+
+        // The period should be inserted before the trailing ' in the literal
+        // Result should render as: "This is 'The One.'"
+        // Note: Our renderer converts all ' to curly ', so both inner quotes become '
+        // The important thing is that the period is BEFORE the closing quote
+        let rendered = result.render();
+        // Check that period is before the closing inner quote
+        assert!(
+            rendered.contains("One.\u{2019}") || rendered.contains("One.'"),
+            "Period should be before closing inner quote, got: {}",
+            rendered
+        );
     }
 
     // ========================================================================
