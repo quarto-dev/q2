@@ -17,7 +17,11 @@ fn check_uses_year_suffix(
     bibliography: Option<&Layout>,
     macros: &HashMap<String, Macro>,
 ) -> bool {
-    fn check_element(el: &Element, macros: &HashMap<String, Macro>) -> bool {
+    fn check_element(
+        el: &Element,
+        macros: &HashMap<String, Macro>,
+        visited: &mut HashSet<String>,
+    ) -> bool {
         match &el.element_type {
             ElementType::Text(text) => {
                 if let TextSource::Variable { name, .. } = &text.source {
@@ -28,31 +32,41 @@ fn check_uses_year_suffix(
                     }
                 }
                 if let TextSource::Macro { name, .. } = &text.source {
+                    // Skip if already visited (prevents infinite recursion with circular macros)
+                    if visited.contains(name) {
+                        return false;
+                    }
                     if let Some(m) = macros.get(name) {
-                        return m.elements.iter().any(|e| check_element(e, macros));
+                        visited.insert(name.clone());
+                        let result = m.elements.iter().any(|e| check_element(e, macros, visited));
+                        visited.remove(name);
+                        return result;
                     }
                 }
                 false
             }
             ElementType::Group(group) => {
-                group.elements.iter().any(|e| check_element(e, macros))
+                group.elements.iter().any(|e| check_element(e, macros, visited))
             }
             ElementType::Choose(choose) => choose
                 .branches
                 .iter()
-                .any(|branch| branch.elements.iter().any(|e| check_element(e, macros))),
+                .any(|branch| branch.elements.iter().any(|e| check_element(e, macros, visited))),
             _ => false,
         }
     }
 
+    let mut visited = HashSet::new();
+
     // Check citation layout
-    if citation.elements.iter().any(|e| check_element(e, macros)) {
+    if citation.elements.iter().any(|e| check_element(e, macros, &mut visited)) {
         return true;
     }
 
     // Check bibliography layout if present
     if let Some(bib) = bibliography {
-        if bib.elements.iter().any(|e| check_element(e, macros)) {
+        visited.clear();
+        if bib.elements.iter().any(|e| check_element(e, macros, &mut visited)) {
             return true;
         }
     }

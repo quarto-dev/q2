@@ -1461,7 +1461,7 @@ fn evaluate_text(
 fn evaluate_names(
     ctx: &mut EvalContext,
     names_el: &NamesElement,
-    formatting: &Formatting,
+    _formatting: &Formatting,
 ) -> Result<Output> {
     // Check if form="count" is set - consider both explicit and inherited form
     // In substitute context, inherit form from parent names element

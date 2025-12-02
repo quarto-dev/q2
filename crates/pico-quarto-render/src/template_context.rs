@@ -15,8 +15,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
-use quarto_markdown_pandoc::pandoc::Pandoc;
-use quarto_markdown_pandoc::pandoc::meta::{MetaMapEntry, MetaValueWithSourceInfo};
+use quarto_markdown_pandoc::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
 
 use crate::format_writers::FormatWriters;
 

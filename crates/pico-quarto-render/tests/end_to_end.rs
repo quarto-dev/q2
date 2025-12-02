@@ -64,8 +64,7 @@ $body$
 // Re-implement the minimal functions needed for testing
 // (In a real scenario, these would be exposed from the crate)
 
-use quarto_markdown_pandoc::pandoc::Pandoc;
-use quarto_markdown_pandoc::pandoc::meta::{MetaMapEntry, MetaValueWithSourceInfo};
+use quarto_markdown_pandoc::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
 
 fn prepare_template_metadata(pandoc: &mut Pandoc) {
     let MetaValueWithSourceInfo::MetaMap {

@@ -18,9 +18,6 @@ use quarto_pandoc_types::{
 use std::{io, mem};
 use yaml_rust2::parser::{Event, MarkedEventReceiver, Parser};
 
-// Re-export the types for backward compatibility
-pub use quarto_pandoc_types::{meta_from_legacy, meta_value_from_legacy};
-
 /// Parse a YAML string value as markdown
 ///
 /// - If tag_source_info is Some: This is a !md tagged value, ERROR on parse failure
