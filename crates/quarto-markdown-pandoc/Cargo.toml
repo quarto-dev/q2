@@ -19,6 +19,8 @@ terminal-support = ["dep:crossterm", "dep:supports-hyperlinks"]
 terminal-hyperlinks = ["dep:supports-hyperlinks"]
 # Enable JSON filter support (requires subprocess spawning, disable for WASM)
 json-filter = []
+# Enable Lua filter support (disable for WASM, where mlua is not available)
+lua-filter = ["dep:mlua"]
 
 [dependencies]
 tree-sitter = { workspace = true }
@@ -42,6 +44,7 @@ quarto-error-message-macros = { path = "../quarto-parse-errors/error-message-mac
 ariadne = "0.4"
 crossterm = { version = "0.28", optional = true }
 supports-hyperlinks = { version = "3.0", optional = true }
+mlua = { version = "0.10", features = ["lua54", "vendored"], optional = true }
 
 [dev-dependencies]
 insta = { version = "1.40", features = ["json", "redactions"] }

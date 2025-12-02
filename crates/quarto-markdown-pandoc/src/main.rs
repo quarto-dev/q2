@@ -14,6 +14,8 @@ mod filter_context;
 mod filters;
 #[cfg(feature = "json-filter")]
 mod json_filter;
+#[cfg(feature = "lua-filter")]
+mod lua;
 mod pandoc;
 mod readers;
 mod traversals;
@@ -63,6 +65,11 @@ struct Args {
     #[cfg(feature = "json-filter")]
     #[arg(long = "json-filter", action = clap::ArgAction::Append)]
     json_filters: Vec<std::path::PathBuf>,
+
+    /// Apply a Lua filter to the document (can be specified multiple times)
+    #[cfg(feature = "lua-filter")]
+    #[arg(long = "lua-filter", action = clap::ArgAction::Append)]
+    lua_filters: Vec<std::path::PathBuf>,
 }
 
 fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
@@ -203,6 +210,28 @@ fn main() {
                     eprintln!("{}", error_json);
                 } else {
                     eprintln!("JSON filter error: {}", e);
+                }
+                std::process::exit(1);
+            }
+        }
+    };
+
+    // Apply Lua filters if any are specified
+    #[cfg(feature = "lua-filter")]
+    let (pandoc, context) = if args.lua_filters.is_empty() {
+        (pandoc, context)
+    } else {
+        match lua::apply_lua_filters(pandoc, context, &args.lua_filters, &args.to) {
+            Ok((filtered_pandoc, filtered_context)) => (filtered_pandoc, filtered_context),
+            Err(e) => {
+                if args.json_errors {
+                    let error_json = serde_json::json!({
+                        "title": "Lua Filter Error",
+                        "message": e.to_string()
+                    });
+                    eprintln!("{}", error_json);
+                } else {
+                    eprintln!("Lua filter error: {}", e);
                 }
                 std::process::exit(1);
             }
