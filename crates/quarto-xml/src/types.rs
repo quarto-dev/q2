@@ -243,9 +243,7 @@ impl XmlElement {
     /// Get child elements by name.
     pub fn get_children(&self, name: &str) -> Vec<&XmlElement> {
         match &self.children {
-            XmlChildren::Elements(elements) => {
-                elements.iter().filter(|e| e.name == name).collect()
-            }
+            XmlChildren::Elements(elements) => elements.iter().filter(|e| e.name == name).collect(),
             XmlChildren::Mixed(children) => children
                 .iter()
                 .filter_map(|c| match c {

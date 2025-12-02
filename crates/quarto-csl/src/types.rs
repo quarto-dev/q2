@@ -400,7 +400,9 @@ impl InheritableNameOptions {
         Self {
             and: self.and.or(other.and),
             delimiter: self.delimiter.clone().or_else(|| other.delimiter.clone()),
-            delimiter_precedes_last: self.delimiter_precedes_last.or(other.delimiter_precedes_last),
+            delimiter_precedes_last: self
+                .delimiter_precedes_last
+                .or(other.delimiter_precedes_last),
             delimiter_precedes_et_al: self
                 .delimiter_precedes_et_al
                 .or(other.delimiter_precedes_et_al),

@@ -9,8 +9,8 @@ use crate::filters::{
 use crate::pandoc::location::empty_source_info;
 use crate::pandoc::shortcode::shortcode_to_span;
 use crate::pandoc::{
-    is_empty_attr, Attr, Block, Blocks, Caption, DefinitionList, Div, Figure, Inline, Inlines,
-    Pandoc, Plain, Space, Span, Str, Superscript,
+    Attr, Block, Blocks, Caption, DefinitionList, Div, Figure, Inline, Inlines, Pandoc, Plain,
+    Space, Span, Str, Superscript, is_empty_attr,
 };
 use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;

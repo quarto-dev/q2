@@ -24,11 +24,12 @@ fn test_parse_apa_style() {
     assert!(style.info.is_some());
 
     let info = style.info.as_ref().unwrap();
-    assert!(info
-        .title
-        .as_ref()
-        .unwrap()
-        .contains("American Psychological Association"));
+    assert!(
+        info.title
+            .as_ref()
+            .unwrap()
+            .contains("American Psychological Association")
+    );
 
     // APA has many macros
     assert!(!style.macros.is_empty());

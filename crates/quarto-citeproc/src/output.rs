@@ -476,13 +476,11 @@ impl Output {
                 }
                 result
             }
-            Output::Linked { children, .. } => {
-                children
-                    .iter()
-                    .map(|c| c.render_without_year_suffix())
-                    .collect::<Vec<_>>()
-                    .concat()
-            }
+            Output::Linked { children, .. } => children
+                .iter()
+                .map(|c| c.render_without_year_suffix())
+                .collect::<Vec<_>>()
+                .concat(),
             Output::InNote(child) => child.render_without_year_suffix(),
             Output::Tagged { tag, child } => {
                 // Skip year suffix tags
@@ -654,9 +652,9 @@ impl Output {
                     children: new_children,
                 }
             }
-            Output::InNote(child) => {
-                Output::InNote(Box::new(child.replace_names_complete_all_inner(substitute, replace_first)))
-            }
+            Output::InNote(child) => Output::InNote(Box::new(
+                child.replace_names_complete_all_inner(substitute, replace_first),
+            )),
             Output::Tagged { tag, child } => match tag {
                 Tag::Names { variable, names } if replace_first => {
                     // Keep the Tag::Names wrapper (preserves affixes from cs:names element),
@@ -686,7 +684,9 @@ impl Output {
                 }
                 _ => Output::Tagged {
                     tag: tag.clone(),
-                    child: Box::new(child.replace_names_complete_all_inner(substitute, replace_first)),
+                    child: Box::new(
+                        child.replace_names_complete_all_inner(substitute, replace_first),
+                    ),
                 },
             },
         }
@@ -814,7 +814,12 @@ impl Output {
         self.replace_names_each_inner(substitute, std::slice::from_ref(first_name), true)
     }
 
-    fn replace_names_each_inner(&self, substitute: &str, names_to_replace: &[Name], replace_first: bool) -> Output {
+    fn replace_names_each_inner(
+        &self,
+        substitute: &str,
+        names_to_replace: &[Name],
+        replace_first: bool,
+    ) -> Output {
         match self {
             Output::Null => Output::Null,
             Output::Literal(s) => Output::Literal(s.clone()),
@@ -827,7 +832,8 @@ impl Output {
                     .iter()
                     .map(|c| {
                         if replace_first && !found {
-                            let result = c.replace_names_each_inner(substitute, names_to_replace, true);
+                            let result =
+                                c.replace_names_each_inner(substitute, names_to_replace, true);
                             if c.extract_first_names().is_some() {
                                 found = true;
                             }
@@ -848,7 +854,8 @@ impl Output {
                     .iter()
                     .map(|c| {
                         if replace_first && !found {
-                            let result = c.replace_names_each_inner(substitute, names_to_replace, true);
+                            let result =
+                                c.replace_names_each_inner(substitute, names_to_replace, true);
                             if c.extract_first_names().is_some() {
                                 found = true;
                             }
@@ -863,9 +870,11 @@ impl Output {
                     children: new_children,
                 }
             }
-            Output::InNote(child) => {
-                Output::InNote(Box::new(child.replace_names_each_inner(substitute, names_to_replace, replace_first)))
-            }
+            Output::InNote(child) => Output::InNote(Box::new(child.replace_names_each_inner(
+                substitute,
+                names_to_replace,
+                replace_first,
+            ))),
             Output::Tagged { tag, child } => match tag {
                 Tag::Names { variable, names } if replace_first => {
                     // Transform child, replacing each matching Tag::Name
@@ -880,7 +889,11 @@ impl Output {
                 }
                 _ => Output::Tagged {
                     tag: tag.clone(),
-                    child: Box::new(child.replace_names_each_inner(substitute, names_to_replace, replace_first)),
+                    child: Box::new(child.replace_names_each_inner(
+                        substitute,
+                        names_to_replace,
+                        replace_first,
+                    )),
                 },
             },
         }
@@ -914,9 +927,11 @@ impl Output {
                     children: new_children,
                 }
             }
-            Output::InNote(child) => {
-                Output::InNote(Box::new(Self::replace_name_nodes(child, substitute, names_to_replace)))
-            }
+            Output::InNote(child) => Output::InNote(Box::new(Self::replace_name_nodes(
+                child,
+                substitute,
+                names_to_replace,
+            ))),
             Output::Tagged { tag, child } => match tag {
                 Tag::Name(name) if names_to_replace.contains(name) => {
                     // Replace this name with the substitute
@@ -927,7 +942,11 @@ impl Output {
                 }
                 _ => Output::Tagged {
                     tag: tag.clone(),
-                    child: Box::new(Self::replace_name_nodes(child, substitute, names_to_replace)),
+                    child: Box::new(Self::replace_name_nodes(
+                        child,
+                        substitute,
+                        names_to_replace,
+                    )),
                 },
             },
         }
@@ -941,9 +960,7 @@ impl Output {
                 children.iter().any(|c| c.has_prefix_tag())
             }
             Output::InNote(child) => child.has_prefix_tag(),
-            Output::Tagged { tag, child } => {
-                matches!(tag, Tag::Prefix) || child.has_prefix_tag()
-            }
+            Output::Tagged { tag, child } => matches!(tag, Tag::Prefix) || child.has_prefix_tag(),
         }
     }
 
@@ -955,9 +972,7 @@ impl Output {
                 children.iter().any(|c| c.has_suffix_tag())
             }
             Output::InNote(child) => child.has_suffix_tag(),
-            Output::Tagged { tag, child } => {
-                matches!(tag, Tag::Suffix) || child.has_suffix_tag()
-            }
+            Output::Tagged { tag, child } => matches!(tag, Tag::Suffix) || child.has_suffix_tag(),
         }
     }
 
@@ -2193,7 +2208,8 @@ pub fn apply_subsequent_author_substitute(
                         // Replace each matching name from the start
                         let num_matching = count_matching_names(prev, curr);
                         if num_matching > 0 {
-                            let matching_names: Vec<_> = curr.iter().take(num_matching).cloned().collect();
+                            let matching_names: Vec<_> =
+                                curr.iter().take(num_matching).cloned().collect();
                             output.replace_names_partial_each(substitute, &matching_names)
                         } else {
                             output
@@ -5835,7 +5851,7 @@ mod punct_tests {
 
     #[test]
     fn test_punctuation_in_quote_inner_quote() {
-        use super::{move_punctuation_inside_quotes, Output, Tag};
+        use super::{Output, Tag, move_punctuation_inside_quotes};
         use quarto_csl::Formatting;
 
         // Test case from quotes_PunctuationWithInnerQuote:
@@ -5843,10 +5859,7 @@ mod punct_tests {
         // Expected: "This is 'The One.'" (period inside inner quote)
 
         // Create the title content wrapped in a Title tag
-        let title_content = Output::tagged(
-            Tag::Title,
-            Output::literal("This is 'The One'"),
-        );
+        let title_content = Output::tagged(Tag::Title, Output::literal("This is 'The One'"));
 
         // Create the formatted node with quotes=true and suffix="."
         let mut fmt = Formatting::default();

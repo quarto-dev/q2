@@ -45,13 +45,16 @@ fn check_uses_year_suffix(
                 }
                 false
             }
-            ElementType::Group(group) => {
-                group.elements.iter().any(|e| check_element(e, macros, visited))
-            }
-            ElementType::Choose(choose) => choose
-                .branches
+            ElementType::Group(group) => group
+                .elements
                 .iter()
-                .any(|branch| branch.elements.iter().any(|e| check_element(e, macros, visited))),
+                .any(|e| check_element(e, macros, visited)),
+            ElementType::Choose(choose) => choose.branches.iter().any(|branch| {
+                branch
+                    .elements
+                    .iter()
+                    .any(|e| check_element(e, macros, visited))
+            }),
             _ => false,
         }
     }
@@ -59,14 +62,22 @@ fn check_uses_year_suffix(
     let mut visited = HashSet::new();
 
     // Check citation layout
-    if citation.elements.iter().any(|e| check_element(e, macros, &mut visited)) {
+    if citation
+        .elements
+        .iter()
+        .any(|e| check_element(e, macros, &mut visited))
+    {
         return true;
     }
 
     // Check bibliography layout if present
     if let Some(bib) = bibliography {
         visited.clear();
-        if bib.elements.iter().any(|e| check_element(e, macros, &mut visited)) {
+        if bib
+            .elements
+            .iter()
+            .any(|e| check_element(e, macros, &mut visited))
+        {
             return true;
         }
     }
@@ -139,7 +150,10 @@ fn validate_macros(style: &Style) -> Result<()> {
 }
 
 /// Check elements for undefined macro references.
-fn check_elements_for_undefined_macros(elements: &[Element], defined: &HashSet<&str>) -> Result<()> {
+fn check_elements_for_undefined_macros(
+    elements: &[Element],
+    defined: &HashSet<&str>,
+) -> Result<()> {
     for element in elements {
         check_element_for_undefined_macros(element, defined)?;
     }
@@ -337,12 +351,14 @@ impl CslParser {
                     value: other.to_string(),
                     expected: "\"in-text\" or \"note\"".to_string(),
                     location: class_attr.value_source.clone(),
-                })
+                });
             }
         };
 
         // Parse optional default-locale
-        let default_locale = self.get_attr(element, "default-locale").map(|a| a.value.clone());
+        let default_locale = self
+            .get_attr(element, "default-locale")
+            .map(|a| a.value.clone());
 
         // Parse style options from attributes
         let options = self.parse_style_options(element);
@@ -440,16 +456,16 @@ impl CslParser {
             .map(|a| a.value == "true")
             .unwrap_or(true);
 
-        let page_range = self
-            .get_attr(element, "page-range-format")
-            .and_then(|a| match a.value.as_str() {
-                "chicago" | "chicago-15" => Some(PageRangeFormat::Chicago15),
-                "chicago-16" => Some(PageRangeFormat::Chicago16),
-                "expanded" => Some(PageRangeFormat::Expanded),
-                "minimal" => Some(PageRangeFormat::Minimal),
-                "minimal-two" => Some(PageRangeFormat::MinimalTwo),
-                _ => None,
-            });
+        let page_range =
+            self.get_attr(element, "page-range-format")
+                .and_then(|a| match a.value.as_str() {
+                    "chicago" | "chicago-15" => Some(PageRangeFormat::Chicago15),
+                    "chicago-16" => Some(PageRangeFormat::Chicago16),
+                    "expanded" => Some(PageRangeFormat::Expanded),
+                    "minimal" => Some(PageRangeFormat::Minimal),
+                    "minimal-two" => Some(PageRangeFormat::MinimalTwo),
+                    _ => None,
+                });
 
         let limit_day_ordinals = self
             .get_attr(element, "limit-day-ordinals-to-day-1")
@@ -525,7 +541,9 @@ impl CslParser {
 
     fn parse_category(&self, element: &XmlElement) -> Category {
         Category {
-            citation_format: self.get_attr(element, "citation-format").map(|a| a.value.clone()),
+            citation_format: self
+                .get_attr(element, "citation-format")
+                .map(|a| a.value.clone()),
             field: self.get_attr(element, "field").map(|a| a.value.clone()),
         }
     }
@@ -688,7 +706,8 @@ impl CslParser {
         let layout_delimiter = if layout_el.is_empty() {
             delimiter.clone()
         } else {
-            self.get_attr(layout_element, "delimiter").map(|a| a.value.clone())
+            self.get_attr(layout_element, "delimiter")
+                .map(|a| a.value.clone())
         };
 
         // Parse sort if present
@@ -831,32 +850,34 @@ impl CslParser {
 
     /// Parse inheritable name options from an element (style, citation, bibliography).
     fn parse_inheritable_name_options(&self, element: &XmlElement) -> InheritableNameOptions {
-        let and = self.get_attr(element, "and").map(|a| match a.value.as_str() {
-            "symbol" => NameAnd::Symbol,
-            _ => NameAnd::Text,
-        });
+        let and = self
+            .get_attr(element, "and")
+            .map(|a| match a.value.as_str() {
+                "symbol" => NameAnd::Symbol,
+                _ => NameAnd::Text,
+            });
 
         let delimiter = self
             .get_attr(element, "name-delimiter")
             .map(|a| a.value.clone());
 
-        let delimiter_precedes_last = self
-            .get_attr(element, "delimiter-precedes-last")
-            .map(|a| match a.value.as_str() {
-                "always" => DelimiterPrecedesLast::Always,
-                "never" => DelimiterPrecedesLast::Never,
-                "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
-                _ => DelimiterPrecedesLast::Contextual,
-            });
+        let delimiter_precedes_last =
+            self.get_attr(element, "delimiter-precedes-last")
+                .map(|a| match a.value.as_str() {
+                    "always" => DelimiterPrecedesLast::Always,
+                    "never" => DelimiterPrecedesLast::Never,
+                    "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
+                    _ => DelimiterPrecedesLast::Contextual,
+                });
 
-        let delimiter_precedes_et_al = self
-            .get_attr(element, "delimiter-precedes-et-al")
-            .map(|a| match a.value.as_str() {
-                "always" => DelimiterPrecedesLast::Always,
-                "never" => DelimiterPrecedesLast::Never,
-                "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
-                _ => DelimiterPrecedesLast::Contextual,
-            });
+        let delimiter_precedes_et_al =
+            self.get_attr(element, "delimiter-precedes-et-al")
+                .map(|a| match a.value.as_str() {
+                    "always" => DelimiterPrecedesLast::Always,
+                    "never" => DelimiterPrecedesLast::Never,
+                    "after-inverted-name" => DelimiterPrecedesLast::AfterInvertedName,
+                    _ => DelimiterPrecedesLast::Contextual,
+                });
 
         let et_al_min = self
             .get_attr(element, "et-al-min")
@@ -876,18 +897,20 @@ impl CslParser {
             .get_attr(element, "initialize-with")
             .map(|a| a.value.clone());
 
-        let form = self.get_attr(element, "name-form").map(|a| match a.value.as_str() {
-            "short" => NameForm::Short,
-            "count" => NameForm::Count,
-            _ => NameForm::Long,
-        });
-
-        let name_as_sort_order = self
-            .get_attr(element, "name-as-sort-order")
+        let form = self
+            .get_attr(element, "name-form")
             .map(|a| match a.value.as_str() {
-                "all" => NameAsSortOrder::All,
-                _ => NameAsSortOrder::First,
+                "short" => NameForm::Short,
+                "count" => NameForm::Count,
+                _ => NameForm::Long,
             });
+
+        let name_as_sort_order =
+            self.get_attr(element, "name-as-sort-order")
+                .map(|a| match a.value.as_str() {
+                    "all" => NameAsSortOrder::All,
+                    _ => NameAsSortOrder::First,
+                });
 
         let sort_separator = self
             .get_attr(element, "sort-separator")
@@ -1080,9 +1103,7 @@ impl CslParser {
             .collect();
 
         // Parse delimiter between name variable groups (e.g., between author and editor)
-        let delimiter = self
-            .get_attr(element, "delimiter")
-            .map(|a| a.value.clone());
+        let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
 
         let mut name = None;
         let mut et_al = None;
@@ -1126,10 +1147,12 @@ impl CslParser {
             None
         };
 
-        let and = self.get_attr(element, "and").map(|a| match a.value.as_str() {
-            "symbol" => NameAnd::Symbol,
-            _ => NameAnd::Text,
-        });
+        let and = self
+            .get_attr(element, "and")
+            .map(|a| match a.value.as_str() {
+                "symbol" => NameAnd::Symbol,
+                _ => NameAnd::Text,
+            });
 
         let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
 
@@ -1169,11 +1192,13 @@ impl CslParser {
             .get_attr(element, "initialize-with")
             .map(|a| a.value.clone());
 
-        let form = self.get_attr(element, "form").map(|a| match a.value.as_str() {
-            "short" => NameForm::Short,
-            "count" => NameForm::Count,
-            _ => NameForm::Long,
-        });
+        let form = self
+            .get_attr(element, "form")
+            .map(|a| match a.value.as_str() {
+                "short" => NameForm::Short,
+                "count" => NameForm::Count,
+                _ => NameForm::Long,
+            });
 
         let name_as_sort_order =
             self.get_attr(element, "name-as-sort-order")
@@ -1264,10 +1289,12 @@ impl CslParser {
 
         let variable = self.require_attr(element, "variable")?.value.clone();
 
-        let form = self.get_attr(element, "form").map(|a| match a.value.as_str() {
-            "numeric" => DateForm::Numeric,
-            _ => DateForm::Text,
-        });
+        let form = self
+            .get_attr(element, "form")
+            .map(|a| match a.value.as_str() {
+                "numeric" => DateForm::Numeric,
+                _ => DateForm::Text,
+            });
 
         let date_parts = self
             .get_attr(element, "date-parts")
@@ -1278,9 +1305,7 @@ impl CslParser {
             })
             .unwrap_or_default();
 
-        let delimiter = self
-            .get_attr(element, "delimiter")
-            .map(|a| a.value.clone());
+        let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
 
         let range_delimiter = self
             .get_attr(element, "range-delimiter")
@@ -1316,17 +1341,19 @@ impl CslParser {
                     value: name_str,
                     expected: "\"year\", \"month\", or \"day\"".to_string(),
                     location: element.source_info.clone(),
-                })
+                });
             }
         };
 
-        let form = self.get_attr(element, "form").map(|a| match a.value.as_str() {
-            "short" => DatePartForm::Short,
-            "numeric" => DatePartForm::Numeric,
-            "numeric-leading-zeros" => DatePartForm::NumericLeadingZeros,
-            "ordinal" => DatePartForm::Ordinal,
-            _ => DatePartForm::Long,
-        });
+        let form = self
+            .get_attr(element, "form")
+            .map(|a| match a.value.as_str() {
+                "short" => DatePartForm::Short,
+                "numeric" => DatePartForm::Numeric,
+                "numeric-leading-zeros" => DatePartForm::NumericLeadingZeros,
+                "ordinal" => DatePartForm::Ordinal,
+                _ => DatePartForm::Long,
+            });
 
         let range_delimiter = self
             .get_attr(element, "range-delimiter")
@@ -1351,7 +1378,10 @@ impl CslParser {
         let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
         let elements = self.parse_elements(element)?;
 
-        Ok(GroupElement { elements, delimiter })
+        Ok(GroupElement {
+            elements,
+            delimiter,
+        })
     }
 
     fn parse_choose_element(&self, element: &XmlElement) -> Result<ChooseElement> {
@@ -1402,7 +1432,11 @@ impl CslParser {
         let mut conditions = Vec::new();
 
         if let Some(attr) = self.get_attr(element, "type") {
-            let types: Vec<String> = attr.value.split_whitespace().map(|s| s.to_string()).collect();
+            let types: Vec<String> = attr
+                .value
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             conditions.push(Condition {
                 condition_type: ConditionType::Type(types),
                 source_info: attr.value_source.clone(),
@@ -1410,7 +1444,11 @@ impl CslParser {
         }
 
         if let Some(attr) = self.get_attr(element, "variable") {
-            let vars: Vec<String> = attr.value.split_whitespace().map(|s| s.to_string()).collect();
+            let vars: Vec<String> = attr
+                .value
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             conditions.push(Condition {
                 condition_type: ConditionType::Variable(vars),
                 source_info: attr.value_source.clone(),
@@ -1418,7 +1456,11 @@ impl CslParser {
         }
 
         if let Some(attr) = self.get_attr(element, "is-numeric") {
-            let vars: Vec<String> = attr.value.split_whitespace().map(|s| s.to_string()).collect();
+            let vars: Vec<String> = attr
+                .value
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             conditions.push(Condition {
                 condition_type: ConditionType::IsNumeric(vars),
                 source_info: attr.value_source.clone(),
@@ -1426,7 +1468,11 @@ impl CslParser {
         }
 
         if let Some(attr) = self.get_attr(element, "is-uncertain-date") {
-            let vars: Vec<String> = attr.value.split_whitespace().map(|s| s.to_string()).collect();
+            let vars: Vec<String> = attr
+                .value
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             conditions.push(Condition {
                 condition_type: ConditionType::IsUncertainDate(vars),
                 source_info: attr.value_source.clone(),
@@ -1434,7 +1480,11 @@ impl CslParser {
         }
 
         if let Some(attr) = self.get_attr(element, "locator") {
-            let locs: Vec<String> = attr.value.split_whitespace().map(|s| s.to_string()).collect();
+            let locs: Vec<String> = attr
+                .value
+                .split_whitespace()
+                .map(|s| s.to_string())
+                .collect();
             conditions.push(Condition {
                 condition_type: ConditionType::Locator(locs),
                 source_info: attr.value_source.clone(),
@@ -1472,14 +1522,14 @@ impl CslParser {
 
     fn parse_formatting(&self, element: &XmlElement) -> Formatting {
         Formatting {
-            font_style: self.get_attr(element, "font-style").and_then(|a| {
-                match a.value.as_str() {
+            font_style: self
+                .get_attr(element, "font-style")
+                .and_then(|a| match a.value.as_str() {
                     "italic" => Some(FontStyle::Italic),
                     "oblique" => Some(FontStyle::Oblique),
                     "normal" => Some(FontStyle::Normal),
                     _ => None,
-                }
-            }),
+                }),
             font_variant: self.get_attr(element, "font-variant").and_then(|a| {
                 match a.value.as_str() {
                     "small-caps" => Some(FontVariant::SmallCaps),
@@ -1510,8 +1560,9 @@ impl CslParser {
                     _ => None,
                 }
             }),
-            text_case: self.get_attr(element, "text-case").and_then(|a| {
-                match a.value.as_str() {
+            text_case: self
+                .get_attr(element, "text-case")
+                .and_then(|a| match a.value.as_str() {
                     "lowercase" => Some(TextCase::Lowercase),
                     "uppercase" => Some(TextCase::Uppercase),
                     "capitalize-first" => Some(TextCase::CapitalizeFirst),
@@ -1519,17 +1570,18 @@ impl CslParser {
                     "sentence" => Some(TextCase::Sentence),
                     "title" => Some(TextCase::Title),
                     _ => None,
-                }
-            }),
+                }),
             prefix: self.get_attr(element, "prefix").map(|a| a.value.clone()),
             suffix: self.get_attr(element, "suffix").map(|a| a.value.clone()),
-            display: self.get_attr(element, "display").and_then(|a| match a.value.as_str() {
-                "block" => Some(Display::Block),
-                "left-margin" => Some(Display::LeftMargin),
-                "right-inline" => Some(Display::RightInline),
-                "indent" => Some(Display::Indent),
-                _ => None,
-            }),
+            display: self
+                .get_attr(element, "display")
+                .and_then(|a| match a.value.as_str() {
+                    "block" => Some(Display::Block),
+                    "left-margin" => Some(Display::LeftMargin),
+                    "right-inline" => Some(Display::RightInline),
+                    "indent" => Some(Display::Indent),
+                    _ => None,
+                }),
             quotes: self
                 .get_attr(element, "quotes")
                 .map(|a| a.value == "true")

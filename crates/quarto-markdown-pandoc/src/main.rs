@@ -11,6 +11,8 @@ use std::io::{self, Read, Write};
 
 mod errors;
 mod filters;
+#[cfg(feature = "json-filter")]
+mod json_filter;
 mod pandoc;
 mod readers;
 mod traversals;
@@ -55,6 +57,11 @@ struct Args {
         default_value_t = false
     )]
     _internal_report_error_state: bool,
+
+    /// Apply a JSON filter to the document (can be specified multiple times)
+    #[cfg(feature = "json-filter")]
+    #[arg(long = "json-filter", action = clap::ArgAction::Append)]
+    json_filters: Vec<std::path::PathBuf>,
 }
 
 fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
@@ -176,6 +183,28 @@ fn main() {
         _ => {
             eprintln!("Unknown input format: {}", args.from);
             std::process::exit(1);
+        }
+    };
+
+    // Apply JSON filters if any are specified
+    #[cfg(feature = "json-filter")]
+    let (pandoc, context) = if args.json_filters.is_empty() {
+        (pandoc, context)
+    } else {
+        match json_filter::apply_json_filters(pandoc, context, &args.json_filters, &args.to) {
+            Ok((filtered_pandoc, filtered_context)) => (filtered_pandoc, filtered_context),
+            Err(e) => {
+                if args.json_errors {
+                    let error_json = serde_json::json!({
+                        "title": "JSON Filter Error",
+                        "message": e.to_string()
+                    });
+                    eprintln!("{}", error_json);
+                } else {
+                    eprintln!("JSON filter error: {}", e);
+                }
+                std::process::exit(1);
+            }
         }
     };
 

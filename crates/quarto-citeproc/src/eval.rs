@@ -557,7 +557,11 @@ fn evaluate_citation_to_output_impl(
                 if layout.cite_group_delimiter.is_some() {
                     group_by_author_with_delimiter(item_outputs, &layout)
                 } else {
-                    Output::formatted_with_delimiter(Formatting::default(), item_outputs, &delimiter)
+                    Output::formatted_with_delimiter(
+                        Formatting::default(),
+                        item_outputs,
+                        &delimiter,
+                    )
                 }
             }
         }
@@ -872,7 +876,10 @@ fn group_by_names(items: Vec<Output>) -> Vec<Vec<Output>> {
 ///
 /// "Smith 2000; Smith 2001; Jones 2002" becomes "Smith 2000, Smith 2001; Jones 2002"
 /// (with cite-group-delimiter=", " and delimiter="; ")
-fn group_by_author_with_delimiter(item_outputs: Vec<Output>, layout: &quarto_csl::Layout) -> Output {
+fn group_by_author_with_delimiter(
+    item_outputs: Vec<Output>,
+    layout: &quarto_csl::Layout,
+) -> Output {
     if item_outputs.is_empty() {
         return Output::Null;
     }
@@ -1466,7 +1473,10 @@ fn evaluate_names(
     // Check if form="count" is set - consider both explicit and inherited form
     // In substitute context, inherit form from parent names element
     let explicit_form = names_el.name.as_ref().and_then(|n| n.form);
-    let inherited_form = ctx.substitute_name_options.as_ref().and_then(|opts| opts.form);
+    let inherited_form = ctx
+        .substitute_name_options
+        .as_ref()
+        .and_then(|opts| opts.form);
 
     let is_count_form = if let Some(form) = explicit_form {
         // Explicit form on this element
@@ -1628,10 +1638,7 @@ fn evaluate_names(
 
 /// Try substitute elements when primary name variables are empty.
 /// This is called when all primary variables in a <names> element have no names.
-fn evaluate_names_substitute(
-    ctx: &mut EvalContext,
-    names_el: &NamesElement,
-) -> Result<Output> {
+fn evaluate_names_substitute(ctx: &mut EvalContext, names_el: &NamesElement) -> Result<Output> {
     let Some(ref substitute) = names_el.substitute else {
         return Ok(Output::Null);
     };

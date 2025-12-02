@@ -631,10 +631,7 @@ impl Processor {
         let ids: Vec<String> = self.references.keys().cloned().collect();
 
         // Get sort keys from bibliography
-        let sort_keys = sort_keys_opt
-            .as_ref()
-            .map(|s| &s.keys[..])
-            .unwrap_or(&[]);
+        let sort_keys = sort_keys_opt.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
 
         // Check if any sort key uses citation-number
         let uses_citation_number = sort_keys.iter().any(

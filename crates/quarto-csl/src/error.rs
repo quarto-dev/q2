@@ -75,10 +75,7 @@ pub enum Error {
     },
 
     /// Root element is not <style>.
-    InvalidRootElement {
-        found: String,
-        location: SourceInfo,
-    },
+    InvalidRootElement { found: String, location: SourceInfo },
 }
 
 impl fmt::Display for Error {
@@ -86,11 +83,13 @@ impl fmt::Display for Error {
         match self {
             Error::XmlError(e) => write!(f, "XML error: {}", e),
             Error::MissingAttribute {
-                element,
-                attribute,
-                ..
+                element, attribute, ..
             } => {
-                write!(f, "Missing required attribute '{}' on <{}>", attribute, element)
+                write!(
+                    f,
+                    "Missing required attribute '{}' on <{}>",
+                    attribute, element
+                )
             }
             Error::InvalidAttributeValue {
                 element,
@@ -206,16 +205,16 @@ impl Error {
                 .problem(format!("Element <{}> is not valid in {}", element, context))
                 .build(),
 
-            Error::MissingTextSource { location } => {
-                DiagnosticMessageBuilder::error("Missing Text Source")
-                    .with_code("Q-9-11")
-                    .with_location(location.clone())
-                    .problem(
-                        "Text element must specify a source using variable, macro, term, or value",
-                    )
-                    .add_hint("Add one of: variable=\"...\", macro=\"...\", term=\"...\", or value=\"...\"?")
-                    .build()
-            }
+            Error::MissingTextSource { location } => DiagnosticMessageBuilder::error(
+                "Missing Text Source",
+            )
+            .with_code("Q-9-11")
+            .with_location(location.clone())
+            .problem("Text element must specify a source using variable, macro, term, or value")
+            .add_hint(
+                "Add one of: variable=\"...\", macro=\"...\", term=\"...\", or value=\"...\"?",
+            )
+            .build(),
 
             Error::UndefinedMacro {
                 name,
@@ -266,7 +265,10 @@ impl Error {
                 DiagnosticMessageBuilder::error("Invalid Root Element")
                     .with_code("Q-9-16")
                     .with_location(location.clone())
-                    .problem(format!("CSL document must have <style> as root, found <{}>", found))
+                    .problem(format!(
+                        "CSL document must have <style> as root, found <{}>",
+                        found
+                    ))
                     .build()
             }
         }

@@ -1,12 +1,12 @@
 //! XML parser that builds XmlWithSourceInfo trees.
 
 use crate::{
-    Error, ParseResult, Result, XmlAttribute, XmlChild, XmlChildren, XmlElement,
-    XmlParseContext, XmlWithSourceInfo,
+    Error, ParseResult, Result, XmlAttribute, XmlChild, XmlChildren, XmlElement, XmlParseContext,
+    XmlWithSourceInfo,
 };
-use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
-use quick_xml::Reader;
 use quarto_source_map::{FileId, SourceInfo};
+use quick_xml::Reader;
+use quick_xml::events::{BytesCData, BytesEnd, BytesStart, BytesText, Event};
 
 /// Parse XML from a string, producing an XmlWithSourceInfo tree.
 ///
@@ -375,11 +375,7 @@ impl<'a> XmlParser<'a> {
         }
     }
 
-    fn parse_attributes(
-        &self,
-        e: &BytesStart<'_>,
-        tag_start: usize,
-    ) -> Result<Vec<XmlAttribute>> {
+    fn parse_attributes(&self, e: &BytesStart<'_>, tag_start: usize) -> Result<Vec<XmlAttribute>> {
         let mut attributes = Vec::new();
 
         // The tag content starts at tag_start + 1 (after '<')
@@ -531,13 +527,10 @@ impl<'a> XmlParser<'a> {
         }
 
         // Check if all children are elements
-        let all_elements = children
-            .iter()
-            .all(|c| matches!(c, XmlChild::Element(_)));
+        let all_elements = children.iter().all(|c| matches!(c, XmlChild::Element(_)));
 
         // Check if there's exactly one text child
-        let single_text = children.len() == 1
-            && matches!(&children[0], XmlChild::Text { .. });
+        let single_text = children.len() == 1 && matches!(&children[0], XmlChild::Text { .. });
 
         if all_elements {
             let elements = children
@@ -665,7 +658,10 @@ mod tests {
         // quick-xml catches mismatched tags itself when check_end_names is enabled (default)
         // It returns an Error::IllFormed(MismatchedEndTag), which we convert to XmlSyntax
         assert!(
-            matches!(result, Err(Error::MismatchedEndTag { .. }) | Err(Error::XmlSyntax { .. })),
+            matches!(
+                result,
+                Err(Error::MismatchedEndTag { .. }) | Err(Error::XmlSyntax { .. })
+            ),
             "Expected MismatchedEndTag or XmlSyntax error, got: {:?}",
             result
         );
