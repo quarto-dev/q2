@@ -9,8 +9,8 @@
  */
 
 use mlua::{
-    Error, IntoLua, Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods,
-    Value,
+    Error, Function, IntoLua, Lua, MetaMethod, Result, Table, UserData, UserDataFields,
+    UserDataMethods, UserDataRef, Value, Variadic,
 };
 use quarto_source_map::SourceInfo;
 
@@ -51,6 +51,38 @@ impl LuaInline {
             Inline::Delete(_) => "Delete",
             Inline::Highlight(_) => "Highlight",
             Inline::EditComment(_) => "EditComment",
+        }
+    }
+
+    /// Get the list of field names for this inline element (for pairs iteration)
+    pub fn field_names(&self) -> &'static [&'static str] {
+        match &self.0 {
+            Inline::Str(_) => &["tag", "text", "clone", "walk"],
+            Inline::Emph(_)
+            | Inline::Strong(_)
+            | Inline::Underline(_)
+            | Inline::Strikeout(_)
+            | Inline::Superscript(_)
+            | Inline::Subscript(_)
+            | Inline::SmallCaps(_) => &["tag", "content", "clone", "walk"],
+            Inline::Quoted(_) => &["tag", "quotetype", "content", "clone", "walk"],
+            Inline::Cite(_) => &["tag", "content", "citations", "clone", "walk"],
+            Inline::Code(_) => &["tag", "text", "attr", "clone", "walk"],
+            Inline::Space(_) | Inline::SoftBreak(_) | Inline::LineBreak(_) => {
+                &["tag", "clone", "walk"]
+            }
+            Inline::Math(_) => &["tag", "mathtype", "text", "clone", "walk"],
+            Inline::RawInline(_) => &["tag", "format", "text", "clone", "walk"],
+            Inline::Link(_) => &["tag", "content", "target", "title", "attr", "clone", "walk"],
+            Inline::Image(_) => &["tag", "content", "src", "title", "attr", "clone", "walk"],
+            Inline::Note(_) => &["tag", "content", "clone", "walk"],
+            Inline::Span(_) => &["tag", "content", "attr", "clone", "walk"],
+            Inline::Insert(_)
+            | Inline::Delete(_)
+            | Inline::Highlight(_)
+            | Inline::EditComment(_) => &["tag", "content", "attr", "clone", "walk"],
+            Inline::NoteReference(_) => &["tag", "id", "clone", "walk"],
+            Inline::Shortcode(_) | Inline::Attr(_, _) => &["tag", "clone", "walk"],
         }
     }
 
@@ -142,6 +174,23 @@ impl LuaInline {
             // Tag and t are always available
             (_, "tag") => self.tag_name().into_lua(lua),
             (_, "t") => self.tag_name().into_lua(lua),
+
+            // Methods - clone and walk are exposed as functions
+            // Clone captures self so it can be called without arguments:
+            //   elem:clone() and local f = elem.clone; f() both work
+            (_, "clone") => {
+                let inline = self.0.clone();
+                lua.create_function(move |lua, ()| lua.create_userdata(LuaInline(inline.clone())))?
+                    .into_lua(lua)
+            }
+            // Walk is called with method syntax: elem:walk { ... }
+            // Lua passes (self, filter_table) to the function
+            (_, "walk") => lua
+                .create_function(|lua, (ud, filter_table): (UserDataRef<LuaInline>, Table)| {
+                    let filtered = walk_inline_with_filter(lua, &ud.0, &filter_table)?;
+                    lua.create_userdata(LuaInline(filtered))
+                })?
+                .into_lua(lua),
 
             // Unknown field
             _ => Ok(Value::Nil),
@@ -361,14 +410,62 @@ impl UserData for LuaInline {
             |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
         );
 
-        // Clone method
-        methods.add_method("clone", |lua, this, ()| {
-            lua.create_userdata(LuaInline(this.0.clone()))
-        });
+        // Note: clone and walk are handled by get_field() rather than add_method()
+        // to allow them to capture self in closures for direct function call syntax
 
         // __tostring for debugging
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
             Ok(format!("{}(...)", this.tag_name()))
+        });
+
+        // __pairs for iteration (for k, v in pairs(elem))
+        methods.add_meta_method(MetaMethod::Pairs, |lua, this, ()| {
+            let inline = this.0.clone();
+
+            // Create the iterator function following Lua's next() semantics:
+            // - If control variable is nil, return first key-value pair
+            // - If control variable is a string key, return next key-value pair after it
+            let stateless_iter =
+                lua.create_function(move |lua, (ud, key): (UserDataRef<LuaInline>, Value)| {
+                    let field_names = ud.field_names();
+
+                    // Find the starting index
+                    let start_idx = match key {
+                        Value::Nil => 0,
+                        Value::String(s) => {
+                            let key_str = s.to_str()?;
+                            // Find the index of the current key and add 1
+                            if let Some(idx) = field_names.iter().position(|&k| key_str == k) {
+                                idx + 1
+                            } else {
+                                // Key not found, end iteration
+                                return Ok(Variadic::new());
+                            }
+                        }
+                        Value::Integer(i) => {
+                            // Support integer keys for iteration protocol compatibility
+                            (i as usize) + 1
+                        }
+                        _ => return Ok(Variadic::new()),
+                    };
+
+                    if start_idx < field_names.len() {
+                        let key = field_names[start_idx];
+                        let value = ud.get_field(lua, key)?;
+                        // Return (key, value) - key becomes the next control variable
+                        Ok(Variadic::from_iter([key.into_lua(lua)?, value]))
+                    } else {
+                        Ok(Variadic::new())
+                    }
+                })?;
+
+            // Return (iterator, state, initial value)
+            // state is the userdata, initial value is nil (start from beginning)
+            Ok((
+                stateless_iter,
+                lua.create_userdata(LuaInline(inline))?,
+                Value::Nil,
+            ))
         });
     }
 }
@@ -399,6 +496,62 @@ impl LuaBlock {
             Block::NoteDefinitionPara(_) => "NoteDefinitionPara",
             Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock",
             Block::CaptionBlock(_) => "CaptionBlock",
+        }
+    }
+
+    /// Get the list of field names for this block element (for pairs iteration)
+    pub fn field_names(&self) -> &'static [&'static str] {
+        match &self.0 {
+            Block::Plain(_) | Block::Paragraph(_) => &["tag", "content", "clone", "walk"],
+            Block::LineBlock(_) => &["tag", "content", "clone", "walk"],
+            Block::CodeBlock(_) => &[
+                "tag",
+                "text",
+                "attr",
+                "identifier",
+                "classes",
+                "clone",
+                "walk",
+            ],
+            Block::RawBlock(_) => &["tag", "format", "text", "clone", "walk"],
+            Block::BlockQuote(_) => &["tag", "content", "clone", "walk"],
+            Block::OrderedList(_) => &["tag", "content", "start", "style", "clone", "walk"],
+            Block::BulletList(_) => &["tag", "content", "clone", "walk"],
+            Block::DefinitionList(_) => &["tag", "content", "clone", "walk"],
+            Block::Header(_) => &[
+                "tag",
+                "level",
+                "content",
+                "attr",
+                "identifier",
+                "classes",
+                "clone",
+                "walk",
+            ],
+            Block::HorizontalRule(_) => &["tag", "clone", "walk"],
+            Block::Table(_) => &["tag", "attr", "caption", "identifier", "clone", "walk"],
+            Block::Figure(_) => &[
+                "tag",
+                "content",
+                "attr",
+                "caption",
+                "identifier",
+                "clone",
+                "walk",
+            ],
+            Block::Div(_) => &[
+                "tag",
+                "content",
+                "attr",
+                "identifier",
+                "classes",
+                "clone",
+                "walk",
+            ],
+            Block::BlockMetadata(_)
+            | Block::NoteDefinitionPara(_)
+            | Block::NoteDefinitionFencedBlock(_)
+            | Block::CaptionBlock(_) => &["tag", "clone", "walk"],
         }
     }
 
@@ -527,6 +680,23 @@ impl LuaBlock {
             // Tag and t are always available
             (_, "tag") => self.tag_name().into_lua(lua),
             (_, "t") => self.tag_name().into_lua(lua),
+
+            // Methods - clone and walk are exposed as functions
+            // Clone captures self so it can be called without arguments:
+            //   elem:clone() and local f = elem.clone; f() both work
+            (_, "clone") => {
+                let block = self.0.clone();
+                lua.create_function(move |lua, ()| lua.create_userdata(LuaBlock(block.clone())))?
+                    .into_lua(lua)
+            }
+            // Walk is called with method syntax: elem:walk { ... }
+            // Lua passes (self, filter_table) to the function
+            (_, "walk") => lua
+                .create_function(|lua, (ud, filter_table): (UserDataRef<LuaBlock>, Table)| {
+                    let filtered = walk_block_with_filter(lua, &ud.0, &filter_table)?;
+                    lua.create_userdata(LuaBlock(filtered))
+                })?
+                .into_lua(lua),
 
             // Unknown field
             _ => Ok(Value::Nil),
@@ -666,36 +836,76 @@ impl UserData for LuaBlock {
             |lua, this, (key, val): (String, Value)| this.set_field(&key, val, lua),
         );
 
-        // Clone method
-        methods.add_method("clone", |lua, this, ()| {
-            lua.create_userdata(LuaBlock(this.0.clone()))
-        });
+        // Note: clone and walk are handled by get_field() rather than add_method()
+        // to allow them to capture self in closures for direct function call syntax
 
         // __tostring for debugging
         methods.add_meta_method(MetaMethod::ToString, |_, this, ()| {
             Ok(format!("{}(...)", this.tag_name()))
+        });
+
+        // __pairs for iteration (for k, v in pairs(elem))
+        methods.add_meta_method(MetaMethod::Pairs, |lua, this, ()| {
+            let block = this.0.clone();
+
+            // Create the iterator function following Lua's next() semantics:
+            // - If control variable is nil, return first key-value pair
+            // - If control variable is a string key, return next key-value pair after it
+            let stateless_iter =
+                lua.create_function(move |lua, (ud, key): (UserDataRef<LuaBlock>, Value)| {
+                    let field_names = ud.field_names();
+
+                    // Find the starting index
+                    let start_idx = match key {
+                        Value::Nil => 0,
+                        Value::String(s) => {
+                            let key_str = s.to_str()?;
+                            // Find the index of the current key and add 1
+                            if let Some(idx) = field_names.iter().position(|&k| key_str == k) {
+                                idx + 1
+                            } else {
+                                // Key not found, end iteration
+                                return Ok(Variadic::new());
+                            }
+                        }
+                        Value::Integer(i) => {
+                            // Support integer keys for iteration protocol compatibility
+                            (i as usize) + 1
+                        }
+                        _ => return Ok(Variadic::new()),
+                    };
+
+                    if start_idx < field_names.len() {
+                        let key = field_names[start_idx];
+                        let value = ud.get_field(lua, key)?;
+                        // Return (key, value) - key becomes the next control variable
+                        Ok(Variadic::from_iter([key.into_lua(lua)?, value]))
+                    } else {
+                        Ok(Variadic::new())
+                    }
+                })?;
+
+            // Return (iterator, state, initial value)
+            // state is the userdata, initial value is nil (start from beginning)
+            Ok((
+                stateless_iter,
+                lua.create_userdata(LuaBlock(block))?,
+                Value::Nil,
+            ))
         });
     }
 }
 
 // Helper functions for conversion
 
-/// Convert Vec<Inline> to Lua table of LuaInline userdata
+/// Convert Vec<Inline> to Lua table of LuaInline userdata with Inlines metatable
 pub fn inlines_to_lua_table(lua: &Lua, inlines: &[Inline]) -> Result<Value> {
-    let table = lua.create_table()?;
-    for (i, inline) in inlines.iter().enumerate() {
-        table.set(i + 1, lua.create_userdata(LuaInline(inline.clone()))?)?;
-    }
-    Ok(Value::Table(table))
+    super::list::create_inlines_table(lua, inlines)
 }
 
-/// Convert Vec<Block> to Lua table of LuaBlock userdata
+/// Convert Vec<Block> to Lua table of LuaBlock userdata with Blocks metatable
 pub fn blocks_to_lua_table(lua: &Lua, blocks: &[Block]) -> Result<Value> {
-    let table = lua.create_table()?;
-    for (i, block) in blocks.iter().enumerate() {
-        table.set(i + 1, lua.create_userdata(LuaBlock(block.clone()))?)?;
-    }
-    Ok(Value::Table(table))
+    super::list::create_blocks_table(lua, blocks)
 }
 
 /// Convert Caption to Lua table
@@ -1043,8 +1253,33 @@ pub fn lua_table_to_blocks(_lua: &Lua, val: Value) -> Result<Vec<Block>> {
     }
 }
 
-/// Create a default SourceInfo for filter-created elements
-pub fn filter_source_info() -> SourceInfo {
+/// Create a SourceInfo for filter-created elements
+///
+/// This captures the source file and line from the Lua debug info,
+/// allowing error messages to point to where the element was created.
+pub fn filter_source_info(lua: &Lua) -> SourceInfo {
+    // Walk up the stack looking for the first Lua function call
+    // Level 0 is this function itself (inside mlua), so we start at level 1
+    // We look up to level 5 to find a filter function (not a C function)
+    for level in 1..=5 {
+        if let Some(debug) = lua.inspect_stack(level) {
+            let source = debug.source();
+            let line = debug.curr_line();
+
+            // Check if this is a Lua source (not a C function)
+            if source.what != "C" {
+                if let Some(src) = source.source {
+                    // The source often starts with "@" for file paths
+                    let path = src.strip_prefix("@").unwrap_or(&src);
+                    // Convert line number from i32, negative means unknown
+                    let line_num = if line >= 0 { line as usize } else { 0 };
+                    return SourceInfo::filter_provenance(path.to_string(), line_num);
+                }
+            }
+        }
+    }
+
+    // Fallback if we couldn't get debug info
     SourceInfo::default()
 }
 
@@ -1283,5 +1518,469 @@ impl FromLua for LuaBlock {
             }
             _ => Err(Error::runtime("expected Block userdata")),
         }
+    }
+}
+
+/// Apply a filter table to an inline element's children
+/// This implements the walk() method for Inline elements
+pub fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Result<Inline> {
+    // Walk applies the filter to children, not to the element itself
+    match inline {
+        // Inlines with content children
+        Inline::Emph(e) => {
+            let filtered = walk_inlines_with_filter(lua, &e.content, filter)?;
+            Ok(Inline::Emph(crate::pandoc::Emph {
+                content: filtered,
+                ..e.clone()
+            }))
+        }
+        Inline::Strong(s) => {
+            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
+            Ok(Inline::Strong(crate::pandoc::Strong {
+                content: filtered,
+                ..s.clone()
+            }))
+        }
+        Inline::Underline(u) => {
+            let filtered = walk_inlines_with_filter(lua, &u.content, filter)?;
+            Ok(Inline::Underline(crate::pandoc::Underline {
+                content: filtered,
+                ..u.clone()
+            }))
+        }
+        Inline::Strikeout(s) => {
+            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
+            Ok(Inline::Strikeout(crate::pandoc::Strikeout {
+                content: filtered,
+                ..s.clone()
+            }))
+        }
+        Inline::Superscript(s) => {
+            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
+            Ok(Inline::Superscript(crate::pandoc::Superscript {
+                content: filtered,
+                ..s.clone()
+            }))
+        }
+        Inline::Subscript(s) => {
+            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
+            Ok(Inline::Subscript(crate::pandoc::Subscript {
+                content: filtered,
+                ..s.clone()
+            }))
+        }
+        Inline::SmallCaps(s) => {
+            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
+            Ok(Inline::SmallCaps(crate::pandoc::SmallCaps {
+                content: filtered,
+                ..s.clone()
+            }))
+        }
+        Inline::Quoted(q) => {
+            let filtered = walk_inlines_with_filter(lua, &q.content, filter)?;
+            Ok(Inline::Quoted(crate::pandoc::Quoted {
+                content: filtered,
+                ..q.clone()
+            }))
+        }
+        Inline::Link(l) => {
+            let filtered = walk_inlines_with_filter(lua, &l.content, filter)?;
+            Ok(Inline::Link(crate::pandoc::Link {
+                content: filtered,
+                ..l.clone()
+            }))
+        }
+        Inline::Image(i) => {
+            let filtered = walk_inlines_with_filter(lua, &i.content, filter)?;
+            Ok(Inline::Image(crate::pandoc::Image {
+                content: filtered,
+                ..i.clone()
+            }))
+        }
+        Inline::Span(s) => {
+            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
+            Ok(Inline::Span(crate::pandoc::Span {
+                content: filtered,
+                ..s.clone()
+            }))
+        }
+        // Note contains blocks
+        Inline::Note(n) => {
+            let filtered = walk_blocks_with_filter(lua, &n.content, filter)?;
+            Ok(Inline::Note(crate::pandoc::Note {
+                content: filtered,
+                ..n.clone()
+            }))
+        }
+        // CriticMarkup types
+        Inline::Insert(i) => {
+            let filtered = walk_inlines_with_filter(lua, &i.content, filter)?;
+            Ok(Inline::Insert(crate::pandoc::Insert {
+                content: filtered,
+                ..i.clone()
+            }))
+        }
+        Inline::Delete(d) => {
+            let filtered = walk_inlines_with_filter(lua, &d.content, filter)?;
+            Ok(Inline::Delete(crate::pandoc::Delete {
+                content: filtered,
+                ..d.clone()
+            }))
+        }
+        Inline::Highlight(h) => {
+            let filtered = walk_inlines_with_filter(lua, &h.content, filter)?;
+            Ok(Inline::Highlight(crate::pandoc::Highlight {
+                content: filtered,
+                ..h.clone()
+            }))
+        }
+        Inline::EditComment(ec) => {
+            let filtered = walk_inlines_with_filter(lua, &ec.content, filter)?;
+            Ok(Inline::EditComment(crate::pandoc::EditComment {
+                content: filtered,
+                ..ec.clone()
+            }))
+        }
+        // Terminal inlines - no children to walk
+        Inline::Str(_)
+        | Inline::Code(_)
+        | Inline::Space(_)
+        | Inline::SoftBreak(_)
+        | Inline::LineBreak(_)
+        | Inline::Math(_)
+        | Inline::RawInline(_)
+        | Inline::Cite(_)
+        | Inline::Shortcode(_)
+        | Inline::NoteReference(_)
+        | Inline::Attr(_, _) => Ok(inline.clone()),
+    }
+}
+
+/// Apply a filter table to a block element's children
+/// This implements the walk() method for Block elements
+pub fn walk_block_with_filter(lua: &Lua, block: &Block, filter: &Table) -> Result<Block> {
+    // Walk applies the filter to children, not to the element itself
+    match block {
+        // Blocks with inline content
+        Block::Plain(p) => {
+            let filtered = walk_inlines_with_filter(lua, &p.content, filter)?;
+            Ok(Block::Plain(crate::pandoc::Plain {
+                content: filtered,
+                ..p.clone()
+            }))
+        }
+        Block::Paragraph(p) => {
+            let filtered = walk_inlines_with_filter(lua, &p.content, filter)?;
+            Ok(Block::Paragraph(crate::pandoc::Paragraph {
+                content: filtered,
+                ..p.clone()
+            }))
+        }
+        Block::Header(h) => {
+            let filtered = walk_inlines_with_filter(lua, &h.content, filter)?;
+            Ok(Block::Header(crate::pandoc::Header {
+                content: filtered,
+                ..h.clone()
+            }))
+        }
+        // Blocks with block content
+        Block::BlockQuote(b) => {
+            let filtered = walk_blocks_with_filter(lua, &b.content, filter)?;
+            Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
+                content: filtered,
+                ..b.clone()
+            }))
+        }
+        Block::Div(d) => {
+            let filtered = walk_blocks_with_filter(lua, &d.content, filter)?;
+            Ok(Block::Div(crate::pandoc::Div {
+                content: filtered,
+                ..d.clone()
+            }))
+        }
+        Block::Figure(f) => {
+            let filtered = walk_blocks_with_filter(lua, &f.content, filter)?;
+            Ok(Block::Figure(crate::pandoc::Figure {
+                content: filtered,
+                ..f.clone()
+            }))
+        }
+        // Lists
+        Block::BulletList(l) => {
+            let filtered_items: Vec<Vec<Block>> = l
+                .content
+                .iter()
+                .map(|item| walk_blocks_with_filter(lua, item, filter))
+                .collect::<Result<_>>()?;
+            Ok(Block::BulletList(crate::pandoc::BulletList {
+                content: filtered_items,
+                ..l.clone()
+            }))
+        }
+        Block::OrderedList(l) => {
+            let filtered_items: Vec<Vec<Block>> = l
+                .content
+                .iter()
+                .map(|item| walk_blocks_with_filter(lua, item, filter))
+                .collect::<Result<_>>()?;
+            Ok(Block::OrderedList(crate::pandoc::OrderedList {
+                content: filtered_items,
+                ..l.clone()
+            }))
+        }
+        // LineBlock has lines (Vec<Vec<Inline>>)
+        Block::LineBlock(l) => {
+            let filtered_lines: Vec<Vec<Inline>> = l
+                .content
+                .iter()
+                .map(|line| walk_inlines_with_filter(lua, line, filter))
+                .collect::<Result<_>>()?;
+            Ok(Block::LineBlock(crate::pandoc::LineBlock {
+                content: filtered_lines,
+                ..l.clone()
+            }))
+        }
+        // Terminal blocks - no children to walk
+        Block::CodeBlock(_)
+        | Block::RawBlock(_)
+        | Block::HorizontalRule(_)
+        | Block::Table(_)
+        | Block::DefinitionList(_)
+        | Block::BlockMetadata(_)
+        | Block::NoteDefinitionPara(_)
+        | Block::NoteDefinitionFencedBlock(_)
+        | Block::CaptionBlock(_) => Ok(block.clone()),
+    }
+}
+
+/// Check if the filter uses topdown traversal mode
+fn is_topdown_traversal(filter: &Table) -> bool {
+    filter
+        .get::<Option<String>>("traverse")
+        .ok()
+        .flatten()
+        .map(|s| s == "topdown")
+        .unwrap_or(false)
+}
+
+/// Apply a filter table to a list of inlines
+pub fn walk_inlines_with_filter(
+    lua: &Lua,
+    inlines: &[Inline],
+    filter: &Table,
+) -> Result<Vec<Inline>> {
+    let topdown = is_topdown_traversal(filter);
+    let mut result = Vec::new();
+
+    for inline in inlines {
+        if topdown {
+            // Topdown: apply filter first, then recurse into children
+            let lua_inline = LuaInline(inline.clone());
+            let tag = lua_inline.tag_name();
+
+            // Apply filter to this element first
+            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
+                let inline_ud = lua.create_userdata(lua_inline)?;
+                let ret: Value = filter_fn.call(inline_ud)?;
+                handle_inline_filter_return(ret, inline)?
+            } else if let Ok(filter_fn) = filter.get::<Function>("Inline") {
+                let inline_ud = lua.create_userdata(lua_inline)?;
+                let ret: Value = filter_fn.call(inline_ud)?;
+                handle_inline_filter_return(ret, inline)?
+            } else {
+                vec![inline.clone()]
+            };
+
+            // Then walk children of each filtered element
+            for elem in filtered {
+                let walked = walk_inline_with_filter(lua, &elem, filter)?;
+                result.push(walked);
+            }
+        } else {
+            // Default (typewise/bottom-up): walk children first, then apply filter
+            let walked = walk_inline_with_filter(lua, inline, filter)?;
+
+            // Then apply filter to this element
+            let lua_inline = LuaInline(walked.clone());
+            let tag = lua_inline.tag_name();
+
+            // Try type-specific filter
+            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
+                let inline_ud = lua.create_userdata(lua_inline)?;
+                let ret: Value = filter_fn.call(inline_ud)?;
+                handle_inline_filter_return(ret, &walked)?
+            } else if let Ok(filter_fn) = filter.get::<Function>("Inline") {
+                // Try generic Inline filter
+                let inline_ud = lua.create_userdata(lua_inline)?;
+                let ret: Value = filter_fn.call(inline_ud)?;
+                handle_inline_filter_return(ret, &walked)?
+            } else {
+                vec![walked]
+            };
+
+            result.extend(filtered);
+        }
+    }
+
+    // Check for Inlines filter (operates on whole list)
+    if let Ok(filter_fn) = filter.get::<Function>("Inlines") {
+        let inlines_table = inlines_to_lua_table(lua, &result)?;
+        let ret: Value = filter_fn.call(inlines_table)?;
+        match ret {
+            Value::Nil => { /* unchanged */ }
+            Value::Table(table) => {
+                let len = table.raw_len();
+                if len == 0 {
+                    return Ok(vec![]);
+                }
+                result = Vec::new();
+                for i in 1..=len {
+                    let value: Value = table.get(i)?;
+                    if let Value::UserData(ud) = value {
+                        let lua_inline = ud.borrow::<LuaInline>()?;
+                        result.push(lua_inline.0.clone());
+                    }
+                }
+            }
+            _ => { /* unchanged */ }
+        }
+    }
+
+    Ok(result)
+}
+
+/// Apply a filter table to a list of blocks
+pub fn walk_blocks_with_filter(lua: &Lua, blocks: &[Block], filter: &Table) -> Result<Vec<Block>> {
+    let topdown = is_topdown_traversal(filter);
+    let mut result = Vec::new();
+
+    for block in blocks {
+        if topdown {
+            // Topdown: apply filter first, then recurse into children
+            let lua_block = LuaBlock(block.clone());
+            let tag = lua_block.tag_name();
+
+            // Apply filter to this element first
+            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
+                let block_ud = lua.create_userdata(lua_block)?;
+                let ret: Value = filter_fn.call(block_ud)?;
+                handle_block_filter_return(ret, block)?
+            } else if let Ok(filter_fn) = filter.get::<Function>("Block") {
+                let block_ud = lua.create_userdata(lua_block)?;
+                let ret: Value = filter_fn.call(block_ud)?;
+                handle_block_filter_return(ret, block)?
+            } else {
+                vec![block.clone()]
+            };
+
+            // Then walk children of each filtered element
+            for elem in filtered {
+                let walked = walk_block_with_filter(lua, &elem, filter)?;
+                result.push(walked);
+            }
+        } else {
+            // Default (typewise/bottom-up): walk children first, then apply filter
+            let walked = walk_block_with_filter(lua, block, filter)?;
+
+            // Then apply filter to this element
+            let lua_block = LuaBlock(walked.clone());
+            let tag = lua_block.tag_name();
+
+            // Try type-specific filter
+            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
+                let block_ud = lua.create_userdata(lua_block)?;
+                let ret: Value = filter_fn.call(block_ud)?;
+                handle_block_filter_return(ret, &walked)?
+            } else if let Ok(filter_fn) = filter.get::<Function>("Block") {
+                // Try generic Block filter
+                let block_ud = lua.create_userdata(lua_block)?;
+                let ret: Value = filter_fn.call(block_ud)?;
+                handle_block_filter_return(ret, &walked)?
+            } else {
+                vec![walked]
+            };
+
+            result.extend(filtered);
+        }
+    }
+
+    // Check for Blocks filter (operates on whole list)
+    if let Ok(filter_fn) = filter.get::<Function>("Blocks") {
+        let blocks_table = blocks_to_lua_table(lua, &result)?;
+        let ret: Value = filter_fn.call(blocks_table)?;
+        match ret {
+            Value::Nil => { /* unchanged */ }
+            Value::Table(table) => {
+                let len = table.raw_len();
+                if len == 0 {
+                    return Ok(vec![]);
+                }
+                result = Vec::new();
+                for i in 1..=len {
+                    let value: Value = table.get(i)?;
+                    if let Value::UserData(ud) = value {
+                        let lua_block = ud.borrow::<LuaBlock>()?;
+                        result.push(lua_block.0.clone());
+                    }
+                }
+            }
+            _ => { /* unchanged */ }
+        }
+    }
+
+    Ok(result)
+}
+
+/// Handle filter return value for an inline
+fn handle_inline_filter_return(ret: Value, original: &Inline) -> Result<Vec<Inline>> {
+    match ret {
+        Value::Nil => Ok(vec![original.clone()]),
+        Value::UserData(ud) => {
+            let lua_inline = ud.borrow::<LuaInline>()?;
+            Ok(vec![lua_inline.0.clone()])
+        }
+        Value::Table(table) => {
+            let len = table.raw_len();
+            if len == 0 {
+                return Ok(vec![]);
+            }
+            let mut inlines = Vec::new();
+            for i in 1..=len {
+                let value: Value = table.get(i)?;
+                if let Value::UserData(ud) = value {
+                    let lua_inline = ud.borrow::<LuaInline>()?;
+                    inlines.push(lua_inline.0.clone());
+                }
+            }
+            Ok(inlines)
+        }
+        _ => Ok(vec![original.clone()]),
+    }
+}
+
+/// Handle filter return value for a block
+fn handle_block_filter_return(ret: Value, original: &Block) -> Result<Vec<Block>> {
+    match ret {
+        Value::Nil => Ok(vec![original.clone()]),
+        Value::UserData(ud) => {
+            let lua_block = ud.borrow::<LuaBlock>()?;
+            Ok(vec![lua_block.0.clone()])
+        }
+        Value::Table(table) => {
+            let len = table.raw_len();
+            if len == 0 {
+                return Ok(vec![]);
+            }
+            let mut blocks = Vec::new();
+            for i in 1..=len {
+                let value: Value = table.get(i)?;
+                if let Value::UserData(ud) = value {
+                    let lua_block = ud.borrow::<LuaBlock>()?;
+                    blocks.push(lua_block.0.clone());
+                }
+            }
+            Ok(blocks)
+        }
+        _ => Ok(vec![original.clone()]),
     }
 }

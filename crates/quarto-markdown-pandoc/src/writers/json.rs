@@ -81,6 +81,10 @@ impl Serialize for SerializableSourceInfo {
                     .collect();
                 map.serialize_entry("d", &piece_arrays)?;
             }
+            SerializableSourceMapping::FilterProvenance { filter_path, line } => {
+                map.serialize_entry("t", &3)?;
+                map.serialize_entry("d", &(filter_path, line))?;
+            }
         }
 
         map.end()
@@ -97,6 +101,10 @@ enum SerializableSourceMapping {
     },
     Concat {
         pieces: Vec<SerializableSourcePiece>,
+    },
+    FilterProvenance {
+        filter_path: String,
+        line: usize,
     },
 }
 
@@ -187,6 +195,14 @@ impl<'a> SourceInfoSerializer<'a> {
                     },
                 )
             }
+            SourceInfo::FilterProvenance { filter_path, line } => (
+                0,
+                0,
+                SerializableSourceMapping::FilterProvenance {
+                    filter_path: filter_path.clone(),
+                    line: *line,
+                },
+            ),
         };
 
         // Calculate ID after recursion completes

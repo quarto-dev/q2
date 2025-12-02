@@ -277,6 +277,9 @@ pub fn process_pipe_table(
                     quarto_source_map::FileId(0) // Fallback
                 }
             }
+            quarto_source_map::SourceInfo::FilterProvenance { .. } => {
+                quarto_source_map::FileId(0) // Fallback - filter-created tables shouldn't reach this
+            }
         };
         // Create a new SourceInfo spanning from table start to caption end
         quarto_source_map::SourceInfo::original(file_id, start_offset, end_offset)

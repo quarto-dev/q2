@@ -13,6 +13,7 @@ use std::rc::Rc;
 /// - Original: Points directly to a file with byte offsets
 /// - Substring: Points to a range within a parent SourceInfo (offsets are relative to parent)
 /// - Concat: Combines multiple SourceInfo pieces (preserves provenance when coalescing text)
+/// - FilterProvenance: Tracks elements created by Lua filters for diagnostics
 ///
 /// The Transformed variant was removed because it's not used in production code.
 /// Text transformations (smart quotes, em-dashes) use Original SourceInfo pointing
@@ -41,6 +42,16 @@ pub enum SourceInfo {
     /// Used when coalescing adjacent text nodes while preserving
     /// the fact that they came from different source locations.
     Concat { pieces: Vec<SourcePiece> },
+    /// Provenance from a Lua filter
+    ///
+    /// Used to track elements created by Lua filters for diagnostic messages.
+    /// Contains the filter file path and line number where the element was created.
+    FilterProvenance {
+        /// Path to the Lua filter file (from debug.getinfo source)
+        filter_path: String,
+        /// Line number in the filter where the element was created
+        line: usize,
+    },
 }
 
 /// A piece of a concatenated source
@@ -122,6 +133,18 @@ impl SourceInfo {
         }
     }
 
+    /// Create source info for a filter-created element
+    ///
+    /// Used to track the provenance of elements created by Lua filters.
+    /// The filter_path should be the path to the filter file (from debug.getinfo source).
+    /// The line should be the line number where the element was created.
+    pub fn filter_provenance(filter_path: impl Into<String>, line: usize) -> Self {
+        SourceInfo::FilterProvenance {
+            filter_path: filter_path.into(),
+            line,
+        }
+    }
+
     /// Combine two SourceInfo objects representing adjacent text
     ///
     /// This creates a Concat mapping that preserves both sources.
@@ -150,6 +173,7 @@ impl SourceInfo {
                 ..
             } => end_offset - start_offset,
             SourceInfo::Concat { pieces } => pieces.iter().map(|p| p.length).sum(),
+            SourceInfo::FilterProvenance { .. } => 0,
         }
     }
 
@@ -157,11 +181,13 @@ impl SourceInfo {
     ///
     /// For Original and Substring, returns the start_offset field.
     /// For Concat, returns 0 (the concat represents a new text starting at 0).
+    /// For FilterProvenance, returns 0.
     pub fn start_offset(&self) -> usize {
         match self {
             SourceInfo::Original { start_offset, .. } => *start_offset,
             SourceInfo::Substring { start_offset, .. } => *start_offset,
             SourceInfo::Concat { .. } => 0,
+            SourceInfo::FilterProvenance { .. } => 0,
         }
     }
 
@@ -169,11 +195,13 @@ impl SourceInfo {
     ///
     /// For Original and Substring, returns the end_offset field.
     /// For Concat, returns the total length.
+    /// For FilterProvenance, returns 0.
     pub fn end_offset(&self) -> usize {
         match self {
             SourceInfo::Original { end_offset, .. } => *end_offset,
             SourceInfo::Substring { end_offset, .. } => *end_offset,
             SourceInfo::Concat { .. } => self.length(),
+            SourceInfo::FilterProvenance { .. } => 0,
         }
     }
 }

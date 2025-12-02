@@ -559,6 +559,10 @@ impl DiagnosticMessage {
                     .first()
                     .and_then(|p| Self::extract_file_id(&p.source_info))
             }
+            quarto_source_map::SourceInfo::FilterProvenance { .. } => {
+                // Filter provenance doesn't have a traditional file_id
+                None
+            }
         }
     }
 

@@ -9,6 +9,8 @@
 pub mod errors;
 pub mod filter_context;
 pub mod filters;
+#[cfg(feature = "lua-filter")]
+pub mod lua;
 pub mod pandoc;
 pub mod readers;
 pub mod traversals;

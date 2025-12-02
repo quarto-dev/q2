@@ -82,8 +82,29 @@ pub fn apply_lua_filter(
     register_pandoc_namespace(&lua)?;
 
     // Set global variables
+    // FORMAT - the target output format (html, latex, etc.)
     lua.globals().set("FORMAT", target_format)?;
-    lua.globals().set("PANDOC_VERSION", "3.0")?;
+
+    // PANDOC_VERSION - version of Pandoc (we emulate 3.x behavior)
+    // Set as a table with numeric indices for version components
+    let version_table = lua.create_table()?;
+    version_table.set(1, 3)?;
+    version_table.set(2, 0)?;
+    version_table.set(3, 0)?;
+    lua.globals().set("PANDOC_VERSION", version_table)?;
+
+    // PANDOC_API_VERSION - version of the pandoc-types API
+    let api_version_table = lua.create_table()?;
+    api_version_table.set(1, 1)?;
+    api_version_table.set(2, 23)?;
+    api_version_table.set(3, 1)?;
+    lua.globals().set("PANDOC_API_VERSION", api_version_table)?;
+
+    // PANDOC_SCRIPT_FILE - path to the current filter script
+    lua.globals().set(
+        "PANDOC_SCRIPT_FILE",
+        filter_path.to_string_lossy().to_string(),
+    )?;
 
     // Load and execute filter script
     lua.load(&filter_source)
@@ -1013,6 +1034,510 @@ end
                     _ => panic!("Expected Str"),
                 }
             }
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_pairs_iteration() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("pairs_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- Test pairs() iteration on Str element
+function Str(elem)
+    local keys = {}
+    for k, v in pairs(elem) do
+        table.insert(keys, k)
+    end
+    -- Str should have: tag, text, clone, walk
+    -- Return a Str with all keys joined
+    return pandoc.Str(table.concat(keys, ","))
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "hello".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => {
+                    // Should contain tag, text, clone, walk
+                    assert!(s.text.contains("tag"), "Expected 'tag' in keys: {}", s.text);
+                    assert!(
+                        s.text.contains("text"),
+                        "Expected 'text' in keys: {}",
+                        s.text
+                    );
+                    assert!(
+                        s.text.contains("clone"),
+                        "Expected 'clone' in keys: {}",
+                        s.text
+                    );
+                    assert!(
+                        s.text.contains("walk"),
+                        "Expected 'walk' in keys: {}",
+                        s.text
+                    );
+                }
+                _ => panic!("Expected Str inline"),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_walk_method() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("walk_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- Test walk() method on Header element
+function Header(elem)
+    -- Use walk to uppercase all Str elements inside the header
+    return elem:walk {
+        Str = function(s)
+            return pandoc.Str(s.text:upper())
+        end
+    }
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Header(crate::pandoc::Header {
+                level: 1,
+                content: vec![
+                    Inline::Str(crate::pandoc::Str {
+                        text: "hello".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Inline::Space(crate::pandoc::Space {
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Inline::Str(crate::pandoc::Str {
+                        text: "world".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                ],
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                source_info: quarto_source_map::SourceInfo::default(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        match &filtered.blocks[0] {
+            Block::Header(h) => {
+                assert_eq!(h.content.len(), 3);
+                match &h.content[0] {
+                    Inline::Str(s) => assert_eq!(s.text, "HELLO"),
+                    _ => panic!("Expected Str"),
+                }
+                match &h.content[2] {
+                    Inline::Str(s) => assert_eq!(s.text, "WORLD"),
+                    _ => panic!("Expected Str"),
+                }
+            }
+            _ => panic!("Expected Header block"),
+        }
+    }
+
+    #[test]
+    fn test_clone_via_field() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("clone_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- Test that clone is accessible as a field
+function Str(elem)
+    local clone_fn = elem.clone
+    if type(clone_fn) == "function" then
+        local cloned = clone_fn()
+        return pandoc.Str(cloned.text .. "_cloned")
+    else
+        return pandoc.Str("ERROR: clone was not a function")
+    end
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "test".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "test_cloned"),
+                _ => panic!("Expected Str inline"),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_walk_nested_elements() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("walk_nested.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- Test walk on Emph to uppercase nested Str
+function Emph(elem)
+    return elem:walk {
+        Str = function(s)
+            return pandoc.Str(s.text:upper())
+        end
+    }
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Emph(crate::pandoc::Emph {
+                    content: vec![
+                        Inline::Str(crate::pandoc::Str {
+                            text: "emphasized".to_string(),
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        }),
+                        Inline::Space(crate::pandoc::Space {
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        }),
+                        Inline::Strong(crate::pandoc::Strong {
+                            content: vec![Inline::Str(crate::pandoc::Str {
+                                text: "bold".to_string(),
+                                source_info: quarto_source_map::SourceInfo::default(),
+                            })],
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        }),
+                    ],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Emph(e) => {
+                    // First Str should be uppercased
+                    match &e.content[0] {
+                        Inline::Str(s) => assert_eq!(s.text, "EMPHASIZED"),
+                        _ => panic!("Expected Str"),
+                    }
+                    // Strong's content should also be walked
+                    match &e.content[2] {
+                        Inline::Strong(strong) => match &strong.content[0] {
+                            Inline::Str(s) => assert_eq!(s.text, "BOLD"),
+                            _ => panic!("Expected Str in Strong"),
+                        },
+                        _ => panic!("Expected Strong"),
+                    }
+                }
+                _ => panic!("Expected Emph inline"),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_topdown_traversal() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("topdown_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- Test topdown traversal mode
+-- In topdown mode, Emph is visited before its children (Str)
+-- So we can intercept and replace the entire Emph without ever seeing the Str
+
+local visited_types = {}
+
+function Emph(elem)
+    table.insert(visited_types, "Emph")
+    -- Replace entire Emph with a Span
+    return pandoc.Span({pandoc.Str("replaced")})
+end
+
+function Str(elem)
+    table.insert(visited_types, "Str:" .. elem.text)
+    return elem
+end
+
+function Pandoc(doc)
+    -- Use topdown traversal
+    return doc:walk {
+        traverse = "topdown",
+        Emph = Emph,
+        Str = Str
+    }
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Emph(crate::pandoc::Emph {
+                    content: vec![Inline::Str(crate::pandoc::Str {
+                        text: "should_not_see_this".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        // In topdown mode, Emph is replaced with Span before we visit the Str inside
+        // So we should see Span(Str("replaced")), not the original "should_not_see_this"
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Span(s) => match &s.content[0] {
+                    Inline::Str(str_elem) => assert_eq!(str_elem.text, "replaced"),
+                    _ => panic!("Expected Str in Span"),
+                },
+                other => panic!("Expected Span, got: {:?}", other),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_filter_provenance_tracking() {
+        // Test that elements created by filters capture their source location
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("provenance_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- This filter creates a new Str element
+-- The source_info should capture this file and line
+function Str(elem)
+    return pandoc.Str("created-by-filter")
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "original".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        // The filtered Str should have FilterProvenance source info
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => {
+                    assert_eq!(s.text, "created-by-filter");
+                    // Check that the source_info is FilterProvenance
+                    match &s.source_info {
+                        quarto_source_map::SourceInfo::FilterProvenance {
+                            filter_path: path,
+                            line,
+                        } => {
+                            // The filter_path should contain our filter file name
+                            assert!(
+                                path.contains("provenance_test.lua"),
+                                "Expected filter path to contain 'provenance_test.lua', got: {}",
+                                path
+                            );
+                            // The line should be around line 5 where pandoc.Str is called
+                            assert!(
+                                *line >= 4 && *line <= 7,
+                                "Expected line to be between 4-7, got: {}",
+                                line
+                            );
+                        }
+                        other => {
+                            panic!("Expected FilterProvenance source info, got: {:?}", other)
+                        }
+                    }
+                }
+                _ => panic!("Expected Str inline"),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_pandoc_utils_stringify_basic() {
+        // Test pandoc.utils.stringify with basic elements
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("stringify_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+-- Test stringify with various element types
+function Para(elem)
+    -- Stringify the paragraph content and return a new paragraph
+    local text = pandoc.utils.stringify(elem)
+    return pandoc.Para({pandoc.Str("result:" .. text)})
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![
+                    Inline::Str(crate::pandoc::Str {
+                        text: "hello".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Inline::Space(crate::pandoc::Space {
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Inline::Str(crate::pandoc::Str {
+                        text: "world".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                ],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => {
+                    assert_eq!(s.text, "result:hello world");
+                }
+                _ => panic!("Expected Str inline"),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+    }
+
+    #[test]
+    fn test_pandoc_utils_stringify_nested() {
+        // Test stringify with nested elements (Emph containing Strong)
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("stringify_nested.lua");
+        fs::write(
+            &filter_path,
+            r#"
+function Emph(elem)
+    local text = pandoc.utils.stringify(elem)
+    return pandoc.Str("stringified:" .. text)
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Emph(crate::pandoc::Emph {
+                    content: vec![
+                        Inline::Str(crate::pandoc::Str {
+                            text: "emphasized".to_string(),
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        }),
+                        Inline::Space(crate::pandoc::Space {
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        }),
+                        Inline::Strong(crate::pandoc::Strong {
+                            content: vec![Inline::Str(crate::pandoc::Str {
+                                text: "bold".to_string(),
+                                source_info: quarto_source_map::SourceInfo::default(),
+                            })],
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        }),
+                    ],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => {
+                    assert_eq!(s.text, "stringified:emphasized bold");
+                }
+                _ => panic!("Expected Str inline"),
+            },
             _ => panic!("Expected Paragraph block"),
         }
     }

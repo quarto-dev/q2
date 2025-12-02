@@ -65,6 +65,11 @@ impl SourceInfo {
                 }
                 None // Offset not found in any piece
             }
+            SourceInfo::FilterProvenance { .. } => {
+                // FilterProvenance doesn't have traditional byte offsets
+                // The location information is stored directly in the variant
+                None
+            }
         }
     }
 

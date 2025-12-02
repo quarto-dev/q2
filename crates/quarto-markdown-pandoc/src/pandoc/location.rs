@@ -337,5 +337,9 @@ pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<us
                 .iter()
                 .find_map(|p| extract_filename_index(&p.source_info))
         }
+        quarto_source_map::SourceInfo::FilterProvenance { .. } => {
+            // Filter provenance doesn't have a filename index
+            None
+        }
     }
 }

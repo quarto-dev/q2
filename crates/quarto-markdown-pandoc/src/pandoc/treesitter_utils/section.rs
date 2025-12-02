@@ -146,6 +146,9 @@ pub fn process_section(
                                 quarto_source_map::FileId(0) // Fallback
                             }
                         }
+                        quarto_source_map::SourceInfo::FilterProvenance { .. } => {
+                            quarto_source_map::FileId(0) // Fallback - filter-created tables
+                        }
                     };
                     table.source_info = quarto_source_map::SourceInfo::original(
                         file_id,

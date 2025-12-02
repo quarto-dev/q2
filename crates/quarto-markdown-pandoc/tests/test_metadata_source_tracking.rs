@@ -20,6 +20,10 @@ fn resolve_source_offset(source: &quarto_source_map::SourceInfo) -> usize {
             // For concat, use the start offset of the first piece
             pieces.first().map(|p| p.offset_in_concat).unwrap_or(0)
         }
+        quarto_source_map::SourceInfo::FilterProvenance { .. } => {
+            // Filter provenance doesn't have a traditional offset
+            0
+        }
     }
 }
 
