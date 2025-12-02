@@ -7,6 +7,7 @@
  */
 
 pub mod errors;
+pub mod filter_context;
 pub mod filters;
 pub mod pandoc;
 pub mod readers;

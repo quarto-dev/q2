@@ -4,6 +4,7 @@
  */
 
 // Note: parse_is_good no longer used - log_observer.had_errors() handles parse errors
+use crate::filter_context::FilterContext;
 use crate::filters::FilterReturn::Unchanged;
 use crate::filters::topdown_traverse;
 use crate::filters::{Filter, FilterReturn};
@@ -196,7 +197,7 @@ pub fn read<T: Write>(
     let mut meta_diagnostics = DiagnosticCollector::new();
 
     result = {
-        let mut filter = Filter::new().with_raw_block(|rb| {
+        let mut filter = Filter::new().with_raw_block(|rb, _ctx| {
             if rb.format != "quarto_minus_metadata" {
                 return Unchanged(rb);
             }
@@ -278,7 +279,8 @@ pub fn read<T: Write>(
                 return FilterReturn::FilterResult(vec![], false);
             }
         });
-        topdown_traverse(result, &mut filter)
+        let mut ctx = FilterContext::new();
+        topdown_traverse(result, &mut filter, &mut ctx)
     };
 
     // Merge meta_from_parses into result.meta

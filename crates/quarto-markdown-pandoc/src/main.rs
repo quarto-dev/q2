@@ -10,6 +10,7 @@ use clap::Parser;
 use std::io::{self, Read, Write};
 
 mod errors;
+mod filter_context;
 mod filters;
 #[cfg(feature = "json-filter")]
 mod json_filter;

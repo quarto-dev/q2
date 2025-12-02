@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::filter_context::FilterContext;
 use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
 };
@@ -270,7 +271,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
         let mut citation_counter: usize = 0;
 
         let mut filter = Filter::new()
-            .with_cite(|mut cite| {
+            .with_cite(|mut cite, _ctx| {
                 // Increment citation counter for each Cite element
                 citation_counter += 1;
                 // Update all citations in this Cite element with the current counter
@@ -280,7 +281,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 // Return Unchanged to allow recursion into cite content while avoiding re-filtering
                 Unchanged(cite)
             })
-            .with_superscript(|mut superscript| {
+            .with_superscript(|mut superscript, _ctx| {
                 let (content, changed) = trim_inlines(superscript.content);
                 if !changed {
                     return Unchanged(Superscript {
@@ -293,7 +294,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 }
             })
             // add attribute to headers that have them.
-            .with_header(move |mut header| {
+            .with_header(move |mut header, _ctx| {
                 let is_last_attr = header
                     .content
                     .last()
@@ -333,7 +334,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 }
             })
             // attempt to desugar single-image paragraphs into figures
-            .with_paragraph(|para| {
+            .with_paragraph(|para, _ctx| {
                 if para.content.len() != 1 {
                     return Unchanged(para);
                 }
@@ -390,7 +391,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 )
             })
             // Convert definition-list divs to DefinitionList blocks
-            .with_div(|div| {
+            .with_div(|div, _ctx| {
                 if is_valid_definition_list_div(&div) {
                     FilterResult(vec![transform_definition_list_div(div)], false)
                 } else {
@@ -399,7 +400,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
             })
             // Remove single empty spans from bullet list items
             // This allows `* []` to create truly empty list items in the AST
-            .with_bullet_list(|mut bullet_list| {
+            .with_bullet_list(|mut bullet_list, _ctx| {
                 let mut changed = false;
                 for item in &mut bullet_list.content {
                     // Check if item has exactly one block
@@ -443,7 +444,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 }
             })
             // Fix table captions that were parsed as last row (no blank line before caption)
-            .with_table(|mut table| {
+            .with_table(|mut table, _ctx| {
                 // Check if caption is empty
                 let caption_is_empty = table.caption.long.is_none()
                     || table
@@ -535,10 +536,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 // Return the transformed table
                 FilterResult(vec![Block::Table(table)], false)
             })
-            .with_shortcode(|shortcode| {
+            .with_shortcode(|shortcode, _ctx| {
                 FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
             })
-            .with_note_reference(|note_ref| {
+            .with_note_reference(|note_ref, _ctx| {
                 let mut kv = LinkedHashMap::new();
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
@@ -555,7 +556,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     false,
                 )
             })
-            .with_insert(|insert| {
+            .with_insert(|insert, _ctx| {
                 let (content, _changed) = trim_inlines(insert.content);
                 let mut classes = vec!["quarto-insert".to_string()];
                 classes.extend(insert.attr.1);
@@ -569,7 +570,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     true,
                 )
             })
-            .with_delete(|delete| {
+            .with_delete(|delete, _ctx| {
                 let (content, _changed) = trim_inlines(delete.content);
                 let mut classes = vec!["quarto-delete".to_string()];
                 classes.extend(delete.attr.1);
@@ -583,7 +584,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     true,
                 )
             })
-            .with_highlight(|highlight| {
+            .with_highlight(|highlight, _ctx| {
                 let (content, _changed) = trim_inlines(highlight.content);
                 let mut classes = vec!["quarto-highlight".to_string()];
                 classes.extend(highlight.attr.1);
@@ -597,7 +598,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     true,
                 )
             })
-            .with_edit_comment(|edit_comment| {
+            .with_edit_comment(|edit_comment, _ctx| {
                 let (content, _changed) = trim_inlines(edit_comment.content);
                 let mut classes = vec!["quarto-edit-comment".to_string()];
                 classes.extend(edit_comment.attr.1);
@@ -611,7 +612,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     true,
                 )
             })
-            .with_inlines(|inlines| {
+            .with_inlines(|inlines, _ctx| {
                 // Combined filter: Handle LineBreak + SoftBreak cleanup, Math + Attr pattern, then citation suffix pattern
 
                 // Step 0: Remove SoftBreaks that immediately follow LineBreaks
@@ -845,7 +846,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
 
                 FilterResult(result, true)
             })
-            .with_attr(|attr| {
+            .with_attr(|attr, _ctx| {
                 // TODO: Add source location when attr has it
                 error_collector_ref.borrow_mut().error(format!(
                     "Found attr in postprocess: {:?} - this should have been removed",
@@ -853,7 +854,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 ));
                 FilterResult(vec![], false)
             })
-            .with_blocks(|blocks| {
+            .with_blocks(|blocks, _ctx| {
                 // Process CaptionBlock nodes: attach to preceding tables or issue warnings
                 let mut result: Blocks = Vec::new();
 
@@ -969,7 +970,8 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
 
                 FilterResult(result, true)
             });
-        let pandoc_result = topdown_traverse(doc, &mut filter);
+        let mut ctx = FilterContext::new();
+        let pandoc_result = topdown_traverse(doc, &mut filter, &mut ctx);
 
         // Check if any errors were collected (before moving out of RefCell)
         let has_errors = error_collector_ref.borrow().has_errors();
@@ -996,9 +998,10 @@ fn as_smart_str(s: String) -> String {
 
 /// Merge consecutive Str inlines and apply smart typography
 pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
+    let mut ctx = FilterContext::new();
     topdown_traverse(
         pandoc,
-        &mut Filter::new().with_inlines(|inlines| {
+        &mut Filter::new().with_inlines(|inlines, _ctx| {
             let mut current_str: Option<String> = None;
             let mut current_source_info: Option<quarto_source_map::SourceInfo> = None;
             let mut result: Inlines = Vec::new();
@@ -1048,5 +1051,6 @@ pub fn merge_strs(pandoc: Pandoc) -> Pandoc {
                 Unchanged(coalesced_result)
             }
         }),
+        &mut ctx,
     )
 }
