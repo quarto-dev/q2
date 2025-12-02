@@ -4,6 +4,12 @@
 **Epic:** k-407 (Extensible filters for quarto-markdown-pandoc)
 **Created:** 2025-11-26
 
+## Related Documents
+
+- [Filter Diagnostics Infrastructure Analysis](./2025-12-02-filter-diagnostics-analysis.md) - Analysis of current filter infrastructure and proposed `FilterContext` design for supporting diagnostic messages from filters
+- [Lua Reference: Manual Index](../lua-reference/manual-index.md) - Structured navigation for Lua 5.4 manual
+- [Lua Reference: Idioms](../lua-reference/lua-idioms.md) - Common Lua patterns for filter programming
+
 ## Overview
 
 Implement embedded Lua filter support using the mlua crate. Lua filters are significantly faster than JSON filters (2% vs 35-40% overhead) because they avoid process spawning and JSON serialization. This design aims for compatibility with Pandoc's Lua filter API while being pragmatic about implementation scope.
@@ -12,18 +18,50 @@ Implement embedded Lua filter support using the mlua crate. Lua filters are sign
 
 ### Pandoc Lua Filter Architecture
 
-From exploration of `external-sources/pandoc/pandoc-lua-engine/`:
+From exploration of `external-sources/pandoc/pandoc-lua-engine/` and `external-sources/pandoc-lua-marshal/`:
 
 1. **Filter structure**: Lua table with element type names as keys
 2. **Traversal modes**:
-   - `typewise` (default): Process by element type in fixed order
-   - `topdown`: Depth-first traversal from root
+   - `typewise` (default): Four traversals in fixed order (see detailed analysis below)
+   - `topdown`: Single depth-first traversal from root
 3. **Return semantics**:
    - `nil`: Element unchanged
    - Same type: Replaces element
    - List: Splice into parent
    - Empty list `{}`: Delete element
    - `false` (topdown): Skip children
+
+### Typewise Traversal - Detailed Analysis
+
+**IMPORTANT**: Based on analysis of `pandoc-lua-marshal/src/Text/Pandoc/Lua/Marshal/Shared.hs`,
+Pandoc's typewise traversal does **NOT** iterate per element type. Instead, it performs
+exactly **4 traversals** for blocks and inlines:
+
+```haskell
+-- From Shared.hs lines 35-41
+walkBlocksAndInlines filter' =
+  case filterWalkingOrder filter' of
+    WalkTopdown     -> walkM (applyFilterTopdown filter')
+    WalkForEachType -> walkInlineSplicing filter'    -- (1) All inline types
+                   >=> walkInlinesStraight filter'   -- (2) Inlines list filter
+                   >=> walkBlockSplicing filter'     -- (3) All block types
+                   >=> walkBlocksStraight filter'    -- (4) Blocks list filter
+```
+
+Each `walkSplicing` function does a **single traversal** where, at each node, it
+dynamically looks up the appropriate filter using `getFunctionFor`:
+
+```haskell
+-- From Walk.hs lines 117-127
+applySplicing pushElement peekElements filter' x = do
+  case filter' `getFunctionFor` x of    -- <-- Dynamic per-node lookup!
+    Nothing -> pure [x]
+    Just fn -> fst <$> applySplicingFunction fn pushElement peekElements x
+```
+
+This is **critical** for both correctness and performance:
+- **Correctness**: Elements are visited in document order, not grouped by type
+- **Performance**: O(nodes) not O(types × nodes)
 
 ### mlua Key APIs
 
@@ -384,38 +422,35 @@ impl LuaFilter {
 
 #### Typewise Traversal
 
-Process elements in Pandoc's canonical order:
+**Key insight from Pandoc**: Typewise traversal does NOT iterate per element type.
+Instead, it performs exactly 4 traversals total, with dynamic per-node filter lookup.
 
 ```rust
 impl LuaFilter {
     pub fn apply_typewise(&self, lua: &Lua, doc: Pandoc) -> LuaResult<Pandoc> {
+        // Order from Pandoc (see pandoc-lua-marshal/Shared.hs):
+        // 1. walkInlineSplicing  - single traversal for ALL inline element types
+        // 2. walkInlinesStraight - single traversal for Inlines list filter
+        // 3. walkBlockSplicing   - single traversal for ALL block element types
+        // 4. walkBlocksStraight  - single traversal for Blocks list filter
+        // 5. Meta filter
+        // 6. Pandoc filter
+
         let mut doc = doc;
 
-        // Order from Pandoc: Inline filters first, then Block filters, then Meta, then Pandoc
+        // 1. Single traversal for all inline element filters (Str, Emph, Strong, etc.)
+        //    At each inline node, dynamically look up the filter for that node's type
+        doc = self.walk_inlines_splicing(lua, doc)?;
 
-        // 1. Individual inline element filters
-        for name in &["Str", "Emph", "Strong", "Underline", /* ... */] {
-            if let Some(callback) = self.callbacks.get(*name) {
-                doc = self.apply_to_all_inlines(lua, doc, name, callback)?;
-            }
-        }
+        // 2. Single traversal for Inlines list filter
+        doc = self.walk_inlines_straight(lua, doc)?;
 
-        // 2. Inlines filter (operates on inline lists)
-        if let Some(callback) = self.callbacks.get("Inlines") {
-            doc = self.apply_to_inline_lists(lua, doc, callback)?;
-        }
+        // 3. Single traversal for all block element filters (Para, Header, etc.)
+        //    At each block node, dynamically look up the filter for that node's type
+        doc = self.walk_blocks_splicing(lua, doc)?;
 
-        // 3. Individual block element filters
-        for name in &["Para", "Plain", "Header", "CodeBlock", /* ... */] {
-            if let Some(callback) = self.callbacks.get(*name) {
-                doc = self.apply_to_all_blocks(lua, doc, name, callback)?;
-            }
-        }
-
-        // 4. Blocks filter
-        if let Some(callback) = self.callbacks.get("Blocks") {
-            doc = self.apply_to_block_lists(lua, doc, callback)?;
-        }
+        // 4. Single traversal for Blocks list filter
+        doc = self.walk_blocks_straight(lua, doc)?;
 
         // 5. Meta filter
         if let Some(callback) = self.callbacks.get("Meta") {
@@ -430,12 +465,63 @@ impl LuaFilter {
         Ok(doc)
     }
 
-    fn apply_callback<T: ToLua + FromLua>(
+    /// Walk all inline elements, applying the appropriate filter for each node's type.
+    /// This is a SINGLE traversal - at each node, we look up the filter dynamically.
+    fn walk_inlines_splicing(&self, lua: &Lua, doc: Pandoc) -> LuaResult<Pandoc> {
+        // Check if we have ANY inline filters; if not, skip traversal entirely
+        let inline_names = [
+            "Str", "Emph", "Strong", "Underline", "Strikeout",
+            "Superscript", "Subscript", "SmallCaps", "Quoted",
+            "Cite", "Code", "Space", "SoftBreak", "LineBreak",
+            "Math", "RawInline", "Link", "Image", "Note", "Span",
+            "Inline",  // Generic fallback
+        ];
+        if !inline_names.iter().any(|name| self.callbacks.contains_key(*name)) {
+            return Ok(doc);
+        }
+
+        // Single traversal: visit each inline, look up filter for its type
+        self.traverse_doc_inlines(lua, doc, |lua, inline| {
+            self.apply_element_filter(lua, inline)
+        })
+    }
+
+    /// Walk all block elements, applying the appropriate filter for each node's type.
+    fn walk_blocks_splicing(&self, lua: &Lua, doc: Pandoc) -> LuaResult<Pandoc> {
+        let block_names = [
+            "Plain", "Para", "LineBlock", "CodeBlock", "RawBlock",
+            "BlockQuote", "OrderedList", "BulletList", "DefinitionList",
+            "Header", "HorizontalRule", "Table", "Figure", "Div",
+            "Block",  // Generic fallback
+        ];
+        if !block_names.iter().any(|name| self.callbacks.contains_key(*name)) {
+            return Ok(doc);
+        }
+
+        self.traverse_doc_blocks(lua, doc, |lua, block| {
+            self.apply_element_filter(lua, block)
+        })
+    }
+
+    /// Apply filter to a single element, using dynamic type lookup.
+    /// This is the core of the per-node filter dispatch.
+    fn apply_element_filter<T: ToLua + FromLua + HasTypeName>(
         &self,
         lua: &Lua,
         element: T,
-        callback: &LuaFunction,
     ) -> LuaResult<FilterResult<T>> {
+        // Dynamic lookup: get the filter for this specific element's type
+        let type_name = element.type_name();  // e.g., "Str", "Para", "Header"
+
+        // First try specific type, then generic fallback ("Inline" or "Block")
+        let callback = self.callbacks.get(type_name)
+            .or_else(|| self.callbacks.get(T::base_type_name()));
+
+        let Some(callback) = callback else {
+            return Ok(FilterResult::Unchanged);
+        };
+
+        // Apply the filter
         let lua_value = element.to_lua(lua)?;
         let result: LuaValue = callback.call(lua_value)?;
 
@@ -456,6 +542,30 @@ impl LuaFilter {
             )),
         }
     }
+
+    /// Walk Inlines lists (for the "Inlines" filter)
+    fn walk_inlines_straight(&self, lua: &Lua, doc: Pandoc) -> LuaResult<Pandoc> {
+        let Some(callback) = self.callbacks.get("Inlines") else {
+            return Ok(doc);
+        };
+        self.traverse_doc_inline_lists(lua, doc, callback)
+    }
+
+    /// Walk Blocks lists (for the "Blocks" filter)
+    fn walk_blocks_straight(&self, lua: &Lua, doc: Pandoc) -> LuaResult<Pandoc> {
+        let Some(callback) = self.callbacks.get("Blocks") else {
+            return Ok(doc);
+        };
+        self.traverse_doc_block_lists(lua, doc, callback)
+    }
+}
+
+/// Trait for elements that have a type name for filter dispatch
+trait HasTypeName {
+    /// The specific constructor name (e.g., "Str", "Para")
+    fn type_name(&self) -> &'static str;
+    /// The base type name for fallback (e.g., "Inline", "Block")
+    fn base_type_name() -> &'static str;
 }
 
 enum FilterResult<T> {
@@ -465,6 +575,18 @@ enum FilterResult<T> {
     // For topdown: Skip(T) - skip children
 }
 ```
+
+#### Why This Matters
+
+The incorrect per-type iteration approach would:
+1. **Wrong order**: Process all `Str` elements first, then all `Emph`, etc.
+2. **Multiple traversals**: O(types × nodes) instead of O(nodes)
+3. **Subtle bugs**: Filters that depend on seeing elements in document order would break
+
+The correct approach (single traversal with per-node lookup):
+1. **Document order**: Elements processed as they appear in the document
+2. **Efficient**: Only 4 traversals total (inlines, Inlines, blocks, Blocks)
+3. **Pandoc-compatible**: Matches actual Pandoc behavior
 
 #### Topdown Traversal
 
@@ -721,6 +843,236 @@ fn test_lua_filter_uppercase() {
 
 **Tradeoff:** Round-trip through Lua loses source locations
 
+### 2a. Filter Provenance Tracking
+
+**Problem:** When a downstream warning is emitted about an AST node (e.g., "invalid link target"),
+users need to know which filter created or modified that node.
+
+**Solution:** Track filter provenance using Lua's `debug.getinfo()` and convert it to `SourceInfo`
+when marshaling back to Rust AST nodes. This integrates with the existing source tracking infrastructure.
+
+#### Design Overview
+
+1. **Lua side**: Capture caller location via `debug.getinfo()` in a hidden `__provenance` field
+2. **Rust side**: Convert `__provenance` to `SourceInfo::Original` during unmarshaling
+3. **Result**: Filter-created nodes have proper `SourceInfo` pointing to the filter file+line
+
+#### Integration with SourceInfo System
+
+The existing `quarto-source-map` crate provides:
+- `SourceContext`: Registry of files with `FileId` → path + content + `FileInformation`
+- `FileInformation`: Line break index for mapping line numbers ↔ byte offsets
+- `SourceInfo::Original { file_id, start_offset, end_offset }`: Location in a file
+
+For filter provenance, we:
+1. Capture `{source, line}` from `debug.getinfo()` in Lua (source contains actual file path)
+2. On unmarshal, parse the source string and lazily register files in `SourceContext`
+3. Convert line number → byte offset using `FileInformation`
+4. Create `SourceInfo::Original` with the resolved `FileId` and computed offsets
+
+**Why not use a global FileId?**
+
+A global like `__FILTER_FILE_ID` fails when filters use `require()` or `loadfile()`:
+```lua
+-- main_filter.lua
+local helper = require("helper")  -- helper.lua has different source!
+
+function Str(elem)
+    return helper.transform(elem)  -- provenance should point to helper.lua
+end
+```
+
+The `debug.getinfo().source` field already contains the correct file path for wherever
+the code is actually executing, so we use that directly.
+
+#### Implementation
+
+**Lua: Capture source path from debug.getinfo()**
+
+```lua
+-- Internal: capture caller's location
+-- Uses debug.getinfo().source which contains the actual file path
+local function get_caller_provenance()
+    local info = debug.getinfo(3, "Sl")  -- 3 = caller of constructor
+    if info and info.currentline > 0 then
+        return {
+            source = info.source,  -- "@path/to/file.lua" or "=stdin" etc.
+            line = info.currentline,
+        }
+    end
+    return nil
+end
+
+-- Constructor captures provenance
+function pandoc.Str(text)
+    local elem = {t = "Str", c = text}
+    elem.__provenance = get_caller_provenance()
+    return elem
+end
+```
+
+**Rust: Convert provenance to SourceInfo with lazy file registration**
+
+```rust
+// src/lua/marshal/mod.rs
+
+/// Convert Lua __provenance to SourceInfo
+///
+/// The provenance contains {source, line} where source is from debug.getinfo().source:
+/// - "@path/to/file.lua" for file-based code
+/// - "=description" for custom source names
+/// - literal string for code loaded from strings
+fn provenance_to_source_info(
+    table: &LuaTable,
+    source_context: &mut SourceContext,  // mutable for lazy registration
+    file_cache: &mut HashMap<String, FileId>,  // cache path -> FileId mappings
+) -> LuaResult<quarto_source_map::SourceInfo> {
+    // Try to get provenance from hidden field
+    let prov: Option<LuaTable> = table.get("__provenance").ok();
+
+    let Some(prov) = prov else {
+        // No provenance - use empty SourceInfo
+        return Ok(quarto_source_map::SourceInfo::default());
+    };
+
+    let source: String = prov.get("source")?;
+    let line: usize = prov.get("line")?;
+
+    // Parse Lua source format (see manual lines 4157-4162)
+    let path = if let Some(path) = source.strip_prefix('@') {
+        path  // "@path/to/file.lua" -> "path/to/file.lua"
+    } else {
+        // Non-file source (string chunk, "=stdin", etc.)
+        // Can't provide file-based source info
+        return Ok(quarto_source_map::SourceInfo::default());
+    };
+
+    // Look up in cache or lazily register the file
+    let file_id = if let Some(&cached_id) = file_cache.get(path) {
+        cached_id
+    } else {
+        // Register the file (reads from disk to build FileInformation)
+        let id = source_context.add_file(path.to_string(), None);
+        file_cache.insert(path.to_string(), id);
+        id
+    };
+
+    // Get FileInformation to convert line → byte offset
+    let file = source_context.get_file(file_id)
+        .ok_or_else(|| LuaError::RuntimeError(
+            format!("Failed to get file info for: {}", path)
+        ))?;
+
+    let file_info = match file.file_info.as_ref() {
+        Some(info) => info,
+        None => {
+            // File doesn't exist or couldn't be read - fall back to default
+            return Ok(quarto_source_map::SourceInfo::default());
+        }
+    };
+
+    // Convert 1-indexed line to byte offset
+    let start_offset = file_info.line_to_offset(line.saturating_sub(1));
+    let end_offset = file_info.line_to_offset(line);
+
+    Ok(quarto_source_map::SourceInfo::original(
+        file_id,
+        start_offset,
+        end_offset,
+    ))
+}
+
+// In FromLua for Inline
+impl FromLua for Inline {
+    fn from_lua_with_context(
+        value: LuaValue,
+        lua: &Lua,
+        source_context: &mut SourceContext,
+        file_cache: &mut HashMap<String, FileId>,
+    ) -> LuaResult<Self> {
+        let table = value.as_table()?;
+
+        // Convert __provenance to SourceInfo
+        let source_info = provenance_to_source_info(&table, source_context, file_cache)?;
+
+        let tag: String = table.get("t")?;
+        let content: LuaValue = table.get("c")?;
+
+        match tag.as_str() {
+            "Str" => Ok(Inline::Str(pandoc::Str {
+                value: String::from_lua(content, lua)?,
+                source_info,  // Now populated from filter provenance
+            })),
+            // ... etc
+        }
+    }
+}
+```
+
+#### Key Design Points
+
+1. **Unified with existing SourceInfo**: No separate `FilterProvenance` type. Filter locations
+   become regular `SourceInfo::Original` pointing to the filter file.
+
+2. **Use debug.getinfo().source directly**: This field contains the actual file path where
+   the code is executing, correctly handling `require()`, `loadfile()`, and other dynamic
+   loading mechanisms.
+
+3. **Lazy file registration**: Files are registered in `SourceContext` on-demand when we
+   first encounter them during unmarshaling. A cache avoids redundant lookups/registrations.
+
+4. **Source format parsing**: Lua's source format (manual lines 4157-4162):
+   - `@filename` → file-based code (we can provide SourceInfo)
+   - `=description` → custom source name (no file context)
+   - literal string → code from string (no file context)
+
+5. **Graceful fallback**: For non-file sources or unreadable files, we return
+   `SourceInfo::default()` rather than failing.
+
+6. **Line → Offset conversion**: Lua gives us line numbers; we convert to byte offsets using
+   the file's `FileInformation` (built when registering the file).
+
+7. **Capture at creation time**: Using `debug.getinfo(3, "Sl")`:
+   - Level 0: `debug.getinfo` itself
+   - Level 1: `get_caller_provenance`
+   - Level 2: Constructor (`pandoc.Str`)
+   - Level 3: Actual filter code that called the constructor
+
+#### Warning Output
+
+With this design, warnings naturally show filter locations:
+
+```
+Warning: Invalid link target "foo://bar"
+  --> filters/links.lua:42
+   |
+42 |     return pandoc.Link(text, "foo://bar")
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+```
+
+Because filter-created nodes have `SourceInfo` pointing to the filter file, the existing
+error reporting infrastructure (ariadne) can render them just like document source locations.
+
+#### Alternative: Weak Table Approach
+
+Instead of storing provenance in each element, maintain a Lua weak table:
+
+```lua
+local provenance_map = setmetatable({}, {__mode = "k"})
+
+function pandoc.Str(text)
+    local elem = {t = "Str", c = text}
+    provenance_map[elem] = get_caller_provenance()
+    return elem
+end
+```
+
+Pros: Doesn't modify element structure
+Cons: Provenance lost when elements are copied/cloned in Lua
+
+**Recommendation:** Use the `__provenance` hidden field. It's more robust because
+provenance travels with the element through any Lua transformations.
+
 ### 3. Error Handling
 
 **Decision:** Lua errors become FilterError variants
@@ -779,4 +1131,9 @@ Initial utils to include:
 - mlua documentation: `external-sources/mlua/`
 - Pandoc Lua filter docs: `external-sources/pandoc/doc/lua-filters.md`
 - hslua implementation: `external-sources/hslua/`
+- **pandoc-lua-marshal**: `external-sources/pandoc-lua-marshal/` - Critical for understanding
+  typewise traversal. Key files:
+  - `src/Text/Pandoc/Lua/Marshal/Shared.hs` - `walkBlocksAndInlines` shows the 4-traversal structure
+  - `src/Text/Pandoc/Lua/Walk.hs` - `walkSplicing` and `applySplicing` show per-node filter lookup
+  - `src/Text/Pandoc/Lua/Marshal/Filter.hs` - `getFunctionFor` for dynamic type dispatch
 - Explorer notes: `FILTER_SUMMARY.md`, mlua exploration results

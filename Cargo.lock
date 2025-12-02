@@ -998,6 +998,7 @@ dependencies = [
  "serde",
  "serde_json",
  "supports-hyperlinks",
+ "tempfile",
  "tree-sitter",
  "tree-sitter-qmd",
  "yaml-rust2",
