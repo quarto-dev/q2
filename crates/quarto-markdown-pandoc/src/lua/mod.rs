@@ -9,6 +9,7 @@
  */
 
 mod constructors;
+mod diagnostics;
 mod filter;
 mod list;
 mod types;

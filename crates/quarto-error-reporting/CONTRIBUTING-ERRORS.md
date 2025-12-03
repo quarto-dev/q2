@@ -93,7 +93,10 @@ Quarto uses TypeScript-style error codes: **`Q-<subsystem>-<number>`**
 | **6** | Extensions and Plugins | Q-6-1 (Extension not found) |
 | **7** | CLI and Tools | Q-7-1 (Invalid command) |
 | **8** | Publishing | Q-8-1 (Publish target not found) |
-| **9+** | Reserved | For future subsystems |
+| **9** | XML/CSL | Q-9-1 (XML syntax error) |
+| **10** | Templates | Q-10-1 (Template parse error) |
+| **11** | Lua Filters | Q-11-1 (Lua filter diagnostic) |
+| **12+** | Reserved | For future subsystems |
 
 ### Finding the Next Error Code
 

@@ -47,6 +47,9 @@ pub fn register_pandoc_namespace(lua: &Lua) -> Result<()> {
     // Set as global
     lua.globals().set("pandoc", pandoc)?;
 
+    // Register the quarto namespace (includes quarto.warn, quarto.error)
+    super::diagnostics::register_quarto_namespace(lua)?;
+
     Ok(())
 }
 

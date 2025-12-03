@@ -113,7 +113,10 @@ fn main() {
     if !input.ends_with("\n") {
         let warning = DiagnosticMessageBuilder::warning("Missing Newline at End of File")
             .with_code("Q-7-1")
-            .problem("Input does not end with a newline")
+            .problem(format!(
+                "File `{}` does not end with a newline",
+                input_filename
+            ))
             .add_info("A newline will be added automatically")
             .build();
 
@@ -223,7 +226,24 @@ fn main() {
         (pandoc, context)
     } else {
         match lua::apply_lua_filters(pandoc, context, &args.lua_filters, &args.to) {
-            Ok((filtered_pandoc, filtered_context)) => (filtered_pandoc, filtered_context),
+            Ok((filtered_pandoc, filtered_context, diagnostics)) => {
+                // Output any diagnostics emitted by the filter via quarto.warn()/quarto.error()
+                if !diagnostics.is_empty() {
+                    if args.json_errors {
+                        for diagnostic in &diagnostics {
+                            eprintln!("{}", diagnostic.to_json());
+                        }
+                    } else {
+                        for diagnostic in &diagnostics {
+                            eprintln!(
+                                "{}",
+                                diagnostic.to_text(Some(&filtered_context.source_context))
+                            );
+                        }
+                    }
+                }
+                (filtered_pandoc, filtered_context)
+            }
             Err(e) => {
                 if args.json_errors {
                     let error_json = serde_json::json!({

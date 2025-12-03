@@ -10,6 +10,7 @@
  */
 
 use mlua::{Function, Lua, MultiValue, Result, Table, Value};
+use quarto_error_reporting::DiagnosticMessage;
 use std::path::Path;
 
 use crate::pandoc::ast_context::ASTContext;
@@ -67,7 +68,7 @@ pub type FilterResult<T> = std::result::Result<T, LuaFilterError>;
 
 /// How the document should be traversed when applying a filter
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum WalkingOrder {
+pub enum WalkingOrder {
     /// Process each type separately with four passes (default):
     /// 1. All inline elements (bottom-up)
     /// 2. All inline lists (Inlines filter)
@@ -79,7 +80,7 @@ enum WalkingOrder {
 }
 
 /// Get the walking order from a filter table
-fn get_walking_order(filter_table: &Table) -> Result<WalkingOrder> {
+pub fn get_walking_order(filter_table: &Table) -> Result<WalkingOrder> {
     match filter_table.get::<Option<String>>("traverse")? {
         Some(s) if s == "topdown" => Ok(WalkingOrder::Topdown),
         _ => Ok(WalkingOrder::Typewise),
@@ -87,12 +88,15 @@ fn get_walking_order(filter_table: &Table) -> Result<WalkingOrder> {
 }
 
 /// Apply a single Lua filter to a document
+///
+/// Returns the filtered document, context, and any diagnostics emitted by the filter
+/// via `quarto.warn()` or `quarto.error()`.
 pub fn apply_lua_filter(
     pandoc: &Pandoc,
     context: &ASTContext,
     filter_path: &Path,
     target_format: &str,
-) -> FilterResult<(Pandoc, ASTContext)> {
+) -> FilterResult<(Pandoc, ASTContext, Vec<DiagnosticMessage>)> {
     // Read filter file
     let filter_source = std::fs::read_to_string(filter_path)
         .map_err(|e| LuaFilterError::FileReadError(filter_path.to_owned(), e))?;
@@ -100,7 +104,7 @@ pub fn apply_lua_filter(
     // Create Lua state
     let lua = Lua::new();
 
-    // Register pandoc namespace with constructors
+    // Register pandoc namespace with constructors (also registers quarto namespace)
     register_pandoc_namespace(&lua)?;
 
     // Set global variables
@@ -145,27 +149,33 @@ pub fn apply_lua_filter(
         WalkingOrder::Topdown => apply_topdown_filter(&lua, &filter_table, &pandoc.blocks)?,
     };
 
-    // Return filtered document
+    // Extract any diagnostics emitted by the filter
+    let diagnostics = super::diagnostics::extract_lua_diagnostics(&lua)?;
+
+    // Return filtered document with diagnostics
     let filtered_pandoc = Pandoc {
         meta: pandoc.meta.clone(),
         blocks: filtered_blocks,
     };
 
-    Ok((filtered_pandoc, context.clone()))
+    Ok((filtered_pandoc, context.clone(), diagnostics))
 }
 
 /// Apply multiple Lua filters in sequence
+///
+/// Returns the filtered document, context, and accumulated diagnostics from all filters.
 pub fn apply_lua_filters(
     pandoc: Pandoc,
     context: ASTContext,
     filter_paths: &[std::path::PathBuf],
     target_format: &str,
-) -> FilterResult<(Pandoc, ASTContext)> {
+) -> FilterResult<(Pandoc, ASTContext, Vec<DiagnosticMessage>)> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
+    let mut all_diagnostics = Vec::new();
 
     for filter_path in filter_paths {
-        let (new_pandoc, new_context) = apply_lua_filter(
+        let (new_pandoc, new_context, diagnostics) = apply_lua_filter(
             &current_pandoc,
             &current_context,
             filter_path,
@@ -173,9 +183,10 @@ pub fn apply_lua_filters(
         )?;
         current_pandoc = new_pandoc;
         current_context = new_context;
+        all_diagnostics.extend(diagnostics);
     }
 
-    Ok((current_pandoc, current_context))
+    Ok((current_pandoc, current_context, all_diagnostics))
 }
 
 /// Get the filter table from Lua (either from return value or globals)
@@ -1159,7 +1170,11 @@ fn apply_topdown_filter(lua: &Lua, filter_table: &Table, blocks: &[Block]) -> Re
 }
 
 /// Walk blocks in topdown order: apply Blocks filter, then each block, then children
-fn walk_blocks_topdown(lua: &Lua, filter_table: &Table, blocks: &[Block]) -> Result<Vec<Block>> {
+pub fn walk_blocks_topdown(
+    lua: &Lua,
+    filter_table: &Table,
+    blocks: &[Block],
+) -> Result<Vec<Block>> {
     // Step 1: Apply Blocks filter first (operates on whole list)
     let (blocks, ctrl) = if let Ok(blocks_fn) = filter_table.get::<Function>("Blocks") {
         let blocks_table = blocks_to_lua_table(lua, blocks)?;
@@ -1308,7 +1323,7 @@ fn walk_block_children_topdown(lua: &Lua, filter_table: &Table, block: &Block) -
 }
 
 /// Walk inlines in topdown order: apply Inlines filter, then each inline, then children
-fn walk_inlines_topdown(
+pub fn walk_inlines_topdown(
     lua: &Lua,
     filter_table: &Table,
     inlines: &[Inline],
@@ -1505,7 +1520,11 @@ fn walk_inline_children_topdown(
 }
 
 /// Apply typewise filter traversal (four separate passes)
-fn apply_typewise_filter(lua: &Lua, filter_table: &Table, blocks: &[Block]) -> Result<Vec<Block>> {
+pub fn apply_typewise_filter(
+    lua: &Lua,
+    filter_table: &Table,
+    blocks: &[Block],
+) -> Result<Vec<Block>> {
     // Pass 1: Walk all inlines (splicing)
     let blocks = walk_inline_splicing(lua, filter_table, blocks)?;
     // Pass 2: Walk all inline lists (Inlines filter)
@@ -1514,6 +1533,19 @@ fn apply_typewise_filter(lua: &Lua, filter_table: &Table, blocks: &[Block]) -> R
     let blocks = walk_block_splicing(lua, filter_table, &blocks)?;
     // Pass 4: Walk all block lists (Blocks filter)
     walk_blocks_straight(lua, filter_table, &blocks)
+}
+
+/// Apply typewise filter traversal to inlines only (two passes)
+/// Used for elem:walk{} on inline elements and inline lists
+pub fn apply_typewise_inlines(
+    lua: &Lua,
+    filter_table: &Table,
+    inlines: &[Inline],
+) -> Result<Vec<Inline>> {
+    // Pass 1: Walk all inline elements (splicing)
+    let inlines = walk_inlines_for_element_filters(lua, filter_table, inlines)?;
+    // Pass 2: Apply Inlines list filter
+    apply_inlines_filter(lua, filter_table, &inlines)
 }
 
 #[cfg(test)]
@@ -1583,7 +1615,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -1639,7 +1671,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -1679,7 +1711,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -1712,7 +1744,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         // Identity filter should preserve the document
         match &filtered.blocks[0] {
@@ -1773,7 +1805,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => {
@@ -1824,7 +1856,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => {
@@ -1883,7 +1915,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -1959,7 +1991,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Header(h) => {
@@ -2013,7 +2045,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -2073,7 +2105,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -2152,7 +2184,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         // In topdown mode, Emph is replaced with Span before we visit the Str inside
         // So we should see Span(Str("replaced")), not the original "should_not_see_this"
@@ -2200,7 +2232,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         // The filtered Str should have FilterProvenance source info
         match &filtered.blocks[0] {
@@ -2279,7 +2311,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -2338,7 +2370,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -2482,7 +2514,7 @@ end
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         match &filtered.blocks[0] {
             Block::Paragraph(p) => match &p.content[0] {
@@ -2834,5 +2866,476 @@ end
             vec!["Blocks", "Para", "Para"],
             "Expected topdown: Blocks first, then individual elements"
         );
+    }
+
+    #[test]
+    fn test_elem_walk_typewise_traversal_order() {
+        // Test that elem:walk{} uses correct four-pass traversal order
+        // When walking a Div containing two paragraphs, all Str elements should be
+        // processed before any Para elements.
+        let dir = TempDir::new().unwrap();
+        let order_file = dir.path().join("order.txt");
+        let filter_path = dir.path().join("elem_walk_order.lua");
+
+        fs::write(
+            &filter_path,
+            format!(
+                r#"
+local order_file = io.open("{}", "w")
+
+-- Filter that walks a Div using elem:walk
+function Div(elem)
+    return elem:walk {{
+        Str = function(s)
+            order_file:write("Str:" .. s.text .. "\n")
+            order_file:flush()
+            return s
+        end,
+        Inlines = function(inlines)
+            order_file:write("Inlines\n")
+            order_file:flush()
+            return inlines
+        end,
+        Para = function(p)
+            order_file:write("Para\n")
+            order_file:flush()
+            return p
+        end,
+        Blocks = function(blocks)
+            order_file:write("Blocks\n")
+            order_file:flush()
+            return blocks
+        end
+    }}
+end
+"#,
+                order_file.display()
+            ),
+        )
+        .unwrap();
+
+        // Document: Div containing two paragraphs, each with one Str
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Div(crate::pandoc::Div {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![
+                    Block::Paragraph(crate::pandoc::Paragraph {
+                        content: vec![Inline::Str(crate::pandoc::Str {
+                            text: "a".to_string(),
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        })],
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Block::Paragraph(crate::pandoc::Paragraph {
+                        content: vec![Inline::Str(crate::pandoc::Str {
+                            text: "b".to_string(),
+                            source_info: quarto_source_map::SourceInfo::default(),
+                        })],
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                ],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        let order = fs::read_to_string(&order_file).unwrap();
+        let lines: Vec<&str> = order.lines().collect();
+
+        // Expected four-pass order:
+        // Pass 1: All inline elements (Str:a, Str:b)
+        // Pass 2: All inline lists (Inlines, Inlines) - one per Para
+        // Pass 3: All block elements (Para, Para)
+        // Pass 4: All block lists - there are TWO:
+        //         - Div.content (the inner [Para, Para] list)
+        //         - The wrapper list [Div] from wrapping the single element
+        // Note: The Div filter itself is NOT called because we're inside elem:walk
+        assert_eq!(
+            lines,
+            vec![
+                "Str:a", "Str:b", "Inlines", "Inlines", "Para", "Para", "Blocks", "Blocks"
+            ],
+            "Expected four-pass order: all inlines first, then Inlines lists, then blocks, then Blocks lists"
+        );
+    }
+
+    #[test]
+    fn test_elem_walk_topdown_stop_signal() {
+        // Test that elem:walk{} with topdown correctly handles the stop signal.
+        // When a filter returns (elem, false), it should NOT descend into children.
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("topdown_stop.lua");
+
+        fs::write(
+            &filter_path,
+            r#"
+-- Filter that uses elem:walk with topdown traversal and stop signal
+function Div(elem)
+    return elem:walk {
+        traverse = "topdown",
+        -- Stop descent at Para elements
+        Para = function(p)
+            return p, false
+        end,
+        -- This should NOT be called for Str inside Para
+        Str = function(s)
+            return pandoc.Str(s.text:upper())
+        end
+    }
+end
+"#,
+        )
+        .unwrap();
+
+        // Document: Div containing Para with Str "hello"
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Div(crate::pandoc::Div {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![Inline::Str(crate::pandoc::Str {
+                        text: "hello".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        // The Str should NOT be uppercased because the Para returned false to stop descent
+        match &filtered.blocks[0] {
+            Block::Div(d) => match &d.content[0] {
+                Block::Paragraph(p) => match &p.content[0] {
+                    Inline::Str(s) => {
+                        assert_eq!(
+                            s.text, "hello",
+                            "Str should NOT be uppercased because descent was stopped at Para"
+                        );
+                    }
+                    _ => panic!("Expected Str inline"),
+                },
+                _ => panic!("Expected Paragraph block"),
+            },
+            _ => panic!("Expected Div block"),
+        }
+    }
+
+    #[test]
+    fn test_inlines_walk_typewise_order() {
+        // Test that Inlines:walk{} uses correct two-pass traversal order
+        // All inline element filters should be applied before the Inlines filter
+        let dir = TempDir::new().unwrap();
+        let order_file = dir.path().join("order.txt");
+        let filter_path = dir.path().join("inlines_walk_order.lua");
+
+        fs::write(
+            &filter_path,
+            format!(
+                r#"
+local order_file = io.open("{}", "w")
+
+-- Filter that walks inlines inside a Para
+function Para(elem)
+    local walked = elem.content:walk {{
+        Str = function(s)
+            order_file:write("Str:" .. s.text .. "\n")
+            order_file:flush()
+            return s
+        end,
+        Inlines = function(inlines)
+            order_file:write("Inlines\n")
+            order_file:flush()
+            return inlines
+        end
+    }}
+    return pandoc.Para(walked)
+end
+"#,
+                order_file.display()
+            ),
+        )
+        .unwrap();
+
+        // Document: Para with two Str elements
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![
+                    Inline::Str(crate::pandoc::Str {
+                        text: "a".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Inline::Space(crate::pandoc::Space {
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                    Inline::Str(crate::pandoc::Str {
+                        text: "b".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    }),
+                ],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let _ = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        let order = fs::read_to_string(&order_file).unwrap();
+        let lines: Vec<&str> = order.lines().collect();
+
+        // Expected two-pass order:
+        // Pass 1: All inline elements (Str:a, Str:b)
+        // Pass 2: Inlines list filter
+        assert_eq!(
+            lines,
+            vec!["Str:a", "Str:b", "Inlines"],
+            "Expected two-pass order: all inline elements first, then Inlines list filter"
+        );
+    }
+
+    // ============================================================================
+    // DIAGNOSTICS TESTS
+    // ============================================================================
+
+    #[test]
+    fn test_quarto_warn_in_filter() {
+        // Test that quarto.warn() emits diagnostics during filter execution
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("warn_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+function Str(elem)
+    quarto.warn("This is a warning about: " .. elem.text)
+    return elem
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "hello".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _, diagnostics) =
+            apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        // Document should be unchanged
+        match &filtered.blocks[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "hello"),
+                _ => panic!("Expected Str inline"),
+            },
+            _ => panic!("Expected Paragraph block"),
+        }
+
+        // Should have one warning diagnostic
+        assert_eq!(diagnostics.len(), 1, "Expected 1 diagnostic");
+        assert_eq!(
+            diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Warning
+        );
+        assert!(
+            diagnostics[0]
+                .title
+                .contains("This is a warning about: hello"),
+            "Expected warning message, got: {}",
+            diagnostics[0].title
+        );
+
+        // Check source location
+        if let Some(quarto_source_map::SourceInfo::FilterProvenance { filter_path, line }) =
+            &diagnostics[0].location
+        {
+            assert!(filter_path.contains("warn_test.lua"));
+            assert!(*line > 0, "Line should be positive");
+        } else {
+            panic!("Expected FilterProvenance source info");
+        }
+    }
+
+    #[test]
+    fn test_quarto_error_in_filter() {
+        // Test that quarto.error() emits error diagnostics during filter execution
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("error_test.lua");
+        fs::write(
+            &filter_path,
+            r#"
+function Para(elem)
+    quarto.error("Something went wrong in paragraph processing")
+    return elem
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "test".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (_, _, diagnostics) =
+            apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        // Should have one error diagnostic
+        assert_eq!(diagnostics.len(), 1, "Expected 1 diagnostic");
+        assert_eq!(
+            diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Error
+        );
+        assert!(
+            diagnostics[0]
+                .title
+                .contains("Something went wrong in paragraph processing")
+        );
+    }
+
+    #[test]
+    fn test_multiple_diagnostics_from_filter() {
+        // Test that multiple warn/error calls accumulate diagnostics
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("multi_diag.lua");
+        fs::write(
+            &filter_path,
+            r#"
+function Str(elem)
+    quarto.warn("Warning 1")
+    quarto.error("Error 1")
+    quarto.warn("Warning 2")
+    return elem
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "test".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (_, _, diagnostics) =
+            apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+
+        // Should have 3 diagnostics
+        assert_eq!(diagnostics.len(), 3, "Expected 3 diagnostics");
+        assert_eq!(
+            diagnostics[0].kind,
+            quarto_error_reporting::DiagnosticKind::Warning
+        );
+        assert_eq!(
+            diagnostics[1].kind,
+            quarto_error_reporting::DiagnosticKind::Error
+        );
+        assert_eq!(
+            diagnostics[2].kind,
+            quarto_error_reporting::DiagnosticKind::Warning
+        );
+    }
+
+    #[test]
+    fn test_diagnostics_accumulated_across_filters() {
+        // Test that diagnostics are accumulated when running multiple filters
+        let dir = TempDir::new().unwrap();
+        let filter1_path = dir.path().join("filter1.lua");
+        let filter2_path = dir.path().join("filter2.lua");
+
+        fs::write(
+            &filter1_path,
+            r#"
+function Str(elem)
+    quarto.warn("Warning from filter 1")
+    return elem
+end
+"#,
+        )
+        .unwrap();
+
+        fs::write(
+            &filter2_path,
+            r#"
+function Str(elem)
+    quarto.error("Error from filter 2")
+    return elem
+end
+"#,
+        )
+        .unwrap();
+
+        let pandoc = Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "test".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (_, _, diagnostics) =
+            apply_lua_filters(pandoc, context, &[filter1_path, filter2_path], "html").unwrap();
+
+        // Should have 2 diagnostics from both filters
+        assert_eq!(
+            diagnostics.len(),
+            2,
+            "Expected 2 diagnostics from 2 filters"
+        );
+        assert!(diagnostics[0].title.contains("Warning from filter 1"));
+        assert!(diagnostics[1].title.contains("Error from filter 2"));
     }
 }

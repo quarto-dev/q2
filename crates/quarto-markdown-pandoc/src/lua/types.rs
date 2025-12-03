@@ -9,8 +9,8 @@
  */
 
 use mlua::{
-    Error, Function, IntoLua, Lua, MetaMethod, Result, Table, UserData, UserDataFields,
-    UserDataMethods, UserDataRef, Value, Variadic,
+    Error, IntoLua, Lua, MetaMethod, Result, Table, UserData, UserDataFields, UserDataMethods,
+    UserDataRef, Value, Variadic,
 };
 use quarto_source_map::SourceInfo;
 
@@ -1521,466 +1521,47 @@ impl FromLua for LuaBlock {
     }
 }
 
-/// Apply a filter table to an inline element's children
-/// This implements the walk() method for Inline elements
+/// Apply a filter to a single inline element using correct traversal
+/// This wraps the element in a list and applies the list-walking function
 pub fn walk_inline_with_filter(lua: &Lua, inline: &Inline, filter: &Table) -> Result<Inline> {
-    // Walk applies the filter to children, not to the element itself
-    match inline {
-        // Inlines with content children
-        Inline::Emph(e) => {
-            let filtered = walk_inlines_with_filter(lua, &e.content, filter)?;
-            Ok(Inline::Emph(crate::pandoc::Emph {
-                content: filtered,
-                ..e.clone()
-            }))
-        }
-        Inline::Strong(s) => {
-            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
-            Ok(Inline::Strong(crate::pandoc::Strong {
-                content: filtered,
-                ..s.clone()
-            }))
-        }
-        Inline::Underline(u) => {
-            let filtered = walk_inlines_with_filter(lua, &u.content, filter)?;
-            Ok(Inline::Underline(crate::pandoc::Underline {
-                content: filtered,
-                ..u.clone()
-            }))
-        }
-        Inline::Strikeout(s) => {
-            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
-            Ok(Inline::Strikeout(crate::pandoc::Strikeout {
-                content: filtered,
-                ..s.clone()
-            }))
-        }
-        Inline::Superscript(s) => {
-            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
-            Ok(Inline::Superscript(crate::pandoc::Superscript {
-                content: filtered,
-                ..s.clone()
-            }))
-        }
-        Inline::Subscript(s) => {
-            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
-            Ok(Inline::Subscript(crate::pandoc::Subscript {
-                content: filtered,
-                ..s.clone()
-            }))
-        }
-        Inline::SmallCaps(s) => {
-            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
-            Ok(Inline::SmallCaps(crate::pandoc::SmallCaps {
-                content: filtered,
-                ..s.clone()
-            }))
-        }
-        Inline::Quoted(q) => {
-            let filtered = walk_inlines_with_filter(lua, &q.content, filter)?;
-            Ok(Inline::Quoted(crate::pandoc::Quoted {
-                content: filtered,
-                ..q.clone()
-            }))
-        }
-        Inline::Link(l) => {
-            let filtered = walk_inlines_with_filter(lua, &l.content, filter)?;
-            Ok(Inline::Link(crate::pandoc::Link {
-                content: filtered,
-                ..l.clone()
-            }))
-        }
-        Inline::Image(i) => {
-            let filtered = walk_inlines_with_filter(lua, &i.content, filter)?;
-            Ok(Inline::Image(crate::pandoc::Image {
-                content: filtered,
-                ..i.clone()
-            }))
-        }
-        Inline::Span(s) => {
-            let filtered = walk_inlines_with_filter(lua, &s.content, filter)?;
-            Ok(Inline::Span(crate::pandoc::Span {
-                content: filtered,
-                ..s.clone()
-            }))
-        }
-        // Note contains blocks
-        Inline::Note(n) => {
-            let filtered = walk_blocks_with_filter(lua, &n.content, filter)?;
-            Ok(Inline::Note(crate::pandoc::Note {
-                content: filtered,
-                ..n.clone()
-            }))
-        }
-        // CriticMarkup types
-        Inline::Insert(i) => {
-            let filtered = walk_inlines_with_filter(lua, &i.content, filter)?;
-            Ok(Inline::Insert(crate::pandoc::Insert {
-                content: filtered,
-                ..i.clone()
-            }))
-        }
-        Inline::Delete(d) => {
-            let filtered = walk_inlines_with_filter(lua, &d.content, filter)?;
-            Ok(Inline::Delete(crate::pandoc::Delete {
-                content: filtered,
-                ..d.clone()
-            }))
-        }
-        Inline::Highlight(h) => {
-            let filtered = walk_inlines_with_filter(lua, &h.content, filter)?;
-            Ok(Inline::Highlight(crate::pandoc::Highlight {
-                content: filtered,
-                ..h.clone()
-            }))
-        }
-        Inline::EditComment(ec) => {
-            let filtered = walk_inlines_with_filter(lua, &ec.content, filter)?;
-            Ok(Inline::EditComment(crate::pandoc::EditComment {
-                content: filtered,
-                ..ec.clone()
-            }))
-        }
-        // Terminal inlines - no children to walk
-        Inline::Str(_)
-        | Inline::Code(_)
-        | Inline::Space(_)
-        | Inline::SoftBreak(_)
-        | Inline::LineBreak(_)
-        | Inline::Math(_)
-        | Inline::RawInline(_)
-        | Inline::Cite(_)
-        | Inline::Shortcode(_)
-        | Inline::NoteReference(_)
-        | Inline::Attr(_, _) => Ok(inline.clone()),
-    }
+    let filtered = walk_inlines_with_filter(lua, &[inline.clone()], filter)?;
+    Ok(filtered
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| inline.clone()))
 }
 
-/// Apply a filter table to a block element's children
-/// This implements the walk() method for Block elements
+/// Apply a filter to a single block element using correct traversal
+/// This wraps the element in a list and applies the list-walking function
 pub fn walk_block_with_filter(lua: &Lua, block: &Block, filter: &Table) -> Result<Block> {
-    // Walk applies the filter to children, not to the element itself
-    match block {
-        // Blocks with inline content
-        Block::Plain(p) => {
-            let filtered = walk_inlines_with_filter(lua, &p.content, filter)?;
-            Ok(Block::Plain(crate::pandoc::Plain {
-                content: filtered,
-                ..p.clone()
-            }))
-        }
-        Block::Paragraph(p) => {
-            let filtered = walk_inlines_with_filter(lua, &p.content, filter)?;
-            Ok(Block::Paragraph(crate::pandoc::Paragraph {
-                content: filtered,
-                ..p.clone()
-            }))
-        }
-        Block::Header(h) => {
-            let filtered = walk_inlines_with_filter(lua, &h.content, filter)?;
-            Ok(Block::Header(crate::pandoc::Header {
-                content: filtered,
-                ..h.clone()
-            }))
-        }
-        // Blocks with block content
-        Block::BlockQuote(b) => {
-            let filtered = walk_blocks_with_filter(lua, &b.content, filter)?;
-            Ok(Block::BlockQuote(crate::pandoc::BlockQuote {
-                content: filtered,
-                ..b.clone()
-            }))
-        }
-        Block::Div(d) => {
-            let filtered = walk_blocks_with_filter(lua, &d.content, filter)?;
-            Ok(Block::Div(crate::pandoc::Div {
-                content: filtered,
-                ..d.clone()
-            }))
-        }
-        Block::Figure(f) => {
-            let filtered = walk_blocks_with_filter(lua, &f.content, filter)?;
-            Ok(Block::Figure(crate::pandoc::Figure {
-                content: filtered,
-                ..f.clone()
-            }))
-        }
-        // Lists
-        Block::BulletList(l) => {
-            let filtered_items: Vec<Vec<Block>> = l
-                .content
-                .iter()
-                .map(|item| walk_blocks_with_filter(lua, item, filter))
-                .collect::<Result<_>>()?;
-            Ok(Block::BulletList(crate::pandoc::BulletList {
-                content: filtered_items,
-                ..l.clone()
-            }))
-        }
-        Block::OrderedList(l) => {
-            let filtered_items: Vec<Vec<Block>> = l
-                .content
-                .iter()
-                .map(|item| walk_blocks_with_filter(lua, item, filter))
-                .collect::<Result<_>>()?;
-            Ok(Block::OrderedList(crate::pandoc::OrderedList {
-                content: filtered_items,
-                ..l.clone()
-            }))
-        }
-        // LineBlock has lines (Vec<Vec<Inline>>)
-        Block::LineBlock(l) => {
-            let filtered_lines: Vec<Vec<Inline>> = l
-                .content
-                .iter()
-                .map(|line| walk_inlines_with_filter(lua, line, filter))
-                .collect::<Result<_>>()?;
-            Ok(Block::LineBlock(crate::pandoc::LineBlock {
-                content: filtered_lines,
-                ..l.clone()
-            }))
-        }
-        // Terminal blocks - no children to walk
-        Block::CodeBlock(_)
-        | Block::RawBlock(_)
-        | Block::HorizontalRule(_)
-        | Block::Table(_)
-        | Block::DefinitionList(_)
-        | Block::BlockMetadata(_)
-        | Block::NoteDefinitionPara(_)
-        | Block::NoteDefinitionFencedBlock(_)
-        | Block::CaptionBlock(_) => Ok(block.clone()),
-    }
+    let filtered = walk_blocks_with_filter(lua, &[block.clone()], filter)?;
+    Ok(filtered.into_iter().next().unwrap_or_else(|| block.clone()))
 }
 
-/// Check if the filter uses topdown traversal mode
-fn is_topdown_traversal(filter: &Table) -> bool {
-    filter
-        .get::<Option<String>>("traverse")
-        .ok()
-        .flatten()
-        .map(|s| s == "topdown")
-        .unwrap_or(false)
-}
-
-/// Apply a filter table to a list of inlines
+/// Apply a filter table to a list of inlines using correct two-pass or topdown traversal
 pub fn walk_inlines_with_filter(
     lua: &Lua,
     inlines: &[Inline],
     filter: &Table,
 ) -> Result<Vec<Inline>> {
-    let topdown = is_topdown_traversal(filter);
-    let mut result = Vec::new();
+    use super::filter::{
+        WalkingOrder, apply_typewise_inlines, get_walking_order, walk_inlines_topdown,
+    };
 
-    for inline in inlines {
-        if topdown {
-            // Topdown: apply filter first, then recurse into children
-            let lua_inline = LuaInline(inline.clone());
-            let tag = lua_inline.tag_name();
-
-            // Apply filter to this element first
-            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
-                let inline_ud = lua.create_userdata(lua_inline)?;
-                let ret: Value = filter_fn.call(inline_ud)?;
-                handle_inline_filter_return(ret, inline)?
-            } else if let Ok(filter_fn) = filter.get::<Function>("Inline") {
-                let inline_ud = lua.create_userdata(lua_inline)?;
-                let ret: Value = filter_fn.call(inline_ud)?;
-                handle_inline_filter_return(ret, inline)?
-            } else {
-                vec![inline.clone()]
-            };
-
-            // Then walk children of each filtered element
-            for elem in filtered {
-                let walked = walk_inline_with_filter(lua, &elem, filter)?;
-                result.push(walked);
-            }
-        } else {
-            // Default (typewise/bottom-up): walk children first, then apply filter
-            let walked = walk_inline_with_filter(lua, inline, filter)?;
-
-            // Then apply filter to this element
-            let lua_inline = LuaInline(walked.clone());
-            let tag = lua_inline.tag_name();
-
-            // Try type-specific filter
-            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
-                let inline_ud = lua.create_userdata(lua_inline)?;
-                let ret: Value = filter_fn.call(inline_ud)?;
-                handle_inline_filter_return(ret, &walked)?
-            } else if let Ok(filter_fn) = filter.get::<Function>("Inline") {
-                // Try generic Inline filter
-                let inline_ud = lua.create_userdata(lua_inline)?;
-                let ret: Value = filter_fn.call(inline_ud)?;
-                handle_inline_filter_return(ret, &walked)?
-            } else {
-                vec![walked]
-            };
-
-            result.extend(filtered);
-        }
+    match get_walking_order(filter)? {
+        WalkingOrder::Typewise => apply_typewise_inlines(lua, filter, inlines),
+        WalkingOrder::Topdown => walk_inlines_topdown(lua, filter, inlines),
     }
-
-    // Check for Inlines filter (operates on whole list)
-    if let Ok(filter_fn) = filter.get::<Function>("Inlines") {
-        let inlines_table = inlines_to_lua_table(lua, &result)?;
-        let ret: Value = filter_fn.call(inlines_table)?;
-        match ret {
-            Value::Nil => { /* unchanged */ }
-            Value::Table(table) => {
-                let len = table.raw_len();
-                if len == 0 {
-                    return Ok(vec![]);
-                }
-                result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_inline = ud.borrow::<LuaInline>()?;
-                        result.push(lua_inline.0.clone());
-                    }
-                }
-            }
-            _ => { /* unchanged */ }
-        }
-    }
-
-    Ok(result)
 }
 
-/// Apply a filter table to a list of blocks
+/// Apply a filter table to a list of blocks using correct four-pass or topdown traversal
 pub fn walk_blocks_with_filter(lua: &Lua, blocks: &[Block], filter: &Table) -> Result<Vec<Block>> {
-    let topdown = is_topdown_traversal(filter);
-    let mut result = Vec::new();
+    use super::filter::{
+        WalkingOrder, apply_typewise_filter, get_walking_order, walk_blocks_topdown,
+    };
 
-    for block in blocks {
-        if topdown {
-            // Topdown: apply filter first, then recurse into children
-            let lua_block = LuaBlock(block.clone());
-            let tag = lua_block.tag_name();
-
-            // Apply filter to this element first
-            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
-                let block_ud = lua.create_userdata(lua_block)?;
-                let ret: Value = filter_fn.call(block_ud)?;
-                handle_block_filter_return(ret, block)?
-            } else if let Ok(filter_fn) = filter.get::<Function>("Block") {
-                let block_ud = lua.create_userdata(lua_block)?;
-                let ret: Value = filter_fn.call(block_ud)?;
-                handle_block_filter_return(ret, block)?
-            } else {
-                vec![block.clone()]
-            };
-
-            // Then walk children of each filtered element
-            for elem in filtered {
-                let walked = walk_block_with_filter(lua, &elem, filter)?;
-                result.push(walked);
-            }
-        } else {
-            // Default (typewise/bottom-up): walk children first, then apply filter
-            let walked = walk_block_with_filter(lua, block, filter)?;
-
-            // Then apply filter to this element
-            let lua_block = LuaBlock(walked.clone());
-            let tag = lua_block.tag_name();
-
-            // Try type-specific filter
-            let filtered = if let Ok(filter_fn) = filter.get::<Function>(tag) {
-                let block_ud = lua.create_userdata(lua_block)?;
-                let ret: Value = filter_fn.call(block_ud)?;
-                handle_block_filter_return(ret, &walked)?
-            } else if let Ok(filter_fn) = filter.get::<Function>("Block") {
-                // Try generic Block filter
-                let block_ud = lua.create_userdata(lua_block)?;
-                let ret: Value = filter_fn.call(block_ud)?;
-                handle_block_filter_return(ret, &walked)?
-            } else {
-                vec![walked]
-            };
-
-            result.extend(filtered);
-        }
-    }
-
-    // Check for Blocks filter (operates on whole list)
-    if let Ok(filter_fn) = filter.get::<Function>("Blocks") {
-        let blocks_table = blocks_to_lua_table(lua, &result)?;
-        let ret: Value = filter_fn.call(blocks_table)?;
-        match ret {
-            Value::Nil => { /* unchanged */ }
-            Value::Table(table) => {
-                let len = table.raw_len();
-                if len == 0 {
-                    return Ok(vec![]);
-                }
-                result = Vec::new();
-                for i in 1..=len {
-                    let value: Value = table.get(i)?;
-                    if let Value::UserData(ud) = value {
-                        let lua_block = ud.borrow::<LuaBlock>()?;
-                        result.push(lua_block.0.clone());
-                    }
-                }
-            }
-            _ => { /* unchanged */ }
-        }
-    }
-
-    Ok(result)
-}
-
-/// Handle filter return value for an inline
-fn handle_inline_filter_return(ret: Value, original: &Inline) -> Result<Vec<Inline>> {
-    match ret {
-        Value::Nil => Ok(vec![original.clone()]),
-        Value::UserData(ud) => {
-            let lua_inline = ud.borrow::<LuaInline>()?;
-            Ok(vec![lua_inline.0.clone()])
-        }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                return Ok(vec![]);
-            }
-            let mut inlines = Vec::new();
-            for i in 1..=len {
-                let value: Value = table.get(i)?;
-                if let Value::UserData(ud) = value {
-                    let lua_inline = ud.borrow::<LuaInline>()?;
-                    inlines.push(lua_inline.0.clone());
-                }
-            }
-            Ok(inlines)
-        }
-        _ => Ok(vec![original.clone()]),
-    }
-}
-
-/// Handle filter return value for a block
-fn handle_block_filter_return(ret: Value, original: &Block) -> Result<Vec<Block>> {
-    match ret {
-        Value::Nil => Ok(vec![original.clone()]),
-        Value::UserData(ud) => {
-            let lua_block = ud.borrow::<LuaBlock>()?;
-            Ok(vec![lua_block.0.clone()])
-        }
-        Value::Table(table) => {
-            let len = table.raw_len();
-            if len == 0 {
-                return Ok(vec![]);
-            }
-            let mut blocks = Vec::new();
-            for i in 1..=len {
-                let value: Value = table.get(i)?;
-                if let Value::UserData(ud) = value {
-                    let lua_block = ud.borrow::<LuaBlock>()?;
-                    blocks.push(lua_block.0.clone());
-                }
-            }
-            Ok(blocks)
-        }
-        _ => Ok(vec![original.clone()]),
+    match get_walking_order(filter)? {
+        WalkingOrder::Typewise => apply_typewise_filter(lua, filter, blocks),
+        WalkingOrder::Topdown => walk_blocks_topdown(lua, filter, blocks),
     }
 }

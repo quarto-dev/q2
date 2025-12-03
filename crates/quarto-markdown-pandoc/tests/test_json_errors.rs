@@ -103,6 +103,15 @@ fn test_newline_warning_json() {
         "Expected correct title"
     );
 
+    // Verify the problem statement includes the filename
+    let problem = json_value["problem"]["content"].as_str().unwrap();
+    assert!(
+        problem.contains(temp_file),
+        "Expected problem to contain filename '{}', got: {}",
+        temp_file,
+        problem
+    );
+
     // Clean up
     let _ = fs::remove_file(temp_file);
 }
@@ -135,6 +144,11 @@ fn test_newline_warning_text() {
     assert!(
         stderr.contains("Missing Newline at End of File"),
         "Expected warning title in stderr"
+    );
+    assert!(
+        stderr.contains(temp_file),
+        "Expected filename '{}' in stderr",
+        temp_file
     );
 
     // Clean up

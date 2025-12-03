@@ -10,7 +10,7 @@
 
 use quarto_markdown_pandoc::lua::apply_lua_filters;
 use quarto_markdown_pandoc::pandoc::ast_context::ASTContext;
-use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Plain, Space, Str};
+use quarto_markdown_pandoc::pandoc::{Block, Inline, Pandoc, Paragraph, Space, Str};
 use std::io::Write;
 use tempfile::NamedTempFile;
 
@@ -34,7 +34,8 @@ fn run_filter(filter_code: &str, doc: Pandoc) -> (Pandoc, ASTContext) {
 
     let context = ASTContext::anonymous();
     let result = apply_lua_filters(doc, context, &[filter_file.path().to_path_buf()], "html");
-    result.expect("Filter failed")
+    let (pandoc, context, _diagnostics) = result.expect("Filter failed");
+    (pandoc, context)
 }
 
 #[test]
