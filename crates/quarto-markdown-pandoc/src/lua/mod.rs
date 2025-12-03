@@ -12,7 +12,10 @@ mod constructors;
 mod diagnostics;
 mod filter;
 mod list;
+pub mod runtime;
 mod types;
 mod utils;
 
 pub use filter::apply_lua_filters;
+#[allow(unused_imports)]
+pub use runtime::{LuaRuntime, NativeRuntime, RuntimeError, RuntimeResult};
