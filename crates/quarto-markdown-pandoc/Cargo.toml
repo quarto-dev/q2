@@ -14,7 +14,7 @@ repository.workspace = true
 cargo-fuzz = true
 
 [features]
-default = ["terminal-support", "json-filter"]
+default = ["terminal-support", "json-filter", "lua-filter"]
 terminal-support = ["dep:crossterm", "dep:supports-hyperlinks"]
 terminal-hyperlinks = ["dep:supports-hyperlinks"]
 # Enable JSON filter support (requires subprocess spawning, disable for WASM)

@@ -7,6 +7,7 @@
  */
 
 use clap::Parser;
+use quarto_error_reporting::DiagnosticMessageBuilder;
 use std::io::{self, Read, Write};
 
 mod errors;
@@ -68,7 +69,7 @@ struct Args {
 
     /// Apply a Lua filter to the document (can be specified multiple times)
     #[cfg(feature = "lua-filter")]
-    #[arg(long = "lua-filter", action = clap::ArgAction::Append)]
+    #[arg(short = 'L', long = "lua-filter", action = clap::ArgAction::Append)]
     lua_filters: Vec<std::path::PathBuf>,
 }
 
@@ -110,16 +111,16 @@ fn main() {
     }
 
     if !input.ends_with("\n") {
+        let warning = DiagnosticMessageBuilder::warning("Missing Newline at End of File")
+            .with_code("Q-7-1")
+            .problem("Input does not end with a newline")
+            .add_info("A newline will be added automatically")
+            .build();
+
         if args.json_errors {
-            // Output as JSON to stderr
-            let warning_json = serde_json::json!({
-                "title": "Warning",
-                "message": "Adding missing newline to end of input"
-            });
-            eprintln!("{}", warning_json);
+            eprintln!("{}", warning.to_json());
         } else {
-            // Output as plain text to stderr
-            eprintln!("(Warning) Adding missing newline to end of input.");
+            eprintln!("{}", warning.to_text(None));
         }
         input.push('\n'); // ensure the input ends with a newline
     }

@@ -56,24 +56,126 @@ fn test_regular_error_format() {
 }
 
 #[test]
-fn test_newline_warning() {
-    // Test file without trailing newline
-    let input = "# Hello World";
+fn test_newline_warning_json() {
+    // Create a temporary file WITHOUT trailing newline
+    let temp_file = "/tmp/test_newline_warning.qmd";
+    let input = "# Hello World"; // No trailing newline
 
-    let result = readers::qmd::read(
-        input.as_bytes(),
-        false,
-        "test.md",
-        &mut std::io::sink(),
-        true,
-        None,
+    fs::write(temp_file, input).expect("Failed to write temp file");
+
+    // Run the binary with --json-errors flag
+    let output = Command::new("cargo")
+        .args(&[
+            "run",
+            "-p",
+            "quarto-markdown-pandoc",
+            "--",
+            "-i",
+            temp_file,
+            "--json-errors",
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // Command should succeed (warning doesn't cause failure)
+    assert!(output.status.success(), "Expected command to succeed");
+
+    // stderr should contain JSON warning about missing newline
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Parse the JSON from stderr
+    let json_lines: Vec<&str> = stderr
+        .lines()
+        .filter(|line| line.starts_with("{"))
+        .collect();
+
+    assert!(!json_lines.is_empty(), "Expected JSON output on stderr");
+
+    // Parse the first JSON line (the newline warning)
+    let json_value: serde_json::Value =
+        serde_json::from_str(json_lines[0]).expect("Failed to parse JSON from stderr");
+
+    // Verify the JSON structure for Q-7-1
+    assert_eq!(json_value["kind"], "warning", "Expected warning kind");
+    assert_eq!(json_value["code"], "Q-7-1", "Expected Q-7-1 code");
+    assert_eq!(
+        json_value["title"], "Missing Newline at End of File",
+        "Expected correct title"
     );
 
-    // Should succeed (the newline is added automatically)
-    assert!(result.is_ok());
+    // Clean up
+    let _ = fs::remove_file(temp_file);
+}
 
-    // The newline warning is currently emitted in main.rs, not in the library
-    // This test just verifies that the parse succeeds
+#[test]
+fn test_newline_warning_text() {
+    // Create a temporary file WITHOUT trailing newline
+    let temp_file = "/tmp/test_newline_warning_text.qmd";
+    let input = "# Hello World"; // No trailing newline
+
+    fs::write(temp_file, input).expect("Failed to write temp file");
+
+    // Run the binary WITHOUT --json-errors flag (text output)
+    let output = Command::new("cargo")
+        .args(&["run", "-p", "quarto-markdown-pandoc", "--", "-i", temp_file])
+        .output()
+        .expect("Failed to execute command");
+
+    // Command should succeed (warning doesn't cause failure)
+    assert!(output.status.success(), "Expected command to succeed");
+
+    // stderr should contain text warning about missing newline
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Verify the warning message contains expected content
+    assert!(
+        stderr.contains("Q-7-1"),
+        "Expected Q-7-1 error code in stderr"
+    );
+    assert!(
+        stderr.contains("Missing Newline at End of File"),
+        "Expected warning title in stderr"
+    );
+
+    // Clean up
+    let _ = fs::remove_file(temp_file);
+}
+
+#[test]
+fn test_no_newline_warning_when_present() {
+    // Create a temporary file WITH trailing newline
+    let temp_file = "/tmp/test_no_newline_warning.qmd";
+    let input = "# Hello World\n"; // WITH trailing newline
+
+    fs::write(temp_file, input).expect("Failed to write temp file");
+
+    // Run the binary with --json-errors flag
+    let output = Command::new("cargo")
+        .args(&[
+            "run",
+            "-p",
+            "quarto-markdown-pandoc",
+            "--",
+            "-i",
+            temp_file,
+            "--json-errors",
+        ])
+        .output()
+        .expect("Failed to execute command");
+
+    // Command should succeed
+    assert!(output.status.success(), "Expected command to succeed");
+
+    // stderr should NOT contain Q-7-1 warning
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(
+        !stderr.contains("Q-7-1"),
+        "Should NOT have Q-7-1 warning when file has trailing newline"
+    );
+
+    // Clean up
+    let _ = fs::remove_file(temp_file);
 }
 
 #[test]
