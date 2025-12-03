@@ -10,6 +10,15 @@ This document outlines a comprehensive plan for porting the Pandoc Lua API to ou
 
 ---
 
+## Reference Documents
+
+- **[Pandoc Lua API Index](2025-12-03-pandoc-lua-api-index.md)**: Navigable index to `external-sources/pandoc/doc/lua-filters.md` with line numbers, anchors, and section summaries
+- **[LuaRuntime Abstraction Layer](2025-12-03-lua-runtime-abstraction-layer.md)**: Design for the runtime abstraction that all Lua API implementations must use
+
+**Important**: All Lua API implementations MUST go through the `LuaRuntime` abstraction layer defined in `crates/quarto-markdown-pandoc/src/lua/runtime.rs`. This ensures proper sandboxing, WASM compatibility, and security policy enforcement.
+
+---
+
 ## Current Implementation Status
 
 ### Already Implemented
