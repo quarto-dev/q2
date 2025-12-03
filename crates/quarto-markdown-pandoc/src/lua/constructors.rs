@@ -229,6 +229,12 @@ pub fn register_pandoc_namespace(lua: &Lua) -> Result<()> {
     // Utils namespace
     super::utils::register_pandoc_utils(lua, &pandoc)?;
 
+    // Text namespace (UTF-8 aware string functions)
+    super::text::register_pandoc_text(lua, &pandoc)?;
+
+    // JSON namespace
+    super::json::register_pandoc_json(lua, &pandoc)?;
+
     // Set as global
     lua.globals().set("pandoc", pandoc)?;
 
