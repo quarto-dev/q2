@@ -12,9 +12,14 @@
 use mlua::{Function, Lua, MultiValue, Result, Table, Value};
 use quarto_error_reporting::DiagnosticMessage;
 use std::path::Path;
+use std::sync::Arc;
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::{Block, Inline, Pandoc};
+
+use super::constructors::register_pandoc_namespace;
+use super::runtime::{LuaRuntime, NativeRuntime};
+use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
 
 // ============================================================================
 // TRAVERSAL CONTROL FOR TOPDOWN MODE
@@ -28,9 +33,6 @@ enum TraversalControl {
     /// Stop descent - don't process children
     Stop,
 }
-
-use super::constructors::register_pandoc_namespace;
-use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
 
 /// Errors that can occur during Lua filter execution
 #[derive(Debug)]
@@ -104,8 +106,13 @@ pub fn apply_lua_filter(
     // Create Lua state
     let lua = Lua::new();
 
+    // Create runtime for system operations
+    // For now, we use NativeRuntime. In the future, this could be passed in
+    // to allow for sandboxed or WASM runtimes.
+    let runtime: Arc<dyn LuaRuntime> = Arc::new(NativeRuntime::new());
+
     // Register pandoc namespace with constructors (also registers quarto namespace)
-    register_pandoc_namespace(&lua)?;
+    register_pandoc_namespace(&lua, runtime)?;
 
     // Set global variables
     // FORMAT - the target output format (html, latex, etc.)

@@ -10,6 +10,9 @@
 
 use hashlink::LinkedHashMap;
 use mlua::{Error, IntoLua, Lua, Result, Table as LuaTable, Value};
+use std::sync::Arc;
+
+use super::runtime::LuaRuntime;
 
 use crate::pandoc::{
     Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, CodeBlock,
@@ -211,7 +214,7 @@ pub struct LuaListAttributes(pub ListAttributes);
 impl UserData for LuaListAttributes {}
 
 /// Register the pandoc namespace with element constructors
-pub fn register_pandoc_namespace(lua: &Lua) -> Result<()> {
+pub fn register_pandoc_namespace(lua: &Lua, runtime: Arc<dyn LuaRuntime>) -> Result<()> {
     let pandoc = lua.create_table()?;
 
     // Inline constructors
@@ -234,6 +237,12 @@ pub fn register_pandoc_namespace(lua: &Lua) -> Result<()> {
 
     // JSON namespace
     super::json::register_pandoc_json(lua, &pandoc)?;
+
+    // Path namespace (path manipulation functions)
+    super::path::register_pandoc_path(lua, &pandoc, runtime.clone())?;
+
+    // System namespace (system operations via LuaRuntime)
+    super::system::register_pandoc_system(lua, &pandoc, runtime)?;
 
     // Set as global
     lua.globals().set("pandoc", pandoc)?;
