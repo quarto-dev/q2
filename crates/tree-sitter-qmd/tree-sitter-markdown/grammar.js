@@ -599,13 +599,13 @@ module.exports = grammar({
             ),
         ),
 
-        inline_note: $ => prec(2, seq(
+        inline_note: $ => seq(
             alias($._inline_note_start_token, $.inline_note_delimiter),
             optional($._inline_whitespace),
             $._inlines,
             optional($._inline_whitespace),
             alias(/[\t ]*[\]]/, $.inline_note_delimiter),
-        )),
+        ),
 
         pandoc_superscript: $ => seq(
             alias($._superscript_open, $.superscript_delimiter),
@@ -737,12 +737,12 @@ module.exports = grammar({
         ),
         // List items are closed after two consecutive blank lines
         _list_item_content: $ => choice(
-            prec(1, seq(
+            seq(
                 $._blank_line,
                 $._blank_line,
                 $._close_block,
                 optional($.block_continuation)
-            )),
+            ),
             repeat1($._block),
         ),
 
@@ -820,7 +820,6 @@ module.exports = grammar({
             optional($.block_continuation)
         ),
 
-        // pandoc_line_break: $ => seq(/\\/, choice($._newline, $._eof)),
 
         _inline_whitespace: $ => prec(-1, choice($._whitespace, $._soft_line_break)),
         _whitespace: $ => /[ \t]+/,
