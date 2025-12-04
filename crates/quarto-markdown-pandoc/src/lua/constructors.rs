@@ -12,6 +12,7 @@ use hashlink::LinkedHashMap;
 use mlua::{Error, IntoLua, Lua, Result, Table as LuaTable, Value};
 use std::sync::Arc;
 
+use super::mediabag::SharedMediaBag;
 use super::runtime::LuaRuntime;
 
 use crate::pandoc::{
@@ -214,7 +215,11 @@ pub struct LuaListAttributes(pub ListAttributes);
 impl UserData for LuaListAttributes {}
 
 /// Register the pandoc namespace with element constructors
-pub fn register_pandoc_namespace(lua: &Lua, runtime: Arc<dyn LuaRuntime>) -> Result<()> {
+pub fn register_pandoc_namespace(
+    lua: &Lua,
+    runtime: Arc<dyn LuaRuntime>,
+    mediabag: SharedMediaBag,
+) -> Result<()> {
     let pandoc = lua.create_table()?;
 
     // Inline constructors
@@ -242,7 +247,13 @@ pub fn register_pandoc_namespace(lua: &Lua, runtime: Arc<dyn LuaRuntime>) -> Res
     super::path::register_pandoc_path(lua, &pandoc, runtime.clone())?;
 
     // System namespace (system operations via LuaRuntime)
-    super::system::register_pandoc_system(lua, &pandoc, runtime)?;
+    super::system::register_pandoc_system(lua, &pandoc, runtime.clone())?;
+
+    // MediaBag namespace (media storage and manipulation)
+    super::mediabag::register_pandoc_mediabag(lua, &pandoc, runtime, mediabag)?;
+
+    // Read/Write functions (pandoc.read, pandoc.write, and option constructors)
+    super::readwrite::register_pandoc_readwrite(lua, &pandoc)?;
 
     // Set as global
     lua.globals().set("pandoc", pandoc)?;

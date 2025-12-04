@@ -18,6 +18,8 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::{Block, Inline, Pandoc};
 
 use super::constructors::register_pandoc_namespace;
+use super::mediabag::create_shared_mediabag;
+use super::readwrite::{create_reader_options_table, create_writer_options_table};
 use super::runtime::{LuaRuntime, NativeRuntime};
 use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
 
@@ -111,8 +113,12 @@ pub fn apply_lua_filter(
     // to allow for sandboxed or WASM runtimes.
     let runtime: Arc<dyn LuaRuntime> = Arc::new(NativeRuntime::new());
 
+    // Create mediabag for storing media items
+    // In the future, this could be pre-populated from the document or passed in
+    let mediabag = create_shared_mediabag();
+
     // Register pandoc namespace with constructors (also registers quarto namespace)
-    register_pandoc_namespace(&lua, runtime)?;
+    register_pandoc_namespace(&lua, runtime, mediabag)?;
 
     // Set global variables
     // FORMAT - the target output format (html, latex, etc.)
@@ -138,6 +144,16 @@ pub fn apply_lua_filter(
         "PANDOC_SCRIPT_FILE",
         filter_path.to_string_lossy().to_string(),
     )?;
+
+    // PANDOC_READER_OPTIONS - reader options used for the input
+    // We provide default options since we don't track actual reader options yet
+    let reader_options = create_reader_options_table(&lua, None)?;
+    lua.globals().set("PANDOC_READER_OPTIONS", reader_options)?;
+
+    // PANDOC_WRITER_OPTIONS - writer options to be used for output
+    // We provide default options since we don't track actual writer options yet
+    let writer_options = create_writer_options_table(&lua, None)?;
+    lua.globals().set("PANDOC_WRITER_OPTIONS", writer_options)?;
 
     // Load and execute filter script
     lua.load(&filter_source)

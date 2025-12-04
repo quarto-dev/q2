@@ -17,6 +17,7 @@ mod filters;
 mod json_filter;
 #[cfg(feature = "lua-filter")]
 mod lua;
+mod options;
 mod pandoc;
 mod readers;
 mod traversals;
