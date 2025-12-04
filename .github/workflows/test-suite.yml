@@ -6,9 +6,11 @@ on:
     # only trigger on branches, not on tags
     branches:
       - main
+      - kyoto
   pull_request:
     branches:
       - main
+      - kyoto
 jobs:
   test-suite:
     strategy:
