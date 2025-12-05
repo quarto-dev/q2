@@ -3,13 +3,16 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-use quarto_markdown_pandoc::template::{
-    render_with_bundle, BodyFormat, TemplateBundle,
-};
+use quarto_markdown_pandoc::template::{BodyFormat, TemplateBundle, render_with_bundle};
 use quarto_markdown_pandoc::wasm_entry_points;
 
 /// Helper to parse QMD and return (Pandoc, ASTContext)
-fn parse_qmd(input: &str) -> (quarto_markdown_pandoc::pandoc::Pandoc, quarto_markdown_pandoc::pandoc::ast_context::ASTContext) {
+fn parse_qmd(
+    input: &str,
+) -> (
+    quarto_markdown_pandoc::pandoc::Pandoc,
+    quarto_markdown_pandoc::pandoc::ast_context::ASTContext,
+) {
     wasm_entry_points::qmd_to_pandoc(input.as_bytes()).expect("Failed to parse QMD")
 }
 
@@ -122,8 +125,7 @@ Hello **bold** and *italic*.
 
 #[test]
 fn test_bundle_json_roundtrip() {
-    let bundle = TemplateBundle::new("$body$")
-        .with_partial("header", "<header>$title$</header>");
+    let bundle = TemplateBundle::new("$body$").with_partial("header", "<header>$title$</header>");
 
     let json = bundle.to_json().expect("Serialization should succeed");
     let parsed = TemplateBundle::from_json(&json).expect("Deserialization should succeed");
@@ -271,7 +273,12 @@ fn test_wasm_invalid_body_format() {
     let parsed: serde_json::Value = serde_json::from_str(&result).expect("Should be valid JSON");
 
     assert!(parsed.get("error").is_some(), "Should have error field");
-    assert!(parsed["error"].as_str().unwrap().contains("Unknown body format"));
+    assert!(
+        parsed["error"]
+            .as_str()
+            .unwrap()
+            .contains("Unknown body format")
+    );
 }
 
 // =============================================================================
@@ -333,5 +340,8 @@ Content.
         .expect("Render should succeed");
 
     // MetaInlines are rendered as strings, so bold should appear as HTML
-    assert!(output.contains("Hello <strong>bold</strong> world") || output.contains("Hello **bold** world"));
+    assert!(
+        output.contains("Hello <strong>bold</strong> world")
+            || output.contains("Hello **bold** world")
+    );
 }

@@ -82,7 +82,7 @@ pub fn render_with_template_bundle(
     bundle_json: &str,
     body_format: &str,
 ) -> String {
-    use crate::template::{render_with_bundle, BodyFormat, TemplateBundle};
+    use crate::template::{BodyFormat, TemplateBundle, render_with_bundle};
 
     // Parse the bundle
     let bundle = match TemplateBundle::from_json(bundle_json) {
@@ -122,13 +122,11 @@ pub fn render_with_template_bundle(
             })
             .to_string()
         }
-        Err(e) => {
-            serde_json::json!({
-                "error": format!("Template render error: {}", e),
-                "diagnostics": []
-            })
-            .to_string()
-        }
+        Err(e) => serde_json::json!({
+            "error": format!("Template render error: {}", e),
+            "diagnostics": []
+        })
+        .to_string(),
     }
 }
 
@@ -172,7 +170,7 @@ pub fn parse_and_render_qmd(input: &[u8], bundle_json: &str, body_format: &str) 
 /// * The template bundle JSON on success
 /// * `{ "error": "..." }` on failure
 pub fn get_builtin_template_json(name: &str) -> String {
-    use crate::template::builtin::{get_builtin_template, BUILTIN_TEMPLATE_NAMES};
+    use crate::template::builtin::{BUILTIN_TEMPLATE_NAMES, get_builtin_template};
 
     match get_builtin_template(name) {
         Some(bundle) => match bundle.to_json() {

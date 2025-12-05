@@ -42,7 +42,7 @@ pub mod context;
 pub mod render;
 
 // Re-export main types for convenience
-pub use builtin::{get_builtin_template, is_builtin_template, BUILTIN_TEMPLATE_NAMES};
+pub use builtin::{BUILTIN_TEMPLATE_NAMES, get_builtin_template, is_builtin_template};
 pub use bundle::TemplateBundle;
 pub use context::{MetaWriter, meta_to_template_value, pandoc_to_context};
 pub use render::{BodyFormat, TemplateRenderError, render_with_bundle, render_with_resolver};

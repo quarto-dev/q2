@@ -22,6 +22,6 @@ mod text;
 mod types;
 mod utils;
 
-pub use filter::apply_lua_filters;
+pub use filter::{LuaFilterError, apply_lua_filters};
 #[allow(unused_imports)]
 pub use runtime::{LuaRuntime, NativeRuntime, RuntimeError, RuntimeResult};

@@ -10,6 +10,7 @@ use clap::Parser;
 use quarto_error_reporting::DiagnosticMessageBuilder;
 use std::io::{self, Read, Write};
 
+mod citeproc_filter;
 mod errors;
 mod filter_context;
 mod filters;
@@ -22,12 +23,13 @@ mod pandoc;
 mod readers;
 mod template;
 mod traversals;
+mod unified_filter;
 mod utils;
 mod writers;
 use template::{
-    builtin::{get_builtin_template, is_builtin_template, BUILTIN_TEMPLATE_NAMES},
-    render::{render_with_bundle, BodyFormat},
     TemplateBundle,
+    builtin::{BUILTIN_TEMPLATE_NAMES, get_builtin_template, is_builtin_template},
+    render::{BodyFormat, render_with_bundle},
 };
 use utils::output::VerboseOutput;
 
@@ -69,15 +71,13 @@ struct Args {
     )]
     _internal_report_error_state: bool,
 
-    /// Apply a JSON filter to the document (can be specified multiple times)
-    #[cfg(feature = "json-filter")]
-    #[arg(long = "json-filter", action = clap::ArgAction::Append)]
-    json_filters: Vec<std::path::PathBuf>,
-
-    /// Apply a Lua filter to the document (can be specified multiple times)
-    #[cfg(feature = "lua-filter")]
-    #[arg(short = 'L', long = "lua-filter", action = clap::ArgAction::Append)]
-    lua_filters: Vec<std::path::PathBuf>,
+    /// Apply a filter to the document (can be specified multiple times).
+    /// Filter type is determined automatically:
+    /// - "citeproc": built-in citation processor
+    /// - *.lua: Lua filter
+    /// - anything else: JSON filter (external executable)
+    #[arg(short = 'F', long = "filter", action = clap::ArgAction::Append)]
+    filters: Vec<String>,
 
     /// Use a template (built-in name like 'html5' or file path)
     #[cfg(feature = "template-fs")]
@@ -112,18 +112,16 @@ fn main() {
     // Handle --export-template early (like --help)
     if let Some(template_name) = &args.export_template {
         match get_builtin_template(template_name) {
-            Some(bundle) => {
-                match bundle.to_json() {
-                    Ok(json) => {
-                        println!("{}", json);
-                        return;
-                    }
-                    Err(e) => {
-                        eprintln!("Error serializing template: {}", e);
-                        std::process::exit(1);
-                    }
+            Some(bundle) => match bundle.to_json() {
+                Ok(json) => {
+                    println!("{}", json);
+                    return;
                 }
-            }
+                Err(e) => {
+                    eprintln!("Error serializing template: {}", e);
+                    std::process::exit(1);
+                }
+            },
             None => {
                 eprintln!(
                     "Unknown built-in template: '{}'. Available: {}",
@@ -244,36 +242,20 @@ fn main() {
         }
     };
 
-    // Apply JSON filters if any are specified
-    #[cfg(feature = "json-filter")]
-    let (pandoc, context) = if args.json_filters.is_empty() {
+    // Apply filters in order
+    let (pandoc, context) = if args.filters.is_empty() {
         (pandoc, context)
     } else {
-        match json_filter::apply_json_filters(pandoc, context, &args.json_filters, &args.to) {
-            Ok((filtered_pandoc, filtered_context)) => (filtered_pandoc, filtered_context),
-            Err(e) => {
-                if args.json_errors {
-                    let error_json = serde_json::json!({
-                        "title": "JSON Filter Error",
-                        "message": e.to_string()
-                    });
-                    eprintln!("{}", error_json);
-                } else {
-                    eprintln!("JSON filter error: {}", e);
-                }
-                std::process::exit(1);
-            }
-        }
-    };
+        // Parse filter specifications
+        let filter_specs: Vec<unified_filter::FilterSpec> = args
+            .filters
+            .iter()
+            .map(|s| unified_filter::FilterSpec::parse(s))
+            .collect();
 
-    // Apply Lua filters if any are specified
-    #[cfg(feature = "lua-filter")]
-    let (pandoc, context) = if args.lua_filters.is_empty() {
-        (pandoc, context)
-    } else {
-        match lua::apply_lua_filters(pandoc, context, &args.lua_filters, &args.to) {
+        match unified_filter::apply_filters(pandoc, context, &filter_specs, &args.to) {
             Ok((filtered_pandoc, filtered_context, diagnostics)) => {
-                // Output any diagnostics emitted by the filter via quarto.warn()/quarto.error()
+                // Output any diagnostics from filters
                 if !diagnostics.is_empty() {
                     if args.json_errors {
                         for diagnostic in &diagnostics {
@@ -293,12 +275,12 @@ fn main() {
             Err(e) => {
                 if args.json_errors {
                     let error_json = serde_json::json!({
-                        "title": "Lua Filter Error",
+                        "title": "Filter Error",
                         "message": e.to_string()
                     });
                     eprintln!("{}", error_json);
                 } else {
-                    eprintln!("Lua filter error: {}", e);
+                    eprintln!("Filter error: {}", e);
                 }
                 std::process::exit(1);
             }
@@ -310,7 +292,11 @@ fn main() {
     let template_bundle: Option<TemplateBundle> = {
         if let Some(bundle_path) = &args.template_bundle {
             let bundle_json = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
-                eprintln!("Failed to read template bundle '{}': {}", bundle_path.display(), e);
+                eprintln!(
+                    "Failed to read template bundle '{}': {}",
+                    bundle_path.display(),
+                    e
+                );
                 std::process::exit(1);
             });
             match TemplateBundle::from_json(&bundle_json) {
@@ -340,7 +326,11 @@ fn main() {
     let template_bundle: Option<TemplateBundle> = {
         if let Some(bundle_path) = &args.template_bundle {
             let bundle_json = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
-                eprintln!("Failed to read template bundle '{}': {}", bundle_path.display(), e);
+                eprintln!(
+                    "Failed to read template bundle '{}': {}",
+                    bundle_path.display(),
+                    e
+                );
                 std::process::exit(1);
             });
             match TemplateBundle::from_json(&bundle_json) {
@@ -411,10 +401,12 @@ fn main() {
             "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
             "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
                 vec![
-                    quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                        .with_code("Q-3-1")
-                        .problem(format!("Failed to write HTML output: {}", e))
-                        .build(),
+                    quarto_error_reporting::DiagnosticMessageBuilder::error(
+                        "IO error during write",
+                    )
+                    .with_code("Q-3-1")
+                    .problem(format!("Failed to write HTML output: {}", e))
+                    .build(),
                 ]
             }),
             "plaintext" | "plain" => {

@@ -13,6 +13,7 @@ use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
 use crate::readers;
 use crate::writers;
+use quarto_error_reporting::DiagnosticMessage;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
@@ -90,13 +91,15 @@ impl std::error::Error for JsonFilterError {}
 ///
 /// # Returns
 ///
-/// A tuple of the filtered Pandoc document and updated ASTContext.
+/// A tuple of the filtered Pandoc document, updated ASTContext, and any diagnostics.
+/// JSON filters don't produce diagnostics through our system, so the diagnostics
+/// vector is always empty.
 pub fn apply_json_filter(
     pandoc: &Pandoc,
     context: &ASTContext,
     filter_path: &Path,
     target_format: &str,
-) -> Result<(Pandoc, ASTContext), JsonFilterError> {
+) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), JsonFilterError> {
     // 1. Serialize document to JSON (including source locations - our format is a
     // superset of Pandoc's, so filters that don't understand source info will ignore it,
     // and filters that preserve it allow us to maintain source tracking through the pipeline)
@@ -147,7 +150,8 @@ pub fn apply_json_filter(
     let (filtered_pandoc, filtered_context) = readers::json::read(&mut json_output.as_bytes())
         .map_err(|e| JsonFilterError::JsonParseError(filter_path.to_owned(), e.to_string()))?;
 
-    Ok((filtered_pandoc, filtered_context))
+    // JSON filters don't produce diagnostics through our system
+    Ok((filtered_pandoc, filtered_context, vec![]))
 }
 
 /// Apply multiple JSON filters in sequence.
@@ -159,12 +163,13 @@ pub fn apply_json_filters(
     context: ASTContext,
     filter_paths: &[std::path::PathBuf],
     target_format: &str,
-) -> Result<(Pandoc, ASTContext), JsonFilterError> {
+) -> Result<(Pandoc, ASTContext, Vec<DiagnosticMessage>), JsonFilterError> {
     let mut current_pandoc = pandoc;
     let mut current_context = context;
+    let mut all_diagnostics = Vec::new();
 
     for filter_path in filter_paths {
-        let (new_pandoc, new_context) = apply_json_filter(
+        let (new_pandoc, new_context, diagnostics) = apply_json_filter(
             &current_pandoc,
             &current_context,
             filter_path,
@@ -172,9 +177,10 @@ pub fn apply_json_filters(
         )?;
         current_pandoc = new_pandoc;
         current_context = new_context;
+        all_diagnostics.extend(diagnostics);
     }
 
-    Ok((current_pandoc, current_context))
+    Ok((current_pandoc, current_context, all_diagnostics))
 }
 
 #[cfg(test)]
@@ -274,7 +280,7 @@ sys.exit(1)
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_json_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_json_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         // The identity filter should preserve the document
         match &filtered.blocks[0] {
@@ -309,7 +315,7 @@ sys.exit(1)
         };
         let context = ASTContext::new();
 
-        let (filtered, _) = apply_json_filter(&pandoc, &context, &filter_path, "html").unwrap();
+        let (filtered, _, _) = apply_json_filter(&pandoc, &context, &filter_path, "html").unwrap();
 
         // The uppercase filter should convert text to uppercase
         match &filtered.blocks[0] {
@@ -370,7 +376,7 @@ sys.exit(1)
         };
         let context = ASTContext::new();
 
-        let (filtered, _) =
+        let (filtered, _, _) =
             apply_json_filters(pandoc, context, &[identity, uppercase], "html").unwrap();
 
         match &filtered.blocks[0] {

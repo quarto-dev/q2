@@ -59,7 +59,8 @@ const STYLES_HTML: &str = include_str!("../../resources/templates/html/styles.ht
 
 /// Pandoc's styles.citations.html partial.
 /// Loaded from resources/templates/html/styles.citations.html
-const STYLES_CITATIONS_HTML: &str = include_str!("../../resources/templates/html/styles.citations.html");
+const STYLES_CITATIONS_HTML: &str =
+    include_str!("../../resources/templates/html/styles.citations.html");
 
 /// A minimal plain template that just outputs the body.
 const PLAIN_TEMPLATE: &str = "$body$\n";
@@ -100,13 +101,21 @@ mod tests {
         let bundle = html_bundle();
         // Should compile without error
         let result = bundle.compile("html.html");
-        assert!(result.is_ok(), "html template should compile: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "html template should compile: {:?}",
+            result.err()
+        );
     }
 
     #[test]
     fn test_plain_template_compiles() {
         let bundle = plain_bundle();
         let result = bundle.compile("plain.txt");
-        assert!(result.is_ok(), "plain template should compile: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "plain template should compile: {:?}",
+            result.err()
+        );
     }
 }

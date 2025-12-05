@@ -34,6 +34,8 @@ quarto-parse-errors = { path = "../quarto-parse-errors" }
 quarto-treesitter-ast = { workspace = true }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-doctemplate = { workspace = true }
+quarto-citeproc = { path = "../quarto-citeproc" }
+quarto-csl = { path = "../quarto-csl" }
 regex = { version = "1.10.0", features = ["unicode"] }
 clap = { version = "4.0", features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }
