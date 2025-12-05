@@ -76,8 +76,13 @@ jobs:
         shell: bash
 
       # build and run tests
+      # on windows, insta install will be 
+      # powershell -c "irm https://insta.rs/install.ps1 | iex"
+      # see https://insta.rs/docs/quickstart/
       - name: Install insta and nextest
-        run: cargo install insta cargo-nextest
+        run: |
+          cargo install cargo-nextest
+          curl -LsSf https://insta.rs/install.sh | sh
         shell: bash
 
       - name: Build
