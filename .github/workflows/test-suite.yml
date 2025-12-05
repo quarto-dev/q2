@@ -76,6 +76,10 @@ jobs:
         shell: bash
 
       # build and run tests
+      - name: Install insta and nextest
+        run: cargo install insta cargo-nextest
+        shell: bash
+
       - name: Build
         run: cargo build
         shell: bash
