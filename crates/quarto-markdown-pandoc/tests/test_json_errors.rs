@@ -64,16 +64,8 @@ fn test_newline_warning_json() {
     fs::write(temp_file, input).expect("Failed to write temp file");
 
     // Run the binary with --json-errors flag
-    let output = Command::new("cargo")
-        .args(&[
-            "run",
-            "-p",
-            "quarto-markdown-pandoc",
-            "--",
-            "-i",
-            temp_file,
-            "--json-errors",
-        ])
+    let output = Command::new(env!("CARGO_BIN_EXE_quarto-markdown-pandoc"))
+        .args(&["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -125,8 +117,8 @@ fn test_newline_warning_text() {
     fs::write(temp_file, input).expect("Failed to write temp file");
 
     // Run the binary WITHOUT --json-errors flag (text output)
-    let output = Command::new("cargo")
-        .args(&["run", "-p", "quarto-markdown-pandoc", "--", "-i", temp_file])
+    let output = Command::new(env!("CARGO_BIN_EXE_quarto-markdown-pandoc"))
+        .args(&["-i", temp_file])
         .output()
         .expect("Failed to execute command");
 
@@ -164,16 +156,8 @@ fn test_no_newline_warning_when_present() {
     fs::write(temp_file, input).expect("Failed to write temp file");
 
     // Run the binary with --json-errors flag
-    let output = Command::new("cargo")
-        .args(&[
-            "run",
-            "-p",
-            "quarto-markdown-pandoc",
-            "--",
-            "-i",
-            temp_file,
-            "--json-errors",
-        ])
+    let output = Command::new(env!("CARGO_BIN_EXE_quarto-markdown-pandoc"))
+        .args(&["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -207,16 +191,8 @@ description: "[incomplete link"
     fs::write(temp_file, input).expect("Failed to write temp file");
 
     // Run the binary with --json-errors flag
-    let output = Command::new("cargo")
-        .args(&[
-            "run",
-            "-p",
-            "quarto-markdown-pandoc",
-            "--",
-            "-i",
-            temp_file,
-            "--json-errors",
-        ])
+    let output = Command::new(env!("CARGO_BIN_EXE_quarto-markdown-pandoc"))
+        .args(&["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -254,16 +230,8 @@ fn test_json_errors_flag_with_error() {
     fs::write(temp_file, input).expect("Failed to write temp file");
 
     // Run the binary with --json-errors flag
-    let output = Command::new("cargo")
-        .args(&[
-            "run",
-            "-p",
-            "quarto-markdown-pandoc",
-            "--",
-            "-i",
-            temp_file,
-            "--json-errors",
-        ])
+    let output = Command::new(env!("CARGO_BIN_EXE_quarto-markdown-pandoc"))
+        .args(&["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
