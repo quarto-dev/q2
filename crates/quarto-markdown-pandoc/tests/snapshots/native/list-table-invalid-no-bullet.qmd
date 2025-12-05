@@ -1,0 +1,5 @@
+::: {.list-table}
+
+Just a paragraph, no bullet list.
+
+:::

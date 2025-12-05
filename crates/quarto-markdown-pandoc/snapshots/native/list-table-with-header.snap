@@ -1,0 +1,6 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+assertion_line: 362
+expression: output
+---
+[ Table ( "" , [] , [] ) (Caption Nothing []) [(AlignDefault, ColWidthDefault), (AlignDefault, ColWidthDefault)] (TableHead ( "" , [] , [] ) [Row ( "" , [] , [] ) [Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "Header", Space, Str "1"]] , Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "Header", Space, Str "2"]] ] ]) [TableBody ( "" , [] , [] ) (RowHeadColumns 0) [] [Row ( "" , [] , [] ) [Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "Cell", Space, Str "1,1"]] , Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "Cell", Space, Str "1,2"]] ] , Row ( "" , [] , [] ) [Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "Cell", Space, Str "2,1"]] , Cell ( "" , [] , [] ) AlignDefault (RowSpan 1) (ColSpan 1) [Plain [Str "Cell", Space, Str "2,2"]] ] ]] (TableFoot ( "" , [] , [] ) [] ) ]

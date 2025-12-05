@@ -1,0 +1,7 @@
+::: {.list-table}
+
+* - []{colspan="2"} Spans two columns
+* - Cell 1
+  - Cell 2
+
+:::

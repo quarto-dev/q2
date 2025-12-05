@@ -1,0 +1,6 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+assertion_line: 362
+expression: output
+---
+[ Div ( "" , ["list-table"] , [] ) [Para [Str "Just", Space, Str "a", Space, Str "paragraph,", Space, Str "no", Space, Str "bullet", Space, Str "list."]] ]

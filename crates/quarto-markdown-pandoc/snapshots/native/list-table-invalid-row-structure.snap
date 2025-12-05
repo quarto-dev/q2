@@ -1,0 +1,6 @@
+---
+source: crates/quarto-markdown-pandoc/tests/test.rs
+assertion_line: 362
+expression: output
+---
+[ Div ( "" , ["list-table"] , [] ) [BulletList [[Plain [Str "Just", Space, Str "text,", Space, Str "not", Space, Str "a", Space, Str "bullet", Space, Str "list", Space, Str "of", Space, Str "cells"]], [BulletList [[Plain [Str "Cell", Space, Str "1"]], [Plain [Str "Cell", Space, Str "2"]]]]]] ]

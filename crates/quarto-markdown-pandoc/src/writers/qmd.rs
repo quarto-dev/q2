@@ -5,8 +5,9 @@
 
 use crate::pandoc::attr::is_empty_attr;
 use crate::pandoc::block::MetaBlock;
+use crate::pandoc::inline::Inline;
 use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
-use crate::pandoc::table::{Alignment, Cell, Table};
+use crate::pandoc::table::{Alignment, Cell, ColWidth, Row, Table};
 use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
@@ -779,11 +780,282 @@ fn write_fenced_note_definition(
     Ok(())
 }
 
+/// Check if a cell's content is "simple" - suitable for pipe table format.
+/// Simple content is a single Plain or Paragraph block with no line breaks.
+fn cell_has_simple_content(content: &[Block]) -> bool {
+    if content.len() != 1 {
+        return false;
+    }
+
+    let inlines = match &content[0] {
+        Block::Plain(plain) => &plain.content,
+        Block::Paragraph(para) => &para.content,
+        _ => return false,
+    };
+
+    // Check for soft/hard breaks in the content
+    !inlines
+        .iter()
+        .any(|inline| matches!(inline, Inline::SoftBreak(_) | Inline::LineBreak(_)))
+}
+
+/// Check if a table can be written in pipe table format.
+/// Returns false if the table requires list-table format.
+///
+/// A table can use pipe format if:
+/// - No cells have row_span > 1 or col_span > 1
+/// - All cells contain only "simple" content (single Para/Plain without breaks)
+fn table_can_use_pipe_format(table: &Table) -> bool {
+    // Check header rows
+    for row in &table.head.rows {
+        for cell in &row.cells {
+            if cell.row_span > 1 || cell.col_span > 1 {
+                return false;
+            }
+            if !cell_has_simple_content(&cell.content) {
+                return false;
+            }
+        }
+    }
+
+    // Check body rows
+    for body in &table.bodies {
+        for row in &body.body {
+            for cell in &row.cells {
+                if cell.row_span > 1 || cell.col_span > 1 {
+                    return false;
+                }
+                if !cell_has_simple_content(&cell.content) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    // Check footer rows
+    for row in &table.foot.rows {
+        for cell in &row.cells {
+            if cell.row_span > 1 || cell.col_span > 1 {
+                return false;
+            }
+            if !cell_has_simple_content(&cell.content) {
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Convert Alignment to character code for list-table
+fn alignment_to_char(align: &Alignment) -> char {
+    match align {
+        Alignment::Left => 'l',
+        Alignment::Center => 'c',
+        Alignment::Right => 'r',
+        Alignment::Default => 'd',
+    }
+}
+
+/// Write a table as a list-table div.
+/// This format supports multi-line cells, rowspan, colspan, etc.
+fn write_list_table(
+    table: &Table,
+    buf: &mut dyn std::io::Write,
+    ctx: &mut QmdWriterContext,
+) -> std::io::Result<()> {
+    // Build div attributes
+    let mut div_classes = vec!["list-table".to_string()];
+    div_classes.extend(table.attr.1.iter().cloned());
+
+    // Count header rows
+    let header_row_count = table.head.rows.len();
+
+    // Build attributes
+    let mut attrs: Vec<String> = Vec::new();
+
+    // Add header-rows if there are header rows
+    if header_row_count > 0 {
+        attrs.push(format!("header-rows=\"{}\"", header_row_count));
+    }
+
+    // Add alignments if there are non-default alignments
+    let has_non_default_aligns = table.colspec.iter().any(|(a, _)| *a != Alignment::Default);
+    if has_non_default_aligns {
+        let aligns: String = table
+            .colspec
+            .iter()
+            .map(|(a, _)| alignment_to_char(a).to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+        attrs.push(format!("aligns=\"{}\"", aligns));
+    }
+
+    // Add widths if there are non-default widths
+    let has_non_default_widths = table
+        .colspec
+        .iter()
+        .any(|(_, w)| matches!(w, ColWidth::Percentage(_)));
+    if has_non_default_widths {
+        let widths: Vec<String> = table
+            .colspec
+            .iter()
+            .map(|(_, w)| match w {
+                ColWidth::Percentage(p) => format!("{}", p),
+                ColWidth::Default => "1".to_string(),
+            })
+            .collect();
+        attrs.push(format!("widths=\"{}\"", widths.join(",")));
+    }
+
+    // Copy any other attributes from the table
+    for (k, v) in &table.attr.2 {
+        attrs.push(format!("{}=\"{}\"", k, v));
+    }
+
+    // Write div opening
+    let id_part = if table.attr.0.is_empty() {
+        String::new()
+    } else {
+        format!("#{} ", table.attr.0)
+    };
+
+    let classes_part = div_classes
+        .iter()
+        .map(|c| format!(".{}", c))
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let attrs_part = if attrs.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", attrs.join(" "))
+    };
+
+    writeln!(buf, "::: {{{}{}{}}}", id_part, classes_part, attrs_part)?;
+    writeln!(buf)?;
+
+    // Write caption if present
+    if let Some(ref long_caption) = table.caption.long {
+        if !long_caption.is_empty() {
+            for block in long_caption {
+                write_block(block, buf, ctx)?;
+            }
+            writeln!(buf)?;
+        }
+    }
+
+    // Collect all rows
+    let mut all_rows: Vec<&Row> = Vec::new();
+    for row in &table.head.rows {
+        all_rows.push(row);
+    }
+    for body in &table.bodies {
+        for row in &body.body {
+            all_rows.push(row);
+        }
+    }
+    for row in &table.foot.rows {
+        all_rows.push(row);
+    }
+
+    // Write each row as a bullet list item containing a nested bullet list of cells
+    for row in all_rows {
+        // Each row is "* - cell1\n  - cell2\n..."
+        for (cell_idx, cell) in row.cells.iter().enumerate() {
+            if cell_idx == 0 {
+                write!(buf, "* ")?;
+            } else {
+                write!(buf, "  ")?;
+            }
+            write!(buf, "- ")?;
+
+            // Check if we need to add cell attributes (colspan, rowspan, align)
+            let needs_attrs =
+                cell.col_span > 1 || cell.row_span > 1 || cell.alignment != Alignment::Default;
+
+            if needs_attrs {
+                write!(buf, "[]")?;
+                write!(buf, "{{")?;
+                let mut attr_parts: Vec<String> = Vec::new();
+                if cell.col_span > 1 {
+                    attr_parts.push(format!("colspan=\"{}\"", cell.col_span));
+                }
+                if cell.row_span > 1 {
+                    attr_parts.push(format!("rowspan=\"{}\"", cell.row_span));
+                }
+                if cell.alignment != Alignment::Default {
+                    attr_parts.push(format!("align=\"{}\"", alignment_to_char(&cell.alignment)));
+                }
+                write!(buf, "{}", attr_parts.join(" "))?;
+                write!(buf, "}} ")?;
+            }
+
+            // Write cell content
+            if cell.content.is_empty() {
+                // Empty cell - write empty span to mark it
+                if !needs_attrs {
+                    write!(buf, "[]")?;
+                }
+            } else {
+                // Write cell content inline if single block with simple content
+                // Otherwise write as nested blocks
+                if cell.content.len() == 1 {
+                    match &cell.content[0] {
+                        Block::Plain(plain) => {
+                            for inline in &plain.content {
+                                write_inline(inline, buf, ctx)?;
+                            }
+                        }
+                        Block::Paragraph(para) => {
+                            for inline in &para.content {
+                                write_inline(inline, buf, ctx)?;
+                            }
+                        }
+                        other => {
+                            writeln!(buf)?;
+                            // Indent the block content
+                            let mut block_buf = Vec::<u8>::new();
+                            write_block(other, &mut block_buf, ctx)?;
+                            let content = String::from_utf8_lossy(&block_buf);
+                            for line in content.lines() {
+                                writeln!(buf, "    {}", line)?;
+                            }
+                            continue; // Skip the newline at the end since we already wrote it
+                        }
+                    }
+                } else {
+                    // Multiple blocks - write on new lines with indentation
+                    writeln!(buf)?;
+                    for block in &cell.content {
+                        let mut block_buf = Vec::<u8>::new();
+                        write_block(block, &mut block_buf, ctx)?;
+                        let content = String::from_utf8_lossy(&block_buf);
+                        for line in content.lines() {
+                            writeln!(buf, "    {}", line)?;
+                        }
+                    }
+                    continue; // Skip the newline at the end since we already wrote it
+                }
+            }
+            writeln!(buf)?;
+        }
+    }
+
+    writeln!(buf, ":::")?;
+    Ok(())
+}
+
 fn write_table(
     table: &Table,
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
+    // Use list-table format if the table has features that pipe tables don't support
+    if !table_can_use_pipe_format(table) {
+        return write_list_table(table, buf, ctx);
+    }
+
     // Collect all rows (header + body rows)
     let mut all_rows = Vec::new();
 
@@ -875,10 +1147,15 @@ fn write_table(
         if !long_caption.is_empty() {
             writeln!(buf)?; // Blank line before caption
             for block in long_caption {
-                // Extract inline content from Plain blocks in caption
-                if let Block::Plain(plain) = block {
+                // Extract inline content from Plain or Paragraph blocks in caption
+                let content = match block {
+                    Block::Plain(plain) => Some(&plain.content),
+                    Block::Paragraph(para) => Some(&para.content),
+                    _ => None,
+                };
+                if let Some(inlines) = content {
                     write!(buf, ": ")?;
-                    for inline in &plain.content {
+                    for inline in inlines {
                         write_inline(inline, buf, ctx)?;
                     }
                     writeln!(buf)?;

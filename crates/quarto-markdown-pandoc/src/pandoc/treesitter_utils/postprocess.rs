@@ -16,8 +16,475 @@ use crate::pandoc::{
 use crate::utils::autoid;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
 use hashlink::LinkedHashMap;
+use quarto_error_reporting::DiagnosticMessageBuilder;
+use quarto_pandoc_types::AttrSourceInfo;
+use quarto_pandoc_types::table::{
+    Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
+};
+use quarto_source_map::SourceInfo;
 use std::cell::RefCell;
 use std::collections::HashMap;
+
+/// Result of validating a list-table div
+#[derive(Debug)]
+pub enum ListTableValidation {
+    /// Div is a valid list-table and can be transformed
+    Valid,
+    /// Div doesn't have 'list-table' class (not an error, just skip)
+    NotListTable,
+    /// Div has 'list-table' class but has invalid structure
+    Invalid {
+        reason: String,
+        location: SourceInfo,
+    },
+}
+
+/// Validate that a div has the structure required for a list-table.
+///
+/// Valid structure:
+/// - Div must have "list-table" class
+/// - Div must contain at least one block, with the last block being a BulletList
+/// - Blocks before the BulletList (if any) form the caption
+/// - The outer BulletList represents rows
+/// - Each row item must contain exactly one block which is a BulletList (the cells)
+///
+/// Returns:
+/// - `Valid` if the div can be transformed to a Table
+/// - `NotListTable` if the div doesn't have the list-table class
+/// - `Invalid` with reason and location if the structure is malformed
+fn validate_list_table_div(div: &Div) -> ListTableValidation {
+    // Check if div has "list-table" class
+    if !div.attr.1.contains(&"list-table".to_string()) {
+        return ListTableValidation::NotListTable;
+    }
+
+    // Must contain at least one block
+    if div.content.is_empty() {
+        return ListTableValidation::Invalid {
+            reason: "list-table div must contain at least one bullet list".to_string(),
+            location: div.source_info.clone(),
+        };
+    }
+
+    // Last block must be a BulletList (the rows)
+    let last_block = div.content.last().unwrap();
+    let Block::BulletList(rows_list) = last_block else {
+        return ListTableValidation::Invalid {
+            reason: "list-table div's last block must be a bullet list (the rows)".to_string(),
+            location: get_block_source_info(last_block),
+        };
+    };
+
+    // Each row item must contain exactly one block which is a BulletList (the cells)
+    for (row_idx, row_blocks) in rows_list.content.iter().enumerate() {
+        // Each row should have exactly one block
+        if row_blocks.len() != 1 {
+            let location = if row_blocks.is_empty() {
+                rows_list.source_info.clone()
+            } else {
+                get_block_source_info(&row_blocks[0])
+            };
+            return ListTableValidation::Invalid {
+                reason: format!(
+                    "row {} in list-table must contain exactly one bullet list (the cells), found {} blocks",
+                    row_idx + 1,
+                    row_blocks.len()
+                ),
+                location,
+            };
+        }
+
+        // That one block must be a BulletList (the cells)
+        let Block::BulletList(_cells_list) = &row_blocks[0] else {
+            return ListTableValidation::Invalid {
+                reason: format!(
+                    "row {} in list-table must contain a bullet list of cells",
+                    row_idx + 1
+                ),
+                location: get_block_source_info(&row_blocks[0]),
+            };
+        };
+    }
+
+    ListTableValidation::Valid
+}
+
+/// Helper to get the source info from a Block
+fn get_block_source_info(block: &Block) -> SourceInfo {
+    match block {
+        Block::Plain(b) => b.source_info.clone(),
+        Block::Paragraph(b) => b.source_info.clone(),
+        Block::LineBlock(b) => b.source_info.clone(),
+        Block::CodeBlock(b) => b.source_info.clone(),
+        Block::RawBlock(b) => b.source_info.clone(),
+        Block::BlockQuote(b) => b.source_info.clone(),
+        Block::OrderedList(b) => b.source_info.clone(),
+        Block::BulletList(b) => b.source_info.clone(),
+        Block::DefinitionList(b) => b.source_info.clone(),
+        Block::Header(b) => b.source_info.clone(),
+        Block::HorizontalRule(b) => b.source_info.clone(),
+        Block::Table(b) => b.source_info.clone(),
+        Block::Figure(b) => b.source_info.clone(),
+        Block::Div(b) => b.source_info.clone(),
+        Block::BlockMetadata(b) => b.source_info.clone(),
+        Block::CaptionBlock(b) => b.source_info.clone(),
+        Block::NoteDefinitionPara(b) => b.source_info.clone(),
+        Block::NoteDefinitionFencedBlock(b) => b.source_info.clone(),
+    }
+}
+
+/// Parse alignment string ("l,c,r,d") into a vector of Alignment
+fn parse_alignments(aligns_str: &str) -> Vec<Alignment> {
+    aligns_str
+        .split(',')
+        .map(|s| match s.trim() {
+            "l" => Alignment::Left,
+            "c" => Alignment::Center,
+            "r" => Alignment::Right,
+            _ => Alignment::Default,
+        })
+        .collect()
+}
+
+/// Parse widths string ("1,2,1") into a vector of ColWidth
+fn parse_widths(widths_str: &str) -> Vec<ColWidth> {
+    widths_str
+        .split(',')
+        .map(|s| {
+            if let Ok(ratio) = s.trim().parse::<f64>() {
+                if ratio > 0.0 {
+                    // Widths in list-table are ratios; we'll normalize them later
+                    ColWidth::Percentage(ratio)
+                } else {
+                    ColWidth::Default
+                }
+            } else {
+                ColWidth::Default
+            }
+        })
+        .collect()
+}
+
+/// Parse alignment character to Alignment
+fn char_to_alignment(c: &str) -> Alignment {
+    match c {
+        "l" => Alignment::Left,
+        "c" => Alignment::Center,
+        "r" => Alignment::Right,
+        _ => Alignment::Default,
+    }
+}
+
+/// Cell attributes extracted from an empty span at the start of a cell
+struct CellAttrs {
+    colspan: usize,
+    rowspan: usize,
+    alignment: Alignment,
+}
+
+/// Extract cell attributes from the first inline of the first block if it's an empty span.
+/// Returns the extracted attributes and mutates the blocks to remove the attribute span.
+fn extract_cell_attrs(blocks: &mut Blocks) -> CellAttrs {
+    let mut attrs = CellAttrs {
+        colspan: 1,
+        rowspan: 1,
+        alignment: Alignment::Default,
+    };
+
+    if blocks.is_empty() {
+        return attrs;
+    }
+
+    // Check if first block has inline content with an empty span at the start
+    let first_inline_is_empty_span = match &blocks[0] {
+        Block::Plain(plain) => {
+            if let Some(Inline::Span(span)) = plain.content.first() {
+                span.content.is_empty()
+            } else {
+                false
+            }
+        }
+        Block::Paragraph(para) => {
+            if let Some(Inline::Span(span)) = para.content.first() {
+                span.content.is_empty()
+            } else {
+                false
+            }
+        }
+        _ => false,
+    };
+
+    if !first_inline_is_empty_span {
+        return attrs;
+    }
+
+    // Extract attributes from the span and remove it
+    match &mut blocks[0] {
+        Block::Plain(plain) => {
+            if let Some(Inline::Span(span)) = plain.content.first() {
+                // Extract attributes
+                for (key, value) in &span.attr.2 {
+                    match key.as_str() {
+                        "colspan" => {
+                            if let Ok(v) = value.parse::<usize>() {
+                                attrs.colspan = v.max(1);
+                            }
+                        }
+                        "rowspan" => {
+                            if let Ok(v) = value.parse::<usize>() {
+                                attrs.rowspan = v.max(1);
+                            }
+                        }
+                        "align" => {
+                            attrs.alignment = char_to_alignment(value);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            // Remove the empty span
+            plain.content.remove(0);
+            // Also remove any leading space that might follow the span
+            if let Some(Inline::Space(_)) = plain.content.first() {
+                plain.content.remove(0);
+            }
+        }
+        Block::Paragraph(para) => {
+            if let Some(Inline::Span(span)) = para.content.first() {
+                // Extract attributes
+                for (key, value) in &span.attr.2 {
+                    match key.as_str() {
+                        "colspan" => {
+                            if let Ok(v) = value.parse::<usize>() {
+                                attrs.colspan = v.max(1);
+                            }
+                        }
+                        "rowspan" => {
+                            if let Ok(v) = value.parse::<usize>() {
+                                attrs.rowspan = v.max(1);
+                            }
+                        }
+                        "align" => {
+                            attrs.alignment = char_to_alignment(value);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            // Remove the empty span
+            para.content.remove(0);
+            // Also remove any leading space that might follow the span
+            if let Some(Inline::Space(_)) = para.content.first() {
+                para.content.remove(0);
+            }
+        }
+        _ => {}
+    }
+
+    attrs
+}
+
+/// Create an empty Attr
+fn empty_table_attr() -> Attr {
+    (String::new(), Vec::new(), LinkedHashMap::new())
+}
+
+/// Create an empty AttrSourceInfo
+fn empty_attr_source() -> AttrSourceInfo {
+    AttrSourceInfo::empty()
+}
+
+/// Transform a valid list-table div into a Table block.
+///
+/// PRECONDITION: div must pass validate_list_table_div() check with Valid result.
+fn transform_list_table_div(div: Div) -> Block {
+    let source_info = div.source_info.clone();
+
+    // Extract attributes from div (LinkedHashMap iteration returns (&String, &String))
+    let header_rows: usize = div
+        .attr
+        .2
+        .get("header-rows")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+
+    let aligns_str = div.attr.2.get("aligns").map(|v| v.as_str());
+    let widths_str = div.attr.2.get("widths").map(|v| v.as_str());
+
+    // Build table attr from div attr, excluding list-table specific attributes
+    let table_id = div.attr.0.clone();
+    let table_classes: Vec<String> = div
+        .attr
+        .1
+        .iter()
+        .filter(|c| *c != "list-table")
+        .cloned()
+        .collect();
+    let mut table_kvs: LinkedHashMap<String, String> = LinkedHashMap::new();
+    for (k, v) in &div.attr.2 {
+        if k != "header-rows" && k != "aligns" && k != "widths" {
+            table_kvs.insert(k.clone(), v.clone());
+        }
+    }
+    let table_attr = (table_id, table_classes, table_kvs);
+
+    // Split content: caption blocks vs the rows BulletList
+    let mut content = div.content;
+    let rows_bullet_list = content.pop().unwrap(); // Last block is the BulletList (validated)
+    let caption_blocks = content; // Everything else is caption
+
+    // Build caption
+    let caption = if caption_blocks.is_empty() {
+        Caption {
+            short: None,
+            long: None,
+            source_info: empty_source_info(),
+        }
+    } else {
+        Caption {
+            short: None,
+            long: Some(caption_blocks),
+            source_info: source_info.clone(),
+        }
+    };
+
+    // Extract the rows from the outer BulletList
+    let Block::BulletList(outer_list) = rows_bullet_list else {
+        panic!("Expected BulletList after validation");
+    };
+
+    // Process each row
+    let mut all_rows: Vec<Row> = Vec::new();
+    let mut num_cols: usize = 0;
+
+    for row_blocks in outer_list.content {
+        // Each row has exactly one block which is a BulletList of cells (validated)
+        let Block::BulletList(cells_list) = row_blocks.into_iter().next().unwrap() else {
+            panic!("Expected BulletList for cells after validation");
+        };
+
+        let row_source_info = cells_list.source_info.clone();
+        let mut cells: Vec<Cell> = Vec::new();
+
+        for mut cell_blocks in cells_list.content {
+            // Extract cell attributes from empty span if present
+            let cell_attrs = extract_cell_attrs(&mut cell_blocks);
+
+            let cell_source_info = if cell_blocks.is_empty() {
+                row_source_info.clone()
+            } else {
+                get_block_source_info(&cell_blocks[0])
+            };
+
+            cells.push(Cell {
+                attr: empty_table_attr(),
+                alignment: cell_attrs.alignment,
+                row_span: cell_attrs.rowspan,
+                col_span: cell_attrs.colspan,
+                content: cell_blocks,
+                source_info: cell_source_info,
+                attr_source: empty_attr_source(),
+            });
+        }
+
+        // Track max columns (accounting for colspan)
+        let row_cols: usize = cells.iter().map(|c| c.col_span).sum();
+        num_cols = num_cols.max(row_cols);
+
+        all_rows.push(Row {
+            attr: empty_table_attr(),
+            cells,
+            source_info: row_source_info,
+            attr_source: empty_attr_source(),
+        });
+    }
+
+    // Build colspec from aligns and widths
+    let alignments = aligns_str.map(parse_alignments).unwrap_or_default();
+    let widths = widths_str.map(parse_widths).unwrap_or_default();
+
+    // Normalize widths to percentages that sum to 1.0
+    let normalized_widths: Vec<ColWidth> = if widths.is_empty() {
+        vec![ColWidth::Default; num_cols]
+    } else {
+        let total: f64 = widths
+            .iter()
+            .map(|w| match w {
+                ColWidth::Percentage(p) => *p,
+                ColWidth::Default => 1.0,
+            })
+            .sum();
+
+        widths
+            .iter()
+            .map(|w| match w {
+                ColWidth::Percentage(p) if total > 0.0 => ColWidth::Percentage(*p / total),
+                _ => ColWidth::Default,
+            })
+            .collect()
+    };
+
+    // Build colspec (alignment, width) pairs
+    let colspec: Vec<ColSpec> = (0..num_cols)
+        .map(|i| {
+            let align = alignments.get(i).cloned().unwrap_or(Alignment::Default);
+            let width = normalized_widths
+                .get(i)
+                .cloned()
+                .unwrap_or(ColWidth::Default);
+            (align, width)
+        })
+        .collect();
+
+    // Split rows into head and body based on header-rows attribute
+    let (head_rows, body_rows) = if header_rows > 0 && header_rows <= all_rows.len() {
+        let (head, body) = all_rows.split_at(header_rows);
+        (head.to_vec(), body.to_vec())
+    } else {
+        (Vec::new(), all_rows)
+    };
+
+    // Build TableHead
+    let head = TableHead {
+        attr: empty_table_attr(),
+        rows: head_rows,
+        source_info: source_info.clone(),
+        attr_source: empty_attr_source(),
+    };
+
+    // Build TableBody (single body with all non-header rows)
+    let bodies = if body_rows.is_empty() {
+        Vec::new()
+    } else {
+        vec![TableBody {
+            attr: empty_table_attr(),
+            rowhead_columns: 0,
+            head: Vec::new(),
+            body: body_rows,
+            source_info: source_info.clone(),
+            attr_source: empty_attr_source(),
+        }]
+    };
+
+    // Build empty TableFoot
+    let foot = TableFoot {
+        attr: empty_table_attr(),
+        rows: Vec::new(),
+        source_info: source_info.clone(),
+        attr_source: empty_attr_source(),
+    };
+
+    Block::Table(Table {
+        attr: table_attr,
+        caption,
+        colspec,
+        head,
+        bodies,
+        foot,
+        source_info,
+        attr_source: div.attr_source,
+    })
+}
 
 /// Trim leading and trailing spaces from inlines
 pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {
@@ -390,12 +857,35 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                     true,
                 )
             })
-            // Convert definition-list divs to DefinitionList blocks
+            // Convert list-table divs to Table blocks and definition-list divs to DefinitionList blocks
             .with_div(|div, _ctx| {
-                if is_valid_definition_list_div(&div) {
-                    FilterResult(vec![transform_definition_list_div(div)], false)
-                } else {
-                    Unchanged(div)
+                // First check for list-table
+                match validate_list_table_div(&div) {
+                    ListTableValidation::Valid => {
+                        FilterResult(vec![transform_list_table_div(div)], false)
+                    }
+                    ListTableValidation::Invalid { reason, location } => {
+                        // Emit warning for malformed list-table div
+                        error_collector_ref.borrow_mut().add(
+                            DiagnosticMessageBuilder::warning("Invalid List-Table Structure")
+                                .with_code("Q-2-35")
+                                .with_location(location)
+                                .problem(reason)
+                                .add_hint(
+                                    "Check the list-table documentation for the correct structure?",
+                                )
+                                .build(),
+                        );
+                        Unchanged(div) // Leave as-is
+                    }
+                    ListTableValidation::NotListTable => {
+                        // Not a list-table, check for definition-list
+                        if is_valid_definition_list_div(&div) {
+                            FilterResult(vec![transform_definition_list_div(div)], false)
+                        } else {
+                            Unchanged(div)
+                        }
+                    }
                 }
             })
             // Remove single empty spans from bullet list items

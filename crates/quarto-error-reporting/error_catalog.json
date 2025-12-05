@@ -342,6 +342,13 @@
     "docs_url": "https://quarto.org/docs/errors/Q-2-34",
     "since_version": "99.9.9"
   },
+  "Q-2-35": {
+    "subsystem": "markdown",
+    "title": "Invalid List-Table Structure",
+    "message_template": "A div with class 'list-table' has an invalid structure and cannot be converted to a table.",
+    "docs_url": "https://quarto.org/docs/errors/Q-2-35",
+    "since_version": "99.9.9"
+  },
 
   "Q-3-1": {
     "subsystem": "writer",

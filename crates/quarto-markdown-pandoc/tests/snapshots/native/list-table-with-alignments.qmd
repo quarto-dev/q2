@@ -1,0 +1,10 @@
+::: {.list-table aligns="l,c,r"}
+
+* - Left
+  - Center
+  - Right
+* - A
+  - B
+  - C
+
+:::

@@ -1,0 +1,7 @@
+::: {.list-table}
+
+* Just text, not a bullet list of cells
+* - Cell 1
+  - Cell 2
+
+:::
