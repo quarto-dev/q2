@@ -1,3 +1,21 @@
 target
-.beads
+
+# This is from https://github.com/steveyegge/beads/blob/main/.gitignore
+
+# Daemon runtime files
+.beads/daemon.log
+.beads/daemon.pid
+.beads/daemon.lock
+.beads/daemon-error
+.beads/bd.sock
+.beads/.exclusive-lock
+
+# .beads directory files (keep JSONL only)
+.beads/.gitignore
+.beads/db.sqlite
+.beads/k.db
+
+# Keep JSONL exports (source of truth for git)
+!.beads/*.jsonl
+
 external-sources/
