@@ -14,6 +14,7 @@ pub mod lua;
 pub mod options;
 pub mod pandoc;
 pub mod readers;
+pub mod template;
 pub mod traversals;
 pub mod utils;
 pub mod wasm_entry_points;

@@ -1092,6 +1092,7 @@ dependencies = [
  "mlua",
  "once_cell",
  "paste",
+ "quarto-doctemplate",
  "quarto-error-message-macros",
  "quarto-error-reporting",
  "quarto-pandoc-types",

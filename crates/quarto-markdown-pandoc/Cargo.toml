@@ -14,13 +14,15 @@ repository.workspace = true
 cargo-fuzz = true
 
 [features]
-default = ["terminal-support", "json-filter", "lua-filter"]
+default = ["terminal-support", "json-filter", "lua-filter", "template-fs"]
 terminal-support = ["dep:crossterm", "dep:supports-hyperlinks"]
 terminal-hyperlinks = ["dep:supports-hyperlinks"]
 # Enable JSON filter support (requires subprocess spawning, disable for WASM)
 json-filter = []
 # Enable Lua filter support (disable for WASM, where mlua is not available)
 lua-filter = ["dep:mlua"]
+# Enable filesystem-based template resolution (disable for WASM)
+template-fs = []
 
 [dependencies]
 tree-sitter = { workspace = true }
@@ -31,6 +33,7 @@ quarto-yaml = { path = "../quarto-yaml" }
 quarto-parse-errors = { path = "../quarto-parse-errors" }
 quarto-treesitter-ast = { workspace = true }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
+quarto-doctemplate = { workspace = true }
 regex = { version = "1.10.0", features = ["unicode"] }
 clap = { version = "4.0", features = ["derive"] }
 serde = { workspace = true, features = ["derive"] }

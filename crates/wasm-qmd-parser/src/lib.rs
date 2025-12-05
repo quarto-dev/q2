@@ -123,3 +123,37 @@ fn as_string(value: &JsValue, name: &str) -> String {
         None => panic!("Unable to parse `{}` as a `String`.", name),
     }
 }
+
+/// Render a QMD document with a template bundle.
+///
+/// # Arguments
+/// * `input` - QMD source text
+/// * `bundle_json` - Template bundle as JSON string
+/// * `body_format` - "html" or "plaintext"
+///
+/// # Returns
+/// JSON object with `{ "output": "..." }` or `{ "error": "...", "diagnostics": [...] }`
+#[wasm_bindgen]
+pub fn render_with_template(input: JsValue, bundle_json: JsValue, body_format: JsValue) -> JsValue {
+    let input = as_string(&input, "input");
+    let bundle_json = as_string(&bundle_json, "bundle_json");
+    let body_format = as_string(&body_format, "body_format");
+
+    let result =
+        wasm_entry_points::parse_and_render_qmd(input.as_bytes(), &bundle_json, &body_format);
+    JsValue::from_str(&result)
+}
+
+/// Get a built-in template as a JSON bundle.
+///
+/// # Arguments
+/// * `name` - Template name ("html5" or "plain")
+///
+/// # Returns
+/// Template bundle JSON or `{ "error": "..." }`
+#[wasm_bindgen]
+pub fn get_builtin_template(name: JsValue) -> JsValue {
+    let name = as_string(&name, "name");
+    let result = wasm_entry_points::get_builtin_template_json(&name);
+    JsValue::from_str(&result)
+}

@@ -20,9 +20,15 @@ mod lua;
 mod options;
 mod pandoc;
 mod readers;
+mod template;
 mod traversals;
 mod utils;
 mod writers;
+use template::{
+    builtin::{get_builtin_template, is_builtin_template, BUILTIN_TEMPLATE_NAMES},
+    render::{render_with_bundle, BodyFormat},
+    TemplateBundle,
+};
 use utils::output::VerboseOutput;
 
 #[derive(Parser, Debug)]
@@ -72,6 +78,19 @@ struct Args {
     #[cfg(feature = "lua-filter")]
     #[arg(short = 'L', long = "lua-filter", action = clap::ArgAction::Append)]
     lua_filters: Vec<std::path::PathBuf>,
+
+    /// Use a template (built-in name like 'html5' or file path)
+    #[cfg(feature = "template-fs")]
+    #[arg(long = "template")]
+    template: Option<String>,
+
+    /// Use a template bundle JSON file
+    #[arg(long = "template-bundle")]
+    template_bundle: Option<std::path::PathBuf>,
+
+    /// Export a built-in template as JSON and exit
+    #[arg(long = "export-template", value_name = "NAME")]
+    export_template: Option<String>,
 }
 
 fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
@@ -89,6 +108,32 @@ fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf:
 
 fn main() {
     let args = Args::parse();
+
+    // Handle --export-template early (like --help)
+    if let Some(template_name) = &args.export_template {
+        match get_builtin_template(template_name) {
+            Some(bundle) => {
+                match bundle.to_json() {
+                    Ok(json) => {
+                        println!("{}", json);
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("Error serializing template: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+            None => {
+                eprintln!(
+                    "Unknown built-in template: '{}'. Available: {}",
+                    template_name,
+                    BUILTIN_TEMPLATE_NAMES.join(", ")
+                );
+                std::process::exit(1);
+            }
+        }
+    }
 
     let mut input_filename = "<stdin>";
     let mut input = String::new();
@@ -260,51 +305,142 @@ fn main() {
         }
     };
 
-    let mut buf = Vec::new();
-    let writer_result = match args.to.as_str() {
-        "json" => {
-            let json_config = writers::json::JsonConfig {
-                include_inline_locations: args
-                    .json_source_location
-                    .as_ref()
-                    .map(|s| s == "full")
-                    .unwrap_or(false),
-            };
-            writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
-        }
-        "native" => writers::native::write(&pandoc, &context, &mut buf),
-        "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
-        "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
-            vec![
-                quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
-                    .with_code("Q-3-1")
-                    .problem(format!("Failed to write HTML output: {}", e))
-                    .build(),
-            ]
-        }),
-        "plaintext" | "plain" => {
-            let (output, diagnostics) = writers::plaintext::blocks_to_string(&pandoc.blocks);
-            buf.extend_from_slice(output.as_bytes());
-            // Plaintext diagnostics are warnings (dropped nodes), not errors
-            // Output them but don't fail
-            if !diagnostics.is_empty() {
-                if args.json_errors {
-                    for diagnostic in &diagnostics {
-                        eprintln!("{}", diagnostic.to_json());
-                    }
-                } else {
-                    for diagnostic in &diagnostics {
-                        eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
-                    }
+    // Load template if specified
+    #[cfg(feature = "template-fs")]
+    let template_bundle: Option<TemplateBundle> = {
+        if let Some(bundle_path) = &args.template_bundle {
+            let bundle_json = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
+                eprintln!("Failed to read template bundle '{}': {}", bundle_path.display(), e);
+                std::process::exit(1);
+            });
+            match TemplateBundle::from_json(&bundle_json) {
+                Ok(bundle) => Some(bundle),
+                Err(e) => {
+                    eprintln!("Failed to parse template bundle: {}", e);
+                    std::process::exit(1);
                 }
             }
-            Ok(())
+        } else if let Some(template_arg) = &args.template {
+            if is_builtin_template(template_arg) {
+                get_builtin_template(template_arg)
+            } else {
+                let template_path = std::path::Path::new(template_arg);
+                let template_source = std::fs::read_to_string(template_path).unwrap_or_else(|e| {
+                    eprintln!("Failed to read template file '{}': {}", template_arg, e);
+                    std::process::exit(1);
+                });
+                Some(TemplateBundle::new(template_source))
+            }
+        } else {
+            None
         }
-        #[cfg(feature = "terminal-support")]
-        "ansi" => writers::ansi::write(&pandoc, &mut buf),
-        _ => {
-            eprintln!("Unknown output format: {}", args.to);
-            std::process::exit(1);
+    };
+
+    #[cfg(not(feature = "template-fs"))]
+    let template_bundle: Option<TemplateBundle> = {
+        if let Some(bundle_path) = &args.template_bundle {
+            let bundle_json = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
+                eprintln!("Failed to read template bundle '{}': {}", bundle_path.display(), e);
+                std::process::exit(1);
+            });
+            match TemplateBundle::from_json(&bundle_json) {
+                Ok(bundle) => Some(bundle),
+                Err(e) => {
+                    eprintln!("Failed to parse template bundle: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            None
+        }
+    };
+
+    let mut buf = Vec::new();
+    let writer_result = if let Some(bundle) = template_bundle {
+        // Determine body format from --to
+        let body_format = match args.to.as_str() {
+            "html" => BodyFormat::Html,
+            "plaintext" | "plain" => BodyFormat::Plaintext,
+            other => {
+                eprintln!(
+                    "Template rendering requires --to html or --to plaintext, got '{}'",
+                    other
+                );
+                std::process::exit(1);
+            }
+        };
+
+        match render_with_bundle(&pandoc, &context, &bundle, body_format) {
+            Ok((output, diagnostics)) => {
+                buf.extend_from_slice(output.as_bytes());
+                // Output any diagnostics (warnings)
+                if !diagnostics.is_empty() {
+                    if args.json_errors {
+                        for diagnostic in &diagnostics {
+                            eprintln!("{}", diagnostic.to_json());
+                        }
+                    } else {
+                        for diagnostic in &diagnostics {
+                            eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            Err(e) => Err(vec![
+                quarto_error_reporting::DiagnosticMessageBuilder::error("Template render error")
+                    .with_code("Q-3-2")
+                    .problem(format!("Failed to render template: {}", e))
+                    .build(),
+            ]),
+        }
+    } else {
+        // No template - use regular writers
+        match args.to.as_str() {
+            "json" => {
+                let json_config = writers::json::JsonConfig {
+                    include_inline_locations: args
+                        .json_source_location
+                        .as_ref()
+                        .map(|s| s == "full")
+                        .unwrap_or(false),
+                };
+                writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
+            }
+            "native" => writers::native::write(&pandoc, &context, &mut buf),
+            "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
+            "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
+                vec![
+                    quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                        .with_code("Q-3-1")
+                        .problem(format!("Failed to write HTML output: {}", e))
+                        .build(),
+                ]
+            }),
+            "plaintext" | "plain" => {
+                let (output, diagnostics) = writers::plaintext::blocks_to_string(&pandoc.blocks);
+                buf.extend_from_slice(output.as_bytes());
+                // Plaintext diagnostics are warnings (dropped nodes), not errors
+                // Output them but don't fail
+                if !diagnostics.is_empty() {
+                    if args.json_errors {
+                        for diagnostic in &diagnostics {
+                            eprintln!("{}", diagnostic.to_json());
+                        }
+                    } else {
+                        for diagnostic in &diagnostics {
+                            eprintln!("{}", diagnostic.to_text(Some(&context.source_context)));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            #[cfg(feature = "terminal-support")]
+            "ansi" => writers::ansi::write(&pandoc, &mut buf),
+            _ => {
+                eprintln!("Unknown output format: {}", args.to);
+                std::process::exit(1);
+            }
         }
     };
 
