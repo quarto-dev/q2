@@ -14,6 +14,7 @@ target
 .beads/.gitignore
 .beads/db.sqlite
 .beads/k.db
+.beads/k.db*
 
 # Keep JSONL exports (source of truth for git)
 !.beads/*.jsonl
