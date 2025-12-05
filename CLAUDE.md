@@ -106,22 +106,40 @@ When fixing ANY bug:
 
 ## Workspace structure
 
-### `crates` - corresponds to the crates in the public quarto-markdown repo
+### `crates/` - all Rust crates in the workspace
 
-- `crates/qmd-syntax-helper`: a binary to help users convert qmd files to the new syntax
-- `crates/quarto-error-reporting`: a library to help create uniform, helpful, beautiful error messages
-- `crates/quarto-markdown-pandoc`: a binary to parse qmd text and produce Pandoc AST and other formats
-- `crates/quarto-source-map`: a library to help maintain information about the source location of data structures in text files
-- `crates/quarto-yaml`: a YAML parser that produces YAML objects and accurate fine-grained source location of elements
-- `crates/tree-sitter-qmd`: tree-sitter grammars for block and inline parsers
-- `crates/wasm-qmd-parser`: A WASM module with some entry points from `crates/quarto-markdown-pandoc`
+**Binaries:**
+- `quarto`: main entry point for the `quarto` command line binary
+- `quarto-markdown-pandoc`: parse qmd text and produce Pandoc AST and other formats
+- `qmd-syntax-helper`: help users convert qmd files to the new syntax
+- `validate-yaml`: exercise `quarto-yaml-validation`
+- `pico-quarto-render`: minimal rendering tool for testing
 
-### `private-crates` - private crates we are not going to release yet
+**Core libraries:**
+- `quarto-core`: core rendering infrastructure for Quarto
+- `quarto-util`: shared utilities for Quarto crates
+- `quarto-error-reporting`: uniform, helpful, beautiful error messages
+- `quarto-source-map`: maintain source location information for data structures
 
-- `private-crates/quarto-yaml-validation`: A library to validate YAML objects using schemas
-- `private-crates/validate-yaml`: A binary to exercise `quarto-yaml-validation`
-- `private-crates/quarto`: The future main entry point for the `quarto` command line binary.
-- `private-crates/quarto-core`: supporting library for `quarto`
+**Parsing libraries:**
+- `quarto-yaml`: YAML parser with accurate fine-grained source locations
+- `quarto-yaml-validation`: validate YAML objects using schemas
+- `quarto-xml`: source-tracked XML parsing
+- `quarto-parse-errors`: parse error infrastructure
+
+**Pandoc/document processing:**
+- `quarto-pandoc-types`: Pandoc AST type definitions
+- `quarto-doctemplate`: Pandoc-compatible document template engine
+- `quarto-csl`: CSL (Citation Style Language) parsing with source tracking
+- `quarto-citeproc`: citation processing engine using CSL styles
+
+**Tree-sitter grammars:**
+- `tree-sitter-qmd`: tree-sitter grammars for block and inline parsers
+- `tree-sitter-doctemplate`: tree-sitter grammar for document templates
+- `quarto-treesitter-ast`: generic tree-sitter AST traversal utilities
+
+**WASM:**
+- `wasm-qmd-parser`: WASM module with entry points from `quarto-markdown-pandoc`
 
 ## Testing instructions
 

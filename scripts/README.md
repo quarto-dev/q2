@@ -18,7 +18,7 @@ This directory contains automation scripts for the Kyoto project.
   - Windows: `choco install ripgrep`
 
 **Features:**
-- Finds all Q-*-* error codes in the codebase (crates + private-crates)
+- Finds all Q-*-* error codes in the codebase
 - Identifies missing catalog entries (HIGH PRIORITY)
 - Identifies orphaned catalog entries (unused codes)
 - Automatically categorizes codes:

@@ -2,7 +2,6 @@
 members = [
     "crates/*",
     "crates/quarto-markdown-pandoc/fuzz",
-    "private-crates/*",
 ]
 resolver = "2"
 
@@ -62,16 +61,16 @@ path = "./crates/wasm-qmd-parser"
 path = "./crates/quarto-markdown-pandoc"
 
 [workspace.dependencies.quarto-core]
-path = "./private-crates/quarto-core"
+path = "./crates/quarto-core"
 
 [workspace.dependencies.quarto-util]
-path = "./private-crates/quarto-util"
+path = "./crates/quarto-util"
 
 [workspace.dependencies.quarto-yaml]
 path = "./crates/quarto-yaml"
 
 [workspace.dependencies.quarto-yaml-validation]
-path = "./private-crates/quarto-yaml-validation"
+path = "./crates/quarto-yaml-validation"
 
 [workspace.dependencies.quarto-error-reporting]
 path = "./crates/quarto-error-reporting"
