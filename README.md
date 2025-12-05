@@ -1,66 +1,120 @@
-# quarto-markdown
+# Quarto Rust
 
-> [!WARNING]
-> This parser isn't used in Quarto yet. This code isn't ready for public consumption. If you stumbled into this repo, then it's very likely not in a state where you'll benefit from it.
+> **Experimental** - This project is under active development and not yet ready for production use.
 
-This repository hosts a standalone parser for "Quarto Markdown" ("QMD"), the Markdown dialect recognized by [Quarto](https://quarto.org).
+This repository is an experimental Rust port of core [Quarto](https://quarto.org) tooling. The goal is to replace parts of the TypeScript/Deno runtime with a unified Rust implementation, enabling:
 
-## Features
+- Shared validation logic between CLI and Language Server Protocol (LSP)
+- Improved performance, particularly for LSP operations
+- Single-binary distribution
 
-- standalone Rust binary
-- built from a pair of tree-sitter grammars forked from the [tree-sitter grammar repo](https://github.com/tree-sitter-grammars/tree-sitter-markdown/)
-- recognizes syntax errors
-- supports Quarto-specific syntax constructs:
-  - code cell blocks with `{language}` syntax
-  - shortcodes
-  - "reader syntax": `{<html}` for transparently using other Pandoc reader formats inside Markdown
-- emits parse tree in Pandoc's `json` and `native` formats
-  - as a consequence, the Quarto-specific syntax constructs are "desugared" into standard Pandoc AST nodes
+## Why Rust?
 
-## Background
+Posit has been investing in Rust for developer tooling:
 
-### Syntax drift from Pandoc
+- [Air](https://github.com/posit-dev/air/) - An R formatter and LSP written in Rust
+- [Ark](https://github.com/posit-dev/ark/) - An R kernel for Jupyter written in Rust
 
-Pandoc 3 doesn't support the following syntax:
+Rust offers compelling advantages for Quarto's tooling:
 
-````
-```{python}
-print("hello, world")
+- **Performance** - Native compilation provides significant speedups for parsing and validation, critical for responsive LSP experiences
+- **WebAssembly** - Rust compiles to WASM, enabling browser-based tooling and editor integrations without separate runtime dependencies
+- **Single binary** - No runtime installation required; simpler distribution and deployment
+- **Memory safety** - Eliminates entire classes of bugs without garbage collection overhead
+
+## Key Crates
+
+### quarto-markdown-pandoc
+
+The most mature crate in this workspace. A Quarto Markdown parser that produces Pandoc AST output with full source location tracking.
+
+```bash
+# Parse QMD to Pandoc JSON
+cargo run -p quarto-markdown-pandoc -- input.qmd -t json
+
+# Parse with verbose tree-sitter output (for debugging)
+cargo run -p quarto-markdown-pandoc -- input.qmd -t json -v
 ```
-````
 
-### Syntax Errors are good, actually
+**Features:**
+- Tree-sitter based parsing (block + inline grammars)
+- Multiple output formats: JSON, HTML, ANSI, Markdown, plaintext
+- Lua filter support (Pandoc-compatible)
+- Source location tracking through all transformations
+- WASM build available (`wasm-qmd-parser`)
 
-In a number of ways, Quarto Markdown _isn't_ Markdown. Most importantly, Quarto Markdown gives syntax errors in malformed documents.
-Modern markdown dialects include a number of syntax constructs that can be the source of mistakes.
-Standards such as Commonmark dictate that [no documents ever contain mistakes](https://spec.commonmark.org/0.31.2/#preliminaries):
+### Supporting Infrastructure
 
-> Any sequence of characters is a valid CommonMark document.
+The crates in this workspace share a focus on **precise source location tracking** and **uniform error reporting**:
 
-This isn't a tenable situation in large documents.
+| Crate | Purpose |
+|-------|---------|
+| `quarto-source-map` | Unified source location tracking with transformation history |
+| `quarto-error-reporting` | Structured diagnostics with tidyverse-style formatting |
+| `quarto-yaml` | YAML parsing with fine-grained source locations |
+| `quarto-xml` | XML parsing with source tracking (for CSL files) |
+| `quarto-pandoc-types` | Pandoc AST type definitions |
+| `quarto-doctemplate` | Pandoc-compatible document template engine |
 
-### First-class support for external tooling
+## Source Location Tracking
 
-A robust parser for QMD documents will enable more robust treatment in editors, IDEs, and external tooling that needs to inspect documents.
+A core design principle: every semantic entity carries source location information through all transformations. This enables:
 
-## Important differences
+- Precise error messages pointing to exact locations in source files
+- Provenance tracking through string extraction, concatenation, and filtering
+- Serializable source info for LSP caching
 
-These are non-exhaustive and will only list intentional differences.
-We will, aspirationally, treat unintentional differences as bugs.
+```rust
+// Source info tracks transformations
+enum SourceInfo {
+    Original { ... },           // Direct file position
+    Substring { parent, ... },  // Extracted from parent
+    Concat { pieces, ... },     // Multiple sources combined
+    FilterProvenance { ... },   // Created by Lua filter
+}
+```
 
-- no naked HTML support: use `{=html}` raw blocks an inlines
-- no grid tables: use `{<markdown}`, [list tables](https://github.com/pandoc-ext/list-table), or Quarto's [HTML-as-table-AST mode](https://quarto.org/docs/authoring/tables.html#html-tables)
+## Error Reporting
 
-## Syntax escape hatches
+Errors use [ariadne](https://github.com/zesterer/ariadne) for precise, visually clear diagnostics:
 
-The "reader" syntax allows users to recover the exact Pandoc markdown behavior when desired.
-With this feature, however, other quarto-markdown conveniences will be absent: no error messages, source tracking, etc.
+```
+$ echo '_hello world' | quarto-markdown-pandoc -t json
 
-## Current state
+Error: [Q-2-5] Unclosed Underscore Emphasis
+   ╭─[<stdin>:1:13]
+   │
+ 1 │ _hello world
+   │ ┬           ┬
+   │ ╰────────────── This is the opening '_' mark.
+   │             │
+   │             ╰── I reached the end of the block before finding a closing '_' for the emphasis.
+───╯
+```
 
-Parses [quarto-web](https://github.com/quarto-dev/quarto-web) with a small number of changes
+## Building
 
-## TODOs
+Requires Rust nightly (edition 2024).
 
-- actually good error messages
-- solve glaring performance issues
+```bash
+# Build all crates
+cargo build
+
+# Run tests (uses nextest)
+cargo nextest run
+
+# Build WASM module
+cd crates/wasm-qmd-parser && wasm-pack build
+```
+
+## Contributing
+
+We welcome discussions about the project via GitHub issues. However, the Quarto team will be working on this codebase internally before we're ready to accept outside contributions. Please feel free to open issues for questions, suggestions, or bug reports.
+
+## Status
+
+This is experimental software. The API is unstable and may change significantly.
+
+## License
+
+MIT - See [LICENSE](LICENSE) for details.
