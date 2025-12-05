@@ -43,7 +43,10 @@ jobs:
       - name: Output rust version
         run: rustup --version
         shell: bash
-        
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
       # Pandoc setup
       - name: Set up Pandoc (Linux)
         if: runner.os == 'Linux'
