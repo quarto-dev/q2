@@ -3,6 +3,10 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+// These re-exports form the public API for template consumers.
+// They may not be used within this crate but are available for external use.
+#![allow(unused_imports)]
+
 //! Document template support for quarto-markdown-pandoc.
 //!
 //! This module provides template rendering capabilities using the quarto-doctemplate
