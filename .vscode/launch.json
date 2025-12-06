@@ -8,16 +8,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in library 'quarto_markdown_pandoc'",
+            "name": "Debug unit tests in library 'pampa'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
                     "--lib",
-                    "--package=quarto-markdown-pandoc"
+                    "--package=pampa"
                 ],
                 "filter": {
-                    "name": "quarto_markdown_pandoc",
+                    "name": "pampa",
                     "kind": "lib"
                 }
             },
@@ -27,34 +27,34 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'quarto-markdown-pandoc'",
+            "name": "Debug executable 'pampa'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=quarto-markdown-pandoc",
-                    "--package=quarto-markdown-pandoc"
+                    "--bin=pampa",
+                    "--package=pampa"
                 ],
                 "filter": {
-                    "name": "quarto-markdown-pandoc",
+                    "name": "pampa",
                     "kind": "bin"
                 }
             },
-            "args": ["-i", "crates/quarto-markdown-pandoc/resources/error-corpus/003.qmd", "-v"],
+            "args": ["-i", "crates/pampa/resources/error-corpus/003.qmd", "-v"],
             "cwd": "${workspaceFolder}"
         },
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'quarto-markdown-pandoc'",
+            "name": "Debug unit tests in executable 'pampa'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=quarto-markdown-pandoc",
-                    "--package=quarto-markdown-pandoc"
+                    "--bin=pampa",
+                    "--package=pampa"
                 ],
                 "filter": {
-                    "name": "quarto-markdown-pandoc",
+                    "name": "pampa",
                     "kind": "bin"
                 }
             },
@@ -70,7 +70,7 @@
                     "test",
                     "--no-run",
                     "--test=test",
-                    "--package=quarto-markdown-pandoc"
+                    "--package=pampa"
                 ],
                 "filter": {
                     "name": "test",
@@ -89,7 +89,7 @@
                     "test",
                     "--no-run",
                     "--test=test_json_errors",
-                    "--package=quarto-markdown-pandoc"
+                    "--package=pampa"
                 ],
                 "filter": {
                     "name": "test_json_errors",
@@ -108,7 +108,7 @@
                     "test",
                     "--no-run",
                     "--test=test_meta",
-                    "--package=quarto-markdown-pandoc"
+                    "--package=pampa"
                 ],
                 "filter": {
                     "name": "test_meta",
@@ -220,7 +220,7 @@
                 "args": [
                     "build",
                     "--bin=hello_fuzz",
-                    "--package=quarto-markdown-pandoc-fuzz"
+                    "--package=pampa-fuzz"
                 ],
                 "filter": {
                     "name": "hello_fuzz",
@@ -239,7 +239,7 @@
                     "test",
                     "--no-run",
                     "--bin=hello_fuzz",
-                    "--package=quarto-markdown-pandoc-fuzz"
+                    "--package=pampa-fuzz"
                 ],
                 "filter": {
                     "name": "hello_fuzz",

@@ -1,0 +1,65 @@
+[package]
+name = "pampa"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "pampa"
+path = "src/main.rs"
+
+[package.metadata]
+cargo-fuzz = true
+
+[features]
+default = ["terminal-support", "json-filter", "lua-filter", "template-fs"]
+terminal-support = ["dep:crossterm", "dep:supports-hyperlinks"]
+terminal-hyperlinks = ["dep:supports-hyperlinks"]
+# Enable JSON filter support (requires subprocess spawning, disable for WASM)
+json-filter = []
+# Enable Lua filter support (disable for WASM, where mlua is not available)
+lua-filter = ["dep:mlua"]
+# Enable filesystem-based template resolution (disable for WASM)
+template-fs = []
+
+[dependencies]
+tree-sitter = { workspace = true }
+tree-sitter-qmd = { workspace = true }
+quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-source-map = { path = "../quarto-source-map" }
+quarto-yaml = { path = "../quarto-yaml" }
+quarto-parse-errors = { path = "../quarto-parse-errors" }
+quarto-treesitter-ast = { workspace = true }
+quarto-pandoc-types = { path = "../quarto-pandoc-types" }
+quarto-doctemplate = { workspace = true }
+quarto-citeproc = { path = "../quarto-citeproc" }
+quarto-csl = { path = "../quarto-csl" }
+regex = { version = "1.10.0", features = ["unicode"] }
+clap = { version = "4.0", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = "1.0"
+glob = "0.3"
+paste = "1.0.15"
+once_cell = "1.21.3"
+yaml-rust2 = { workspace = true }
+hashlink = { version = "0.10.0", features = ["serde_impl"] }
+quarto-error-message-macros = { path = "../quarto-parse-errors/error-message-macros" }
+ariadne = "0.4"
+crossterm = { version = "0.28", optional = true }
+supports-hyperlinks = { version = "3.0", optional = true }
+mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"], optional = true }
+sha1 = "0.10"
+base64 = "0.22"
+
+[dev-dependencies]
+insta = { version = "1.40", features = ["json", "redactions"] }
+tempfile = "3.10"
+
+[lints]
+workspace = true

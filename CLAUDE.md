@@ -110,7 +110,7 @@ When fixing ANY bug:
 
 **Binaries:**
 - `quarto`: main entry point for the `quarto` command line binary
-- `quarto-markdown-pandoc`: parse qmd text and produce Pandoc AST and other formats
+- `pampa`: parse qmd text and produce Pandoc AST and other formats
 - `qmd-syntax-helper`: help users convert qmd files to the new syntax
 - `validate-yaml`: exercise `quarto-yaml-validation`
 - `pico-quarto-render`: minimal rendering tool for testing
@@ -139,7 +139,7 @@ When fixing ANY bug:
 - `quarto-treesitter-ast`: generic tree-sitter AST traversal utilities
 
 **WASM:**
-- `wasm-qmd-parser`: WASM module with entry points from `quarto-markdown-pandoc`
+- `wasm-qmd-parser`: WASM module with entry points from `pampa`
 
 ## Testing instructions
 

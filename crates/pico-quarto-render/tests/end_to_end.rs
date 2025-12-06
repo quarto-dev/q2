@@ -26,7 +26,7 @@ fn render_qmd_to_html(fixture_name: &str) -> String {
 
     // Parse QMD
     let mut output_stream = std::io::sink();
-    let (mut pandoc, _context, _warnings) = quarto_markdown_pandoc::readers::qmd::read(
+    let (mut pandoc, _context, _warnings) = pampa::readers::qmd::read(
         &input_content,
         false,
         qmd_path.to_str().unwrap(),
@@ -64,7 +64,7 @@ $body$
 // Re-implement the minimal functions needed for testing
 // (In a real scenario, these would be exposed from the crate)
 
-use quarto_markdown_pandoc::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
+use pampa::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
 
 fn prepare_template_metadata(pandoc: &mut Pandoc) {
     let MetaValueWithSourceInfo::MetaMap {
@@ -86,12 +86,12 @@ fn prepare_template_metadata(pandoc: &mut Pandoc) {
             MetaValueWithSourceInfo::MetaString { value, .. } => value.clone(),
             MetaValueWithSourceInfo::MetaInlines { content, .. } => {
                 let (text, _) =
-                    quarto_markdown_pandoc::writers::plaintext::inlines_to_string(content);
+                    pampa::writers::plaintext::inlines_to_string(content);
                 text
             }
             MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
                 let (text, _) =
-                    quarto_markdown_pandoc::writers::plaintext::blocks_to_string(content);
+                    pampa::writers::plaintext::blocks_to_string(content);
                 text
             }
             _ => return,
@@ -109,8 +109,8 @@ fn prepare_template_metadata(pandoc: &mut Pandoc) {
 }
 
 use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
-use quarto_markdown_pandoc::pandoc::block::Block;
-use quarto_markdown_pandoc::pandoc::inline::Inlines;
+use pampa::pandoc::block::Block;
+use pampa::pandoc::inline::Inlines;
 use std::collections::HashMap;
 
 struct HtmlWriters;
@@ -118,13 +118,13 @@ struct HtmlWriters;
 impl HtmlWriters {
     fn write_blocks(&self, blocks: &[Block]) -> anyhow::Result<String> {
         let mut buf = Vec::new();
-        quarto_markdown_pandoc::writers::html::write_blocks(blocks, &mut buf)?;
+        pampa::writers::html::write_blocks(blocks, &mut buf)?;
         Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 
     fn write_inlines(&self, inlines: &Inlines) -> anyhow::Result<String> {
         let mut buf = Vec::new();
-        quarto_markdown_pandoc::writers::html::write_inlines(inlines, &mut buf)?;
+        pampa::writers::html::write_inlines(inlines, &mut buf)?;
         Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 }

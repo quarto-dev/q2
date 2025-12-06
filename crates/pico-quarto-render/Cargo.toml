@@ -11,7 +11,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-quarto-markdown-pandoc = { workspace = true }
+pampa = { workspace = true }
 quarto-doctemplate = { workspace = true }
 anyhow.workspace = true
 clap = { version = "4.0", features = ["derive"] }

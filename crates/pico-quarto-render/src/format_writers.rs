@@ -9,8 +9,8 @@
 //! and implementations for HTML output.
 
 use anyhow::Result;
-use quarto_markdown_pandoc::pandoc::block::Block;
-use quarto_markdown_pandoc::pandoc::inline::Inlines;
+use pampa::pandoc::block::Block;
+use pampa::pandoc::inline::Inlines;
 
 /// Format-specific writers for converting Pandoc AST to strings.
 ///
@@ -26,20 +26,20 @@ pub trait FormatWriters {
 
 /// HTML format writers.
 ///
-/// Uses the HTML writer from quarto-markdown-pandoc to convert
+/// Uses the HTML writer from pampa to convert
 /// Pandoc AST nodes to HTML strings.
 pub struct HtmlWriters;
 
 impl FormatWriters for HtmlWriters {
     fn write_blocks(&self, blocks: &[Block]) -> Result<String> {
         let mut buf = Vec::new();
-        quarto_markdown_pandoc::writers::html::write_blocks(blocks, &mut buf)?;
+        pampa::writers::html::write_blocks(blocks, &mut buf)?;
         Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 
     fn write_inlines(&self, inlines: &Inlines) -> Result<String> {
         let mut buf = Vec::new();
-        quarto_markdown_pandoc::writers::html::write_inlines(inlines, &mut buf)?;
+        pampa::writers::html::write_inlines(inlines, &mut buf)?;
         Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 }
@@ -47,9 +47,9 @@ impl FormatWriters for HtmlWriters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_markdown_pandoc::pandoc::Inline;
-    use quarto_markdown_pandoc::pandoc::block::Paragraph;
-    use quarto_markdown_pandoc::pandoc::inline::{Emph, Space, Str};
+    use pampa::pandoc::Inline;
+    use pampa::pandoc::block::Paragraph;
+    use pampa::pandoc::inline::{Emph, Space, Str};
 
     fn dummy_source_info() -> quarto_source_map::SourceInfo {
         quarto_source_map::SourceInfo::from_range(

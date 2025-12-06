@@ -224,7 +224,7 @@ let error = DiagnosticMessageBuilder::error("Schema Validation Failed")
 Used throughout the codebase:
 
 ```rust
-use quarto_markdown_pandoc::utils::diagnostic_collector::DiagnosticCollector;
+use pampa::utils::diagnostic_collector::DiagnosticCollector;
 
 let mut collector = DiagnosticCollector::new();
 

@@ -70,7 +70,7 @@ Create JSON files in your error corpus directory (e.g., `resources/error-corpus/
 ### 3. Generate error table
 
 **NOTE**: The build script (`scripts/build_error_table.ts`) needs generalization work.
-For now, see `crates/quarto-markdown-pandoc/scripts/build_error_table.ts` for a working example.
+For now, see `crates/pampa/scripts/build_error_table.ts` for a working example.
 
 The script should be invoked like:
 
@@ -130,7 +130,7 @@ Output format (JSON to stdout):
 
 ## Status
 
-**Phase 0.1**: Initial extraction from quarto-markdown-pandoc
+**Phase 0.1**: Initial extraction from pampa
 
 - ✅ Error table types extracted
 - ✅ TreeSitterLogObserver extracted
@@ -143,7 +143,7 @@ The build script in `scripts/build_error_table.ts` has been started but needs mo
 - Support the new `--cmd` parameter for flexible command invocation
 - Handle different file extensions properly
 
-For now, parsers can copy and adapt the qmd version from `crates/quarto-markdown-pandoc/scripts/build_error_table.ts`.
+For now, parsers can copy and adapt the qmd version from `crates/pampa/scripts/build_error_table.ts`.
 
 ## License
 

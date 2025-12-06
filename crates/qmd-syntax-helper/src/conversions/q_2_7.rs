@@ -8,7 +8,7 @@
 //
 // Fix strategy: Escape the apostrophe with a backslash `'` → `\'`
 //
-// Error catalog entry: crates/quarto-markdown-pandoc/resources/error-corpus/Q-2-7.json
+// Error catalog entry: crates/pampa/resources/error-corpus/Q-2-7.json
 // Error code: Q-2-7
 // Title: "Unclosed Single Quote"
 //
@@ -41,11 +41,11 @@ impl Q27Converter {
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
-        // Parse with quarto-markdown-pandoc to get diagnostics
+        // Parse with pampa to get diagnostics
         let mut sink = std::io::sink();
         let filename = file_path.to_string_lossy();
 
-        let result = quarto_markdown_pandoc::readers::qmd::read(
+        let result = pampa::readers::qmd::read(
             content.as_bytes(),
             false, // not loose mode
             &filename,

@@ -4,7 +4,7 @@
 //! during processing - a common pattern in Quarto subsystems like YAML validation
 //! and markdown parsing.
 //!
-//! Note: DiagnosticCollector is in quarto-markdown-pandoc, so this example shows
+//! Note: DiagnosticCollector is in pampa, so this example shows
 //! the pattern manually. In real code, use the DiagnosticCollector utility.
 
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage, DiagnosticMessageBuilder};

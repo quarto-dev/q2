@@ -19,9 +19,9 @@ mod utils;
 
 use std::panic;
 
-use quarto_markdown_pandoc::readers;
-use quarto_markdown_pandoc::wasm_entry_points;
-use quarto_markdown_pandoc::writers;
+use pampa::readers;
+use pampa::wasm_entry_points;
+use pampa::writers;
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -34,8 +34,8 @@ fn json_to_pandoc(
     input: &str,
 ) -> Result<
     (
-        quarto_markdown_pandoc::pandoc::Pandoc,
-        quarto_markdown_pandoc::pandoc::ASTContext,
+        pampa::pandoc::Pandoc,
+        pampa::pandoc::ASTContext,
     ),
     String,
 > {
@@ -46,8 +46,8 @@ fn json_to_pandoc(
 }
 
 fn pandoc_to_json(
-    doc: &quarto_markdown_pandoc::pandoc::Pandoc,
-    context: &quarto_markdown_pandoc::pandoc::ASTContext,
+    doc: &pampa::pandoc::Pandoc,
+    context: &pampa::pandoc::ASTContext,
 ) -> Result<String, String> {
     let mut buf = Vec::new();
     match writers::json::write(doc, context, &mut buf) {
@@ -65,7 +65,7 @@ fn pandoc_to_json(
     }
 }
 
-fn pandoc_to_qmd(doc: &quarto_markdown_pandoc::pandoc::Pandoc) -> Result<String, String> {
+fn pandoc_to_qmd(doc: &pampa::pandoc::Pandoc) -> Result<String, String> {
     let mut buf = Vec::new();
     match writers::qmd::write(doc, &mut buf) {
         Ok(_) => {

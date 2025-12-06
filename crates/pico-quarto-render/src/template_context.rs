@@ -15,7 +15,7 @@ use std::path::Path;
 
 use anyhow::Result;
 use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
-use quarto_markdown_pandoc::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
+use pampa::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
 
 use crate::format_writers::FormatWriters;
 
@@ -48,12 +48,12 @@ pub fn prepare_template_metadata(pandoc: &mut Pandoc) {
             MetaValueWithSourceInfo::MetaString { value, .. } => value.clone(),
             MetaValueWithSourceInfo::MetaInlines { content, .. } => {
                 let (text, _diagnostics) =
-                    quarto_markdown_pandoc::writers::plaintext::inlines_to_string(content);
+                    pampa::writers::plaintext::inlines_to_string(content);
                 text
             }
             MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
                 let (text, _diagnostics) =
-                    quarto_markdown_pandoc::writers::plaintext::blocks_to_string(content);
+                    pampa::writers::plaintext::blocks_to_string(content);
                 text
             }
             _ => return, // Other types: skip
@@ -174,8 +174,8 @@ pub fn compile_template<R: quarto_doctemplate::PartialResolver>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_markdown_pandoc::pandoc::Inline;
-    use quarto_markdown_pandoc::pandoc::inline::Str;
+    use pampa::pandoc::Inline;
+    use pampa::pandoc::inline::Str;
 
     fn dummy_source_info() -> quarto_source_map::SourceInfo {
         quarto_source_map::SourceInfo::from_range(

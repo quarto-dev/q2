@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/*",
-    "crates/quarto-markdown-pandoc/fuzz",
+    "crates/pampa/fuzz",
 ]
 resolver = "2"
 
@@ -57,8 +57,8 @@ path = "./crates/tree-sitter-sexpr"
 [workspace.dependencies.wasm-qmd-parser]
 path = "./crates/wasm-qmd-parser"
 
-[workspace.dependencies.quarto-markdown-pandoc]
-path = "./crates/quarto-markdown-pandoc"
+[workspace.dependencies.pampa]
+path = "./crates/pampa"
 
 [workspace.dependencies.quarto-core]
 path = "./crates/quarto-core"

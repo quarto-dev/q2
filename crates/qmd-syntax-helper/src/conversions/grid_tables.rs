@@ -7,8 +7,8 @@ use std::process::{Command, Stdio};
 use crate::rule::{CheckResult, ConvertResult, Rule};
 use crate::utils::file_io::{read_file, write_file};
 use crate::utils::resources::ResourceManager;
-use quarto_markdown_pandoc::readers::json;
-use quarto_markdown_pandoc::writers::qmd;
+use pampa::readers::json;
+use pampa::writers::qmd;
 
 pub struct GridTableConverter {
     grid_start_regex: Regex,
@@ -90,7 +90,7 @@ impl GridTableConverter {
 
     /// Convert a single grid table by:
     /// 1. Running pandoc with the Lua filter to convert to JSON
-    /// 2. Running quarto-markdown-pandoc to convert JSON to markdown
+    /// 2. Running pampa to convert JSON to markdown
     pub fn convert_table(&self, table_text: &str) -> Result<String> {
         use std::io::Write;
 

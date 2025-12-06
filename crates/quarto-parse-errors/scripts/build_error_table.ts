@@ -17,7 +17,7 @@ if (!args.cmd || !args.corpus || !args.output) {
   console.error("Usage: build_error_table.ts --cmd <command> --corpus <dir> --output <file> [--extension <ext>] [--pattern <glob>]");
   console.error("");
   console.error("Arguments:");
-  console.error("  --cmd       Command to run parser with error reporting (e.g., '../../target/debug/quarto-markdown-pandoc --_internal-report-error-state -i')");
+  console.error("  --cmd       Command to run parser with error reporting (e.g., '../../target/debug/pampa --_internal-report-error-state -i')");
   console.error("  --corpus    Path to error corpus directory (e.g., 'resources/error-corpus')");
   console.error("  --output    Path to output JSON file (e.g., 'resources/error-corpus/_autogen-table.json')");
   console.error("  --extension File extension for test cases (default: same as first test file, or specify explicitly)");
@@ -25,7 +25,7 @@ if (!args.cmd || !args.corpus || !args.output) {
   console.error("");
   console.error("Example:");
   console.error("  ./scripts/build_error_table.ts \\");
-  console.error("    --cmd '../../target/debug/quarto-markdown-pandoc --_internal-report-error-state -i' \\");
+  console.error("    --cmd '../../target/debug/pampa --_internal-report-error-state -i' \\");
   console.error("    --corpus resources/error-corpus \\");
   console.error("    --output resources/error-corpus/_autogen-table.json \\");
   console.error("    --extension .qmd");
@@ -122,7 +122,7 @@ try {
     // Process old format .qmd file
     if (jsonFiles.some(jf => basename(jf, ".json") === base)) {
       const errorInfo = JSON.parse(Deno.readTextFileSync(jsonPath));
-      const parseResult = new Deno.Command("../../target/debug/quarto-markdown-pandoc", {
+      const parseResult = new Deno.Command("../../target/debug/pampa", {
         args: ["--_internal-report-error-state", "-i", file],
       });
       const output = await parseResult.output();
@@ -198,7 +198,7 @@ try {
         await Deno.writeTextFile(caseFile, variantContent);
 
         // Run parser with error state reporting
-        const parseResult = new Deno.Command("../../target/debug/quarto-markdown-pandoc", {
+        const parseResult = new Deno.Command("../../target/debug/pampa", {
           args: ["--_internal-report-error-state", "-i", caseFile],
         });
         const output = await parseResult.output();
@@ -334,7 +334,7 @@ const now = new Date();
 // Touch the source file so that cargo build rebuilds it.
 Deno.utimeSync("src/readers/qmd_error_message_table.rs", now, now);
 
-console.log("Rebuilding quarto-markdown-pandoc with new table...");
+console.log("Rebuilding pampa with new table...");
 await (new Deno.Command("cargo", {
   args: ["build"],
 })).output();

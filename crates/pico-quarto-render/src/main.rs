@@ -189,7 +189,7 @@ fn process_qmd_file(
     // Parse QMD to AST
     let mut output_stream = std::io::sink();
 
-    let (mut pandoc, _context, _warnings) = quarto_markdown_pandoc::readers::qmd::read(
+    let (mut pandoc, _context, _warnings) = pampa::readers::qmd::read(
         &input_content,
         false, // loose mode
         qmd_path.to_str().unwrap_or("<unknown>"),

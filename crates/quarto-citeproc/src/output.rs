@@ -1135,7 +1135,7 @@ impl Output {
 
     /// Convert the output to Pandoc Inlines.
     ///
-    /// This produces a `Vec<Inline>` that can be consumed by quarto-markdown-pandoc's
+    /// This produces a `Vec<Inline>` that can be consumed by pampa's
     /// HTML writer. The conversion handles:
     /// - Text formatting (italic, bold, small-caps, superscript, subscript)
     /// - Text case transformations
@@ -4783,7 +4783,7 @@ impl Default for CslRenderContext {
 /// that matches the CSL test expectations.
 ///
 /// This is intended for testing only - production code should use
-/// quarto-markdown-pandoc's HTML writer.
+/// pampa's HTML writer.
 ///
 /// Uses default English quotes. For locale-specific quotes, use
 /// `render_inlines_to_csl_html_with_locale` instead.

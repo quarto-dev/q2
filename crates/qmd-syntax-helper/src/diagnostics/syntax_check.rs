@@ -57,25 +57,25 @@ impl SyntaxChecker {
         Ok(())
     }
 
-    /// Parse a file using quarto-markdown-pandoc
+    /// Parse a file using pampa
     fn parse_file(&self, file_path: &Path) -> Result<()> {
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
-        // Use the quarto-markdown-pandoc library to parse
+        // Use the pampa library to parse
         let mut sink = std::io::sink();
         let filename = file_path.to_string_lossy();
 
-        let result = quarto_markdown_pandoc::readers::qmd::read(
+        let result = pampa::readers::qmd::read(
             content.as_bytes(),
             false, // not loose mode
             &filename,
             &mut sink,
             Some(
-                quarto_markdown_pandoc::readers::qmd_error_messages::produce_json_error_messages
+                pampa::readers::qmd_error_messages::produce_json_error_messages
                     as fn(
                         &[u8],
-                        &quarto_markdown_pandoc::utils::tree_sitter_log_observer::TreeSitterLogObserver,
+                        &pampa::utils::tree_sitter_log_observer::TreeSitterLogObserver,
                         &str,
                     ) -> Vec<String>,
             ), // Use JSON error formatter for machine-readable errors

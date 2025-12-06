@@ -7,7 +7,7 @@ this `ts-packages/` directory contains TypeScript packages that complement the R
 
 ## Packages
 
-- **annotated-qmd** (`@quarto/annotated-qmd`): Converts quarto-markdown-pandoc JSON output
+- **annotated-qmd** (`@quarto/annotated-qmd`): Converts pampa JSON output
   to AnnotatedParse structures compatible with quarto-cli's YAML validation infrastructure.
 
 ## Development

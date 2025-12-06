@@ -18,7 +18,7 @@ use quarto_source_map::SourceInfo;
 
 /// Collector for diagnostic messages during template evaluation.
 ///
-/// This is a simplified version of the DiagnosticCollector from quarto-markdown-pandoc,
+/// This is a simplified version of the DiagnosticCollector from pampa,
 /// tailored for template evaluation.
 #[derive(Debug, Default)]
 pub struct DiagnosticCollector {

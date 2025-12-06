@@ -65,7 +65,7 @@ cargo build --release --bin qmd-syntax-helper
 - Rust 2024 edition
 - For grid table conversion:
   - `pandoc` must be in PATH
-  - `quarto-markdown-pandoc` workspace crate (used as library)
+  - `pampa` workspace crate (used as library)
 
 ## Future Converters
 
@@ -115,9 +115,9 @@ Grid table conversion uses a two-stage pipeline:
    - Uses embedded Lua filter to transform Table nodes to list-table Div format
    - Extracted to temp directory at runtime via ResourceManager
 
-2. **quarto-markdown-pandoc library**: Converts Pandoc JSON AST back to Markdown
-   - Uses `quarto_markdown_pandoc::readers::json::read()` to parse JSON
-   - Uses `quarto_markdown_pandoc::writers::qmd::write()` to generate Markdown
+2. **pampa library**: Converts Pandoc JSON AST back to Markdown
+   - Uses `pampa::readers::json::read()` to parse JSON
+   - Uses `pampa::writers::qmd::write()` to generate Markdown
    - Pure Rust library calls (no subprocess overhead)
 
 ## License

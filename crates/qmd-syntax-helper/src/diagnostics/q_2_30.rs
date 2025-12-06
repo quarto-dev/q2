@@ -30,7 +30,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::rule::{CheckResult, ConvertResult, Rule, SourceLocation};
-use quarto_markdown_pandoc::pandoc::Block;
+use pampa::pandoc::Block;
 
 pub struct Q230Checker {}
 
@@ -51,11 +51,11 @@ impl Q230Checker {
         let content = fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
-        // Parse with quarto-markdown-pandoc to get AST
+        // Parse with pampa to get AST
         let mut sink = std::io::sink();
         let filename = file_path.to_string_lossy();
 
-        let parse_result = quarto_markdown_pandoc::readers::qmd::read(
+        let parse_result = pampa::readers::qmd::read(
             content.as_bytes(),
             false, // not loose mode
             &filename,
@@ -105,7 +105,7 @@ impl Q230Checker {
     fn para_starts_with_indent(
         &self,
         content: &str,
-        para: &quarto_markdown_pandoc::pandoc::Paragraph,
+        para: &pampa::pandoc::Paragraph,
     ) -> Result<bool> {
         let para_start = para.source_info.start_offset();
 

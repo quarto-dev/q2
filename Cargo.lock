@@ -836,6 +836,50 @@ dependencies = [
 ]
 
 [[package]]
+name = "pampa"
+version = "0.0.0"
+dependencies = [
+ "ariadne",
+ "base64",
+ "clap",
+ "crossterm",
+ "glob",
+ "hashlink",
+ "insta",
+ "mlua",
+ "once_cell",
+ "paste",
+ "quarto-citeproc",
+ "quarto-csl",
+ "quarto-doctemplate",
+ "quarto-error-message-macros",
+ "quarto-error-reporting",
+ "quarto-pandoc-types",
+ "quarto-parse-errors",
+ "quarto-source-map",
+ "quarto-treesitter-ast",
+ "quarto-yaml",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha1",
+ "supports-hyperlinks",
+ "tempfile",
+ "tree-sitter",
+ "tree-sitter-qmd",
+ "yaml-rust2",
+]
+
+[[package]]
+name = "pampa-fuzz"
+version = "0.0.0"
+dependencies = [
+ "libfuzzer-sys",
+ "pampa",
+ "yaml-rust2",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -920,8 +964,8 @@ dependencies = [
  "anyhow",
  "clap",
  "include_dir",
+ "pampa",
  "quarto-doctemplate",
- "quarto-markdown-pandoc",
  "quarto-source-map",
  "rayon",
  "walkdir",
@@ -976,8 +1020,8 @@ dependencies = [
  "colored",
  "glob",
  "include_dir",
+ "pampa",
  "quarto-error-reporting",
- "quarto-markdown-pandoc",
  "regex",
  "serde",
  "serde_json",
@@ -1076,50 +1120,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "url",
-]
-
-[[package]]
-name = "quarto-markdown-pandoc"
-version = "0.0.0"
-dependencies = [
- "ariadne",
- "base64",
- "clap",
- "crossterm",
- "glob",
- "hashlink",
- "insta",
- "mlua",
- "once_cell",
- "paste",
- "quarto-citeproc",
- "quarto-csl",
- "quarto-doctemplate",
- "quarto-error-message-macros",
- "quarto-error-reporting",
- "quarto-pandoc-types",
- "quarto-parse-errors",
- "quarto-source-map",
- "quarto-treesitter-ast",
- "quarto-yaml",
- "regex",
- "serde",
- "serde_json",
- "sha1",
- "supports-hyperlinks",
- "tempfile",
- "tree-sitter",
- "tree-sitter-qmd",
- "yaml-rust2",
-]
-
-[[package]]
-name = "quarto-markdown-pandoc-fuzz"
-version = "0.0.0"
-dependencies = [
- "libfuzzer-sys",
- "quarto-markdown-pandoc",
- "yaml-rust2",
 ]
 
 [[package]]
@@ -1888,7 +1888,7 @@ name = "wasm-qmd-parser"
 version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
- "quarto-markdown-pandoc",
+ "pampa",
  "wasm-bindgen",
  "wasm-bindgen-test",
 ]

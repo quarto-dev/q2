@@ -7,8 +7,8 @@ use std::process::{Command, Stdio};
 use crate::rule::{CheckResult, ConvertResult, Rule};
 use crate::utils::file_io::{read_file, write_file};
 use crate::utils::resources::ResourceManager;
-use quarto_markdown_pandoc::readers::json;
-use quarto_markdown_pandoc::writers::qmd;
+use pampa::readers::json;
+use pampa::writers::qmd;
 
 pub struct DefinitionListConverter {
     def_item_regex: Regex,
@@ -143,7 +143,7 @@ impl DefinitionListConverter {
 
     /// Convert a single definition list by:
     /// 1. Running pandoc with the Lua filter to convert to JSON
-    /// 2. Using quarto-markdown-pandoc library to convert JSON to markdown
+    /// 2. Using pampa library to convert JSON to markdown
     pub fn convert_list(&self, list_text: &str) -> Result<String> {
         use std::io::Write;
 
