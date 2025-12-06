@@ -191,11 +191,14 @@ impl Template {
         );
 
         // Extract the final nodes
-        let nodes = match result {
+        let mut nodes = match result {
             Intermediate::Nodes(nodes) => nodes,
             Intermediate::Node(node) => vec![node],
             _ => Vec::new(),
         };
+
+        // Normalize multiline directives to match Pandoc's newline handling
+        normalize_multiline_directives(&mut nodes);
 
         Ok(Template {
             nodes,
@@ -953,6 +956,143 @@ fn extract_forloop_parts(
     }
 
     (var, body, separator)
+}
+
+/// Normalize multiline directives to match Pandoc's newline handling.
+///
+/// In Pandoc's doctemplates, when a directive like `$if(...)$` or `$for(...)$`
+/// is on its own line (preceded by only whitespace, followed by newline),
+/// the trailing newline is "swallowed" - it doesn't appear in the output.
+/// Similarly, the newline after the closing `$endif$` or `$endfor$` is swallowed.
+///
+/// Since our tree-sitter parser preserves all text literally, we need to
+/// detect these "multiline" directives and strip the extra newlines.
+///
+/// Detection: A directive is "multiline" if its body starts with a Literal
+/// beginning with '\n'. This indicates the directive was followed by a newline.
+fn normalize_multiline_directives(nodes: &mut Vec<TemplateNode>) {
+    // Process each node, with access to the next sibling for lookahead
+    let mut i = 0;
+    while i < nodes.len() {
+        match &mut nodes[i] {
+            TemplateNode::Conditional(cond) => {
+                // Check if this is a multiline conditional
+                let is_multiline = is_first_child_newline_literal(&cond.branches);
+
+                if is_multiline {
+                    // Strip leading newline from body of each branch
+                    for (_condition, body) in &mut cond.branches {
+                        strip_leading_newline_from_nodes(body);
+                        // Recursively normalize nested directives
+                        normalize_multiline_directives(body);
+                    }
+
+                    // Strip leading newline from else branch if present
+                    if let Some(else_body) = &mut cond.else_branch {
+                        strip_leading_newline_from_nodes(else_body);
+                        normalize_multiline_directives(else_body);
+                    }
+
+                    // Strip leading newline from next sibling if it's a Literal
+                    if i + 1 < nodes.len() {
+                        strip_leading_newline_from_node(&mut nodes[i + 1]);
+                    }
+                } else {
+                    // Still need to recursively normalize nested directives
+                    for (_condition, body) in &mut cond.branches {
+                        normalize_multiline_directives(body);
+                    }
+                    if let Some(else_body) = &mut cond.else_branch {
+                        normalize_multiline_directives(else_body);
+                    }
+                }
+            }
+
+            TemplateNode::ForLoop(for_loop) => {
+                // Check if this is a multiline for loop
+                let is_multiline = first_node_is_newline_literal(&for_loop.body);
+
+                if is_multiline {
+                    // Strip leading newline from body
+                    strip_leading_newline_from_nodes(&mut for_loop.body);
+                    normalize_multiline_directives(&mut for_loop.body);
+
+                    // Strip leading newline from separator if present
+                    if let Some(sep) = &mut for_loop.separator {
+                        strip_leading_newline_from_nodes(sep);
+                        normalize_multiline_directives(sep);
+                    }
+
+                    // Strip leading newline from next sibling if it's a Literal
+                    if i + 1 < nodes.len() {
+                        strip_leading_newline_from_node(&mut nodes[i + 1]);
+                    }
+                } else {
+                    // Still need to recursively normalize nested directives
+                    normalize_multiline_directives(&mut for_loop.body);
+                    if let Some(sep) = &mut for_loop.separator {
+                        normalize_multiline_directives(sep);
+                    }
+                }
+            }
+
+            TemplateNode::Nesting(nesting) => {
+                normalize_multiline_directives(&mut nesting.children);
+            }
+
+            TemplateNode::BreakableSpace(bs) => {
+                normalize_multiline_directives(&mut bs.children);
+            }
+
+            // Other node types don't need processing
+            TemplateNode::Literal(_)
+            | TemplateNode::Variable(_)
+            | TemplateNode::Partial(_)
+            | TemplateNode::Comment(_) => {}
+        }
+
+        i += 1;
+    }
+}
+
+/// Check if the first branch's first node is a Literal starting with '\n'.
+fn is_first_child_newline_literal(branches: &[(VariableRef, Vec<TemplateNode>)]) -> bool {
+    if let Some((_, body)) = branches.first() {
+        first_node_is_newline_literal(body)
+    } else {
+        false
+    }
+}
+
+/// Check if the first node in a list is a Literal starting with '\n'.
+fn first_node_is_newline_literal(nodes: &[TemplateNode]) -> bool {
+    if let Some(TemplateNode::Literal(lit)) = nodes.first() {
+        lit.text.starts_with('\n')
+    } else {
+        false
+    }
+}
+
+/// Strip a leading '\n' from the first Literal node if present.
+fn strip_leading_newline_from_nodes(nodes: &mut Vec<TemplateNode>) {
+    if let Some(first) = nodes.first_mut() {
+        strip_leading_newline_from_node(first);
+        // If the node became empty, remove it
+        if let TemplateNode::Literal(lit) = first {
+            if lit.text.is_empty() {
+                nodes.remove(0);
+            }
+        }
+    }
+}
+
+/// Strip a leading '\n' from a node if it's a Literal starting with '\n'.
+fn strip_leading_newline_from_node(node: &mut TemplateNode) {
+    if let TemplateNode::Literal(lit) = node {
+        if lit.text.starts_with('\n') {
+            lit.text = lit.text[1..].to_string();
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,0 +1,6 @@
+$if(items)$
+List:
+$for(items)$
+  - $it$
+$endfor$
+$endif$

@@ -199,12 +199,16 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
             // Handle literal separator for arrays: $var[, ]$
             if let Some(sep) = &var.separator {
                 if let TemplateValue::List(items) = value {
-                    let docs: Vec<Doc> = items.iter().map(|v| v.to_doc()).collect();
+                    let docs: Vec<Doc> = items
+                        .iter()
+                        .map(|v| v.to_doc().remove_final_newline())
+                        .collect();
                     return intersperse_docs(docs, Doc::text(sep));
                 }
             }
             // TODO: Apply pipes
-            value.to_doc()
+            // Strip final newline from variable values (matches Pandoc's removeFinalNl)
+            value.to_doc().remove_final_newline()
         }
         None => {
             // Emit warning or error depending on strict mode

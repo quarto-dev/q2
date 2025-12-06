@@ -107,6 +107,58 @@ impl Doc {
         Doc::BreakingSpace
     }
 
+    /// Remove a trailing newline from this document.
+    ///
+    /// This matches Pandoc's `removeFinalNl` behavior, which strips trailing
+    /// newlines from variable values when interpolating them into templates.
+    ///
+    /// Important: This does NOT strip `BreakingSpace`, matching Pandoc's behavior
+    /// where breaking spaces are preserved (they're for text reflow, not hard newlines).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// Doc::NewLine.remove_final_newline() // => Doc::Empty
+    /// Doc::text("hello\n").remove_final_newline() // => Doc::text("hello")
+    /// Doc::text("hello").remove_final_newline() // => Doc::text("hello")
+    /// ```
+    pub fn remove_final_newline(self) -> Self {
+        match self {
+            // Explicit newline nodes become empty
+            Doc::NewLine => Doc::Empty,
+
+            // Text with trailing newline: strip it
+            Doc::Text(s) => {
+                if s.ends_with('\n') {
+                    let trimmed = s.trim_end_matches('\n');
+                    if trimmed.is_empty() {
+                        Doc::Empty
+                    } else {
+                        Doc::Text(trimmed.to_string())
+                    }
+                } else {
+                    Doc::Text(s)
+                }
+            }
+
+            // Concatenation: recursively strip from the right side
+            Doc::Concat(a, b) => {
+                let b_stripped = b.remove_final_newline();
+                if b_stripped.is_empty() {
+                    // If right side is now empty, return left side
+                    // (possibly recursively stripping if it also ends with newline)
+                    a.remove_final_newline()
+                } else {
+                    Doc::Concat(a, Box::new(b_stripped))
+                }
+            }
+
+            // Everything else passes through unchanged
+            // (Empty, Prefixed, BreakingSpace)
+            other => other,
+        }
+    }
+
     /// Render this document to a string.
     ///
     /// # Arguments
@@ -297,5 +349,78 @@ mod tests {
 
         // First line has no prefix, second line gets both prefixes
         assert_eq!(outer.render(None), "line1\n>   line2");
+    }
+
+    #[test]
+    fn test_remove_final_newline_from_newline() {
+        // NewLine node becomes Empty
+        let doc = Doc::NewLine;
+        assert!(doc.remove_final_newline().is_empty());
+    }
+
+    #[test]
+    fn test_remove_final_newline_from_text() {
+        // Text with trailing newline
+        let doc = Doc::text("hello\n");
+        assert_eq!(doc.remove_final_newline().render(None), "hello");
+
+        // Text without trailing newline - unchanged
+        let doc = Doc::text("hello");
+        assert_eq!(doc.remove_final_newline().render(None), "hello");
+
+        // Text with multiple trailing newlines - all stripped
+        let doc = Doc::text("hello\n\n\n");
+        assert_eq!(doc.remove_final_newline().render(None), "hello");
+
+        // Only newline - becomes empty
+        let doc = Doc::text("\n");
+        assert!(doc.remove_final_newline().is_empty());
+    }
+
+    #[test]
+    fn test_remove_final_newline_from_concat() {
+        // Concat ending with NewLine
+        let doc = Doc::text("hello").concat(Doc::NewLine);
+        assert_eq!(doc.remove_final_newline().render(None), "hello");
+
+        // Concat ending with text with newline
+        let doc = Doc::text("hello").concat(Doc::text(" world\n"));
+        assert_eq!(doc.remove_final_newline().render(None), "hello world");
+
+        // Nested concat - should strip from rightmost
+        let doc = Doc::text("a")
+            .concat(Doc::NewLine)
+            .concat(Doc::text("b"))
+            .concat(Doc::NewLine);
+        assert_eq!(doc.remove_final_newline().render(None), "a\nb");
+    }
+
+    #[test]
+    fn test_remove_final_newline_preserves_breaking_space() {
+        // BreakingSpace should NOT be stripped (matches Pandoc behavior)
+        let doc = Doc::text("hello").concat(Doc::BreakingSpace);
+        assert_eq!(doc.remove_final_newline().render(None), "hello ");
+
+        // Even if BreakingSpace is at the end
+        let doc = Doc::BreakingSpace;
+        assert_eq!(doc.remove_final_newline().render(None), " ");
+    }
+
+    #[test]
+    fn test_remove_final_newline_empty() {
+        // Empty stays empty
+        assert!(Doc::Empty.remove_final_newline().is_empty());
+    }
+
+    #[test]
+    fn test_remove_final_newline_prefixed() {
+        // Prefixed passes through unchanged - we don't recurse into it
+        // (matching Pandoc's removeFinalNl which doesn't recurse into Nest)
+        let inner = Doc::text("hello");
+        let doc = Doc::prefixed("  ", inner.clone());
+        let stripped = doc.remove_final_newline();
+
+        // The Prefixed wrapper is preserved, content unchanged
+        assert_eq!(stripped, Doc::Prefixed("  ".to_string(), Box::new(inner)));
     }
 }

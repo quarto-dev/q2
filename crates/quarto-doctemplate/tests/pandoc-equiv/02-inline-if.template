@@ -1,0 +1,1 @@
+before $if(show)$content$endif$ after
