@@ -346,42 +346,13 @@ fn capitalize_literal(output: Output) -> Output {
 
 impl Output {
     /// Render the output to a plain string.
+    ///
+    /// This method converts the Output AST to Pandoc Inlines first, then
+    /// serializes to a markdown-like string. This unified path ensures
+    /// consistent behavior between the String and Inlines code paths.
     pub fn render(&self) -> String {
-        match self {
-            Output::Null => String::new(),
-            Output::Literal(s) => s.clone(),
-            Output::Formatted {
-                formatting,
-                children,
-            } => {
-                // Join children with delimiter if specified, using smart punctuation handling
-                let inner: String = if let Some(ref delim) = formatting.delimiter {
-                    let rendered: Vec<String> = children
-                        .iter()
-                        .map(|c| c.render())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    join_with_smart_delim(rendered, delim)
-                } else {
-                    // No delimiter - still apply punctuation fixing
-                    let rendered: Vec<String> = children.iter().map(|c| c.render()).collect();
-                    fix_punct(rendered).join("")
-                };
-                render_with_formatting(&inner, formatting)
-            }
-            Output::Linked { children, .. } => {
-                // For plain text rendering, just render children (no link markup)
-                children.iter().map(|c| c.render()).collect()
-            }
-            Output::InNote(child) => {
-                // For plain text, just render the content
-                child.render()
-            }
-            Output::Tagged { child, .. } => {
-                // Tags are transparent for rendering
-                child.render()
-            }
-        }
+        let inlines = self.to_inlines();
+        inlines_to_markdown_string(&inlines)
     }
 
     /// Extract the rendered text of names (Tag::Names) from this output.
@@ -2111,6 +2082,285 @@ fn render_with_formatting(text: &str, formatting: &Formatting) -> String {
     with_suffix
 }
 
+// ============================================================================
+// Inlines to Markdown String conversion
+// ============================================================================
+
+/// Convert Pandoc Inlines to a markdown-like string.
+///
+/// This function produces output compatible with the legacy `render()` method,
+/// allowing the code path to be unified: Output → Inlines → String.
+///
+/// Format mappings:
+/// - Emph → `*content*`
+/// - Strong → `**content**`
+/// - Superscript → `^content^`
+/// - Subscript → `~content~`
+/// - Quoted(DoubleQuote) → `"content"` (Unicode curly quotes)
+/// - Quoted(SingleQuote) → `'content'` (Unicode curly quotes)
+/// - SmallCaps → content (transparent, no markup)
+/// - Span → content (transparent)
+/// - Link → content (no link markup)
+/// - Note → content rendered as string
+pub fn inlines_to_markdown_string(inlines: &[quarto_pandoc_types::Inline]) -> String {
+    let mut result = String::new();
+    for inline in inlines {
+        inline_to_markdown_string(inline, &mut result);
+    }
+    result
+}
+
+/// Convert a single Pandoc Inline to markdown-like string, appending to result.
+fn inline_to_markdown_string(inline: &quarto_pandoc_types::Inline, result: &mut String) {
+    use quarto_pandoc_types::{Inline, QuoteType};
+
+    match inline {
+        Inline::Str(s) => {
+            result.push_str(&s.text);
+        }
+        Inline::Space(_) => {
+            result.push(' ');
+        }
+        Inline::SoftBreak(_) => {
+            result.push(' ');
+        }
+        Inline::LineBreak(_) => {
+            result.push('\n');
+        }
+        Inline::Emph(e) => {
+            result.push('*');
+            for child in &e.content {
+                inline_to_markdown_string(child, result);
+            }
+            result.push('*');
+        }
+        Inline::Strong(s) => {
+            result.push_str("**");
+            for child in &s.content {
+                inline_to_markdown_string(child, result);
+            }
+            result.push_str("**");
+        }
+        Inline::Superscript(s) => {
+            result.push('^');
+            for child in &s.content {
+                inline_to_markdown_string(child, result);
+            }
+            result.push('^');
+        }
+        Inline::Subscript(s) => {
+            result.push('~');
+            for child in &s.content {
+                inline_to_markdown_string(child, result);
+            }
+            result.push('~');
+        }
+        Inline::SmallCaps(s) => {
+            // SmallCaps is transparent in markdown output (no markup available)
+            // This matches the legacy render() behavior which ignores font_variant
+            for child in &s.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Quoted(q) => {
+            // Use Unicode curly quotes as per CSL locale conventions
+            match q.quote_type {
+                QuoteType::DoubleQuote => {
+                    result.push('\u{201C}'); // "
+                    for child in &q.content {
+                        inline_to_markdown_string(child, result);
+                    }
+                    result.push('\u{201D}'); // "
+                }
+                QuoteType::SingleQuote => {
+                    result.push('\u{2018}'); // '
+                    for child in &q.content {
+                        inline_to_markdown_string(child, result);
+                    }
+                    result.push('\u{2019}'); // '
+                }
+            }
+        }
+        Inline::Link(l) => {
+            // For plain text rendering, just render content (no link markup)
+            for child in &l.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Note(n) => {
+            // Render note content as string
+            for block in &n.content {
+                block_to_markdown_string(block, result);
+            }
+        }
+        Inline::Span(s) => {
+            // Spans are transparent (including nocase/nodecoration)
+            for child in &s.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Underline(u) => {
+            // No standard markdown for underline, render content
+            for child in &u.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Strikeout(s) => {
+            // Could use ~~content~~ but for consistency with legacy, just render content
+            for child in &s.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Code(c) => {
+            result.push('`');
+            result.push_str(&c.text);
+            result.push('`');
+        }
+        Inline::Math(m) => {
+            // Render math text as-is (no delimiters for simplicity)
+            result.push_str(&m.text);
+        }
+        Inline::RawInline(r) => {
+            // Raw inline - just include the text
+            result.push_str(&r.text);
+        }
+        Inline::Image(i) => {
+            // For plain text, render alt text
+            for child in &i.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Cite(c) => {
+            // Render citation content
+            for child in &c.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        // Quarto extensions - render content or ignore
+        Inline::Shortcode(_) => {}
+        Inline::NoteReference(_) => {}
+        Inline::Attr(_, _) => {}
+        Inline::Insert(i) => {
+            for child in &i.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Delete(d) => {
+            for child in &d.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::Highlight(h) => {
+            for child in &h.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+        Inline::EditComment(e) => {
+            for child in &e.content {
+                inline_to_markdown_string(child, result);
+            }
+        }
+    }
+}
+
+/// Convert a Pandoc Block to markdown-like string, appending to result.
+fn block_to_markdown_string(block: &quarto_pandoc_types::Block, result: &mut String) {
+    use quarto_pandoc_types::Block;
+
+    match block {
+        Block::Plain(p) => {
+            for inline in &p.content {
+                inline_to_markdown_string(inline, result);
+            }
+        }
+        Block::Paragraph(p) => {
+            for inline in &p.content {
+                inline_to_markdown_string(inline, result);
+            }
+        }
+        Block::Div(d) => {
+            for inner in &d.content {
+                block_to_markdown_string(inner, result);
+            }
+        }
+        Block::BlockQuote(b) => {
+            for inner in &b.content {
+                block_to_markdown_string(inner, result);
+            }
+        }
+        Block::BulletList(b) => {
+            for item in &b.content {
+                for inner in item {
+                    block_to_markdown_string(inner, result);
+                }
+            }
+        }
+        Block::OrderedList(o) => {
+            for item in &o.content {
+                for inner in item {
+                    block_to_markdown_string(inner, result);
+                }
+            }
+        }
+        Block::DefinitionList(d) => {
+            for (term, defs) in &d.content {
+                for inline in term {
+                    inline_to_markdown_string(inline, result);
+                }
+                for def in defs {
+                    for inner in def {
+                        block_to_markdown_string(inner, result);
+                    }
+                }
+            }
+        }
+        Block::Header(h) => {
+            for inline in &h.content {
+                inline_to_markdown_string(inline, result);
+            }
+        }
+        Block::CodeBlock(c) => {
+            result.push_str(&c.text);
+        }
+        Block::RawBlock(r) => {
+            result.push_str(&r.text);
+        }
+        Block::HorizontalRule(_) => {}
+        Block::LineBlock(l) => {
+            for line in &l.content {
+                for inline in line {
+                    inline_to_markdown_string(inline, result);
+                }
+            }
+        }
+        Block::Table(_) => {
+            // Tables are complex, skip for now
+        }
+        Block::Figure(f) => {
+            for inner in &f.content {
+                block_to_markdown_string(inner, result);
+            }
+        }
+        // Quarto extensions
+        Block::BlockMetadata(_) => {}
+        Block::NoteDefinitionPara(n) => {
+            for inline in &n.content {
+                inline_to_markdown_string(inline, result);
+            }
+        }
+        Block::NoteDefinitionFencedBlock(n) => {
+            for inner in &n.content {
+                block_to_markdown_string(inner, result);
+            }
+        }
+        Block::CaptionBlock(c) => {
+            for inline in &c.content {
+                inline_to_markdown_string(inline, result);
+            }
+        }
+    }
+}
+
 /// Join multiple outputs with a delimiter.
 pub fn join_outputs(outputs: Vec<Output>, delimiter: &str) -> Output {
     let non_null: Vec<_> = outputs.into_iter().filter(|o| !o.is_null()).collect();
@@ -2512,6 +2762,9 @@ fn get_trailing_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
                 }
             }
             Inline::Quoted(q) => {
+                // Look inside quoted elements for punctuation collision detection.
+                // This matches Pandoc citeproc behavior where punctuation deduplication
+                // happens based on semantic content, not literal quote characters.
                 if let Some(c) = get_trailing_char(&q.content) {
                     return Some(c);
                 }
@@ -2554,6 +2807,8 @@ fn get_leading_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
                 }
             }
             Inline::Quoted(q) => {
+                // Look inside quoted elements for punctuation collision detection.
+                // This matches Pandoc citeproc behavior.
                 if let Some(c) = get_leading_char(&q.content) {
                     return Some(c);
                 }
@@ -5463,6 +5718,182 @@ mod tests {
 }
 
 #[cfg(test)]
+mod render_via_inlines_tests {
+    //! Tests for the unified render path: `to_inlines() |> inlines_to_markdown_string()`.
+    //!
+    //! These tests verify that the render() method produces correct markdown-like
+    //! string output for various Output structures.
+
+    use super::*;
+
+    #[test]
+    fn test_render_literal() {
+        assert_eq!(Output::literal("Hello World").render(), "Hello World");
+    }
+
+    #[test]
+    fn test_render_null() {
+        assert_eq!(Output::Null.render(), "");
+    }
+
+    #[test]
+    fn test_render_formatted_basic() {
+        let output = Output::formatted(
+            Formatting::default(),
+            vec![Output::literal("Hello"), Output::literal(" World")],
+        );
+        assert_eq!(output.render(), "Hello World");
+    }
+
+    #[test]
+    fn test_render_italic() {
+        let mut formatting = Formatting::default();
+        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let output = Output::formatted(formatting, vec![Output::literal("Title")]);
+        assert_eq!(output.render(), "*Title*");
+    }
+
+    #[test]
+    fn test_render_bold() {
+        let mut formatting = Formatting::default();
+        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        let output = Output::formatted(formatting, vec![Output::literal("Author")]);
+        assert_eq!(output.render(), "**Author**");
+    }
+
+    #[test]
+    fn test_render_superscript() {
+        let mut formatting = Formatting::default();
+        formatting.vertical_align = Some(quarto_csl::VerticalAlign::Sup);
+        let output = Output::formatted(formatting, vec![Output::literal("2")]);
+        assert_eq!(output.render(), "^2^");
+    }
+
+    #[test]
+    fn test_render_subscript() {
+        let mut formatting = Formatting::default();
+        formatting.vertical_align = Some(quarto_csl::VerticalAlign::Sub);
+        let output = Output::formatted(formatting, vec![Output::literal("x")]);
+        assert_eq!(output.render(), "~x~");
+    }
+
+    #[test]
+    fn test_render_prefix_suffix() {
+        let mut formatting = Formatting::default();
+        formatting.prefix = Some("(".to_string());
+        formatting.suffix = Some(")".to_string());
+        let output = Output::formatted(formatting, vec![Output::literal("2020")]);
+        assert_eq!(output.render(), "(2020)");
+    }
+
+    #[test]
+    fn test_render_quotes() {
+        let mut formatting = Formatting::default();
+        formatting.quotes = true;
+        let output = Output::formatted(formatting, vec![Output::literal("Title")]);
+        assert_eq!(output.render(), "\u{201C}Title\u{201D}");
+    }
+
+    #[test]
+    fn test_render_nested_formatting() {
+        let mut inner_fmt = Formatting::default();
+        inner_fmt.font_style = Some(quarto_csl::FontStyle::Italic);
+
+        let mut outer_fmt = Formatting::default();
+        outer_fmt.prefix = Some("(".to_string());
+        outer_fmt.suffix = Some(")".to_string());
+
+        let inner = Output::formatted(inner_fmt, vec![Output::literal("Title")]);
+        let outer = Output::formatted(outer_fmt, vec![inner, Output::literal(", 2020")]);
+        assert_eq!(outer.render(), "(*Title*, 2020)");
+    }
+
+    #[test]
+    fn test_render_tagged_transparent() {
+        let output = Output::tagged(Tag::Title, Output::literal("My Book"));
+        assert_eq!(output.render(), "My Book");
+    }
+
+    #[test]
+    fn test_render_linked() {
+        let output = Output::Linked {
+            url: "http://example.com".to_string(),
+            children: vec![Output::literal("Link Text")],
+        };
+        assert_eq!(output.render(), "Link Text");
+    }
+
+    #[test]
+    fn test_render_delimiter() {
+        let mut formatting = Formatting::default();
+        formatting.delimiter = Some(", ".to_string());
+        let output = Output::formatted(
+            formatting,
+            vec![
+                Output::literal("A"),
+                Output::literal("B"),
+                Output::literal("C"),
+            ],
+        );
+        assert_eq!(output.render(), "A, B, C");
+    }
+
+    #[test]
+    fn test_render_delimiter_filters_empty() {
+        let mut formatting = Formatting::default();
+        formatting.delimiter = Some(", ".to_string());
+        let output = Output::formatted(
+            formatting,
+            vec![Output::literal("A"), Output::Null, Output::literal("C")],
+        );
+        assert_eq!(output.render(), "A, C");
+    }
+
+    #[test]
+    fn test_render_text_case_uppercase() {
+        let mut formatting = Formatting::default();
+        formatting.text_case = Some(quarto_csl::TextCase::Uppercase);
+        let output = Output::formatted(formatting, vec![Output::literal("hello")]);
+        assert_eq!(output.render(), "HELLO");
+    }
+
+    #[test]
+    fn test_render_text_case_lowercase() {
+        let mut formatting = Formatting::default();
+        formatting.text_case = Some(quarto_csl::TextCase::Lowercase);
+        let output = Output::formatted(formatting, vec![Output::literal("HELLO")]);
+        assert_eq!(output.render(), "hello");
+    }
+
+    #[test]
+    fn test_render_strip_periods() {
+        let mut formatting = Formatting::default();
+        formatting.strip_periods = true;
+        let output = Output::formatted(formatting, vec![Output::literal("Ph.D.")]);
+        assert_eq!(output.render(), "PhD");
+    }
+
+    #[test]
+    fn test_render_combined_formatting() {
+        let mut formatting = Formatting::default();
+        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        formatting.prefix = Some("(".to_string());
+        formatting.suffix = Some(")".to_string());
+        let output = Output::formatted(formatting, vec![Output::literal("Title")]);
+        assert_eq!(output.render(), "(*Title*)");
+    }
+
+    #[test]
+    fn test_render_italic_and_bold() {
+        let mut formatting = Formatting::default();
+        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        let output = Output::formatted(formatting, vec![Output::literal("Important")]);
+        assert_eq!(output.render(), "***Important***");
+    }
+}
+
+#[cfg(test)]
 mod rich_text_tests {
     use super::*;
 
@@ -5743,11 +6174,13 @@ mod punct_tests {
         let result = move_punctuation_inside_quotes(input);
         assert_eq!(result.render(), "\u{201C}one,\u{201D} \u{201C}two\u{201D}");
 
-        // Test: already has punctuation inside - should not double
+        // Test: already has punctuation inside - punctuation collision removes duplicate
         let input = Output::sequence(vec![quoted("Hello."), Output::literal(". world")]);
         let result = move_punctuation_inside_quotes(input);
-        // Should NOT move because content already ends with period
-        assert_eq!(result.render(), "\u{201C}Hello.\u{201D}. world");
+        // Should NOT move punctuation inside (because content already ends with period),
+        // but the external period IS deduplicated via punctuation collision rules
+        // (trailing '.' inside quote collides with leading '.' → keepFirst)
+        assert_eq!(result.render(), "\u{201C}Hello.\u{201D} world");
 
         // Test: no trailing punctuation - unchanged
         let input = Output::sequence(vec![quoted("Hello"), Output::literal(" world")]);

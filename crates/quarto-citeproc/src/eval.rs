@@ -1258,7 +1258,7 @@ fn evaluate_elements(
     let mut outputs = Vec::new();
 
     for element in elements {
-        let output = evaluate_element(ctx, element)?;
+        let output = evaluate_element(ctx, element, delimiter)?;
         if !output.is_null() {
             outputs.push(output);
         }
@@ -1273,14 +1273,23 @@ fn evaluate_elements(
 }
 
 /// Evaluate a single element.
-fn evaluate_element(ctx: &mut EvalContext, element: &Element) -> Result<Output> {
+///
+/// The `inherited_delimiter` parameter allows delimiter inheritance through
+/// transparent elements like `<choose>`. When a `<group delimiter="...">` wraps
+/// a `<choose>` element, the delimiter is passed through so that the choose
+/// branch's elements are joined with the parent group's delimiter.
+fn evaluate_element(
+    ctx: &mut EvalContext,
+    element: &Element,
+    inherited_delimiter: &str,
+) -> Result<Output> {
     let formatting = ctx.effective_formatting(&element.formatting);
 
     let output = match &element.element_type {
         ElementType::Text(text_el) => evaluate_text(ctx, text_el, &formatting)?,
         ElementType::Names(names_el) => evaluate_names(ctx, names_el, &formatting)?,
         ElementType::Group(group_el) => evaluate_group(ctx, group_el, &formatting)?,
-        ElementType::Choose(choose_el) => evaluate_choose(ctx, choose_el)?,
+        ElementType::Choose(choose_el) => evaluate_choose(ctx, choose_el, inherited_delimiter)?,
         ElementType::Number(num_el) => evaluate_number(ctx, num_el, &formatting)?,
         ElementType::Label(label_el) => evaluate_label(ctx, label_el, &formatting)?,
         ElementType::Date(date_el) => evaluate_date(ctx, date_el, &formatting)?,
@@ -1664,7 +1673,8 @@ fn evaluate_names_substitute(ctx: &mut EvalContext, names_el: &NamesElement) -> 
 
     let mut result = Output::Null;
     for element in substitute {
-        let sub_output = evaluate_element(ctx, element)?;
+        // Substitute elements don't inherit a parent delimiter
+        let sub_output = evaluate_element(ctx, element, "")?;
         if !sub_output.is_null() {
             result = sub_output;
             break;
@@ -2821,11 +2831,35 @@ fn evaluate_group(
 }
 
 /// Evaluate a choose element (conditionals).
-fn evaluate_choose(ctx: &mut EvalContext, choose_el: &quarto_csl::ChooseElement) -> Result<Output> {
+///
+/// The `inherited_delimiter` parameter is passed from the parent context (typically
+/// a `<group>` element with a delimiter attribute). This allows choose elements to
+/// be "transparent" for delimiter inheritance - the branch elements are joined with
+/// the parent group's delimiter rather than being concatenated without separation.
+///
+/// This is important for CSL styles like Chicago author-date where the structure is:
+/// ```xml
+/// <group delimiter=". ">
+///   <choose>
+///     <if ...>
+///       <text macro="author"/>
+///       <text macro="date"/>
+///       <text macro="title"/>
+///     </if>
+///   </choose>
+/// </group>
+/// ```
+/// Without delimiter inheritance, the author, date, and title would be concatenated
+/// directly without the ". " separator.
+fn evaluate_choose(
+    ctx: &mut EvalContext,
+    choose_el: &quarto_csl::ChooseElement,
+    inherited_delimiter: &str,
+) -> Result<Output> {
     for branch in &choose_el.branches {
         // Else branch has no conditions
         if branch.conditions.is_empty() {
-            return evaluate_elements(ctx, &branch.elements, "");
+            return evaluate_elements(ctx, &branch.elements, inherited_delimiter);
         }
 
         // Evaluate conditions based on match type
@@ -2845,7 +2879,7 @@ fn evaluate_choose(ctx: &mut EvalContext, choose_el: &quarto_csl::ChooseElement)
         };
 
         if matches {
-            return evaluate_elements(ctx, &branch.elements, "");
+            return evaluate_elements(ctx, &branch.elements, inherited_delimiter);
         }
     }
 
@@ -4598,5 +4632,165 @@ mod tests {
 
         // Letter in the middle
         assert!(!is_numeric_chunk("5a5"));
+    }
+
+    /// Test that group delimiters are properly inherited through choose elements.
+    ///
+    /// This test verifies the fix for a bug where `<group delimiter=". ">` wrapping
+    /// a `<choose>` element would not apply delimiters between the choose branch's
+    /// children. This is a common pattern in CSL styles like Chicago author-date.
+    #[test]
+    fn test_choose_inherits_group_delimiter() {
+        // CSL style that mimics the Chicago author-date pattern:
+        // <group delimiter=". "> wrapping a <choose> with multiple elements inside
+        let csl = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+  <info>
+    <title>Test Style</title>
+    <id>test</id>
+    <updated>2024-01-01T00:00:00+00:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout suffix=".">
+      <group delimiter=". ">
+        <choose>
+          <if type="book">
+            <names variable="author">
+              <name name-as-sort-order="first" sort-separator=", "/>
+            </names>
+            <date variable="issued">
+              <date-part name="year"/>
+            </date>
+            <text variable="title" font-style="italic"/>
+            <text variable="publisher"/>
+          </if>
+          <else>
+            <names variable="author">
+              <name name-as-sort-order="first" sort-separator=", "/>
+            </names>
+            <date variable="issued">
+              <date-part name="year"/>
+            </date>
+            <text variable="title"/>
+          </else>
+        </choose>
+      </group>
+    </layout>
+  </bibliography>
+</style>"#;
+
+        let style = parse_csl(csl).unwrap();
+        let mut processor = Processor::new(style);
+
+        let reference: Reference = serde_json::from_str(
+            r#"{
+            "id": "jones2019",
+            "type": "book",
+            "author": [{"family": "Jones", "given": "Alice"}],
+            "title": "An Important Book",
+            "issued": {"date-parts": [[2019]]},
+            "publisher": "Academic Press"
+        }"#,
+        )
+        .unwrap();
+
+        processor.add_reference(reference);
+
+        // Test using generate_bibliography (which uses render())
+        let entries = processor.generate_bibliography().unwrap();
+        assert_eq!(entries.len(), 1);
+        let (id, rendered) = &entries[0];
+        assert_eq!(id, "jones2019");
+
+        // The key assertion: delimiters should appear between author, date, title, publisher
+        // Expected: "Jones, Alice. 2019. An Important Book. Academic Press."
+        // Bug would produce: "Jones, Alice2019An Important BookAcademic Press."
+        assert!(
+            rendered.contains(". 2019"),
+            "Missing delimiter before year. Got: {}",
+            rendered
+        );
+        assert!(
+            rendered.contains("2019. "),
+            "Missing delimiter after year. Got: {}",
+            rendered
+        );
+
+        // Also test to_blocks() path (used by citeproc filter)
+        let output_entries = processor.generate_bibliography_to_outputs().unwrap();
+        assert_eq!(output_entries.len(), 1);
+        let (_, output) = &output_entries[0];
+
+        // Convert to blocks and then to a simple string for verification
+        let blocks = output.to_blocks();
+        let block_text = format!("{:?}", blocks);
+
+        // Verify delimiters appear in the block output
+        assert!(
+            block_text.contains("\". \""),
+            "Missing delimiter in to_blocks() output. Got: {}",
+            block_text
+        );
+    }
+
+    /// Test that choose without parent delimiter still works correctly.
+    #[test]
+    fn test_choose_without_parent_delimiter() {
+        let csl = r#"<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0">
+  <info>
+    <title>Test Style</title>
+    <id>test</id>
+    <updated>2024-01-01T00:00:00+00:00</updated>
+  </info>
+  <citation>
+    <layout>
+      <text variable="title"/>
+    </layout>
+  </citation>
+  <bibliography>
+    <layout>
+      <choose>
+        <if type="book">
+          <group delimiter=" - ">
+            <text variable="title"/>
+            <text variable="publisher"/>
+          </group>
+        </if>
+      </choose>
+    </layout>
+  </bibliography>
+</style>"#;
+
+        let style = parse_csl(csl).unwrap();
+        let mut processor = Processor::new(style);
+
+        let reference: Reference = serde_json::from_str(
+            r#"{
+            "id": "test1",
+            "type": "book",
+            "title": "Test Book",
+            "publisher": "Test Publisher"
+        }"#,
+        )
+        .unwrap();
+
+        processor.add_reference(reference);
+
+        let entries = processor.generate_bibliography().unwrap();
+        assert_eq!(entries.len(), 1);
+        let (_, rendered) = &entries[0];
+
+        // Should have delimiter from the inner group
+        assert!(
+            rendered.contains(" - "),
+            "Missing inner group delimiter. Got: {}",
+            rendered
+        );
     }
 }
