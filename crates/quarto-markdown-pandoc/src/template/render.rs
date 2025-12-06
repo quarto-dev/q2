@@ -131,15 +131,19 @@ fn render_body(
 ///
 /// ```ignore
 /// let bundle = TemplateBundle::from_json(r#"{"version": "1.0.0", "main": "<html>$body$</html>"}"#)?;
-/// let output = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)?;
+/// let output = render_with_bundle(&pandoc, &mut context, &bundle, "my-template.html", BodyFormat::Html)?;
 /// ```
 pub fn render_with_bundle(
     pandoc: &Pandoc,
-    context: &ASTContext,
+    context: &mut ASTContext,
     bundle: &TemplateBundle,
+    template_name: &str,
     body_format: BodyFormat,
 ) -> Result<(String, Vec<DiagnosticMessage>), TemplateRenderError> {
-    let template = bundle.compile("bundle")?;
+    // Compile template using the shared source context.
+    // This ensures template file IDs are unique within the same context as the main document,
+    // allowing diagnostics from templates to be correctly attributed to their source files.
+    let template = bundle.compile_with_context(template_name, &mut context.source_context)?;
     let resolver = bundle.to_resolver();
     render_with_compiled_template(pandoc, context, &template, &resolver, body_format)
 }
@@ -294,13 +298,19 @@ mod tests {
 
     #[test]
     fn test_render_with_bundle_simple() {
-        let (pandoc, context) = make_simple_pandoc();
+        let (pandoc, mut context) = make_simple_pandoc();
         let bundle = TemplateBundle::new(
             "<html><head><title>$title$</title></head><body>$body$</body></html>",
         );
 
-        let (output, diags) =
-            render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html).unwrap();
+        let (output, diags) = render_with_bundle(
+            &pandoc,
+            &mut context,
+            &bundle,
+            "test.html",
+            BodyFormat::Html,
+        )
+        .unwrap();
 
         assert!(diags.is_empty());
         assert!(output.contains("<title>Test Title</title>"));
@@ -310,11 +320,17 @@ mod tests {
 
     #[test]
     fn test_render_with_bundle_plaintext() {
-        let (pandoc, context) = make_simple_pandoc();
+        let (pandoc, mut context) = make_simple_pandoc();
         let bundle = TemplateBundle::new("Title: $title$\n\n$body$");
 
-        let (output, _diags) =
-            render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Plaintext).unwrap();
+        let (output, _diags) = render_with_bundle(
+            &pandoc,
+            &mut context,
+            &bundle,
+            "test.txt",
+            BodyFormat::Plaintext,
+        )
+        .unwrap();
 
         assert!(output.contains("Title: Test Title"));
         assert!(output.contains("Hello"));
@@ -323,13 +339,19 @@ mod tests {
 
     #[test]
     fn test_render_with_bundle_partials() {
-        let (pandoc, context) = make_simple_pandoc();
+        let (pandoc, mut context) = make_simple_pandoc();
         let bundle = TemplateBundle::new("$header()$\n$body$\n$footer()$")
             .with_partial("header", "<header>$title$</header>")
             .with_partial("footer", "<footer>End</footer>");
 
-        let (output, diags) =
-            render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html).unwrap();
+        let (output, diags) = render_with_bundle(
+            &pandoc,
+            &mut context,
+            &bundle,
+            "test.html",
+            BodyFormat::Html,
+        )
+        .unwrap();
 
         assert!(diags.is_empty());
         assert!(output.contains("<header>Test Title</header>"));
@@ -338,11 +360,17 @@ mod tests {
 
     #[test]
     fn test_render_with_bundle_conditional() {
-        let (pandoc, context) = make_simple_pandoc();
+        let (pandoc, mut context) = make_simple_pandoc();
         let bundle = TemplateBundle::new("$if(title)$Has title: $title$$endif$");
 
-        let (output, _diags) =
-            render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html).unwrap();
+        let (output, _diags) = render_with_bundle(
+            &pandoc,
+            &mut context,
+            &bundle,
+            "test.html",
+            BodyFormat::Html,
+        )
+        .unwrap();
 
         assert!(output.contains("Has title: Test Title"));
     }

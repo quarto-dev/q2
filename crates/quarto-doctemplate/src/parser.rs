@@ -31,23 +31,21 @@ pub struct Template {
 }
 
 /// Parser context passed through the bottom-up traversal.
+///
+/// This struct holds only the file ID needed during parsing.
+/// The `SourceContext` is managed at the `Template` level, not here.
 #[derive(Debug)]
 pub struct ParserContext {
-    /// Source context for tracking locations.
-    pub source_context: SourceContext,
-    /// The current file ID.
+    /// The current file ID within the source context.
     pub file_id: FileId,
 }
 
 impl ParserContext {
-    /// Create a new parser context for a file.
-    pub fn new(filename: &str) -> Self {
-        let mut source_context = SourceContext::new();
-        let file_id = source_context.add_file(filename.to_string(), None);
-        Self {
-            source_context,
-            file_id,
-        }
+    /// Create a new parser context with a specific file ID.
+    ///
+    /// The file should already be added to a `SourceContext` before calling this.
+    pub fn new(file_id: FileId) -> Self {
+        Self { file_id }
     }
 
     /// Create source info from a tree-sitter node.
@@ -104,6 +102,9 @@ enum Intermediate {
 impl Template {
     /// Compile a template from source text.
     ///
+    /// This creates an internal `SourceContext` for standalone use.
+    /// For integrated use with a shared context, use [`compile_with_source_context`].
+    ///
     /// # Arguments
     /// * `source` - The template source text
     ///
@@ -114,7 +115,44 @@ impl Template {
     }
 
     /// Compile a template from source text with a filename for error reporting.
+    ///
+    /// This creates an internal `SourceContext` for standalone use.
+    /// For integrated use with a shared context, use [`compile_with_source_context`].
     pub fn compile_with_filename(source: &str, filename: &str) -> TemplateResult<Self> {
+        let mut source_context = SourceContext::new();
+        Self::compile_with_source_context(source, filename, &mut source_context)
+    }
+
+    /// Compile a template from source text with a shared `SourceContext`.
+    ///
+    /// This allows multiple templates (main template + partials) to share the same
+    /// `SourceContext`, ensuring unique file IDs across all files. This is essential
+    /// for correct diagnostic reporting when templates are used within a larger
+    /// compilation pipeline.
+    ///
+    /// # Arguments
+    /// * `source` - The template source text
+    /// * `filename` - The filename for error reporting
+    /// * `source_context` - The shared source context (files will be added to this)
+    ///
+    /// # Returns
+    /// A compiled template, or an error if parsing fails.
+    pub fn compile_with_source_context(
+        source: &str,
+        filename: &str,
+        source_context: &mut SourceContext,
+    ) -> TemplateResult<Self> {
+        // Add this file to the shared context
+        let file_id = source_context.add_file(filename.to_string(), Some(source.to_string()));
+
+        // Parse using the assigned file ID
+        Self::parse_with_file_id(source, file_id)
+    }
+
+    /// Internal: Parse a template with a pre-assigned file ID.
+    ///
+    /// This is the core parsing logic, separated from SourceContext management.
+    fn parse_with_file_id(source: &str, file_id: FileId) -> TemplateResult<Self> {
         // Set up tree-sitter parser
         let mut parser = Parser::new();
         let language = tree_sitter_doctemplate::LANGUAGE;
@@ -141,7 +179,7 @@ impl Template {
         }
 
         // Set up context for traversal
-        let context = ParserContext::new(filename);
+        let context = ParserContext::new(file_id);
 
         // Use bottom-up traversal to convert CST to AST
         let mut cursor = tree.walk();
@@ -198,8 +236,8 @@ impl Template {
 
     /// Compile a template with a custom partial resolver.
     ///
-    /// This method allows specifying how partials are loaded, which is useful
-    /// for testing (using in-memory partials) or loading from non-filesystem sources.
+    /// This creates an internal `SourceContext` for standalone use.
+    /// For integrated use with a shared context, use [`compile_with_resolver_and_context`].
     ///
     /// # Arguments
     /// * `source` - The template source text
@@ -215,38 +253,74 @@ impl Template {
         resolver: &impl PartialResolver,
         depth: usize,
     ) -> TemplateResult<Self> {
+        let mut source_context = SourceContext::new();
+        Self::compile_with_resolver_and_context(
+            source,
+            template_path,
+            resolver,
+            depth,
+            &mut source_context,
+        )
+    }
+
+    /// Compile a template with a custom partial resolver and shared `SourceContext`.
+    ///
+    /// This allows multiple templates (main template + partials) to share the same
+    /// `SourceContext`, ensuring unique file IDs across all files.
+    ///
+    /// # Arguments
+    /// * `source` - The template source text
+    /// * `template_path` - Path used for resolving relative partial references
+    /// * `resolver` - The partial resolver to use
+    /// * `depth` - Current nesting depth (for recursion protection)
+    /// * `source_context` - The shared source context (files will be added to this)
+    ///
+    /// # Returns
+    /// A compiled template with all partials resolved, or an error.
+    pub fn compile_with_resolver_and_context(
+        source: &str,
+        template_path: &Path,
+        resolver: &impl PartialResolver,
+        depth: usize,
+        source_context: &mut SourceContext,
+    ) -> TemplateResult<Self> {
         const MAX_DEPTH: usize = 50;
 
-        // First, parse the template without partial resolution
+        // First, parse the template with the shared source context
         let filename = template_path.to_string_lossy();
-        let mut template = Self::compile_with_filename(source, &filename)?;
+        let mut template = Self::compile_with_source_context(source, &filename, source_context)?;
 
-        // Then resolve partials recursively
-        resolve_partials(
+        // Then resolve partials recursively (also using the shared context)
+        resolve_partials_with_context(
             &mut template.nodes,
             template_path,
             resolver,
             depth,
             MAX_DEPTH,
+            source_context,
         )?;
 
         Ok(template)
     }
 }
 
-/// Recursively resolve partial references in a list of template nodes.
+/// Recursively resolve partial references with a shared `SourceContext`.
 ///
 /// This function traverses the AST and for each `Partial` node:
 /// 1. Loads the partial source using the resolver
-/// 2. Parses the partial source
+/// 2. Parses the partial source with the shared `SourceContext`
 /// 3. Recursively resolves any partials in the loaded partial
 /// 4. Stores the resolved nodes in the `Partial.resolved` field
-fn resolve_partials(
+///
+/// Using a shared `SourceContext` ensures unique file IDs across all parsed
+/// templates, which is essential for correct diagnostic attribution.
+fn resolve_partials_with_context(
     nodes: &mut [TemplateNode],
     template_path: &Path,
     resolver: &impl PartialResolver,
     depth: usize,
     max_depth: usize,
+    source_context: &mut SourceContext,
 ) -> TemplateResult<()> {
     // Check recursion limit
     if depth > max_depth {
@@ -282,12 +356,13 @@ fn resolve_partials(
                 // Determine the path for this partial (for nested partial resolution)
                 let partial_path = resolve_partial_path(&partial.name, template_path);
 
-                // Parse the partial and resolve its partials recursively
-                let partial_template = Template::compile_with_resolver(
+                // Parse the partial using the shared source context
+                let partial_template = Template::compile_with_resolver_and_context(
                     partial_source,
                     &partial_path,
                     resolver,
                     depth + 1,
+                    source_context,
                 )?;
 
                 // Store the resolved nodes
@@ -297,38 +372,68 @@ fn resolve_partials(
             // Recurse into nested structures
             TemplateNode::Conditional(cond) => {
                 for (_, body) in &mut cond.branches {
-                    resolve_partials(body, template_path, resolver, depth, max_depth)?;
+                    resolve_partials_with_context(
+                        body,
+                        template_path,
+                        resolver,
+                        depth,
+                        max_depth,
+                        source_context,
+                    )?;
                 }
                 if let Some(else_branch) = &mut cond.else_branch {
-                    resolve_partials(else_branch, template_path, resolver, depth, max_depth)?;
+                    resolve_partials_with_context(
+                        else_branch,
+                        template_path,
+                        resolver,
+                        depth,
+                        max_depth,
+                        source_context,
+                    )?;
                 }
             }
 
             TemplateNode::ForLoop(for_loop) => {
-                resolve_partials(
+                resolve_partials_with_context(
                     &mut for_loop.body,
                     template_path,
                     resolver,
                     depth,
                     max_depth,
+                    source_context,
                 )?;
                 if let Some(sep) = &mut for_loop.separator {
-                    resolve_partials(sep, template_path, resolver, depth, max_depth)?;
+                    resolve_partials_with_context(
+                        sep,
+                        template_path,
+                        resolver,
+                        depth,
+                        max_depth,
+                        source_context,
+                    )?;
                 }
             }
 
             TemplateNode::Nesting(nesting) => {
-                resolve_partials(
+                resolve_partials_with_context(
                     &mut nesting.children,
                     template_path,
                     resolver,
                     depth,
                     max_depth,
+                    source_context,
                 )?;
             }
 
             TemplateNode::BreakableSpace(bs) => {
-                resolve_partials(&mut bs.children, template_path, resolver, depth, max_depth)?;
+                resolve_partials_with_context(
+                    &mut bs.children,
+                    template_path,
+                    resolver,
+                    depth,
+                    max_depth,
+                    source_context,
+                )?;
             }
 
             // Other nodes don't need recursion

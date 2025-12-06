@@ -67,7 +67,7 @@ pub fn parse_qmd(input: &[u8], include_resolved_locations: bool) -> String {
 /// # Arguments
 ///
 /// * `pandoc` - The parsed Pandoc document
-/// * `context` - The AST context from parsing
+/// * `context` - The AST context from parsing (mutable to allow adding template files)
 /// * `bundle_json` - JSON string containing the template bundle
 /// * `body_format` - "html" or "plaintext"
 ///
@@ -78,8 +78,21 @@ pub fn parse_qmd(input: &[u8], include_resolved_locations: bool) -> String {
 /// * `{ "error": "...", "diagnostics": [...] }` on failure
 pub fn render_with_template_bundle(
     pandoc: &crate::pandoc::Pandoc,
-    context: &crate::pandoc::ast_context::ASTContext,
+    context: &mut crate::pandoc::ast_context::ASTContext,
     bundle_json: &str,
+    body_format: &str,
+) -> String {
+    render_with_template_bundle_named(pandoc, context, bundle_json, "<template>", body_format)
+}
+
+/// Render a parsed document using a template bundle with a custom template name.
+///
+/// Like [`render_with_template_bundle`] but allows specifying the template name for error reporting.
+pub fn render_with_template_bundle_named(
+    pandoc: &crate::pandoc::Pandoc,
+    context: &mut crate::pandoc::ast_context::ASTContext,
+    bundle_json: &str,
+    template_name: &str,
     body_format: &str,
 ) -> String {
     use crate::template::{BodyFormat, TemplateBundle, render_with_bundle};
@@ -110,7 +123,7 @@ pub fn render_with_template_bundle(
     };
 
     // Render
-    match render_with_bundle(pandoc, context, &bundle, format) {
+    match render_with_bundle(pandoc, context, &bundle, template_name, format) {
         Ok((output, diagnostics)) => {
             let diag_json: Vec<serde_json::Value> = diagnostics
                 .iter()
@@ -146,9 +159,21 @@ pub fn render_with_template_bundle(
 /// * `{ "output": "..." }` on success
 /// * `{ "error": "...", "diagnostics": [...] }` on failure
 pub fn parse_and_render_qmd(input: &[u8], bundle_json: &str, body_format: &str) -> String {
+    parse_and_render_qmd_with_template_name(input, bundle_json, "<template>", body_format)
+}
+
+/// Parse QMD input and render with a template bundle, using a custom template name.
+///
+/// Like [`parse_and_render_qmd`] but allows specifying the template name for error reporting.
+pub fn parse_and_render_qmd_with_template_name(
+    input: &[u8],
+    bundle_json: &str,
+    template_name: &str,
+    body_format: &str,
+) -> String {
     match qmd_to_pandoc(input) {
-        Ok((pandoc, context)) => {
-            render_with_template_bundle(&pandoc, &context, bundle_json, body_format)
+        Ok((pandoc, mut context)) => {
+            render_with_template_bundle_named(&pandoc, &mut context, bundle_json, template_name, body_format)
         }
         Err(errors) => {
             serde_json::json!({

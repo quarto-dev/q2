@@ -243,7 +243,7 @@ fn main() {
     };
 
     // Apply filters in order
-    let (pandoc, context) = if args.filters.is_empty() {
+    let (pandoc, mut context) = if args.filters.is_empty() {
         (pandoc, context)
     } else {
         // Parse filter specifications
@@ -287,9 +287,9 @@ fn main() {
         }
     };
 
-    // Load template if specified
+    // Load template if specified, tracking both the bundle and its name for error reporting
     #[cfg(feature = "template-fs")]
-    let template_bundle: Option<TemplateBundle> = {
+    let template_info: Option<(TemplateBundle, String)> = {
         if let Some(bundle_path) = &args.template_bundle {
             let bundle_json = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
                 eprintln!(
@@ -300,7 +300,7 @@ fn main() {
                 std::process::exit(1);
             });
             match TemplateBundle::from_json(&bundle_json) {
-                Ok(bundle) => Some(bundle),
+                Ok(bundle) => Some((bundle, bundle_path.display().to_string())),
                 Err(e) => {
                     eprintln!("Failed to parse template bundle: {}", e);
                     std::process::exit(1);
@@ -309,13 +309,14 @@ fn main() {
         } else if let Some(template_arg) = &args.template {
             if is_builtin_template(template_arg) {
                 get_builtin_template(template_arg)
+                    .map(|b| (b, format!("<builtin-template:{}>", template_arg)))
             } else {
                 let template_path = std::path::Path::new(template_arg);
                 let template_source = std::fs::read_to_string(template_path).unwrap_or_else(|e| {
                     eprintln!("Failed to read template file '{}': {}", template_arg, e);
                     std::process::exit(1);
                 });
-                Some(TemplateBundle::new(template_source))
+                Some((TemplateBundle::new(template_source), template_arg.clone()))
             }
         } else {
             None
@@ -323,7 +324,7 @@ fn main() {
     };
 
     #[cfg(not(feature = "template-fs"))]
-    let template_bundle: Option<TemplateBundle> = {
+    let template_info: Option<(TemplateBundle, String)> = {
         if let Some(bundle_path) = &args.template_bundle {
             let bundle_json = std::fs::read_to_string(bundle_path).unwrap_or_else(|e| {
                 eprintln!(
@@ -334,7 +335,7 @@ fn main() {
                 std::process::exit(1);
             });
             match TemplateBundle::from_json(&bundle_json) {
-                Ok(bundle) => Some(bundle),
+                Ok(bundle) => Some((bundle, bundle_path.display().to_string())),
                 Err(e) => {
                     eprintln!("Failed to parse template bundle: {}", e);
                     std::process::exit(1);
@@ -346,7 +347,7 @@ fn main() {
     };
 
     let mut buf = Vec::new();
-    let writer_result = if let Some(bundle) = template_bundle {
+    let writer_result = if let Some((bundle, template_name)) = template_info {
         // Determine body format from --to
         let body_format = match args.to.as_str() {
             "html" => BodyFormat::Html,
@@ -360,7 +361,7 @@ fn main() {
             }
         };
 
-        match render_with_bundle(&pandoc, &context, &bundle, body_format) {
+        match render_with_bundle(&pandoc, &mut context, &bundle, &template_name, body_format) {
             Ok((output, diagnostics)) => {
                 buf.extend_from_slice(output.as_bytes());
                 // Output any diagnostics (warnings)

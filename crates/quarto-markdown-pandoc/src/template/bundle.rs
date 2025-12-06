@@ -10,6 +10,7 @@
 //! environments without filesystem access (e.g., WASM).
 
 use quarto_doctemplate::{MemoryResolver, Template, TemplateError};
+use quarto_source_map::SourceContext;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
@@ -140,6 +141,9 @@ impl TemplateBundle {
     /// This parses the main template and resolves all partials from the bundle.
     /// The resulting `Template` can be used for rendering.
     ///
+    /// This creates an internal `SourceContext` for standalone use.
+    /// For integrated use with a shared context, use [`compile_with_context`].
+    ///
     /// # Arguments
     ///
     /// * `template_name` - A name for the template (used in error messages).
@@ -148,6 +152,33 @@ impl TemplateBundle {
         let resolver = self.to_resolver();
         let path = Path::new(template_name);
         let template = Template::compile_with_resolver(&self.main, path, &resolver, 0)?;
+        Ok(template)
+    }
+
+    /// Compile the bundle into a ready-to-use template with a shared `SourceContext`.
+    ///
+    /// This allows the template and its partials to share the same `SourceContext`
+    /// as the main document, ensuring unique file IDs across all files. This is
+    /// essential for correct diagnostic reporting.
+    ///
+    /// # Arguments
+    ///
+    /// * `template_name` - A name for the template (used in error messages).
+    /// * `source_context` - The shared source context (template files will be added to this)
+    pub fn compile_with_context(
+        &self,
+        template_name: &str,
+        source_context: &mut SourceContext,
+    ) -> Result<Template, BundleError> {
+        let resolver = self.to_resolver();
+        let path = Path::new(template_name);
+        let template = Template::compile_with_resolver_and_context(
+            &self.main,
+            path,
+            &resolver,
+            0,
+            source_context,
+        )?;
         Ok(template)
     }
 }

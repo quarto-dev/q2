@@ -28,11 +28,17 @@ title: My Document
 
 Hello **world**!
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("<h1>$title$</h1>\n$body$");
 
-    let (output, diagnostics) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, diagnostics) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("<h1>My Document</h1>"));
     assert!(output.contains("<p>Hello <strong>world</strong>!</p>"));
@@ -47,13 +53,19 @@ title: Test
 
 Content here.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("$header()$\n$body$\n$footer()$")
         .with_partial("header", "<header>$title$</header>")
         .with_partial("footer", "<footer>End</footer>");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("<header>Test</header>"));
     assert!(output.contains("<footer>End</footer>"));
@@ -67,11 +79,17 @@ title: Has Title
 
 Body text.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("$if(title)$TITLE: $title$$endif$$if(missing)$MISSING$endif$");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("TITLE: Has Title"));
     assert!(!output.contains("MISSING"));
@@ -88,11 +106,17 @@ authors:
 
 Content.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("$for(authors)$- $authors$\n$endfor$");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("- Alice"));
     assert!(output.contains("- Bob"));
@@ -107,11 +131,17 @@ title: Plain Text Test
 
 Hello **bold** and *italic*.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("Title: $title$\n\n$body$");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Plaintext)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.txt",
+        BodyFormat::Plaintext,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("Title: Plain Text Test"));
     // In plaintext, bold/italic should be stripped
@@ -201,11 +231,17 @@ author: Test Author
 
 This is content.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = get_builtin_template("html").unwrap();
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "<builtin-template:html>",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("<!DOCTYPE html>"));
     assert!(output.contains("<title>"));
@@ -295,11 +331,17 @@ author:
 
 Content.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("Name: $author.name$\nAffiliation: $author.affiliation$");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("Name: John Doe"));
     assert!(output.contains("Affiliation: ACME Corp"));
@@ -314,11 +356,17 @@ published: false
 
 Content.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("$if(draft)$DRAFT$endif$$if(published)$PUBLISHED$endif$");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     assert!(output.contains("DRAFT"));
     assert!(!output.contains("PUBLISHED"));
@@ -333,11 +381,17 @@ title: Hello **bold** world
 
 Content.
 "#;
-    let (pandoc, context) = parse_qmd(input);
+    let (pandoc, mut context) = parse_qmd(input);
     let bundle = TemplateBundle::new("Title: $title$");
 
-    let (output, _) = render_with_bundle(&pandoc, &context, &bundle, BodyFormat::Html)
-        .expect("Render should succeed");
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
 
     // MetaInlines are rendered as strings, so bold should appear as HTML
     assert!(
