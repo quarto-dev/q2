@@ -845,11 +845,13 @@ dependencies = [
  "crossterm",
  "glob",
  "hashlink",
+ "indexmap",
  "insta",
  "mlua",
  "once_cell",
  "paste",
  "quarto-citeproc",
+ "quarto-config",
  "quarto-csl",
  "quarto-doctemplate",
  "quarto-error-message-macros",
@@ -1057,6 +1059,20 @@ dependencies = [
  "serde_json",
  "similar",
  "thiserror",
+]
+
+[[package]]
+name = "quarto-config"
+version = "0.0.0"
+dependencies = [
+ "indexmap",
+ "insta",
+ "quarto-error-reporting",
+ "quarto-pandoc-types",
+ "quarto-source-map",
+ "quarto-yaml",
+ "thiserror",
+ "yaml-rust2",
 ]
 
 [[package]]

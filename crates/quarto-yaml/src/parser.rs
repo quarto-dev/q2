@@ -1216,4 +1216,184 @@ We used the following approach...
             "Object should end at end of content"
         );
     }
+
+    // =========== TAG TESTS ===========
+
+    #[test]
+    fn test_parse_scalar_with_tag() {
+        let yaml = parse("key: !expr x + 1").unwrap();
+        let value = yaml.get_hash_value("key").expect("key not found");
+
+        assert!(value.tag.is_some());
+        let (tag_suffix, _tag_source) = value.tag.as_ref().unwrap();
+        assert_eq!(tag_suffix, "expr");
+    }
+
+    #[test]
+    fn test_parse_scalar_with_prefer_tag() {
+        let yaml = parse("theme: !prefer cosmo").unwrap();
+        let value = yaml.get_hash_value("theme").expect("theme not found");
+
+        assert!(value.tag.is_some());
+        let (tag_suffix, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag_suffix, "prefer");
+        assert_eq!(value.yaml.as_str(), Some("cosmo"));
+    }
+
+    #[test]
+    fn test_parse_scalar_with_concat_tag() {
+        let yaml = parse("items: !concat [a, b]").unwrap();
+        // Note: !concat on a sequence - the tag is on the sequence itself
+        let value = yaml.get_hash_value("items").expect("items not found");
+
+        // The tag is currently only captured for scalars, not sequences
+        // This test documents current behavior
+        assert!(value.is_array());
+    }
+
+    #[test]
+    fn test_parse_scalar_with_md_tag() {
+        let yaml = parse("description: !md \"**bold** text\"").unwrap();
+        let value = yaml.get_hash_value("description").expect("description not found");
+
+        assert!(value.tag.is_some());
+        let (tag_suffix, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag_suffix, "md");
+    }
+
+    #[test]
+    fn test_parse_scalar_with_str_tag() {
+        let yaml = parse("title: !str \"My Title\"").unwrap();
+        let value = yaml.get_hash_value("title").expect("title not found");
+
+        assert!(value.tag.is_some());
+        let (tag_suffix, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag_suffix, "str");
+    }
+
+    #[test]
+    fn test_parse_scalar_with_path_tag() {
+        let yaml = parse("file: !path ./data/file.csv").unwrap();
+        let value = yaml.get_hash_value("file").expect("file not found");
+
+        assert!(value.tag.is_some());
+        let (tag_suffix, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag_suffix, "path");
+    }
+
+    #[test]
+    fn test_parse_scalar_with_glob_tag() {
+        let yaml = parse("sources: !glob \"*.qmd\"").unwrap();
+        let value = yaml.get_hash_value("sources").expect("sources not found");
+
+        assert!(value.tag.is_some());
+        let (tag_suffix, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag_suffix, "glob");
+    }
+
+    #[test]
+    fn test_combined_tag_with_underscore_works() {
+        // Combined tags like !prefer_md ARE supported using underscore as separator.
+        // This is the recommended syntax for combining merge ops with interpretation hints.
+        let result = parse("title: !prefer_md \"**My Title**\"");
+        assert!(result.is_ok(), "Combined tags with underscore should parse");
+
+        let yaml = result.unwrap();
+        let value = yaml.get_hash_value("title").unwrap();
+        let (tag, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag, "prefer_md");
+    }
+
+    #[test]
+    fn test_combined_tag_with_comma_not_supported() {
+        // Note: Combined tags like !prefer,md are NOT supported by standard YAML parsers.
+        // The comma is not valid in a tag without proper URI escaping.
+        // Use underscore instead: !prefer_md
+        let result = parse("title: !prefer,md \"**My Title**\"");
+        assert!(result.is_err(), "Combined tags with comma should not parse");
+    }
+
+    #[test]
+    fn test_tag_source_info_location() {
+        let yaml_content = "key: !expr value";
+        let yaml = parse(yaml_content).unwrap();
+        let value = yaml.get_hash_value("key").expect("key not found");
+
+        let (_, tag_source) = value.tag.as_ref().expect("tag should be present");
+
+        // The tag should start at "!" (offset 5)
+        let tag_start = tag_source.start_offset();
+        assert_eq!(&yaml_content[tag_start..tag_start + 1], "!");
+
+        // The tag should cover "!expr" (5 characters)
+        let tag_len = tag_source.end_offset() - tag_source.start_offset();
+        assert_eq!(tag_len, 5); // "!expr"
+    }
+
+    #[test]
+    fn test_no_tag_when_absent() {
+        let yaml = parse("key: value").unwrap();
+        let value = yaml.get_hash_value("key").expect("key not found");
+
+        assert!(value.tag.is_none());
+    }
+
+    #[test]
+    fn test_alternative_tag_separator_syntaxes() {
+        // Test which separators work for combined tags
+
+        // Underscore separator - should work
+        let result = parse("title: !prefer_md test");
+        assert!(result.is_ok(), "Underscore separator should work");
+        let yaml = result.unwrap();
+        let value = yaml.get_hash_value("title").unwrap();
+        let (tag, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag, "prefer_md");
+
+        // Dash/hyphen separator - should work
+        let result = parse("title: !prefer-md test");
+        assert!(result.is_ok(), "Dash separator should work");
+        let yaml = result.unwrap();
+        let value = yaml.get_hash_value("title").unwrap();
+        let (tag, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag, "prefer-md");
+
+        // Dot separator - should work
+        let result = parse("title: !prefer.md test");
+        assert!(result.is_ok(), "Dot separator should work");
+        let yaml = result.unwrap();
+        let value = yaml.get_hash_value("title").unwrap();
+        let (tag, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag, "prefer.md");
+
+        // Colon separator - works
+        let result = parse("title: !prefer:md test");
+        assert!(result.is_ok(), "Colon separator should work");
+        let yaml = result.unwrap();
+        let value = yaml.get_hash_value("title").unwrap();
+        let (tag, _) = value.tag.as_ref().unwrap();
+        assert_eq!(tag, "prefer:md");
+
+        // Exclamation mark separator - does NOT work (treated as handle)
+        let result = parse("title: !md!prefer test");
+        assert!(result.is_err(), "Bang separator should not work (treated as YAML handle)");
+    }
+
+    #[test]
+    fn test_multiple_tagged_values() {
+        let yaml = parse(r#"
+title: !str "Plain Title"
+description: !md "**Bold** description"
+file: !path ./data.csv
+"#).unwrap();
+
+        let title = yaml.get_hash_value("title").expect("title not found");
+        assert_eq!(title.tag.as_ref().map(|(t, _)| t.as_str()), Some("str"));
+
+        let desc = yaml.get_hash_value("description").expect("description not found");
+        assert_eq!(desc.tag.as_ref().map(|(t, _)| t.as_str()), Some("md"));
+
+        let file = yaml.get_hash_value("file").expect("file not found");
+        assert_eq!(file.tag.as_ref().map(|(t, _)| t.as_str()), Some("path"));
+    }
 }

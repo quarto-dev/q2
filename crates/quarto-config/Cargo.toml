@@ -1,0 +1,27 @@
+[package]
+name = "quarto-config"
+version = "0.0.0"
+publish = false
+authors.workspace = true
+categories.workspace = true
+edition.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Configuration merging with source tracking for Quarto"
+
+[dependencies]
+quarto-source-map = { path = "../quarto-source-map" }
+quarto-yaml = { path = "../quarto-yaml" }
+quarto-pandoc-types = { path = "../quarto-pandoc-types" }
+quarto-error-reporting = { path = "../quarto-error-reporting" }
+indexmap = "2.0"
+thiserror = { workspace = true }
+yaml-rust2 = { workspace = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+
+[lints]
+workspace = true

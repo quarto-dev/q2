@@ -97,6 +97,62 @@
     "docs_url": "https://quarto.org/docs/errors/Q-1-20",
     "since_version": "99.9.9"
   },
+  "Q-1-21": {
+    "subsystem": "yaml",
+    "title": "Unknown Tag Component",
+    "message_template": "Unknown component in YAML tag. Valid components are: prefer, concat, md, str, path, glob, expr.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-21",
+    "since_version": "99.9.9"
+  },
+  "Q-1-22": {
+    "subsystem": "yaml",
+    "title": "Unrecognized Tag",
+    "message_template": "Unrecognized YAML tag. Valid tags include: prefer, concat, md, str, path, glob, expr.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-22",
+    "since_version": "99.9.9"
+  },
+  "Q-1-23": {
+    "subsystem": "yaml",
+    "title": "Config Layer Parse Failure",
+    "message_template": "Failed to parse a configuration layer. Check the YAML syntax in the specified file.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-23",
+    "since_version": "99.9.9"
+  },
+  "Q-1-24": {
+    "subsystem": "yaml",
+    "title": "Empty Tag Component",
+    "message_template": "YAML tag contains an empty component. Check for leading, trailing, or consecutive commas.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-24",
+    "since_version": "99.9.9"
+  },
+  "Q-1-25": {
+    "subsystem": "yaml",
+    "title": "Whitespace in Tag",
+    "message_template": "YAML tag contains whitespace. Remove spaces around tag components.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-25",
+    "since_version": "99.9.9"
+  },
+  "Q-1-26": {
+    "subsystem": "yaml",
+    "title": "Invalid Tag Character",
+    "message_template": "YAML tag contains invalid characters. Only letters, numbers, and commas are allowed.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-26",
+    "since_version": "99.9.9"
+  },
+  "Q-1-27": {
+    "subsystem": "yaml",
+    "title": "Config Nesting Too Deep",
+    "message_template": "Configuration nesting exceeds maximum depth. Simplify the configuration structure.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-27",
+    "since_version": "99.9.9"
+  },
+  "Q-1-28": {
+    "subsystem": "yaml",
+    "title": "Conflicting Merge Operations",
+    "message_template": "YAML tag specifies both 'prefer' and 'concat'. Use only one merge operation per tag.",
+    "docs_url": "https://quarto.org/docs/errors/Q-1-28",
+    "since_version": "99.9.9"
+  },
   "Q-1-99": {
     "subsystem": "yaml",
     "title": "Generic Validation Error",

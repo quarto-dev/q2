@@ -399,3 +399,191 @@ Content.
             || output.contains("Hello **bold** world")
     );
 }
+
+// =============================================================================
+// Config merging tests (template defaults)
+// =============================================================================
+
+#[test]
+fn test_default_lang_is_set() {
+    // When no lang is specified in metadata, it should default to "en"
+    let input = r#"---
+title: Test
+---
+
+Content.
+"#;
+    let (pandoc, mut context) = parse_qmd(input);
+    let bundle = TemplateBundle::new("Lang: $lang$");
+
+    let (output, diagnostics) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
+
+    assert!(diagnostics.is_empty(), "Expected no diagnostics: {:?}", diagnostics);
+    assert!(output.contains("Lang: en"), "Default lang should be 'en', got: {}", output);
+}
+
+#[test]
+fn test_document_lang_overrides_default() {
+    // When lang is specified in metadata, it should override the default
+    let input = r#"---
+title: Test
+lang: de
+---
+
+Content.
+"#;
+    let (pandoc, mut context) = parse_qmd(input);
+    let bundle = TemplateBundle::new("Lang: $lang$");
+
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
+
+    assert!(output.contains("Lang: de"), "Document lang should override default, got: {}", output);
+}
+
+#[test]
+fn test_pagetitle_derived_from_title_string() {
+    // When title is a plain string, pagetitle should be the same
+    let input = r#"---
+title: My Simple Title
+---
+
+Content.
+"#;
+    let (pandoc, mut context) = parse_qmd(input);
+    let bundle = TemplateBundle::new("<title>$pagetitle$</title>");
+
+    let (output, diagnostics) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
+
+    assert!(diagnostics.is_empty());
+    assert!(output.contains("<title>My Simple Title</title>"), "pagetitle should match title, got: {}", output);
+}
+
+#[test]
+fn test_pagetitle_derived_from_title_with_emphasis() {
+    // This is the key integration test from the design:
+    // title: Hello _world_ should produce pagetitle: Hello world (plain text)
+    let input = r#"---
+title: Hello _world_
+---
+
+Hi there.
+"#;
+    let (pandoc, mut context) = parse_qmd(input);
+    let bundle = TemplateBundle::new("<title>$pagetitle$</title>\n<h1>$title$</h1>");
+
+    let (output, diagnostics) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
+
+    assert!(diagnostics.is_empty(), "Expected no diagnostics: {:?}", diagnostics);
+
+    // pagetitle should be plain text (no <em>)
+    assert!(
+        output.contains("<title>Hello world</title>"),
+        "pagetitle should be plain text 'Hello world', got: {}", output
+    );
+
+    // title should retain formatting as HTML
+    assert!(
+        output.contains("<h1>Hello <em>world</em></h1>"),
+        "title should have HTML formatting, got: {}", output
+    );
+}
+
+#[test]
+fn test_pagetitle_with_builtin_html_template() {
+    use pampa::template::builtin::get_builtin_template;
+
+    // Test the full integration with the builtin HTML template
+    let input = r#"---
+title: Hello _world_
+---
+
+Hi there.
+"#;
+    let (pandoc, mut context) = parse_qmd(input);
+    let bundle = get_builtin_template("html").unwrap();
+
+    let (output, diagnostics) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "<builtin-template:html>",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
+
+    assert!(diagnostics.is_empty(), "Expected no diagnostics: {:?}", diagnostics);
+
+    // Check the <html lang="en"> attribute
+    assert!(
+        output.contains(r#"lang="en""#),
+        "Should have lang='en' attribute, got: {}", output
+    );
+
+    // Check the <title> tag has plain text
+    assert!(
+        output.contains("<title>Hello world</title>"),
+        "pagetitle in <title> should be plain text, got: {}", output
+    );
+
+    // Check the visible title has HTML formatting
+    assert!(
+        output.contains("Hello <em>world</em>"),
+        "Visible title should have HTML formatting, got: {}", output
+    );
+}
+
+#[test]
+fn test_explicit_pagetitle_overrides_derived() {
+    // When pagetitle is explicitly set, it should override the derived value
+    let input = r#"---
+title: Hello _world_
+pagetitle: Custom Page Title
+---
+
+Content.
+"#;
+    let (pandoc, mut context) = parse_qmd(input);
+    let bundle = TemplateBundle::new("<title>$pagetitle$</title>");
+
+    let (output, _) = render_with_bundle(
+        &pandoc,
+        &mut context,
+        &bundle,
+        "test.html",
+        BodyFormat::Html,
+    )
+    .expect("Render should succeed");
+
+    assert!(
+        output.contains("<title>Custom Page Title</title>"),
+        "Explicit pagetitle should override derived, got: {}", output
+    );
+}

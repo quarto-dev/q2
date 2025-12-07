@@ -11,7 +11,8 @@
 use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
 use crate::template::bundle::{BundleError, TemplateBundle};
-use crate::template::context::{MetaWriter, pandoc_to_context};
+use crate::template::config_merge::merged_metadata_to_context;
+use crate::template::context::MetaWriter;
 use crate::writers::{html, plaintext};
 use quarto_doctemplate::{PartialResolver, Template, TemplateError};
 use quarto_error_reporting::DiagnosticMessage;
@@ -173,9 +174,10 @@ pub fn render_with_compiled_template<R: PartialResolver>(
     let (body, body_diags) = render_body(pandoc, context, body_format)?;
     all_diagnostics.extend(body_diags);
 
-    // Convert metadata to template context
+    // Convert metadata to template context using the merged config system.
+    // This merges template defaults (lang, pagetitle) with document metadata.
     let meta_writer = body_format.meta_writer();
-    let (template_ctx, meta_diags) = pandoc_to_context(&pandoc.meta, body, meta_writer);
+    let (template_ctx, meta_diags) = merged_metadata_to_context(&pandoc.meta, body, meta_writer);
     all_diagnostics.extend(meta_diags);
 
     // Render the template

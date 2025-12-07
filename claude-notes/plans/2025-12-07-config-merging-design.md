@@ -4,6 +4,10 @@
 **Issue**: k-zvzm
 **Status**: Design proposal
 
+**Incorporated subissue designs**:
+- `k-vpgx`: MergedConfig lifetime design → cursor-based navigation (see RQ1)
+- `k-os6h`: Error handling strategy → comprehensive error codes (see RQ2)
+
 ## Executive Summary
 
 This document proposes a design for Quarto's Rust configuration merging system. The key insight from the Haskell `composable-validation` work is that we can achieve both proper associativity AND preference semantics by **separating construction from interpretation**.
@@ -193,27 +197,73 @@ pub enum ConfigValueKind {
     Map(IndexMap<String, ConfigValue>),
 
     /// Pandoc inline content (for already-interpreted values)
-    /// Treated like scalars: last wins, no concatenation
+    /// Default: !prefer (last wins, no concatenation)
+    /// Use !concat explicitly if concatenation is desired
     PandocInlines(Vec<Inline>),
 
     /// Pandoc block content (for already-interpreted values)
-    /// Treated like arrays: concatenate by default, !prefer to replace
+    /// Default: !prefer (last wins, no concatenation)
+    /// Use !concat explicitly if concatenation is desired
     PandocBlocks(Vec<Block>),
 }
 ```
 
-### Construction: `MergedConfig`
+### Construction: `MergedConfig` with Cursor-Based Navigation
 
-For lazy evaluation, we don't immediately merge into a new tree. Instead, we keep references:
+For lazy evaluation, we don't immediately merge into a new tree. Instead, we keep references and use a cursor-based API for ergonomic navigation:
 
 ```rust
+use indexmap::IndexMap;
+
 /// A lazily-evaluated merged configuration
 ///
-/// This maintains references to original config layers without copying.
-/// Values are resolved on demand at the "navigation site".
+/// The lifetime parameter `'a` indicates that MergedConfig borrows from
+/// existing ConfigValue data. This is zero-copy construction.
 pub struct MergedConfig<'a> {
     /// Ordered list of config layers (first = lowest priority)
     layers: Vec<&'a ConfigValue>,
+}
+
+/// A cursor for navigating merged configuration
+///
+/// The cursor is lightweight: it stores a reference to the config
+/// and a path. Resolution happens lazily when you call `as_*()` methods.
+pub struct MergedCursor<'a> {
+    config: &'a MergedConfig<'a>,
+    path: Vec<String>,
+}
+
+/// A resolved scalar value with its source
+pub struct MergedScalar<'a> {
+    /// The resolved value
+    pub value: &'a ConfigValue,
+    /// Which layer this value came from (for debugging)
+    pub layer_index: usize,
+}
+
+/// A resolved array with merge semantics applied
+pub struct MergedArray<'a> {
+    /// Items after applying prefer/concat semantics
+    pub items: Vec<MergedArrayItem<'a>>,
+}
+
+pub struct MergedArrayItem<'a> {
+    pub value: &'a ConfigValue,
+    pub layer_index: usize,
+}
+
+/// A resolved map with merge semantics applied
+pub struct MergedMap<'a> {
+    config: &'a MergedConfig<'a>,
+    path: Vec<String>,
+    keys: Vec<String>,
+}
+
+/// A resolved value of any type (for when type is not known ahead of time)
+pub enum MergedValue<'a> {
+    Scalar(MergedScalar<'a>),
+    Array(MergedArray<'a>),
+    Map(MergedMap<'a>),
 }
 
 impl<'a> MergedConfig<'a> {
@@ -228,64 +278,146 @@ impl<'a> MergedConfig<'a> {
         new_layers.push(layer);
         MergedConfig { layers: new_layers }
     }
+
+    /// Get a cursor at the root
+    pub fn cursor(&self) -> MergedCursor<'_> {
+        MergedCursor { config: self, path: Vec::new() }
+    }
+
+    // Convenience methods that delegate to cursor
+    pub fn get_scalar(&self, path: &[&str]) -> Option<MergedScalar<'a>> {
+        self.cursor().at_path(path).as_scalar()
+    }
+
+    pub fn get_array(&self, path: &[&str]) -> Option<MergedArray<'a>> {
+        self.cursor().at_path(path).as_array()
+    }
+
+    pub fn get_map(&self, path: &[&str]) -> Option<MergedMap<'a>> {
+        self.cursor().at_path(path).as_map()
+    }
+
+    pub fn contains(&self, path: &[&str]) -> bool {
+        self.cursor().at_path(path).exists()
+    }
 }
 ```
 
-### Interpretation: Lazy Resolution
+### Cursor Navigation and Resolution
 
-The key innovation is resolving values lazily at navigation sites:
+The cursor provides both path-based and chainable navigation:
 
 ```rust
-impl<'a> MergedConfig<'a> {
-    /// Get a scalar value at a path
-    /// Returns the value and its source info for error reporting
-    pub fn get_scalar(&self, path: &[&str]) -> Option<(&Yaml, &SourceInfo)> {
-        // Walk path in reverse (highest priority first)
-        for layer in self.layers.iter().rev() {
-            if let Some((value, source)) = self.resolve_path(layer, path) {
-                return Some((value, source));
+impl<'a> MergedCursor<'a> {
+    /// Navigate to a child key
+    pub fn at(&self, key: &str) -> MergedCursor<'a> {
+        let mut path = self.path.clone();
+        path.push(key.to_string());
+        MergedCursor { config: self.config, path }
+    }
+
+    /// Navigate to a path (multiple keys at once)
+    pub fn at_path(&self, path: &[&str]) -> MergedCursor<'a> {
+        let mut new_path = self.path.clone();
+        new_path.extend(path.iter().map(|s| s.to_string()));
+        MergedCursor { config: self.config, path: new_path }
+    }
+
+    /// Check if this path exists in any layer
+    pub fn exists(&self) -> bool {
+        self.config.layers.iter().any(|layer| self.navigate_to(layer).is_some())
+    }
+
+    /// Get child keys at this path (union across layers, respecting merge semantics)
+    pub fn keys(&self) -> Vec<String> { ... }
+
+    /// Resolve as any value type (for when type is not known ahead of time)
+    pub fn as_value(&self) -> Option<MergedValue<'a>> { ... }
+
+    /// Resolve as scalar (last-wins semantics)
+    /// Scalars, PandocInlines, and PandocBlocks all default to !prefer (last wins)
+    pub fn as_scalar(&self) -> Option<MergedScalar<'a>> {
+        // Walk layers in reverse (highest priority first)
+        for (i, layer) in self.config.layers.iter().enumerate().rev() {
+            if let Some(value) = self.navigate_to(layer) {
+                if matches!(value.value, ConfigValueKind::Scalar(_)
+                                       | ConfigValueKind::PandocInlines(_)
+                                       | ConfigValueKind::PandocBlocks(_)) {
+                    return Some(MergedScalar { value, layer_index: i });
+                }
             }
         }
         None
     }
 
-    /// Get an array value at a path, applying merge semantics
-    pub fn get_array(&self, path: &[&str]) -> Option<MergedArray<'a>> {
-        let mut items: Vec<(&ConfigValue, &SourceInfo)> = Vec::new();
+    /// Resolve as array (applying prefer/concat semantics)
+    pub fn as_array(&self) -> Option<MergedArray<'a>> {
+        let mut items: Vec<MergedArrayItem<'a>> = Vec::new();
 
-        // Walk layers in order (lowest priority first)
-        for layer in &self.layers {
-            if let Some(value) = self.resolve_path_to_value(layer, path) {
+        for (i, layer) in self.config.layers.iter().enumerate() {
+            if let Some(value) = self.navigate_to(layer) {
                 match value.merge_op {
-                    MergeOp::Prefer => {
-                        // Reset: discard all previous items
-                        items.clear();
-                    }
-                    MergeOp::Concat => {
-                        // Concatenate: add to existing items
-                    }
+                    MergeOp::Prefer => items.clear(),
+                    MergeOp::Concat => { /* keep existing */ }
                 }
-
                 if let ConfigValueKind::Array(arr) = &value.value {
                     for item in arr {
-                        items.push((item, &value.source_info));
+                        items.push(MergedArrayItem { value: item, layer_index: i });
                     }
                 }
             }
         }
 
-        if items.is_empty() {
-            None
-        } else {
-            Some(MergedArray { items })
-        }
+        if items.is_empty() { None } else { Some(MergedArray { items }) }
     }
 
-    /// Get a map value at a path, applying merge semantics
-    pub fn get_map(&self, path: &[&str]) -> Option<MergedMap<'a>> {
-        // Similar logic: Prefer resets, Concat merges field-wise
-        // Field-wise merge uses recursive resolution
+    /// Resolve as map (applying prefer/concat semantics)
+    pub fn as_map(&self) -> Option<MergedMap<'a>> { ... }
+
+    // Internal helper: navigate to path within a single layer
+    fn navigate_to(&self, root: &'a ConfigValue) -> Option<&'a ConfigValue> {
+        let mut current = root;
+        for key in &self.path {
+            match &current.value {
+                ConfigValueKind::Map(map) => current = map.get(key)?,
+                _ => return None,
+            }
+        }
+        Some(current)
     }
+}
+```
+
+### Usage Examples
+
+```rust
+// ConfigValues exist somewhere (e.g., parsed from YAML files)
+let project_config: ConfigValue = parse_config("_quarto.yml");
+let doc_config: ConfigValue = parse_config("document.qmd");
+
+// Create merged config by borrowing - zero copy!
+let merged = MergedConfig::new(vec![&project_config, &doc_config]);
+
+// Direct path access
+if let Some(theme) = merged.get_scalar(&["format", "html", "theme"]) {
+    println!("Theme: {:?}", theme.value);
+}
+
+// Cursor-based navigation (chainable)
+let cursor = merged.cursor();
+let theme = cursor.at("format").at("html").at("theme").as_scalar();
+
+// Hybrid: reuse common prefix
+let format = merged.cursor().at("format");
+let html_theme = format.at("html").at("theme").as_scalar();
+let pdf_class = format.at("pdf").at("documentclass").as_scalar();
+
+// Generic traversal with as_value()
+match cursor.at("metadata").as_value() {
+    Some(MergedValue::Scalar(s)) => println!("scalar: {:?}", s.value),
+    Some(MergedValue::Array(a)) => println!("array: {} items", a.items.len()),
+    Some(MergedValue::Map(m)) => println!("map: {:?}", m.keys()),
+    None => println!("not defined"),
 }
 ```
 
@@ -382,21 +514,67 @@ impl From<YamlWithSourceInfo> for ConfigValue {
 }
 ```
 
-### Eager Evaluation Option
+### Materialization and Serialization
 
-For cases where eager evaluation is needed (e.g., serialization, caching):
+For cases where owned data is needed (serialization, caching, cross-thread use):
 
 ```rust
+/// Options for materialization
+pub struct MaterializeOptions {
+    /// Maximum nesting depth (default: 256)
+    pub max_depth: usize,
+}
+
+impl Default for MaterializeOptions {
+    fn default() -> Self {
+        Self { max_depth: 256 }
+    }
+}
+
 impl<'a> MergedConfig<'a> {
-    /// Materialize the merged config into a new owned ConfigValue
-    /// This performs the full merge eagerly and returns an owned result.
-    pub fn materialize(&self) -> ConfigValue {
-        // Walk through all paths and resolve each one
-        // Build a new ConfigValue tree with resolved values
-        // Each leaf node's source_info points to its origin layer
+    /// Materialize with default options
+    pub fn materialize(&self) -> Result<ConfigValue, ConfigError> {
+        self.materialize_with_options(&MaterializeOptions::default())
+    }
+
+    /// Materialize with custom options
+    pub fn materialize_with_options(
+        &self,
+        options: &MaterializeOptions,
+    ) -> Result<ConfigValue, ConfigError> {
+        self.cursor().materialize_with_depth(0, options)
+    }
+}
+
+impl<'a> MergedCursor<'a> {
+    /// Materialize this cursor's value into an owned ConfigValue
+    fn materialize_with_depth(
+        &self,
+        depth: usize,
+        options: &MaterializeOptions,
+    ) -> Result<ConfigValue, ConfigError> {
+        if depth > options.max_depth {
+            return Err(ConfigError::NestingTooDeep {
+                max_depth: options.max_depth,
+                path: self.path.clone(),
+            });
+        }
+
+        // Resolution logic: scalars, arrays, maps...
+        // Recursive calls pass depth + 1
     }
 }
 ```
+
+**Serialization Strategy**: `MergedConfig<'a>` contains borrowed references and cannot be directly serialized. Instead:
+
+1. **Materialize first**: Call `merged.materialize()` to get an owned `ConfigValue`
+2. **Serialize the owned tree**: `ConfigValue` can implement `Serialize`
+3. **Deserialize and re-merge**: The deserialized `ConfigValue` can be used as a layer in new merges
+
+**What's preserved**: Each value's `SourceInfo` survives materialization—validation errors will still point to the correct file and line.
+
+**What's lost**: Layer indices (which layer a value came from), but `SourceInfo` provides the real provenance.
 
 ## YAML Tag Convention
 
@@ -406,9 +584,9 @@ YAML 1.2 spec (section 3.2.1.2) only allows one tag per value. But we may need b
 - **Merge semantics**: `!prefer` or `!concat`
 - **Interpretation hints**: `!md`, `!str`, `!path`, `!glob`, `!expr`
 
-### Solution: Comma-Separated Tag Components
+### Solution: Underscore-Separated Tag Components
 
-Use a single YAML tag with comma-separated components:
+Use a single YAML tag with underscore-separated components:
 
 ```yaml
 # Single component (most common)
@@ -416,13 +594,13 @@ title: !md "This is **strong**"
 keywords: !prefer [one, two]
 
 # Multiple components when needed
-abstract: !prefer,md "This **overrides** completely"
-paths: !concat,path ["./a", "./b"]
+abstract: !prefer_md "This **overrides** completely"
+paths: !concat_path ["./a", "./b"]
 ```
 
 ### Parsing Rules
 
-1. Split the tag suffix by comma: `"prefer,md"` → `["prefer", "md"]`
+1. Split the tag suffix by underscore: `"prefer_md"` → `["prefer", "md"]`
 2. Categorize each component:
    - **Merge tags**: `prefer`, `concat`
    - **Interpretation tags**: `md`, `str`, `path`, `glob`, `expr`
@@ -446,30 +624,37 @@ paths: !concat,path ["./a", "./b"]
 
 ```yaml
 # Override with markdown-interpreted value
-title: !prefer,md "**New** Title"
+title: !prefer_md "**New** Title"
 
 # Concatenate paths (relative to source)
-resources: !concat,path ["./images", "./data"]
+resources: !concat_path ["./images", "./data"]
 
 # Override with plain string (no markdown parsing)
-raw_html: !prefer,str "<div>literal</div>"
+raw_html: !prefer_str "<div>literal</div>"
 
 # Single tags (most common usage)
 description: !md "Some **bold** text"
 files: !prefer ["only", "these"]
 ```
 
-### Why Comma?
+### Why Underscore?
 
-- Visually clear and readable
-- Not used in standard YAML tag names
-- Easy to parse: `tag.split(',')`
-- Common convention (CSS classes, CLI flags)
+- Fully supported by YAML parsers (unlike comma which fails)
+- Common in programming (snake_case)
+- Visually separates components
+- Easy to parse: `tag.split('_')`
 
-Alternatives considered:
-- Colon (`:`) - might conflict with YAML syntax
-- Dash (`-`) - ambiguous: is `!no-md` two tags or one?
-- Underscore (`_`) - less readable: `!prefer_md`
+**Tested separators**:
+| Separator | Example | YAML Parser Support |
+|-----------|---------|---------------------|
+| Underscore | `!prefer_md` | ✓ Works |
+| Dash | `!prefer-md` | ✓ Works |
+| Dot | `!prefer.md` | ✓ Works |
+| Colon | `!prefer:md` | ✓ Works |
+| Comma | `!prefer,md` | ✗ Fails |
+| Bang | `!md!prefer` | ✗ Fails |
+
+We chose underscore as it's the most readable and common in code conventions.
 
 ## Markdown Value Handling
 
@@ -493,7 +678,7 @@ Use tags to override the default:
 |-----------|-----|--------|
 | Want markdown in _quarto.yml | `!md` | Parsed as markdown |
 | Want plain string in .qmd | `!str` | Kept as literal |
-| Want to override AND markdown | `!prefer,md` | Reset + parse as markdown |
+| Want to override AND markdown | `!prefer_md` | Reset + parse as markdown |
 
 ### Implementation
 
@@ -554,7 +739,7 @@ Lazy merge structure with on-demand materialization:
 
 ### 1. YAML Parsing (quarto-yaml)
 
-Extend parser to recognize comma-separated tag components:
+Extend parser to recognize underscore-separated tag components with comprehensive error handling:
 
 ```rust
 // In quarto-yaml/src/parser.rs
@@ -564,47 +749,129 @@ Extend parser to recognize comma-separated tag components:
 pub struct ParsedTag {
     pub merge_op: Option<MergeOp>,
     pub interpretation: Option<Interpretation>,
+    /// True if any errors occurred (not just warnings)
+    pub had_errors: bool,
 }
 
-/// Parse a YAML tag suffix with comma-separated components
-/// Examples: "prefer", "md", "prefer,md", "concat,path"
+/// Parse a YAML tag suffix with underscore-separated components
+/// Examples: "prefer", "md", "prefer_md", "concat_path"
 fn parse_tag(
-    tag: &yaml_rust2::Tag,
+    tag_str: &str,
     tag_source: &SourceInfo,
     diagnostics: &mut DiagnosticCollector,
 ) -> ParsedTag {
     let mut result = ParsedTag::default();
 
-    for component in tag.suffix.split(',') {
-        match component.trim() {
-            // Merge semantics
-            "prefer" => result.merge_op = Some(MergeOp::Prefer),
-            "concat" => result.merge_op = Some(MergeOp::Concat),
+    // Check for invalid characters (only alphanumeric and underscore allowed)
+    if tag_str.contains(|c: char| !c.is_alphanumeric() && c != '_') {
+        diagnostics.error_at(
+            format!("Invalid character in tag '!{}' (Q-1-26)", tag_str),
+            tag_source.clone(),
+        );
+        result.had_errors = true;
+        return result;
+    }
 
-            // Interpretation hints
+    for component in tag_str.split('_') {
+        // Empty component check (Q-1-24)
+        if component.is_empty() {
+            diagnostics.error_at(
+                format!("Empty component in tag '!{}' (Q-1-24)", tag_str),
+                tag_source.clone(),
+            );
+            result.had_errors = true;
+            return result;
+        }
+
+        // Whitespace check (Q-1-25)
+        if component != component.trim() {
+            diagnostics.error_at(
+                format!("Whitespace in tag component '!{}' (Q-1-25)", tag_str),
+                tag_source.clone(),
+            );
+            result.had_errors = true;
+            return result;
+        }
+
+        match component {
+            "prefer" => {
+                if result.merge_op.is_some() {
+                    diagnostics.error_at(
+                        format!("Conflicting merge operations in tag '!{}' (Q-1-28)", tag_str),
+                        tag_source.clone(),
+                    );
+                    result.had_errors = true;
+                    return result;
+                }
+                result.merge_op = Some(MergeOp::Prefer);
+            }
+            "concat" => {
+                if result.merge_op.is_some() {
+                    diagnostics.error_at(
+                        format!("Conflicting merge operations in tag '!{}' (Q-1-28)", tag_str),
+                        tag_source.clone(),
+                    );
+                    result.had_errors = true;
+                    return result;
+                }
+                result.merge_op = Some(MergeOp::Concat);
+            }
             "md" => result.interpretation = Some(Interpretation::Markdown),
             "str" => result.interpretation = Some(Interpretation::PlainString),
             "path" => result.interpretation = Some(Interpretation::Path),
             "glob" => result.interpretation = Some(Interpretation::Glob),
             "expr" => result.interpretation = Some(Interpretation::Expr),
 
-            // Unknown components emit warnings (Q-1-21)
+            // Unknown components emit warnings (Q-1-21), not errors
             unknown => {
-                diagnostics.warn(
-                    DiagnosticMessageBuilder::warning("Unknown tag component")
-                        .with_code("Q-1-21")
-                        .problem(&format!(
-                            "Unknown component '{}' in tag '!{}'",
-                            unknown, tag.suffix
-                        ))
-                        .with_location(tag_source.clone())
-                        .build()
+                diagnostics.warn_at(
+                    format!("Unknown tag component '{}' in '!{}' (Q-1-21)", unknown, tag_str),
+                    tag_source.clone(),
                 );
             }
         }
     }
 
     result
+}
+```
+
+### Error Handling for Layer Parsing
+
+When merging config layers, use "collect errors, then decide" pattern:
+
+```rust
+impl<'a> MergedConfig<'a> {
+    /// Merge config layers, collecting diagnostics
+    ///
+    /// Returns Some if all layers parsed successfully, None if any failed.
+    /// All errors/warnings are collected in diagnostics either way.
+    pub fn merge_with_diagnostics(
+        layers: Vec<(&'a ConfigValue, &SourceInfo)>,
+        diagnostics: &mut DiagnosticCollector,
+    ) -> Option<MergedConfig<'a>> {
+        let mut valid_layers = Vec::new();
+        let mut had_errors = false;
+
+        for (layer, source) in layers {
+            // Validate the layer (tag parsing, etc.)
+            if let Err(e) = validate_layer(layer, diagnostics) {
+                diagnostics.error_at(
+                    format!("Config layer parse failure (Q-1-23): {}", e),
+                    source.clone(),
+                );
+                had_errors = true;
+            } else {
+                valid_layers.push(layer);
+            }
+        }
+
+        if had_errors {
+            None  // Errors already in diagnostics
+        } else {
+            Some(MergedConfig::new(valid_layers))
+        }
+    }
 }
 ```
 
@@ -641,35 +908,56 @@ pub fn validate_config(
 
 ### Phase 1: Create `quarto-config` crate
 
-- [ ] Create crate skeleton with Cargo.toml (deps: quarto-yaml, quarto-source-map, quarto-pandoc-types)
+- [ ] Create crate skeleton with Cargo.toml (deps: quarto-yaml, quarto-source-map, quarto-pandoc-types, quarto-error-reporting)
 - [ ] Define `MergeOp` enum (Prefer, Concat)
 - [ ] Define `Interpretation` enum (Markdown, PlainString, Path, Glob, Expr)
 - [ ] Define `ConfigValueKind` enum (Scalar, Array, Map, PandocInlines, PandocBlocks)
 - [ ] Define `ConfigValue` struct
-- [ ] Implement comma-separated tag parsing (`parse_tag()` function)
+- [ ] Implement underscore-separated tag parsing with full error handling:
+  - Q-1-21: Unknown tag component (warning)
+  - Q-1-22: Unrecognized tag (warning)
+  - Q-1-24: Empty tag component (error)
+  - Q-1-25: Whitespace in tag (error)
+  - Q-1-26: Invalid tag character (error)
+  - Q-1-28: Conflicting merge operations (error)
 - [ ] Implement `From<YamlWithSourceInfo> for ConfigValue`
 - [ ] Implement `From<MetaValueWithSourceInfo> for ConfigValue` (for already-interpreted values)
+- [ ] Add error codes Q-1-23 through Q-1-28 to `error_catalog.json`
 - [ ] Unit tests for basic construction and tag extraction
 
-### Phase 2: Lazy Merge Structure
+### Phase 2: Cursor-Based Navigation
 
-- [ ] Define `MergedConfig<'a>` with layer storage
-- [ ] Define `MergedMap<'a>` and `MergedArray<'a>` for nested navigation
-- [ ] Implement scalar resolution (last wins)
+- [ ] Define `MergedConfig<'a>` with layer storage (borrowed references)
+- [ ] Define `MergedCursor<'a>` with path-based navigation
+- [ ] Define `MergedValue<'a>`, `MergedScalar<'a>`, `MergedArray<'a>`, `MergedMap<'a>`
+- [ ] Implement cursor navigation: `at()`, `at_path()`, `exists()`, `keys()`
+- [ ] Implement resolution: `as_value()`, `as_scalar()`, `as_array()`, `as_map()`
+- [ ] Implement scalar resolution (last wins for Scalar, PandocInlines, PandocBlocks—all default to !prefer)
 - [ ] Implement array resolution with `!prefer`/`!concat` semantics
 - [ ] Implement map resolution with `!prefer`/`!concat` semantics
-- [ ] Handle nested resolution (recursive field-wise merge)
+- [ ] Implement `MergedMap::iter()` for key-cursor iteration
 - [ ] Unit tests for all merge scenarios from composable-validation
 - [ ] Property-based tests for associativity
 
-### Phase 3: quarto-yaml Integration
+### Phase 3: Materialization and Error Handling
+
+- [ ] Define `MaterializeOptions` with `max_depth` (default: 256)
+- [ ] Implement `materialize()` and `materialize_with_options()`
+- [ ] Implement depth-limited recursive materialization
+- [ ] Add Q-1-27 error for nesting too deep
+- [ ] Implement `merge_with_diagnostics()` for layer validation
+- [ ] Add Q-1-23 error for layer parse failures
+- [ ] Tests for depth limit enforcement
+- [ ] Tests for error collection pattern
+
+### Phase 4: quarto-yaml Integration
 
 - [ ] Extend tag parsing to recognize `!prefer` and `!concat`
 - [ ] Ensure tags flow through to `YamlWithSourceInfo.tag` field
-- [ ] Emit warnings for unknown tags (Q-1-21, Q-1-22)
+- [ ] Integrate error handling with DiagnosticCollector
 - [ ] Tests for tag parsing in various contexts
 
-### Phase 4: pampa Integration
+### Phase 5: pampa Integration
 
 - [ ] Create `pampa/src/config_meta.rs` for conversion layer
 - [ ] Implement `config_to_meta()` function
@@ -678,14 +966,12 @@ pub fn validate_config(
 - [ ] Update document rendering to use `MergedConfig`
 - [ ] Integration tests with real .qmd files and _quarto.yml
 
-### Phase 5: Performance & Polish
+### Phase 6: Performance & Polish
 
-- [ ] Implement `materialize()` for eager evaluation when needed
-- [ ] Add caching for frequently-accessed subtrees (see Open Questions)
 - [ ] Benchmark against TypeScript mergeConfigs
 - [ ] Profile and optimize hot paths
+- [ ] Consider caching for frequently-accessed subtrees (if needed)
 - [ ] Documentation with examples
-- [ ] Error messages for invalid tag combinations
 
 ## Design Decisions (Confirmed)
 
@@ -767,25 +1053,25 @@ authors: !prefer
   - Bob
 ```
 
-### D3.5: Comma-separated tag components
+### D3.5: Underscore-separated tag components
 
-**Decision**: Since YAML only allows one tag per node, use comma-separated components within a single tag to express multiple dimensions.
+**Decision**: Since YAML only allows one tag per node, use underscore-separated components within a single tag to express multiple dimensions.
 
-**Format**: `!component1,component2` (e.g., `!prefer,md`)
+**Format**: `!component1_component2` (e.g., `!prefer_md`)
 
 **Parsing**:
-1. Split by comma
+1. Split by underscore
 2. Merge tags: `prefer`, `concat` → sets `MergeOp`
 3. Interpretation tags: `md`, `str`, `path`, `glob`, `expr` → sets `Interpretation`
 4. **Unrecognized components emit warnings** (see D5 below)
 
 **Examples**:
 ```yaml
-value: !prefer,md "**override** with markdown"
-paths: !concat,path ["./a", "./b"]
+value: !prefer_md "**override** with markdown"
+paths: !concat_path ["./a", "./b"]
 ```
 
-**Rationale**: Future-proofs the design. If we later need new tag dimensions, the convention is already established.
+**Rationale**: Underscore is fully supported by YAML parsers (unlike comma which fails). Future-proofs the design for new tag dimensions.
 
 ### D5: Unknown tag components emit warnings
 
@@ -838,8 +1124,8 @@ Warning [Q-1-22]: Unknown YAML tag
 - Already-interpreted Pandoc AST from filters or prior processing
 
 **Merge semantics**:
-- `PandocInlines`: Treated like scalars (last wins)
-- `PandocBlocks`: Treated like arrays (concat by default, `!prefer` to reset)
+- `PandocInlines`: Default `!prefer` (last wins), use `!concat` explicitly if needed
+- `PandocBlocks`: Default `!prefer` (last wins), use `!concat` explicitly if needed
 
 **Implication**: `quarto-config` depends on `quarto-pandoc-types`.
 
@@ -944,27 +1230,38 @@ Key differences from previous analysis:
 - Explicit handling of markdown interpretation
 - `ConfigValue` as a new type (not just extending `YamlWithSourceInfo`) to support Pandoc AST values directly
 
+## Resolved Questions (from subissue documents)
+
+### RQ1: MergedConfig lifetime design (was OQ1, subissue: k-vpgx)
+
+**Resolution**: Cursor-based navigation design with borrowed references.
+
+- `MergedConfig<'a>` stores `Vec<&'a ConfigValue>` (zero-copy construction)
+- `MergedCursor<'a>` provides chainable navigation via `.at(key)` and `.at_path()`
+- `MergedValue<'a>` enum allows type-agnostic access via `cursor.as_value()`
+- Resolution happens lazily at `as_scalar()`, `as_array()`, `as_map()` call sites
+- Materialization via `materialize()` produces owned `ConfigValue` for serialization
+
+### RQ2: Error handling strategy (was OQ2, subissue: k-os6h)
+
+**Resolution**: Comprehensive error handling with specific error codes.
+
+| Code | Description | Severity |
+|------|-------------|----------|
+| Q-1-21 | Unknown tag component | Warning |
+| Q-1-22 | Unrecognized tag | Warning |
+| Q-1-23 | Config layer parse failure | Error |
+| Q-1-24 | Empty tag component | Error |
+| Q-1-25 | Whitespace in tag | Error |
+| Q-1-26 | Invalid tag character | Error |
+| Q-1-27 | Config nesting too deep | Error |
+| Q-1-28 | Conflicting merge operations | Error |
+
+- **Layer parsing**: "Collect errors, then decide" pattern—all errors shown, None returned if any
+- **Circular includes**: Out of scope (project layer concern)
+- **Depth limit**: 256 levels default, enforced during materialization
+
 ## Open Questions
-
-The following areas need further design work and have dedicated beads subissues:
-
-### OQ1: MergedConfig lifetime design (subissue: k-vpgx)
-
-The `MergedConfig<'a>` lifetime design needs more detail, particularly:
-
-- What does `MergedMap<'a>` look like? How does it support lazy resolution while being navigable?
-- How does nested navigation work? E.g., `merged.get("format")?.get("html")?.get("theme")`
-- Consider a `MergedValue<'a>` enum that can represent any navigable result
-- How do we handle the case where inner navigation returns borrowed vs owned data?
-
-### OQ2: Error handling strategy (subissue: k-os6h)
-
-Need to define behavior for:
-
-- YAML parsing failures in one layer (fail fast? skip layer with warning?)
-- Syntactically invalid tags (covered by D5, but what about malformed comma syntax?)
-- Circular includes (likely out of scope per Non-Goals, but should document boundary)
-- Memory/stack overflow from deeply nested configs
 
 ### OQ3: Caching strategy for MergedConfig
 
