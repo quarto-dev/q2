@@ -24,16 +24,18 @@ Rust offers compelling advantages for Quarto's tooling:
 
 ## Key Crates
 
-### quarto-markdown-pandoc
+### pampa
 
-The most mature crate in this workspace. A Quarto Markdown parser that produces Pandoc AST output with full source location tracking.
+The most mature crate in this workspace. **pampa** is our Rust port of [Pandoc](https://pandoc.org), the universal document converter. While not a feature-for-feature reimplementation, pampa offers many of the same APIs and will feel familiar to Pandoc users.
+
+Currently, pampa focuses on parsing Quarto Markdown (QMD) and producing Pandoc AST output with full source location tracking.
 
 ```bash
 # Parse QMD to Pandoc JSON
-cargo run -p quarto-markdown-pandoc -- input.qmd -t json
+cargo run -p pampa -- input.qmd -t json
 
 # Parse with verbose tree-sitter output (for debugging)
-cargo run -p quarto-markdown-pandoc -- input.qmd -t json -v
+cargo run -p pampa -- input.qmd -t json -v
 ```
 
 **Features:**

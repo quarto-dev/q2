@@ -1,9 +1,11 @@
-# quarto-markdown
+# pampa
 
 > [!WARNING]
-> This parser isn't used in Quarto yet. This code isn't ready for public consumption. If you stumbled into this repo, then it's very likely not in a state where you'll benefit from it.
+> This code isn't used in Quarto yet and isn't ready for public consumption. If you stumbled into this repo, it's very likely not in a state where you'll benefit from it.
 
-This repository hosts a standalone parser for "Quarto Markdown" ("QMD"), the Markdown dialect recognized by [Quarto](https://quarto.org).
+**pampa** is a Rust port of [Pandoc](https://pandoc.org), the universal document converter. While not a feature-for-feature reimplementation, pampa offers many of the same APIs and will feel familiar to Pandoc users.
+
+Currently, pampa focuses on parsing "Quarto Markdown" ("QMD"), the Markdown dialect recognized by [Quarto](https://quarto.org).
 
 ## Features
 
