@@ -1,0 +1,60 @@
+[package]
+name = "quarto-hub"
+version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+edition.workspace = true
+description = "Automerge-based collaborative editing infrastructure for Quarto projects"
+
+[[bin]]
+name = "hub"
+path = "src/main.rs"
+
+[lib]
+name = "quarto_hub"
+path = "src/lib.rs"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework (version 0.8 to match samod)
+axum = { version = "0.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+
+# Automerge (via samod for JS compatibility)
+automerge = "0.7"
+samod = { version = "0.6", features = ["tokio", "axum", "tungstenite"] }
+
+# WebSocket client for connecting to sync servers
+tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
+
+# Async channels (required by samod)
+futures = "0.3"
+
+# File locking
+fs2 = "0.4"
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# CLI
+clap = { workspace = true }
+
+# Utilities
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
