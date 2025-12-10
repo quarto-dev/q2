@@ -6,7 +6,7 @@ use clap::Parser;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use quarto_hub::{context::HubConfig, server, StorageManager};
+use quarto_hub::{StorageManager, context::HubConfig, server};
 
 #[derive(Parser, Debug)]
 #[command(name = "hub")]
@@ -29,6 +29,22 @@ struct Args {
     /// Peers are persisted to hub.json and used on subsequent runs.
     #[arg(long = "peer", value_name = "URL")]
     peers: Vec<String>,
+
+    /// Periodic filesystem sync interval in seconds.
+    /// Set to 0 to disable periodic sync.
+    /// Default: 30 seconds.
+    #[arg(long, default_value = "30")]
+    sync_interval: u64,
+
+    /// Disable filesystem watching.
+    /// When disabled, file changes won't be detected until periodic sync runs.
+    #[arg(long)]
+    no_watch: bool,
+
+    /// Debounce duration for filesystem events in milliseconds.
+    /// Default: 500ms.
+    #[arg(long, default_value = "500")]
+    watch_debounce: u64,
 }
 
 #[tokio::main]
@@ -70,10 +86,19 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // Configure and run server
+    let sync_interval_secs = if args.sync_interval == 0 {
+        None
+    } else {
+        Some(args.sync_interval)
+    };
+
     let config = HubConfig {
         port: args.port,
         host: args.host,
         peers,
+        sync_interval_secs,
+        watch_enabled: !args.no_watch,
+        watch_debounce_ms: args.watch_debounce,
     };
 
     server::run_server(storage, config).await?;

@@ -56,5 +56,15 @@ clap = { workspace = true }
 # Utilities
 walkdir = "2"
 
+# Filesystem watching for continuous sync
+notify = "8"
+notify-debouncer-mini = "0.7"
+
+# Cryptographic hashing for content checksums
+sha2 = "0.10"
+
+# Hex encoding/decoding for change hash serialization
+hex = "0.4"
+
 [dev-dependencies]
 tempfile = "3"

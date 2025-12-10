@@ -36,8 +36,7 @@ fn test_yaml_serialization_size_scaling() {
         let qmd_size = qmd_content.len();
 
         // Parse QMD to PandocAST
-        let mut output_stream =
-            pampa::utils::output::VerboseOutput::Sink(std::io::sink());
+        let mut output_stream = pampa::utils::output::VerboseOutput::Sink(std::io::sink());
         let (pandoc, context, _warnings) = readers::qmd::read(
             qmd_content.as_bytes(),
             false,
@@ -94,8 +93,7 @@ fn test_yaml_serialization_with_siblings() {
         let qmd_size = yaml.len();
 
         // Parse and serialize
-        let mut output_stream =
-            pampa::utils::output::VerboseOutput::Sink(std::io::sink());
+        let mut output_stream = pampa::utils::output::VerboseOutput::Sink(std::io::sink());
         let (pandoc, context, _warnings) = readers::qmd::read(
             yaml.as_bytes(),
             false,
@@ -136,8 +134,7 @@ level1:
 Some content.
 "#;
 
-    let mut output_stream =
-        pampa::utils::output::VerboseOutput::Sink(std::io::sink());
+    let mut output_stream = pampa::utils::output::VerboseOutput::Sink(std::io::sink());
     let (pandoc, context, _warnings) = readers::qmd::read(
         yaml.as_bytes(),
         false,
@@ -219,8 +216,7 @@ fn test_binary_tree_serialization() {
         let num_nodes = (1 << depth) - 1; // 2^depth - 1
 
         // Parse QMD to PandocAST
-        let mut output_stream =
-            pampa::utils::output::VerboseOutput::Sink(std::io::sink());
+        let mut output_stream = pampa::utils::output::VerboseOutput::Sink(std::io::sink());
         let (pandoc, context, _warnings) = readers::qmd::read(
             qmd_content.as_bytes(),
             false,

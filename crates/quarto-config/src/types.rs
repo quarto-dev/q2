@@ -251,10 +251,7 @@ mod tests {
 
     #[test]
     fn test_config_value_scalar() {
-        let value = ConfigValue::new_scalar(
-            Yaml::String("test".into()),
-            SourceInfo::default(),
-        );
+        let value = ConfigValue::new_scalar(Yaml::String("test".into()), SourceInfo::default());
 
         assert!(value.is_scalar());
         assert!(!value.is_array());

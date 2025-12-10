@@ -203,7 +203,7 @@ pub fn parse_tag(
                     builder = builder.add_hint(format!("Did you mean '{}'?", did_you_mean));
                 } else {
                     builder = builder.add_hint(
-                        "Valid components are: prefer, concat, md, str, path, glob, expr"
+                        "Valid components are: prefer, concat, md, str, path, glob, expr",
                     );
                 }
 
@@ -287,8 +287,17 @@ mod tests {
             let result = parse_tag(tag, &SourceInfo::default(), &mut diagnostics);
 
             assert!(!result.had_errors, "Failed for tag: {}", tag);
-            assert!(diagnostics.is_empty(), "Unexpected diagnostics for tag: {}", tag);
-            assert_eq!(result.interpretation, Some(expected), "Wrong interpretation for tag: {}", tag);
+            assert!(
+                diagnostics.is_empty(),
+                "Unexpected diagnostics for tag: {}",
+                tag
+            );
+            assert_eq!(
+                result.interpretation,
+                Some(expected),
+                "Wrong interpretation for tag: {}",
+                tag
+            );
         }
     }
 
@@ -351,6 +360,9 @@ mod tests {
             merge_op: Some(MergeOp::Prefer),
             ..Default::default()
         };
-        assert_eq!(tag_with_prefer.merge_op_or(MergeOp::Concat), MergeOp::Prefer);
+        assert_eq!(
+            tag_with_prefer.merge_op_or(MergeOp::Concat),
+            MergeOp::Prefer
+        );
     }
 }

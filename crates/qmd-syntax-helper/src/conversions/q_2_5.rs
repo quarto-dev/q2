@@ -40,14 +40,8 @@ impl Q25Converter {
         let mut sink = std::io::sink();
         let filename = file_path.to_string_lossy();
 
-        let result = pampa::readers::qmd::read(
-            content.as_bytes(),
-            false,
-            &filename,
-            &mut sink,
-            true,
-            None,
-        );
+        let result =
+            pampa::readers::qmd::read(content.as_bytes(), false, &filename, &mut sink, true, None);
 
         let diagnostics = match result {
             Ok(_) => return Ok(Vec::new()),

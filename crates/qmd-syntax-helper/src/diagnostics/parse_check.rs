@@ -22,14 +22,8 @@ impl ParseChecker {
         let mut sink = std::io::sink();
         let filename = file_path.to_string_lossy();
 
-        let result = pampa::readers::qmd::read(
-            content.as_bytes(),
-            false,
-            &filename,
-            &mut sink,
-            true,
-            None,
-        );
+        let result =
+            pampa::readers::qmd::read(content.as_bytes(), false, &filename, &mut sink, true, None);
 
         match result {
             Ok(_) => Ok(None),

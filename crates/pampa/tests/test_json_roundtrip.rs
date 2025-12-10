@@ -226,9 +226,7 @@ fn test_json_roundtrip_complex_document() {
     assert!(parsed.meta.contains_key("title"));
 
     match parsed.meta.get("title") {
-        Some(pampa::pandoc::MetaValueWithSourceInfo::MetaString {
-            value, ..
-        }) => {
+        Some(pampa::pandoc::MetaValueWithSourceInfo::MetaString { value, .. }) => {
             assert_eq!(value, "Test Document");
         }
         _ => panic!("Expected MetaString for title"),

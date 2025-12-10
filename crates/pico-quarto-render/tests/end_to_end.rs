@@ -85,13 +85,11 @@ fn prepare_template_metadata(pandoc: &mut Pandoc) {
         let plain_text = match &entry.value {
             MetaValueWithSourceInfo::MetaString { value, .. } => value.clone(),
             MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                let (text, _) =
-                    pampa::writers::plaintext::inlines_to_string(content);
+                let (text, _) = pampa::writers::plaintext::inlines_to_string(content);
                 text
             }
             MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
-                let (text, _) =
-                    pampa::writers::plaintext::blocks_to_string(content);
+                let (text, _) = pampa::writers::plaintext::blocks_to_string(content);
                 text
             }
             _ => return,
@@ -108,9 +106,9 @@ fn prepare_template_metadata(pandoc: &mut Pandoc) {
     }
 }
 
-use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
 use pampa::pandoc::block::Block;
 use pampa::pandoc::inline::Inlines;
+use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
 use std::collections::HashMap;
 
 struct HtmlWriters;

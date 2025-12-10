@@ -91,13 +91,12 @@ fn analyze_categorical_predictors_errors() {
     if log_observer.had_errors() {
         let filename = "categorical-predictors.qmd";
         let source_context = quarto_source_map::SourceContext::new();
-        let diagnostics =
-            pampa::readers::qmd_error_messages::produce_diagnostic_messages(
-                &input_bytes,
-                &log_observer,
-                filename,
-                &source_context,
-            );
+        let diagnostics = pampa::readers::qmd_error_messages::produce_diagnostic_messages(
+            &input_bytes,
+            &log_observer,
+            filename,
+            &source_context,
+        );
 
         println!("\n=== DIAGNOSTIC MESSAGE ANALYSIS ===");
         println!("Total diagnostics generated: {}", diagnostics.len());

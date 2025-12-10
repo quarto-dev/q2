@@ -32,13 +32,7 @@ pub fn run() {
 
 fn json_to_pandoc(
     input: &str,
-) -> Result<
-    (
-        pampa::pandoc::Pandoc,
-        pampa::pandoc::ASTContext,
-    ),
-    String,
-> {
+) -> Result<(pampa::pandoc::Pandoc, pampa::pandoc::ASTContext), String> {
     match readers::json::read(&mut input.as_bytes()) {
         Ok(doc) => Ok(doc),
         Err(err) => Err(format!("Unable to read as json: {:?}", err)),

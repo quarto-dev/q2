@@ -248,18 +248,16 @@ end
 
     let doc = Pandoc {
         meta: Default::default(),
-        blocks: vec![Block::BlockQuote(
-            pampa::pandoc::BlockQuote {
-                content: vec![Block::Paragraph(Paragraph {
-                    content: vec![Inline::Str(Str {
-                        text: "hello".to_string(),
-                        source_info: quarto_source_map::SourceInfo::default(),
-                    })],
+        blocks: vec![Block::BlockQuote(pampa::pandoc::BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "hello".to_string(),
                     source_info: quarto_source_map::SourceInfo::default(),
                 })],
                 source_info: quarto_source_map::SourceInfo::default(),
-            },
-        )],
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
     };
 
     let (transformed, _) = run_filter(filter_code, doc);

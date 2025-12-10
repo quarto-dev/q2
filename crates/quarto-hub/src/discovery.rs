@@ -105,9 +105,11 @@ mod tests {
         assert_eq!(files.qmd_files.len(), 3);
         assert!(files.qmd_files.contains(&PathBuf::from("index.qmd")));
         assert!(files.qmd_files.contains(&PathBuf::from("about.qmd")));
-        assert!(files
-            .qmd_files
-            .contains(&PathBuf::from("chapters/intro.qmd")));
+        assert!(
+            files
+                .qmd_files
+                .contains(&PathBuf::from("chapters/intro.qmd"))
+        );
     }
 
     #[test]

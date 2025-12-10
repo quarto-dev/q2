@@ -96,8 +96,8 @@ impl HubStorageConfig {
     /// Save config to file.
     fn save(&self, hub_dir: &Path) -> Result<()> {
         let config_path = hub_dir.join("hub.json");
-        let content = serde_json::to_string_pretty(self)
-            .map_err(|e| Error::ConfigParse(e.to_string()))?;
+        let content =
+            serde_json::to_string_pretty(self).map_err(|e| Error::ConfigParse(e.to_string()))?;
         fs::write(&config_path, content)?;
         Ok(())
     }

@@ -84,8 +84,7 @@ pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
             interpretation: None,
         },
         MetaValueWithSourceInfo::MetaList { items, source_info } => {
-            let config_items: Vec<ConfigValue> =
-                items.iter().map(meta_to_config_value).collect();
+            let config_items: Vec<ConfigValue> = items.iter().map(meta_to_config_value).collect();
             ConfigValue {
                 value: ConfigValueKind::Array(config_items),
                 source_info: source_info.clone(),
@@ -93,7 +92,10 @@ pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
                 interpretation: None,
             }
         }
-        MetaValueWithSourceInfo::MetaMap { entries, source_info } => {
+        MetaValueWithSourceInfo::MetaMap {
+            entries,
+            source_info,
+        } => {
             let config_entries: IndexMap<String, ConfigValue> = entries
                 .iter()
                 .map(|entry| (entry.key.clone(), meta_to_config_value(&entry.value)))
@@ -181,7 +183,10 @@ fn yaml_to_template_value(yaml: &Yaml) -> TemplateValue {
         Yaml::Hash(hash) => {
             let map: HashMap<String, TemplateValue> = hash
                 .iter()
-                .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), yaml_to_template_value(v))))
+                .filter_map(|(k, v)| {
+                    k.as_str()
+                        .map(|key| (key.to_string(), yaml_to_template_value(v)))
+                })
                 .collect();
             TemplateValue::Map(map)
         }
@@ -362,7 +367,9 @@ mod tests {
         };
         let config = meta_to_config_value(&meta);
 
-        assert!(matches!(config.value, ConfigValueKind::Scalar(Yaml::String(ref s)) if s == "hello"));
+        assert!(
+            matches!(config.value, ConfigValueKind::Scalar(Yaml::String(ref s)) if s == "hello")
+        );
     }
 
     #[test]
@@ -373,7 +380,10 @@ mod tests {
         };
         let config = meta_to_config_value(&meta);
 
-        assert!(matches!(config.value, ConfigValueKind::Scalar(Yaml::Boolean(true))));
+        assert!(matches!(
+            config.value,
+            ConfigValueKind::Scalar(Yaml::Boolean(true))
+        ));
     }
 
     #[test]
@@ -475,21 +485,34 @@ mod tests {
             source_info: dummy_source_info(),
         };
 
-        let (ctx, diags) = merged_metadata_to_context(&meta, "<p>Body</p>".to_string(), MetaWriter::Html);
+        let (ctx, diags) =
+            merged_metadata_to_context(&meta, "<p>Body</p>".to_string(), MetaWriter::Html);
 
         assert!(diags.is_empty(), "Expected no diagnostics: {:?}", diags);
 
         // Should have lang from defaults
-        assert_eq!(ctx.get("lang"), Some(&TemplateValue::String("en".to_string())));
+        assert_eq!(
+            ctx.get("lang"),
+            Some(&TemplateValue::String("en".to_string()))
+        );
 
         // Should have pagetitle derived from title
-        assert_eq!(ctx.get("pagetitle"), Some(&TemplateValue::String("Test Title".to_string())));
+        assert_eq!(
+            ctx.get("pagetitle"),
+            Some(&TemplateValue::String("Test Title".to_string()))
+        );
 
         // Should have title from document
-        assert_eq!(ctx.get("title"), Some(&TemplateValue::String("Test Title".to_string())));
+        assert_eq!(
+            ctx.get("title"),
+            Some(&TemplateValue::String("Test Title".to_string()))
+        );
 
         // Should have body
-        assert_eq!(ctx.get("body"), Some(&TemplateValue::String("<p>Body</p>".to_string())));
+        assert_eq!(
+            ctx.get("body"),
+            Some(&TemplateValue::String("<p>Body</p>".to_string()))
+        );
     }
 
     #[test]
@@ -520,6 +543,9 @@ mod tests {
         let (ctx, _diags) = merged_metadata_to_context(&meta, "".to_string(), MetaWriter::Html);
 
         // Document's lang should override default
-        assert_eq!(ctx.get("lang"), Some(&TemplateValue::String("de".to_string())));
+        assert_eq!(
+            ctx.get("lang"),
+            Some(&TemplateValue::String("de".to_string()))
+        );
     }
 }

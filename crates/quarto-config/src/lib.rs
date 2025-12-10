@@ -37,41 +37,23 @@
 //! }
 //! ```
 
-mod types;
-mod tag;
 mod convert;
-mod merged;
 mod materialize;
+mod merged;
+mod tag;
+mod types;
 
-pub use types::{
-    ConfigError,
-    ConfigValue,
-    ConfigValueKind,
-    Interpretation,
-    MergeOp,
-};
+pub use types::{ConfigError, ConfigValue, ConfigValueKind, Interpretation, MergeOp};
 
-pub use tag::{
-    ParsedTag,
-    parse_tag,
-};
+pub use tag::{ParsedTag, parse_tag};
 
 pub use convert::config_value_from_yaml;
 
 pub use merged::{
-    MergedArray,
-    MergedArrayItem,
-    MergedConfig,
-    MergedCursor,
-    MergedMap,
-    MergedScalar,
-    MergedValue,
+    MergedArray, MergedArrayItem, MergedConfig, MergedCursor, MergedMap, MergedScalar, MergedValue,
 };
 
-pub use materialize::{
-    MaterializeOptions,
-    merge_with_diagnostics,
-};
+pub use materialize::{MaterializeOptions, merge_with_diagnostics};
 
 // Re-export for convenience
 pub use quarto_source_map::SourceInfo;

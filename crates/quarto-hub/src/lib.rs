@@ -13,8 +13,15 @@ pub mod index;
 pub mod peer;
 pub mod server;
 pub mod storage;
+pub mod sync;
+pub mod sync_state;
+pub mod watch;
+
+// Test-only modules
+#[cfg(test)]
+mod automerge_api_tests;
 
 pub use context::HubContext;
 pub use error::{Error, Result};
 pub use index::IndexDocument;
-pub use storage::{HubStorageConfig, StorageManager, CURRENT_HUB_VERSION};
+pub use storage::{CURRENT_HUB_VERSION, HubStorageConfig, StorageManager};

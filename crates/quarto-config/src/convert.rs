@@ -180,7 +180,8 @@ mod tests {
     fn test_convert_hash() {
         let mut diagnostics = Vec::new();
 
-        let key = YamlWithSourceInfo::new_scalar(Yaml::String("name".into()), SourceInfo::default());
+        let key =
+            YamlWithSourceInfo::new_scalar(Yaml::String("name".into()), SourceInfo::default());
         let value = make_scalar("value");
         let entry = quarto_yaml::YamlHashEntry::new(
             key,
@@ -193,7 +194,8 @@ mod tests {
         let mut hash = yaml_rust2::yaml::Hash::new();
         hash.insert(Yaml::String("name".into()), Yaml::String("value".into()));
 
-        let yaml = YamlWithSourceInfo::new_hash(Yaml::Hash(hash), SourceInfo::default(), vec![entry]);
+        let yaml =
+            YamlWithSourceInfo::new_hash(Yaml::Hash(hash), SourceInfo::default(), vec![entry]);
 
         let config = config_value_from_yaml(yaml, &mut diagnostics);
 
@@ -227,7 +229,11 @@ mod tests {
         assert!(diagnostics.is_empty());
         assert!(config.is_map());
 
-        let theme = config.as_map().unwrap().get("theme").expect("theme not found");
+        let theme = config
+            .as_map()
+            .unwrap()
+            .get("theme")
+            .expect("theme not found");
         assert_eq!(theme.merge_op, MergeOp::Prefer);
         assert_eq!(theme.as_yaml().unwrap().as_str(), Some("cosmo"));
     }
@@ -242,8 +248,15 @@ mod tests {
 
         assert!(diagnostics.is_empty());
 
-        let desc = config.as_map().unwrap().get("description").expect("description not found");
-        assert_eq!(desc.interpretation, Some(crate::types::Interpretation::Markdown));
+        let desc = config
+            .as_map()
+            .unwrap()
+            .get("description")
+            .expect("description not found");
+        assert_eq!(
+            desc.interpretation,
+            Some(crate::types::Interpretation::Markdown)
+        );
     }
 
     #[test]
@@ -256,8 +269,15 @@ mod tests {
 
         assert!(diagnostics.is_empty());
 
-        let file = config.as_map().unwrap().get("file").expect("file not found");
-        assert_eq!(file.interpretation, Some(crate::types::Interpretation::Path));
+        let file = config
+            .as_map()
+            .unwrap()
+            .get("file")
+            .expect("file not found");
+        assert_eq!(
+            file.interpretation,
+            Some(crate::types::Interpretation::Path)
+        );
     }
 
     #[test]
@@ -278,17 +298,36 @@ format:
         assert!(diagnostics.is_empty());
 
         // Navigate to nested values
-        let format = config.as_map().unwrap().get("format").expect("format not found");
-        let html = format.as_map().unwrap().get("html").expect("html not found");
-        let theme = html.as_map().unwrap().get("theme").expect("theme not found");
+        let format = config
+            .as_map()
+            .unwrap()
+            .get("format")
+            .expect("format not found");
+        let html = format
+            .as_map()
+            .unwrap()
+            .get("html")
+            .expect("html not found");
+        let theme = html
+            .as_map()
+            .unwrap()
+            .get("theme")
+            .expect("theme not found");
 
         assert_eq!(theme.merge_op, MergeOp::Prefer);
         assert_eq!(theme.as_yaml().unwrap().as_str(), Some("darkly"));
 
         let pdf = format.as_map().unwrap().get("pdf").expect("pdf not found");
-        let docclass = pdf.as_map().unwrap().get("documentclass").expect("documentclass not found");
+        let docclass = pdf
+            .as_map()
+            .unwrap()
+            .get("documentclass")
+            .expect("documentclass not found");
 
-        assert_eq!(docclass.interpretation, Some(crate::types::Interpretation::PlainString));
+        assert_eq!(
+            docclass.interpretation,
+            Some(crate::types::Interpretation::PlainString)
+        );
     }
 
     #[test]
@@ -305,7 +344,11 @@ format:
         assert_eq!(diagnostics[0].code.as_deref(), Some("Q-1-21"));
 
         // Value should still be converted
-        let value = config.as_map().unwrap().get("value").expect("value not found");
+        let value = config
+            .as_map()
+            .unwrap()
+            .get("value")
+            .expect("value not found");
         assert_eq!(value.as_yaml().unwrap().as_str(), Some("hello"));
     }
 
@@ -318,12 +361,26 @@ format:
         let mut diagnostics = Vec::new();
         let config = config_value_from_yaml(yaml, &mut diagnostics);
 
-        assert!(diagnostics.is_empty(), "Expected no diagnostics, got: {:?}", diagnostics);
+        assert!(
+            diagnostics.is_empty(),
+            "Expected no diagnostics, got: {:?}",
+            diagnostics
+        );
 
-        let title = config.as_map().unwrap().get("title").expect("title not found");
+        let title = config
+            .as_map()
+            .unwrap()
+            .get("title")
+            .expect("title not found");
         assert_eq!(title.merge_op, MergeOp::Prefer);
-        assert_eq!(title.interpretation, Some(crate::types::Interpretation::Markdown));
-        assert_eq!(title.as_yaml().unwrap().as_str(), Some("**Override Title**"));
+        assert_eq!(
+            title.interpretation,
+            Some(crate::types::Interpretation::Markdown)
+        );
+        assert_eq!(
+            title.as_yaml().unwrap().as_str(),
+            Some("**Override Title**")
+        );
     }
 
     #[test]
@@ -337,8 +394,15 @@ format:
 
         assert!(diagnostics.is_empty());
 
-        let files = config.as_map().unwrap().get("files").expect("files not found");
+        let files = config
+            .as_map()
+            .unwrap()
+            .get("files")
+            .expect("files not found");
         assert_eq!(files.merge_op, MergeOp::Concat);
-        assert_eq!(files.interpretation, Some(crate::types::Interpretation::Path));
+        assert_eq!(
+            files.interpretation,
+            Some(crate::types::Interpretation::Path)
+        );
     }
 }

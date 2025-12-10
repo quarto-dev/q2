@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
 use pampa::pandoc::{MetaMapEntry, MetaValueWithSourceInfo, Pandoc};
+use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
 
 use crate::format_writers::FormatWriters;
 
@@ -47,13 +47,11 @@ pub fn prepare_template_metadata(pandoc: &mut Pandoc) {
         let plain_text = match &entry.value {
             MetaValueWithSourceInfo::MetaString { value, .. } => value.clone(),
             MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                let (text, _diagnostics) =
-                    pampa::writers::plaintext::inlines_to_string(content);
+                let (text, _diagnostics) = pampa::writers::plaintext::inlines_to_string(content);
                 text
             }
             MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
-                let (text, _diagnostics) =
-                    pampa::writers::plaintext::blocks_to_string(content);
+                let (text, _diagnostics) = pampa::writers::plaintext::blocks_to_string(content);
                 text
             }
             _ => return, // Other types: skip

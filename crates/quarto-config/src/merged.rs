@@ -237,12 +237,10 @@ impl<'a> MergedCursor<'a> {
                 return match &value.value {
                     ConfigValueKind::Scalar(_)
                     | ConfigValueKind::PandocInlines(_)
-                    | ConfigValueKind::PandocBlocks(_) => {
-                        Some(MergedValue::Scalar(MergedScalar {
-                            value,
-                            layer_index: i,
-                        }))
-                    }
+                    | ConfigValueKind::PandocBlocks(_) => Some(MergedValue::Scalar(MergedScalar {
+                        value,
+                        layer_index: i,
+                    })),
                     ConfigValueKind::Array(_) => self.as_array().map(MergedValue::Array),
                     ConfigValueKind::Map(_) => self.as_map().map(MergedValue::Map),
                 };
@@ -569,12 +567,8 @@ mod tests {
 
     #[test]
     fn test_map_field_wise_merge() {
-        let layer1 = map(vec![
-            ("format", map(vec![("html", scalar("default"))])),
-        ]);
-        let layer2 = map(vec![
-            ("format", map(vec![("pdf", scalar("article"))])),
-        ]);
+        let layer1 = map(vec![("format", map(vec![("html", scalar("default"))]))]);
+        let layer2 = map(vec![("format", map(vec![("pdf", scalar("article"))]))]);
         let merged = MergedConfig::new(vec![&layer1, &layer2]);
 
         // Both keys should be present
@@ -586,12 +580,11 @@ mod tests {
 
     #[test]
     fn test_map_prefer_resets() {
-        let layer1 = map(vec![
-            ("format", map(vec![("html", scalar("default"))])),
-        ]);
-        let layer2 = map(vec![
-            ("format", map_prefer(vec![("pdf", scalar("article"))])),
-        ]);
+        let layer1 = map(vec![("format", map(vec![("html", scalar("default"))]))]);
+        let layer2 = map(vec![(
+            "format",
+            map_prefer(vec![("pdf", scalar("article"))]),
+        )]);
         let merged = MergedConfig::new(vec![&layer1, &layer2]);
 
         // Only pdf should be present (prefer resets)
@@ -768,7 +761,10 @@ mod tests {
             "a",
             map(vec![(
                 "b",
-                map(vec![("c", map(vec![("d", map(vec![("e", scalar("deep"))]))]))]),
+                map(vec![(
+                    "c",
+                    map(vec![("d", map(vec![("e", scalar("deep"))]))]),
+                )]),
             )]),
         )]);
         let merged = MergedConfig::new(vec![&config]);

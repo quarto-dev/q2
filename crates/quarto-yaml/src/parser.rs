@@ -1254,7 +1254,9 @@ We used the following approach...
     #[test]
     fn test_parse_scalar_with_md_tag() {
         let yaml = parse("description: !md \"**bold** text\"").unwrap();
-        let value = yaml.get_hash_value("description").expect("description not found");
+        let value = yaml
+            .get_hash_value("description")
+            .expect("description not found");
 
         assert!(value.tag.is_some());
         let (tag_suffix, _) = value.tag.as_ref().unwrap();
@@ -1376,21 +1378,29 @@ We used the following approach...
 
         // Exclamation mark separator - does NOT work (treated as handle)
         let result = parse("title: !md!prefer test");
-        assert!(result.is_err(), "Bang separator should not work (treated as YAML handle)");
+        assert!(
+            result.is_err(),
+            "Bang separator should not work (treated as YAML handle)"
+        );
     }
 
     #[test]
     fn test_multiple_tagged_values() {
-        let yaml = parse(r#"
+        let yaml = parse(
+            r#"
 title: !str "Plain Title"
 description: !md "**Bold** description"
 file: !path ./data.csv
-"#).unwrap();
+"#,
+        )
+        .unwrap();
 
         let title = yaml.get_hash_value("title").expect("title not found");
         assert_eq!(title.tag.as_ref().map(|(t, _)| t.as_str()), Some("str"));
 
-        let desc = yaml.get_hash_value("description").expect("description not found");
+        let desc = yaml
+            .get_hash_value("description")
+            .expect("description not found");
         assert_eq!(desc.tag.as_ref().map(|(t, _)| t.as_str()), Some("md"));
 
         let file = yaml.get_hash_value("file").expect("file not found");

@@ -425,8 +425,16 @@ Content.
     )
     .expect("Render should succeed");
 
-    assert!(diagnostics.is_empty(), "Expected no diagnostics: {:?}", diagnostics);
-    assert!(output.contains("Lang: en"), "Default lang should be 'en', got: {}", output);
+    assert!(
+        diagnostics.is_empty(),
+        "Expected no diagnostics: {:?}",
+        diagnostics
+    );
+    assert!(
+        output.contains("Lang: en"),
+        "Default lang should be 'en', got: {}",
+        output
+    );
 }
 
 #[test]
@@ -451,7 +459,11 @@ Content.
     )
     .expect("Render should succeed");
 
-    assert!(output.contains("Lang: de"), "Document lang should override default, got: {}", output);
+    assert!(
+        output.contains("Lang: de"),
+        "Document lang should override default, got: {}",
+        output
+    );
 }
 
 #[test]
@@ -476,7 +488,11 @@ Content.
     .expect("Render should succeed");
 
     assert!(diagnostics.is_empty());
-    assert!(output.contains("<title>My Simple Title</title>"), "pagetitle should match title, got: {}", output);
+    assert!(
+        output.contains("<title>My Simple Title</title>"),
+        "pagetitle should match title, got: {}",
+        output
+    );
 }
 
 #[test]
@@ -501,18 +517,24 @@ Hi there.
     )
     .expect("Render should succeed");
 
-    assert!(diagnostics.is_empty(), "Expected no diagnostics: {:?}", diagnostics);
+    assert!(
+        diagnostics.is_empty(),
+        "Expected no diagnostics: {:?}",
+        diagnostics
+    );
 
     // pagetitle should be plain text (no <em>)
     assert!(
         output.contains("<title>Hello world</title>"),
-        "pagetitle should be plain text 'Hello world', got: {}", output
+        "pagetitle should be plain text 'Hello world', got: {}",
+        output
     );
 
     // title should retain formatting as HTML
     assert!(
         output.contains("<h1>Hello <em>world</em></h1>"),
-        "title should have HTML formatting, got: {}", output
+        "title should have HTML formatting, got: {}",
+        output
     );
 }
 
@@ -539,24 +561,31 @@ Hi there.
     )
     .expect("Render should succeed");
 
-    assert!(diagnostics.is_empty(), "Expected no diagnostics: {:?}", diagnostics);
+    assert!(
+        diagnostics.is_empty(),
+        "Expected no diagnostics: {:?}",
+        diagnostics
+    );
 
     // Check the <html lang="en"> attribute
     assert!(
         output.contains(r#"lang="en""#),
-        "Should have lang='en' attribute, got: {}", output
+        "Should have lang='en' attribute, got: {}",
+        output
     );
 
     // Check the <title> tag has plain text
     assert!(
         output.contains("<title>Hello world</title>"),
-        "pagetitle in <title> should be plain text, got: {}", output
+        "pagetitle in <title> should be plain text, got: {}",
+        output
     );
 
     // Check the visible title has HTML formatting
     assert!(
         output.contains("Hello <em>world</em>"),
-        "Visible title should have HTML formatting, got: {}", output
+        "Visible title should have HTML formatting, got: {}",
+        output
     );
 }
 
@@ -584,6 +613,7 @@ Content.
 
     assert!(
         output.contains("<title>Custom Page Title</title>"),
-        "Explicit pagetitle should override derived, got: {}", output
+        "Explicit pagetitle should override derived, got: {}",
+        output
     );
 }

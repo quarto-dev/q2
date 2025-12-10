@@ -61,8 +61,7 @@ fn test_metadata_source_tracking_002_qmd() {
     let content = std::fs::read_to_string(test_file).expect("Failed to read test file");
 
     // Step 1: Read QMD to PandocAST
-    let mut output_stream =
-        pampa::utils::output::VerboseOutput::Sink(std::io::sink());
+    let mut output_stream = pampa::utils::output::VerboseOutput::Sink(std::io::sink());
     let (pandoc, context, _warnings) = readers::qmd::read(
         content.as_bytes(),
         false,
@@ -348,8 +347,7 @@ fn test_yaml_tagged_value_source_tracking() {
     let qmd_content = std::fs::read_to_string(test_file).expect("Failed to read test file");
 
     // Parse QMD
-    let mut output_stream =
-        pampa::utils::output::VerboseOutput::Sink(std::io::sink());
+    let mut output_stream = pampa::utils::output::VerboseOutput::Sink(std::io::sink());
     let (pandoc, _context, _warnings) = readers::qmd::read(
         qmd_content.as_bytes(),
         false,

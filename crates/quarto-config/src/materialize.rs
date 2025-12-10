@@ -194,11 +194,13 @@ pub fn merge_with_diagnostics<'a>(
         // Validate the layer recursively
         if let Err(e) = validate_layer(layer, diagnostics) {
             diagnostics.push(
-                quarto_error_reporting::DiagnosticMessageBuilder::error("Config layer validation failed")
-                    .with_code("Q-1-23")
-                    .problem(format!("Failed to validate config layer: {}", e))
-                    .with_location(layer.source_info.clone())
-                    .build(),
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Config layer validation failed",
+                )
+                .with_code("Q-1-23")
+                .problem(format!("Failed to validate config layer: {}", e))
+                .with_location(layer.source_info.clone())
+                .build(),
             );
             had_errors = true;
         }

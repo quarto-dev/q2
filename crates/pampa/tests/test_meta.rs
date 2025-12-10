@@ -5,9 +5,7 @@
 
 use hashlink::LinkedHashMap;
 use pampa::pandoc::location::{Location, Range, SourceInfo};
-use pampa::pandoc::{
-    Inline, MetaValue, RawBlock, parse_metadata_strings, rawblock_to_meta,
-};
+use pampa::pandoc::{Inline, MetaValue, RawBlock, parse_metadata_strings, rawblock_to_meta};
 use std::fs;
 
 #[test]

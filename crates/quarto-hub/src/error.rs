@@ -19,7 +19,9 @@ pub enum Error {
     #[error("Failed to parse hub config: {0}")]
     ConfigParse(String),
 
-    #[error("Hub storage version {found} is newer than supported version {supported}. Please upgrade quarto-hub.")]
+    #[error(
+        "Hub storage version {found} is newer than supported version {supported}. Please upgrade quarto-hub."
+    )]
     ConfigVersionTooNew { found: u32, supported: u32 },
 
     #[error("IO error: {0}")]
@@ -33,6 +35,12 @@ pub enum Error {
 
     #[error("Index document error: {0}")]
     IndexDocument(String),
+
+    #[error("Sync state error: {0}")]
+    SyncState(String),
+
+    #[error("Sync error: {0}")]
+    Sync(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -19,9 +19,7 @@ use pampa::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use pampa::pandoc::caption::Caption;
 use pampa::pandoc::inline::{Citation, CitationMode};
 use pampa::pandoc::table::{Cell, Row, Table, TableBody, TableFoot, TableHead};
-use pampa::pandoc::{
-    Block, Code, CodeBlock, Div, Figure, Header, Image, Inline, Link, Span,
-};
+use pampa::pandoc::{Block, Code, CodeBlock, Div, Figure, Header, Image, Inline, Link, Span};
 use quarto_source_map::SourceInfo;
 
 // ============================================================================

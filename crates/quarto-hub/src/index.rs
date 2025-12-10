@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use automerge::{transaction::Transactable, Automerge, ObjType, ReadDoc, ROOT};
+use automerge::{Automerge, ObjType, ROOT, ReadDoc, transaction::Transactable};
 use samod::{DocHandle, DocumentId, Repo};
 use tracing::{debug, info, warn};
 

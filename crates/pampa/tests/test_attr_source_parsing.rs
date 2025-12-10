@@ -696,8 +696,7 @@ fn test_json_serialization_includes_attr_source() {
 
     // Serialize to JSON
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     // Parse the JSON output
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
@@ -745,8 +744,7 @@ fn test_json_serialization_header_with_attr_source() {
     let context = ASTContext::anonymous();
 
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
     let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
@@ -782,8 +780,7 @@ fn test_json_serialization_code_block_with_attr_source() {
     let context = ASTContext::anonymous();
 
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
     let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
@@ -820,14 +817,12 @@ fn test_json_roundtrip_preserves_attr_source() {
 
     // Serialize to JSON
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     // Deserialize from JSON
     let json_bytes = buffer.into_inner();
     let (pandoc2, _context2) =
-        pampa::readers::json::read(&mut json_bytes.as_slice())
-            .expect("Failed to read JSON");
+        pampa::readers::json::read(&mut json_bytes.as_slice()).expect("Failed to read JSON");
 
     // Extract the span from both ASTs
     let Block::Paragraph(para1) = &pandoc.blocks[0] else {
@@ -870,14 +865,12 @@ fn test_json_roundtrip_header_attr_source() {
 
     // Serialize to JSON
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     // Deserialize from JSON
     let json_bytes = buffer.into_inner();
     let (pandoc2, _context2) =
-        pampa::readers::json::read(&mut json_bytes.as_slice())
-            .expect("Failed to read JSON");
+        pampa::readers::json::read(&mut json_bytes.as_slice()).expect("Failed to read JSON");
 
     // Extract headers
     let Block::Header(header1) = &pandoc.blocks[0] else {
@@ -1023,8 +1016,7 @@ fn test_link_target_source_json_serialization() {
     let context = ASTContext::anonymous();
 
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
     let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
@@ -1071,8 +1063,7 @@ fn test_link_target_source_without_title() {
     let context = ASTContext::anonymous();
 
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
     let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
@@ -1109,8 +1100,7 @@ fn test_image_target_source_json_serialization() {
     let context = ASTContext::anonymous();
 
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
     let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
@@ -1165,8 +1155,7 @@ fn test_citation_id_source_json_serialization() {
     let context = ASTContext::anonymous();
 
     let mut buffer = Cursor::new(Vec::new());
-    pampa::writers::json::write(&pandoc, &context, &mut buffer)
-        .expect("Failed to write JSON");
+    pampa::writers::json::write(&pandoc, &context, &mut buffer).expect("Failed to write JSON");
 
     let json_output = String::from_utf8(buffer.into_inner()).expect("Invalid UTF-8");
     let json: serde_json::Value = serde_json::from_str(&json_output).expect("Failed to parse JSON");
