@@ -271,10 +271,19 @@ Quarto CLI (Rust) with "quarto lsp" command
 ### 1. LSP Framework
 **Choice**: `tower-lsp` (https://github.com/ebkalderon/tower-lsp)
 **Rationale**:
-- Well-maintained, used by rust-analyzer
+- Well-maintained, popular async LSP framework
 - Async/await support with Tokio
 - Clean API for LSP protocol
 - Good examples and documentation
+
+**Note**: rust-analyzer uses its own synchronous `lsp-server` crate, not tower-lsp. However, rust-analyzer's team recommends tower-lsp for async implementations. We choose tower-lsp because our unified LSP+hub architecture benefits from async (sharing Tokio runtime with axum for the hub HTTP/WebSocket server).
+
+**Important**: tower-lsp is a *protocol framework only* - it does NOT provide document management. Unlike the TypeScript `vscode-languageserver` which includes `TextDocuments`, tower-lsp requires us to implement our own document storage. Options:
+- [lsp-textdocument](https://lib.rs/crates/lsp-textdocument) - Third-party crate (~27K downloads/month), UTF-16 only
+- [ropey](https://crates.io/crates/ropey) - Rope data structure for efficient text manipulation
+- Custom implementation (recommended for our automerge integration needs)
+
+See `plans/2025-12-11-unified-lsp-hub-design.md` for our `DocumentManager` design that integrates with quarto-hub.
 
 ### 2. Markdown Parsing
 **Choice**: Reuse `quarto-markdown` (tree-sitter based)

@@ -45,10 +45,14 @@
 ### Primary Framework: **tower-lsp** 🎯
 
 **Why**:
-- Industry standard (used by rust-analyzer)
 - Async-first with Tokio
 - Type-safe LSP protocol
 - Mature and well-maintained
+- Popular choice for Rust LSP implementations
+
+**Note**: rust-analyzer uses its own synchronous `lsp-server` crate (vendored into their repo), not tower-lsp. However, the rust-analyzer team recommends tower-lsp for async LSP implementations.
+
+**Critical Note**: tower-lsp is a *protocol-only* framework. Unlike TypeScript's `vscode-languageserver` which includes `TextDocuments` for document management, tower-lsp requires us to implement our own document storage. This is actually advantageous for our design since we need to integrate with automerge for collaborative editing.
 
 ### Essential Crates
 
