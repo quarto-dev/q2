@@ -8,7 +8,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-comrak = { path = "../../external-sources/comrak", default-features = false }
+comrak = { version = "0.49.0", default-features = false }
 quarto-pandoc-types = { workspace = true }
 quarto-source-map = { workspace = true }
 hashlink = { version = "0.10.0", features = ["serde_impl"] }
