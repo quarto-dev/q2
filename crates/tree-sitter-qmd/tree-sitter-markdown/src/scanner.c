@@ -685,8 +685,9 @@ static bool parse_star(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
     // ...and how many spaces follow the first star.
     uint8_t extra_indentation = 0;
     // very ugly hack: we need to prioritize EMPHASIS_CLOSE_STAR while
-    // reading this
-    if (valid_symbols[EMPHASIS_CLOSE_STAR]) {
+    // reading this, but only if the next character isn't itself a '*', which
+    // would denote a strong emphasis marker
+    if (valid_symbols[EMPHASIS_CLOSE_STAR] && lexer->lookahead != '*') {
         EMIT_TOKEN(EMPHASIS_CLOSE_STAR);
     }
     bool could_be_close_strong_emphasis = valid_symbols[STRONG_EMPHASIS_CLOSE_STAR];

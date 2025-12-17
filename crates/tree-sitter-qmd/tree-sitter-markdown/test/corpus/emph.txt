@@ -1,0 +1,83 @@
+================================================================================
+emph.txt: basic star emph
+================================================================================
+*basic*
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter)))))
+================================================================================
+emph.txt: basic strong star emph
+================================================================================
+**strong**
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter)))))
+================================================================================
+emph.txt: nested star emph strong star emph
+================================================================================
+*hello **strong** world*
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (pandoc_strong
+              (strong_emphasis_delimiter)
+              (pandoc_str)
+              (strong_emphasis_delimiter))
+            (pandoc_space)
+            (pandoc_str)
+            (emphasis_delimiter)))))
+================================================================================
+emph.txt: basic underscore emph
+================================================================================
+_basic_
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (emphasis_delimiter)))))
+================================================================================
+emph.txt: basic strong underscore emph
+================================================================================
+__strong__
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_strong
+            (strong_emphasis_delimiter)
+            (pandoc_str)
+            (strong_emphasis_delimiter)))))
+================================================================================
+emph.txt: nested underscore emph underscore star emph
+================================================================================
+_hello __strong__ world_
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_paragraph
+          (pandoc_emph
+            (emphasis_delimiter)
+            (pandoc_str)
+            (pandoc_strong
+              (strong_emphasis_delimiter)
+              (pandoc_str)
+              (strong_emphasis_delimiter))
+            (pandoc_str)
+            (emphasis_delimiter)))))

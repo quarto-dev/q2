@@ -37,6 +37,10 @@ pub fn extract_quoted_text(text: &str) -> String {
 }
 
 /// Helper function to process inline emphasis-like constructs
+/// Handles IntermediateInlines by flattening them into the result instead of
+/// wrapping them in a Span. This is important for nested emphasis where the
+/// inner emphasis may return multiple inlines (e.g., Space + Strong when the
+/// delimiter captures a leading space).
 pub fn process_emphasis_like_inline<F>(
     children: Vec<(String, PandocNativeIntermediate)>,
     delimiter_name: &str,
@@ -45,10 +49,20 @@ pub fn process_emphasis_like_inline<F>(
 where
     F: FnMut((String, PandocNativeIntermediate)) -> Inline,
 {
-    filter_delimiter_children(children, delimiter_name)
-        .into_iter()
-        .map(|child| native_inline(child))
-        .collect()
+    let mut result = Vec::new();
+    for (node_name, child) in filter_delimiter_children(children, delimiter_name) {
+        match child {
+            // Flatten IntermediateInlines instead of passing through native_inline
+            // which would wrap multiple inlines in a Span
+            PandocNativeIntermediate::IntermediateInlines(inlines) => {
+                result.extend(inlines);
+            }
+            other => {
+                result.push(native_inline((node_name, other)));
+            }
+        }
+    }
+    result
 }
 
 /// Helper function to process emphasis-like inlines with a closure to build the final result

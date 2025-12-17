@@ -4370,17 +4370,21 @@
       ]
     },
     "_inline_whitespace": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "SYMBOL",
-          "name": "_whitespace"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_soft_line_break"
-        }
-      ]
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "CHOICE",
+        "members": [
+          {
+            "type": "SYMBOL",
+            "name": "_whitespace"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_soft_line_break"
+          }
+        ]
+      }
     },
     "_whitespace": {
       "type": "PATTERN",

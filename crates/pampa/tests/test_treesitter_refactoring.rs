@@ -419,6 +419,55 @@ fn test_pandoc_strong_with_spaces() {
     assert_eq!(space_count, 2, "Should have 2 Space nodes: {}", result);
 }
 
+/// Test nested strong inside emph - should NOT create a stray Span
+/// Issue: When strong delimiter captures leading space, the Space and Strong
+/// were being wrapped in a Span instead of being flattened into the Emph content.
+#[test]
+fn test_nested_strong_inside_emph_no_stray_span() {
+    let input = "*hello **world** yeah*";
+    let result = parse_qmd_to_pandoc_ast(input);
+
+    // Should produce: Para [ Emph [ Str "hello" , Space , Strong [ Str "world" ] , Space , Str "yeah" ] ]
+    // Should NOT contain a Span wrapping the Space and Strong
+    assert!(result.contains("Para"), "Should contain Para: {}", result);
+    assert!(result.contains("Emph"), "Should contain Emph: {}", result);
+    assert!(
+        result.contains("Strong"),
+        "Should contain Strong: {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"hello\""),
+        "Should contain Str \"hello\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"world\""),
+        "Should contain Str \"world\": {}",
+        result
+    );
+    assert!(
+        result.contains("Str \"yeah\""),
+        "Should contain Str \"yeah\": {}",
+        result
+    );
+
+    // Critical: Should NOT contain a Span (the bug creates a stray Span)
+    assert!(
+        !result.contains("Span"),
+        "Should NOT contain a stray Span wrapping Space and Strong: {}",
+        result
+    );
+
+    // Should have exactly 2 Space nodes (one before Strong, one after)
+    let space_count = result.matches("Space").count();
+    assert_eq!(
+        space_count, 2,
+        "Should have exactly 2 Space nodes: {}",
+        result
+    );
+}
+
 // ============================================================================
 // Code Span Tests (inline code with backticks)
 // ============================================================================
