@@ -20,3 +20,4 @@ target
 !.beads/*.jsonl
 
 external-sources/
+!external-sources/commonmark-spec/spec.txt

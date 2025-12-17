@@ -517,6 +517,29 @@ pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {
     (result, changed)
 }
 
+/// Convert trailing LineBreak to literal backslash for CommonMark compatibility.
+///
+/// Per CommonMark spec (lines 9362-9391), hard line breaks do NOT work at the end
+/// of a block element. A backslash at the end of a paragraph or header should
+/// produce a literal "\", not a LineBreak.
+///
+/// Example: `foo\` at end of paragraph → `<p>foo\</p>` (literal backslash)
+///
+/// Returns true if a conversion was made.
+pub fn convert_trailing_linebreak_to_str(inlines: &mut Inlines) -> bool {
+    if let Some(Inline::LineBreak(lb)) = inlines.last() {
+        let source_info = lb.source_info.clone();
+        inlines.pop();
+        inlines.push(Inline::Str(Str {
+            text: "\\".to_string(),
+            source_info,
+        }));
+        true
+    } else {
+        false
+    }
+}
+
 /// List of known abbreviations
 const ABBREVIATIONS: &[&str] = &[
     "Mr.", "Mrs.", "Ms.", "Capt.", "Dr.", "Prof.", "Gen.", "Gov.", "e.g.", "i.e.", "Sgt.", "St.",
@@ -762,6 +785,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
             })
             // add attribute to headers that have them.
             .with_header(move |mut header, _ctx| {
+                // Convert trailing LineBreak to literal backslash (CommonMark spec)
+                // Per spec, hard line breaks don't work at end of block elements
+                let trailing_lb_converted = convert_trailing_linebreak_to_str(&mut header.content);
+
                 let is_last_attr = header
                     .content
                     .last()
@@ -781,12 +808,14 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         };
 
                         attr.0 = final_id;
-                        if !is_empty_attr(&attr) {
+                        if !is_empty_attr(&attr) || trailing_lb_converted {
                             header.attr = attr;
                             FilterResult(vec![Block::Header(header)], true)
                         } else {
                             Unchanged(header)
                         }
+                    } else if trailing_lb_converted {
+                        FilterResult(vec![Block::Header(header)], true)
                     } else {
                         Unchanged(header)
                     }
@@ -801,61 +830,83 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 }
             })
             // attempt to desugar single-image paragraphs into figures
-            .with_paragraph(|para, _ctx| {
-                if para.content.len() != 1 {
-                    return Unchanged(para);
+            // also convert trailing LineBreak to literal backslash (CommonMark spec)
+            .with_paragraph(|mut para, _ctx| {
+                // Convert trailing LineBreak to literal backslash (CommonMark spec)
+                // Per spec, hard line breaks don't work at end of block elements
+                let trailing_lb_converted = convert_trailing_linebreak_to_str(&mut para.content);
+
+                // Check for single-image paragraph (for figure conversion)
+                if para.content.len() == 1 {
+                    if let Some(Inline::Image(image)) = para.content.first() {
+                        if !image.content.is_empty() {
+                            let figure_attr: Attr =
+                                (image.attr.0.clone(), vec![], LinkedHashMap::new());
+                            let image_attr: Attr =
+                                ("".to_string(), image.attr.1.clone(), image.attr.2.clone());
+
+                            // Split attr_source between figure and image
+                            let figure_attr_source = crate::pandoc::attr::AttrSourceInfo {
+                                id: image.attr_source.id.clone(),
+                                classes: vec![],
+                                attributes: vec![],
+                            };
+                            let image_attr_source = crate::pandoc::attr::AttrSourceInfo {
+                                id: None,
+                                classes: image.attr_source.classes.clone(),
+                                attributes: image.attr_source.attributes.clone(),
+                            };
+
+                            let mut new_image = image.clone();
+                            new_image.attr = image_attr;
+                            new_image.attr_source = image_attr_source;
+
+                            // Use proper source info from the original paragraph and image
+                            return FilterResult(
+                                vec![Block::Figure(Figure {
+                                    attr: figure_attr,
+                                    caption: Caption {
+                                        short: None,
+                                        long: Some(vec![Block::Plain(Plain {
+                                            content: image.content.clone(),
+                                            // Caption text comes from image's alt text
+                                            source_info: image.source_info.clone(),
+                                        })]),
+                                        // Caption as a whole also uses image's source info
+                                        source_info: image.source_info.clone(),
+                                    },
+                                    content: vec![Block::Plain(Plain {
+                                        content: vec![Inline::Image(new_image)],
+                                        // Content contains the image
+                                        source_info: image.source_info.clone(),
+                                    })],
+                                    // Figure spans the entire paragraph
+                                    source_info: para.source_info.clone(),
+                                    attr_source: figure_attr_source,
+                                })],
+                                true,
+                            );
+                        }
+                    }
                 }
-                let first = para.content.first().unwrap();
-                let Inline::Image(image) = first else {
-                    return Unchanged(para);
-                };
-                if image.content.is_empty() {
-                    return Unchanged(para);
+
+                // Not a figure conversion case, but may have converted trailing LineBreak
+                if trailing_lb_converted {
+                    FilterResult(vec![Block::Paragraph(para)], true)
+                } else {
+                    Unchanged(para)
                 }
-                let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new());
-                let image_attr: Attr = ("".to_string(), image.attr.1.clone(), image.attr.2.clone());
-
-                // Split attr_source between figure and image
-                let figure_attr_source = crate::pandoc::attr::AttrSourceInfo {
-                    id: image.attr_source.id.clone(),
-                    classes: vec![],
-                    attributes: vec![],
-                };
-                let image_attr_source = crate::pandoc::attr::AttrSourceInfo {
-                    id: None,
-                    classes: image.attr_source.classes.clone(),
-                    attributes: image.attr_source.attributes.clone(),
-                };
-
-                let mut new_image = image.clone();
-                new_image.attr = image_attr;
-                new_image.attr_source = image_attr_source;
-
-                // Use proper source info from the original paragraph and image
-                FilterResult(
-                    vec![Block::Figure(Figure {
-                        attr: figure_attr,
-                        caption: Caption {
-                            short: None,
-                            long: Some(vec![Block::Plain(Plain {
-                                content: image.content.clone(),
-                                // Caption text comes from image's alt text
-                                source_info: image.source_info.clone(),
-                            })]),
-                            // Caption as a whole also uses image's source info
-                            source_info: image.source_info.clone(),
-                        },
-                        content: vec![Block::Plain(Plain {
-                            content: vec![Inline::Image(new_image)],
-                            // Content contains the image
-                            source_info: image.source_info.clone(),
-                        })],
-                        // Figure spans the entire paragraph
-                        source_info: para.source_info.clone(),
-                        attr_source: figure_attr_source,
-                    })],
-                    true,
-                )
+            })
+            // Convert trailing LineBreak in Plain blocks (used in tight lists)
+            .with_plain(|mut plain, _ctx| {
+                // Convert trailing LineBreak to literal backslash (CommonMark spec)
+                // Per spec, hard line breaks don't work at end of block elements
+                let trailing_lb_converted = convert_trailing_linebreak_to_str(&mut plain.content);
+                if trailing_lb_converted {
+                    FilterResult(vec![Block::Plain(plain)], true)
+                } else {
+                    Unchanged(plain)
+                }
             })
             // Convert list-table divs to Table blocks and definition-list divs to DefinitionList blocks
             .with_div(|div, _ctx| {

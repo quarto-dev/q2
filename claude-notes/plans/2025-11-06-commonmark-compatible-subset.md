@@ -1212,3 +1212,637 @@ A well-defined CommonMark-compatible subset is about **defining a safe zone** wh
 ---
 
 *This plan is a living document. As we implement and test, we'll update based on findings.*
+
+---
+
+## Appendix: Direct Comrak AST → Pandoc AST Conversion
+
+**Added**: 2025-12-16
+**Status**: Design phase
+
+### Motivation
+
+The original plan proposed comparing qmd and comrak via HTML output (Strategy 2) or through a Pandoc CLI roundtrip (Strategy 3). Both approaches have drawbacks:
+
+- **HTML comparison**: Requires careful normalization, may miss semantic differences
+- **Pandoc CLI roundtrip**: External dependency, potential information loss (HTML → Pandoc)
+
+A **direct AST conversion** from comrak to our Pandoc AST enables:
+1. **Precise structural comparison** at the semantic level
+2. **No external dependencies** (pure Rust)
+3. **Clear mapping** between CommonMark concepts and Pandoc concepts
+4. **Better debugging** when tests fail (can compare AST trees directly)
+
+### New Crate: `comrak-to-pandoc`
+
+Location: `crates/comrak-to-pandoc/`
+
+**Dependencies**:
+```toml
+[dependencies]
+comrak = "0.47"
+quarto-pandoc-types = { path = "../quarto-pandoc-types" }
+quarto-source-map = { path = "../quarto-source-map" }
+```
+
+### Core API
+
+```rust
+//! Convert comrak's CommonMark AST to quarto-pandoc-types AST.
+//!
+//! This crate provides direct conversion from comrak's arena-based AST
+//! to our owned Pandoc AST structures. Only the CommonMark subset is
+//! supported; GFM extensions will panic.
+
+use comrak::nodes::{AstNode, NodeValue};
+use quarto_pandoc_types::{Block, Blocks, Inline, Inlines, Pandoc};
+
+/// Convert a comrak document to a Pandoc document.
+///
+/// # Panics
+/// Panics if the AST contains nodes outside the CommonMark subset
+/// (tables, strikethrough, footnotes, etc.)
+pub fn convert_document<'a>(root: &'a AstNode<'a>) -> Pandoc {
+    // ...
+}
+
+/// Convert a comrak block node to Pandoc blocks.
+fn convert_block<'a>(node: &'a AstNode<'a>) -> Vec<Block> {
+    // ...
+}
+
+/// Convert a comrak inline node to Pandoc inlines.
+fn convert_inline<'a>(node: &'a AstNode<'a>) -> Vec<Inline> {
+    // ...
+}
+```
+
+### Node Mapping Table
+
+#### Block Nodes
+
+| Comrak NodeValue | Pandoc Block | Notes |
+|------------------|--------------|-------|
+| `Document` | (root container) | Children become `Pandoc.blocks` |
+| `Paragraph` | `Paragraph` | Children → `Inlines` |
+| `Heading(NodeHeading)` | `Header` | `level` maps directly; `setext=true` → panic |
+| `CodeBlock(NodeCodeBlock)` | `CodeBlock` | `fenced=false` → panic; `info` → class |
+| `BlockQuote` | `BlockQuote` | Children → `Blocks` |
+| `List(NodeList)` | `BulletList` or `OrderedList` | Based on `list_type` |
+| `Item(NodeList)` | `Vec<Block>` (list item) | Children → `Blocks`; tight→`Plain`, loose→`Para` |
+| `ThematicBreak` | `HorizontalRule` | Direct mapping |
+| `HtmlBlock(_)` | **PANIC** | Not in subset |
+| `FrontMatter(_)` | (skip or store in Meta) | TBD |
+| `Table(_)` | **PANIC** | GFM extension |
+| `FootnoteDefinition(_)` | **PANIC** | Extension |
+| All others | **PANIC** | Extensions |
+
+#### Inline Nodes
+
+| Comrak NodeValue | Pandoc Inline | Notes |
+|------------------|---------------|-------|
+| `Text(Cow<str>)` | `Str` + `Space` | Must tokenize on whitespace |
+| `Emph` | `Emph` | Children → `Inlines` |
+| `Strong` | `Strong` | Children → `Inlines` |
+| `Code(NodeCode)` | `Code` | `literal` → `text` |
+| `Link(NodeLink)` | `Link` | `url`, `title` → `Target` |
+| `Image(NodeLink)` | `Image` | `url`, `title` → `Target`; children → alt |
+| `SoftBreak` | `SoftBreak` | Direct mapping |
+| `LineBreak` | `LineBreak` | Direct mapping |
+| `HtmlInline(_)` | **PANIC** | Not in subset |
+| `Strikethrough` | **PANIC** | GFM extension |
+| `Superscript` | **PANIC** | Extension |
+| `Subscript` | **PANIC** | Extension |
+| `FootnoteReference(_)` | **PANIC** | Extension |
+| `Math(_)` | **PANIC** | Extension |
+| All others | **PANIC** | Extensions |
+
+### Implementation Details
+
+#### 1. Text Tokenization
+
+Comrak represents "hello world" as a single `Text` node. Pandoc expects:
+```
+[Str("hello"), Space, Str("world")]
+```
+
+Implementation:
+```rust
+fn tokenize_text(text: &str) -> Inlines {
+    let mut result = Vec::new();
+    let mut chars = text.chars().peekable();
+    let mut current_word = String::new();
+
+    while let Some(c) = chars.next() {
+        if c.is_whitespace() {
+            // Emit accumulated word
+            if !current_word.is_empty() {
+                result.push(Inline::Str(Str {
+                    text: std::mem::take(&mut current_word),
+                    source_info: empty_source_info(),
+                }));
+            }
+            // Emit space (collapse multiple whitespace to single Space)
+            if !matches!(result.last(), Some(Inline::Space(_))) {
+                result.push(Inline::Space(Space {
+                    source_info: empty_source_info(),
+                }));
+            }
+        } else {
+            current_word.push(c);
+        }
+    }
+
+    // Emit final word
+    if !current_word.is_empty() {
+        result.push(Inline::Str(Str {
+            text: current_word,
+            source_info: empty_source_info(),
+        }));
+    }
+
+    result
+}
+```
+
+#### 2. Tight vs Loose Lists
+
+Comrak's `NodeList::tight` determines whether list items get `<p>` tags in HTML.
+
+In Pandoc AST:
+- **Tight list**: Items contain `Plain` (no paragraph wrapper)
+- **Loose list**: Items contain `Para` (with paragraph wrapper)
+
+Implementation:
+```rust
+fn convert_list_item<'a>(
+    item_node: &'a AstNode<'a>,
+    tight: bool,
+) -> Blocks {
+    let children = convert_children_to_blocks(item_node);
+
+    if tight {
+        // Convert single Para to Plain for tight lists
+        children.into_iter().map(|block| {
+            match block {
+                Block::Paragraph(Paragraph { content, source_info }) => {
+                    Block::Plain(Plain { content, source_info })
+                }
+                other => other,
+            }
+        }).collect()
+    } else {
+        children
+    }
+}
+```
+
+#### 3. Code Block Language Handling
+
+Comrak stores the info string in `NodeCodeBlock::info`. This maps to Pandoc's `Attr`:
+```rust
+fn convert_code_block(cb: &NodeCodeBlock) -> Block {
+    if !cb.fenced {
+        panic!("Indented code blocks not in CommonMark subset");
+    }
+
+    let classes = if cb.info.is_empty() {
+        vec![]
+    } else {
+        // Info string may have additional metadata after language
+        // e.g., "python {.class}" - for now just use first word as language
+        vec![cb.info.split_whitespace().next().unwrap_or("").to_string()]
+    };
+
+    Block::CodeBlock(CodeBlock {
+        attr: ("".to_string(), classes, LinkedHashMap::new()),
+        text: cb.literal.clone(),
+        source_info: empty_source_info(),
+        attr_source: AttrSourceInfo::empty(),
+    })
+}
+```
+
+#### 4. Link and Image Handling
+
+```rust
+fn convert_link(link: &NodeLink, children: Inlines) -> Inline {
+    // Detect autolinks: content is just Str(url) matching the URL
+    let is_autolink = match children.as_slice() {
+        [Inline::Str(s)] => s.text == link.url,
+        _ => false,
+    };
+
+    let attr = if is_autolink {
+        // pampa adds "uri" class to autolinks
+        ("".to_string(), vec!["uri".to_string()], LinkedHashMap::new())
+    } else {
+        empty_attr()
+    };
+
+    Inline::Link(Link {
+        attr,
+        content: children,
+        target: (link.url.clone(), link.title.clone()),
+        source_info: empty_source_info(),
+        attr_source: AttrSourceInfo::empty(),
+        target_source: TargetSourceInfo::empty(),
+    })
+}
+
+fn convert_image(link: &NodeLink, children: Inlines) -> Inline {
+    // For images, children become alt text
+    Inline::Image(Image {
+        attr: empty_attr(),
+        content: children,  // Alt text inlines
+        target: (link.url.clone(), link.title.clone()),
+        source_info: empty_source_info(),
+        attr_source: AttrSourceInfo::empty(),
+        target_source: TargetSourceInfo::empty(),
+    })
+}
+```
+
+#### 5. Traversal Strategy
+
+Use post-order traversal to build owned structures bottom-up:
+
+```rust
+fn convert_block<'a>(node: &'a AstNode<'a>) -> Vec<Block> {
+    let ast = node.data.borrow();
+
+    match &ast.value {
+        NodeValue::Document => {
+            // Document is just a container
+            node.children()
+                .flat_map(|child| convert_block(child))
+                .collect()
+        }
+
+        NodeValue::Paragraph => {
+            let inlines = convert_children_to_inlines(node);
+            vec![Block::Paragraph(Paragraph {
+                content: inlines,
+                source_info: empty_source_info(),
+            })]
+        }
+
+        NodeValue::Heading(h) => {
+            if h.setext {
+                panic!("Setext headings not in CommonMark subset");
+            }
+            let inlines = convert_children_to_inlines(node);
+            vec![Block::Header(Header {
+                level: h.level as usize,
+                attr: empty_attr(),
+                content: inlines,
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })]
+        }
+
+        NodeValue::List(list) => {
+            let items: Vec<Blocks> = node.children()
+                .map(|child| convert_list_item(child, list.tight))
+                .collect();
+
+            match list.list_type {
+                ListType::Bullet => {
+                    vec![Block::BulletList(BulletList {
+                        content: items,
+                        source_info: empty_source_info(),
+                    })]
+                }
+                ListType::Ordered => {
+                    vec![Block::OrderedList(OrderedList {
+                        attr: (
+                            list.start,
+                            ListNumberStyle::Decimal,
+                            match list.delimiter {
+                                ListDelimType::Period => ListNumberDelim::Period,
+                                ListDelimType::Paren => ListNumberDelim::OneParen,
+                            },
+                        ),
+                        content: items,
+                        source_info: empty_source_info(),
+                    })]
+                }
+            }
+        }
+
+        // ... other block types
+
+        _ => panic!("Unsupported node type: {:?}", ast.value),
+    }
+}
+```
+
+### AST Comparison Function
+
+For testing, we need a comparison that ignores source locations:
+
+```rust
+/// Compare two Pandoc documents, ignoring source location information.
+pub fn ast_eq_ignore_source(a: &Pandoc, b: &Pandoc) -> bool {
+    blocks_eq(&a.blocks, &b.blocks) && meta_eq(&a.meta, &b.meta)
+}
+
+fn blocks_eq(a: &[Block], b: &[Block]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| block_eq(x, y))
+}
+
+fn block_eq(a: &Block, b: &Block) -> bool {
+    match (a, b) {
+        (Block::Plain(x), Block::Plain(y)) => inlines_eq(&x.content, &y.content),
+        (Block::Paragraph(x), Block::Paragraph(y)) => inlines_eq(&x.content, &y.content),
+        (Block::Header(x), Block::Header(y)) => {
+            x.level == y.level
+                && attr_eq(&x.attr, &y.attr)
+                && inlines_eq(&x.content, &y.content)
+        }
+        (Block::CodeBlock(x), Block::CodeBlock(y)) => {
+            attr_eq(&x.attr, &y.attr) && x.text == y.text
+        }
+        (Block::BlockQuote(x), Block::BlockQuote(y)) => blocks_eq(&x.content, &y.content),
+        (Block::BulletList(x), Block::BulletList(y)) => {
+            x.content.len() == y.content.len()
+                && x.content.iter().zip(y.content.iter())
+                    .all(|(a, b)| blocks_eq(a, b))
+        }
+        (Block::OrderedList(x), Block::OrderedList(y)) => {
+            x.attr == y.attr  // ListAttributes has no source info
+                && x.content.len() == y.content.len()
+                && x.content.iter().zip(y.content.iter())
+                    .all(|(a, b)| blocks_eq(a, b))
+        }
+        (Block::HorizontalRule(_), Block::HorizontalRule(_)) => true,
+        _ => false,
+    }
+}
+
+fn inlines_eq(a: &[Inline], b: &[Inline]) -> bool {
+    a.len() == b.len() && a.iter().zip(b.iter()).all(|(x, y)| inline_eq(x, y))
+}
+
+fn inline_eq(a: &Inline, b: &Inline) -> bool {
+    match (a, b) {
+        (Inline::Str(x), Inline::Str(y)) => x.text == y.text,
+        (Inline::Space(_), Inline::Space(_)) => true,
+        (Inline::SoftBreak(_), Inline::SoftBreak(_)) => true,
+        (Inline::LineBreak(_), Inline::LineBreak(_)) => true,
+        (Inline::Emph(x), Inline::Emph(y)) => inlines_eq(&x.content, &y.content),
+        (Inline::Strong(x), Inline::Strong(y)) => inlines_eq(&x.content, &y.content),
+        (Inline::Code(x), Inline::Code(y)) => {
+            attr_eq(&x.attr, &y.attr) && x.text == y.text
+        }
+        (Inline::Link(x), Inline::Link(y)) => {
+            attr_eq(&x.attr, &y.attr)
+                && inlines_eq(&x.content, &y.content)
+                && x.target == y.target
+        }
+        (Inline::Image(x), Inline::Image(y)) => {
+            attr_eq(&x.attr, &y.attr)
+                && inlines_eq(&x.content, &y.content)
+                && x.target == y.target
+        }
+        _ => false,
+    }
+}
+
+fn attr_eq(a: &Attr, b: &Attr) -> bool {
+    a.0 == b.0 && a.1 == b.1 && a.2 == b.2
+}
+```
+
+### Testing Strategy
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use comrak::{parse_document, Arena, ComrakOptions};
+
+    fn commonmark_options() -> ComrakOptions {
+        // Pure CommonMark, no GFM extensions
+        ComrakOptions::default()
+    }
+
+    fn parse_comrak(markdown: &str) -> Pandoc {
+        let arena = Arena::new();
+        let root = parse_document(&arena, markdown, &commonmark_options());
+        convert_document(root)
+    }
+
+    fn parse_qmd(markdown: &str) -> Pandoc {
+        // Use qmd parser
+        quarto_core::parse(markdown).to_pandoc()
+    }
+
+    #[test]
+    fn test_simple_paragraph() {
+        let md = "Hello world.\n";
+        let comrak = parse_comrak(md);
+        let qmd = parse_qmd(md);
+        assert!(ast_eq_ignore_source(&comrak, &qmd));
+    }
+
+    #[test]
+    fn test_heading_with_emphasis() {
+        let md = "# Hello *world*\n";
+        let comrak = parse_comrak(md);
+        let qmd = parse_qmd(md);
+        assert!(ast_eq_ignore_source(&comrak, &qmd));
+    }
+
+    #[test]
+    fn test_tight_list() {
+        let md = "- one\n- two\n- three\n";
+        let comrak = parse_comrak(md);
+        let qmd = parse_qmd(md);
+        assert!(ast_eq_ignore_source(&comrak, &qmd));
+    }
+
+    #[test]
+    fn test_loose_list() {
+        let md = "- one\n\n- two\n\n- three\n";
+        let comrak = parse_comrak(md);
+        let qmd = parse_qmd(md);
+        assert!(ast_eq_ignore_source(&comrak, &qmd));
+    }
+}
+```
+
+### File Structure
+
+```
+crates/comrak-to-pandoc/
+├── Cargo.toml
+├── src/
+│   ├── lib.rs           # Public API, convert_document()
+│   ├── block.rs         # Block conversion
+│   ├── inline.rs        # Inline conversion
+│   ├── text.rs          # Text tokenization
+│   ├── compare.rs       # AST comparison (ignoring source)
+│   └── tests/
+│       ├── mod.rs
+│       ├── blocks.rs    # Block conversion tests
+│       ├── inlines.rs   # Inline conversion tests
+│       └── subset.rs    # Differential tests against qmd
+```
+
+### Resolved Questions (from pampa investigation)
+
+**Investigated 2025-12-16** using pampa output:
+
+1. **Text tokenization**: Confirmed. `"Hello world."` → `[Str("Hello"), Space, Str("world.")]`
+
+2. **Soft breaks**: Confirmed. Newline within paragraph → `SoftBreak` (not `Space`)
+
+3. **Escaped characters**: `\*escaped\*` → `Str("*escaped*")`. The backslash escape is processed and results in plain `Str` with the escaped character. Comrak's `NodeValue::Escaped` should map to `Str`.
+
+4. **Hard line breaks**: `\` at end of line → `LineBreak`
+
+5. **Autolinks**: `<https://example.com>` becomes:
+   - `Link` with `attr.classes = ["uri"]`
+   - `content = [Str("https://example.com")]`
+   - `target = ("https://example.com", "")`
+
+   **Important**: Comrak doesn't distinguish autolinks in its AST (no flag in `NodeLink`). The converter must detect autolinks (link content == URL) and add the `uri` class to match pampa's output.
+
+6. **Code block info strings**: For pure CommonMark, the info string is just the language. The `{.class}` syntax is a Pandoc/qmd extension that won't appear in CommonMark-subset input. Just use the info string as the language class.
+
+### Implementation Status
+
+**Implemented 2025-12-16**
+
+The `comrak-to-pandoc` crate has been created and is fully functional.
+
+#### Completed Steps
+
+1. ✅ **Created the crate** at `crates/comrak-to-pandoc/`
+2. ✅ **Implemented `convert_document`** for all CommonMark block types
+3. ✅ **Added text tokenization** - splits on whitespace, produces `Str` + `Space` tokens
+4. ✅ **Implemented block types**: Document, Paragraph, Header, CodeBlock, BlockQuote, List, HorizontalRule
+5. ✅ **Implemented inline types**: Text, Emph, Strong, Code, Link, Image, SoftBreak, LineBreak
+6. ✅ **Built differential test suite** - 57 tests passing, 6 skipped (known differences)
+7. ✅ **Documented discrepancies** - see "Known Differences" below
+
+#### Test Results
+
+```
+57 tests run: 57 passed, 6 skipped
+```
+
+#### Known Differences (qmd extensions beyond CommonMark)
+
+The differential tests revealed where pampa (qmd) extends beyond CommonMark:
+
+| Feature | pampa (qmd) | comrak (CommonMark) | Test Status |
+|---------|-------------|---------------------|-------------|
+| **Heading IDs** | Auto-generates (e.g., `"heading-1"`) | Empty string | `#[ignore]` |
+| **Standalone Images** | Wrapped in `Figure` block | Inline in `Paragraph` | `#[ignore]` |
+| **Code Block Attributes** | May add extra attributes | Basic language class only | `#[ignore]` |
+
+These differences are documented in `tests/differential.rs`.
+
+#### Crate Structure
+
+```
+crates/comrak-to-pandoc/
+├── Cargo.toml
+├── src/
+│   ├── lib.rs          # Public API: convert_document, ast_eq_ignore_source
+│   ├── block.rs        # Block conversion
+│   ├── inline.rs       # Inline conversion
+│   ├── text.rs         # Text tokenization
+│   └── compare.rs      # AST comparison (ignores source info)
+└── tests/
+    └── differential.rs # Differential tests vs pampa
+```
+
+### Next Steps (Remaining Work)
+
+1. **Reconcile heading ID difference**: Add pampa option to disable auto-ID generation for CommonMark mode
+2. **Reconcile Figure difference**: Add pampa option to keep standalone images in Paragraph
+3. **Investigate code block attributes**: Understand and document the specific differences
+4. **Expand test coverage**: Add more edge cases as CommonMark spec tests are reviewed
+5. **Integration with k-333**: Use the crate for CommonMark subset validation testing
+
+---
+
+## Appendix: CommonMark Spec Reference
+
+**Added**: 2025-12-17
+
+For detailed information about the CommonMark 0.31.2 specification, including:
+- Section-by-section line numbers
+- Key definitions (delimiter runs, flanking rules, etc.)
+- Emphasis rules 1-17
+- Hard/soft line break behavior
+- Known parser differences between pampa and comrak
+
+See: [CommonMark Spec Annotated Index](../commonmark-reference/spec-index.md)
+
+The spec file is located at: `external-sources/commonmark-spec/spec.txt`
+
+---
+
+## Appendix: Property Testing Framework
+
+**Added**: 2025-12-17
+
+A property testing framework has been implemented in `crates/comrak-to-pandoc/tests/` using the `proptest` crate.
+
+### Implementation
+
+The property tests generate random Pandoc AST documents, serialize them to markdown via pampa's qmd writer, then verify that both pampa and comrak produce equivalent ASTs when parsing.
+
+**Test files:**
+- `tests/generators.rs` - Constrained AST generators
+- `tests/proptest_roundtrip.rs` - Property-based roundtrip tests
+- `tests/debug.rs` - Debug tests for specific failing cases
+- `src/normalize.rs` - AST normalization for known differences
+
+### Known Parser Differences (Cannot Normalize)
+
+These are fundamental differences in how pampa and comrak interpret markdown:
+
+1. **Nested emphasis**: `*text **strong** text*`
+   - Spec rules 13-14 allow multiple interpretations
+   - Pampa: separate Emph spans
+   - Comrak: nests Strong inside Emph
+
+2. **LineBreak at end of block**: `foo\` at paragraph end
+   - Spec says hard breaks don't work at end of block
+   - Comrak: literal `\`
+   - Pampa: may produce LineBreak
+
+3. **HR inside blockquotes**: `> ---`
+   - Pampa interprets `---` as potential YAML delimiter
+   - Comrak: produces HorizontalRule
+
+### Normalized Differences (Handled)
+
+These differences are reconciled in `normalize.rs`:
+
+1. Heading IDs (pampa generates, comrak doesn't) - stripped
+2. Figure wrapping (pampa wraps standalone images) - unwrapped
+3. Autolink "uri" class (pampa adds, comrak doesn't) - stripped
+4. Code block trailing newline - stripped
+5. Empty Spans - unwrapped
+6. Header leading/trailing spaces - stripped
+
+### Generator Constraints
+
+To avoid generating inputs that trigger known parser differences, the generators in `generators.rs` use feature sets that constrain:
+
+1. No consecutive lists (they merge in markdown)
+2. No nested emph/strong (parsed differently)
+3. No HR inside blockquotes (YAML delimiter issue)
+4. No autolinks (deeply nested structures)
+5. No linebreak in headers/first position
+6. No autolinks in link content (spec forbids links in links)
+
+### Test Status
+
+All 12 property tests pass with the current normalizations and generator constraints.

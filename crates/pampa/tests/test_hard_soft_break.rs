@@ -203,21 +203,28 @@ fn test_hard_break_in_emphasis() {
     );
 }
 
-/// Test hard break at end of paragraph
+/// Test hard break at end of paragraph produces literal backslash (CommonMark spec)
+///
+/// Per CommonMark spec (lines 9362-9391), hard line breaks do NOT work at the end
+/// of a block element. A backslash at the end of a paragraph should produce a
+/// literal "\", not a LineBreak.
 #[test]
 fn test_hard_break_at_end() {
     let input = "hello\\\n";
     let result = parse_qmd_to_pandoc_ast(input);
 
-    // Should produce: Para [ Str "hello" , LineBreak ]
+    // Should produce: Para [ Str "hello\\" ] (literal backslash, not LineBreak)
+    // Per CommonMark spec, backslash at end of block is literal
     assert!(
         result.contains("Para"),
         "Output should contain Para: {}",
         result
     );
+
+    // Should NOT contain LineBreak (CommonMark spec: hard break doesn't work at end of block)
     assert!(
-        result.contains("LineBreak"),
-        "Output should contain LineBreak: {}",
+        !result.contains("LineBreak"),
+        "Output should NOT contain LineBreak (CommonMark spec): {}",
         result
     );
 
@@ -225,6 +232,13 @@ fn test_hard_break_at_end() {
     assert!(
         !result.contains("SoftBreak"),
         "Output should NOT contain SoftBreak: {}",
+        result
+    );
+
+    // Should contain literal backslash
+    assert!(
+        result.contains("Str \"hello\\\\\""),
+        "Output should contain literal backslash: {}",
         result
     );
 }
