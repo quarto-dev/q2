@@ -236,6 +236,10 @@ fn main() {
                 }
             }
         }
+        "commonmark" => {
+            // Use comrak-based CommonMark reader
+            readers::commonmark::read(&input, input_filename)
+        }
         _ => {
             eprintln!("Unknown input format: {}", args.from);
             std::process::exit(1);

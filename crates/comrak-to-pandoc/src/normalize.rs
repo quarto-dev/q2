@@ -8,7 +8,7 @@
  * by normalizing both ASTs to a common form before comparison.
  */
 
-use quarto_pandoc_types::{attr::AttrSourceInfo, Block, Figure, Inline, Pandoc, Paragraph};
+use quarto_pandoc_types::{Block, Figure, Inline, Pandoc, Paragraph, attr::AttrSourceInfo};
 
 /// Normalize a Pandoc AST for comparison.
 ///
@@ -221,7 +221,7 @@ mod tests {
     use super::*;
     use hashlink::LinkedHashMap;
     use quarto_pandoc_types::{
-        attr::TargetSourceInfo, meta::MetaValueWithSourceInfo, Header, Link,
+        Header, Link, attr::TargetSourceInfo, meta::MetaValueWithSourceInfo,
     };
     use quarto_source_map::{FileId, SourceInfo};
 

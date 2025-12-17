@@ -1632,6 +1632,8 @@ dependencies = [
  "ariadne",
  "base64 0.22.1",
  "clap",
+ "comrak",
+ "comrak-to-pandoc",
  "crossterm",
  "glob",
  "hashlink",

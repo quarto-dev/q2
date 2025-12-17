@@ -7,8 +7,8 @@ fn main() {}
 
 #[cfg(test)]
 mod tests {
-    use comrak::{parse_document, Arena, Options};
     use comrak::nodes::NodeValue;
+    use comrak::{Arena, Options, parse_document};
 
     #[test]
     fn debug_comrak_html_output() {
@@ -35,13 +35,21 @@ mod tests {
         eprintln!("{:?}", markdown);
 
         eprintln!("\n=== RAW AST TREE ===");
-        fn print_node<'a>(node: &'a comrak::arena_tree::Node<'a, std::cell::RefCell<comrak::nodes::Ast>>, indent: usize) {
+        fn print_node<'a>(
+            node: &'a comrak::arena_tree::Node<'a, std::cell::RefCell<comrak::nodes::Ast>>,
+            indent: usize,
+        ) {
             let data = node.data.borrow();
             let indent_str = "  ".repeat(indent);
 
             match &data.value {
                 NodeValue::Text(text) => {
-                    eprintln!("{}Text({:?}) [bytes: {:?}]", indent_str, text, text.as_bytes());
+                    eprintln!(
+                        "{}Text({:?}) [bytes: {:?}]",
+                        indent_str,
+                        text,
+                        text.as_bytes()
+                    );
                 }
                 other => {
                     eprintln!("{}{:?}", indent_str, other);
@@ -64,8 +72,8 @@ mod tests {
             "hello *world*\n",
             "a *b* c\n",
             "*a* b\n",
-            "a*b*\n",  // No space before emphasis
-            "`code1` `code2`\n",  // Code spans with space
+            "a*b*\n",            // No space before emphasis
+            "`code1` `code2`\n", // Code spans with space
         ];
 
         for markdown in test_cases {

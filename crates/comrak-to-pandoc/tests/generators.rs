@@ -12,10 +12,10 @@
 use hashlink::LinkedHashMap;
 use proptest::prelude::*;
 use quarto_pandoc_types::{
-    attr::{AttrSourceInfo, TargetSourceInfo},
-    meta::MetaValueWithSourceInfo,
     Block, BulletList, Code, CodeBlock, Emph, Header, HorizontalRule, Image, Inline, Link,
     OrderedList, Pandoc, Paragraph, Plain, Str, Strong,
+    attr::{AttrSourceInfo, TargetSourceInfo},
+    meta::MetaValueWithSourceInfo,
 };
 use quarto_source_map::{FileId, SourceInfo};
 
@@ -137,7 +137,7 @@ impl InlineFeatures {
     pub fn without_emph(&self) -> Self {
         Self {
             emph: false,
-            strong: false, // Avoid nested emphasis ambiguity
+            strong: false,    // Avoid nested emphasis ambiguity
             linebreak: false, // Hard breaks inside emphasis are problematic
             ..self.clone()
         }
@@ -162,7 +162,7 @@ impl InlineFeatures {
     pub fn without_link(&self) -> Self {
         Self {
             link: false,
-            autolink: false, // CommonMark: no links inside links
+            autolink: false,  // CommonMark: no links inside links
             linebreak: false, // Hard breaks inside link text are problematic
             ..self.clone()
         }
@@ -397,7 +397,11 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
         let inner_features = features.without_link();
         choices.push((
             1,
-            (gen_inline_sequence(inner_features, 1, 3), gen_url(), gen_title())
+            (
+                gen_inline_sequence(inner_features, 1, 3),
+                gen_url(),
+                gen_title(),
+            )
                 .prop_map(|(content, url, title)| {
                     Inline::Link(Link {
                         content,
@@ -416,7 +420,11 @@ fn gen_single_inline(features: InlineFeatures) -> impl Strategy<Value = Inline> 
         let inner_features = features.without_image();
         choices.push((
             1,
-            (gen_inline_sequence(inner_features, 1, 2), gen_url(), gen_title())
+            (
+                gen_inline_sequence(inner_features, 1, 2),
+                gen_url(),
+                gen_title(),
+            )
                 .prop_map(|(alt, url, title)| {
                     Inline::Image(Image {
                         content: alt,
@@ -726,7 +734,10 @@ pub fn gen_with_header_doc() -> impl Strategy<Value = Pandoc> {
 
 /// Generate a document with code blocks (L3, B2).
 pub fn gen_with_code_block_doc() -> impl Strategy<Value = Pandoc> {
-    gen_pandoc(BlockFeatures::with_code_block(), InlineFeatures::with_code())
+    gen_pandoc(
+        BlockFeatures::with_code_block(),
+        InlineFeatures::with_code(),
+    )
 }
 
 /// Generate a document with all non-recursive blocks (L3, B3).

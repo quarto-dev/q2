@@ -5,17 +5,28 @@
  * Convert comrak block nodes to Pandoc blocks.
  */
 
-use crate::inline::convert_children_to_inlines;
+use crate::inline::convert_children_to_inlines_with_source;
+use crate::source_location::SourceLocationContext;
 use crate::{empty_attr, empty_source_info};
 use comrak::arena_tree::Node;
-use comrak::nodes::{Ast, ListDelimType, ListType, NodeCodeBlock, NodeHeading, NodeList, NodeValue};
+use comrak::nodes::{
+    Ast, ListDelimType, ListType, NodeCodeBlock, NodeHeading, NodeList, NodeValue,
+};
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::{
     AttrSourceInfo, Block, BlockQuote, Blocks, BulletList, CodeBlock, Header, HorizontalRule,
     ListAttributes, ListNumberDelim, ListNumberStyle, MetaValueWithSourceInfo, OrderedList, Pandoc,
     Paragraph, Plain,
 };
+use quarto_source_map::SourceInfo;
 use std::cell::RefCell;
+
+/// Helper to get source info from context or empty
+fn get_source_info(ast: &Ast, source_ctx: Option<&SourceLocationContext>) -> SourceInfo {
+    source_ctx
+        .map(|ctx| ctx.sourcepos_to_source_info(&ast.sourcepos))
+        .unwrap_or_else(empty_source_info)
+}
 
 /// Convert a comrak document to a Pandoc document.
 ///
@@ -23,10 +34,25 @@ use std::cell::RefCell;
 /// Panics if the AST contains nodes outside the CommonMark subset
 /// (tables, strikethrough, footnotes, etc.)
 pub fn convert_document<'a>(root: &'a Node<'a, RefCell<Ast>>) -> Pandoc {
+    convert_document_with_source(root, None)
+}
+
+/// Convert a comrak document to a Pandoc document with source location tracking.
+///
+/// If `source_ctx` is provided, source locations from comrak will be converted
+/// to quarto-source-map SourceInfo. If None, empty source info will be used.
+///
+/// # Panics
+/// Panics if the AST contains nodes outside the CommonMark subset
+/// (tables, strikethrough, footnotes, etc.)
+pub fn convert_document_with_source<'a>(
+    root: &'a Node<'a, RefCell<Ast>>,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Pandoc {
     let ast = root.data.borrow();
     match &ast.value {
         NodeValue::Document => {
-            let blocks = convert_children_to_blocks(root);
+            let blocks = convert_children_to_blocks(root, source_ctx);
             Pandoc {
                 meta: MetaValueWithSourceInfo::default(),
                 blocks,
@@ -37,50 +63,57 @@ pub fn convert_document<'a>(root: &'a Node<'a, RefCell<Ast>>) -> Pandoc {
 }
 
 /// Convert a comrak node's block children to Pandoc blocks.
-fn convert_children_to_blocks<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Blocks {
+fn convert_children_to_blocks<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Blocks {
     node.children()
-        .flat_map(|child| convert_block(child))
+        .flat_map(|child| convert_block(child, source_ctx))
         .collect()
 }
 
 /// Convert a comrak block node to Pandoc blocks.
 ///
 /// Returns a Vec because some nodes may expand to multiple blocks.
-fn convert_block<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Blocks {
+fn convert_block<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Blocks {
     let ast = node.data.borrow();
+    let source_info = get_source_info(&ast, source_ctx);
 
     match &ast.value {
         NodeValue::Document => {
             // Document is handled at the top level
-            convert_children_to_blocks(node)
+            convert_children_to_blocks(node, source_ctx)
         }
 
         NodeValue::Paragraph => {
-            let inlines = convert_children_to_inlines(node);
+            let inlines = convert_children_to_inlines_with_source(node, source_ctx);
             vec![Block::Paragraph(Paragraph {
                 content: inlines,
-                source_info: empty_source_info(),
+                source_info,
             })]
         }
 
         NodeValue::Heading(heading) => {
-            vec![convert_heading(node, heading)]
+            vec![convert_heading(node, heading, source_ctx)]
         }
 
         NodeValue::CodeBlock(code_block) => {
-            vec![convert_code_block(code_block)]
+            vec![convert_code_block(code_block, source_info)]
         }
 
         NodeValue::BlockQuote => {
-            let children = convert_children_to_blocks(node);
+            let children = convert_children_to_blocks(node, source_ctx);
             vec![Block::BlockQuote(BlockQuote {
                 content: children,
-                source_info: empty_source_info(),
+                source_info,
             })]
         }
 
         NodeValue::List(list) => {
-            vec![convert_list(node, list)]
+            vec![convert_list(node, list, source_ctx)]
         }
 
         NodeValue::Item(_) => {
@@ -89,9 +122,7 @@ fn convert_block<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Blocks {
         }
 
         NodeValue::ThematicBreak => {
-            vec![Block::HorizontalRule(HorizontalRule {
-                source_info: empty_source_info(),
-            })]
+            vec![Block::HorizontalRule(HorizontalRule { source_info })]
         }
 
         NodeValue::FrontMatter(_) => {
@@ -150,22 +181,28 @@ fn convert_block<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Blocks {
     }
 }
 
-fn convert_heading<'a>(node: &'a Node<'a, RefCell<Ast>>, heading: &NodeHeading) -> Block {
+fn convert_heading<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    heading: &NodeHeading,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Block {
     if heading.setext {
         panic!("Setext headings not supported in CommonMark subset");
     }
 
-    let inlines = convert_children_to_inlines(node);
+    let ast = node.data.borrow();
+    let source_info = get_source_info(&ast, source_ctx);
+    let inlines = convert_children_to_inlines_with_source(node, source_ctx);
     Block::Header(Header {
         level: heading.level as usize,
         attr: empty_attr(),
         content: inlines,
-        source_info: empty_source_info(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
     })
 }
 
-fn convert_code_block(code_block: &NodeCodeBlock) -> Block {
+fn convert_code_block(code_block: &NodeCodeBlock, source_info: SourceInfo) -> Block {
     if !code_block.fenced {
         panic!("Indented code blocks not supported in CommonMark subset");
     }
@@ -175,32 +212,41 @@ fn convert_code_block(code_block: &NodeCodeBlock) -> Block {
     } else {
         // Info string is the language (may have additional metadata after space)
         // For CommonMark, just use the whole info string as language
-        vec![code_block
-            .info
-            .split_whitespace()
-            .next()
-            .unwrap_or("")
-            .to_string()]
+        vec![
+            code_block
+                .info
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_string(),
+        ]
     };
 
     Block::CodeBlock(CodeBlock {
         attr: (String::new(), classes, LinkedHashMap::new()),
         text: code_block.literal.clone(),
-        source_info: empty_source_info(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
     })
 }
 
-fn convert_list<'a>(node: &'a Node<'a, RefCell<Ast>>, list: &NodeList) -> Block {
+fn convert_list<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    list: &NodeList,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Block {
+    let ast = node.data.borrow();
+    let source_info = get_source_info(&ast, source_ctx);
+
     let items: Vec<Blocks> = node
         .children()
-        .map(|child| convert_list_item(child, list.tight))
+        .map(|child| convert_list_item(child, list.tight, source_ctx))
         .collect();
 
     match list.list_type {
         ListType::Bullet => Block::BulletList(BulletList {
             content: items,
-            source_info: empty_source_info(),
+            source_info,
         }),
         ListType::Ordered => {
             let attr: ListAttributes = (
@@ -214,14 +260,18 @@ fn convert_list<'a>(node: &'a Node<'a, RefCell<Ast>>, list: &NodeList) -> Block 
             Block::OrderedList(OrderedList {
                 attr,
                 content: items,
-                source_info: empty_source_info(),
+                source_info,
             })
         }
     }
 }
 
-fn convert_list_item<'a>(node: &'a Node<'a, RefCell<Ast>>, tight: bool) -> Blocks {
-    let children = convert_children_to_blocks(node);
+fn convert_list_item<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    tight: bool,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Blocks {
+    let children = convert_children_to_blocks(node, source_ctx);
 
     if tight {
         // For tight lists, convert single Paragraph to Plain
@@ -246,7 +296,7 @@ fn convert_list_item<'a>(node: &'a Node<'a, RefCell<Ast>>, tight: bool) -> Block
 #[cfg(test)]
 mod tests {
     use super::*;
-    use comrak::{parse_document, Arena, Options};
+    use comrak::{Arena, Options, parse_document};
 
     fn parse(markdown: &str) -> Pandoc {
         let arena = Arena::new();

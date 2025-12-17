@@ -24,7 +24,7 @@
  * - Or normalize the ASTs before comparison
  */
 
-use comrak::{parse_document, Arena, Options};
+use comrak::{Arena, Options, parse_document};
 use comrak_to_pandoc::{ast_eq_ignore_source, convert_document};
 
 /// Parse markdown with comrak and convert to Pandoc AST
@@ -51,7 +51,11 @@ fn parse_with_pampa(markdown: &str) -> quarto_pandoc_types::Pandoc {
 }
 
 /// Compare two ASTs and print diff if they don't match
-fn assert_asts_match(comrak_ast: &quarto_pandoc_types::Pandoc, pampa_ast: &quarto_pandoc_types::Pandoc, input: &str) {
+fn assert_asts_match(
+    comrak_ast: &quarto_pandoc_types::Pandoc,
+    pampa_ast: &quarto_pandoc_types::Pandoc,
+    input: &str,
+) {
     if !ast_eq_ignore_source(comrak_ast, pampa_ast) {
         eprintln!("AST mismatch for input: {:?}", input);
         eprintln!("Comrak blocks: {:#?}", comrak_ast.blocks);

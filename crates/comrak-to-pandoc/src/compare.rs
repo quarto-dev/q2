@@ -26,9 +26,7 @@ pub fn block_eq(a: &Block, b: &Block) -> bool {
         (Block::Header(x), Block::Header(y)) => {
             x.level == y.level && attr_eq(&x.attr, &y.attr) && inlines_eq(&x.content, &y.content)
         }
-        (Block::CodeBlock(x), Block::CodeBlock(y)) => {
-            attr_eq(&x.attr, &y.attr) && x.text == y.text
-        }
+        (Block::CodeBlock(x), Block::CodeBlock(y)) => attr_eq(&x.attr, &y.attr) && x.text == y.text,
         (Block::BlockQuote(x), Block::BlockQuote(y)) => blocks_eq(&x.content, &y.content),
         (Block::BulletList(x), Block::BulletList(y)) => {
             x.content.len() == y.content.len()
@@ -72,14 +70,10 @@ pub fn inline_eq(a: &Inline, b: &Inline) -> bool {
         (Inline::Subscript(x), Inline::Subscript(y)) => inlines_eq(&x.content, &y.content),
         (Inline::Code(x), Inline::Code(y)) => attr_eq(&x.attr, &y.attr) && x.text == y.text,
         (Inline::Link(x), Inline::Link(y)) => {
-            attr_eq(&x.attr, &y.attr)
-                && inlines_eq(&x.content, &y.content)
-                && x.target == y.target
+            attr_eq(&x.attr, &y.attr) && inlines_eq(&x.content, &y.content) && x.target == y.target
         }
         (Inline::Image(x), Inline::Image(y)) => {
-            attr_eq(&x.attr, &y.attr)
-                && inlines_eq(&x.content, &y.content)
-                && x.target == y.target
+            attr_eq(&x.attr, &y.attr) && inlines_eq(&x.content, &y.content) && x.target == y.target
         }
         (Inline::Span(x), Inline::Span(y)) => {
             attr_eq(&x.attr, &y.attr) && inlines_eq(&x.content, &y.content)

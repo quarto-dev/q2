@@ -12,13 +12,15 @@
 mod block;
 mod compare;
 mod inline;
+pub mod source_location;
 mod text;
 
 pub mod normalize;
 
-pub use block::convert_document;
+pub use block::{convert_document, convert_document_with_source};
 pub use compare::ast_eq_ignore_source;
 pub use normalize::normalize;
+pub use source_location::SourceLocationContext;
 
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::Attr;
@@ -37,7 +39,7 @@ pub(crate) fn empty_attr() -> Attr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use comrak::{parse_document, Arena, Options};
+    use comrak::{Arena, Options, parse_document};
 
     fn parse_comrak(markdown: &str) -> quarto_pandoc_types::Pandoc {
         let arena = Arena::new();

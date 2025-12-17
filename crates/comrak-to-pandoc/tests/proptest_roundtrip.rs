@@ -15,7 +15,7 @@
  * 5. Compare the normalized ASTs
  */
 
-use comrak::{parse_document, Arena, Options};
+use comrak::{Arena, Options, parse_document};
 use comrak_to_pandoc::{ast_eq_ignore_source, convert_document, normalize};
 use proptest::prelude::*;
 

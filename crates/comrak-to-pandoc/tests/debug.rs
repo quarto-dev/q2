@@ -2,7 +2,7 @@ fn main() {}
 
 #[cfg(test)]
 mod tests {
-    use comrak::{parse_document, Arena, Options};
+    use comrak::{Arena, Options, parse_document};
     use comrak_to_pandoc::{ast_eq_ignore_source, convert_document, normalize};
 
     fn debug_roundtrip(markdown: &str) -> bool {
@@ -21,7 +21,8 @@ mod tests {
             &mut output,
             true,
             None,
-        ).expect("pampa parse failed");
+        )
+        .expect("pampa parse failed");
 
         eprintln!("=== MARKDOWN ===");
         eprintln!("{:?}", markdown);
@@ -281,7 +282,9 @@ line two
     #[ignore = "complex nested autolinks"]
     fn debug_nested_autolinks_in_image() {
         // From test_full_roundtrip - triple nested links
-        debug_roundtrip("![[[[https://aaa.example.com](https://aaa.example.com)](https://aaa.example.com)](https://aaa.example.com)]\n");
+        debug_roundtrip(
+            "![[[[https://aaa.example.com](https://aaa.example.com)](https://aaa.example.com)](https://aaa.example.com)]\n",
+        );
     }
 
     #[test]

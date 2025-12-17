@@ -19,6 +19,32 @@ Currently, pampa focuses on parsing "Quarto Markdown" ("QMD"), the Markdown dial
 - emits parse tree in Pandoc's `json` and `native` formats
   - as a consequence, the Quarto-specific syntax constructs are "desugared" into standard Pandoc AST nodes
 
+## Input Formats
+
+pampa supports multiple input formats via the `--from` (or `-f`) flag:
+
+| Format | Description |
+|--------|-------------|
+| `markdown`, `qmd` | Quarto Markdown (default) - strict parsing with syntax error detection |
+| `commonmark` | Pure CommonMark - uses [comrak](https://github.com/kivikakk/comrak) for spec-compliant parsing |
+| `json` | Pandoc JSON AST |
+
+### CommonMark Mode
+
+For users who need strict CommonMark compliance, the `--from commonmark` option provides a spec-compliant parser:
+
+```bash
+pampa --from commonmark -t json < input.md
+```
+
+This mode:
+- Follows the [CommonMark specification](https://spec.commonmark.org/) exactly
+- Accepts any valid CommonMark document (no syntax errors)
+- Provides full source location tracking for all AST nodes
+- Does not support Quarto-specific extensions (code cells, shortcodes, etc.)
+
+Use CommonMark mode when you need predictable, standards-compliant parsing and don't require Quarto's extended syntax or error detection.
+
 ## Background
 
 ### Syntax drift from Pandoc

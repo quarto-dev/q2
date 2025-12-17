@@ -5,7 +5,8 @@
  * Convert comrak inline nodes to Pandoc inlines.
  */
 
-use crate::text::tokenize_text;
+use crate::source_location::SourceLocationContext;
+use crate::text::{tokenize_text, tokenize_text_with_source};
 use crate::{empty_attr, empty_source_info};
 use comrak::arena_tree::Node;
 use comrak::nodes::{Ast, NodeCode, NodeLink, NodeValue};
@@ -14,70 +15,93 @@ use quarto_pandoc_types::{
     AttrSourceInfo, Code, Emph, Image, Inline, Inlines, LineBreak, Link, SoftBreak, Strong,
     TargetSourceInfo,
 };
+use quarto_source_map::SourceInfo;
 use std::cell::RefCell;
+
+/// Helper to get source info from context or empty
+fn get_source_info(ast: &Ast, source_ctx: Option<&SourceLocationContext>) -> SourceInfo {
+    source_ctx
+        .map(|ctx| ctx.sourcepos_to_source_info(&ast.sourcepos))
+        .unwrap_or_else(empty_source_info)
+}
 
 /// Convert a comrak node's inline children to Pandoc inlines.
 pub fn convert_children_to_inlines<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Inlines {
+    convert_children_to_inlines_with_source(node, None)
+}
+
+/// Convert a comrak node's inline children to Pandoc inlines with source tracking.
+pub fn convert_children_to_inlines_with_source<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Inlines {
     node.children()
-        .flat_map(|child| convert_inline(child))
+        .flat_map(|child| convert_inline(child, source_ctx))
         .collect()
 }
 
 /// Convert a comrak inline node to Pandoc inlines.
 ///
 /// Returns a Vec because some nodes (like Text) expand to multiple inlines.
-pub fn convert_inline<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Inlines {
+fn convert_inline<'a>(
+    node: &'a Node<'a, RefCell<Ast>>,
+    source_ctx: Option<&SourceLocationContext>,
+) -> Inlines {
     let ast = node.data.borrow();
+    let source_info = get_source_info(&ast, source_ctx);
 
     match &ast.value {
-        NodeValue::Text(text) => tokenize_text(text),
+        NodeValue::Text(text) => {
+            if let Some(ctx) = source_ctx {
+                let base_offset = ctx.start_offset(&ast.sourcepos);
+                tokenize_text_with_source(text, base_offset, ctx.file_id())
+            } else {
+                tokenize_text(text)
+            }
+        }
 
         NodeValue::SoftBreak => {
-            vec![Inline::SoftBreak(SoftBreak {
-                source_info: empty_source_info(),
-            })]
+            vec![Inline::SoftBreak(SoftBreak { source_info })]
         }
 
         NodeValue::LineBreak => {
-            vec![Inline::LineBreak(LineBreak {
-                source_info: empty_source_info(),
-            })]
+            vec![Inline::LineBreak(LineBreak { source_info })]
         }
 
         NodeValue::Code(code) => {
-            vec![convert_code(code)]
+            vec![convert_code(code, source_info)]
         }
 
         NodeValue::Emph => {
-            let children = convert_children_to_inlines(node);
+            let children = convert_children_to_inlines_with_source(node, source_ctx);
             vec![Inline::Emph(Emph {
                 content: children,
-                source_info: empty_source_info(),
+                source_info,
             })]
         }
 
         NodeValue::Strong => {
-            let children = convert_children_to_inlines(node);
+            let children = convert_children_to_inlines_with_source(node, source_ctx);
             vec![Inline::Strong(Strong {
                 content: children,
-                source_info: empty_source_info(),
+                source_info,
             })]
         }
 
         NodeValue::Link(link) => {
-            let children = convert_children_to_inlines(node);
-            vec![convert_link(link, children)]
+            let children = convert_children_to_inlines_with_source(node, source_ctx);
+            vec![convert_link(link, children, source_info)]
         }
 
         NodeValue::Image(link) => {
-            let children = convert_children_to_inlines(node);
-            vec![convert_image(link, children)]
+            let children = convert_children_to_inlines_with_source(node, source_ctx);
+            vec![convert_image(link, children, source_info)]
         }
 
         NodeValue::Escaped => {
             // Escaped characters just become the character itself
             // The actual character is in the children as Text
-            convert_children_to_inlines(node)
+            convert_children_to_inlines_with_source(node, source_ctx)
         }
 
         // Unsupported inline types - panic as they're outside CommonMark subset
@@ -128,16 +152,16 @@ pub fn convert_inline<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Inlines {
     }
 }
 
-fn convert_code(code: &NodeCode) -> Inline {
+fn convert_code(code: &NodeCode, source_info: SourceInfo) -> Inline {
     Inline::Code(Code {
         attr: empty_attr(),
         text: code.literal.clone(),
-        source_info: empty_source_info(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
     })
 }
 
-fn convert_link(link: &NodeLink, children: Inlines) -> Inline {
+fn convert_link(link: &NodeLink, children: Inlines, source_info: SourceInfo) -> Inline {
     // Detect autolinks: content is just Str(url) matching the URL
     let is_autolink = match children.as_slice() {
         [Inline::Str(s)] => s.text == link.url,
@@ -155,19 +179,19 @@ fn convert_link(link: &NodeLink, children: Inlines) -> Inline {
         attr,
         content: children,
         target: (link.url.clone(), link.title.clone()),
-        source_info: empty_source_info(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
     })
 }
 
-fn convert_image(link: &NodeLink, children: Inlines) -> Inline {
+fn convert_image(link: &NodeLink, children: Inlines, source_info: SourceInfo) -> Inline {
     // For images, children become alt text
     Inline::Image(Image {
         attr: empty_attr(),
         content: children,
         target: (link.url.clone(), link.title.clone()),
-        source_info: empty_source_info(),
+        source_info,
         attr_source: AttrSourceInfo::empty(),
         target_source: TargetSourceInfo::empty(),
     })
@@ -176,7 +200,7 @@ fn convert_image(link: &NodeLink, children: Inlines) -> Inline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use comrak::{parse_document, Arena, Options};
+    use comrak::{Arena, Options, parse_document};
 
     fn get_first_para_inlines(markdown: &str) -> Inlines {
         let arena = Arena::new();
