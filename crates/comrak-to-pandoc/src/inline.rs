@@ -25,11 +25,6 @@ fn get_source_info(ast: &Ast, source_ctx: Option<&SourceLocationContext>) -> Sou
         .unwrap_or_else(empty_source_info)
 }
 
-/// Convert a comrak node's inline children to Pandoc inlines.
-pub fn convert_children_to_inlines<'a>(node: &'a Node<'a, RefCell<Ast>>) -> Inlines {
-    convert_children_to_inlines_with_source(node, None)
-}
-
 /// Convert a comrak node's inline children to Pandoc inlines with source tracking.
 pub fn convert_children_to_inlines_with_source<'a>(
     node: &'a Node<'a, RefCell<Ast>>,
@@ -207,7 +202,7 @@ mod tests {
         let root = parse_document(&arena, markdown, &Options::default());
         // Get first child (should be paragraph)
         let para = root.first_child().expect("Expected a block");
-        convert_children_to_inlines(para)
+        convert_children_to_inlines_with_source(para, None)
     }
 
     #[test]

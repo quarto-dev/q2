@@ -205,17 +205,6 @@ fn strip_leading_trailing_spaces(mut inlines: Vec<Inline>) -> Vec<Inline> {
     inlines
 }
 
-/// Single inline normalization (for backwards compatibility).
-fn normalize_inline(inline: Inline) -> Inline {
-    let mut result = normalize_inline_to_vec(inline);
-    if result.len() == 1 {
-        result.pop().unwrap()
-    } else {
-        // This shouldn't happen for non-Span inlines
-        panic!("normalize_inline called on Span that would expand to multiple inlines")
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

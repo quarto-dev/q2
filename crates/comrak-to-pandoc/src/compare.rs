@@ -93,6 +93,7 @@ fn attr_eq(a: &Attr, b: &Attr) -> bool {
 }
 
 /// Pretty-print difference between two Pandoc documents for debugging.
+#[allow(dead_code)]
 pub fn diff_ast(a: &Pandoc, b: &Pandoc) -> String {
     let mut result = String::new();
 
