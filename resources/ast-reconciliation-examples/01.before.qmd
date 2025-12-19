@@ -1,0 +1,21 @@
+---
+format: html
+title: Hello
+keep-md: true
+---
+
+## This is a section
+
+There's some stuff here.
+
+Repeat.
+
+```{r}
+cat("Hello world")
+```
+
+## This is another section
+
+There's more stuff here.
+
+Repeat.

@@ -1,0 +1,35 @@
+---
+format: html
+title: Hello
+keep-md: true
+---
+
+## This is a section
+
+There's some stuff here.
+
+Repeat.
+
+
+::: {.cell}
+
+```{.r .cell-code}
+cat("Hello world")
+```
+
+::: {.cell-output .cell-output-stdout}
+
+```
+Hello world
+```
+
+
+:::
+:::
+
+
+## This is another section
+
+There's more stuff here.
+
+Repeat.

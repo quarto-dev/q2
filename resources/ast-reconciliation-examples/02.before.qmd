@@ -1,0 +1,19 @@
+---
+format: html
+title: inline
+keep-md: true
+---
+
+## Inline code execution
+
+This has inline code in it, `r 23 * 37`. Let's see what happens.
+
+## Another section
+
+This has regular code cells.
+
+```{r}
+1 + 2
+```
+
+And more.

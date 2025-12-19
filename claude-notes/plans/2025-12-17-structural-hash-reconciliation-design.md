@@ -2,7 +2,7 @@
 
 **Date**: 2025-12-17
 **Issue**: k-xvte
-**Status**: Ready for implementation
+**Status**: Implemented (2025-12-18)
 **Parent issue**: k-6daf (Good source location tracking after engine outputs)
 **Related**: claude-notes/plans/2025-12-15-engine-output-source-location-reconciliation.md
 
@@ -1060,6 +1060,20 @@ For LSP and IDE use cases, we may want incremental reconciliation as the user ed
 | Duplicate handling | First-come-first-served by document order | Simple; handles order-preserving engines correctly |
 | Metadata handling | Executed wins entirely (v1) | Simple; future work (k-7bty) for field-level reconciliation |
 | Nested plans | Pre-computed during compute phase | Keeps compute pure, apply simple |
+
+## Test Resources
+
+Test files for before/after engine execution are in `resources/ast-reconciliation-examples/`:
+
+- `01.before.qmd` / `01.after.qmd`: Basic R code block execution
+  - Before: `{r}` code block with `cat("Hello world")`
+  - After: Wrapped in `::: {.cell}` div with output in `::: {.cell-output}` div
+
+- `02.before.qmd` / `02.after.qmd`: Inline code + code block
+  - Before: Inline `` `r 23 * 37` `` and `{r}` code block with `1 + 2`
+  - After: Inline replaced with `851`, code block wrapped with output
+
+If more examples of post-engine markdown are needed, ask the user.
 
 ## References
 
