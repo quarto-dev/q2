@@ -276,6 +276,9 @@ fn build_router(ctx: SharedContext) -> Router {
             get(get_document).put(update_document),
         )
         // WebSocket endpoint for automerge sync
+        // Root path "/" is the standard location used by sync.automerge.org
+        // "/ws" is kept for backward compatibility
+        .route("/", get(ws_handler))
         .route("/ws", get(ws_handler))
         .fallback(not_found)
         .layer(TraceLayer::new_for_http())
