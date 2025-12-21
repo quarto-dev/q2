@@ -32,8 +32,9 @@ use anyhow::{Context, Result};
 use tracing::{debug, info};
 
 use quarto_core::{
-    BinaryDependencies, DocumentInfo, Format, FormatIdentifier, MetadataNormalizeTransform,
-    ProjectContext, RenderContext, RenderOptions, ResourceCollectorTransform, TransformPipeline,
+    BinaryDependencies, CalloutTransform, DocumentInfo, Format, FormatIdentifier,
+    MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
+    ResourceCollectorTransform, TransformPipeline,
 };
 
 /// Arguments for the render command
@@ -225,7 +226,11 @@ fn render_document(
 fn build_transform_pipeline() -> TransformPipeline {
     let mut pipeline = TransformPipeline::new();
 
-    // Add transforms in order
+    // Add transforms in order:
+    // 1. CalloutTransform - convert callout Divs to CustomNodes
+    // 2. MetadataNormalizeTransform - normalize metadata (pagetitle, etc.)
+    // 3. ResourceCollectorTransform - collect image dependencies
+    pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
@@ -271,8 +276,8 @@ fn render_to_html(pandoc: &pampa::pandoc::Pandoc) -> Result<String> {
     writeln!(buf, "</head>")?;
     writeln!(buf, "<body>")?;
 
-    // Render body content
-    pampa::writers::html::write_blocks(&pandoc.blocks, &mut buf)
+    // Render body content using quarto-core's HTML writer (handles CustomNodes)
+    quarto_core::html_writer::write_blocks(&pandoc.blocks, &mut buf)
         .context("Failed to write HTML body")?;
 
     writeln!(buf, "</body>")?;
