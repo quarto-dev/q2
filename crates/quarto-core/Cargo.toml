@@ -17,6 +17,7 @@ serde_yaml = "0.9"
 which = "7.0"
 
 quarto-util.workspace = true
+quarto-pandoc-types.workspace = true
 
 [lints]
 workspace = true

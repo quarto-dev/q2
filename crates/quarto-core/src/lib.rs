@@ -37,6 +37,7 @@ pub mod error;
 pub mod format;
 pub mod project;
 pub mod render;
+pub mod transform;
 
 // Re-export commonly used types
 pub use artifact::{Artifact, ArtifactStore};
@@ -44,3 +45,4 @@ pub use error::{QuartoError, Result};
 pub use format::{Format, FormatIdentifier};
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
+pub use transform::{AstTransform, TransformPipeline};
