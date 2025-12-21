@@ -177,6 +177,11 @@ fn extract_css_from_meta(meta: &MetaValueWithSourceInfo) -> Option<Vec<TemplateV
                     MetaValueWithSourceInfo::MetaString { value, .. } => {
                         vec![TemplateValue::String(value.clone())]
                     }
+                    MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                        // YAML values like `css: custom.css` are often parsed as inlines
+                        let text = inlines_to_text(content);
+                        vec![TemplateValue::String(text)]
+                    }
                     MetaValueWithSourceInfo::MetaList { items, .. } => items
                         .iter()
                         .map(meta_value_to_template_value)

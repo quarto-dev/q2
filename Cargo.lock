@@ -1873,6 +1873,7 @@ dependencies = [
  "quarto-doctemplate",
  "quarto-util",
  "serde_json",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]
