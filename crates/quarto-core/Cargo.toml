@@ -22,5 +22,8 @@ quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
 quarto-doctemplate.workspace = true
 
+[dev-dependencies]
+tempfile = "3"
+
 [lints]
 workspace = true

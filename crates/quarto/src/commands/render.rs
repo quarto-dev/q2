@@ -199,13 +199,24 @@ fn render_document(
     let output_path = determine_output_path(&ctx, args)?;
 
     // Create output directory if needed
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create output directory: {}", parent.display()))?;
-    }
+    let output_dir = output_path
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine output directory"))?;
+    fs::create_dir_all(output_dir)
+        .with_context(|| format!("Failed to create output directory: {}", output_dir.display()))?;
 
-    // Render to HTML
-    let html_output = render_to_html(&pandoc)?;
+    // Get the output stem for resource directory naming
+    let output_stem = output_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| anyhow::anyhow!("Could not determine output filename stem"))?;
+
+    // Write static resources (CSS, JS) to output directory
+    let resource_paths = quarto_core::resources::write_html_resources(output_dir, output_stem)
+        .context("Failed to write HTML resources")?;
+
+    // Render to HTML with resource paths
+    let html_output = render_to_html(&pandoc, &resource_paths.css)?;
 
     // Write output
     let mut output_file = fs::File::create(&output_path)
@@ -257,16 +268,16 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
     Ok(base_output)
 }
 
-/// Render Pandoc AST to HTML string
-fn render_to_html(pandoc: &pampa::pandoc::Pandoc) -> Result<String> {
+/// Render Pandoc AST to HTML string with external resources
+fn render_to_html(pandoc: &pampa::pandoc::Pandoc, css_paths: &[String]) -> Result<String> {
     // First, render the body content using quarto-core's HTML writer
     let mut body_buf = Vec::new();
     quarto_core::html_writer::write_blocks(&pandoc.blocks, &mut body_buf)
         .context("Failed to write HTML body")?;
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 
-    // Then wrap it with the template, passing metadata for title, css, etc.
-    quarto_core::template::render_with_template(&body, &pandoc.meta)
+    // Then wrap it with the template, passing metadata and resource paths
+    quarto_core::template::render_with_resources(&body, &pandoc.meta, css_paths)
         .context("Failed to render template")
 }
 

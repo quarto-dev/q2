@@ -38,6 +38,7 @@ pub mod format;
 pub mod html_writer;
 pub mod project;
 pub mod render;
+pub mod resources;
 pub mod template;
 pub mod transform;
 pub mod transforms;

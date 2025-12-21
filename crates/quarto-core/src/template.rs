@@ -30,7 +30,7 @@ use crate::Result;
 /// This template is compatible with Pandoc's variable conventions:
 /// - `$pagetitle$` / `$title$` - document title
 /// - `$body$` - rendered body content
-/// - `$css$` - optional CSS stylesheets
+/// - `$css$` - CSS stylesheets (external files)
 /// - `$header-includes$` - additional header content
 const DEFAULT_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
@@ -46,17 +46,6 @@ $endfor$
 $if(header-includes)$
 $header-includes$
 $endif$
-<style>
-/* Minimal default styles */
-body { max-width: 800px; margin: 0 auto; padding: 1rem; font-family: system-ui, sans-serif; }
-.callout { border-left: 4px solid #ccc; padding: 0.5rem 1rem; margin: 1rem 0; background: #f9f9f9; }
-.callout-note { border-color: #0d6efd; }
-.callout-warning { border-color: #ffc107; }
-.callout-tip { border-color: #198754; }
-.callout-important { border-color: #dc3545; }
-.callout-caution { border-color: #fd7e14; }
-.callout-header { font-weight: bold; margin-bottom: 0.5rem; }
-</style>
 </head>
 <body>
 $body$
@@ -117,6 +106,87 @@ pub fn render_with_custom_template(
     template
         .render(&ctx)
         .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Render a document with external resources.
+///
+/// This function renders the document with the default template and adds
+/// CSS/JS resource paths to the template context. Resource paths from
+/// the `css_paths` parameter are combined with any CSS paths from metadata.
+///
+/// # Arguments
+/// * `body` - The rendered body content (HTML)
+/// * `meta` - Document metadata from the Pandoc AST
+/// * `css_paths` - Paths to CSS files (relative to output HTML)
+///
+/// # Returns
+/// The complete HTML document as a string.
+pub fn render_with_resources(
+    body: &str,
+    meta: &MetaValueWithSourceInfo,
+    css_paths: &[String],
+) -> Result<String> {
+    let template = default_html_template()?;
+
+    let mut ctx = TemplateContext::new();
+    ctx.insert("body", TemplateValue::String(body.to_string()));
+
+    // Add metadata, but we'll handle css specially
+    add_metadata_to_context_except(meta, &mut ctx, &["css"]);
+
+    // Build combined CSS list: default resources first, then user-specified
+    let mut css_list: Vec<TemplateValue> = css_paths
+        .iter()
+        .map(|p| TemplateValue::String(p.clone()))
+        .collect();
+
+    // Add any user-specified CSS from metadata
+    if let Some(user_css) = extract_css_from_meta(meta) {
+        css_list.extend(user_css);
+    }
+
+    ctx.insert("css", TemplateValue::List(css_list));
+
+    template
+        .render(&ctx)
+        .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Add metadata from the Pandoc AST to the template context, excluding specific keys.
+fn add_metadata_to_context_except(
+    meta: &MetaValueWithSourceInfo,
+    ctx: &mut TemplateContext,
+    exclude: &[&str],
+) {
+    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+        for entry in entries {
+            if !exclude.contains(&entry.key.as_str()) {
+                let value = meta_value_to_template_value(&entry.value);
+                ctx.insert(&entry.key, value);
+            }
+        }
+    }
+}
+
+/// Extract CSS paths from document metadata.
+fn extract_css_from_meta(meta: &MetaValueWithSourceInfo) -> Option<Vec<TemplateValue>> {
+    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+        for entry in entries {
+            if entry.key == "css" {
+                return Some(match &entry.value {
+                    MetaValueWithSourceInfo::MetaString { value, .. } => {
+                        vec![TemplateValue::String(value.clone())]
+                    }
+                    MetaValueWithSourceInfo::MetaList { items, .. } => items
+                        .iter()
+                        .map(meta_value_to_template_value)
+                        .collect(),
+                    _ => Vec::new(),
+                });
+            }
+        }
+    }
+    None
 }
 
 /// Add metadata from the Pandoc AST to the template context.
