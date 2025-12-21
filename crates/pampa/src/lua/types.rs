@@ -51,6 +51,7 @@ impl LuaInline {
             Inline::Delete(_) => "Delete",
             Inline::Highlight(_) => "Highlight",
             Inline::EditComment(_) => "EditComment",
+            Inline::Custom(_) => "Custom",
         }
     }
 
@@ -83,6 +84,8 @@ impl LuaInline {
             | Inline::EditComment(_) => &["tag", "content", "attr", "clone", "walk"],
             Inline::NoteReference(_) => &["tag", "id", "clone", "walk"],
             Inline::Shortcode(_) | Inline::Attr(_, _) => &["tag", "clone", "walk"],
+            // Custom nodes are not exposed to Lua filters yet
+            Inline::Custom(_) => &["tag", "clone"],
         }
     }
 
@@ -496,6 +499,7 @@ impl LuaBlock {
             Block::NoteDefinitionPara(_) => "NoteDefinitionPara",
             Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock",
             Block::CaptionBlock(_) => "CaptionBlock",
+            Block::Custom(_) => "Custom",
         }
     }
 
@@ -552,6 +556,8 @@ impl LuaBlock {
             | Block::NoteDefinitionPara(_)
             | Block::NoteDefinitionFencedBlock(_)
             | Block::CaptionBlock(_) => &["tag", "clone", "walk"],
+            // Custom nodes are not exposed to Lua filters yet
+            Block::Custom(_) => &["tag", "clone"],
         }
     }
 

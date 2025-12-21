@@ -2005,6 +2005,7 @@ dependencies = [
  "hashlink",
  "quarto-source-map",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

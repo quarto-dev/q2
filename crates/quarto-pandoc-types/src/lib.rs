@@ -13,6 +13,7 @@
 pub mod attr;
 pub mod block;
 pub mod caption;
+pub mod custom;
 pub mod inline;
 pub mod list;
 pub mod meta;
@@ -28,6 +29,7 @@ pub use block::{
     OrderedList, Paragraph, Plain, RawBlock,
 };
 pub use caption::Caption;
+pub use custom::{CustomNode, Slot};
 pub use inline::{
     AsInline, Citation, CitationMode, Cite, Code, Delete, EditComment, Emph, Highlight, Image,
     Inline, Inlines, Insert, LineBreak, Link, Math, MathType, Note, NoteReference, QuoteType,

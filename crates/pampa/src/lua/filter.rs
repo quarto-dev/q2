@@ -543,6 +543,7 @@ fn block_tag(block: &Block) -> &'static str {
         Block::NoteDefinitionPara(_) => "NoteDefinitionPara",
         Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock",
         Block::CaptionBlock(_) => "CaptionBlock",
+        Block::Custom(_) => "Custom",
     }
 }
 
@@ -576,6 +577,7 @@ fn inline_tag(inline: &Inline) -> &'static str {
         Inline::Delete(_) => "Delete",
         Inline::Highlight(_) => "Highlight",
         Inline::EditComment(_) => "EditComment",
+        Inline::Custom(_) => "Custom",
     }
 }
 
@@ -689,7 +691,8 @@ fn walk_block_for_inline_splicing(lua: &Lua, filter_table: &Table, block: &Block
         | Block::BlockMetadata(_)
         | Block::NoteDefinitionPara(_)
         | Block::NoteDefinitionFencedBlock(_)
-        | Block::CaptionBlock(_) => Ok(block.clone()),
+        | Block::CaptionBlock(_)
+        | Block::Custom(_) => Ok(block.clone()),
     }
 }
 
@@ -830,7 +833,8 @@ fn walk_inline_children_for_element_filters(
         | Inline::Insert(_)
         | Inline::Delete(_)
         | Inline::Highlight(_)
-        | Inline::EditComment(_) => Ok(inline.clone()),
+        | Inline::EditComment(_)
+        | Inline::Custom(_) => Ok(inline.clone()),
     }
 }
 
@@ -942,7 +946,8 @@ fn walk_block_for_inlines_straight(
         | Block::BlockMetadata(_)
         | Block::NoteDefinitionPara(_)
         | Block::NoteDefinitionFencedBlock(_)
-        | Block::CaptionBlock(_) => Ok(block.clone()),
+        | Block::CaptionBlock(_)
+        | Block::Custom(_) => Ok(block.clone()),
     }
 }
 
@@ -1069,7 +1074,8 @@ fn walk_block_children_for_element_filters(
         | Block::BlockMetadata(_)
         | Block::NoteDefinitionPara(_)
         | Block::NoteDefinitionFencedBlock(_)
-        | Block::CaptionBlock(_) => Ok(block.clone()),
+        | Block::CaptionBlock(_)
+        | Block::Custom(_) => Ok(block.clone()),
     }
 }
 
@@ -1170,7 +1176,8 @@ fn walk_block_for_blocks_straight(lua: &Lua, filter_table: &Table, block: &Block
         | Block::BlockMetadata(_)
         | Block::NoteDefinitionPara(_)
         | Block::NoteDefinitionFencedBlock(_)
-        | Block::CaptionBlock(_) => Ok(block.clone()),
+        | Block::CaptionBlock(_)
+        | Block::Custom(_) => Ok(block.clone()),
     }
 }
 
@@ -1341,7 +1348,8 @@ fn walk_block_children_topdown(lua: &Lua, filter_table: &Table, block: &Block) -
         | Block::BlockMetadata(_)
         | Block::NoteDefinitionPara(_)
         | Block::NoteDefinitionFencedBlock(_)
-        | Block::CaptionBlock(_) => Ok(block.clone()),
+        | Block::CaptionBlock(_)
+        | Block::Custom(_) => Ok(block.clone()),
     }
 }
 
@@ -1538,7 +1546,8 @@ fn walk_inline_children_topdown(
         | Inline::Cite(_)
         | Inline::Shortcode(_)
         | Inline::NoteReference(_)
-        | Inline::Attr(_, _) => Ok(inline.clone()),
+        | Inline::Attr(_, _)
+        | Inline::Custom(_) => Ok(inline.clone()),
     }
 }
 

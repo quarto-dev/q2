@@ -171,6 +171,12 @@ fn write_inline<T: std::io::Write>(
         Inline::Attr(_, _) => {
             // Attr uses AttrSourceInfo, not SourceInfo, so we drop silently
         }
+        Inline::Custom(custom) => {
+            ctx.warn_dropped_node(
+                &format!("Custom inline ({})", custom.type_name),
+                &custom.source_info,
+            );
+        }
     }
     Ok(())
 }
@@ -313,6 +319,12 @@ fn write_block<T: std::io::Write>(
         }
         Block::CaptionBlock(CaptionBlock { source_info, .. }) => {
             ctx.warn_dropped_node("CaptionBlock", source_info);
+        }
+        Block::Custom(custom) => {
+            ctx.warn_dropped_node(
+                &format!("Custom block ({})", custom.type_name),
+                &custom.source_info,
+            );
         }
     }
     Ok(())

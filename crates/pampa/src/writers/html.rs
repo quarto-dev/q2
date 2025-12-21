@@ -233,6 +233,9 @@ fn write_inline<T: std::io::Write>(inline: &Inline, buf: &mut T) -> std::io::Res
             write_inlines(&c.content, buf)?;
             write!(buf, "</span>")?;
         }
+        Inline::Custom(_) => {
+            // Custom inline nodes are not rendered in HTML output
+        }
     }
     Ok(())
 }
@@ -473,6 +476,9 @@ fn write_block<T: std::io::Write>(block: &Block, buf: &mut T) -> std::io::Result
             write!(buf, "<div class=\"caption\">")?;
             write_inlines(&caption.content, buf)?;
             writeln!(buf, "</div>")?;
+        }
+        Block::Custom(_) => {
+            // Custom block nodes are not rendered in HTML output
         }
     }
     Ok(())

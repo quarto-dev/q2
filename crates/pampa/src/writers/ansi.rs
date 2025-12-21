@@ -737,6 +737,19 @@ fn write_block_with_depth(
             );
             Ok(LastBlockSpacing::None)
         }
+        Block::Custom(_) => {
+            ctx.errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Custom block not supported in ANSI format",
+                )
+                .with_code("Q-3-56")
+                .problem("Custom block elements cannot be rendered in ANSI terminal output")
+                .add_detail("Custom nodes are internal Quarto extensions not yet supported in ANSI")
+                .add_hint("Consider using a different output format")
+                .build(),
+            );
+            Ok(LastBlockSpacing::None)
+        }
     }
 }
 
@@ -1356,6 +1369,9 @@ fn write_inline<T: Write + ?Sized>(
         }
         Inline::EditComment(_) => {
             // Ignore edit comments in output
+        }
+        Inline::Custom(_) => {
+            // Custom nodes are not rendered in ANSI output
         }
     }
     Ok(())

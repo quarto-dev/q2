@@ -30,28 +30,6 @@ struct ProcessResult {
     result: Result<PathBuf>,
 }
 
-/// Thread-safe wrapper for Template.
-///
-/// Template contains SourceInfo which uses Rc internally, making it not Sync/Send.
-/// We wrap it and use unsafe to assert it's safe to share across threads.
-///
-/// # Safety
-///
-/// This is safe because:
-/// 1. We only read from the template during parallel processing (no mutation)
-/// 2. The Rc inside SourceInfo is never incremented/decremented after template compilation
-/// 3. Template::render() only reads the AST nodes, it doesn't modify them
-/// 4. Each thread gets a shared reference and doesn't modify the template
-///
-/// The underlying issue is that SourceInfo uses Rc for substring tracking,
-/// but in the template context, these Rc values are created once during parsing
-/// and never mutated afterward. The template evaluation is purely read-only.
-struct SendSyncTemplate(Template);
-
-// SAFETY: See struct documentation above.
-unsafe impl Sync for SendSyncTemplate {}
-unsafe impl Send for SendSyncTemplate {}
-
 #[derive(Parser, Debug)]
 #[command(name = "pico-quarto-render")]
 #[command(about = "Experimental QMD to HTML batch renderer")]
@@ -129,11 +107,12 @@ fn main() -> Result<()> {
             .collect()
     } else {
         // Parallel processing with rayon
-        let shared_template = Arc::new(SendSyncTemplate(template));
+        // Template is now Send + Sync (SourceInfo uses Arc instead of Rc)
+        let shared_template = Arc::new(template);
         qmd_files
             .par_iter()
             .map(|qmd_path| {
-                let template = &shared_template.0;
+                let template = shared_template.as_ref();
                 ProcessResult {
                     input_path: qmd_path.clone(),
                     result: process_qmd_file(qmd_path, &args.input_dir, &args.output_dir, template),

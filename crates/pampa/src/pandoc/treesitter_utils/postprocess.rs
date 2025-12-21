@@ -130,6 +130,7 @@ fn get_block_source_info(block: &Block) -> SourceInfo {
         Block::CaptionBlock(b) => b.source_info.clone(),
         Block::NoteDefinitionPara(b) => b.source_info.clone(),
         Block::NoteDefinitionFencedBlock(b) => b.source_info.clone(),
+        Block::Custom(b) => b.source_info.clone(),
     }
 }
 

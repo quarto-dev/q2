@@ -1737,6 +1737,10 @@ fn write_inline(
         crate::pandoc::Inline::LineBreak(node) => write_linebreak(node, buf, ctx),
         crate::pandoc::Inline::Link(node) => write_link(node, buf, ctx),
         crate::pandoc::Inline::Image(node) => write_image(node, buf, ctx),
+        crate::pandoc::Inline::Custom(_) => {
+            // Custom inline nodes are not rendered in QMD output
+            Ok(())
+        }
     }
 }
 
@@ -1812,6 +1816,9 @@ fn write_block(
                 .add_hint("Check for bugs in postprocessing or filters producing orphaned captions")
                 .build(),
             );
+        }
+        Block::Custom(_) => {
+            // Custom block nodes are not rendered in QMD output
         }
     }
     Ok(())

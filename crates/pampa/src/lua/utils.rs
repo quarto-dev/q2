@@ -242,7 +242,8 @@ fn block_to_inlines(block: &Block) -> Vec<Inline> {
         | Block::CaptionBlock(_)
         | Block::BlockMetadata(_)
         | Block::NoteDefinitionPara(_)
-        | Block::NoteDefinitionFencedBlock(_) => vec![],
+        | Block::NoteDefinitionFencedBlock(_)
+        | Block::Custom(_) => vec![],
     }
 }
 
@@ -331,6 +332,7 @@ fn get_inline_type_name(inline: &Inline) -> String {
         Inline::Delete(_) => "Delete".to_string(),
         Inline::Highlight(_) => "Highlight".to_string(),
         Inline::EditComment(_) => "EditComment".to_string(),
+        Inline::Custom(_) => "Custom".to_string(),
     }
 }
 
@@ -355,6 +357,7 @@ fn get_block_type_name(block: &Block) -> String {
         Block::BlockMetadata(_) => "BlockMetadata".to_string(),
         Block::NoteDefinitionPara(_) => "NoteDefinitionPara".to_string(),
         Block::NoteDefinitionFencedBlock(_) => "NoteDefinitionFencedBlock".to_string(),
+        Block::Custom(_) => "Custom".to_string(),
     }
 }
 
@@ -796,6 +799,8 @@ fn stringify_inline(inline: &Inline) -> String {
         Inline::Delete(d) => stringify_inlines(&d.content),
         Inline::Highlight(h) => stringify_inlines(&h.content),
         Inline::EditComment(_) => String::new(),
+        // Custom nodes: we don't attempt to stringify their contents
+        Inline::Custom(_) => String::new(),
     }
 }
 
@@ -867,6 +872,8 @@ fn stringify_block(block: &Block) -> String {
         Block::BlockMetadata(_) => String::new(),
         Block::NoteDefinitionPara(n) => stringify_inlines(&n.content),
         Block::NoteDefinitionFencedBlock(n) => stringify_blocks(&n.content),
+        // Custom nodes: we don't attempt to stringify their contents
+        Block::Custom(_) => String::new(),
     }
 }
 

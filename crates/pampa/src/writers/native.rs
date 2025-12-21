@@ -482,6 +482,24 @@ fn write_inline<T: std::io::Write>(
             );
             // Skip this inline
         }
+        Inline::Custom(custom) => {
+            // Custom nodes are not supported in native format
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Custom inline node in native writer",
+                )
+                .with_code("Q-3-37")
+                .problem(format!(
+                    "Custom node type `{}` not supported in native format",
+                    custom.type_name
+                ))
+                .with_location(custom.source_info.clone())
+                .add_detail("Custom nodes are internal Quarto extensions")
+                .add_hint("Use JSON output format to see custom node details")
+                .build(),
+            );
+            // Skip this inline
+        }
     }
     Ok(())
 }
@@ -838,6 +856,24 @@ fn write_block<T: std::io::Write>(
                     "This may indicate a bug in postprocessing or a filter that \
                      produces orphaned captions",
                 )
+                .build(),
+            );
+            // Skip this block
+        }
+        Block::Custom(custom) => {
+            // Custom nodes are not supported in native format
+            errors.push(
+                quarto_error_reporting::DiagnosticMessageBuilder::error(
+                    "Custom block node in native writer",
+                )
+                .with_code("Q-3-38")
+                .problem(format!(
+                    "Custom node type `{}` not supported in native format",
+                    custom.type_name
+                ))
+                .with_location(custom.source_info.clone())
+                .add_detail("Custom nodes are internal Quarto extensions")
+                .add_hint("Use JSON output format to see custom node details")
                 .build(),
             );
             // Skip this block
