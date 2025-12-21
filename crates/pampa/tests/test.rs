@@ -509,7 +509,8 @@ fn test_html_writer() {
                 )
                 .unwrap();
                 let mut buf = Vec::new();
-                writers::html::write(&pandoc, &mut buf).unwrap();
+                let context = ASTContext::anonymous();
+                writers::html::write(&pandoc, &context, &mut buf).unwrap();
                 let our_html = String::from_utf8(buf).expect("Invalid UTF-8 in our HTML output");
 
                 // Get Pandoc's output

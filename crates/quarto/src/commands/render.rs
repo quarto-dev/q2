@@ -86,8 +86,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Discover project context
-    let project = ProjectContext::discover(&input_path)
-        .context("Failed to discover project context")?;
+    let project =
+        ProjectContext::discover(&input_path).context("Failed to discover project context")?;
 
     if !args.quiet {
         if project.is_single_file {
@@ -114,8 +114,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
 /// Resolve format string to Format
 fn resolve_format(format_str: &str) -> Result<Format> {
-    let identifier = FormatIdentifier::try_from(format_str)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    let identifier =
+        FormatIdentifier::try_from(format_str).map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok(Format {
         identifier,
@@ -164,13 +164,13 @@ fn render_document(
     let mut output_stream = std::io::sink();
     let input_path_str = doc_info.input.to_string_lossy();
 
-    let (mut pandoc, _context, warnings) = pampa::readers::qmd::read(
+    let (mut pandoc, context, warnings) = pampa::readers::qmd::read(
         &input_content,
         false, // loose mode
         &input_path_str,
         &mut output_stream,
-        true,  // track source locations
-        None,  // file_id
+        true, // track source locations
+        None, // file_id
     )
     .map_err(|diagnostics| {
         // Format error messages
@@ -202,8 +202,12 @@ fn render_document(
     let output_dir = output_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Could not determine output directory"))?;
-    fs::create_dir_all(output_dir)
-        .with_context(|| format!("Failed to create output directory: {}", output_dir.display()))?;
+    fs::create_dir_all(output_dir).with_context(|| {
+        format!(
+            "Failed to create output directory: {}",
+            output_dir.display()
+        )
+    })?;
 
     // Get the output stem for resource directory naming
     let output_stem = output_path
@@ -216,7 +220,7 @@ fn render_document(
         .context("Failed to write HTML resources")?;
 
     // Render to HTML with resource paths
-    let html_output = render_to_html(&pandoc, &resource_paths.css)?;
+    let html_output = render_to_html(&pandoc, &context, &resource_paths.css)?;
 
     // Write output
     let mut output_file = fs::File::create(&output_path)
@@ -271,10 +275,16 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
 }
 
 /// Render Pandoc AST to HTML string with external resources
-fn render_to_html(pandoc: &pampa::pandoc::Pandoc, css_paths: &[String]) -> Result<String> {
+fn render_to_html(
+    pandoc: &pampa::pandoc::Pandoc,
+    ast_context: &pampa::pandoc::ASTContext,
+    css_paths: &[String],
+) -> Result<String> {
     // First, render the body content using pampa's HTML writer
+    // This is metadata-aware and will include source location attributes
+    // if format.html.source-location: full is set in the document
     let mut body_buf = Vec::new();
-    pampa::writers::html::write_blocks(&pandoc.blocks, &mut body_buf)
+    pampa::writers::html::write(pandoc, ast_context, &mut body_buf)
         .context("Failed to write HTML body")?;
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 

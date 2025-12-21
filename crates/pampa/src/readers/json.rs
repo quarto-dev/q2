@@ -2263,9 +2263,9 @@ fn read_custom_block_from_div(
 
     for slot_wrapper in content_arr {
         // Each slot is a Div with data-slot-name attribute
-        let slot_obj = slot_wrapper.as_object().ok_or_else(|| {
-            JsonReadError::InvalidType("Slot wrapper must be object".to_string())
-        })?;
+        let slot_obj = slot_wrapper
+            .as_object()
+            .ok_or_else(|| JsonReadError::InvalidType("Slot wrapper must be object".to_string()))?;
 
         let slot_t = slot_obj.get("t").and_then(|v| v.as_str());
         if slot_t != Some("Div") {
@@ -2401,9 +2401,9 @@ fn read_custom_inline_from_span(
 
     for slot_wrapper in content_arr {
         // Each slot is a Span with data-slot-name attribute
-        let slot_obj = slot_wrapper.as_object().ok_or_else(|| {
-            JsonReadError::InvalidType("Slot wrapper must be object".to_string())
-        })?;
+        let slot_obj = slot_wrapper
+            .as_object()
+            .ok_or_else(|| JsonReadError::InvalidType("Slot wrapper must be object".to_string()))?;
 
         let slot_t = slot_obj.get("t").and_then(|v| v.as_str());
         if slot_t != Some("Span") {

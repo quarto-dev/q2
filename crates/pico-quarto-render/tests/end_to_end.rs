@@ -116,13 +116,13 @@ struct HtmlWriters;
 impl HtmlWriters {
     fn write_blocks(&self, blocks: &[Block]) -> anyhow::Result<String> {
         let mut buf = Vec::new();
-        pampa::writers::html::write_blocks(blocks, &mut buf)?;
+        pampa::writers::html::write_blocks_to(blocks, &mut buf)?;
         Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 
     fn write_inlines(&self, inlines: &Inlines) -> anyhow::Result<String> {
         let mut buf = Vec::new();
-        pampa::writers::html::write_inlines(inlines, &mut buf)?;
+        pampa::writers::html::write_inlines_to(inlines, &mut buf)?;
         Ok(String::from_utf8_lossy(&buf).into_owned())
     }
 }

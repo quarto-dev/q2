@@ -73,8 +73,8 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
         false, // loose mode
         &input_path_str,
         &mut output_stream,
-        true,  // track source locations
-        None,  // file_id
+        true, // track source locations
+        None, // file_id
     )
     .map_err(|diagnostics| {
         diagnostics
@@ -112,17 +112,19 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     let output_stem = output_path.file_stem().unwrap().to_str().unwrap();
 
     // Write resources
-    let resource_paths =
-        quarto_core::resources::write_html_resources(output_dir, output_stem).map_err(|e| e.to_string())?;
+    let resource_paths = quarto_core::resources::write_html_resources(output_dir, output_stem)
+        .map_err(|e| e.to_string())?;
 
     // Render HTML body using pampa's HTML writer
     let mut body_buf = Vec::new();
-    pampa::writers::html::write_blocks(&pandoc.blocks, &mut body_buf).map_err(|e| e.to_string())?;
+    pampa::writers::html::write_blocks_to(&pandoc.blocks, &mut body_buf)
+        .map_err(|e| e.to_string())?;
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 
     // Render with template
-    let html = quarto_core::template::render_with_resources(&body, &pandoc.meta, &resource_paths.css)
-        .map_err(|e| e.to_string())?;
+    let html =
+        quarto_core::template::render_with_resources(&body, &pandoc.meta, &resource_paths.css)
+            .map_err(|e| e.to_string())?;
 
     // Write output
     fs::create_dir_all(output_dir).map_err(|e| e.to_string())?;
@@ -391,12 +393,21 @@ Content here.
     );
 
     assert!(result.result.is_ok());
-    assert!(result.resource_dir().exists(), "Resource directory should exist");
+    assert!(
+        result.resource_dir().exists(),
+        "Resource directory should exist"
+    );
     assert!(result.css_path().exists(), "CSS file should exist");
 
     let css = fs::read_to_string(result.css_path()).unwrap();
-    assert!(css.contains(".callout"), "CSS should contain callout styles");
-    assert!(css.contains("--font-family-sans"), "CSS should contain CSS variables");
+    assert!(
+        css.contains(".callout"),
+        "CSS should contain callout styles"
+    );
+    assert!(
+        css.contains("--font-family-sans"),
+        "CSS should contain CSS variables"
+    );
 }
 
 #[test]
@@ -535,7 +546,7 @@ title: Lists Test
     assert!(html.contains("<ul>"));
     assert!(html.contains("<li>"));
     assert!(html.contains("Item one"));
-    assert!(html.contains("<ol"));  // May have type attribute
+    assert!(html.contains("<ol")); // May have type attribute
     assert!(html.contains("First"));
 }
 
@@ -673,7 +684,10 @@ fn test_long_document() {
     // Test with a longer document to ensure no buffer issues
     let mut content = String::from("---\ntitle: Long Document\n---\n\n");
     for i in 0..100 {
-        content.push_str(&format!("## Section {}\n\nParagraph {} with some content.\n\n", i, i));
+        content.push_str(&format!(
+            "## Section {}\n\nParagraph {} with some content.\n\n",
+            i, i
+        ));
     }
 
     let result = render_qmd(&content);

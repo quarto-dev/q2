@@ -1125,10 +1125,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
 /// - Attribute `data-custom-slots`: JSON mapping slot names to types
 /// - Attribute `data-custom-data`: JSON-serialized plain_data
 /// - Content: slot contents in order, each wrapped in a Div with `data-slot-name`
-fn write_custom_block(
-    custom: &crate::pandoc::CustomNode,
-    ctx: &mut JsonWriterContext,
-) -> Value {
+fn write_custom_block(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterContext) -> Value {
     // Build the slot metadata (name -> type mapping)
     let slot_meta: serde_json::Map<String, Value> = custom
         .slots
@@ -1146,10 +1143,7 @@ fn write_custom_block(
 
     // Start with the original attr's key-value pairs and add custom node attributes
     let mut wrapper_attr_kvs = custom.attr.2.clone();
-    wrapper_attr_kvs.insert(
-        "data-custom-type".to_string(),
-        custom.type_name.clone(),
-    );
+    wrapper_attr_kvs.insert("data-custom-type".to_string(), custom.type_name.clone());
     wrapper_attr_kvs.insert(
         "data-custom-slots".to_string(),
         serde_json::to_string(&slot_meta).unwrap_or_else(|_| "{}".to_string()),
@@ -1207,17 +1201,15 @@ fn write_custom_block(
     let mut obj = serde_json::Map::new();
     obj.insert("t".to_string(), json!("Div"));
     obj.insert("c".to_string(), json!([write_attr(&wrapper_attr), content]));
-    ctx.serializer.add_source_info(&mut obj, &custom.source_info);
+    ctx.serializer
+        .add_source_info(&mut obj, &custom.source_info);
     Value::Object(obj)
 }
 
 /// Serialize a CustomNode as a wrapper Span with __quarto_custom_node class.
 ///
 /// Similar to write_custom_block but uses Span as the wrapper element.
-fn write_custom_inline(
-    custom: &crate::pandoc::CustomNode,
-    ctx: &mut JsonWriterContext,
-) -> Value {
+fn write_custom_inline(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterContext) -> Value {
     // Build the slot metadata (name -> type mapping)
     let slot_meta: serde_json::Map<String, Value> = custom
         .slots
@@ -1235,10 +1227,7 @@ fn write_custom_inline(
 
     // Start with the original attr's key-value pairs and add custom node attributes
     let mut wrapper_attr_kvs = custom.attr.2.clone();
-    wrapper_attr_kvs.insert(
-        "data-custom-type".to_string(),
-        custom.type_name.clone(),
-    );
+    wrapper_attr_kvs.insert("data-custom-type".to_string(), custom.type_name.clone());
     wrapper_attr_kvs.insert(
         "data-custom-slots".to_string(),
         serde_json::to_string(&slot_meta).unwrap_or_else(|_| "{}".to_string()),
@@ -1299,7 +1288,8 @@ fn write_custom_inline(
     let mut obj = serde_json::Map::new();
     obj.insert("t".to_string(), json!("Span"));
     obj.insert("c".to_string(), json!([write_attr(&wrapper_attr), content]));
-    ctx.serializer.add_source_info(&mut obj, &custom.source_info);
+    ctx.serializer
+        .add_source_info(&mut obj, &custom.source_info);
     Value::Object(obj)
 }
 
@@ -1407,7 +1397,10 @@ fn write_blocks(blocks: &[Block], ctx: &mut JsonWriterContext) -> Value {
     )
 }
 
-fn write_pandoc(
+/// Generate JSON representation of a Pandoc document.
+///
+/// This function is used internally by the HTML writer to build the source map.
+pub(crate) fn write_pandoc(
     pandoc: &Pandoc,
     ast_context: &ASTContext,
     config: &JsonConfig,
@@ -1993,8 +1986,7 @@ mod tests {
 
     #[test]
     fn test_custom_block_preserves_attr() {
-        use crate::pandoc::attr::empty_attr;
-        use crate::pandoc::{Block, CustomNode, Slot};
+        use crate::pandoc::{Block, CustomNode};
         use crate::readers::json as json_reader;
 
         // Create a custom node with custom id and classes
