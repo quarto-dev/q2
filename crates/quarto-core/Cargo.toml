@@ -20,6 +20,7 @@ hashlink = "0.10"
 quarto-util.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
+quarto-doctemplate.workspace = true
 
 [lints]
 workspace = true

@@ -259,55 +259,19 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
 
 /// Render Pandoc AST to HTML string
 fn render_to_html(pandoc: &pampa::pandoc::Pandoc) -> Result<String> {
-    let mut buf = Vec::new();
-
-    // Write document wrapper
-    writeln!(buf, "<!DOCTYPE html>")?;
-    writeln!(buf, "<html>")?;
-    writeln!(buf, "<head>")?;
-    writeln!(buf, "<meta charset=\"utf-8\">")?;
-    writeln!(buf, "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">")?;
-
-    // Extract title from metadata if available
-    if let Some(title) = extract_title_from_meta(&pandoc.meta) {
-        writeln!(buf, "<title>{}</title>", html_escape(&title))?;
-    }
-
-    writeln!(buf, "</head>")?;
-    writeln!(buf, "<body>")?;
-
-    // Render body content using quarto-core's HTML writer (handles CustomNodes)
-    quarto_core::html_writer::write_blocks(&pandoc.blocks, &mut buf)
+    // First, render the body content using quarto-core's HTML writer
+    let mut body_buf = Vec::new();
+    quarto_core::html_writer::write_blocks(&pandoc.blocks, &mut body_buf)
         .context("Failed to write HTML body")?;
+    let body = String::from_utf8_lossy(&body_buf).into_owned();
 
-    writeln!(buf, "</body>")?;
-    writeln!(buf, "</html>")?;
-
-    Ok(String::from_utf8_lossy(&buf).into_owned())
-}
-
-/// Extract title from document metadata
-fn extract_title_from_meta(meta: &pampa::pandoc::MetaValueWithSourceInfo) -> Option<String> {
-    use pampa::pandoc::MetaValueWithSourceInfo;
-
-    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
-        for entry in entries {
-            if entry.key == "title" {
-                return match &entry.value {
-                    MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-                    MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                        let (text, _) = pampa::writers::plaintext::inlines_to_string(content);
-                        Some(text)
-                    }
-                    _ => None,
-                };
-            }
-        }
-    }
-    None
+    // Then wrap it with the template, passing metadata for title, css, etc.
+    quarto_core::template::render_with_template(&body, &pandoc.meta)
+        .context("Failed to render template")
 }
 
 /// Escape HTML special characters
+#[cfg(test)]
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
