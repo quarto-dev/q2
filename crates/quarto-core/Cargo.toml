@@ -13,5 +13,10 @@ thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yaml = "0.9"
+which = "7.0"
 
 quarto-util.workspace = true
+
+[lints]
+workspace = true
