@@ -32,8 +32,8 @@ use anyhow::{Context, Result};
 use tracing::{debug, info};
 
 use quarto_core::{
-    BinaryDependencies, CalloutTransform, DocumentInfo, Format, FormatIdentifier,
-    MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
+    BinaryDependencies, CalloutResolveTransform, CalloutTransform, DocumentInfo, Format,
+    FormatIdentifier, MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
     ResourceCollectorTransform, TransformPipeline,
 };
 
@@ -239,9 +239,11 @@ fn build_transform_pipeline() -> TransformPipeline {
 
     // Add transforms in order:
     // 1. CalloutTransform - convert callout Divs to CustomNodes
-    // 2. MetadataNormalizeTransform - normalize metadata (pagetitle, etc.)
-    // 3. ResourceCollectorTransform - collect image dependencies
+    // 2. CalloutResolveTransform - resolve Callout CustomNodes to standard Div structure
+    // 3. MetadataNormalizeTransform - normalize metadata (pagetitle, etc.)
+    // 4. ResourceCollectorTransform - collect image dependencies
     pipeline.push(Box::new(CalloutTransform::new()));
+    pipeline.push(Box::new(CalloutResolveTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
@@ -270,9 +272,9 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
 
 /// Render Pandoc AST to HTML string with external resources
 fn render_to_html(pandoc: &pampa::pandoc::Pandoc, css_paths: &[String]) -> Result<String> {
-    // First, render the body content using quarto-core's HTML writer
+    // First, render the body content using pampa's HTML writer
     let mut body_buf = Vec::new();
-    quarto_core::html_writer::write_blocks(&pandoc.blocks, &mut body_buf)
+    pampa::writers::html::write_blocks(&pandoc.blocks, &mut body_buf)
         .context("Failed to write HTML body")?;
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 

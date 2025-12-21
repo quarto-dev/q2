@@ -10,6 +10,7 @@
 //! This module contains the core transforms used in the Quarto render pipeline:
 //!
 //! - [`CalloutTransform`] - Converts callout Divs to CustomNodes
+//! - [`CalloutResolveTransform`] - Resolves Callout CustomNodes to standard Div structure
 //! - [`MetadataNormalizeTransform`] - Normalizes document metadata (adds pagetitle, etc.)
 //! - [`ResourceCollectorTransform`] - Collects resource dependencies (images, etc.)
 //!
@@ -17,9 +18,11 @@
 //! can be added to a [`TransformPipeline`](crate::transform::TransformPipeline).
 
 mod callout;
+mod callout_resolve;
 mod metadata_normalize;
 mod resource_collector;
 
 pub use callout::CalloutTransform;
+pub use callout_resolve::CalloutResolveTransform;
 pub use metadata_normalize::MetadataNormalizeTransform;
 pub use resource_collector::ResourceCollectorTransform;

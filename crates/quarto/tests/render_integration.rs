@@ -56,8 +56,9 @@ impl RenderResult {
 /// Run the render pipeline using the quarto-core APIs directly.
 fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     use quarto_core::{
-        BinaryDependencies, CalloutTransform, DocumentInfo, Format, MetadataNormalizeTransform,
-        ProjectContext, RenderContext, RenderOptions, ResourceCollectorTransform, TransformPipeline,
+        BinaryDependencies, CalloutResolveTransform, CalloutTransform, DocumentInfo, Format,
+        MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
+        ResourceCollectorTransform, TransformPipeline,
     };
 
     // Read input
@@ -99,6 +100,7 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     // Run transform pipeline
     let mut pipeline = TransformPipeline::new();
     pipeline.push(Box::new(CalloutTransform::new()));
+    pipeline.push(Box::new(CalloutResolveTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
     pipeline
@@ -113,9 +115,9 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     let resource_paths =
         quarto_core::resources::write_html_resources(output_dir, output_stem).map_err(|e| e.to_string())?;
 
-    // Render HTML body
+    // Render HTML body using pampa's HTML writer
     let mut body_buf = Vec::new();
-    quarto_core::html_writer::write_blocks(&pandoc.blocks, &mut body_buf).map_err(|e| e.to_string())?;
+    pampa::writers::html::write_blocks(&pandoc.blocks, &mut body_buf).map_err(|e| e.to_string())?;
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 
     // Render with template

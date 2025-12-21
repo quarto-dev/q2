@@ -35,7 +35,6 @@
 pub mod artifact;
 pub mod error;
 pub mod format;
-pub mod html_writer;
 pub mod project;
 pub mod render;
 pub mod resources;
@@ -50,4 +49,7 @@ pub use format::{Format, FormatIdentifier};
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
 pub use transform::{AstTransform, TransformPipeline};
-pub use transforms::{CalloutTransform, MetadataNormalizeTransform, ResourceCollectorTransform};
+pub use transforms::{
+    CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,
+    ResourceCollectorTransform,
+};
