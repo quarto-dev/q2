@@ -32,8 +32,8 @@ use anyhow::{Context, Result};
 use tracing::{debug, info};
 
 use quarto_core::{
-    BinaryDependencies, DocumentInfo, Format, FormatIdentifier, ProjectContext, RenderContext,
-    RenderOptions,
+    BinaryDependencies, DocumentInfo, Format, FormatIdentifier, MetadataNormalizeTransform,
+    ProjectContext, RenderContext, RenderOptions, ResourceCollectorTransform, TransformPipeline,
 };
 
 /// Arguments for the render command
@@ -153,7 +153,7 @@ fn render_document(
         output_path: args.output.as_ref().map(PathBuf::from),
     };
 
-    let ctx = RenderContext::new(project, doc_info, format, binaries).with_options(options);
+    let mut ctx = RenderContext::new(project, doc_info, format, binaries).with_options(options);
 
     // Read input file
     let input_content = fs::read(&doc_info.input)
@@ -163,7 +163,7 @@ fn render_document(
     let mut output_stream = std::io::sink();
     let input_path_str = doc_info.input.to_string_lossy();
 
-    let (pandoc, _context, warnings) = pampa::readers::qmd::read(
+    let (mut pandoc, _context, warnings) = pampa::readers::qmd::read(
         &input_content,
         false, // loose mode
         &input_path_str,
@@ -187,6 +187,12 @@ fn render_document(
             eprintln!("Warning: {}", warning.to_text(None));
         }
     }
+
+    // Build and execute transform pipeline
+    let pipeline = build_transform_pipeline();
+    pipeline
+        .execute(&mut pandoc, &mut ctx)
+        .map_err(|e| anyhow::anyhow!("Transform error: {}", e))?;
 
     // Determine output path
     let output_path = determine_output_path(&ctx, args)?;
@@ -213,6 +219,17 @@ fn render_document(
     }
 
     Ok(())
+}
+
+/// Build the transform pipeline for HTML rendering.
+fn build_transform_pipeline() -> TransformPipeline {
+    let mut pipeline = TransformPipeline::new();
+
+    // Add transforms in order
+    pipeline.push(Box::new(MetadataNormalizeTransform::new()));
+    pipeline.push(Box::new(ResourceCollectorTransform::new()));
+
+    pipeline
 }
 
 /// Determine the output path for a render

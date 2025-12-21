@@ -15,9 +15,11 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml = "0.9"
 which = "7.0"
+hashlink = "0.10"
 
 quarto-util.workspace = true
 quarto-pandoc-types.workspace = true
+quarto-source-map.workspace = true
 
 [lints]
 workspace = true

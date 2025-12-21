@@ -66,6 +66,19 @@ impl Artifact {
         }
     }
 
+    /// Create an artifact representing a file path (without loading content).
+    ///
+    /// The content is empty; this is used to record that a file at a given
+    /// path is needed as a resource.
+    pub fn from_path(path: impl Into<PathBuf>, content_type: impl Into<String>) -> Self {
+        Self {
+            content: Vec::new(),
+            content_type: content_type.into(),
+            path: Some(path.into()),
+            metadata: HashMap::new(),
+        }
+    }
+
     /// Set the file path for this artifact
     pub fn with_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.path = Some(path.into());

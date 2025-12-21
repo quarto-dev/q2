@@ -1915,7 +1915,9 @@ name = "quarto-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "hashlink",
  "quarto-pandoc-types",
+ "quarto-source-map",
  "quarto-util",
  "serde",
  "serde_json",

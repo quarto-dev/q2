@@ -38,6 +38,7 @@ pub mod format;
 pub mod project;
 pub mod render;
 pub mod transform;
+pub mod transforms;
 
 // Re-export commonly used types
 pub use artifact::{Artifact, ArtifactStore};
@@ -46,3 +47,4 @@ pub use format::{Format, FormatIdentifier};
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
 pub use transform::{AstTransform, TransformPipeline};
+pub use transforms::{MetadataNormalizeTransform, ResourceCollectorTransform};
