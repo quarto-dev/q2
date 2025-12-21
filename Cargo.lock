@@ -1868,8 +1868,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "pampa",
  "quarto-core",
+ "quarto-doctemplate",
  "quarto-util",
+ "serde_json",
  "tracing",
  "tracing-subscriber",
 ]
