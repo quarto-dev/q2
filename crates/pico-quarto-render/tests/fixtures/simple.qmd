@@ -1,5 +1,0 @@
----
-title: "Simple Test"
----
-
-This is a simple test document.

@@ -1,1 +1,0 @@
-Just some content without a YAML header.
