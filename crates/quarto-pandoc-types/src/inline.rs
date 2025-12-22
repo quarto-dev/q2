@@ -5,6 +5,7 @@
 
 use crate::attr::{Attr, AttrSourceInfo, TargetSourceInfo, is_empty_attr};
 use crate::block::Blocks;
+use crate::custom::CustomNode;
 use crate::shortcode::Shortcode;
 use serde::{Deserialize, Serialize};
 
@@ -44,6 +45,12 @@ pub enum Inline {
     Delete(Delete),
     Highlight(Highlight),
     EditComment(EditComment),
+
+    /// Custom node for Quarto inline extensions
+    ///
+    /// Parsed from Spans with special class names. When serialized to Pandoc JSON,
+    /// these are converted to wrapper Spans with `__quarto_custom_node` class.
+    Custom(CustomNode),
 }
 
 pub type Inlines = Vec<Inline>;

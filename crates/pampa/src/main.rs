@@ -404,7 +404,7 @@ fn main() {
             }
             "native" => writers::native::write(&pandoc, &context, &mut buf),
             "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
-            "html" => writers::html::write(&pandoc, &mut buf).map_err(|e| {
+            "html" => writers::html::write(&pandoc, &context, &mut buf).map_err(|e| {
                 vec![
                     quarto_error_reporting::DiagnosticMessageBuilder::error(
                         "IO error during write",

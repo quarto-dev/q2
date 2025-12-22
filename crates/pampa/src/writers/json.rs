@@ -666,6 +666,10 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
             let attr = (String::new(), vec!["critic-comment".to_string()], LinkedHashMap::new());
             node_with_source("Span", Some(json!([write_attr(&attr), write_inlines(&ec.content, ctx)])), &ec.source_info, ctx)
         }
+        Inline::Custom(custom) => {
+            // Serialize CustomNode as wrapper Span with __quarto_custom_node class
+            write_custom_inline(custom, ctx)
+        }
     }
 }
 
@@ -1106,7 +1110,187 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
                 ctx,
             )
         }
+        Block::Custom(custom) => {
+            // Serialize CustomNode as wrapper Div with __quarto_custom_node class
+            write_custom_block(custom, ctx)
+        }
     }
+}
+
+/// Serialize a CustomNode as a wrapper Div with __quarto_custom_node class.
+///
+/// Format:
+/// - Wrapper Div with class `__quarto_custom_node`
+/// - Attribute `data-custom-type`: the type_name
+/// - Attribute `data-custom-slots`: JSON mapping slot names to types
+/// - Attribute `data-custom-data`: JSON-serialized plain_data
+/// - Content: slot contents in order, each wrapped in a Div with `data-slot-name`
+fn write_custom_block(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterContext) -> Value {
+    // Build the slot metadata (name -> type mapping)
+    let slot_meta: serde_json::Map<String, Value> = custom
+        .slots
+        .iter()
+        .map(|(name, slot)| {
+            let slot_type = match slot {
+                crate::pandoc::Slot::Block(_) => "Block",
+                crate::pandoc::Slot::Inline(_) => "Inline",
+                crate::pandoc::Slot::Blocks(_) => "Blocks",
+                crate::pandoc::Slot::Inlines(_) => "Inlines",
+            };
+            (name.clone(), json!(slot_type))
+        })
+        .collect();
+
+    // Start with the original attr's key-value pairs and add custom node attributes
+    let mut wrapper_attr_kvs = custom.attr.2.clone();
+    wrapper_attr_kvs.insert("data-custom-type".to_string(), custom.type_name.clone());
+    wrapper_attr_kvs.insert(
+        "data-custom-slots".to_string(),
+        serde_json::to_string(&slot_meta).unwrap_or_else(|_| "{}".to_string()),
+    );
+    if !custom.plain_data.is_null() {
+        wrapper_attr_kvs.insert(
+            "data-custom-data".to_string(),
+            serde_json::to_string(&custom.plain_data).unwrap_or_else(|_| "null".to_string()),
+        );
+    }
+
+    // Start with the original attr and add the custom node class
+    let mut classes = custom.attr.1.clone();
+    classes.insert(0, "__quarto_custom_node".to_string());
+
+    let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
+
+    // Build content: each slot wrapped in a Div with data-slot-name
+    let mut content: Vec<Value> = Vec::new();
+    for (name, slot) in &custom.slots {
+        let slot_content = match slot {
+            crate::pandoc::Slot::Block(block) => {
+                vec![write_block(block, ctx)]
+            }
+            crate::pandoc::Slot::Inline(inline) => {
+                // Wrap single inline in a Plain block
+                vec![json!({
+                    "t": "Plain",
+                    "c": [write_inline(inline, ctx)]
+                })]
+            }
+            crate::pandoc::Slot::Blocks(blocks) => {
+                blocks.iter().map(|b| write_block(b, ctx)).collect()
+            }
+            crate::pandoc::Slot::Inlines(inlines) => {
+                // Wrap inlines in a Plain block
+                vec![json!({
+                    "t": "Plain",
+                    "c": write_inlines(inlines, ctx)
+                })]
+            }
+        };
+
+        // Each slot is wrapped in a Div with data-slot-name attribute
+        let mut slot_attr_kvs = LinkedHashMap::new();
+        slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
+        let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
+
+        content.push(json!({
+            "t": "Div",
+            "c": [write_attr(&slot_wrapper_attr), slot_content]
+        }));
+    }
+
+    let mut obj = serde_json::Map::new();
+    obj.insert("t".to_string(), json!("Div"));
+    obj.insert("c".to_string(), json!([write_attr(&wrapper_attr), content]));
+    ctx.serializer
+        .add_source_info(&mut obj, &custom.source_info);
+    Value::Object(obj)
+}
+
+/// Serialize a CustomNode as a wrapper Span with __quarto_custom_node class.
+///
+/// Similar to write_custom_block but uses Span as the wrapper element.
+fn write_custom_inline(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterContext) -> Value {
+    // Build the slot metadata (name -> type mapping)
+    let slot_meta: serde_json::Map<String, Value> = custom
+        .slots
+        .iter()
+        .map(|(name, slot)| {
+            let slot_type = match slot {
+                crate::pandoc::Slot::Block(_) => "Block",
+                crate::pandoc::Slot::Inline(_) => "Inline",
+                crate::pandoc::Slot::Blocks(_) => "Blocks",
+                crate::pandoc::Slot::Inlines(_) => "Inlines",
+            };
+            (name.clone(), json!(slot_type))
+        })
+        .collect();
+
+    // Start with the original attr's key-value pairs and add custom node attributes
+    let mut wrapper_attr_kvs = custom.attr.2.clone();
+    wrapper_attr_kvs.insert("data-custom-type".to_string(), custom.type_name.clone());
+    wrapper_attr_kvs.insert(
+        "data-custom-slots".to_string(),
+        serde_json::to_string(&slot_meta).unwrap_or_else(|_| "{}".to_string()),
+    );
+    if !custom.plain_data.is_null() {
+        wrapper_attr_kvs.insert(
+            "data-custom-data".to_string(),
+            serde_json::to_string(&custom.plain_data).unwrap_or_else(|_| "null".to_string()),
+        );
+    }
+
+    // Start with the original attr and add the custom node class
+    let mut classes = custom.attr.1.clone();
+    classes.insert(0, "__quarto_custom_node".to_string());
+
+    let wrapper_attr = (custom.attr.0.clone(), classes, wrapper_attr_kvs);
+
+    // Build content: for inline custom nodes, slots contain inlines
+    // Each slot wrapped in a Span with data-slot-name
+    let mut content: Vec<Value> = Vec::new();
+    for (name, slot) in &custom.slots {
+        let slot_content = match slot {
+            crate::pandoc::Slot::Inline(inline) => {
+                vec![write_inline(inline, ctx)]
+            }
+            crate::pandoc::Slot::Inlines(inlines) => {
+                inlines.iter().map(|i| write_inline(i, ctx)).collect()
+            }
+            crate::pandoc::Slot::Block(_) | crate::pandoc::Slot::Blocks(_) => {
+                // Block slots in inline custom nodes shouldn't happen,
+                // but we can emit a warning and render as placeholder
+                ctx.errors.push(
+                    DiagnosticMessageBuilder::error("Block slot in inline custom node")
+                        .with_code("Q-3-39")
+                        .with_location(custom.source_info.clone())
+                        .problem(format!(
+                            "Custom inline node `{}` has block-level slot `{}`",
+                            custom.type_name, name
+                        ))
+                        .add_detail("Inline custom nodes should only have inline slots")
+                        .build(),
+                );
+                vec![json!({"t": "Str", "c": "[block content]"})]
+            }
+        };
+
+        // Each slot is wrapped in a Span with data-slot-name attribute
+        let mut slot_attr_kvs = LinkedHashMap::new();
+        slot_attr_kvs.insert("data-slot-name".to_string(), name.clone());
+        let slot_wrapper_attr = (String::new(), vec![], slot_attr_kvs);
+
+        content.push(json!({
+            "t": "Span",
+            "c": [write_attr(&slot_wrapper_attr), slot_content]
+        }));
+    }
+
+    let mut obj = serde_json::Map::new();
+    obj.insert("t".to_string(), json!("Span"));
+    obj.insert("c".to_string(), json!([write_attr(&wrapper_attr), content]));
+    ctx.serializer
+        .add_source_info(&mut obj, &custom.source_info);
+    Value::Object(obj)
 }
 
 fn write_meta_value_with_source_info(
@@ -1213,7 +1397,10 @@ fn write_blocks(blocks: &[Block], ctx: &mut JsonWriterContext) -> Value {
     )
 }
 
-fn write_pandoc(
+/// Generate JSON representation of a Pandoc document.
+///
+/// This function is used internally by the HTML writer to build the source map.
+pub(crate) fn write_pandoc(
     pandoc: &Pandoc,
     ast_context: &ASTContext,
     config: &JsonConfig,
@@ -1333,7 +1520,7 @@ pub fn write<W: std::io::Write>(
 mod tests {
     use super::*;
     use quarto_source_map::{FileId, SourceInfo};
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     fn make_test_context() -> ASTContext {
         ASTContext::anonymous()
@@ -1386,14 +1573,14 @@ mod tests {
         let config = make_test_config();
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
-        let parent = Rc::new(SourceInfo::Original {
+        let parent = Arc::new(SourceInfo::Original {
             file_id: FileId(0),
             start_offset: 0,
             end_offset: 100,
         });
 
         let child = SourceInfo::Substring {
-            parent: Rc::clone(&parent),
+            parent: Arc::clone(&parent),
             start_offset: 10,
             end_offset: 20,
         };
@@ -1434,26 +1621,26 @@ mod tests {
         let config = make_test_config();
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
-        let parent = Rc::new(SourceInfo::Original {
+        let parent = Arc::new(SourceInfo::Original {
             file_id: FileId(0),
             start_offset: 0,
             end_offset: 100,
         });
 
         let child1 = SourceInfo::Substring {
-            parent: Rc::clone(&parent),
+            parent: Arc::clone(&parent),
             start_offset: 10,
             end_offset: 20,
         };
 
         let child2 = SourceInfo::Substring {
-            parent: Rc::clone(&parent),
+            parent: Arc::clone(&parent),
             start_offset: 30,
             end_offset: 40,
         };
 
         let child3 = SourceInfo::Substring {
-            parent: Rc::clone(&parent),
+            parent: Arc::clone(&parent),
             start_offset: 50,
             end_offset: 60,
         };
@@ -1488,38 +1675,38 @@ mod tests {
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
         // Build a chain: Original -> Sub1 -> Sub2 -> Sub3 -> Sub4 -> Sub5
-        let level0 = Rc::new(SourceInfo::Original {
+        let level0 = Arc::new(SourceInfo::Original {
             file_id: FileId(0),
             start_offset: 0,
             end_offset: 1000,
         });
 
-        let level1 = Rc::new(SourceInfo::Substring {
-            parent: Rc::clone(&level0),
+        let level1 = Arc::new(SourceInfo::Substring {
+            parent: Arc::clone(&level0),
             start_offset: 100,
             end_offset: 900,
         });
 
-        let level2 = Rc::new(SourceInfo::Substring {
-            parent: Rc::clone(&level1),
+        let level2 = Arc::new(SourceInfo::Substring {
+            parent: Arc::clone(&level1),
             start_offset: 200,
             end_offset: 800,
         });
 
-        let level3 = Rc::new(SourceInfo::Substring {
-            parent: Rc::clone(&level2),
+        let level3 = Arc::new(SourceInfo::Substring {
+            parent: Arc::clone(&level2),
             start_offset: 300,
             end_offset: 700,
         });
 
-        let level4 = Rc::new(SourceInfo::Substring {
-            parent: Rc::clone(&level3),
+        let level4 = Arc::new(SourceInfo::Substring {
+            parent: Arc::clone(&level3),
             start_offset: 400,
             end_offset: 600,
         });
 
         let level5 = SourceInfo::Substring {
-            parent: Rc::clone(&level4),
+            parent: Arc::clone(&level4),
             start_offset: 450,
             end_offset: 550,
         };
@@ -1555,13 +1742,13 @@ mod tests {
         let config = make_test_config();
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
-        let piece1_source = Rc::new(SourceInfo::Original {
+        let piece1_source = Arc::new(SourceInfo::Original {
             file_id: FileId(0),
             start_offset: 0,
             end_offset: 10,
         });
 
-        let piece2_source = Rc::new(SourceInfo::Original {
+        let piece2_source = Arc::new(SourceInfo::Original {
             file_id: FileId(0),
             start_offset: 20,
             end_offset: 30,
@@ -1611,7 +1798,7 @@ mod tests {
         let config = make_test_config();
         let mut serializer = SourceInfoSerializer::new(&context, &config);
 
-        let parent = Rc::new(SourceInfo::Original {
+        let parent = Arc::new(SourceInfo::Original {
             file_id: FileId(0),
             start_offset: 0,
             end_offset: 100,
@@ -1619,13 +1806,13 @@ mod tests {
 
         // Create multiple Substrings sharing the same parent Rc
         let child1 = SourceInfo::Substring {
-            parent: Rc::clone(&parent),
+            parent: Arc::clone(&parent),
             start_offset: 10,
             end_offset: 20,
         };
 
         let child2 = SourceInfo::Substring {
-            parent: Rc::clone(&parent),
+            parent: Arc::clone(&parent),
             start_offset: 30,
             end_offset: 40,
         };
@@ -1658,5 +1845,198 @@ mod tests {
             .filter(|entry| matches!(entry.mapping, SerializableSourceMapping::Original { .. }))
             .count();
         assert_eq!(original_count, 1, "Parent should only appear once in pool");
+    }
+
+    #[test]
+    fn test_custom_block_json_roundtrip() {
+        use crate::pandoc::attr::empty_attr;
+        use crate::pandoc::{Block, CustomNode, Paragraph, Slot, Str};
+        use crate::readers::json as json_reader;
+
+        // Create a custom block node with slots
+        let custom = CustomNode {
+            type_name: "Callout".to_string(),
+            slots: {
+                let mut slots = hashlink::LinkedHashMap::new();
+                slots.insert(
+                    "title".to_string(),
+                    Slot::Inlines(vec![crate::pandoc::Inline::Str(Str {
+                        text: "Warning".to_string(),
+                        source_info: SourceInfo::default(),
+                    })]),
+                );
+                slots.insert(
+                    "content".to_string(),
+                    Slot::Blocks(vec![Block::Paragraph(Paragraph {
+                        content: vec![crate::pandoc::Inline::Str(Str {
+                            text: "Be careful!".to_string(),
+                            source_info: SourceInfo::default(),
+                        })],
+                        source_info: SourceInfo::default(),
+                    })]),
+                );
+                slots
+            },
+            plain_data: serde_json::json!({"type": "warning", "appearance": "simple"}),
+            attr: empty_attr(),
+            source_info: SourceInfo::default(),
+        };
+
+        let block = Block::Custom(custom);
+
+        // Create a minimal Pandoc document with this block
+        let pandoc = crate::pandoc::Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: SourceInfo::default(),
+            },
+            blocks: vec![block],
+        };
+
+        // Write to JSON
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut output = Vec::new();
+        write_with_config(&pandoc, &context, &mut output, &config).unwrap();
+
+        // Read back
+        let (read_pandoc, _) = json_reader::read(&mut output.as_slice()).unwrap();
+
+        // Verify we got a Custom block back
+        assert_eq!(read_pandoc.blocks.len(), 1);
+        match &read_pandoc.blocks[0] {
+            Block::Custom(read_custom) => {
+                assert_eq!(read_custom.type_name, "Callout");
+                assert_eq!(read_custom.slots.len(), 2);
+                assert!(read_custom.slots.contains_key("title"));
+                assert!(read_custom.slots.contains_key("content"));
+                assert_eq!(read_custom.plain_data["type"], "warning");
+                assert_eq!(read_custom.plain_data["appearance"], "simple");
+            }
+            other => panic!("Expected Custom block, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_custom_inline_json_roundtrip() {
+        use crate::pandoc::attr::empty_attr;
+        use crate::pandoc::{Block, CustomNode, Inline, Paragraph, Slot, Str};
+        use crate::readers::json as json_reader;
+
+        // Create a custom inline node with slots
+        let custom = CustomNode {
+            type_name: "Tooltip".to_string(),
+            slots: {
+                let mut slots = hashlink::LinkedHashMap::new();
+                slots.insert(
+                    "text".to_string(),
+                    Slot::Inlines(vec![Inline::Str(Str {
+                        text: "hover me".to_string(),
+                        source_info: SourceInfo::default(),
+                    })]),
+                );
+                slots
+            },
+            plain_data: serde_json::json!({"tip": "This is a tooltip"}),
+            attr: empty_attr(),
+            source_info: SourceInfo::default(),
+        };
+
+        let inline = Inline::Custom(custom);
+
+        // Create a minimal Pandoc document with this inline in a paragraph
+        let pandoc = crate::pandoc::Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: SourceInfo::default(),
+            },
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![inline],
+                source_info: SourceInfo::default(),
+            })],
+        };
+
+        // Write to JSON
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut output = Vec::new();
+        write_with_config(&pandoc, &context, &mut output, &config).unwrap();
+
+        // Read back
+        let (read_pandoc, _) = json_reader::read(&mut output.as_slice()).unwrap();
+
+        // Verify we got a Custom inline back
+        assert_eq!(read_pandoc.blocks.len(), 1);
+        match &read_pandoc.blocks[0] {
+            Block::Paragraph(para) => {
+                assert_eq!(para.content.len(), 1);
+                match &para.content[0] {
+                    Inline::Custom(read_custom) => {
+                        assert_eq!(read_custom.type_name, "Tooltip");
+                        assert_eq!(read_custom.slots.len(), 1);
+                        assert!(read_custom.slots.contains_key("text"));
+                        assert_eq!(read_custom.plain_data["tip"], "This is a tooltip");
+                    }
+                    other => panic!("Expected Custom inline, got {:?}", other),
+                }
+            }
+            other => panic!("Expected Paragraph, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_custom_block_preserves_attr() {
+        use crate::pandoc::{Block, CustomNode};
+        use crate::readers::json as json_reader;
+
+        // Create a custom node with custom id and classes
+        let attr = (
+            "my-callout".to_string(),
+            vec!["callout-warning".to_string(), "important".to_string()],
+            {
+                let mut kvs = hashlink::LinkedHashMap::new();
+                kvs.insert("data-foo".to_string(), "bar".to_string());
+                kvs
+            },
+        );
+
+        let custom = CustomNode {
+            type_name: "Callout".to_string(),
+            slots: hashlink::LinkedHashMap::new(),
+            plain_data: serde_json::Value::Null,
+            attr,
+            source_info: SourceInfo::default(),
+        };
+
+        let block = Block::Custom(custom);
+
+        // Create a minimal Pandoc document
+        let pandoc = crate::pandoc::Pandoc {
+            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
+                entries: vec![],
+                source_info: SourceInfo::default(),
+            },
+            blocks: vec![block],
+        };
+
+        // Write and read back
+        let context = make_test_context();
+        let config = make_test_config();
+        let mut output = Vec::new();
+        write_with_config(&pandoc, &context, &mut output, &config).unwrap();
+        let (read_pandoc, _) = json_reader::read(&mut output.as_slice()).unwrap();
+
+        // Verify attr was preserved
+        match &read_pandoc.blocks[0] {
+            Block::Custom(read_custom) => {
+                assert_eq!(read_custom.attr.0, "my-callout");
+                assert_eq!(
+                    read_custom.attr.1,
+                    vec!["callout-warning".to_string(), "important".to_string()]
+                );
+                assert_eq!(read_custom.attr.2.get("data-foo"), Some(&"bar".to_string()));
+            }
+            _ => panic!("Expected Custom block"),
+        }
     }
 }

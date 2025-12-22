@@ -244,6 +244,10 @@ fn collect_source_info_from_block(block: &Block, source_infos: &mut Vec<SourceIn
         | Block::CaptionBlock(_) => {
             // TODO: handle these special block types if they have source info
         }
+        Block::Custom(custom) => {
+            source_infos.push(custom.source_info.clone());
+            // TODO: recursively collect from slots if needed
+        }
     }
 }
 
@@ -381,6 +385,10 @@ fn collect_source_info_from_inline(inline: &Inline, source_infos: &mut Vec<Sourc
             for child in &comment.content {
                 collect_source_info_from_inline(child, source_infos);
             }
+        }
+        Inline::Custom(custom) => {
+            source_infos.push(custom.source_info.clone());
+            // TODO: recursively collect from slots if needed
         }
     }
 }

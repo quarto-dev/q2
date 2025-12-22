@@ -11,7 +11,7 @@
 use mlua::{Error, Lua, MultiValue, Result, Table, Value};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::{FileId, SourceInfo, SourcePiece};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use super::types::{LuaBlock, LuaInline};
 use crate::pandoc::{Block, Inline};
@@ -118,7 +118,7 @@ fn source_info_from_lua_table(table: &Table) -> Result<SourceInfo> {
         "Substring" => {
             let parent_table: Table = table.get("parent")?;
             Ok(SourceInfo::Substring {
-                parent: Rc::new(source_info_from_lua_table(&parent_table)?),
+                parent: Arc::new(source_info_from_lua_table(&parent_table)?),
                 start_offset: table.get("start_offset")?,
                 end_offset: table.get("end_offset")?,
             })
@@ -179,6 +179,7 @@ fn get_inline_source_info(inline: &Inline) -> Option<SourceInfo> {
         Inline::Highlight(h) => Some(h.source_info.clone()),
         Inline::EditComment(e) => Some(e.source_info.clone()),
         Inline::NoteReference(n) => Some(n.source_info.clone()),
+        Inline::Custom(c) => Some(c.source_info.clone()),
         // These element types don't have source_info
         Inline::Shortcode(_) => None,
         Inline::Attr(_, _) => None,
@@ -206,6 +207,7 @@ fn get_block_source_info(block: &Block) -> SourceInfo {
         Block::NoteDefinitionPara(n) => n.source_info.clone(),
         Block::NoteDefinitionFencedBlock(n) => n.source_info.clone(),
         Block::CaptionBlock(c) => c.source_info.clone(),
+        Block::Custom(c) => c.source_info.clone(),
     }
 }
 

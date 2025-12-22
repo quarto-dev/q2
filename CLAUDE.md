@@ -113,7 +113,6 @@ When fixing ANY bug:
 - `pampa`: parse qmd text and produce Pandoc AST and other formats
 - `qmd-syntax-helper`: help users convert qmd files to the new syntax
 - `validate-yaml`: exercise `quarto-yaml-validation`
-- `pico-quarto-render`: minimal rendering tool for testing
 
 **Core libraries:**
 - `quarto-core`: core rendering infrastructure for Quarto

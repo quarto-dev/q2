@@ -36,7 +36,7 @@ impl MetaWriter {
         match self {
             MetaWriter::Html => {
                 let mut buf = Vec::new();
-                let result = html::write_inlines(inlines, &mut buf);
+                let result = html::write_inlines_to(inlines, &mut buf);
                 let diagnostics = if let Err(e) = result {
                     vec![DiagnosticMessage::error(format!(
                         "Failed to render inlines as HTML: {}",
@@ -56,7 +56,7 @@ impl MetaWriter {
         match self {
             MetaWriter::Html => {
                 let mut buf = Vec::new();
-                let result = html::write_blocks(blocks, &mut buf);
+                let result = html::write_blocks_to(blocks, &mut buf);
                 let diagnostics = if let Err(e) = result {
                     vec![DiagnosticMessage::error(format!(
                         "Failed to render blocks as HTML: {}",

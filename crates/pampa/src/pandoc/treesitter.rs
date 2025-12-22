@@ -83,6 +83,7 @@ fn get_block_source_info(block: &Block) -> &quarto_source_map::SourceInfo {
         Block::NoteDefinitionPara(b) => &b.source_info,
         Block::NoteDefinitionFencedBlock(b) => &b.source_info,
         Block::CaptionBlock(b) => &b.source_info,
+        Block::Custom(b) => &b.source_info,
     }
 }
 

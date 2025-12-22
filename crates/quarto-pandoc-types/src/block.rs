@@ -5,6 +5,7 @@
 
 use crate::attr::{Attr, AttrSourceInfo};
 use crate::caption::Caption;
+use crate::custom::CustomNode;
 use crate::inline::Inlines;
 use crate::list::ListAttributes;
 use crate::meta::MetaValueWithSourceInfo;
@@ -32,6 +33,11 @@ pub enum Block {
     NoteDefinitionPara(NoteDefinitionPara),
     NoteDefinitionFencedBlock(NoteDefinitionFencedBlock),
     CaptionBlock(CaptionBlock),
+    /// Custom node for Quarto extensions (callouts, tabsets, etc.)
+    ///
+    /// Parsed from Divs with special class names. When serialized to Pandoc JSON,
+    /// these are converted to wrapper Divs with `__quarto_custom_node` class.
+    Custom(CustomNode),
 }
 
 pub type Blocks = Vec<Block>;

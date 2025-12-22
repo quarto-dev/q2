@@ -328,7 +328,22 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Render { .. } => commands::render::execute(),
+        Commands::Render {
+            input,
+            to,
+            output,
+            output_dir,
+            quiet,
+            debug,
+            ..
+        } => commands::render::execute(commands::render::RenderArgs {
+            input,
+            to,
+            output,
+            output_dir,
+            quiet,
+            debug,
+        }),
         Commands::Preview { .. } => commands::preview::execute(),
         Commands::Serve { .. } => commands::serve::execute(),
         Commands::Create { .. } => commands::create::execute(),

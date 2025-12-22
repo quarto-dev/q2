@@ -505,25 +505,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "crossbeam-deque"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51"
-dependencies = [
- "crossbeam-epoch",
- "crossbeam-utils",
-]
-
-[[package]]
-name = "crossbeam-epoch"
-version = "0.9.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
-dependencies = [
- "crossbeam-utils",
-]
-
-[[package]]
 name = "crossbeam-utils"
 version = "0.8.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,20 +1739,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pico-quarto-render"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "clap",
- "include_dir",
- "pampa",
- "quarto-doctemplate",
- "quarto-source-map",
- "rayon",
- "walkdir",
-]
-
-[[package]]
 name = "pin-project-lite"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1868,8 +1835,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "pampa",
  "quarto-core",
+ "quarto-doctemplate",
  "quarto-util",
+ "serde_json",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1912,11 +1883,18 @@ name = "quarto-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "hashlink",
+ "quarto-doctemplate",
+ "quarto-pandoc-types",
+ "quarto-source-map",
  "quarto-util",
  "serde",
  "serde_json",
+ "serde_yaml",
+ "tempfile",
  "thiserror 1.0.69",
  "tracing",
+ "which",
 ]
 
 [[package]]
@@ -2006,6 +1984,7 @@ dependencies = [
  "quarto-source-map",
  "rustc-hash",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -2146,26 +2125,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core",
-]
-
-[[package]]
-name = "rayon"
-version = "1.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "368f01d005bf8fd9b1206fb6fa653e6c4a81ceb1466406b81792d87c5677a58f"
-dependencies = [
- "either",
- "rayon-core",
-]
-
-[[package]]
-name = "rayon-core"
-version = "1.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
-dependencies = [
- "crossbeam-deque",
- "crossbeam-utils",
 ]
 
 [[package]]
@@ -2459,6 +2418,19 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_yaml"
+version = "0.9.34+deprecated"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a8b1a1a2ebf674015cc02edccce75287f1a0130d394307b36743c2f5d504b47"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "ryu",
+ "serde",
+ "unsafe-libyaml",
 ]
 
 [[package]]
@@ -3040,6 +3012,12 @@ name = "unicode_categories"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
+
+[[package]]
+name = "unsafe-libyaml"
+version = "0.2.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "url"

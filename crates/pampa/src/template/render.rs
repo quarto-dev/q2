@@ -94,7 +94,7 @@ fn render_body(
 
     match format {
         BodyFormat::Html => {
-            html::write_blocks(&pandoc.blocks, &mut buf)
+            html::write_blocks_to(&pandoc.blocks, &mut buf)
                 .map_err(|e| TemplateRenderError::BodyRender(e.to_string()))?;
             diagnostics = vec![];
         }

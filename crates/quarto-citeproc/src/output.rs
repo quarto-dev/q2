@@ -2190,6 +2190,8 @@ fn inline_to_markdown_string(inline: &quarto_pandoc_types::Inline, result: &mut 
                 inline_to_markdown_string(child, result);
             }
         }
+        // Custom nodes should be processed before citation processing
+        Inline::Custom(_) => {}
     }
 }
 
@@ -2288,6 +2290,8 @@ fn block_to_markdown_string(block: &quarto_pandoc_types::Block, result: &mut Str
                 inline_to_markdown_string(inline, result);
             }
         }
+        // Custom nodes should be processed before citation processing
+        Block::Custom(_) => {}
     }
 }
 
@@ -5149,7 +5153,8 @@ fn render_inline_to_csl_html_with_ctx(
         | Inline::Insert(_)
         | Inline::Delete(_)
         | Inline::Highlight(_)
-        | Inline::EditComment(_) => {
+        | Inline::EditComment(_)
+        | Inline::Custom(_) => {
             // Not expected in CSL output
         }
     }

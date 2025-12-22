@@ -14,4 +14,11 @@ pub enum QuartoError {
     Other(String),
 }
 
+impl QuartoError {
+    /// Create an error from any message.
+    pub fn other(msg: impl Into<String>) -> Self {
+        Self::Other(msg.into())
+    }
+}
+
 pub type Result<T> = std::result::Result<T, QuartoError>;

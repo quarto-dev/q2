@@ -697,6 +697,11 @@ pub fn topdown_traverse_inline(
         Inline::EditComment(ec) => {
             handle_inline_filter!(EditComment, ec, edit_comment, filter, ctx)
         }
+        Inline::Custom(custom) => {
+            // Custom nodes: recursively filter the content in slots, then pass through
+            // For now, just pass through - Custom nodes shouldn't appear in Rust filter context yet
+            vec![Inline::Custom(custom)]
+        }
     }
 }
 
@@ -800,6 +805,11 @@ pub fn topdown_traverse_block(
             panic!(
                 "CaptionBlock found in filter - should have been processed during postprocessing"
             )
+        }
+        Block::Custom(custom) => {
+            // Custom nodes: recursively filter the content in slots, then pass through
+            // For now, just pass through - Custom nodes shouldn't appear in Rust filter context yet
+            vec![Block::Custom(custom)]
         }
     }
 }

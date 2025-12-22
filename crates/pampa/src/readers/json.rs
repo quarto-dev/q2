@@ -7,16 +7,17 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::{Location, Range};
 use crate::pandoc::{
     Alignment, Attr, AttrSourceInfo, Block, BlockQuote, BulletList, Caption, Cell, Citation,
-    CitationMode, Cite, Code, CodeBlock, ColSpec, ColWidth, DefinitionList, Div, Emph, Figure,
-    Header, HorizontalRule, Image, Inline, Inlines, LineBlock, Link, ListAttributes,
+    CitationMode, Cite, Code, CodeBlock, ColSpec, ColWidth, CustomNode, DefinitionList, Div, Emph,
+    Figure, Header, HorizontalRule, Image, Inline, Inlines, LineBlock, Link, ListAttributes,
     ListNumberDelim, ListNumberStyle, Math, MathType, MetaBlock, MetaMapEntry,
     MetaValueWithSourceInfo, Note, OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted,
-    RawBlock, RawInline, Row, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
-    Superscript, Table, TableBody, TableFoot, TableHead, Underline,
+    RawBlock, RawInline, Row, Slot, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong,
+    Subscript, Superscript, Table, TableBody, TableFoot, TableHead, Underline,
 };
+use hashlink::LinkedHashMap;
 use quarto_source_map::FileId;
 use serde_json::Value;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub enum JsonReadError {
@@ -192,7 +193,7 @@ impl SourceInfoDeserializer {
                         .clone();
 
                     quarto_source_map::SourceInfo::Substring {
-                        parent: Rc::new(parent),
+                        parent: Arc::new(parent),
                         start_offset,
                         end_offset,
                     }
@@ -274,7 +275,7 @@ impl SourceInfoDeserializer {
 
                     // Approximate with Substring
                     quarto_source_map::SourceInfo::Substring {
-                        parent: Rc::new(parent),
+                        parent: Arc::new(parent),
                         start_offset,
                         end_offset,
                     }
@@ -873,6 +874,12 @@ fn read_inline(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<I
             }
 
             let attr = read_attr(&arr[0])?;
+
+            // Check if this is a custom node wrapper
+            if attr.1.contains(&"__quarto_custom_node".to_string()) {
+                return read_custom_inline_from_span(&attr, &arr[1], source_info, deserializer);
+            }
+
             let content = read_inlines(&arr[1], deserializer)?;
             let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
             Ok(Inline::Span(Span {
@@ -1919,6 +1926,12 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 ));
             }
             let attr = read_attr(&arr[0])?;
+
+            // Check if this is a custom node wrapper
+            if attr.1.contains(&"__quarto_custom_node".to_string()) {
+                return read_custom_block_from_div(&attr, &arr[1], source_info, deserializer);
+            }
+
             let content = read_blocks(&arr[1], deserializer)?;
             let attr_source = read_attr_source(obj.get("attrS"), deserializer)?;
             Ok(Block::Div(Div {
@@ -2187,6 +2200,266 @@ fn read_meta_value_with_source_info(
             t
         ))),
     }
+}
+
+/// Read a CustomNode from a wrapper Div with __quarto_custom_node class.
+///
+/// The Div has:
+/// - Class `__quarto_custom_node` (already confirmed by caller)
+/// - Attribute `data-custom-type`: the type_name
+/// - Attribute `data-custom-slots`: JSON mapping slot names to types
+/// - Attribute `data-custom-data`: JSON-serialized plain_data (optional)
+/// - Content: slot contents in order, each wrapped in a Div with `data-slot-name`
+fn read_custom_block_from_div(
+    wrapper_attr: &Attr,
+    content: &Value,
+    source_info: quarto_source_map::SourceInfo,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<Block> {
+    // Extract custom node metadata from attributes
+    let type_name = wrapper_attr
+        .2
+        .get("data-custom-type")
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let slot_types_json = wrapper_attr
+        .2
+        .get("data-custom-slots")
+        .cloned()
+        .unwrap_or_else(|| "{}".to_string());
+
+    let slot_types: serde_json::Map<String, Value> =
+        serde_json::from_str(&slot_types_json).unwrap_or_default();
+
+    let plain_data = if let Some(data_str) = wrapper_attr.2.get("data-custom-data") {
+        serde_json::from_str(data_str).unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
+
+    // Build the attr without the custom node class
+    let classes: Vec<String> = wrapper_attr
+        .1
+        .iter()
+        .filter(|c| *c != "__quarto_custom_node")
+        .cloned()
+        .collect();
+
+    // Remove the custom node attributes from the attr
+    let mut filtered_kvs: LinkedHashMap<String, String> = wrapper_attr.2.clone();
+    filtered_kvs.remove("data-custom-type");
+    filtered_kvs.remove("data-custom-slots");
+    filtered_kvs.remove("data-custom-data");
+
+    let attr = (wrapper_attr.0.clone(), classes, filtered_kvs);
+
+    // Parse slot contents from the wrapper Div children
+    let content_arr = content.as_array().ok_or_else(|| {
+        JsonReadError::InvalidType("Custom node content must be array".to_string())
+    })?;
+
+    let mut slots: LinkedHashMap<String, Slot> = LinkedHashMap::new();
+
+    for slot_wrapper in content_arr {
+        // Each slot is a Div with data-slot-name attribute
+        let slot_obj = slot_wrapper
+            .as_object()
+            .ok_or_else(|| JsonReadError::InvalidType("Slot wrapper must be object".to_string()))?;
+
+        let slot_t = slot_obj.get("t").and_then(|v| v.as_str());
+        if slot_t != Some("Div") {
+            continue; // Skip non-Div elements
+        }
+
+        let slot_c = slot_obj.get("c").and_then(|v| v.as_array());
+        if slot_c.is_none() || slot_c.unwrap().len() != 2 {
+            continue;
+        }
+        let slot_c = slot_c.unwrap();
+
+        let slot_attr = read_attr(&slot_c[0])?;
+        let slot_name = match slot_attr.2.get("data-slot-name") {
+            Some(name) => name.clone(),
+            None => continue, // Skip if no slot name
+        };
+
+        // Get the slot type from the metadata
+        let slot_type = slot_types
+            .get(&slot_name)
+            .and_then(|v| v.as_str())
+            .unwrap_or("Blocks");
+
+        let slot_content = &slot_c[1];
+        let slot = match slot_type {
+            "Block" => {
+                // Single block - take the first element
+                let blocks = read_blocks(slot_content, deserializer)?;
+                if let Some(block) = blocks.into_iter().next() {
+                    Slot::Block(Box::new(block))
+                } else {
+                    Slot::Blocks(vec![])
+                }
+            }
+            "Inline" => {
+                // Single inline - expect a Plain block containing the inline
+                let blocks = read_blocks(slot_content, deserializer)?;
+                if let Some(Block::Plain(plain)) = blocks.into_iter().next() {
+                    if let Some(inline) = plain.content.into_iter().next() {
+                        Slot::Inline(Box::new(inline))
+                    } else {
+                        Slot::Inlines(vec![])
+                    }
+                } else {
+                    Slot::Inlines(vec![])
+                }
+            }
+            "Blocks" => {
+                let blocks = read_blocks(slot_content, deserializer)?;
+                Slot::Blocks(blocks)
+            }
+            "Inlines" => {
+                // Inlines wrapped in a Plain block
+                let blocks = read_blocks(slot_content, deserializer)?;
+                if let Some(Block::Plain(plain)) = blocks.into_iter().next() {
+                    Slot::Inlines(plain.content)
+                } else {
+                    Slot::Inlines(vec![])
+                }
+            }
+            _ => {
+                let blocks = read_blocks(slot_content, deserializer)?;
+                Slot::Blocks(blocks)
+            }
+        };
+
+        slots.insert(slot_name, slot);
+    }
+
+    Ok(Block::Custom(CustomNode {
+        type_name,
+        slots,
+        plain_data,
+        attr,
+        source_info,
+    }))
+}
+
+/// Read a CustomNode from a wrapper Span with __quarto_custom_node class.
+///
+/// Similar to read_custom_block_from_div but for inline custom nodes.
+fn read_custom_inline_from_span(
+    wrapper_attr: &Attr,
+    content: &Value,
+    source_info: quarto_source_map::SourceInfo,
+    deserializer: &SourceInfoDeserializer,
+) -> Result<Inline> {
+    // Extract custom node metadata from attributes
+    let type_name = wrapper_attr
+        .2
+        .get("data-custom-type")
+        .cloned()
+        .unwrap_or_else(|| "Unknown".to_string());
+
+    let slot_types_json = wrapper_attr
+        .2
+        .get("data-custom-slots")
+        .cloned()
+        .unwrap_or_else(|| "{}".to_string());
+
+    let slot_types: serde_json::Map<String, Value> =
+        serde_json::from_str(&slot_types_json).unwrap_or_default();
+
+    let plain_data = if let Some(data_str) = wrapper_attr.2.get("data-custom-data") {
+        serde_json::from_str(data_str).unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
+
+    // Build the attr without the custom node class
+    let classes: Vec<String> = wrapper_attr
+        .1
+        .iter()
+        .filter(|c| *c != "__quarto_custom_node")
+        .cloned()
+        .collect();
+
+    // Remove the custom node attributes from the attr
+    let mut filtered_kvs: LinkedHashMap<String, String> = wrapper_attr.2.clone();
+    filtered_kvs.remove("data-custom-type");
+    filtered_kvs.remove("data-custom-slots");
+    filtered_kvs.remove("data-custom-data");
+
+    let attr = (wrapper_attr.0.clone(), classes, filtered_kvs);
+
+    // Parse slot contents from the wrapper Span children
+    let content_arr = content.as_array().ok_or_else(|| {
+        JsonReadError::InvalidType("Custom inline content must be array".to_string())
+    })?;
+
+    let mut slots: LinkedHashMap<String, Slot> = LinkedHashMap::new();
+
+    for slot_wrapper in content_arr {
+        // Each slot is a Span with data-slot-name attribute
+        let slot_obj = slot_wrapper
+            .as_object()
+            .ok_or_else(|| JsonReadError::InvalidType("Slot wrapper must be object".to_string()))?;
+
+        let slot_t = slot_obj.get("t").and_then(|v| v.as_str());
+        if slot_t != Some("Span") {
+            continue; // Skip non-Span elements
+        }
+
+        let slot_c = slot_obj.get("c").and_then(|v| v.as_array());
+        if slot_c.is_none() || slot_c.unwrap().len() != 2 {
+            continue;
+        }
+        let slot_c = slot_c.unwrap();
+
+        let slot_attr = read_attr(&slot_c[0])?;
+        let slot_name = match slot_attr.2.get("data-slot-name") {
+            Some(name) => name.clone(),
+            None => continue, // Skip if no slot name
+        };
+
+        // Get the slot type from the metadata
+        let slot_type = slot_types
+            .get(&slot_name)
+            .and_then(|v| v.as_str())
+            .unwrap_or("Inlines");
+
+        let slot_content = &slot_c[1];
+        let slot = match slot_type {
+            "Inline" => {
+                // Single inline
+                let inlines = read_inlines(slot_content, deserializer)?;
+                if let Some(inline) = inlines.into_iter().next() {
+                    Slot::Inline(Box::new(inline))
+                } else {
+                    Slot::Inlines(vec![])
+                }
+            }
+            "Inlines" => {
+                let inlines = read_inlines(slot_content, deserializer)?;
+                Slot::Inlines(inlines)
+            }
+            _ => {
+                // Block slots in inline custom nodes - just read as inlines
+                let inlines = read_inlines(slot_content, deserializer)?;
+                Slot::Inlines(inlines)
+            }
+        };
+
+        slots.insert(slot_name, slot);
+    }
+
+    Ok(Inline::Custom(CustomNode {
+        type_name,
+        slots,
+        plain_data,
+        attr,
+        source_info,
+    }))
 }
 
 #[cfg(test)]

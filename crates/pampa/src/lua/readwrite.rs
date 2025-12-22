@@ -466,8 +466,10 @@ fn pandoc_write(lua: &Lua, args: mlua::MultiValue) -> Result<mlua::String> {
     // Dispatch to the appropriate writer
     let output = match base_format {
         "html" => {
+            // Need an ASTContext for HTML writer (for source tracking support)
+            let context = crate::pandoc::ast_context::ASTContext::anonymous();
             let mut buf = Vec::new();
-            crate::writers::html::write(&pandoc, &mut buf)
+            crate::writers::html::write(&pandoc, &context, &mut buf)
                 .map_err(|e| Error::runtime(format!("pandoc.write (html) failed: {}", e)))?;
             String::from_utf8(buf)
                 .map_err(|e| Error::runtime(format!("Invalid UTF-8 in output: {}", e)))?

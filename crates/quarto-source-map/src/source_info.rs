@@ -2,7 +2,7 @@
 
 use crate::types::{FileId, Range};
 use serde::{Deserialize, Serialize};
-use std::rc::Rc;
+use std::sync::Arc;
 
 /// Source information tracking a location and its transformation history
 ///
@@ -33,7 +33,7 @@ pub enum SourceInfo {
     /// Offsets are relative to the parent's text.
     /// The chain of Substrings always resolves to an Original.
     Substring {
-        parent: Rc<SourceInfo>,
+        parent: Arc<SourceInfo>,
         start_offset: usize,
         end_offset: usize,
     },
@@ -100,7 +100,7 @@ impl SourceInfo {
     /// Create source info for a substring extraction
     pub fn substring(parent: SourceInfo, start: usize, end: usize) -> Self {
         SourceInfo::Substring {
-            parent: Rc::new(parent),
+            parent: Arc::new(parent),
             start_offset: start,
             end_offset: end,
         }
