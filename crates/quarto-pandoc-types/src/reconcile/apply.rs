@@ -9,9 +9,13 @@
  */
 
 use super::types::{
-    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
+    BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
+    ReconciliationPlan,
 };
+use crate::custom::{CustomNode, Slot};
 use crate::{Block, Inline, Pandoc};
+use hashlink::LinkedHashMap;
+use std::collections::HashMap;
 
 /// Apply a reconciliation plan to produce a merged Pandoc AST.
 ///
@@ -69,13 +73,16 @@ pub fn apply_reconciliation_to_blocks(
                     .take()
                     .expect("Executed block already used");
 
-                // Check if this is a block container or inline container
+                // Check if this is a block container, inline container, or custom node
                 if let Some(nested_plan) = plan.block_container_plans.get(&alignment_idx) {
                     // Block container (Div, BlockQuote, etc.)
                     apply_block_container_reconciliation(orig_block, exec_block, nested_plan)
                 } else if let Some(inline_plan) = plan.inline_plans.get(&alignment_idx) {
                     // Block with inline content (Paragraph, Header, etc.)
                     apply_inline_block_reconciliation(orig_block, exec_block, inline_plan)
+                } else if let Some(slot_plan) = plan.custom_node_plans.get(&alignment_idx) {
+                    // Custom node (Callout, PanelTabset, etc.)
+                    apply_custom_node_block_reconciliation(orig_block, exec_block, slot_plan)
                 } else {
                     // No nested plan - just use original (shouldn't happen)
                     orig_block
@@ -210,9 +217,12 @@ fn apply_reconciliation_to_inlines(
                     .take()
                     .expect("Executed inline already used");
 
-                // Check for Note (contains Blocks) or other inline containers
+                // Check for Note (contains Blocks), Custom node, or other inline containers
                 if let Some(block_plan) = plan.note_block_plans.get(&alignment_idx) {
                     apply_note_reconciliation(orig_inline, exec_inline, block_plan)
+                } else if let Some(slot_plan) = plan.custom_node_plans.get(&alignment_idx) {
+                    // Custom inline node
+                    apply_custom_node_inline_reconciliation(orig_inline, exec_inline, slot_plan)
                 } else if let Some(nested_plan) = plan.inline_container_plans.get(&alignment_idx) {
                     apply_inline_container_reconciliation(orig_inline, exec_inline, nested_plan)
                 } else {
@@ -315,6 +325,133 @@ fn apply_inline_container_reconciliation(
         }
         // Fallback
         (orig, _) => orig,
+    }
+}
+
+/// Apply reconciliation to a CustomNode block.
+fn apply_custom_node_block_reconciliation(
+    orig_block: Block,
+    exec_block: Block,
+    slot_plan: &CustomNodeSlotPlan,
+) -> Block {
+    match (orig_block, exec_block) {
+        (Block::Custom(orig), Block::Custom(exec)) => {
+            Block::Custom(apply_custom_node_reconciliation(orig, exec, slot_plan))
+        }
+        // Fallback: shouldn't happen, return original
+        (orig, _) => orig,
+    }
+}
+
+/// Apply reconciliation to a CustomNode inline.
+fn apply_custom_node_inline_reconciliation(
+    orig_inline: Inline,
+    exec_inline: Inline,
+    slot_plan: &CustomNodeSlotPlan,
+) -> Inline {
+    match (orig_inline, exec_inline) {
+        (Inline::Custom(orig), Inline::Custom(exec)) => {
+            Inline::Custom(apply_custom_node_reconciliation(orig, exec, slot_plan))
+        }
+        // Fallback: shouldn't happen, return original
+        (orig, _) => orig,
+    }
+}
+
+/// Apply reconciliation to a CustomNode's slots.
+///
+/// This produces a new CustomNode with:
+/// - source_info and attr from original (preserves source location)
+/// - type_name from original (should match exec)
+/// - plain_data from executed (use executed's config)
+/// - slots reconciled by name
+fn apply_custom_node_reconciliation(
+    orig: CustomNode,
+    exec: CustomNode,
+    slot_plan: &CustomNodeSlotPlan,
+) -> CustomNode {
+    // Drain orig slots into a map for selective taking
+    let mut orig_slots: HashMap<String, Slot> = orig.slots.into_iter().collect();
+
+    // Build result slots following executed's slot structure (preserves order)
+    let mut result_slots = LinkedHashMap::new();
+
+    for (name, exec_slot) in exec.slots {
+        let result_slot = if let Some(block_plan) = slot_plan.block_slot_plans.get(&name) {
+            // Apply block plan to this slot
+            let orig_slot = orig_slots.remove(&name);
+            apply_block_slot_reconciliation(orig_slot, exec_slot, block_plan)
+        } else if let Some(inline_plan) = slot_plan.inline_slot_plans.get(&name) {
+            // Apply inline plan to this slot
+            let orig_slot = orig_slots.remove(&name);
+            apply_inline_slot_reconciliation(orig_slot, exec_slot, inline_plan)
+        } else if let Some(orig_slot) = orig_slots.remove(&name) {
+            // No plan - check if we can use original (same type = content matches)
+            if std::mem::discriminant(&orig_slot) == std::mem::discriminant(&exec_slot) {
+                // Same type, content must match (otherwise we'd have a plan)
+                orig_slot
+            } else {
+                // Type mismatch, use executed
+                exec_slot
+            }
+        } else {
+            // No original slot, use executed
+            exec_slot
+        };
+
+        result_slots.insert(name, result_slot);
+    }
+
+    CustomNode {
+        type_name: orig.type_name, // Should equal exec.type_name
+        slots: result_slots,
+        plain_data: exec.plain_data, // Use executed's plain_data
+        attr: orig.attr,             // Preserve original attr (source info)
+        source_info: orig.source_info, // Preserve original source
+    }
+}
+
+/// Apply reconciliation to a block slot.
+fn apply_block_slot_reconciliation(
+    orig_slot: Option<Slot>,
+    exec_slot: Slot,
+    plan: &ReconciliationPlan,
+) -> Slot {
+    match (orig_slot, exec_slot) {
+        (Some(Slot::Block(orig_b)), Slot::Block(exec_b)) => {
+            let reconciled = apply_reconciliation_to_blocks(vec![*orig_b], vec![*exec_b], plan);
+            Slot::Block(Box::new(
+                reconciled.into_iter().next().expect("Expected one block"),
+            ))
+        }
+        (Some(Slot::Blocks(orig_bs)), Slot::Blocks(exec_bs)) => {
+            let reconciled = apply_reconciliation_to_blocks(orig_bs, exec_bs, plan);
+            Slot::Blocks(reconciled)
+        }
+        // Type mismatch or no original, use executed
+        (_, exec_slot) => exec_slot,
+    }
+}
+
+/// Apply reconciliation to an inline slot.
+fn apply_inline_slot_reconciliation(
+    orig_slot: Option<Slot>,
+    exec_slot: Slot,
+    plan: &InlineReconciliationPlan,
+) -> Slot {
+    match (orig_slot, exec_slot) {
+        (Some(Slot::Inline(orig_i)), Slot::Inline(exec_i)) => {
+            let reconciled = apply_reconciliation_to_inlines(vec![*orig_i], vec![*exec_i], plan);
+            Slot::Inline(Box::new(
+                reconciled.into_iter().next().expect("Expected one inline"),
+            ))
+        }
+        (Some(Slot::Inlines(orig_is)), Slot::Inlines(exec_is)) => {
+            let reconciled = apply_reconciliation_to_inlines(orig_is, exec_is, plan);
+            Slot::Inlines(reconciled)
+        }
+        // Type mismatch or no original, use executed
+        (_, exec_slot) => exec_slot,
     }
 }
 

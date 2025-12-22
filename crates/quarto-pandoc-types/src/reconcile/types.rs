@@ -8,6 +8,28 @@
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 
+/// Plan for reconciling a CustomNode's slots.
+///
+/// CustomNodes have named slots that can contain blocks or inlines.
+/// This plan describes how to reconcile each slot's content, using
+/// slot names as keys (analogous to React's key-based reconciliation).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CustomNodeSlotPlan {
+    /// Plans for slots containing blocks (Slot::Block or Slot::Blocks).
+    /// Key: slot name.
+    /// Absence means either:
+    /// - Content is identical (use original slot entirely)
+    /// - Slot doesn't exist in original (use executed slot)
+    /// - Slot type changed (use executed slot)
+    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
+    pub block_slot_plans: FxHashMap<String, ReconciliationPlan>,
+
+    /// Plans for slots containing inlines (Slot::Inline or Slot::Inlines).
+    /// Key: slot name.
+    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
+    pub inline_slot_plans: FxHashMap<String, InlineReconciliationPlan>,
+}
+
 /// Alignment decision for a single block in the result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -90,6 +112,12 @@ pub struct InlineReconciliationPlan {
     /// Key: index into inline_alignments.
     #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
     pub note_block_plans: FxHashMap<usize, ReconciliationPlan>,
+
+    /// Plans for inline CustomNode slots (Inline::Custom).
+    /// Key: index into inline_alignments where alignment is RecurseIntoContainer
+    /// and the inline is a Custom node.
+    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
+    pub custom_node_plans: FxHashMap<usize, CustomNodeSlotPlan>,
 }
 
 /// Complete plan for reconciling a Pandoc AST.
@@ -107,6 +135,12 @@ pub struct ReconciliationPlan {
     /// Key: index into block_alignments.
     #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
     pub inline_plans: FxHashMap<usize, InlineReconciliationPlan>,
+
+    /// Plans for CustomNode slots (Block::Custom).
+    /// Key: index into block_alignments where alignment is RecurseIntoContainer
+    /// and the block is a Custom node.
+    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
+    pub custom_node_plans: FxHashMap<usize, CustomNodeSlotPlan>,
 
     /// Diagnostics.
     pub stats: ReconciliationStats,

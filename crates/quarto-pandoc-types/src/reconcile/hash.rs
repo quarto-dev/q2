@@ -10,6 +10,7 @@
  * - Uses address-based memoization for the original AST
  */
 
+use crate::custom::{CustomNode, Slot};
 use crate::{Attr, Block, Inline};
 use rustc_hash::FxHashMap;
 use std::hash::{Hash, Hasher};
@@ -221,6 +222,9 @@ fn compute_block_hash_inner(block: &Block, cache: &mut HashCache<'_>) -> u64 {
         Block::CaptionBlock(c) => {
             hash_inlines(&c.content, cache, &mut hasher);
         }
+        Block::Custom(cn) => {
+            hash_custom_node(cn, cache, &mut hasher);
+        }
     }
 
     hasher.finish()
@@ -343,6 +347,9 @@ fn compute_inline_hash_inner(inline: &Inline, cache: &mut HashCache<'_>) -> u64 
             hash_attr(&e.attr, &mut hasher);
             hash_inlines(&e.content, cache, &mut hasher);
         }
+        Inline::Custom(cn) => {
+            hash_custom_node(cn, cache, &mut hasher);
+        }
     }
 
     hasher.finish()
@@ -396,6 +403,55 @@ fn hash_table_rows(
             cell.row_span.hash(hasher);
             cell.col_span.hash(hasher);
             hash_blocks(&cell.content, cache, hasher);
+        }
+    }
+}
+
+/// Hash a CustomNode.
+///
+/// This hashes the type_name, attr, plain_data (via JSON serialization),
+/// and all slots with their names and contents.
+fn hash_custom_node(cn: &CustomNode, cache: &mut HashCache<'_>, hasher: &mut impl Hasher) {
+    // Hash type name
+    cn.type_name.hash(hasher);
+
+    // Hash attr
+    hash_attr(&cn.attr, hasher);
+
+    // Hash plain_data via JSON serialization for canonical form
+    // Using to_string for deterministic output
+    if let Ok(json) = serde_json::to_string(&cn.plain_data) {
+        json.hash(hasher);
+    } else {
+        // Fallback: hash the debug representation
+        format!("{:?}", cn.plain_data).hash(hasher);
+    }
+
+    // Hash slots in order (LinkedHashMap preserves insertion order)
+    cn.slots.len().hash(hasher);
+    for (name, slot) in &cn.slots {
+        name.hash(hasher);
+        hash_slot(slot, cache, hasher);
+    }
+}
+
+/// Hash a slot from a CustomNode.
+fn hash_slot(slot: &Slot, cache: &mut HashCache<'_>, hasher: &mut impl Hasher) {
+    // Hash discriminant to distinguish slot types
+    std::mem::discriminant(slot).hash(hasher);
+
+    match slot {
+        Slot::Block(b) => {
+            compute_block_hash_inner(b, cache).hash(hasher);
+        }
+        Slot::Inline(i) => {
+            compute_inline_hash_inner(i, cache).hash(hasher);
+        }
+        Slot::Blocks(bs) => {
+            hash_blocks(bs, cache, hasher);
+        }
+        Slot::Inlines(is) => {
+            hash_inlines(is, cache, hasher);
         }
     }
 }
@@ -483,6 +539,7 @@ pub fn structural_eq_block(a: &Block, b: &Block) -> bool {
         (Block::CaptionBlock(a), Block::CaptionBlock(b)) => {
             structural_eq_inlines(&a.content, &b.content)
         }
+        (Block::Custom(a), Block::Custom(b)) => structural_eq_custom_node(a, b),
         _ => false,
     }
 }
@@ -564,6 +621,7 @@ pub fn structural_eq_inline(a: &Inline, b: &Inline) -> bool {
         (Inline::EditComment(a), Inline::EditComment(b)) => {
             attr_eq(&a.attr, &b.attr) && structural_eq_inlines(&a.content, &b.content)
         }
+        (Inline::Custom(a), Inline::Custom(b)) => structural_eq_custom_node(a, b),
         _ => false,
     }
 }
@@ -584,6 +642,51 @@ fn option_blocks_eq(a: &Option<Vec<Block>>, b: &Option<Vec<Block>>) -> bool {
         (None, None) => true,
         (Some(a), Some(b)) => structural_eq_blocks(a, b),
         _ => false,
+    }
+}
+
+/// Check structural equality of two CustomNodes.
+pub fn structural_eq_custom_node(a: &CustomNode, b: &CustomNode) -> bool {
+    // Type name must match
+    if a.type_name != b.type_name {
+        return false;
+    }
+
+    // Attr must match
+    if !attr_eq(&a.attr, &b.attr) {
+        return false;
+    }
+
+    // Plain data must match
+    if a.plain_data != b.plain_data {
+        return false;
+    }
+
+    // Slots must match by name and content
+    if a.slots.len() != b.slots.len() {
+        return false;
+    }
+
+    for (name, slot_a) in &a.slots {
+        let Some(slot_b) = b.slots.get(name) else {
+            return false;
+        };
+        if !structural_eq_slot(slot_a, slot_b) {
+            return false;
+        }
+    }
+
+    true
+}
+
+/// Check structural equality of two slots.
+pub fn structural_eq_slot(a: &Slot, b: &Slot) -> bool {
+    match (a, b) {
+        (Slot::Block(a), Slot::Block(b)) => structural_eq_block(a, b),
+        (Slot::Inline(a), Slot::Inline(b)) => structural_eq_inline(a, b),
+        (Slot::Blocks(a), Slot::Blocks(b)) => structural_eq_blocks(a, b),
+        (Slot::Inlines(a), Slot::Inlines(b)) => structural_eq_inlines(a, b),
+        _ => false, // Different slot types
     }
 }
 

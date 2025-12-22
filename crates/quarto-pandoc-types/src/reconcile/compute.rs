@@ -13,9 +13,10 @@ use super::hash::{
     HashCache,
 };
 use super::types::{
-    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
-    ReconciliationStats,
+    BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
+    ReconciliationPlan, ReconciliationStats,
 };
+use crate::custom::{CustomNode, Slot};
 use crate::{Block, Inline, Pandoc};
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -51,6 +52,7 @@ pub fn compute_reconciliation_for_blocks<'a>(
     let mut alignments = Vec::with_capacity(executed.len());
     let mut block_container_plans = FxHashMap::default();
     let mut inline_plans = FxHashMap::default();
+    let mut custom_node_plans = FxHashMap::default();
     let mut used_original: FxHashSet<usize> = FxHashSet::default();
     let mut stats = ReconciliationStats::default();
 
@@ -79,8 +81,17 @@ pub fn compute_reconciliation_for_blocks<'a>(
             .enumerate()
             .filter(|(i, _)| !used_original.contains(i))
             .find(|(_, orig_block)| {
-                std::mem::discriminant(*orig_block) == exec_discriminant
-                    && is_container_block(orig_block)
+                if std::mem::discriminant(*orig_block) != exec_discriminant {
+                    return false;
+                }
+                if !is_container_block(orig_block) {
+                    return false;
+                }
+                // For Custom blocks, also check type_name matches
+                match (*orig_block, exec_block) {
+                    (Block::Custom(o), Block::Custom(e)) => o.type_name == e.type_name,
+                    _ => true,
+                }
             });
 
         if let Some((orig_idx, orig_block)) = type_match {
@@ -89,9 +100,16 @@ pub fn compute_reconciliation_for_blocks<'a>(
 
             // Pre-compute the nested reconciliation plan for this container
             let alignment_idx = alignments.len();
-            let nested_plan = compute_container_plan(orig_block, exec_block, cache);
-            stats.merge(&nested_plan.stats);
-            block_container_plans.insert(alignment_idx, nested_plan);
+
+            // Handle Custom blocks specially (slot-based reconciliation)
+            if let (Block::Custom(orig_cn), Block::Custom(exec_cn)) = (orig_block, exec_block) {
+                let slot_plan = compute_custom_node_slot_plan(orig_cn, exec_cn, cache);
+                custom_node_plans.insert(alignment_idx, slot_plan);
+            } else {
+                let nested_plan = compute_container_plan(orig_block, exec_block, cache);
+                stats.merge(&nested_plan.stats);
+                block_container_plans.insert(alignment_idx, nested_plan);
+            }
 
             alignments.push(BlockAlignment::RecurseIntoContainer {
                 before_idx: orig_idx,
@@ -148,6 +166,7 @@ pub fn compute_reconciliation_for_blocks<'a>(
         block_alignments: alignments,
         block_container_plans,
         inline_plans,
+        custom_node_plans,
         stats,
     }
 }
@@ -162,6 +181,7 @@ fn is_container_block(block: &Block) -> bool {
             | Block::BulletList(_)
             | Block::DefinitionList(_)
             | Block::Figure(_)
+            | Block::Custom(_)
     )
 }
 
@@ -236,6 +256,101 @@ fn compute_list_plan<'a>(
     plan
 }
 
+/// Compute reconciliation plan for a CustomNode's slots.
+///
+/// This uses slot names as keys for matching. For each slot in the executed
+/// CustomNode, we check if the original has a matching slot and compute
+/// a reconciliation plan for its content.
+fn compute_custom_node_slot_plan<'a>(
+    orig: &'a CustomNode,
+    exec: &CustomNode,
+    cache: &mut HashCache<'a>,
+) -> CustomNodeSlotPlan {
+    use super::hash::{structural_eq_block, structural_eq_inline};
+
+    let mut block_slot_plans = FxHashMap::default();
+    let mut inline_slot_plans = FxHashMap::default();
+
+    // For each slot in executed, check if we need reconciliation
+    for (name, exec_slot) in &exec.slots {
+        // Try to find matching slot in original
+        let Some(orig_slot) = orig.slots.get(name) else {
+            // No original slot - will use executed (no plan needed)
+            continue;
+        };
+
+        // Check if slot types match and compute appropriate plan
+        match (orig_slot, exec_slot) {
+            (Slot::Block(orig_b), Slot::Block(exec_b)) => {
+                // Check if content matches exactly
+                let orig_hash = cache.hash_block(orig_b);
+                let exec_hash = compute_block_hash_fresh(exec_b);
+
+                if orig_hash != exec_hash || !structural_eq_block(orig_b, exec_b) {
+                    // Content differs - compute plan for single-element sequence
+                    let plan = compute_reconciliation_for_blocks(
+                        std::slice::from_ref(orig_b.as_ref()),
+                        std::slice::from_ref(exec_b.as_ref()),
+                        cache,
+                    );
+                    block_slot_plans.insert(name.clone(), plan);
+                }
+                // If equal, no plan needed (implicit KeepOriginal)
+            }
+            (Slot::Blocks(orig_bs), Slot::Blocks(exec_bs)) => {
+                // Compute plan for block sequences
+                let plan = compute_reconciliation_for_blocks(orig_bs, exec_bs, cache);
+
+                // Only store if there's actual reconciliation work to do
+                let needs_plan = plan.block_alignments.iter().any(|a| {
+                    !matches!(a, BlockAlignment::KeepBefore(_))
+                }) || !plan.block_container_plans.is_empty()
+                    || !plan.inline_plans.is_empty()
+                    || !plan.custom_node_plans.is_empty();
+
+                if needs_plan {
+                    block_slot_plans.insert(name.clone(), plan);
+                }
+            }
+            (Slot::Inline(orig_i), Slot::Inline(exec_i)) => {
+                let orig_hash = cache.hash_inline(orig_i);
+                let exec_hash = compute_inline_hash_fresh(exec_i);
+
+                if orig_hash != exec_hash || !structural_eq_inline(orig_i, exec_i) {
+                    let plan = compute_inline_alignments(
+                        std::slice::from_ref(orig_i.as_ref()),
+                        std::slice::from_ref(exec_i.as_ref()),
+                        cache,
+                    );
+                    inline_slot_plans.insert(name.clone(), plan);
+                }
+            }
+            (Slot::Inlines(orig_is), Slot::Inlines(exec_is)) => {
+                let plan = compute_inline_alignments(orig_is, exec_is, cache);
+
+                let needs_plan = plan.inline_alignments.iter().any(|a| {
+                    !matches!(a, InlineAlignment::KeepBefore(_))
+                }) || !plan.inline_container_plans.is_empty()
+                    || !plan.note_block_plans.is_empty()
+                    || !plan.custom_node_plans.is_empty();
+
+                if needs_plan {
+                    inline_slot_plans.insert(name.clone(), plan);
+                }
+            }
+            _ => {
+                // Slot type changed - no reconciliation possible
+                // Will use executed slot entirely (no plan entry)
+            }
+        }
+    }
+
+    CustomNodeSlotPlan {
+        block_slot_plans,
+        inline_slot_plans,
+    }
+}
+
 /// Compute inline reconciliation plan for a block with inline content.
 fn compute_inline_plan_for_block<'a>(
     orig_block: &'a Block,
@@ -278,6 +393,7 @@ fn compute_inline_alignments<'a>(
     let mut alignments = Vec::with_capacity(executed.len());
     let mut inline_container_plans = FxHashMap::default();
     let mut note_block_plans = FxHashMap::default();
+    let mut custom_node_plans = FxHashMap::default();
     let mut used_original: FxHashSet<usize> = FxHashSet::default();
 
     for (exec_idx, exec_inline) in executed.iter().enumerate() {
@@ -301,8 +417,17 @@ fn compute_inline_alignments<'a>(
             .enumerate()
             .filter(|(i, _)| !used_original.contains(i))
             .find(|(_, orig_inline)| {
-                std::mem::discriminant(*orig_inline) == exec_discriminant
-                    && is_container_inline(orig_inline)
+                if std::mem::discriminant(*orig_inline) != exec_discriminant {
+                    return false;
+                }
+                if !is_container_inline(orig_inline) {
+                    return false;
+                }
+                // For Custom inlines, also check type_name matches
+                match (*orig_inline, exec_inline) {
+                    (Inline::Custom(o), Inline::Custom(e)) => o.type_name == e.type_name,
+                    _ => true,
+                }
             });
 
         if let Some((orig_idx, orig_inline)) = type_match {
@@ -319,6 +444,12 @@ fn compute_inline_alignments<'a>(
                     nested_cache,
                 );
                 note_block_plans.insert(alignment_idx, block_plan);
+            } else if let (Inline::Custom(orig_cn), Inline::Custom(exec_cn)) =
+                (orig_inline, exec_inline)
+            {
+                // Handle Custom inline (has named slots with blocks/inlines)
+                let slot_plan = compute_custom_node_slot_plan(orig_cn, exec_cn, cache);
+                custom_node_plans.insert(alignment_idx, slot_plan);
             } else {
                 // Other container inlines have inline children
                 if let Some(nested_plan) =
@@ -343,6 +474,7 @@ fn compute_inline_alignments<'a>(
         inline_alignments: alignments,
         inline_container_plans,
         note_block_plans,
+        custom_node_plans,
     }
 }
 
@@ -367,6 +499,7 @@ fn is_container_inline(inline: &Inline) -> bool {
             | Inline::Delete(_)
             | Inline::Highlight(_)
             | Inline::EditComment(_)
+            | Inline::Custom(_)
     )
 }
 
