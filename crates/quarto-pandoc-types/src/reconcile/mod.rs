@@ -67,6 +67,7 @@ pub fn reconcile(original: Pandoc, executed: Pandoc) -> (Pandoc, ReconciliationP
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::custom::{CustomNode, Slot};
     use crate::{CodeBlock, Div, Header, Paragraph, Str};
     use hashlink::LinkedHashMap;
     use quarto_source_map::{FileId, SourceInfo};
@@ -450,6 +451,435 @@ mod tests {
                 assert_eq!(s.text, "Second");
             }
             assert_eq!(p.source_info, source_original());
+        }
+    }
+
+    // =========================================================================
+    // CustomNode Reconciliation Tests
+    // =========================================================================
+
+    /// Helper to create a CustomNode (like a Callout) with a content slot.
+    fn make_custom_node(
+        type_name: &str,
+        title_text: &str,
+        content_text: &str,
+        source: SourceInfo,
+    ) -> CustomNode {
+        let mut slots = LinkedHashMap::new();
+
+        // Title slot (Inlines)
+        slots.insert(
+            "title".to_string(),
+            Slot::Inlines(vec![crate::Inline::Str(Str {
+                text: title_text.to_string(),
+                source_info: source.clone(),
+            })]),
+        );
+
+        // Content slot (Blocks)
+        slots.insert(
+            "content".to_string(),
+            Slot::Blocks(vec![crate::Block::Paragraph(Paragraph {
+                content: vec![crate::Inline::Str(Str {
+                    text: content_text.to_string(),
+                    source_info: source.clone(),
+                })],
+                source_info: source.clone(),
+            })]),
+        );
+
+        CustomNode {
+            type_name: type_name.to_string(),
+            slots,
+            plain_data: serde_json::json!({"type": "note"}),
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: source,
+        }
+    }
+
+    /// Test: CustomNode with identical content is kept (preserves source location).
+    #[test]
+    fn test_custom_node_identical_content_kept() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_custom_node(
+                "Callout",
+                "Note",
+                "This is important.",
+                source_original(),
+            ))],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_custom_node(
+                "Callout",
+                "Note",
+                "This is important.",
+                source_executed(),
+            ))],
+        };
+
+        let (result, plan) = reconcile(original, executed);
+
+        // CustomNode should be kept (identical content)
+        assert_eq!(plan.stats.blocks_kept, 1);
+        assert_eq!(plan.stats.blocks_replaced, 0);
+
+        // Source should be from original
+        if let crate::Block::Custom(cn) = &result.blocks[0] {
+            assert_eq!(cn.source_info, source_original());
+            assert_eq!(cn.type_name, "Callout");
+        } else {
+            panic!("Expected Custom block");
+        }
+    }
+
+    /// Test: CustomNode with changed slot content gets slot-level reconciliation.
+    #[test]
+    fn test_custom_node_slot_content_changed() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_custom_node(
+                "Callout",
+                "Note",
+                "Original content.",
+                source_original(),
+            ))],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_custom_node(
+                "Callout",
+                "Note", // Title unchanged
+                "Changed content.", // Content changed
+                source_executed(),
+            ))],
+        };
+
+        let (result, plan) = reconcile(original, executed);
+
+        // Should recurse into the CustomNode
+        assert_eq!(plan.stats.blocks_recursed, 1);
+
+        if let crate::Block::Custom(cn) = &result.blocks[0] {
+            // CustomNode itself should preserve original source
+            assert_eq!(cn.source_info, source_original());
+
+            // Title slot should preserve original source (unchanged)
+            if let Some(Slot::Inlines(title)) = cn.slots.get("title") {
+                if let crate::Inline::Str(s) = &title[0] {
+                    assert_eq!(s.text, "Note");
+                    assert_eq!(s.source_info, source_original());
+                }
+            } else {
+                panic!("Expected title slot");
+            }
+
+            // Content slot should have executed source (changed)
+            if let Some(Slot::Blocks(content)) = cn.slots.get("content") {
+                if let crate::Block::Paragraph(p) = &content[0] {
+                    assert_eq!(p.source_info, source_executed());
+                    if let crate::Inline::Str(s) = &p.content[0] {
+                        assert_eq!(s.text, "Changed content.");
+                    }
+                }
+            } else {
+                panic!("Expected content slot");
+            }
+        } else {
+            panic!("Expected Custom block");
+        }
+    }
+
+    /// Test: CustomNodes with different type_name are not reconciled.
+    #[test]
+    fn test_custom_node_different_type_not_reconciled() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_custom_node(
+                "Callout",
+                "Note",
+                "Content",
+                source_original(),
+            ))],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_custom_node(
+                "PanelTabset", // Different type!
+                "Note",
+                "Content",
+                source_executed(),
+            ))],
+        };
+
+        let (result, plan) = reconcile(original, executed);
+
+        // Should be replaced, not recursed (different type_name)
+        assert_eq!(plan.stats.blocks_replaced, 1);
+        assert_eq!(plan.stats.blocks_recursed, 0);
+
+        // Result should have executed's CustomNode
+        if let crate::Block::Custom(cn) = &result.blocks[0] {
+            assert_eq!(cn.type_name, "PanelTabset");
+            assert_eq!(cn.source_info, source_executed());
+        } else {
+            panic!("Expected Custom block");
+        }
+    }
+
+    /// Test: CustomNode plain_data is taken from executed.
+    #[test]
+    fn test_custom_node_plain_data_from_executed() {
+        let mut orig_cn = make_custom_node("Callout", "Note", "Content", source_original());
+        orig_cn.plain_data = serde_json::json!({"type": "note", "collapse": false});
+
+        let mut exec_cn = make_custom_node("Callout", "Note", "Changed content", source_executed());
+        exec_cn.plain_data = serde_json::json!({"type": "note", "collapse": true}); // Different!
+
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(orig_cn)],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(exec_cn)],
+        };
+
+        let (result, _plan) = reconcile(original, executed);
+
+        if let crate::Block::Custom(cn) = &result.blocks[0] {
+            // plain_data should come from executed
+            assert_eq!(cn.plain_data["collapse"], true);
+            // But source_info should be from original
+            assert_eq!(cn.source_info, source_original());
+        } else {
+            panic!("Expected Custom block");
+        }
+    }
+
+    /// Test: CustomNode mixed with regular blocks.
+    #[test]
+    fn test_custom_node_mixed_with_regular_blocks() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![
+                make_para("Before callout", source_original()),
+                crate::Block::Custom(make_custom_node(
+                    "Callout",
+                    "Warning",
+                    "Be careful!",
+                    source_original(),
+                )),
+                make_para("After callout", source_original()),
+            ],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![
+                make_para("Before callout", source_executed()),
+                crate::Block::Custom(make_custom_node(
+                    "Callout",
+                    "Warning",
+                    "Be careful!",
+                    source_executed(),
+                )),
+                make_para("After callout", source_executed()),
+            ],
+        };
+
+        let (result, plan) = reconcile(original, executed);
+
+        // All blocks should be kept
+        assert_eq!(plan.stats.blocks_kept, 3);
+        assert_eq!(plan.stats.blocks_replaced, 0);
+
+        // First para
+        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+            assert_eq!(p.source_info, source_original());
+        }
+
+        // CustomNode
+        if let crate::Block::Custom(cn) = &result.blocks[1] {
+            assert_eq!(cn.source_info, source_original());
+        }
+
+        // Last para
+        if let crate::Block::Paragraph(p) = &result.blocks[2] {
+            assert_eq!(p.source_info, source_original());
+        }
+    }
+
+    /// Test: CustomNode with multiple slots, some changed and some unchanged.
+    #[test]
+    fn test_custom_node_partial_slot_changes() {
+        // Create a more complex CustomNode with multiple block slots
+        fn make_complex_callout(
+            title: &str,
+            body1: &str,
+            body2: &str,
+            source: SourceInfo,
+        ) -> CustomNode {
+            let mut slots = LinkedHashMap::new();
+
+            slots.insert(
+                "title".to_string(),
+                Slot::Inlines(vec![crate::Inline::Str(Str {
+                    text: title.to_string(),
+                    source_info: source.clone(),
+                })]),
+            );
+
+            slots.insert(
+                "content".to_string(),
+                Slot::Blocks(vec![
+                    crate::Block::Paragraph(Paragraph {
+                        content: vec![crate::Inline::Str(Str {
+                            text: body1.to_string(),
+                            source_info: source.clone(),
+                        })],
+                        source_info: source.clone(),
+                    }),
+                    crate::Block::Paragraph(Paragraph {
+                        content: vec![crate::Inline::Str(Str {
+                            text: body2.to_string(),
+                            source_info: source.clone(),
+                        })],
+                        source_info: source.clone(),
+                    }),
+                ]),
+            );
+
+            CustomNode {
+                type_name: "Callout".to_string(),
+                slots,
+                plain_data: serde_json::json!({}),
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: source,
+            }
+        }
+
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_complex_callout(
+                "Important",
+                "First paragraph unchanged.",
+                "Second paragraph will change.",
+                source_original(),
+            ))],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Custom(make_complex_callout(
+                "Important",                   // Title unchanged
+                "First paragraph unchanged.",  // First para unchanged
+                "Second paragraph CHANGED!",   // Second para changed
+                source_executed(),
+            ))],
+        };
+
+        let (result, plan) = reconcile(original, executed);
+
+        // Should recurse
+        assert_eq!(plan.stats.blocks_recursed, 1);
+
+        if let crate::Block::Custom(cn) = &result.blocks[0] {
+            // CustomNode keeps original source
+            assert_eq!(cn.source_info, source_original());
+
+            // Title should keep original
+            if let Some(Slot::Inlines(title)) = cn.slots.get("title") {
+                if let crate::Inline::Str(s) = &title[0] {
+                    assert_eq!(s.source_info, source_original());
+                }
+            }
+
+            // Content slot - first para unchanged, second changed
+            if let Some(Slot::Blocks(content)) = cn.slots.get("content") {
+                // First paragraph should keep original source
+                if let crate::Block::Paragraph(p1) = &content[0] {
+                    assert_eq!(p1.source_info, source_original());
+                }
+
+                // Second paragraph should have executed source
+                if let crate::Block::Paragraph(p2) = &content[1] {
+                    assert_eq!(p2.source_info, source_executed());
+                    if let crate::Inline::Str(s) = &p2.content[0] {
+                        assert_eq!(s.text, "Second paragraph CHANGED!");
+                    }
+                }
+            }
+        }
+    }
+
+    /// Test: Inline CustomNode reconciliation.
+    #[test]
+    fn test_inline_custom_node_reconciliation() {
+        fn make_inline_custom(text: &str, source: SourceInfo) -> crate::Inline {
+            let mut slots = LinkedHashMap::new();
+            slots.insert(
+                "content".to_string(),
+                Slot::Inlines(vec![crate::Inline::Str(Str {
+                    text: text.to_string(),
+                    source_info: source.clone(),
+                })]),
+            );
+
+            crate::Inline::Custom(CustomNode {
+                type_name: "Shortcode".to_string(),
+                slots,
+                plain_data: serde_json::json!({"name": "video"}),
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: source,
+            })
+        }
+
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Paragraph(Paragraph {
+                content: vec![
+                    crate::Inline::Str(Str {
+                        text: "Text before ".to_string(),
+                        source_info: source_original(),
+                    }),
+                    make_inline_custom("unchanged", source_original()),
+                    crate::Inline::Str(Str {
+                        text: " text after".to_string(),
+                        source_info: source_original(),
+                    }),
+                ],
+                source_info: source_original(),
+            })],
+        };
+
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![crate::Block::Paragraph(Paragraph {
+                content: vec![
+                    crate::Inline::Str(Str {
+                        text: "Text before ".to_string(),
+                        source_info: source_executed(),
+                    }),
+                    make_inline_custom("unchanged", source_executed()),
+                    crate::Inline::Str(Str {
+                        text: " text after".to_string(),
+                        source_info: source_executed(),
+                    }),
+                ],
+                source_info: source_executed(),
+            })],
+        };
+
+        let (result, _plan) = reconcile(original, executed);
+
+        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+            // Paragraph should keep original source (content unchanged)
+            assert_eq!(p.source_info, source_original());
+
+            // Inline Custom should keep original source
+            if let crate::Inline::Custom(cn) = &p.content[1] {
+                assert_eq!(cn.source_info, source_original());
+            }
         }
     }
 }
