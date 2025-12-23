@@ -3229,19 +3229,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasm-quarto-hub-client"
-version = "0.1.0"
-dependencies = [
- "console_error_panic_hook",
- "pampa",
- "quarto-core",
- "quarto-system-runtime",
- "serde",
- "serde_json",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "web-sys"
 version = "0.3.82"
 source = "registry+https://github.com/rust-lang/crates.io-index"
