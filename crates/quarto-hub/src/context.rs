@@ -98,6 +98,7 @@ impl HubContext {
 
         info!(
             qmd_count = project_files.qmd_files.len(),
+            config_count = project_files.config_files.len(),
             "Discovered project files"
         );
 
@@ -237,7 +238,7 @@ async fn reconcile_files_with_index(
 ) -> Result<usize> {
     let mut added = 0;
 
-    for file_path in &project_files.qmd_files {
+    for file_path in project_files.all_files() {
         let path_str = file_path.to_string_lossy();
 
         // Skip if already in index

@@ -1,0 +1,139 @@
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #1a1a2e;
+}
+
+.wasm-error-banner {
+  background: #ff4444;
+  color: white;
+  padding: 12px 16px;
+  font-size: 14px;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #16213e;
+  border-bottom: 1px solid #1f3460;
+  gap: 16px;
+}
+
+.editor-header .project-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.editor-header h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.sync-status {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.sync-status.connected {
+  background: #0a4f0a;
+  color: #4ade80;
+}
+
+.sync-status.disconnected {
+  background: #4f0a0a;
+  color: #f87171;
+}
+
+.file-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.file-selector select {
+  padding: 8px 12px;
+  background: #0f3460;
+  border: 1px solid #1f4460;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  min-width: 200px;
+  cursor: pointer;
+}
+
+.file-selector select:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.new-file-btn {
+  padding: 8px 12px;
+  background: #0f3460;
+  border: 1px solid #1f4460;
+  border-radius: 6px;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-file-btn:hover {
+  background: #1f4460;
+  color: #fff;
+}
+
+.disconnect-btn {
+  padding: 8px 16px;
+  background: none;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #888;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.disconnect-btn:hover {
+  border-color: #ff4444;
+  color: #ff4444;
+}
+
+.editor-main {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.pane {
+  flex: 1;
+  min-width: 0;
+}
+
+.editor-pane {
+  border-right: 1px solid #1f3460;
+}
+
+.preview-pane {
+  background: #fff;
+}
+
+.preview-pane iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Monaco editor overrides */
+.monaco-editor {
+  padding-top: 0 !important;
+}
+
+.monaco-editor .margin {
+  background: #1a1a2e !important;
+}

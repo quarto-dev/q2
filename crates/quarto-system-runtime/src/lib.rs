@@ -16,9 +16,12 @@
  * - [Node.js Permission Model](https://nodejs.org/api/permissions.html)
  */
 
-mod native;
 mod sandbox;
 mod traits;
+
+// Native runtime is only compiled for non-WASM targets
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
 
 // WASM runtime is only compiled for WASM targets
 #[cfg(target_arch = "wasm32")]
@@ -30,11 +33,12 @@ pub use traits::{
     XdgDirKind,
 };
 
-// Re-export runtime implementations
+// Re-export runtime implementations based on target
+#[cfg(not(target_arch = "wasm32"))]
 pub use native::NativeRuntime;
 
 #[cfg(target_arch = "wasm32")]
-pub use wasm::WasmRuntime;
+pub use wasm::{VirtualFileSystem, WasmRuntime};
 
 // Re-export sandboxing types
 pub use sandbox::{PathPattern, SandboxedRuntime, SecurityPolicy, SharedRuntime};
@@ -54,6 +58,7 @@ pub fn default_runtime() -> WasmRuntime {
 }
 
 #[cfg(test)]
+#[cfg(not(target_arch = "wasm32"))]
 mod tests {
     use super::*;
 

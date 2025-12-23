@@ -1,0 +1,261 @@
+.project-selector {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.project-selector .modal {
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 32px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.project-selector h1 {
+  margin: 0 0 24px;
+  font-size: 24px;
+  color: #fff;
+}
+
+.project-selector h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: #888;
+  font-weight: 500;
+}
+
+.project-selector .error {
+  background: #ff4444;
+  color: white;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.project-selector .loading {
+  color: #888;
+  text-align: center;
+  padding: 32px;
+}
+
+.project-selector .empty {
+  color: #666;
+  font-style: italic;
+}
+
+.projects-list ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.projects-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #16213e;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.projects-list li:hover {
+  background: #1f3460;
+}
+
+.project-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.project-name {
+  color: #fff;
+  font-weight: 500;
+}
+
+.project-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.project-server {
+  color: #666;
+}
+
+.project-docid {
+  color: #888;
+  font-family: monospace;
+  cursor: help;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.delete-btn:hover {
+  background: #ff4444;
+  color: white;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #333;
+}
+
+.divider span {
+  padding: 0 16px;
+  color: #666;
+  font-size: 12px;
+}
+
+.add-btn {
+  width: 100%;
+  padding: 16px;
+  background: #0f3460;
+  border: 2px dashed #1f4460;
+  border-radius: 8px;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-btn:hover {
+  background: #1f4460;
+  color: #fff;
+  border-color: #2f5480;
+}
+
+.add-form {
+  background: #0f3460;
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  color: #888;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px;
+  background: #16213e;
+  border: 1px solid #1f3460;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.form-group input::placeholder {
+  color: #555;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+.form-actions button {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.form-actions button:first-child {
+  background: none;
+  border: 1px solid #333;
+  color: #888;
+}
+
+.form-actions button:first-child:hover {
+  border-color: #666;
+  color: #fff;
+}
+
+.form-actions button.primary {
+  background: #646cff;
+  border: none;
+  color: #fff;
+}
+
+.form-actions button.primary:hover {
+  background: #747bff;
+}
+
+.import-export {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #333;
+}
+
+.import-export button {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.import-export button:hover {
+  border-color: #666;
+  color: #fff;
+}
+
+.project-selector .connecting {
+  background: #1a4a1a;
+  color: #4ade80;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  text-align: center;
+}

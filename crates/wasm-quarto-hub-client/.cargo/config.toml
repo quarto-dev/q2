@@ -1,0 +1,2 @@
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+bulk-memory", "-Zwasm-c-abi=spec"]

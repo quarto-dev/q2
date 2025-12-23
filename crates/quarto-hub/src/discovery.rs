@@ -12,6 +12,9 @@ use walkdir::WalkDir;
 pub struct ProjectFiles {
     /// All discovered `.qmd` files (paths relative to project root)
     pub qmd_files: Vec<PathBuf>,
+
+    /// Config files (e.g., `_quarto.yml`, paths relative to project root)
+    pub config_files: Vec<PathBuf>,
 }
 
 impl ProjectFiles {
@@ -33,9 +36,20 @@ impl ProjectFiles {
             let path = entry.path();
 
             if path.is_file() {
+                // Check for config files first (by name)
+                if let Some(file_name) = path.file_name() {
+                    if file_name == "_quarto.yml" || file_name == "_quarto.yaml" {
+                        if let Ok(relative) = path.strip_prefix(project_root) {
+                            debug!(?relative, "Discovered config file");
+                            files.config_files.push(relative.to_path_buf());
+                        }
+                        continue;
+                    }
+                }
+
+                // Check for .qmd files (by extension)
                 if let Some(ext) = path.extension() {
                     if ext == "qmd" {
-                        // Store path relative to project root
                         if let Ok(relative) = path.strip_prefix(project_root) {
                             debug!(?relative, "Discovered .qmd file");
                             files.qmd_files.push(relative.to_path_buf());
@@ -47,13 +61,19 @@ impl ProjectFiles {
 
         // Sort for deterministic ordering
         files.qmd_files.sort();
+        files.config_files.sort();
 
         files
     }
 
     /// Returns the total number of discovered files.
     pub fn total_count(&self) -> usize {
-        self.qmd_files.len()
+        self.qmd_files.len() + self.config_files.len()
+    }
+
+    /// Returns an iterator over all discovered file paths.
+    pub fn all_files(&self) -> impl Iterator<Item = &PathBuf> {
+        self.config_files.iter().chain(self.qmd_files.iter())
     }
 }
 
@@ -128,5 +148,46 @@ mod tests {
 
         assert_eq!(files.qmd_files.len(), 1);
         assert!(files.qmd_files.contains(&PathBuf::from("index.qmd")));
+    }
+
+    #[test]
+    fn test_discover_config_files() {
+        let temp = TempDir::new().unwrap();
+
+        // Create _quarto.yml at project root
+        fs::write(temp.path().join("_quarto.yml"), "project:\n  type: website").unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+
+        // Create a subdirectory with _quarto.yaml (alternate extension)
+        fs::create_dir(temp.path().join("subproject")).unwrap();
+        fs::write(
+            temp.path().join("subproject/_quarto.yaml"),
+            "project:\n  type: book",
+        )
+        .unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+
+        assert_eq!(files.config_files.len(), 2);
+        assert!(files.config_files.contains(&PathBuf::from("_quarto.yml")));
+        assert!(files.config_files.contains(&PathBuf::from("subproject/_quarto.yaml")));
+        assert_eq!(files.qmd_files.len(), 1);
+        assert_eq!(files.total_count(), 3);
+    }
+
+    #[test]
+    fn test_all_files_iterator() {
+        let temp = TempDir::new().unwrap();
+
+        fs::write(temp.path().join("_quarto.yml"), "project:\n  type: website").unwrap();
+        fs::write(temp.path().join("index.qmd"), "# Hello").unwrap();
+        fs::write(temp.path().join("about.qmd"), "# About").unwrap();
+
+        let files = ProjectFiles::discover(temp.path());
+        let all: Vec<_> = files.all_files().collect();
+
+        assert_eq!(all.len(), 3);
+        // Config files come first
+        assert_eq!(all[0], &PathBuf::from("_quarto.yml"));
     }
 }

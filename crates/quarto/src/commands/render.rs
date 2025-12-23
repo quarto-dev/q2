@@ -24,8 +24,6 @@
 //! - Multi-file projects
 //! - Non-HTML formats
 
-use std::fs;
-use std::io::Write;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -167,8 +165,9 @@ fn render_document(
     let mut ctx = RenderContext::new(project, doc_info, format, binaries).with_options(options);
 
     // Read input file
-    let input_content = fs::read(&doc_info.input)
-        .with_context(|| format!("Failed to read input file: {}", doc_info.input.display()))?;
+    let input_content = runtime
+        .file_read(&doc_info.input)
+        .map_err(|e| anyhow::anyhow!("Failed to read input file {}: {}", doc_info.input.display(), e))?;
 
     // Parse QMD to Pandoc AST
     let mut output_stream = std::io::sink();
@@ -212,12 +211,9 @@ fn render_document(
     let output_dir = output_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Could not determine output directory"))?;
-    fs::create_dir_all(output_dir).with_context(|| {
-        format!(
-            "Failed to create output directory: {}",
-            output_dir.display()
-        )
-    })?;
+    runtime
+        .dir_create(output_dir, true)
+        .map_err(|e| anyhow::anyhow!("Failed to create output directory {}: {}", output_dir.display(), e))?;
 
     // Get the output stem for resource directory naming
     let output_stem = output_path
@@ -234,12 +230,9 @@ fn render_document(
     let html_output = render_to_html(&pandoc, &context, &resource_paths.css)?;
 
     // Write output
-    let mut output_file = fs::File::create(&output_path)
-        .with_context(|| format!("Failed to create output file: {}", output_path.display()))?;
-
-    output_file
-        .write_all(html_output.as_bytes())
-        .with_context(|| format!("Failed to write output file: {}", output_path.display()))?;
+    runtime
+        .file_write(&output_path, html_output.as_bytes())
+        .map_err(|e| anyhow::anyhow!("Failed to write output file {}: {}", output_path.display(), e))?;
 
     if !args.quiet {
         info!("Output: {}", output_path.display());
