@@ -12,7 +12,7 @@
  * - Writing media to disk
  *
  * All operations that involve file system or network access go through
- * the LuaRuntime abstraction layer.
+ * the SystemRuntime abstraction layer.
  *
  * Reference: https://pandoc.org/lua-filters.html#module-pandoc.mediabag
  */
@@ -24,7 +24,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use super::runtime::LuaRuntime;
+use super::runtime::SystemRuntime;
 
 /// A single entry in the mediabag
 #[derive(Debug, Clone)]
@@ -110,7 +110,7 @@ pub fn create_shared_mediabag() -> SharedMediaBag {
 pub fn register_pandoc_mediabag(
     lua: &Lua,
     pandoc: &Table,
-    runtime: Arc<dyn LuaRuntime>,
+    runtime: Arc<dyn SystemRuntime>,
     mediabag: SharedMediaBag,
 ) -> Result<()> {
     let mb_table = lua.create_table()?;
@@ -465,9 +465,9 @@ mod tests {
     use super::*;
     use crate::lua::runtime::NativeRuntime;
 
-    fn create_test_lua() -> (Lua, Arc<dyn LuaRuntime>, SharedMediaBag) {
+    fn create_test_lua() -> (Lua, Arc<dyn SystemRuntime>, SharedMediaBag) {
         let lua = Lua::new();
-        let runtime = Arc::new(NativeRuntime::new()) as Arc<dyn LuaRuntime>;
+        let runtime = Arc::new(NativeRuntime::new()) as Arc<dyn SystemRuntime>;
         let mediabag = create_shared_mediabag();
         let pandoc = lua.create_table().unwrap();
         lua.globals().set("pandoc", pandoc.clone()).unwrap();

@@ -20,16 +20,20 @@
 //!
 //! ```ignore
 //! use quarto_core::resources::{write_html_resources, HtmlResourcePaths};
+//! use quarto_system_runtime::NativeRuntime;
+//!
+//! let runtime = NativeRuntime::new();
 //!
 //! // During render, write resources and get paths
-//! let paths = write_html_resources(&output_dir, "document")?;
+//! let paths = write_html_resources(&output_dir, "document", &runtime)?;
 //!
 //! // paths.css contains relative paths for template
 //! // e.g., ["document_files/styles.css"]
 //! ```
 
-use std::fs;
 use std::path::{Path, PathBuf};
+
+use quarto_system_runtime::SystemRuntime;
 
 use crate::Result;
 
@@ -68,6 +72,7 @@ impl HtmlResourcePaths {
 /// # Arguments
 /// * `output_dir` - Directory containing the output HTML file
 /// * `stem` - The stem of the output filename (e.g., "document" for "document.html")
+/// * `runtime` - The system runtime for file operations
 ///
 /// # Returns
 /// Paths to the written resources, relative to the output HTML file.
@@ -75,16 +80,20 @@ impl HtmlResourcePaths {
 /// # Example
 /// ```ignore
 /// // For output at /output/document.html
-/// let paths = write_html_resources(Path::new("/output"), "document")?;
+/// let paths = write_html_resources(Path::new("/output"), "document", &runtime)?;
 /// // Creates /output/document_files/styles.css
 /// // Returns paths.css = ["document_files/styles.css"]
 /// ```
-pub fn write_html_resources(output_dir: &Path, stem: &str) -> Result<HtmlResourcePaths> {
+pub fn write_html_resources(
+    output_dir: &Path,
+    stem: &str,
+    runtime: &dyn SystemRuntime,
+) -> Result<HtmlResourcePaths> {
     // Create resource directory: {stem}_files/
     let resource_dir_name = format!("{}_files", stem);
     let resource_dir = output_dir.join(&resource_dir_name);
 
-    fs::create_dir_all(&resource_dir).map_err(|e| {
+    runtime.dir_create(&resource_dir, true).map_err(|e| {
         crate::error::QuartoError::other(format!(
             "Failed to create resource directory {}: {}",
             resource_dir.display(),
@@ -95,13 +104,15 @@ pub fn write_html_resources(output_dir: &Path, stem: &str) -> Result<HtmlResourc
     // Write CSS
     let css_filename = "styles.css";
     let css_path = resource_dir.join(css_filename);
-    fs::write(&css_path, DEFAULT_CSS).map_err(|e| {
-        crate::error::QuartoError::other(format!(
-            "Failed to write CSS to {}: {}",
-            css_path.display(),
-            e
-        ))
-    })?;
+    runtime
+        .file_write(&css_path, DEFAULT_CSS.as_bytes())
+        .map_err(|e| {
+            crate::error::QuartoError::other(format!(
+                "Failed to write CSS to {}: {}",
+                css_path.display(),
+                e
+            ))
+        })?;
 
     // Build relative paths for template
     let css_relative = format!("{}/{}", resource_dir_name, css_filename);
@@ -123,6 +134,7 @@ pub fn resource_dir_name(stem: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_system_runtime::NativeRuntime;
     use std::fs;
     use tempfile::TempDir;
 
@@ -135,8 +147,9 @@ mod tests {
 
     #[test]
     fn test_write_html_resources_creates_directory() {
+        let runtime = NativeRuntime::new();
         let temp = TempDir::new().unwrap();
-        let paths = write_html_resources(temp.path(), "document").unwrap();
+        let paths = write_html_resources(temp.path(), "document", &runtime).unwrap();
 
         assert!(paths.resource_dir.exists());
         assert!(paths.resource_dir.ends_with("document_files"));
@@ -144,8 +157,9 @@ mod tests {
 
     #[test]
     fn test_write_html_resources_writes_css() {
+        let runtime = NativeRuntime::new();
         let temp = TempDir::new().unwrap();
-        let _paths = write_html_resources(temp.path(), "mydoc").unwrap();
+        let _paths = write_html_resources(temp.path(), "mydoc", &runtime).unwrap();
 
         let css_path = temp.path().join("mydoc_files/styles.css");
         assert!(css_path.exists());
@@ -156,8 +170,9 @@ mod tests {
 
     #[test]
     fn test_write_html_resources_returns_relative_paths() {
+        let runtime = NativeRuntime::new();
         let temp = TempDir::new().unwrap();
-        let paths = write_html_resources(temp.path(), "test").unwrap();
+        let paths = write_html_resources(temp.path(), "test", &runtime).unwrap();
 
         assert_eq!(paths.css.len(), 1);
         assert_eq!(paths.css[0], "test_files/styles.css");

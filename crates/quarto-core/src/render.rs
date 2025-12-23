@@ -14,6 +14,8 @@
 
 use std::path::PathBuf;
 
+use quarto_system_runtime::SystemRuntime;
+
 use crate::artifact::ArtifactStore;
 use crate::format::Format;
 use crate::project::{DocumentInfo, ProjectContext};
@@ -41,27 +43,13 @@ impl BinaryDependencies {
     }
 
     /// Discover binary dependencies from environment and PATH
-    pub fn discover() -> Self {
+    pub fn discover(runtime: &dyn SystemRuntime) -> Self {
         Self {
-            dart_sass: Self::find_binary("sass", "QUARTO_DART_SASS"),
-            esbuild: Self::find_binary("esbuild", "QUARTO_ESBUILD"),
-            pandoc: Self::find_binary("pandoc", "QUARTO_PANDOC"),
-            typst: Self::find_binary("typst", "QUARTO_TYPST"),
+            dart_sass: runtime.find_binary("sass", "QUARTO_DART_SASS"),
+            esbuild: runtime.find_binary("esbuild", "QUARTO_ESBUILD"),
+            pandoc: runtime.find_binary("pandoc", "QUARTO_PANDOC"),
+            typst: runtime.find_binary("typst", "QUARTO_TYPST"),
         }
-    }
-
-    /// Find a binary by checking environment variable, then PATH
-    fn find_binary(name: &str, env_var: &str) -> Option<PathBuf> {
-        // 1. Check environment variable
-        if let Ok(path) = std::env::var(env_var) {
-            let path = PathBuf::from(path);
-            if path.exists() {
-                return Some(path);
-            }
-        }
-
-        // 2. Try to find in PATH using which
-        which::which(name).ok()
     }
 
     /// Check if dart-sass is available

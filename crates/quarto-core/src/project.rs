@@ -19,6 +19,8 @@
 
 use std::path::{Path, PathBuf};
 
+use quarto_system_runtime::SystemRuntime;
+
 use crate::error::{QuartoError, Result};
 
 /// Project type enumeration
@@ -142,23 +144,30 @@ impl ProjectContext {
     /// If the path is a directory, looks for `_quarto.yml` in that directory and parents.
     ///
     /// If no `_quarto.yml` is found, creates a single-file pseudo-project.
-    pub fn discover(path: impl AsRef<Path>) -> Result<Self> {
+    pub fn discover(path: impl AsRef<Path>, runtime: &dyn SystemRuntime) -> Result<Self> {
         let path = path.as_ref();
 
         // Canonicalize the path
-        let path = path
-            .canonicalize()
-            .map_err(|e| QuartoError::Io(e))?;
+        let path = runtime
+            .canonicalize(path)
+            .map_err(|e| QuartoError::Other(format!("Failed to canonicalize path: {}", e)))?;
 
         // Determine if this is a file or directory
-        let (search_dir, input_file) = if path.is_file() {
+        let is_file = runtime
+            .is_file(&path)
+            .map_err(|e| QuartoError::Other(format!("Failed to check path type: {}", e)))?;
+        let is_dir = runtime
+            .is_dir(&path)
+            .map_err(|e| QuartoError::Other(format!("Failed to check path type: {}", e)))?;
+
+        let (search_dir, input_file) = if is_file {
             (
                 path.parent()
                     .ok_or_else(|| QuartoError::Other("Input file has no parent directory".into()))?
                     .to_path_buf(),
                 Some(path.clone()),
             )
-        } else if path.is_dir() {
+        } else if is_dir {
             (path.clone(), None)
         } else {
             return Err(QuartoError::Other(format!(
@@ -168,7 +177,7 @@ impl ProjectContext {
         };
 
         // Search for _quarto.yml
-        let (project_dir, config) = Self::find_project_config(&search_dir)?;
+        let (project_dir, config) = Self::find_project_config(&search_dir, runtime)?;
 
         // Determine if this is a single-file project
         let is_single_file = config.is_none() && input_file.is_some();
@@ -201,12 +210,12 @@ impl ProjectContext {
     }
 
     /// Create a single-file project context directly
-    pub fn single_file(input: impl AsRef<Path>) -> Result<Self> {
+    pub fn single_file(input: impl AsRef<Path>, runtime: &dyn SystemRuntime) -> Result<Self> {
         let input = input.as_ref();
 
-        let input = input
-            .canonicalize()
-            .map_err(|e| QuartoError::Io(e))?;
+        let input = runtime
+            .canonicalize(input)
+            .map_err(|e| QuartoError::Other(format!("Failed to canonicalize path: {}", e)))?;
 
         let dir = input
             .parent()
@@ -223,21 +232,30 @@ impl ProjectContext {
     }
 
     /// Search for `_quarto.yml` in directory and parents
-    fn find_project_config(start_dir: &Path) -> Result<(Option<PathBuf>, Option<ProjectConfig>)> {
+    fn find_project_config(
+        start_dir: &Path,
+        runtime: &dyn SystemRuntime,
+    ) -> Result<(Option<PathBuf>, Option<ProjectConfig>)> {
         let mut current = start_dir.to_path_buf();
 
         loop {
             let config_path = current.join("_quarto.yml");
-            if config_path.exists() {
+            let exists = runtime
+                .path_exists(&config_path, None)
+                .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?;
+            if exists {
                 // Found config file - parse it
-                let config = Self::parse_config(&config_path)?;
+                let config = Self::parse_config(&config_path, runtime)?;
                 return Ok((Some(current), Some(config)));
             }
 
             // Also check for _quarto.yaml (alternate extension)
             let config_path_yaml = current.join("_quarto.yaml");
-            if config_path_yaml.exists() {
-                let config = Self::parse_config(&config_path_yaml)?;
+            let exists_yaml = runtime
+                .path_exists(&config_path_yaml, None)
+                .map_err(|e| QuartoError::Other(format!("Failed to check config path: {}", e)))?;
+            if exists_yaml {
+                let config = Self::parse_config(&config_path_yaml, runtime)?;
                 return Ok((Some(current), Some(config)));
             }
 
@@ -252,8 +270,10 @@ impl ProjectContext {
     }
 
     /// Parse a `_quarto.yml` file
-    fn parse_config(path: &Path) -> Result<ProjectConfig> {
-        let content = std::fs::read_to_string(path).map_err(QuartoError::Io)?;
+    fn parse_config(path: &Path, runtime: &dyn SystemRuntime) -> Result<ProjectConfig> {
+        let content = runtime
+            .file_read_string(path)
+            .map_err(|e| QuartoError::Other(format!("Failed to read config file: {}", e)))?;
 
         // Parse YAML
         let value: serde_json::Value = serde_yaml::from_str(&content)

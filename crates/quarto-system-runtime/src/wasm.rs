@@ -1,19 +1,14 @@
 /*
- * lua/runtime/wasm.rs
+ * wasm.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * WasmRuntime implementation for Lua filters in browser environments.
+ * WasmRuntime implementation for browser environments.
  *
- * This is a stub file - full implementation is tracked in issue k-484.
- *
- * When implemented, this runtime will:
- * - Use VirtualFileSystem for file operations (mediabag + in-memory)
- * - Return NotSupported for process execution
- * - Use fetch() API for network (blocking wrapper)
- * - Return empty/None for environment access
- * - Return NotSupported for CWD operations
- *
- * Design doc: claude-notes/plans/2025-12-03-lua-runtime-abstraction-layer.md
+ * This runtime operates within browser sandbox constraints:
+ * - No direct filesystem access (uses VirtualFileSystem)
+ * - No process execution
+ * - Network via fetch() API
+ * - No environment variables
  */
 
 // This module is only compiled for WASM targets
@@ -22,8 +17,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use super::traits::{
-    CommandOutput, LuaRuntime, PathKind, PathMetadata, RuntimeError, RuntimeResult, TempDir,
+use crate::traits::{
+    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
 };
 
@@ -34,8 +29,6 @@ use super::traits::{
 /// - No process execution
 /// - Network via fetch() API
 /// - No environment variables
-///
-/// See issue k-484 for implementation details.
 pub struct WasmRuntime {
     // TODO: Add VirtualFileSystem
     // vfs: VirtualFileSystem,
@@ -56,65 +49,91 @@ impl Default for WasmRuntime {
     }
 }
 
-impl LuaRuntime for WasmRuntime {
+impl SystemRuntime for WasmRuntime {
     fn file_read(&self, _path: &Path) -> RuntimeResult<Vec<u8>> {
         // TODO: Implement using VirtualFileSystem
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
     }
 
     fn file_write(&self, _path: &Path, _contents: &[u8]) -> RuntimeResult<()> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
     }
 
     fn path_exists(&self, _path: &Path, _kind: Option<PathKind>) -> RuntimeResult<bool> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
+    }
+
+    fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf> {
+        // In WASM, we can't resolve symlinks or verify path existence.
+        // We just normalize the path by removing . and .. components.
+        use std::path::Component;
+
+        let mut normalized = PathBuf::new();
+        for component in path.components() {
+            match component {
+                Component::ParentDir => {
+                    // Go up one level if possible
+                    if !normalized.pop() {
+                        // Can't go above root - keep the ..
+                        normalized.push("..");
+                    }
+                }
+                Component::CurDir => {
+                    // Skip . components
+                }
+                other => {
+                    normalized.push(other);
+                }
+            }
+        }
+        Ok(normalized)
     }
 
     fn path_metadata(&self, _path: &Path) -> RuntimeResult<PathMetadata> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
     }
 
     fn file_copy(&self, _src: &Path, _dst: &Path) -> RuntimeResult<()> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
     }
 
     fn path_rename(&self, _old: &Path, _new: &Path) -> RuntimeResult<()> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
     }
 
     fn file_remove(&self, _path: &Path) -> RuntimeResult<()> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime file operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime file operations not yet implemented".to_string(),
         ))
     }
 
     fn dir_create(&self, _path: &Path, _recursive: bool) -> RuntimeResult<()> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime directory operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime directory operations not yet implemented".to_string(),
         ))
     }
 
     fn dir_remove(&self, _path: &Path, _recursive: bool) -> RuntimeResult<()> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime directory operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime directory operations not yet implemented".to_string(),
         ))
     }
 
     fn dir_list(&self, _path: &Path) -> RuntimeResult<Vec<PathBuf>> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime directory operations not yet implemented (see k-484)".to_string(),
+            "WasmRuntime directory operations not yet implemented".to_string(),
         ))
     }
 
@@ -127,7 +146,7 @@ impl LuaRuntime for WasmRuntime {
 
     fn temp_dir(&self, _template: &str) -> RuntimeResult<TempDir> {
         Err(RuntimeError::NotSupported(
-            "WasmRuntime temp directory not yet implemented (see k-484)".to_string(),
+            "WasmRuntime temp directory not yet implemented".to_string(),
         ))
     }
 
@@ -162,7 +181,7 @@ impl LuaRuntime for WasmRuntime {
     fn fetch_url(&self, _url: &str) -> RuntimeResult<(Vec<u8>, String)> {
         // TODO: Implement using fetch() API via wasm-bindgen
         Err(RuntimeError::NotSupported(
-            "WasmRuntime fetch not yet implemented (see k-484)".to_string(),
+            "WasmRuntime fetch not yet implemented".to_string(),
         ))
     }
 

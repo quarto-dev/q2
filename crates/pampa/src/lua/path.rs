@@ -9,7 +9,7 @@
  * - directory, filename, split, split_extension, join: path parsing/building
  * - is_absolute, is_relative: path type checks
  * - normalize, make_relative: path transformations
- * - exists: filesystem check (requires LuaRuntime)
+ * - exists: filesystem check (requires SystemRuntime)
  * - split_search_path: PATH parsing
  *
  * Reference: https://pandoc.org/lua-filters.html#module-pandoc.path
@@ -19,7 +19,7 @@ use mlua::{Lua, Result, Table, Value};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
-use super::runtime::{LuaRuntime, PathKind};
+use super::runtime::{PathKind, SystemRuntime};
 
 /// Register the pandoc.path module.
 ///
@@ -28,7 +28,7 @@ use super::runtime::{LuaRuntime, PathKind};
 ///
 /// The `runtime` parameter is used for the `exists` function which requires
 /// filesystem access.
-pub fn register_pandoc_path(lua: &Lua, pandoc: &Table, runtime: Arc<dyn LuaRuntime>) -> Result<()> {
+pub fn register_pandoc_path(lua: &Lua, pandoc: &Table, runtime: Arc<dyn SystemRuntime>) -> Result<()> {
     let path = lua.create_table()?;
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -350,9 +350,9 @@ mod tests {
     use super::*;
     use crate::lua::runtime::NativeRuntime;
 
-    fn create_test_lua() -> (Lua, Arc<dyn LuaRuntime>) {
+    fn create_test_lua() -> (Lua, Arc<dyn SystemRuntime>) {
         let lua = Lua::new();
-        let runtime = Arc::new(NativeRuntime::new()) as Arc<dyn LuaRuntime>;
+        let runtime = Arc::new(NativeRuntime::new()) as Arc<dyn SystemRuntime>;
         let pandoc = lua.create_table().unwrap();
         lua.globals().set("pandoc", pandoc.clone()).unwrap();
         register_pandoc_path(&lua, &pandoc, runtime.clone()).unwrap();

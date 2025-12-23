@@ -20,7 +20,7 @@ use crate::pandoc::{Block, Inline, Pandoc};
 use super::constructors::register_pandoc_namespace;
 use super::mediabag::create_shared_mediabag;
 use super::readwrite::{create_reader_options_table, create_writer_options_table};
-use super::runtime::{LuaRuntime, NativeRuntime};
+use super::runtime::{NativeRuntime, SystemRuntime};
 use super::types::{LuaBlock, LuaInline, blocks_to_lua_table, inlines_to_lua_table};
 
 // ============================================================================
@@ -111,7 +111,7 @@ pub fn apply_lua_filter(
     // Create runtime for system operations
     // For now, we use NativeRuntime. In the future, this could be passed in
     // to allow for sandboxed or WASM runtimes.
-    let runtime: Arc<dyn LuaRuntime> = Arc::new(NativeRuntime::new());
+    let runtime: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
     // Create mediabag for storing media items
     // In the future, this could be pre-populated from the document or passed in

@@ -1,8 +1,8 @@
 /*
- * lua/runtime/native.rs
+ * native.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * NativeRuntime implementation for Lua filters.
+ * NativeRuntime implementation.
  *
  * This runtime provides full system access using std:
  * - std::fs for file operations
@@ -18,14 +18,14 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use super::traits::{
-    CommandOutput, LuaRuntime, PathKind, PathMetadata, RuntimeError, RuntimeResult, TempDir,
+use crate::traits::{
+    CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
 };
 
 /// Native runtime with full system access.
 ///
-/// This is the default runtime for trusted filters on native targets.
+/// This is the default runtime for trusted code on native targets.
 /// It provides unrestricted access to the filesystem, process execution,
 /// environment variables, and network (if enabled).
 #[derive(Debug, Default)]
@@ -42,7 +42,7 @@ impl NativeRuntime {
     }
 }
 
-impl LuaRuntime for NativeRuntime {
+impl SystemRuntime for NativeRuntime {
     // ═══════════════════════════════════════════════════════════════════════
     // FILE OPERATIONS
     // ═══════════════════════════════════════════════════════════════════════
@@ -72,6 +72,10 @@ impl LuaRuntime for NativeRuntime {
             Some(PathKind::Directory) => Ok(path.is_dir()),
             Some(PathKind::Symlink) => Ok(path.symlink_metadata()?.file_type().is_symlink()),
         }
+    }
+
+    fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf> {
+        path.canonicalize().map_err(RuntimeError::from)
     }
 
     fn path_metadata(&self, path: &Path) -> RuntimeResult<PathMetadata> {
@@ -333,6 +337,22 @@ impl LuaRuntime for NativeRuntime {
             Some(sub) => Ok(base.join(sub)),
             None => Ok(base),
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BINARY DISCOVERY
+    // ═══════════════════════════════════════════════════════════════════════
+
+    fn find_binary(&self, name: &str, env_var: &str) -> Option<PathBuf> {
+        // Check environment variable first
+        if let Ok(path_str) = std::env::var(env_var) {
+            let path = PathBuf::from(path_str);
+            if path.is_file() {
+                return Some(path);
+            }
+        }
+        // Fall back to PATH lookup
+        which::which(name).ok()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -713,5 +733,62 @@ mod tests {
         // These should not error (though we can't easily verify the output)
         rt.stdout_write(b"test stdout\n").unwrap();
         rt.stderr_write(b"test stderr\n").unwrap();
+    }
+
+    #[test]
+    fn test_is_file_and_is_dir() {
+        let temp = TempFileTempDir::new().unwrap();
+        let file_path = temp.path().join("test.txt");
+        let dir_path = temp.path().join("subdir");
+        let rt = runtime();
+
+        // Create file and directory
+        fs::write(&file_path, "content").unwrap();
+        fs::create_dir(&dir_path).unwrap();
+
+        // Test is_file
+        assert!(rt.is_file(&file_path).unwrap());
+        assert!(!rt.is_file(&dir_path).unwrap());
+        assert!(!rt.is_file(&temp.path().join("nonexistent")).unwrap());
+
+        // Test is_dir
+        assert!(!rt.is_dir(&file_path).unwrap());
+        assert!(rt.is_dir(&dir_path).unwrap());
+        assert!(!rt.is_dir(&temp.path().join("nonexistent")).unwrap());
+    }
+
+    #[test]
+    fn test_find_binary() {
+        let rt = runtime();
+
+        // "echo" should exist on all Unix-like systems and Windows
+        // (on Windows it's a shell builtin but `which` should find cmd.exe or similar)
+        #[cfg(unix)]
+        {
+            let echo = rt.find_binary("echo", "NONEXISTENT_ENV_VAR");
+            assert!(echo.is_some(), "echo binary should be found on PATH");
+        }
+
+        // Test with a definitely nonexistent binary
+        let nonexistent = rt.find_binary("definitely_not_a_real_binary_12345", "NONEXISTENT_ENV_VAR");
+        assert!(nonexistent.is_none());
+    }
+
+    #[test]
+    fn test_canonicalize() {
+        let temp = TempFileTempDir::new().unwrap();
+        let file_path = temp.path().join("test.txt");
+        let rt = runtime();
+
+        // Create a file so canonicalize can work
+        fs::write(&file_path, "content").unwrap();
+
+        // Canonicalize should return an absolute path
+        let canonical = rt.canonicalize(&file_path).unwrap();
+        assert!(canonical.is_absolute());
+
+        // Should fail for nonexistent paths
+        let result = rt.canonicalize(&temp.path().join("nonexistent.txt"));
+        assert!(result.is_err());
     }
 }

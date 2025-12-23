@@ -1,15 +1,13 @@
 /*
- * lua/runtime/traits.rs
+ * traits.rs
  * Copyright (c) 2025 Posit, PBC
  *
  * Defines the LuaRuntime trait and supporting types for the runtime abstraction layer.
  *
- * This abstraction allows Lua filters to run in different execution environments:
+ * This abstraction allows code to run in different execution environments:
  * - NativeRuntime: Full system access using std
  * - WasmRuntime: Browser environment with VFS and fetch()
- * - SandboxedRuntime: Restricted access for untrusted filters
- *
- * Design doc: claude-notes/plans/2025-12-03-lua-runtime-abstraction-layer.md
+ * - SandboxedRuntime: Restricted access for untrusted code
  */
 
 use std::collections::HashMap;
@@ -189,7 +187,7 @@ impl AsRef<Path> for TempDir {
     }
 }
 
-/// Trait defining all low-level runtime operations for Lua filters.
+/// Trait defining all low-level runtime operations.
 ///
 /// Implementations of this trait provide the actual system interaction,
 /// allowing for different behavior based on target (native, WASM) or
@@ -205,7 +203,7 @@ impl AsRef<Path> for TempDir {
 /// - Secure by default (no permissions granted without explicit opt-in)
 /// - Detailed error messages for debugging
 /// - Full Pandoc API compatibility (functions exist but may return errors)
-pub trait LuaRuntime: Send + Sync {
+pub trait SystemRuntime: Send + Sync {
     // ═══════════════════════════════════════════════════════════════════════
     // FILE OPERATIONS
     // ═══════════════════════════════════════════════════════════════════════
@@ -237,6 +235,30 @@ pub trait LuaRuntime: Send + Sync {
     ///
     /// Corresponds to: `pandoc.path.exists`
     fn path_exists(&self, path: &Path, kind: Option<PathKind>) -> RuntimeResult<bool>;
+
+    /// Check if path exists and is a file.
+    ///
+    /// Convenience method that calls `path_exists` with `PathKind::File`.
+    fn is_file(&self, path: &Path) -> RuntimeResult<bool> {
+        self.path_exists(path, Some(PathKind::File))
+    }
+
+    /// Check if path exists and is a directory.
+    ///
+    /// Convenience method that calls `path_exists` with `PathKind::Directory`.
+    fn is_dir(&self, path: &Path) -> RuntimeResult<bool> {
+        self.path_exists(path, Some(PathKind::Directory))
+    }
+
+    /// Canonicalize a path (resolve symlinks, make absolute).
+    ///
+    /// On native platforms, this resolves symlinks and returns an absolute path.
+    /// On WASM, this normalizes the path (removes `.` and `..` components) but
+    /// cannot resolve symlinks since there's no real filesystem.
+    ///
+    /// Returns an error if the path doesn't exist (on native) or if the path
+    /// is malformed.
+    fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf>;
 
     /// Get file/directory metadata.
     ///
@@ -359,6 +381,35 @@ pub trait LuaRuntime: Send + Sync {
     ///
     /// Corresponds to: `pandoc.system.xdg`
     fn xdg_dir(&self, kind: XdgDirKind, subpath: Option<&Path>) -> RuntimeResult<PathBuf>;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // BINARY DISCOVERY
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Find a binary by checking an environment variable first, then PATH.
+    ///
+    /// This method is useful for finding external tools like pandoc, sass, etc.
+    /// The `env_var` parameter specifies an environment variable that may contain
+    /// the path to the binary (e.g., "QUARTO_PANDOC" for pandoc).
+    ///
+    /// Returns `None` if the binary is not found. In WASM environments,
+    /// always returns `None` since external binaries are not available.
+    ///
+    /// Default implementation checks the environment variable but does not
+    /// search PATH. Override in `NativeRuntime` to use `which::which()`.
+    fn find_binary(&self, name: &str, env_var: &str) -> Option<PathBuf> {
+        // Check environment variable first
+        if let Ok(Some(path_str)) = self.env_get(env_var) {
+            let path = PathBuf::from(path_str);
+            if self.is_file(&path).unwrap_or(false) {
+                return Some(path);
+            }
+        }
+        // Default implementation does not search PATH
+        // NativeRuntime overrides this to use which::which()
+        let _ = name; // Silence unused variable warning
+        None
+    }
 
     // ═══════════════════════════════════════════════════════════════════════
     // OUTPUT

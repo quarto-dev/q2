@@ -55,11 +55,14 @@ The quarto-hub crate defines the automerge document structure that both the CLI 
 - Maps file paths to automerge document IDs
 - Structure: `ROOT.files: Map<String, String>` (path → bs58-encoded doc ID)
 - Methods: `add_file()`, `remove_file()`, `get_file()`, `has_file()`, `get_all_files()`
+- **Important**: Must include `_quarto.yml` (or `_quarto.yaml`) so the web frontend can access project configuration
 
 **Document Structure**:
 - Each `.qmd` file is a separate automerge document
+- `_quarto.yml` is also stored as an automerge document (needed for rendering)
 - Content stored as `ROOT.text: automerge::Text` (CRDT text)
 - Document IDs are bs58-encoded
+- **MVP limitation**: Binary assets (images, CSS files) are NOT stored in automerge - pure Markdown only
 
 **Note:** The web frontend accesses this same data model via automerge-repo (JS), NOT via HTTP APIs. The sync server only provides WebSocket sync protocol.
 
@@ -76,11 +79,13 @@ The `quarto` crate uses direct filesystem access throughout:
 
 ---
 
-## Design: QuartoRuntime Abstraction
+## Design: SystemRuntime Abstraction
+
+**Note**: The original plan proposed a `QuartoRuntime` trait, but we've unified this with the existing `LuaRuntime` by renaming it to `SystemRuntime` and moving it to `quarto-system-runtime`. See `claude-notes/plans/2025-12-22-system-runtime-unification.md` (issue k-6zaq).
 
 ### Trait Definition
 
-Following the `LuaRuntime` pattern, we propose a `QuartoRuntime` trait:
+The `SystemRuntime` trait (in `crates/quarto-system-runtime/`):
 
 ```rust
 /// Result type for runtime operations
@@ -467,7 +472,8 @@ crates/wasm-quarto-hub-client/
 ├── src/
 │   ├── lib.rs              # Entry points (exported to JS)
 │   ├── virtual_fs.rs       # In-memory virtual filesystem
-│   └── runtime.rs          # WasmQuartoRuntime implementation
+│   ├── runtime.rs          # WasmRuntime implementing SystemRuntime trait
+│   └── vfs_api.rs          # VFS functions exported to JS (vfs_add_file, etc.)
 └── build.md                # Build instructions for emscripten
 ```
 
@@ -682,6 +688,126 @@ The "Index Document" refers to the automerge document that maps file paths to do
 8. **WASM render** → Produce HTML
 9. **Preview iframe** → Display HTML
 
+### VFS Initialization Protocol
+
+The Virtual Filesystem (VFS) in the WASM module must be kept in sync with automerge documents. This happens through a subscription-based protocol:
+
+**On Project Open (Two-Pane View Initialization):**
+
+```typescript
+// 1. Load IndexDocument
+const indexDoc = await repo.find(indexDocId);
+const files = indexDoc.files; // Map<path, docId>
+
+// 2. Subscribe to all project files
+for (const [path, docId] of Object.entries(files)) {
+  const docHandle = await repo.find(docId);
+
+  // 3. Initial VFS population
+  const content = docHandle.doc.text.toString();
+  wasmModule.vfs_add_file(path, new TextEncoder().encode(content));
+
+  // 4. Subscribe to future changes
+  docHandle.on('change', () => {
+    const newContent = docHandle.doc.text.toString();
+    wasmModule.vfs_update_file(path, new TextEncoder().encode(newContent));
+
+    // If this is the currently-viewed file, trigger re-render
+    if (path === currentFilePath) {
+      triggerRender();
+    }
+  });
+}
+
+// 5. VFS is now populated and will stay current
+```
+
+**WASM VFS API:**
+
+```rust
+/// Add or update a file in the virtual filesystem
+#[wasm_bindgen]
+pub fn vfs_add_file(path: &str, content: &[u8]);
+
+/// Update an existing file (same as add_file, but semantically clearer)
+#[wasm_bindgen]
+pub fn vfs_update_file(path: &str, content: &[u8]);
+
+/// Remove a file from the virtual filesystem
+#[wasm_bindgen]
+pub fn vfs_remove_file(path: &str);
+
+/// List all files currently in the virtual filesystem
+#[wasm_bindgen]
+pub fn vfs_list_files() -> Vec<String>;
+
+/// Clear all files from the virtual filesystem
+#[wasm_bindgen]
+pub fn vfs_clear();
+```
+
+**On New File Creation:**
+
+When a user creates a new `.qmd` file in the web UI:
+
+1. Create new automerge document with empty `ROOT.text`
+2. Add entry to IndexDocument: `files[newPath] = newDocId`
+3. Other clients receive IndexDocument change via sync
+4. Other clients detect new path → `repo.find(newDocId)` → `vfs_add_file()`
+
+This "just works" because all clients subscribe to IndexDocument changes.
+
+**On File Deletion:**
+
+1. Remove entry from IndexDocument
+2. Other clients receive change → `vfs_remove_file(path)`
+
+**Subscribing to IndexDocument Changes:**
+
+The frontend must also subscribe to IndexDocument changes to detect new/removed files from collaborators:
+
+```typescript
+indexDocHandle.on('change', () => {
+  const currentFiles = new Set(Object.keys(indexDocHandle.doc.files));
+  const vfsFiles = new Set(wasmModule.vfs_list_files());
+
+  // New files added by collaborators
+  for (const path of currentFiles) {
+    if (!vfsFiles.has(path)) {
+      const docId = indexDocHandle.doc.files[path];
+      subscribeToFile(path, docId); // Same logic as initialization
+    }
+  }
+
+  // Files removed by collaborators
+  for (const path of vfsFiles) {
+    if (!currentFiles.has(path)) {
+      wasmModule.vfs_remove_file(path);
+      unsubscribeFromFile(path);
+    }
+  }
+});
+```
+
+**Rendering with VFS:**
+
+When `render_qmd_to_html()` is called:
+- The WASM module reads the current file from VFS
+- It can also read `_quarto.yml` from VFS for project config
+- It can read any include files referenced by the document
+- All files are "current" because we maintain them incrementally via automerge subscriptions
+
+**Files Included in VFS:**
+
+| File Type | In VFS? | Notes |
+|-----------|---------|-------|
+| `.qmd` files | ✅ Yes | Main content files |
+| `_quarto.yml` / `_quarto.yaml` | ✅ Yes | Project configuration |
+| Lua filters (`.lua`) | ✅ Yes | If stored in project |
+| Images (`.png`, `.jpg`, etc.) | ❌ No | MVP limitation - pure Markdown only |
+| CSS/SCSS files | ❌ No | MVP limitation |
+| Other binary assets | ❌ No | MVP limitation |
+
 ### Frontend Technology Stack
 
 - **Framework**: React (keep it simple)
@@ -699,25 +825,28 @@ The "Index Document" refers to the automerge document that maps file paths to do
 
 ## Implementation Phases
 
-### Phase 1: QuartoRuntime Abstraction (k-nkhl)
+### Phase 1: SystemRuntime Integration (k-nkhl)
 
-1. Define `QuartoRuntime` trait in `quarto-core`
-2. Implement `NativeQuartoRuntime`
-3. Update `ProjectContext` to use runtime
-4. Update `BinaryDependencies` to use runtime
-5. Update render command to use runtime
-6. Add comprehensive tests
+**Prerequisite completed**: `SystemRuntime` trait now exists in `quarto-system-runtime` crate (k-6zaq).
+
+1. ~~Define runtime trait~~ → Done: Use `SystemRuntime` from `quarto-system-runtime`
+2. ~~Implement NativeRuntime~~ → Done: `NativeRuntime` exists
+3. Update `ProjectContext` to accept `&dyn SystemRuntime`
+4. Update `BinaryDependencies` to use `SystemRuntime::find_binary()`
+5. Update render command to thread runtime through
+6. Add integration tests
 7. Ensure existing CLI tests pass
 
 ### Phase 2: `wasm-quarto-hub-client` Crate
 
 1. Create crate structure at `crates/wasm-quarto-hub-client/`
 2. Implement `VirtualFileSystem` (in-memory)
-3. Implement `WasmQuartoRuntime` (uses VirtualFileSystem)
+3. Implement `WasmRuntime` for `SystemRuntime` trait (uses VirtualFileSystem)
 4. Set up emscripten build configuration
-5. Implement exported functions (render_qmd_to_html, etc.)
-6. Test Lua filter support via mlua
-7. Build and test WASM module
+5. Implement VFS API functions (`vfs_add_file`, `vfs_update_file`, etc.)
+6. Implement rendering functions (`render_qmd_to_html`, etc.)
+7. Test Lua filter support via mlua
+8. Build and test WASM module
 
 ### Phase 3: React Frontend Setup
 
@@ -864,10 +993,10 @@ The `wasm-quarto-hub-client` crate uses `wasm32-unknown-emscripten`, which enabl
    - Source location tracking from pampa enables deeper qmd-preview integration (future sessions)
 
 7. **Asset handling**: Virtual filesystem integration.
-   - Only .qmd file content is shared via automerge
+   - `.qmd` files and `_quarto.yml` are shared via automerge (text content only)
+   - **MVP limitation**: Binary assets (images, CSS, fonts) are NOT synced - pure Markdown only
    - Assets generated by rendering pipeline stay in WASM virtual filesystem
-   - JavaScript traverses rendered HTML and replaces asset references (e.g., `<img>` tags) with content from WASM module
-   - No server-side asset storage needed
+   - Future: Binary asset sync strategy TBD (base64 in automerge, external blob storage, etc.)
 
 8. **Editor component**: Monaco Editor.
    - VS Code heritage, familiar to users

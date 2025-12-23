@@ -1,27 +1,23 @@
 /*
- * lua/runtime/sandbox.rs
+ * sandbox.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * SandboxedRuntime implementation for untrusted Lua filters.
+ * SandboxedRuntime implementation for untrusted code.
  *
- * This is a stub file - full implementation is tracked in issue k-485.
- *
- * When implemented, this runtime will:
- * - Use decorator pattern wrapping any LuaRuntime
- * - Enforce SecurityPolicy with Deno-style permission model
- * - Support allow/deny lists for read, write, net, run, env
- * - Provide detailed error messages (PermissionError)
- * - Support path wildcards for granular access control
- *
- * Design doc: claude-notes/plans/2025-12-03-lua-runtime-abstraction-layer.md
+ * This runtime:
+ * - Uses decorator pattern wrapping any LuaRuntime
+ * - Enforces SecurityPolicy with Deno-style permission model
+ * - Supports allow/deny lists for read, write, net, run, env
+ * - Provides detailed error messages (PermissionError)
+ * - Supports path wildcards for granular access control
  */
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use super::traits::{
-    CommandOutput, LuaRuntime, PathKind, PathMetadata, RuntimeResult, TempDir, XdgDirKind,
+use crate::traits::{
+    CommandOutput, PathKind, PathMetadata, RuntimeResult, SystemRuntime, TempDir, XdgDirKind,
 };
 
 /// A path pattern that can match files/directories.
@@ -118,7 +114,7 @@ pub struct SecurityPolicy {
 }
 
 impl SecurityPolicy {
-    /// Fully permissive policy (for trusted filters).
+    /// Fully permissive policy (for trusted code).
     ///
     /// Equivalent to Deno's `-A` / `--allow-all` flag.
     pub fn trusted() -> Self {
@@ -138,7 +134,7 @@ impl SecurityPolicy {
         }
     }
 
-    /// Restrictive policy for untrusted filters.
+    /// Restrictive policy for untrusted code.
     ///
     /// Only allows:
     /// - Reading from project directory
@@ -167,17 +163,15 @@ impl SecurityPolicy {
 
 /// Sandboxed runtime that enforces security policies.
 ///
-/// This is a decorator that wraps any LuaRuntime and enforces
+/// This is a decorator that wraps any SystemRuntime and enforces
 /// the configured SecurityPolicy on all operations.
-///
-/// See issue k-485 for full implementation.
-pub struct SandboxedRuntime<R: LuaRuntime> {
+pub struct SandboxedRuntime<R: SystemRuntime> {
     inner: R,
-    #[allow(dead_code)] // Will be used in k-485
+    #[allow(dead_code)] // Will be used when full permission checking is implemented
     policy: SecurityPolicy,
 }
 
-impl<R: LuaRuntime> SandboxedRuntime<R> {
+impl<R: SystemRuntime> SandboxedRuntime<R> {
     /// Create a new SandboxedRuntime wrapping the given runtime.
     pub fn new(inner: R, policy: SecurityPolicy) -> Self {
         Self { inner, policy }
@@ -185,20 +179,24 @@ impl<R: LuaRuntime> SandboxedRuntime<R> {
 }
 
 // Stub implementation that just delegates to inner runtime
-// Full permission checking will be implemented in k-485
-impl<R: LuaRuntime> LuaRuntime for SandboxedRuntime<R> {
+// Full permission checking will be implemented in the future
+impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
-        // TODO: Check policy.can_read(path) - see k-485
+        // TODO: Check policy.can_read(path)
         self.inner.file_read(path)
     }
 
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
-        // TODO: Check policy.can_write(path) - see k-485
+        // TODO: Check policy.can_write(path)
         self.inner.file_write(path, contents)
     }
 
     fn path_exists(&self, path: &Path, kind: Option<PathKind>) -> RuntimeResult<bool> {
         self.inner.path_exists(path, kind)
+    }
+
+    fn canonicalize(&self, path: &Path) -> RuntimeResult<PathBuf> {
+        self.inner.canonicalize(path)
     }
 
     fn path_metadata(&self, path: &Path) -> RuntimeResult<PathMetadata> {
@@ -230,7 +228,7 @@ impl<R: LuaRuntime> LuaRuntime for SandboxedRuntime<R> {
     }
 
     fn cwd(&self) -> RuntimeResult<PathBuf> {
-        // TODO: Check policy.allow_cwd - see k-485
+        // TODO: Check policy.allow_cwd
         self.inner.cwd()
     }
 
@@ -239,7 +237,7 @@ impl<R: LuaRuntime> LuaRuntime for SandboxedRuntime<R> {
     }
 
     fn exec_pipe(&self, command: &str, args: &[&str], stdin: &[u8]) -> RuntimeResult<Vec<u8>> {
-        // TODO: Check policy.can_run(command) - see k-485
+        // TODO: Check policy.can_run(command)
         self.inner.exec_pipe(command, args, stdin)
     }
 
@@ -253,7 +251,7 @@ impl<R: LuaRuntime> LuaRuntime for SandboxedRuntime<R> {
     }
 
     fn env_get(&self, name: &str) -> RuntimeResult<Option<String>> {
-        // TODO: Check policy.can_env(name) - see k-485
+        // TODO: Check policy.can_env(name)
         self.inner.env_get(name)
     }
 
@@ -262,7 +260,7 @@ impl<R: LuaRuntime> LuaRuntime for SandboxedRuntime<R> {
     }
 
     fn fetch_url(&self, url: &str) -> RuntimeResult<(Vec<u8>, String)> {
-        // TODO: Check policy.can_net(host) - see k-485
+        // TODO: Check policy.can_net(host)
         self.inner.fetch_url(url)
     }
 
@@ -292,7 +290,7 @@ impl<R: LuaRuntime> LuaRuntime for SandboxedRuntime<R> {
 }
 
 /// Type alias for a thread-safe shared runtime.
-pub type SharedRuntime = Arc<dyn LuaRuntime>;
+pub type SharedRuntime = Arc<dyn SystemRuntime>;
 
 #[cfg(test)]
 mod tests {
@@ -318,7 +316,7 @@ mod tests {
         let pattern = PathPattern::new("/home/user/*.txt");
         assert!(pattern.matches(Path::new("/home/user/file.txt")));
         assert!(pattern.matches(Path::new("/home/user/other.txt")));
-        // Note: Simple implementation, full glob matching in k-485
+        // Note: Simple implementation, full glob matching in future
     }
 
     #[test]

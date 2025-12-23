@@ -16,16 +16,20 @@
 //!
 //! ```ignore
 //! use quarto_core::{ProjectContext, RenderContext, Format, BinaryDependencies};
+//! use quarto_system_runtime::NativeRuntime;
+//!
+//! // Create a runtime for system operations
+//! let runtime = NativeRuntime::new();
 //!
 //! // Discover project from input file
-//! let project = ProjectContext::discover("document.qmd")?;
+//! let project = ProjectContext::discover("document.qmd", &runtime)?;
 //!
 //! // Get the document to render
 //! let document = &project.files[0];
 //!
 //! // Set up render context
 //! let format = Format::html();
-//! let binaries = BinaryDependencies::discover();
+//! let binaries = BinaryDependencies::discover(&runtime);
 //! let mut ctx = RenderContext::new(&project, document, &format, &binaries);
 //!
 //! // Pipeline stages use ctx.artifacts for storing intermediates

@@ -60,6 +60,10 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
         MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
         ResourceCollectorTransform, TransformPipeline,
     };
+    use quarto_system_runtime::NativeRuntime;
+
+    // Create runtime
+    let runtime = NativeRuntime::new();
 
     // Read input
     let input_content = fs::read(input_path).map_err(|e| e.to_string())?;
@@ -85,7 +89,7 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     })?;
 
     // Set up render context
-    let project = ProjectContext::discover(input_path).map_err(|e| e.to_string())?;
+    let project = ProjectContext::discover(input_path, &runtime).map_err(|e| e.to_string())?;
     let doc_info = DocumentInfo::from_path(input_path);
     let format = Format::html();
     let binaries = BinaryDependencies::new();
@@ -112,8 +116,9 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     let output_stem = output_path.file_stem().unwrap().to_str().unwrap();
 
     // Write resources
-    let resource_paths = quarto_core::resources::write_html_resources(output_dir, output_stem)
-        .map_err(|e| e.to_string())?;
+    let resource_paths =
+        quarto_core::resources::write_html_resources(output_dir, output_stem, &runtime)
+            .map_err(|e| e.to_string())?;
 
     // Render HTML body using pampa's HTML writer
     let mut body_buf = Vec::new();

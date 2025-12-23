@@ -90,6 +90,9 @@ path = "./crates/quarto-treesitter-ast"
 [workspace.dependencies.quarto-pandoc-types]
 path = "./crates/quarto-pandoc-types"
 
+[workspace.dependencies.quarto-system-runtime]
+path = "./crates/quarto-system-runtime"
+
 [workspace.lints.clippy]
 assigning_clones = "warn"
 cfg_not_test = "warn"

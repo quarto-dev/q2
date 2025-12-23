@@ -36,6 +36,7 @@ use quarto_core::{
     FormatIdentifier, MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
     ResourceCollectorTransform, TransformPipeline,
 };
+use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 /// Arguments for the render command
 #[derive(Debug)]
@@ -57,17 +58,25 @@ pub struct RenderArgs {
 
 /// Execute the render command
 pub fn execute(args: RenderArgs) -> Result<()> {
+    // Create the system runtime
+    let runtime = NativeRuntime::new();
+
     // Determine input path
     let input_path = match &args.input {
         Some(input) => PathBuf::from(input),
         None => {
             // Default to current directory
-            std::env::current_dir().context("Failed to get current directory")?
+            runtime
+                .cwd()
+                .map_err(|e| anyhow::anyhow!("Failed to get current directory: {}", e))?
         }
     };
 
     // Validate input exists
-    if !input_path.exists() {
+    let path_exists = runtime
+        .path_exists(&input_path, None)
+        .map_err(|e| anyhow::anyhow!("Failed to check input path: {}", e))?;
+    if !path_exists {
         anyhow::bail!("Input path does not exist: {}", input_path.display());
     }
 
@@ -86,8 +95,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Discover project context
-    let project =
-        ProjectContext::discover(&input_path).context("Failed to discover project context")?;
+    let project = ProjectContext::discover(&input_path, &runtime)
+        .context("Failed to discover project context")?;
 
     if !args.quiet {
         if project.is_single_file {
@@ -102,11 +111,11 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Set up binary dependencies
-    let binaries = BinaryDependencies::discover();
+    let binaries = BinaryDependencies::discover(&runtime);
 
     // Render each file
     for doc_info in &project.files {
-        render_document(&doc_info, &project, &format, &binaries, &args)?;
+        render_document(&doc_info, &project, &format, &binaries, &args, &runtime)?;
     }
 
     Ok(())
@@ -143,6 +152,7 @@ fn render_document(
     format: &Format,
     binaries: &BinaryDependencies,
     args: &RenderArgs,
+    runtime: &dyn SystemRuntime,
 ) -> Result<()> {
     debug!("Rendering: {}", doc_info.input.display());
 
@@ -216,8 +226,9 @@ fn render_document(
         .ok_or_else(|| anyhow::anyhow!("Could not determine output filename stem"))?;
 
     // Write static resources (CSS, JS) to output directory
-    let resource_paths = quarto_core::resources::write_html_resources(output_dir, output_stem)
-        .context("Failed to write HTML resources")?;
+    let resource_paths =
+        quarto_core::resources::write_html_resources(output_dir, output_stem, runtime)
+            .context("Failed to write HTML resources")?;
 
     // Render to HTML with resource paths
     let html_output = render_to_html(&pandoc, &context, &resource_paths.css)?;

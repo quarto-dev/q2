@@ -1632,6 +1632,7 @@ dependencies = [
  "quarto-pandoc-types",
  "quarto-parse-errors",
  "quarto-source-map",
+ "quarto-system-runtime",
  "quarto-treesitter-ast",
  "quarto-yaml",
  "regex",
@@ -1838,6 +1839,7 @@ dependencies = [
  "pampa",
  "quarto-core",
  "quarto-doctemplate",
+ "quarto-system-runtime",
  "quarto-util",
  "serde_json",
  "tempfile",
@@ -1887,6 +1889,7 @@ dependencies = [
  "quarto-doctemplate",
  "quarto-pandoc-types",
  "quarto-source-map",
+ "quarto-system-runtime",
  "quarto-util",
  "serde",
  "serde_json",
@@ -1894,7 +1897,6 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tracing",
- "which",
 ]
 
 [[package]]
@@ -2005,6 +2007,14 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "quarto-system-runtime"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "which",
 ]
 
 [[package]]

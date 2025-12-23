@@ -13,7 +13,7 @@ use mlua::{Error, IntoLua, Lua, Result, Table as LuaTable, Value};
 use std::sync::Arc;
 
 use super::mediabag::SharedMediaBag;
-use super::runtime::LuaRuntime;
+use super::runtime::SystemRuntime;
 
 use crate::pandoc::{
     Block, BlockQuote, BulletList, Caption, Citation, CitationMode, Cite, CodeBlock,
@@ -217,7 +217,7 @@ impl UserData for LuaListAttributes {}
 /// Register the pandoc namespace with element constructors
 pub fn register_pandoc_namespace(
     lua: &Lua,
-    runtime: Arc<dyn LuaRuntime>,
+    runtime: Arc<dyn SystemRuntime>,
     mediabag: SharedMediaBag,
 ) -> Result<()> {
     let pandoc = lua.create_table()?;
@@ -246,7 +246,7 @@ pub fn register_pandoc_namespace(
     // Path namespace (path manipulation functions)
     super::path::register_pandoc_path(lua, &pandoc, runtime.clone())?;
 
-    // System namespace (system operations via LuaRuntime)
+    // System namespace (system operations via SystemRuntime)
     super::system::register_pandoc_system(lua, &pandoc, runtime.clone())?;
 
     // MediaBag namespace (media storage and manipulation)

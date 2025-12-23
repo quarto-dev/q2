@@ -15,7 +15,7 @@
  * - Temporary files: with_temporary_directory
  * - XDG directories: xdg
  *
- * All operations go through the LuaRuntime abstraction layer for security
+ * All operations go through the SystemRuntime abstraction layer for security
  * and cross-platform support.
  *
  * Reference: https://pandoc.org/lua-filters.html#module-pandoc.system
@@ -26,7 +26,7 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::runtime::{LuaRuntime, XdgDirKind};
+use super::runtime::{SystemRuntime, XdgDirKind};
 
 /// Register the pandoc.system module.
 ///
@@ -38,7 +38,7 @@ use super::runtime::{LuaRuntime, XdgDirKind};
 pub fn register_pandoc_system(
     lua: &Lua,
     pandoc: &Table,
-    runtime: Arc<dyn LuaRuntime>,
+    runtime: Arc<dyn SystemRuntime>,
 ) -> Result<()> {
     let system = lua.create_table()?;
 
@@ -496,9 +496,9 @@ mod tests {
     use super::*;
     use crate::lua::runtime::NativeRuntime;
 
-    fn create_test_lua() -> (Lua, Arc<dyn LuaRuntime>) {
+    fn create_test_lua() -> (Lua, Arc<dyn SystemRuntime>) {
         let lua = Lua::new();
-        let runtime = Arc::new(NativeRuntime::new()) as Arc<dyn LuaRuntime>;
+        let runtime = Arc::new(NativeRuntime::new()) as Arc<dyn SystemRuntime>;
         let pandoc = lua.create_table().unwrap();
         lua.globals().set("pandoc", pandoc.clone()).unwrap();
         register_pandoc_system(&lua, &pandoc, runtime.clone()).unwrap();
