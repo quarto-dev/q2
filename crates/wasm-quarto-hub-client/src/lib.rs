@@ -17,6 +17,10 @@ pub mod c_shim;
 use std::path::Path;
 use std::sync::OnceLock;
 
+use quarto_core::{
+    render_qmd_to_html, BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectContext,
+    RenderContext, RenderOptions,
+};
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -196,6 +200,20 @@ struct RenderResponse {
     html: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     diagnostics: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warnings: Option<Vec<String>>,
+}
+
+/// Create a minimal project context for WASM rendering.
+fn create_wasm_project_context(path: &Path) -> ProjectContext {
+    let dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
+    ProjectContext {
+        dir: dir.clone(),
+        config: None,
+        is_single_file: true,
+        files: vec![DocumentInfo::from_path(path)],
+        output_dir: dir,
+    }
 }
 
 /// Render a QMD file from the virtual filesystem.
@@ -208,52 +226,143 @@ struct RenderResponse {
 #[wasm_bindgen]
 pub fn render_qmd(path: &str) -> String {
     let runtime = get_runtime();
+    let path = Path::new(path);
 
     // Read the file from VFS
-    let content = match runtime.file_read(Path::new(path)) {
-        Ok(bytes) => match String::from_utf8(bytes) {
-            Ok(s) => s,
-            Err(_) => {
-                return serde_json::to_string(&RenderResponse {
-                    success: false,
-                    error: Some("File is not valid UTF-8".to_string()),
-                    html: None,
-                    diagnostics: None,
-                })
-                .unwrap();
-            }
-        },
+    let content = match runtime.file_read(path) {
+        Ok(bytes) => bytes,
         Err(e) => {
             return serde_json::to_string(&RenderResponse {
                 success: false,
                 error: Some(format!("Failed to read file: {}", e)),
                 html: None,
                 diagnostics: None,
+                warnings: None,
             })
             .unwrap();
         }
     };
 
-    // Use pampa to parse and render
-    // For now, use the existing wasm_entry_points from pampa
-    let result =
-        pampa::wasm_entry_points::parse_and_render_qmd(content.as_bytes(), "", "html");
+    // Create minimal project context for WASM
+    let project = create_wasm_project_context(path);
+    let doc = DocumentInfo::from_path(path);
+    let format = Format::html();
+    let binaries = BinaryDependencies::new();
 
-    // The result is already JSON, return it directly
-    result
+    let options = RenderOptions {
+        verbose: false,
+        execute: false,
+        use_freeze: false,
+        output_path: None,
+    };
+
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
+
+    // Use the unified pipeline (same as CLI)
+    let config = HtmlRenderConfig::default();
+    let source_name = path.to_string_lossy();
+
+    match render_qmd_to_html(&content, &source_name, &mut ctx, &config) {
+        Ok(output) => {
+            // Populate VFS with artifacts so post-processor can resolve them.
+            // This includes CSS at /.quarto/project-artifacts/styles.css.
+            for (_key, artifact) in ctx.artifacts.iter() {
+                if let Some(artifact_path) = &artifact.path {
+                    runtime.add_file(artifact_path, artifact.content.clone());
+                }
+            }
+
+            let warnings: Vec<String> = output.warnings.iter().map(|w| w.message.clone()).collect();
+            serde_json::to_string(&RenderResponse {
+                success: true,
+                error: None,
+                html: Some(output.html),
+                diagnostics: None,
+                warnings: if warnings.is_empty() {
+                    None
+                } else {
+                    Some(warnings)
+                },
+            })
+            .unwrap()
+        }
+        Err(e) => serde_json::to_string(&RenderResponse {
+            success: false,
+            error: Some(e.to_string()),
+            html: None,
+            diagnostics: None,
+            warnings: None,
+        })
+        .unwrap(),
+    }
 }
 
 /// Render QMD content directly (without reading from VFS).
 ///
 /// # Arguments
 /// * `content` - QMD source text
-/// * `template_bundle` - Optional template bundle JSON (empty string for default)
+/// * `_template_bundle` - Optional template bundle JSON (currently unused, reserved for future use)
 ///
 /// # Returns
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub fn render_qmd_content(content: &str, template_bundle: &str) -> String {
-    pampa::wasm_entry_points::parse_and_render_qmd(content.as_bytes(), template_bundle, "html")
+pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
+    // Create a virtual path for this content
+    let path = Path::new("/input.qmd");
+
+    // Create minimal project context for WASM
+    let project = create_wasm_project_context(path);
+    let doc = DocumentInfo::from_path(path);
+    let format = Format::html();
+    let binaries = BinaryDependencies::new();
+
+    let options = RenderOptions {
+        verbose: false,
+        execute: false,
+        use_freeze: false,
+        output_path: None,
+    };
+
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
+
+    // Use the unified pipeline (same as CLI)
+    // TODO: Support custom templates via template_bundle parameter
+    let config = HtmlRenderConfig::default();
+
+    match render_qmd_to_html(content.as_bytes(), "/input.qmd", &mut ctx, &config) {
+        Ok(output) => {
+            // Populate VFS with artifacts so post-processor can resolve them.
+            // This includes CSS at /.quarto/project-artifacts/styles.css.
+            let runtime = get_runtime();
+            for (_key, artifact) in ctx.artifacts.iter() {
+                if let Some(path) = &artifact.path {
+                    runtime.add_file(path, artifact.content.clone());
+                }
+            }
+
+            let warnings: Vec<String> = output.warnings.iter().map(|w| w.message.clone()).collect();
+            serde_json::to_string(&RenderResponse {
+                success: true,
+                error: None,
+                html: Some(output.html),
+                diagnostics: None,
+                warnings: if warnings.is_empty() {
+                    None
+                } else {
+                    Some(warnings)
+                },
+            })
+            .unwrap()
+        }
+        Err(e) => serde_json::to_string(&RenderResponse {
+            success: false,
+            error: Some(e.to_string()),
+            html: None,
+            diagnostics: None,
+            warnings: None,
+        })
+        .unwrap(),
+    }
 }
 
 /// Get a built-in template as a JSON bundle.

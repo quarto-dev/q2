@@ -21,6 +21,8 @@ quarto-system-runtime.workspace = true
 quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
 quarto-doctemplate.workspace = true
+quarto-error-reporting.workspace = true
+pampa.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

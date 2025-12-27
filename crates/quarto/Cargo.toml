@@ -21,13 +21,13 @@ serde_json.workspace = true
 quarto-core.workspace = true
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
-pampa.workspace = true
 quarto-doctemplate.workspace = true
 
 [build-dependencies]
 
 [dev-dependencies]
 tempfile = "3"
+pampa.workspace = true
 
 [lints]
 workspace = true

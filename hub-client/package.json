@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:fresh": "npm run preflight && vite",
+    "preflight": "npm run build:wasm && npm run typecheck",
     "build": "tsc -b && vite build",
+    "build:wasm": "node scripts/build-wasm.js",
+    "build:all": "npm run build:wasm && npm run build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "lint": "eslint .",
     "preview": "vite preview"
   },

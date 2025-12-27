@@ -63,6 +63,7 @@ path = "./crates/wasm-qmd-parser"
 
 [workspace.dependencies.pampa]
 path = "./crates/pampa"
+default-features = false
 
 [workspace.dependencies.quarto-core]
 path = "./crates/quarto-core"

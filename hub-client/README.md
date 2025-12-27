@@ -1,73 +1,74 @@
-# React + TypeScript + Vite
+# hub-client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Web frontend for Quarto Hub - a collaborative document editor using Quarto's WASM rendering engine.
 
-Currently, two official plugins are available:
+## Prerequisites
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js 18+
+- Rust toolchain with `wasm32-unknown-unknown` target (`rustup target add wasm32-unknown-unknown`)
+- `wasm-pack` (`cargo install wasm-pack`)
+- LLVM (macOS only: `brew install llvm`)
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Quick Start (Fresh Build)
 
-## Expanding the ESLint configuration
+To rebuild everything and start the dev server:
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev:fresh
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+This will:
+1. Rebuild the WASM module from `crates/wasm-quarto-hub-client`
+2. Start the Vite dev server
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Regular Development
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+If you haven't changed any Rust code, you can skip the WASM rebuild:
+
+```bash
+npm run dev
 ```
+
+### Available Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start Vite dev server (uses existing WASM) |
+| `npm run dev:fresh` | Run preflight checks, then start dev server |
+| `npm run preflight` | Build WASM + typecheck (run this during development) |
+| `npm run build` | Build TypeScript and Vite for production |
+| `npm run build:wasm` | Rebuild only the WASM module |
+| `npm run build:all` | Rebuild WASM + production build |
+| `npm run typecheck` | Type-check with strict Vite-compatible settings |
+| `npm run lint` | Run ESLint |
+| `npm run preview` | Preview production build |
+
+### Preflight Checks
+
+Run `npm run preflight` after making changes to verify everything builds correctly:
+- Rebuilds the WASM module (catches Rust errors)
+- Type-checks TypeScript with Vite-compatible settings
+
+This is the same check that runs before `dev:fresh`, but without starting the dev server.
+
+**Important:** Plain `tsc --noEmit` without `-p tsconfig.app.json` uses different settings and may miss errors that will break at runtime. Always use `npm run typecheck` or `npm run preflight`.
+
+### When to Rebuild WASM
+
+You need to rebuild the WASM module (`npm run build:wasm` or `npm run dev:fresh`) when:
+
+- You've made changes to `crates/wasm-quarto-hub-client`
+- You've made changes to `crates/quarto-core` (transforms, pipeline, etc.)
+- You've made changes to `crates/pampa` (parsing, rendering)
+- You've pulled updates that include Rust changes
+
+## Architecture
+
+The hub-client uses a WASM module (`wasm-quarto-hub-client`) that provides:
+
+- **Virtual File System (VFS)** - In-browser file storage for project files
+- **QMD Rendering** - Full Quarto rendering pipeline (parsing, transforms, HTML generation)
+
+The WASM module is symlinked from `crates/wasm-quarto-hub-client/pkg/`.

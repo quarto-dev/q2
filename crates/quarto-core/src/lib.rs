@@ -39,6 +39,7 @@
 pub mod artifact;
 pub mod error;
 pub mod format;
+pub mod pipeline;
 pub mod project;
 pub mod render;
 pub mod resources;
@@ -50,10 +51,13 @@ pub mod transforms;
 pub use artifact::{Artifact, ArtifactStore};
 pub use error::{QuartoError, Result};
 pub use format::{Format, FormatIdentifier};
+pub use pipeline::{
+    render_qmd_to_html, HtmlRenderConfig, ParseWarning, RenderOutput, DEFAULT_CSS_ARTIFACT_PATH,
+};
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
 pub use transform::{AstTransform, TransformPipeline};
 pub use transforms::{
     CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,
-    ResourceCollectorTransform,
+    ResourceCollectorTransform, TitleBlockTransform,
 };
