@@ -144,6 +144,288 @@ impl<'ast, W: Write> HtmlWriterContext<'ast, W> {
 }
 
 // =============================================================================
+// HTML Attribute Classification
+// =============================================================================
+
+/// Standard HTML5 global and element-specific attributes that should NOT be
+/// prefixed with `data-`. This list is based on the HTML Living Standard:
+/// https://html.spec.whatwg.org/multipage/indices.html#attributes-3
+///
+/// The array MUST be sorted for binary search to work correctly.
+const HTML5_ATTRIBUTES: &[&str] = &[
+    "abbr",
+    "accept",
+    "accept-charset",
+    "accesskey",
+    "action",
+    "allow",
+    "allowfullscreen",
+    "allowpaymentrequest",
+    "alt",
+    "as",
+    "async",
+    "autocapitalize",
+    "autocomplete",
+    "autofocus",
+    "autoplay",
+    "charset",
+    "checked",
+    "cite",
+    "class",
+    "color",
+    "cols",
+    "colspan",
+    "content",
+    "contenteditable",
+    "controls",
+    "coords",
+    "crossorigin",
+    "data",
+    "datetime",
+    "decoding",
+    "default",
+    "defer",
+    "dir",
+    "dirname",
+    "disabled",
+    "download",
+    "draggable",
+    "enctype",
+    "enterkeyhint",
+    "fetchpriority",
+    "for",
+    "form",
+    "formaction",
+    "formenctype",
+    "formmethod",
+    "formnovalidate",
+    "formtarget",
+    "headers",
+    "height",
+    "hidden",
+    "high",
+    "href",
+    "hreflang",
+    "http-equiv",
+    "id",
+    "imagesizes",
+    "imagesrcset",
+    "inputmode",
+    "integrity",
+    "is",
+    "ismap",
+    "itemid",
+    "itemprop",
+    "itemref",
+    "itemscope",
+    "itemtype",
+    "kind",
+    "label",
+    "lang",
+    "list",
+    "loading",
+    "loop",
+    "low",
+    "manifest",
+    "max",
+    "maxlength",
+    "media",
+    "method",
+    "min",
+    "minlength",
+    "multiple",
+    "muted",
+    "name",
+    "nomodule",
+    "nonce",
+    "novalidate",
+    "onabort",
+    "onafterprint",
+    "onauxclick",
+    "onbeforematch",
+    "onbeforeprint",
+    "onbeforeunload",
+    "onblur",
+    "oncancel",
+    "oncanplay",
+    "oncanplaythrough",
+    "onchange",
+    "onclick",
+    "onclose",
+    "oncontextmenu",
+    "oncopy",
+    "oncuechange",
+    "oncut",
+    "ondblclick",
+    "ondrag",
+    "ondragend",
+    "ondragenter",
+    "ondragleave",
+    "ondragover",
+    "ondragstart",
+    "ondrop",
+    "ondurationchange",
+    "onemptied",
+    "onended",
+    "onerror",
+    "onfocus",
+    "onformdata",
+    "onhashchange",
+    "oninput",
+    "oninvalid",
+    "onkeydown",
+    "onkeypress",
+    "onkeyup",
+    "onlanguagechange",
+    "onload",
+    "onloadeddata",
+    "onloadedmetadata",
+    "onloadstart",
+    "onmessage",
+    "onmessageerror",
+    "onmousedown",
+    "onmouseenter",
+    "onmouseleave",
+    "onmousemove",
+    "onmouseout",
+    "onmouseover",
+    "onmouseup",
+    "onoffline",
+    "ononline",
+    "onpagehide",
+    "onpageshow",
+    "onpaste",
+    "onpause",
+    "onplay",
+    "onplaying",
+    "onpopstate",
+    "onprogress",
+    "onratechange",
+    "onrejectionhandled",
+    "onreset",
+    "onresize",
+    "onscroll",
+    "onsecuritypolicyviolation",
+    "onseeked",
+    "onseeking",
+    "onselect",
+    "onslotchange",
+    "onstalled",
+    "onstorage",
+    "onsubmit",
+    "onsuspend",
+    "ontimeupdate",
+    "ontoggle",
+    "onunhandledrejection",
+    "onunload",
+    "onvolumechange",
+    "onwaiting",
+    "onwheel",
+    "open",
+    "optimum",
+    "pattern",
+    "ping",
+    "placeholder",
+    "playsinline",
+    "poster",
+    "preload",
+    "readonly",
+    "referrerpolicy",
+    "rel",
+    "required",
+    "reversed",
+    "role",
+    "rows",
+    "rowspan",
+    "sandbox",
+    "scope",
+    "selected",
+    "shape",
+    "size",
+    "sizes",
+    "slot",
+    "span",
+    "spellcheck",
+    "src",
+    "srcdoc",
+    "srclang",
+    "srcset",
+    "start",
+    "step",
+    "style",
+    "tabindex",
+    "target",
+    "title",
+    "translate",
+    "type",
+    "typemustmatch",
+    "updateviacache",
+    "usemap",
+    "value",
+    "width",
+    "workertype",
+    "wrap",
+];
+
+/// RDFa attributes that should NOT be prefixed with `data-`.
+/// See: https://www.w3.org/TR/rdfa-primer/
+///
+/// The array MUST be sorted for binary search to work correctly.
+const RDFA_ATTRIBUTES: &[&str] = &[
+    "about",
+    "content",
+    "datatype",
+    "href",
+    "prefix",
+    "property",
+    "rel",
+    "resource",
+    "rev",
+    "src",
+    "typeof",
+    "vocab",
+];
+
+/// Check if an attribute name is a standard HTML5 attribute.
+fn is_html5_attribute(attr: &str) -> bool {
+    HTML5_ATTRIBUTES.binary_search(&attr).is_ok()
+}
+
+/// Check if an attribute name is an RDFa attribute.
+fn is_rdfa_attribute(attr: &str) -> bool {
+    RDFA_ATTRIBUTES.binary_search(&attr).is_ok()
+}
+
+/// Determine if an attribute should be prefixed with `data-`.
+///
+/// Returns `false` (don't prefix) if:
+/// - The attribute already starts with `data-` or `aria-`
+/// - The attribute contains `:` (namespace prefix like `epub:type`)
+/// - The attribute is a standard HTML5 attribute
+/// - The attribute is an RDFa attribute
+///
+/// Returns `true` (prefix with `data-`) for all other custom attributes.
+fn should_prefix_attribute(attr: &str) -> bool {
+    // Never prefix if already has data- or aria- prefix
+    if attr.starts_with("data-") || attr.starts_with("aria-") {
+        return false;
+    }
+
+    // Never prefix if contains colon (namespace prefix like epub:type)
+    if attr.contains(':') {
+        return false;
+    }
+
+    // Never prefix standard HTML5 or RDFa attributes
+    if is_html5_attribute(attr) || is_rdfa_attribute(attr) {
+        return false;
+    }
+
+    // Everything else gets prefixed
+    true
+}
+
+// =============================================================================
 // Helper functions
 // =============================================================================
 
@@ -162,6 +444,9 @@ fn escape_html(s: &str) -> String {
 }
 
 /// Write HTML attributes (id, classes, key-value pairs)
+///
+/// Standard HTML5 attributes (style, title, dir, lang, etc.) and ARIA attributes
+/// are written as-is. Custom attributes are prefixed with `data-`.
 fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std::io::Result<()> {
     let (id, classes, attrs) = attr;
 
@@ -173,9 +458,13 @@ fn write_attr<W: Write>(attr: &Attr, ctx: &mut HtmlWriterContext<'_, W>) -> std:
         write!(ctx, " class=\"{}\"", escape_html(&classes.join(" ")))?;
     }
 
-    // Pandoc prefixes custom attributes with "data-"
+    // Write key-value attributes, prefixing custom ones with "data-"
     for (k, v) in attrs {
-        write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
+        if should_prefix_attribute(k) {
+            write!(ctx, " data-{}=\"{}\"", escape_html(k), escape_html(v))?;
+        } else {
+            write!(ctx, " {}=\"{}\"", escape_html(k), escape_html(v))?;
+        }
     }
 
     Ok(())
