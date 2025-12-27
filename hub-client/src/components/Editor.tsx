@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type { ProjectEntry, FileEntry } from '../types/project';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
+import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
 import './Editor.css';
 
 interface Props {
@@ -129,6 +130,25 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [wasmError, setWasmError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Handler for .qmd link clicks in the preview
+  const handleQmdLinkClick = useCallback(
+    (targetPath: string) => {
+      const file = files.find(
+        (f) => f.path === targetPath || '/' + f.path === targetPath
+      );
+      if (file) {
+        setCurrentFile(file);
+      }
+    },
+    [files]
+  );
+
+  // Post-process iframe content after render (replace CSS links with data URIs)
+  const { handleLoad } = useIframePostProcessor(iframeRef, {
+    currentFilePath: currentFile?.path ?? '',
+    onQmdLinkClick: handleQmdLinkClick,
+  });
+
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
@@ -174,73 +194,20 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       }
 
       if (result.success) {
-        // Wrap the rendered HTML in a full document with styles
-        const html = `
-          <html>
-            <head>
-              <style>
-                body {
-                  font-family: system-ui, -apple-system, sans-serif;
-                  padding: 24px;
-                  max-width: 800px;
-                  margin: 0 auto;
-                  line-height: 1.6;
-                  color: #333;
-                }
-                h1, h2, h3, h4, h5, h6 {
-                  margin-top: 1.5em;
-                  margin-bottom: 0.5em;
-                }
-                p { margin: 1em 0; }
-                pre {
-                  background: #f4f4f4;
-                  padding: 16px;
-                  border-radius: 4px;
-                  overflow-x: auto;
-                }
-                code {
-                  font-family: 'SF Mono', Monaco, Consolas, monospace;
-                  font-size: 0.9em;
-                }
-                :not(pre) > code {
-                  background: #f0f0f0;
-                  padding: 2px 6px;
-                  border-radius: 3px;
-                }
-                ul, ol { margin: 1em 0; padding-left: 2em; }
-                li { margin: 0.25em 0; }
-                blockquote {
-                  margin: 1em 0;
-                  padding-left: 1em;
-                  border-left: 4px solid #ddd;
-                  color: #666;
-                }
-                a { color: #0066cc; }
-                table {
-                  border-collapse: collapse;
-                  width: 100%;
-                  margin: 1em 0;
-                }
-                th, td {
-                  border: 1px solid #ddd;
-                  padding: 8px 12px;
-                  text-align: left;
-                }
-                th { background: #f4f4f4; }
-              </style>
-            </head>
-            <body>${result.html}</body>
-          </html>
-        `;
-        setPreviewHtml(html);
+        // The render pipeline now produces complete HTML with CSS links.
+        // The useIframePostProcessor hook will replace CSS links with
+        // data URIs after the iframe loads.
+        setPreviewHtml(result.html);
       } else {
-        const errorMsg = typeof result.error === 'string'
-          ? result.error
-          : JSON.stringify(result.error, null, 2) || 'Unknown error';
+        const errorMsg =
+          typeof result.error === 'string'
+            ? result.error
+            : JSON.stringify(result.error, null, 2) || 'Unknown error';
         setPreviewHtml(renderError(qmdContent, errorMsg, result.diagnostics));
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : JSON.stringify(err, null, 2);
+      const errorMsg =
+        err instanceof Error ? err.message : JSON.stringify(err, null, 2);
       setPreviewHtml(renderError(qmdContent, errorMsg));
     }
   }, []);
@@ -351,6 +318,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             srcDoc={previewHtml}
             title="Preview"
             sandbox="allow-same-origin"
+            onLoad={handleLoad}
           />
         </div>
       </main>

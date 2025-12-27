@@ -1886,7 +1886,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hashlink",
+ "pampa",
  "quarto-doctemplate",
+ "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",

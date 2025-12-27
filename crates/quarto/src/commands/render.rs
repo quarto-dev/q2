@@ -30,9 +30,8 @@ use anyhow::{Context, Result};
 use tracing::{debug, info};
 
 use quarto_core::{
-    BinaryDependencies, CalloutResolveTransform, CalloutTransform, DocumentInfo, Format,
-    FormatIdentifier, MetadataNormalizeTransform, ProjectContext, RenderContext, RenderOptions,
-    ResourceCollectorTransform, TransformPipeline,
+    render_qmd_to_html, BinaryDependencies, DocumentInfo, Format, FormatIdentifier,
+    HtmlRenderConfig, ProjectContext, RenderContext, RenderOptions,
 };
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
@@ -164,47 +163,7 @@ fn render_document(
 
     let mut ctx = RenderContext::new(project, doc_info, format, binaries).with_options(options);
 
-    // Read input file
-    let input_content = runtime
-        .file_read(&doc_info.input)
-        .map_err(|e| anyhow::anyhow!("Failed to read input file {}: {}", doc_info.input.display(), e))?;
-
-    // Parse QMD to Pandoc AST
-    let mut output_stream = std::io::sink();
-    let input_path_str = doc_info.input.to_string_lossy();
-
-    let (mut pandoc, context, warnings) = pampa::readers::qmd::read(
-        &input_content,
-        false, // loose mode
-        &input_path_str,
-        &mut output_stream,
-        true, // track source locations
-        None, // file_id
-    )
-    .map_err(|diagnostics| {
-        // Format error messages
-        let error_text = diagnostics
-            .iter()
-            .map(|d| d.to_text(None))
-            .collect::<Vec<_>>()
-            .join("\n");
-        anyhow::anyhow!("Parse errors:\n{}", error_text)
-    })?;
-
-    // Report warnings
-    if !args.quiet && !warnings.is_empty() {
-        for warning in &warnings {
-            eprintln!("Warning: {}", warning.to_text(None));
-        }
-    }
-
-    // Build and execute transform pipeline
-    let pipeline = build_transform_pipeline();
-    pipeline
-        .execute(&mut pandoc, &mut ctx)
-        .map_err(|e| anyhow::anyhow!("Transform error: {}", e))?;
-
-    // Determine output path
+    // Determine output path (needed before rendering for CSS resource paths)
     let output_path = determine_output_path(&ctx, args)?;
 
     // Create output directory if needed
@@ -226,12 +185,31 @@ fn render_document(
         quarto_core::resources::write_html_resources(output_dir, output_stem, runtime)
             .context("Failed to write HTML resources")?;
 
-    // Render to HTML with resource paths
-    let html_output = render_to_html(&pandoc, &context, &resource_paths.css)?;
+    // Read input file
+    let input_content = runtime
+        .file_read(&doc_info.input)
+        .map_err(|e| anyhow::anyhow!("Failed to read input file {}: {}", doc_info.input.display(), e))?;
+
+    // Use the unified pipeline to render
+    let input_path_str = doc_info.input.to_string_lossy();
+    let config = HtmlRenderConfig {
+        css_paths: &resource_paths.css,
+        template: None,
+    };
+
+    let output = render_qmd_to_html(&input_content, &input_path_str, &mut ctx, &config)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    // Report warnings
+    if !args.quiet && !output.warnings.is_empty() {
+        for warning in &output.warnings {
+            eprintln!("Warning: {}", warning.message);
+        }
+    }
 
     // Write output
     runtime
-        .file_write(&output_path, html_output.as_bytes())
+        .file_write(&output_path, output.html.as_bytes())
         .map_err(|e| anyhow::anyhow!("Failed to write output file {}: {}", output_path.display(), e))?;
 
     if !args.quiet {
@@ -239,23 +217,6 @@ fn render_document(
     }
 
     Ok(())
-}
-
-/// Build the transform pipeline for HTML rendering.
-fn build_transform_pipeline() -> TransformPipeline {
-    let mut pipeline = TransformPipeline::new();
-
-    // Add transforms in order:
-    // 1. CalloutTransform - convert callout Divs to CustomNodes
-    // 2. CalloutResolveTransform - resolve Callout CustomNodes to standard Div structure
-    // 3. MetadataNormalizeTransform - normalize metadata (pagetitle, etc.)
-    // 4. ResourceCollectorTransform - collect image dependencies
-    pipeline.push(Box::new(CalloutTransform::new()));
-    pipeline.push(Box::new(CalloutResolveTransform::new()));
-    pipeline.push(Box::new(MetadataNormalizeTransform::new()));
-    pipeline.push(Box::new(ResourceCollectorTransform::new()));
-
-    pipeline
 }
 
 /// Determine the output path for a render
@@ -276,25 +237,6 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
     }
 
     Ok(base_output)
-}
-
-/// Render Pandoc AST to HTML string with external resources
-fn render_to_html(
-    pandoc: &pampa::pandoc::Pandoc,
-    ast_context: &pampa::pandoc::ASTContext,
-    css_paths: &[String],
-) -> Result<String> {
-    // First, render the body content using pampa's HTML writer
-    // This is metadata-aware and will include source location attributes
-    // if format.html.source-location: full is set in the document
-    let mut body_buf = Vec::new();
-    pampa::writers::html::write(pandoc, ast_context, &mut body_buf)
-        .context("Failed to write HTML body")?;
-    let body = String::from_utf8_lossy(&body_buf).into_owned();
-
-    // Then wrap it with the template, passing metadata and resource paths
-    quarto_core::template::render_with_resources(&body, &pandoc.meta, css_paths)
-        .context("Failed to render template")
 }
 
 /// Escape HTML special characters
