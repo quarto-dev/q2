@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react(), wasm()],
   resolve: {
     alias: {
-      'wasm-quarto-hub-client': path.resolve(__dirname, 'wasm-quarto-hub-client'),
+      'wasm-quarto-hub-client': path.resolve(__dirname, 'wasm-quarto-hub-client/wasm_quarto_hub_client.js'),
     },
   },
   optimizeDeps: {

@@ -5,6 +5,7 @@ import type { ProjectEntry, FileEntry } from '../types/project';
 import type { Patch } from '../services/automergeSync';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
+import { usePresence } from '../hooks/usePresence';
 import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
 import './Editor.css';
 
@@ -127,6 +128,9 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
 
   // Flag to prevent local changes from echoing back during remote edits
   const applyingRemoteRef = useRef(false);
+
+  // Presence for collaborative cursors
+  const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(currentFile?.path ?? null);
 
   // Get content from fileContents map, or use default for new files
   const getContent = useCallback((file: FileEntry | null): string => {
@@ -292,6 +296,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   // Capture Monaco editor instance on mount
   const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor) => {
     editorRef.current = editor;
+    onPresenceEditorMount(editor);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -308,11 +313,18 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       <header className="editor-header">
         <div className="project-info">
           <h1>{project.description}</h1>
-          <span className={`sync-status ${wasmStatus === 'ready' ? 'connected' : 'disconnected'}`}>
-            {wasmStatus === 'loading' && 'Loading WASM...'}
-            {wasmStatus === 'ready' && 'Ready'}
-            {wasmStatus === 'error' && 'WASM Error'}
-          </span>
+          <div className="status-indicators">
+            <span className={`sync-status ${wasmStatus === 'ready' ? 'connected' : 'disconnected'}`}>
+              {wasmStatus === 'loading' && 'Loading WASM...'}
+              {wasmStatus === 'ready' && 'Ready'}
+              {wasmStatus === 'error' && 'WASM Error'}
+            </span>
+            {userCount > 0 && (
+              <span className="user-count" title={remoteUsers.map(u => u.userName).join(', ')}>
+                {userCount} other{userCount === 1 ? '' : 's'} here
+              </span>
+            )}
+          </div>
         </div>
         <div className="file-selector">
           <select value={currentFile?.path || ''} onChange={handleFileChange}>

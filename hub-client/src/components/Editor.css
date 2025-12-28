@@ -35,6 +35,12 @@
   color: #fff;
 }
 
+.status-indicators {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .sync-status {
   font-size: 12px;
   padding: 4px 8px;
@@ -49,6 +55,15 @@
 .sync-status.disconnected {
   background: #4f0a0a;
   color: #f87171;
+}
+
+.user-count {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #1f3460;
+  color: #60a5fa;
+  cursor: help;
 }
 
 .file-selector {

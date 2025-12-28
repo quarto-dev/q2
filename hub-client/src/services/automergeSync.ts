@@ -248,6 +248,21 @@ export function isConnected(): boolean {
   return state.repo !== null && state.indexHandle !== null;
 }
 
+/**
+ * Get the DocHandle for a file by path.
+ * Used by the presence service for ephemeral messaging.
+ */
+export function getFileHandle(path: string): DocHandle<FileDocument> | null {
+  return state.fileHandles.get(path) ?? null;
+}
+
+/**
+ * Get all current file paths that have handles.
+ */
+export function getFilePaths(): string[] {
+  return Array.from(state.fileHandles.keys());
+}
+
 // Helper functions
 
 function getFilesFromIndex(doc: IndexDocument): FileEntry[] {

@@ -259,3 +259,158 @@
   margin-bottom: 16px;
   text-align: center;
 }
+
+/* User Identity Section */
+.user-identity {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #333;
+}
+
+.user-identity h2 {
+  margin: 0 0 4px;
+}
+
+.identity-hint {
+  color: #666;
+  font-size: 12px;
+  margin: 0 0 16px;
+}
+
+.identity-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #16213e;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.identity-color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.identity-name {
+  color: #fff;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.identity-name .edit-hint {
+  color: #666;
+  font-size: 12px;
+  font-weight: normal;
+}
+
+.identity-name:hover .edit-hint {
+  color: #888;
+}
+
+.identity-name-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.identity-name-edit input {
+  flex: 1;
+  padding: 8px 12px;
+  background: #0f3460;
+  border: 1px solid #1f4460;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.identity-name-edit input:focus {
+  outline: none;
+  border-color: #646cff;
+}
+
+.identity-name-edit button {
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.identity-name-edit .save-btn {
+  background: #646cff;
+  border: none;
+  color: #fff;
+}
+
+.identity-name-edit .save-btn:hover {
+  background: #747bff;
+}
+
+.identity-name-edit .cancel-btn {
+  background: none;
+  border: 1px solid #333;
+  color: #888;
+}
+
+.identity-name-edit .cancel-btn:hover {
+  border-color: #666;
+  color: #fff;
+}
+
+.identity-actions {
+  margin-bottom: 16px;
+}
+
+.randomize-btn {
+  padding: 8px 16px;
+  background: none;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.randomize-btn:hover {
+  border-color: #666;
+  color: #fff;
+}
+
+.color-picker label {
+  display: block;
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.color-swatch:hover {
+  transform: scale(1.1);
+}
+
+.color-swatch.selected {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}

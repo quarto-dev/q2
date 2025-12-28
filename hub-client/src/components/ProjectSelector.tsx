@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ProjectEntry } from '../types/project';
+import type { UserSettings } from '../services/storage/types';
 import * as projectStorage from '../services/projectStorage';
+import * as userSettingsService from '../services/userSettings';
 import './ProjectSelector.css';
 
 interface Props {
@@ -8,6 +10,13 @@ interface Props {
   isConnecting?: boolean;
   error?: string | null;
 }
+
+// Curated color palette for user selection
+const COLOR_PALETTE = [
+  '#E91E63', '#9C27B0', '#673AB7', '#3F51B5',
+  '#2196F3', '#00BCD4', '#009688', '#4CAF50',
+  '#8BC34A', '#FF9800', '#FF5722', '#795548',
+];
 
 export default function ProjectSelector({ onSelectProject, isConnecting, error: connectionError }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
@@ -19,6 +28,11 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
   const [syncServer, setSyncServer] = useState('wss://sync.automerge.org');
   const [description, setDescription] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // User identity state
+  const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -33,9 +47,69 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
     }
   }, []);
 
+  const loadUserSettings = useCallback(async () => {
+    try {
+      const settings = await userSettingsService.getUserIdentity();
+      setUserSettings(settings);
+    } catch (err) {
+      console.error('Failed to load user settings:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadProjects();
-  }, [loadProjects]);
+    loadUserSettings();
+  }, [loadProjects, loadUserSettings]);
+
+  const handleStartEditName = () => {
+    if (userSettings) {
+      setEditNameValue(userSettings.userName);
+      setEditingName(true);
+    }
+  };
+
+  const handleSaveName = async () => {
+    if (!editNameValue.trim()) {
+      return;
+    }
+    try {
+      const updated = await userSettingsService.updateUserName(editNameValue.trim());
+      setUserSettings(updated);
+      setEditingName(false);
+    } catch (err) {
+      console.error('Failed to update name:', err);
+    }
+  };
+
+  const handleCancelEditName = () => {
+    setEditingName(false);
+    setEditNameValue('');
+  };
+
+  const handleColorChange = async (color: string) => {
+    try {
+      const updated = await userSettingsService.updateUserColor(color);
+      setUserSettings(updated);
+    } catch (err) {
+      console.error('Failed to update color:', err);
+    }
+  };
+
+  const handleRandomizeName = async () => {
+    try {
+      // Reset generates a new random name
+      const reset = await userSettingsService.resetUserIdentity();
+      // But keep the color if user had one selected
+      if (userSettings && userSettings.userColor !== reset.userColor) {
+        const updated = await userSettingsService.updateUserColor(userSettings.userColor);
+        setUserSettings(updated);
+      } else {
+        setUserSettings(reset);
+      }
+    } catch (err) {
+      console.error('Failed to randomize name:', err);
+    }
+  };
 
   const handleSelectProject = async (project: ProjectEntry) => {
     await projectStorage.touchProject(project.id);
@@ -207,6 +281,67 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
           <button className="add-btn" onClick={() => setShowAddForm(true)}>
             + Add New Project
           </button>
+        )}
+
+        {userSettings && (
+          <div className="user-identity">
+            <h2>Your Identity</h2>
+            <p className="identity-hint">This is how others see you during collaboration</p>
+
+            <div className="identity-preview">
+              <span
+                className="identity-color-dot"
+                style={{ backgroundColor: userSettings.userColor }}
+              />
+              {editingName ? (
+                <div className="identity-name-edit">
+                  <input
+                    type="text"
+                    value={editNameValue}
+                    onChange={(e) => setEditNameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveName();
+                      if (e.key === 'Escape') handleCancelEditName();
+                    }}
+                    autoFocus
+                  />
+                  <button type="button" onClick={handleSaveName} className="save-btn">
+                    Save
+                  </button>
+                  <button type="button" onClick={handleCancelEditName} className="cancel-btn">
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <span className="identity-name" onClick={handleStartEditName}>
+                  {userSettings.userName}
+                  <span className="edit-hint">(click to edit)</span>
+                </span>
+              )}
+            </div>
+
+            <div className="identity-actions">
+              <button type="button" onClick={handleRandomizeName} className="randomize-btn">
+                Randomize Name
+              </button>
+            </div>
+
+            <div className="color-picker">
+              <label>Cursor Color</label>
+              <div className="color-swatches">
+                {COLOR_PALETTE.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`color-swatch ${userSettings.userColor === color ? 'selected' : ''}`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => handleColorChange(color)}
+                    title={color}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
         )}
 
         <div className="import-export">
