@@ -9,6 +9,7 @@ import {
   getFileContent,
   updateFileContent,
 } from './services/automergeSync';
+import type { Patch } from './services/automergeSync';
 import './App.css';
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
+  const [filePatches, setFilePatches] = useState<Map<string, Patch[]>>(new Map());
 
   // Set up sync handlers
   useEffect(() => {
@@ -24,10 +26,15 @@ function App() {
       onFilesChange: (newFiles) => {
         setFiles(newFiles);
       },
-      onFileContent: (path, content) => {
+      onFileContent: (path, content, patches) => {
         setFileContents((prev) => {
           const next = new Map(prev);
           next.set(path, content);
+          return next;
+        });
+        setFilePatches((prev) => {
+          const next = new Map(prev);
+          next.set(path, patches);
           return next;
         });
       },
@@ -73,6 +80,7 @@ function App() {
     setProject(null);
     setFiles([]);
     setFileContents(new Map());
+    setFilePatches(new Map());
     setConnectionError(null);
   }, []);
 
@@ -100,6 +108,7 @@ function App() {
       project={project}
       files={files}
       fileContents={fileContents}
+      filePatches={filePatches}
       onDisconnect={handleDisconnect}
       onContentChange={handleContentChange}
     />

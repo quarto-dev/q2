@@ -64,6 +64,33 @@ You need to rebuild the WASM module (`npm run build:wasm` or `npm run dev:fresh`
 - You've made changes to `crates/pampa` (parsing, rendering)
 - You've pulled updates that include Rust changes
 
+## Production Build / Deployment
+
+For deploying to a remote server, use:
+
+```bash
+npm run build:all
+```
+
+This produces a complete production build in `dist/`.
+
+### dev:fresh vs build:all
+
+These two scripts are often confused:
+
+| | `dev:fresh` | `build:all` |
+|---|-------------|-------------|
+| WASM build | Yes | Yes |
+| TypeScript | Type-check only (`--noEmit`) | Full compilation (`tsc -b`) |
+| Vite | Starts dev server | Production build |
+| Output | None (serves on-the-fly) | `dist/` directory |
+
+- **`dev:fresh`** is for local development. Vite transpiles TypeScript on-the-fly, so no compilation step is needed. The `preflight` check just validates types.
+
+- **`build:all`** is for deployment. It runs `tsc -b` to compile TypeScript and `vite build` to bundle everything into `dist/`.
+
+If you run `dev:fresh` expecting deployable output, you won't get any - you need `build:all`.
+
 ## Architecture
 
 The hub-client uses a WASM module (`wasm-quarto-hub-client`) that provides:

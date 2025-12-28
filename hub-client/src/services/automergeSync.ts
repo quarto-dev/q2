@@ -6,7 +6,11 @@
  */
 
 import { Repo, DocHandle } from '@automerge/automerge-repo';
-import type { DocumentId } from '@automerge/automerge-repo';
+import type { DocumentId, Patch } from '@automerge/automerge-repo';
+import { updateText } from '@automerge/automerge';
+
+// Re-export Patch type for use in other components
+export type { Patch };
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
 import type { FileEntry } from '../types/project';
 import { vfsAddFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
@@ -39,7 +43,7 @@ const state: SyncState = {
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
-type FileContentHandler = (path: string, content: string) => void;
+type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
 type ConnectionHandler = (connected: boolean) => void;
 type ErrorHandler = (error: Error) => void;
 
@@ -169,7 +173,8 @@ export function getFileContent(path: string): string | null {
 }
 
 /**
- * Update the content of a file
+ * Update the content of a file using incremental text updates.
+ * This generates granular patches that preserve cursor position on remote clients.
  */
 export function updateFileContent(path: string, content: string): void {
   const handle = state.fileHandles.get(path);
@@ -179,7 +184,9 @@ export function updateFileContent(path: string, content: string): void {
   }
 
   handle.change(doc => {
-    doc.text = content;
+    // Use updateText to compute diff and apply incremental changes.
+    // This generates proper splice/del patches instead of full replacement.
+    updateText(doc, ['text'], content);
   });
 
   // Update VFS
@@ -277,19 +284,19 @@ async function subscribeToFile(path: string, handle: DocHandle<FileDocument>): P
   // Store handle
   state.fileHandles.set(path, handle);
 
-  // Initial VFS population
+  // Initial VFS population (no patches on initial load)
   const doc = handle.doc();
   if (doc) {
     vfsAddFile(path, doc.text || '');
-    onFileContent?.(path, doc.text || '');
+    onFileContent?.(path, doc.text || '', []);
   }
 
-  // Subscribe to changes
-  const changeHandler = () => {
+  // Subscribe to changes - forward patches from the change event
+  const changeHandler = ({ patches }: { patches: Patch[] }) => {
     const changedDoc = handle.doc();
     if (changedDoc) {
       vfsAddFile(path, changedDoc.text || '');
-      onFileContent?.(path, changedDoc.text || '');
+      onFileContent?.(path, changedDoc.text || '', patches);
     }
   };
   handle.on('change', changeHandler);

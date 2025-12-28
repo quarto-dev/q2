@@ -1,14 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
+import type { Patch } from '../services/automergeSync';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
+import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
 import './Editor.css';
 
 interface Props {
   project: ProjectEntry;
   files: FileEntry[];
   fileContents: Map<string, string>;
+  filePatches: Map<string, Patch[]>;
   onDisconnect: () => void;
   onContentChange: (path: string, content: string) => void;
 }
@@ -115,8 +119,14 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentChange }: Props) {
+export default function Editor({ project, files, fileContents, filePatches, onDisconnect, onContentChange }: Props) {
   const [currentFile, setCurrentFile] = useState<FileEntry | null>(selectDefaultFile(files));
+
+  // Monaco editor instance ref
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+
+  // Flag to prevent local changes from echoing back during remote edits
+  const applyingRemoteRef = useRef(false);
 
   // Get content from fileContents map, or use default for new files
   const getContent = useCallback((file: FileEntry | null): string => {
@@ -227,28 +237,61 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     updatePreview(content);
   }, [content, updatePreview, wasmStatus]);
 
-  // Update content when file selection changes or fileContents updates
+  // Sync local content state with external Automerge state.
+  // Uses incremental edits when patches are available to preserve cursor position.
+  // Note: setState in effect is intentional here - we're syncing with external state (Automerge).
   useEffect(() => {
-    if (currentFile) {
-      const newContent = fileContents.get(currentFile.path);
-      if (newContent !== undefined && newContent !== content) {
-        setContent(newContent);
+    if (!currentFile) return;
+
+    const newContent = fileContents.get(currentFile.path);
+    if (newContent === undefined || newContent === content) return;
+
+    const patches = filePatches.get(currentFile.path) ?? [];
+
+    // If we have patches and the editor is mounted, apply incremental edits
+    if (patches.length > 0 && editorRef.current) {
+      const edits = patchesToMonacoEdits(patches, content);
+
+      if (edits.length > 0) {
+        // Mark that we're applying remote changes to prevent echo
+        applyingRemoteRef.current = true;
+        editorRef.current.executeEdits('remote-sync', edits);
+        applyingRemoteRef.current = false;
       }
+
+      // Sync local state with the new content
+      setContent(newContent);
+    } else {
+      // Fallback: full content replacement (initial load, file switch, no patches)
+      setContent(newContent);
     }
-  }, [currentFile, fileContents]);
+    // Note: `content` is intentionally NOT in the dependency array.
+    // We only want to sync when external data changes, not on local edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFile, fileContents, filePatches]);
 
   // Update currentFile when files list changes (e.g., on initial load)
+  // Note: setState in effect is intentional - syncing with external file list
   useEffect(() => {
     if (!currentFile && files.length > 0) {
+       
       setCurrentFile(selectDefaultFile(files));
     }
   }, [files, currentFile]);
 
   const handleEditorChange = (value: string | undefined) => {
+    // Skip echo when applying remote changes
+    if (applyingRemoteRef.current) return;
+
     if (value !== undefined && currentFile) {
       setContent(value);
       onContentChange(currentFile.path, value);
     }
+  };
+
+  // Capture Monaco editor instance on mount
+  const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor) => {
+    editorRef.current = editor;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -302,6 +345,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             theme="vs-dark"
             value={content}
             onChange={handleEditorChange}
+            onMount={handleEditorMount}
             options={{
               minimap: { enabled: false },
               fontSize: 14,
