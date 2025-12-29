@@ -12,6 +12,48 @@
   font-size: 14px;
 }
 
+/* Diagnostics banner for errors without source locations */
+.diagnostics-banner {
+  background: #2d1b1b;
+  border-bottom: 1px solid #4a2020;
+  padding: 8px 16px;
+}
+
+.diagnostic-item {
+  padding: 4px 0;
+  font-size: 13px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+}
+
+.diagnostic-item.diagnostic-error {
+  color: #f87171;
+}
+
+.diagnostic-item.diagnostic-warning {
+  color: #fbbf24;
+}
+
+.diagnostic-item.diagnostic-info {
+  color: #60a5fa;
+}
+
+.diagnostic-item.diagnostic-note {
+  color: #a5b4fc;
+}
+
+.diagnostic-code {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.diagnostic-title {
+  font-weight: 500;
+}
+
+.diagnostic-problem {
+  opacity: 0.85;
+}
+
 .editor-header {
   display: flex;
   align-items: center;

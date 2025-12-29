@@ -182,10 +182,9 @@ fn extract_css_from_meta(meta: &MetaValueWithSourceInfo) -> Option<Vec<TemplateV
                         let text = inlines_to_text(content);
                         vec![TemplateValue::String(text)]
                     }
-                    MetaValueWithSourceInfo::MetaList { items, .. } => items
-                        .iter()
-                        .map(meta_value_to_template_value)
-                        .collect(),
+                    MetaValueWithSourceInfo::MetaList { items, .. } => {
+                        items.iter().map(meta_value_to_template_value).collect()
+                    }
                     _ => Vec::new(),
                 });
             }
@@ -207,9 +206,7 @@ fn add_metadata_to_context(meta: &MetaValueWithSourceInfo, ctx: &mut TemplateCon
 /// Convert a Pandoc MetaValue to a TemplateValue.
 fn meta_value_to_template_value(meta: &MetaValueWithSourceInfo) -> TemplateValue {
     match meta {
-        MetaValueWithSourceInfo::MetaString { value, .. } => {
-            TemplateValue::String(value.clone())
-        }
+        MetaValueWithSourceInfo::MetaString { value, .. } => TemplateValue::String(value.clone()),
         MetaValueWithSourceInfo::MetaBool { value, .. } => TemplateValue::Bool(*value),
         MetaValueWithSourceInfo::MetaInlines { content, .. } => {
             // Convert inlines to plain text for template use
@@ -222,10 +219,8 @@ fn meta_value_to_template_value(meta: &MetaValueWithSourceInfo) -> TemplateValue
             TemplateValue::String(text)
         }
         MetaValueWithSourceInfo::MetaList { items, .. } => {
-            let list_items: Vec<TemplateValue> = items
-                .iter()
-                .map(meta_value_to_template_value)
-                .collect();
+            let list_items: Vec<TemplateValue> =
+                items.iter().map(meta_value_to_template_value).collect();
             TemplateValue::List(list_items)
         }
         MetaValueWithSourceInfo::MetaMap { entries, .. } => {
@@ -326,8 +321,16 @@ mod tests {
         SourceInfo::from_range(
             FileId(0),
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 0, row: 0, column: 0 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
             },
         )
     }
@@ -432,11 +435,9 @@ mod tests {
                     text: "Hello".to_string(),
                     source_info: dummy_source_info(),
                 }),
-                quarto_pandoc_types::inline::Inline::Space(
-                    quarto_pandoc_types::inline::Space {
-                        source_info: dummy_source_info(),
-                    },
-                ),
+                quarto_pandoc_types::inline::Inline::Space(quarto_pandoc_types::inline::Space {
+                    source_info: dummy_source_info(),
+                }),
                 quarto_pandoc_types::inline::Inline::Str(Str {
                     text: "World".to_string(),
                     source_info: dummy_source_info(),

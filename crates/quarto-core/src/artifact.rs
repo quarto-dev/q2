@@ -240,7 +240,10 @@ mod tests {
             .with_metadata("version", serde_json::json!("1.0"));
 
         assert_eq!(artifact.path, Some(PathBuf::from("/path/to/file.txt")));
-        assert_eq!(artifact.metadata.get("version"), Some(&serde_json::json!("1.0")));
+        assert_eq!(
+            artifact.metadata.get("version"),
+            Some(&serde_json::json!("1.0"))
+        );
     }
 
     #[test]

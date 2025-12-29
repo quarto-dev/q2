@@ -673,7 +673,20 @@ impl DiagnosticMessage {
         // Map the location offsets back to original file positions
         // map_offset expects relative offsets (0 = start of this SourceInfo's range)
         let start_mapped = main_location.map_offset(0, ctx)?;
-        let end_mapped = main_location.map_offset(main_location.length(), ctx)?;
+        // For end offset, try the full length first. If that fails (e.g., when the span
+        // extends past EOF), clamp to the last valid position. This handles edge cases
+        // like errors pointing to EOF or diagnostics with off-by-one end offsets.
+        let end_mapped = main_location
+            .map_offset(main_location.length(), ctx)
+            .or_else(|| {
+                // Clamp: if length() fails, try length()-1, which should be the last valid byte
+                if main_location.length() > 0 {
+                    main_location.map_offset(main_location.length() - 1, ctx)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| start_mapped.clone());
 
         // Create display path with OSC 8 hyperlink for clickable file paths
         // Check if this path refers to a real file on disk (vs an ephemeral in-memory file)

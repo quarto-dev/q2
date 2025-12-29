@@ -30,8 +30,8 @@ use anyhow::{Context, Result};
 use tracing::{debug, info};
 
 use quarto_core::{
-    render_qmd_to_html, BinaryDependencies, DocumentInfo, Format, FormatIdentifier,
-    HtmlRenderConfig, ProjectContext, RenderContext, RenderOptions,
+    BinaryDependencies, DocumentInfo, Format, FormatIdentifier, HtmlRenderConfig, ProjectContext,
+    QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
 };
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
@@ -170,9 +170,13 @@ fn render_document(
     let output_dir = output_path
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Could not determine output directory"))?;
-    runtime
-        .dir_create(output_dir, true)
-        .map_err(|e| anyhow::anyhow!("Failed to create output directory {}: {}", output_dir.display(), e))?;
+    runtime.dir_create(output_dir, true).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to create output directory {}: {}",
+            output_dir.display(),
+            e
+        )
+    })?;
 
     // Get the output stem for resource directory naming
     let output_stem = output_path
@@ -186,9 +190,13 @@ fn render_document(
             .context("Failed to write HTML resources")?;
 
     // Read input file
-    let input_content = runtime
-        .file_read(&doc_info.input)
-        .map_err(|e| anyhow::anyhow!("Failed to read input file {}: {}", doc_info.input.display(), e))?;
+    let input_content = runtime.file_read(&doc_info.input).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read input file {}: {}",
+            doc_info.input.display(),
+            e
+        )
+    })?;
 
     // Use the unified pipeline to render
     let input_path_str = doc_info.input.to_string_lossy();
@@ -197,20 +205,35 @@ fn render_document(
         template: None,
     };
 
-    let output = render_qmd_to_html(&input_content, &input_path_str, &mut ctx, &config)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    let output = match render_qmd_to_html(&input_content, &input_path_str, &mut ctx, &config) {
+        Ok(output) => output,
+        Err(QuartoError::Parse(parse_error)) => {
+            // Parse errors have rich ariadne formatting with their own "Error:" prefix.
+            // Print directly to avoid anyhow adding a duplicate prefix.
+            eprintln!("{}", parse_error);
+            std::process::exit(1);
+        }
+        Err(e) => return Err(anyhow::anyhow!("{}", e)),
+    };
 
-    // Report warnings
+    // Report warnings with full ariadne-style source context
     if !args.quiet && !output.warnings.is_empty() {
         for warning in &output.warnings {
-            eprintln!("Warning: {}", warning.message);
+            // Use the source context for rich error rendering with source snippets
+            eprintln!("{}", warning.to_text(Some(&output.source_context)));
         }
     }
 
     // Write output
     runtime
         .file_write(&output_path, output.html.as_bytes())
-        .map_err(|e| anyhow::anyhow!("Failed to write output file {}: {}", output_path.display(), e))?;
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "Failed to write output file {}: {}",
+                output_path.display(),
+                e
+            )
+        })?;
 
     if !args.quiet {
         info!("Output: {}", output_path.display());

@@ -3,10 +3,12 @@ import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
 import type { Patch } from '../services/automergeSync';
+import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
 import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
+import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import './Editor.css';
 
 interface Props {
@@ -144,6 +146,13 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   const [wasmError, setWasmError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
+  // Diagnostics state for Monaco markers
+  const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
+  const [unlocatedErrors, setUnlocatedErrors] = useState<Diagnostic[]>([]);
+
+  // Monaco instance ref for setting markers
+  const monacoRef = useRef<typeof Monaco | null>(null);
+
   // Handler for .qmd link clicks in the preview
   const handleQmdLinkClick = useCallback(
     (targetPath: string) => {
@@ -196,16 +205,32 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
 
     if (!isWasmReady()) {
       setPreviewHtml(renderFallback(qmdContent, 'Loading WASM renderer...'));
+      setDiagnostics([]);
       return;
     }
 
     try {
+      console.log('[Diagnostics] Rendering content:', JSON.stringify(qmdContent));
       const result = await renderToHtml(qmdContent);
 
       // Check if content changed while we were rendering
       if (qmdContent !== lastContentRef.current) {
         return;
       }
+
+      // Collect all diagnostics from both success and error paths
+      const allDiagnostics: Diagnostic[] = [
+        ...(result.diagnostics ?? []),
+        ...(result.warnings ?? []),
+      ];
+      console.log('[Diagnostics] Render result:', JSON.stringify({
+        success: result.success,
+        error: result.error,
+        diagnosticsCount: result.diagnostics?.length ?? 0,
+        warningsCount: result.warnings?.length ?? 0,
+        allDiagnostics
+      }, null, 2));
+      setDiagnostics(allDiagnostics);
 
       if (result.success) {
         // The render pipeline now produces complete HTML with CSS links.
@@ -217,12 +242,14 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           typeof result.error === 'string'
             ? result.error
             : JSON.stringify(result.error, null, 2) || 'Unknown error';
-        setPreviewHtml(renderError(qmdContent, errorMsg, result.diagnostics));
+        // Show error in preview pane (fallback display)
+        setPreviewHtml(renderError(qmdContent, errorMsg));
       }
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : JSON.stringify(err, null, 2);
       setPreviewHtml(renderError(qmdContent, errorMsg));
+      setDiagnostics([]);
     }
   }, []);
 
@@ -240,6 +267,31 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   useEffect(() => {
     updatePreview(content);
   }, [content, updatePreview, wasmStatus]);
+
+  // Apply Monaco markers when diagnostics change
+  useEffect(() => {
+    console.log('[Diagnostics] Effect triggered, diagnostics count:', diagnostics.length);
+
+    if (!editorRef.current || !monacoRef.current) {
+      console.log('[Diagnostics] Editor or Monaco not ready: editor=' + !!editorRef.current + ', monaco=' + !!monacoRef.current);
+      return;
+    }
+
+    const model = editorRef.current.getModel();
+    if (!model) {
+      console.log('[Diagnostics] No model available');
+      return;
+    }
+
+    const { markers, unlocatedDiagnostics } = diagnosticsToMarkers(diagnostics);
+    console.log('[Diagnostics] Setting markers:', JSON.stringify({
+      markersCount: markers.length,
+      unlocatedCount: unlocatedDiagnostics.length,
+      markers
+    }, null, 2));
+    monacoRef.current.editor.setModelMarkers(model, 'quarto', markers);
+    setUnlocatedErrors(unlocatedDiagnostics);
+  }, [diagnostics]);
 
   // Sync local content state with external Automerge state.
   // Uses incremental edits when patches are available to preserve cursor position.
@@ -294,8 +346,9 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   };
 
   // Capture Monaco editor instance on mount
-  const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor) => {
+  const handleEditorMount = (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
     onPresenceEditorMount(editor);
   };
 
@@ -305,6 +358,9 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       setCurrentFile(file);
       const fileContent = fileContents.get(file.path);
       setContent(fileContent ?? '');
+      // Clear diagnostics when switching files
+      setDiagnostics([]);
+      setUnlocatedErrors([]);
     }
   };
 
@@ -346,6 +402,18 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       {wasmError && (
         <div className="wasm-error-banner">
           Failed to load WASM: {wasmError}
+        </div>
+      )}
+
+      {unlocatedErrors.length > 0 && (
+        <div className="diagnostics-banner">
+          {unlocatedErrors.map((diag, i) => (
+            <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
+              {diag.code && <span className="diagnostic-code">[{diag.code}]</span>}
+              <span className="diagnostic-title">{diag.title}</span>
+              {diag.problem && <span className="diagnostic-problem">: {diag.problem}</span>}
+            </div>
+          ))}
         </div>
       )}
 

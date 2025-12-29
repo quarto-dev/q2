@@ -42,9 +42,9 @@ use quarto_pandoc_types::custom::{CustomNode, Slot};
 use quarto_pandoc_types::pandoc::Pandoc;
 use serde_json::json;
 
+use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::Result;
 
 /// Known callout types in Quarto.
 const CALLOUT_TYPES: &[&str] = &["note", "warning", "tip", "caution", "important"];
@@ -234,7 +234,7 @@ fn extract_attr_value(attr: &Attr, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_pandoc_types::attr::{empty_attr, AttrSourceInfo};
+    use quarto_pandoc_types::attr::{AttrSourceInfo, empty_attr};
     use quarto_pandoc_types::block::{Header, Paragraph};
     use quarto_pandoc_types::inline::Str;
     use quarto_source_map::{FileId, Location, Range, SourceInfo};

@@ -34,8 +34,11 @@
 use std::path::PathBuf;
 
 use quarto_doctemplate::Template;
+use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_source_map::SourceContext;
 
+use crate::Result;
 use crate::artifact::Artifact;
 use crate::render::RenderContext;
 use crate::resources::DEFAULT_CSS;
@@ -44,7 +47,6 @@ use crate::transforms::{
     CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,
     ResourceCollectorTransform, TitleBlockTransform,
 };
-use crate::Result;
 
 /// Well-known path for the default CSS artifact in WASM context.
 ///
@@ -75,25 +77,20 @@ pub struct RenderOutput {
 
     /// Warnings generated during parsing.
     ///
+    /// These are structured diagnostic messages that preserve source location
+    /// information. Use `warning.to_text(Some(&source_context))` to render
+    /// them with ariadne-style source snippets.
+    ///
     /// Note: Collected artifacts (e.g., image dependencies) are stored in
     /// `ctx.artifacts` and can be accessed after rendering completes.
-    pub warnings: Vec<ParseWarning>,
-}
+    pub warnings: Vec<DiagnosticMessage>,
 
-/// A warning from the parsing stage.
-#[derive(Debug, Clone)]
-pub struct ParseWarning {
-    /// The warning message.
-    pub message: String,
-}
-
-impl ParseWarning {
-    /// Create a new parse warning.
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
+    /// Source context for mapping byte offsets to line/column positions.
+    ///
+    /// This contains the original source content and is needed for:
+    /// - Rendering warnings/errors with ariadne source snippets
+    /// - Mapping diagnostic locations to editor positions (Monaco markers)
+    pub source_context: SourceContext,
 }
 
 /// Render QMD content to HTML.
@@ -125,7 +122,9 @@ pub fn render_qmd_to_html(
     config: &HtmlRenderConfig,
 ) -> Result<RenderOutput> {
     // Stage 1: Parse QMD to Pandoc AST
-    let (mut pandoc, ast_context, parse_warnings) = parse_qmd(content, source_name)?;
+    let parse_result = parse_qmd(content, source_name)?;
+    let mut pandoc = parse_result.pandoc;
+    let ast_context = parse_result.ast_context;
 
     // Stage 2: Run transform pipeline
     let pipeline = build_transform_pipeline();
@@ -147,42 +146,51 @@ pub fn render_qmd_to_html(
     // include the default CSS artifact path.
     let html = apply_template(&body, &pandoc, config, ctx)?;
 
-    // Collect results
-    let warnings = parse_warnings
-        .into_iter()
-        .map(|w| ParseWarning::new(w.to_text(None)))
-        .collect();
+    // Return structured warnings and source context (no string conversion)
+    Ok(RenderOutput {
+        html,
+        warnings: parse_result.warnings,
+        source_context: parse_result.source_context,
+    })
+}
 
-    Ok(RenderOutput { html, warnings })
+/// Result of parsing QMD content.
+struct ParseResult {
+    pandoc: Pandoc,
+    ast_context: pampa::pandoc::ASTContext,
+    warnings: Vec<DiagnosticMessage>,
+    source_context: SourceContext,
 }
 
 /// Parse QMD content to Pandoc AST.
-fn parse_qmd(
-    content: &[u8],
-    source_name: &str,
-) -> Result<(
-    Pandoc,
-    pampa::pandoc::ASTContext,
-    Vec<quarto_error_reporting::DiagnosticMessage>,
-)> {
+fn parse_qmd(content: &[u8], source_name: &str) -> Result<ParseResult> {
     let mut output_stream = std::io::sink();
 
-    pampa::readers::qmd::read(
+    // Create SourceContext for error rendering and location mapping.
+    // This contains the file content needed for ariadne to show source snippets
+    // and for mapping byte offsets to line/column positions.
+    let mut source_context = SourceContext::new();
+    let content_str = String::from_utf8_lossy(content).to_string();
+    source_context.add_file(source_name.to_string(), Some(content_str));
+
+    match pampa::readers::qmd::read(
         content,
         false,       // loose mode
         source_name, // filename for error messages
         &mut output_stream,
         true, // track source locations
         None, // file_id
-    )
-    .map_err(|diagnostics| {
-        let error_text = diagnostics
-            .iter()
-            .map(|d| d.to_text(None))
-            .collect::<Vec<_>>()
-            .join("\n");
-        crate::error::QuartoError::Parse(error_text)
-    })
+    ) {
+        Ok((pandoc, ast_context, warnings)) => Ok(ParseResult {
+            pandoc,
+            ast_context,
+            warnings,
+            source_context,
+        }),
+        Err(diagnostics) => Err(crate::error::QuartoError::Parse(
+            crate::error::ParseError::new(diagnostics, source_context),
+        )),
+    }
 }
 
 /// Build the standard transform pipeline.
@@ -212,8 +220,9 @@ fn render_body_html(pandoc: &Pandoc, ast_context: &pampa::pandoc::ASTContext) ->
         crate::error::QuartoError::Render(format!("Failed to write HTML body: {}", e))
     })?;
 
-    String::from_utf8(body_buf)
-        .map_err(|e| crate::error::QuartoError::Render(format!("Invalid UTF-8 in HTML body: {}", e)))
+    String::from_utf8(body_buf).map_err(|e| {
+        crate::error::QuartoError::Render(format!("Invalid UTF-8 in HTML body: {}", e))
+    })
 }
 
 /// Apply template to rendered body.
@@ -281,7 +290,8 @@ mod tests {
 
     #[test]
     fn test_render_with_callout() {
-        let content = b"---\ntitle: Test\n---\n\n::: {.callout-warning}\n## Watch Out\nBe careful!\n:::";
+        let content =
+            b"---\ntitle: Test\n---\n\n::: {.callout-warning}\n## Watch Out\nBe careful!\n:::";
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/test.qmd");
@@ -324,5 +334,80 @@ mod tests {
         let pipeline = build_transform_pipeline();
         // The pipeline should have 5 transforms
         assert_eq!(pipeline.len(), 5);
+    }
+
+    #[test]
+    fn test_parse_error_has_structured_diagnostics() {
+        // This QMD has an unclosed span - missing closing bracket
+        let content =
+            b"---\ntitle: About\n---\n\nAbout this site.\n\nBack to [main(./index.qmd).\n";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/about.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let result = render_qmd_to_html(content, "about.qmd", &mut ctx, &config);
+
+        // Should fail with a parse error
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        match err {
+            crate::error::QuartoError::Parse(parse_error) => {
+                // Test the structured diagnostics, not just the string!
+                assert!(
+                    !parse_error.diagnostics.is_empty(),
+                    "Should have at least one diagnostic"
+                );
+
+                let diag = &parse_error.diagnostics[0];
+
+                // Check error code
+                assert_eq!(
+                    diag.code.as_deref(),
+                    Some("Q-2-1"),
+                    "Should be error Q-2-1 (Unclosed Span)"
+                );
+
+                // Check title contains expected text
+                assert!(
+                    diag.title.contains("Unclosed Span"),
+                    "Title should mention 'Unclosed Span', got: {}",
+                    diag.title
+                );
+
+                // Check that location is present
+                assert!(
+                    diag.location.is_some(),
+                    "Diagnostic should have a source location"
+                );
+
+                // Verify we can map the location to line/column
+                let loc = diag.location.as_ref().unwrap();
+                let mapped = loc.map_offset(0, &parse_error.source_context);
+                assert!(
+                    mapped.is_some(),
+                    "Should be able to map offset to line/column"
+                );
+
+                let mapped_loc = mapped.unwrap();
+                // The '[' is on line 7 (0-indexed: 6)
+                assert_eq!(
+                    mapped_loc.location.row, 6,
+                    "Error should be on line 7 (0-indexed: 6)"
+                );
+
+                // Also verify the rendered output contains ariadne markers
+                let rendered = parse_error.render();
+                assert!(
+                    rendered.contains("about.qmd"),
+                    "Rendered error should contain filename"
+                );
+            }
+            _ => panic!("Expected QuartoError::Parse, got: {:?}", err),
+        }
     }
 }

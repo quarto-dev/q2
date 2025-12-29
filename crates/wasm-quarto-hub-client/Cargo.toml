@@ -12,8 +12,11 @@ crate-type = ["cdylib"]
 [dependencies]
 pampa = { path = "../pampa", default-features = false }
 quarto-core = { path = "../quarto-core" }
+quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-source-map = { path = "../quarto-source-map" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
 wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["console"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 console_error_panic_hook = "0.1"

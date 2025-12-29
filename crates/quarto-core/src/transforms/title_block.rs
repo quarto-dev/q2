@@ -14,16 +14,16 @@
 //! This is a simplified version of Quarto's title block handling for
 //! prototyping purposes.
 
-use quarto_pandoc_types::attr::{empty_attr, AttrSourceInfo};
+use quarto_pandoc_types::attr::{AttrSourceInfo, empty_attr};
 use quarto_pandoc_types::block::{Block, Header};
 use quarto_pandoc_types::inline::{Inline, Str};
 use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
 use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 
+use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::Result;
 
 /// Transform that adds a title header from metadata if not present.
 ///
@@ -68,9 +68,9 @@ impl AstTransform for TitleBlockTransform {
 
 /// Check if the document has any level-1 header.
 fn has_level1_header(blocks: &[Block]) -> bool {
-    blocks.iter().any(|block| {
-        matches!(block, Block::Header(h) if h.level == 1)
-    })
+    blocks
+        .iter()
+        .any(|block| matches!(block, Block::Header(h) if h.level == 1))
 }
 
 /// Extract title text from metadata.
@@ -279,12 +279,10 @@ mod tests {
 
         // First block should be the existing header
         match &ast.blocks[0] {
-            Block::Header(h) => {
-                match &h.content[0] {
-                    Inline::Str(s) => assert_eq!(s.text, "Existing Title"),
-                    _ => panic!("Expected Str inline"),
-                }
-            }
+            Block::Header(h) => match &h.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "Existing Title"),
+                _ => panic!("Expected Str inline"),
+            },
             _ => panic!("Expected Header block"),
         }
     }

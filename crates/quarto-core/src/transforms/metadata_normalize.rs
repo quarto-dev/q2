@@ -14,15 +14,15 @@
 //!
 //! More derived fields can be added in the future (author-meta, date-meta, etc.)
 
+use quarto_pandoc_types::Slot;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::Inline;
 use quarto_pandoc_types::meta::{MetaMapEntry, MetaValueWithSourceInfo};
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_pandoc_types::Slot;
 
+use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::Result;
 
 /// Transform that normalizes document metadata.
 ///

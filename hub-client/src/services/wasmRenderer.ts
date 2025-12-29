@@ -5,6 +5,8 @@
  * VFS operations and QMD rendering.
  */
 
+import type { Diagnostic, RenderResponse } from '../types/diagnostic';
+
 // Response types from WASM module
 interface VfsResponse {
   success: boolean;
@@ -13,14 +15,8 @@ interface VfsResponse {
   content?: string;
 }
 
-interface RenderResponse {
-  success?: boolean;
-  error?: string;
-  message?: string;
-  html?: string;
-  output?: string;
-  diagnostics?: string[];
-}
+// Re-export Diagnostic type for convenience
+export type { Diagnostic } from '../types/diagnostic';
 
 // WASM module state
 let wasmModule: typeof import('wasm-quarto-hub-client') | null = null;
@@ -160,51 +156,49 @@ export function getBuiltinTemplate(name: string): string {
 // ============================================================================
 
 /**
- * Render QMD content to HTML, handling errors gracefully
+ * Result of rendering QMD content to HTML.
  */
-export async function renderToHtml(qmdContent: string): Promise<{
+export interface RenderResult {
   html: string;
   success: boolean;
   error?: string;
-  diagnostics?: string[];
-}> {
+  /** Structured error diagnostics with line/column information for Monaco. */
+  diagnostics?: Diagnostic[];
+  /** Structured warning diagnostics with line/column information for Monaco. */
+  warnings?: Diagnostic[];
+}
+
+/**
+ * Render QMD content to HTML, handling errors gracefully.
+ *
+ * Returns structured diagnostics with source locations that can be
+ * converted to Monaco editor markers using diagnosticsToMarkers().
+ */
+export async function renderToHtml(qmdContent: string): Promise<RenderResult> {
   try {
     await initWasm();
 
-    // Debug: log what we're rendering
-    console.log('Rendering QMD content, length:', qmdContent.length);
-    console.log('Template bundle available:', !!htmlTemplateBundle);
+    const result: RenderResponse = renderQmdContent(
+      qmdContent,
+      htmlTemplateBundle || ''
+    );
 
-    const result = renderQmdContent(qmdContent, htmlTemplateBundle || '');
-    console.log('Render result:', result);
-    console.log('Result keys:', Object.keys(result));
-
-    // Check for success: either explicit success flag, or presence of output/html
-    const hasOutput = !!(result.html || result.output);
-    const hasError = !!(result.error || result.message);
-    const isSuccess = result.success === true || (hasOutput && !hasError);
-
-    if (isSuccess) {
+    if (result.success) {
       return {
-        html: result.html || result.output || '',
+        html: result.html || '',
         success: true,
+        warnings: result.warnings,
       };
     } else {
-      // Extract error message, handling various formats
-      let errorMsg = 'Unknown render error';
-      if (result.error) {
-        errorMsg = typeof result.error === 'string'
-          ? result.error
-          : JSON.stringify(result.error);
-      } else if (result.message) {
-        errorMsg = result.message;
-      }
+      // Extract error message
+      const errorMsg = result.error || 'Unknown render error';
 
       return {
         html: '',
         success: false,
         error: errorMsg,
         diagnostics: result.diagnostics,
+        warnings: result.warnings,
       };
     }
   } catch (err) {

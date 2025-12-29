@@ -15,15 +15,15 @@
 
 use std::path::{Path, PathBuf};
 
+use quarto_pandoc_types::Slot;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::Inline;
 use quarto_pandoc_types::pandoc::Pandoc;
-use quarto_pandoc_types::Slot;
 
+use crate::Result;
 use crate::artifact::Artifact;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::Result;
 
 /// Transform that collects resource dependencies from the AST.
 ///
@@ -418,11 +418,7 @@ mod tests {
             },
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Image {
-                    attr: (
-                        String::new(),
-                        vec![],
-                        hashlink::LinkedHashMap::new(),
-                    ),
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                     content: vec![Inline::Str(Str {
                         text: "alt text".to_string(),
                         source_info: dummy_source_info(),
@@ -458,11 +454,7 @@ mod tests {
             },
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Image {
-                    attr: (
-                        String::new(),
-                        vec![],
-                        hashlink::LinkedHashMap::new(),
-                    ),
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                     content: vec![],
                     target: ("https://example.com/image.png".to_string(), String::new()),
                     source_info: dummy_source_info(),
@@ -495,11 +487,7 @@ mod tests {
             },
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Image {
-                    attr: (
-                        String::new(),
-                        vec![],
-                        hashlink::LinkedHashMap::new(),
-                    ),
+                    attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                     content: vec![],
                     target: ("data:image/png;base64,abc123".to_string(), String::new()),
                     source_info: dummy_source_info(),

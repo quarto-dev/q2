@@ -276,11 +276,15 @@ impl ProjectContext {
             .map_err(|e| QuartoError::Other(format!("Failed to read config file: {}", e)))?;
 
         // Parse YAML
-        let value: serde_json::Value = serde_yaml::from_str(&content)
-            .map_err(|e| QuartoError::Other(format!("Failed to parse {}: {}", path.display(), e)))?;
+        let value: serde_json::Value = serde_yaml::from_str(&content).map_err(|e| {
+            QuartoError::Other(format!("Failed to parse {}: {}", path.display(), e))
+        })?;
 
         // Extract project configuration
-        let project = value.get("project").cloned().unwrap_or(serde_json::Value::Null);
+        let project = value
+            .get("project")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
 
         let project_type = project
             .get("type")
@@ -335,16 +339,21 @@ mod tests {
 
     #[test]
     fn test_project_type_from_string() {
-        assert_eq!(ProjectType::try_from("website").unwrap(), ProjectType::Website);
+        assert_eq!(
+            ProjectType::try_from("website").unwrap(),
+            ProjectType::Website
+        );
         assert_eq!(ProjectType::try_from("book").unwrap(), ProjectType::Book);
-        assert_eq!(ProjectType::try_from("default").unwrap(), ProjectType::Default);
+        assert_eq!(
+            ProjectType::try_from("default").unwrap(),
+            ProjectType::Default
+        );
         assert!(ProjectType::try_from("unknown").is_err());
     }
 
     #[test]
     fn test_document_info() {
-        let doc = DocumentInfo::from_path("/path/to/doc.qmd")
-            .with_output("/path/to/doc.html");
+        let doc = DocumentInfo::from_path("/path/to/doc.qmd").with_output("/path/to/doc.html");
 
         assert_eq!(doc.input, PathBuf::from("/path/to/doc.qmd"));
         assert_eq!(doc.output, Some(PathBuf::from("/path/to/doc.html")));

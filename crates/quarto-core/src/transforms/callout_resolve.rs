@@ -44,9 +44,9 @@ use quarto_pandoc_types::pandoc::Pandoc;
 use quarto_source_map::SourceInfo;
 use serde_json::Value;
 
+use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
-use crate::Result;
 
 /// Transform that resolves Callout CustomNodes to standard Pandoc Div structure.
 ///
@@ -166,10 +166,7 @@ fn resolve_callout(custom: &mut CustomNode) -> Div {
     let source_info = custom.source_info.clone();
 
     // Build class list for outer div
-    let mut classes = vec![
-        "callout".to_string(),
-        format!("callout-{}", callout_type),
-    ];
+    let mut classes = vec!["callout".to_string(), format!("callout-{}", callout_type)];
     if appearance != "default" {
         classes.push(format!("callout-appearance-{}", appearance));
     }
@@ -327,8 +324,16 @@ mod tests {
         SourceInfo::from_range(
             FileId(0),
             Range {
-                start: Location { offset: 0, row: 0, column: 0 },
-                end: Location { offset: 0, row: 0, column: 0 },
+                start: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
             },
         )
     }

@@ -48,8 +48,8 @@
 //! pipeline.execute(&mut ast, &mut ctx)?;
 //! ```
 
-use crate::render::RenderContext;
 use crate::Result;
+use crate::render::RenderContext;
 
 /// Trait for AST transformations.
 ///
@@ -165,8 +165,8 @@ mod tests {
     use crate::project::{DocumentInfo, ProjectContext};
     use crate::render::{BinaryDependencies, RenderContext};
     use std::path::PathBuf;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     fn make_test_project() -> ProjectContext {
         ProjectContext {
@@ -219,7 +219,9 @@ mod tests {
             _ast: &mut quarto_pandoc_types::pandoc::Pandoc,
             _ctx: &mut RenderContext,
         ) -> Result<()> {
-            Err(crate::error::QuartoError::other("Transform failed intentionally"))
+            Err(crate::error::QuartoError::other(
+                "Transform failed intentionally",
+            ))
         }
     }
 

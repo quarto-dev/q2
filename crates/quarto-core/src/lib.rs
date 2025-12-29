@@ -49,10 +49,10 @@ pub mod transforms;
 
 // Re-export commonly used types
 pub use artifact::{Artifact, ArtifactStore};
-pub use error::{QuartoError, Result};
+pub use error::{ParseError, QuartoError, Result};
 pub use format::{Format, FormatIdentifier};
 pub use pipeline::{
-    render_qmd_to_html, HtmlRenderConfig, ParseWarning, RenderOutput, DEFAULT_CSS_ARTIFACT_PATH,
+    DEFAULT_CSS_ARTIFACT_PATH, HtmlRenderConfig, RenderOutput, render_qmd_to_html,
 };
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};

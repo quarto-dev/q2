@@ -19,8 +19,10 @@ use std::sync::OnceLock;
 
 use quarto_core::{
     render_qmd_to_html, BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectContext,
-    RenderContext, RenderOptions,
+    QuartoError, RenderContext, RenderOptions,
 };
+use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
+use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
@@ -188,6 +190,165 @@ pub fn vfs_read_file(path: &str) -> String {
 }
 
 // ============================================================================
+// DIAGNOSTIC TYPES FOR JSON TRANSPORT
+// ============================================================================
+
+/// A diagnostic detail item for JSON serialization.
+#[derive(Serialize)]
+struct JsonDiagnosticDetail {
+    kind: String,
+    content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_column: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_column: Option<u32>,
+}
+
+/// A diagnostic message for JSON serialization.
+///
+/// This struct is designed for transport to the TypeScript/Monaco layer.
+/// Line and column numbers are 1-based to match Monaco's expectations.
+#[derive(Serialize)]
+struct JsonDiagnostic {
+    kind: String,
+    title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    problem: Option<String>,
+    hints: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start_column: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end_column: Option<u32>,
+    details: Vec<JsonDiagnosticDetail>,
+}
+
+/// Convert a DiagnosticMessage to a JsonDiagnostic.
+///
+/// Uses the SourceContext to map byte offsets to 1-based line/column numbers.
+fn diagnostic_to_json(diag: &DiagnosticMessage, ctx: &SourceContext) -> JsonDiagnostic {
+    // Map the main location
+    let (start_line, start_column, end_line, end_column) = if let Some(loc) = &diag.location {
+        // Map start position (offset 0 relative to this SourceInfo)
+        let start = loc.map_offset(0, ctx);
+        // Map end position (offset = length of span)
+        let end = loc
+            .map_offset(loc.length(), ctx)
+            .or_else(|| {
+                // Fallback: if end mapping fails, try length-1
+                if loc.length() > 0 {
+                    loc.map_offset(loc.length() - 1, ctx)
+                } else {
+                    None
+                }
+            })
+            .or_else(|| start.clone());
+
+        match (start, end) {
+            (Some(s), Some(e)) => (
+                Some((s.location.row + 1) as u32),   // 1-based line
+                Some((s.location.column + 1) as u32), // 1-based column
+                Some((e.location.row + 1) as u32),
+                Some((e.location.column + 1) as u32),
+            ),
+            (Some(s), None) => (
+                Some((s.location.row + 1) as u32),
+                Some((s.location.column + 1) as u32),
+                None,
+                None,
+            ),
+            _ => (None, None, None, None),
+        }
+    } else {
+        (None, None, None, None)
+    };
+
+    // Convert details
+    let details: Vec<JsonDiagnosticDetail> = diag
+        .details
+        .iter()
+        .map(|detail| {
+            let (d_start_line, d_start_col, d_end_line, d_end_col) =
+                if let Some(loc) = &detail.location {
+                    let start = loc.map_offset(0, ctx);
+                    let end = loc.map_offset(loc.length(), ctx).or_else(|| start.clone());
+
+                    match (start, end) {
+                        (Some(s), Some(e)) => (
+                            Some((s.location.row + 1) as u32),
+                            Some((s.location.column + 1) as u32),
+                            Some((e.location.row + 1) as u32),
+                            Some((e.location.column + 1) as u32),
+                        ),
+                        (Some(s), None) => (
+                            Some((s.location.row + 1) as u32),
+                            Some((s.location.column + 1) as u32),
+                            None,
+                            None,
+                        ),
+                        _ => (None, None, None, None),
+                    }
+                } else {
+                    (None, None, None, None)
+                };
+
+            let kind_str = match detail.kind {
+                quarto_error_reporting::DetailKind::Error => "error",
+                quarto_error_reporting::DetailKind::Info => "info",
+                quarto_error_reporting::DetailKind::Note => "note",
+            };
+
+            JsonDiagnosticDetail {
+                kind: kind_str.to_string(),
+                content: detail.content.as_str().to_string(),
+                start_line: d_start_line,
+                start_column: d_start_col,
+                end_line: d_end_line,
+                end_column: d_end_col,
+            }
+        })
+        .collect();
+
+    // Convert kind
+    let kind_str = match diag.kind {
+        DiagnosticKind::Error => "error",
+        DiagnosticKind::Warning => "warning",
+        DiagnosticKind::Info => "info",
+        DiagnosticKind::Note => "note",
+    };
+
+    // Convert hints
+    let hints: Vec<String> = diag.hints.iter().map(|h| h.as_str().to_string()).collect();
+
+    JsonDiagnostic {
+        kind: kind_str.to_string(),
+        title: diag.title.clone(),
+        code: diag.code.clone(),
+        problem: diag.problem.as_ref().map(|p| p.as_str().to_string()),
+        hints,
+        start_line,
+        start_column,
+        end_line,
+        end_column,
+        details,
+    }
+}
+
+/// Convert a slice of DiagnosticMessages to JsonDiagnostics.
+fn diagnostics_to_json(diags: &[DiagnosticMessage], ctx: &SourceContext) -> Vec<JsonDiagnostic> {
+    diags.iter().map(|d| diagnostic_to_json(d, ctx)).collect()
+}
+
+// ============================================================================
 // RENDERING API
 // ============================================================================
 
@@ -198,10 +359,12 @@ struct RenderResponse {
     error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     html: Option<String>,
+    /// Structured diagnostics (errors) with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
-    diagnostics: Option<Vec<String>>,
+    diagnostics: Option<Vec<JsonDiagnostic>>,
+    /// Structured warnings with line/column information for Monaco.
     #[serde(skip_serializing_if = "Option::is_none")]
-    warnings: Option<Vec<String>>,
+    warnings: Option<Vec<JsonDiagnostic>>,
 }
 
 /// Create a minimal project context for WASM rendering.
@@ -272,7 +435,8 @@ pub fn render_qmd(path: &str) -> String {
                 }
             }
 
-            let warnings: Vec<String> = output.warnings.iter().map(|w| w.message.clone()).collect();
+            // Convert warnings to structured JSON with line/column info
+            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
             serde_json::to_string(&RenderResponse {
                 success: true,
                 error: None,
@@ -286,14 +450,26 @@ pub fn render_qmd(path: &str) -> String {
             })
             .unwrap()
         }
-        Err(e) => serde_json::to_string(&RenderResponse {
-            success: false,
-            error: Some(e.to_string()),
-            html: None,
-            diagnostics: None,
-            warnings: None,
-        })
-        .unwrap(),
+        Err(e) => {
+            // Extract structured diagnostics from parse errors
+            let (error_msg, diagnostics) = match &e {
+                QuartoError::Parse(parse_error) => {
+                    let diags =
+                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
+                    (e.to_string(), Some(diags))
+                }
+                _ => (e.to_string(), None),
+            };
+
+            serde_json::to_string(&RenderResponse {
+                success: false,
+                error: Some(error_msg),
+                html: None,
+                diagnostics,
+                warnings: None,
+            })
+            .unwrap()
+        }
     }
 }
 
@@ -329,8 +505,35 @@ pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
     // TODO: Support custom templates via template_bundle parameter
     let config = HtmlRenderConfig::default();
 
-    match render_qmd_to_html(content.as_bytes(), "/input.qmd", &mut ctx, &config) {
+    // Debug: log content length to verify we're running new code
+    web_sys::console::log_1(&format!("[WASM] render_qmd_content called, content length: {}", content.len()).into());
+
+    // Reset debug counters before parsing
+    pampa::readers::qmd::reset_wasm_debug_counters();
+
+    let result = render_qmd_to_html(content.as_bytes(), "/input.qmd", &mut ctx, &config);
+
+    // Log debug counters after parsing (regardless of success or failure)
+    let (logger_calls, saw_error) = pampa::readers::qmd::get_wasm_debug_counters();
+    let messages = pampa::readers::qmd::get_wasm_debug_messages();
+    web_sys::console::log_1(
+        &format!(
+            "[WASM] Logger debug: {} calls, detect_error seen: {}",
+            logger_calls, saw_error
+        )
+        .into(),
+    );
+    // Log captured messages (first 20 + any with error/skip/recover)
+    web_sys::console::log_1(
+        &format!("[WASM] Logger messages ({} captured):", messages.len()).into(),
+    );
+    for (i, msg) in messages.iter().enumerate() {
+        web_sys::console::log_1(&format!("  [{}] {}", i, msg).into());
+    }
+
+    match result {
         Ok(output) => {
+            web_sys::console::log_1(&format!("[WASM] Render succeeded, warnings: {}", output.warnings.len()).into());
             // Populate VFS with artifacts so post-processor can resolve them.
             // This includes CSS at /.quarto/project-artifacts/styles.css.
             let runtime = get_runtime();
@@ -340,7 +543,8 @@ pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
                 }
             }
 
-            let warnings: Vec<String> = output.warnings.iter().map(|w| w.message.clone()).collect();
+            // Convert warnings to structured JSON with line/column info
+            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
             serde_json::to_string(&RenderResponse {
                 success: true,
                 error: None,
@@ -354,14 +558,35 @@ pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
             })
             .unwrap()
         }
-        Err(e) => serde_json::to_string(&RenderResponse {
-            success: false,
-            error: Some(e.to_string()),
-            html: None,
-            diagnostics: None,
-            warnings: None,
-        })
-        .unwrap(),
+        Err(e) => {
+            web_sys::console::log_1(&format!("[WASM] Render FAILED: {}", e).into());
+
+            // Extract structured diagnostics from parse errors
+            let (error_msg, diagnostics) = match &e {
+                QuartoError::Parse(parse_error) => {
+                    web_sys::console::log_1(
+                        &format!(
+                            "[WASM] Parse error with {} diagnostics",
+                            parse_error.diagnostics.len()
+                        )
+                        .into(),
+                    );
+                    let diags =
+                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
+                    (e.to_string(), Some(diags))
+                }
+                _ => (e.to_string(), None),
+            };
+
+            serde_json::to_string(&RenderResponse {
+                success: false,
+                error: Some(error_msg),
+                html: None,
+                diagnostics,
+                warnings: None,
+            })
+            .unwrap()
+        }
     }
 }
 
