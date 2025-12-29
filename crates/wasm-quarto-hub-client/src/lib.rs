@@ -505,35 +505,10 @@ pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
     // TODO: Support custom templates via template_bundle parameter
     let config = HtmlRenderConfig::default();
 
-    // Debug: log content length to verify we're running new code
-    web_sys::console::log_1(&format!("[WASM] render_qmd_content called, content length: {}", content.len()).into());
-
-    // Reset debug counters before parsing
-    pampa::readers::qmd::reset_wasm_debug_counters();
-
     let result = render_qmd_to_html(content.as_bytes(), "/input.qmd", &mut ctx, &config);
-
-    // Log debug counters after parsing (regardless of success or failure)
-    let (logger_calls, saw_error) = pampa::readers::qmd::get_wasm_debug_counters();
-    let messages = pampa::readers::qmd::get_wasm_debug_messages();
-    web_sys::console::log_1(
-        &format!(
-            "[WASM] Logger debug: {} calls, detect_error seen: {}",
-            logger_calls, saw_error
-        )
-        .into(),
-    );
-    // Log captured messages (first 20 + any with error/skip/recover)
-    web_sys::console::log_1(
-        &format!("[WASM] Logger messages ({} captured):", messages.len()).into(),
-    );
-    for (i, msg) in messages.iter().enumerate() {
-        web_sys::console::log_1(&format!("  [{}] {}", i, msg).into());
-    }
 
     match result {
         Ok(output) => {
-            web_sys::console::log_1(&format!("[WASM] Render succeeded, warnings: {}", output.warnings.len()).into());
             // Populate VFS with artifacts so post-processor can resolve them.
             // This includes CSS at /.quarto/project-artifacts/styles.css.
             let runtime = get_runtime();
@@ -559,18 +534,9 @@ pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
             .unwrap()
         }
         Err(e) => {
-            web_sys::console::log_1(&format!("[WASM] Render FAILED: {}", e).into());
-
             // Extract structured diagnostics from parse errors
             let (error_msg, diagnostics) = match &e {
                 QuartoError::Parse(parse_error) => {
-                    web_sys::console::log_1(
-                        &format!(
-                            "[WASM] Parse error with {} diagnostics",
-                            parse_error.diagnostics.len()
-                        )
-                        .into(),
-                    );
                     let diags =
                         diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
                     (e.to_string(), Some(diags))

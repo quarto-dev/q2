@@ -15,5 +15,5 @@ int fclose(FILE *);
 
 int vsnprintf(char *s, unsigned long n, const char *format, ...);
 
-#define sprintf(str, ...) 0
-#define snprintf(str, len, ...) 0
+int sprintf(char *str, const char *format, ...);
+int snprintf(char *str, unsigned long n, const char *format, ...);

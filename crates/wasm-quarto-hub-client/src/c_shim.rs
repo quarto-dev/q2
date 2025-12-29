@@ -231,6 +231,202 @@ pub unsafe extern "C" fn fwrite(
     panic!("fwrite is not supported");
 }
 
+// Track if our snprintf is being called
+static SNPRINTF_CALL_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Get snprintf call count for debugging
+pub fn get_snprintf_call_count() -> usize {
+    SNPRINTF_CALL_COUNT.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Minimal snprintf implementation for tree-sitter logging.
+///
+/// Tree-sitter uses snprintf to format log messages. This implementation
+/// handles the common format specifiers used by tree-sitter's logging.
+#[no_mangle]
+pub unsafe extern "C" fn snprintf(
+    buf: *mut c_char,
+    size: usize,
+    format: *const c_char,
+    mut args: ...
+) -> c_int {
+    SNPRINTF_CALL_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+    if buf.is_null() || size == 0 {
+        return 0;
+    }
+
+    let format_str = std::ffi::CStr::from_ptr(format);
+    let format_bytes = format_str.to_bytes();
+
+    let mut output = Vec::with_capacity(size);
+    let mut i = 0;
+
+    while i < format_bytes.len() && output.len() < size - 1 {
+        if format_bytes[i] == b'%' && i + 1 < format_bytes.len() {
+            i += 1;
+            // Skip flags, width, precision
+            while i < format_bytes.len()
+                && (format_bytes[i] == b'-'
+                    || format_bytes[i] == b'+'
+                    || format_bytes[i] == b' '
+                    || format_bytes[i] == b'#'
+                    || format_bytes[i] == b'0'
+                    || format_bytes[i].is_ascii_digit()
+                    || format_bytes[i] == b'.')
+            {
+                i += 1;
+            }
+
+            if i >= format_bytes.len() {
+                break;
+            }
+
+            match format_bytes[i] {
+                b'd' | b'i' => {
+                    let val: c_int = args.arg();
+                    let s = val.to_string();
+                    for b in s.bytes() {
+                        if output.len() < size - 1 {
+                            output.push(b);
+                        }
+                    }
+                }
+                b'u' => {
+                    let val: u32 = args.arg();
+                    let s = val.to_string();
+                    for b in s.bytes() {
+                        if output.len() < size - 1 {
+                            output.push(b);
+                        }
+                    }
+                }
+                b's' => {
+                    let ptr: *const c_char = args.arg();
+                    if !ptr.is_null() {
+                        let cstr = std::ffi::CStr::from_ptr(ptr);
+                        for b in cstr.to_bytes() {
+                            if output.len() < size - 1 {
+                                output.push(*b);
+                            }
+                        }
+                    }
+                }
+                b'c' => {
+                    let val: c_int = args.arg();
+                    if output.len() < size - 1 {
+                        output.push(val as u8);
+                    }
+                }
+                b'%' => {
+                    if output.len() < size - 1 {
+                        output.push(b'%');
+                    }
+                }
+                b'l' => {
+                    // Handle %ld, %lu, %lld, %llu
+                    i += 1;
+                    if i < format_bytes.len() {
+                        match format_bytes[i] {
+                            b'd' | b'i' => {
+                                let val: i64 = args.arg();
+                                let s = val.to_string();
+                                for b in s.bytes() {
+                                    if output.len() < size - 1 {
+                                        output.push(b);
+                                    }
+                                }
+                            }
+                            b'u' => {
+                                let val: u64 = args.arg();
+                                let s = val.to_string();
+                                for b in s.bytes() {
+                                    if output.len() < size - 1 {
+                                        output.push(b);
+                                    }
+                                }
+                            }
+                            b'l' => {
+                                // %lld or %llu
+                                i += 1;
+                                if i < format_bytes.len() {
+                                    match format_bytes[i] {
+                                        b'd' | b'i' => {
+                                            let val: i64 = args.arg();
+                                            let s = val.to_string();
+                                            for b in s.bytes() {
+                                                if output.len() < size - 1 {
+                                                    output.push(b);
+                                                }
+                                            }
+                                        }
+                                        b'u' => {
+                                            let val: u64 = args.arg();
+                                            let s = val.to_string();
+                                            for b in s.bytes() {
+                                                if output.len() < size - 1 {
+                                                    output.push(b);
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                b'z' => {
+                    // Handle %zu, %zd (size_t)
+                    i += 1;
+                    if i < format_bytes.len() {
+                        match format_bytes[i] {
+                            b'u' => {
+                                let val: usize = args.arg();
+                                let s = val.to_string();
+                                for b in s.bytes() {
+                                    if output.len() < size - 1 {
+                                        output.push(b);
+                                    }
+                                }
+                            }
+                            b'd' | b'i' => {
+                                let val: isize = args.arg();
+                                let s = val.to_string();
+                                for b in s.bytes() {
+                                    if output.len() < size - 1 {
+                                        output.push(b);
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {
+                    // Unknown specifier, just skip
+                }
+            }
+            i += 1;
+        } else {
+            if output.len() < size - 1 {
+                output.push(format_bytes[i]);
+            }
+            i += 1;
+        }
+    }
+
+    // Null-terminate
+    let written = output.len();
+    for (j, b) in output.into_iter().enumerate() {
+        *buf.add(j) = b as c_char;
+    }
+    *buf.add(written) = 0;
+
+    written as c_int
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn vsnprintf(
     _buf: *mut c_char,
@@ -238,5 +434,6 @@ pub unsafe extern "C" fn vsnprintf(
     _format: *const c_char,
     _args: ...
 ) -> c_int {
-    panic!("vsnprintf is not supported");
+    // vsnprintf with va_list is harder to implement; tree-sitter primarily uses snprintf
+    0
 }

@@ -3,7 +3,6 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-// Note: parse_is_good no longer used - log_observer.had_errors() handles parse errors
 use crate::filter_context::FilterContext;
 use crate::filters::FilterReturn::Unchanged;
 use crate::filters::topdown_traverse;
@@ -18,42 +17,8 @@ use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_parse_errors::TreeSitterLogObserverTrait;
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tree_sitter::LogType;
 use tree_sitter_qmd::MarkdownParser;
-
-// Debug counters for WASM tracing - using atomics so they work in closures
-static LOGGER_CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
-static LOGGER_SAW_DETECT_ERROR: AtomicBool = AtomicBool::new(false);
-
-use std::sync::Mutex;
-static LOGGER_MESSAGES: Mutex<Vec<String>> = Mutex::new(Vec::new());
-
-/// Reset the debug counters (call before each parse for clean state)
-pub fn reset_wasm_debug_counters() {
-    LOGGER_CALL_COUNT.store(0, Ordering::SeqCst);
-    LOGGER_SAW_DETECT_ERROR.store(false, Ordering::SeqCst);
-    if let Ok(mut msgs) = LOGGER_MESSAGES.lock() {
-        msgs.clear();
-    }
-}
-
-/// Get the debug counter values (call after parse to inspect)
-pub fn get_wasm_debug_counters() -> (usize, bool) {
-    (
-        LOGGER_CALL_COUNT.load(Ordering::SeqCst),
-        LOGGER_SAW_DETECT_ERROR.load(Ordering::SeqCst),
-    )
-}
-
-/// Get a sample of logged messages for debugging
-pub fn get_wasm_debug_messages() -> Vec<String> {
-    if let Ok(msgs) = LOGGER_MESSAGES.lock() {
-        msgs.clone()
-    } else {
-        vec![]
-    }
-}
 
 fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf: &mut T) {
     let mut depth = 0;
@@ -108,23 +73,6 @@ pub fn read<T: Write>(
         .parser
         .set_logger(Some(Box::new(|log_type, message| match log_type {
             LogType::Parse => {
-                // Track logger calls for WASM debugging
-                let count = LOGGER_CALL_COUNT.fetch_add(1, Ordering::SeqCst);
-                if message.starts_with("detect_error") {
-                    LOGGER_SAW_DETECT_ERROR.store(true, Ordering::SeqCst);
-                }
-                // Capture first 20 messages and any containing "error" or "skip"
-                if count < 20
-                    || message.contains("error")
-                    || message.contains("skip")
-                    || message.contains("recover")
-                {
-                    if let Ok(mut msgs) = LOGGER_MESSAGES.lock() {
-                        if msgs.len() < 100 {
-                            msgs.push(message.to_string());
-                        }
-                    }
-                }
                 fast_log_observer.log(log_type, message);
             }
             _ => {}
@@ -160,8 +108,6 @@ pub fn read<T: Write>(
         .source_context
         .add_file(filename.to_string(), Some(input_str));
 
-    // if fast observer saw an error, reparse with full log observer to
-    // capture tokens and report good error
     if fast_log_observer.had_errors() {
         parser
             .parser

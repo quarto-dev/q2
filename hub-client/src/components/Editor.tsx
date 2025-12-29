@@ -60,10 +60,22 @@ function renderFallback(content: string, message: string): string {
   `;
 }
 
+// Strip ANSI escape codes from text
+function stripAnsi(text: string): string {
+  // Match ANSI escape sequences: ESC [ ... m (SGR sequences)
+  // This covers color codes like \x1b[31m, \x1b[38;5;246m, \x1b[0m, etc.
+  return text.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
 // Error display HTML
 function renderError(content: string, error: string, diagnostics?: string[]): string {
+  // Strip ANSI codes and escape HTML
+  const cleanError = stripAnsi(error)
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
   const diagHtml = diagnostics?.length
-    ? `<ul>${diagnostics.map(d => `<li>${d}</li>`).join('')}</ul>`
+    ? `<ul>${diagnostics.map(d => `<li>${stripAnsi(d).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</li>`).join('')}</ul>`
     : '';
 
   return `
@@ -92,12 +104,21 @@ function renderError(content: string, error: string, diagnostics?: string[]): st
             border-radius: 4px;
             margin-bottom: 16px;
           }
+          .error-message {
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
+            font-size: 13px;
+            line-height: 1.4;
+            white-space: pre;
+            overflow-x: auto;
+            margin-top: 8px;
+          }
           .error ul { margin: 8px 0 0 0; padding-left: 20px; }
         </style>
       </head>
       <body>
         <div class="error">
-          <strong>Render Error:</strong> ${error}
+          <strong>Render Error</strong>
+          <div class="error-message">${cleanError}</div>
           ${diagHtml}
         </div>
         <pre><code>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
@@ -210,7 +231,6 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     }
 
     try {
-      console.log('[Diagnostics] Rendering content:', JSON.stringify(qmdContent));
       const result = await renderToHtml(qmdContent);
 
       // Check if content changed while we were rendering
@@ -223,13 +243,6 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
         ...(result.diagnostics ?? []),
         ...(result.warnings ?? []),
       ];
-      console.log('[Diagnostics] Render result:', JSON.stringify({
-        success: result.success,
-        error: result.error,
-        diagnosticsCount: result.diagnostics?.length ?? 0,
-        warningsCount: result.warnings?.length ?? 0,
-        allDiagnostics
-      }, null, 2));
       setDiagnostics(allDiagnostics);
 
       if (result.success) {
@@ -270,25 +283,16 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
 
   // Apply Monaco markers when diagnostics change
   useEffect(() => {
-    console.log('[Diagnostics] Effect triggered, diagnostics count:', diagnostics.length);
-
     if (!editorRef.current || !monacoRef.current) {
-      console.log('[Diagnostics] Editor or Monaco not ready: editor=' + !!editorRef.current + ', monaco=' + !!monacoRef.current);
       return;
     }
 
     const model = editorRef.current.getModel();
     if (!model) {
-      console.log('[Diagnostics] No model available');
       return;
     }
 
     const { markers, unlocatedDiagnostics } = diagnosticsToMarkers(diagnostics);
-    console.log('[Diagnostics] Setting markers:', JSON.stringify({
-      markersCount: markers.length,
-      unlocatedCount: unlocatedDiagnostics.length,
-      markers
-    }, null, 2));
     monacoRef.current.editor.setModelMarkers(model, 'quarto', markers);
     setUnlocatedErrors(unlocatedDiagnostics);
   }, [diagnostics]);
