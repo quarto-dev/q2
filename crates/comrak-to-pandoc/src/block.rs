@@ -14,8 +14,8 @@ use comrak::nodes::{
 };
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::{
-    AttrSourceInfo, Block, BlockQuote, Blocks, BulletList, CodeBlock, Header, HorizontalRule,
-    ListAttributes, ListNumberDelim, ListNumberStyle, MetaValueWithSourceInfo, OrderedList, Pandoc,
+    AttrSourceInfo, Block, BlockQuote, Blocks, BulletList, CodeBlock, ConfigValue, Header,
+    HorizontalRule, ListAttributes, ListNumberDelim, ListNumberStyle, OrderedList, Pandoc,
     Paragraph, Plain,
 };
 use quarto_source_map::SourceInfo;
@@ -54,7 +54,7 @@ pub fn convert_document_with_source<'a>(
         NodeValue::Document => {
             let blocks = convert_children_to_blocks(root, source_ctx);
             Pandoc {
-                meta: MetaValueWithSourceInfo::default(),
+                meta: ConfigValue::default(),
                 blocks,
             }
         }

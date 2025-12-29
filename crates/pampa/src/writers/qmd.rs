@@ -12,6 +12,7 @@ use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
+use crate::template::config_value_to_meta;
 use hashlink::LinkedHashMap;
 use std::io::{self, Write};
 use yaml_rust2::{Yaml, YamlEmitter};
@@ -747,7 +748,9 @@ fn write_metablock(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<bool> {
-    write_meta(&metablock.meta, buf, ctx)
+    // Convert ConfigValue to MetaValueWithSourceInfo for serialization
+    let meta_value = config_value_to_meta(&metablock.meta);
+    write_meta(&meta_value, buf, ctx)
 }
 
 fn write_inlinerefdef(
@@ -1878,7 +1881,9 @@ fn write_impl<T: std::io::Write>(
     buf: &mut T,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    let mut need_newline = write_meta(&pandoc.meta, buf, ctx)?;
+    // Convert ConfigValue to MetaValueWithSourceInfo for serialization
+    let meta_value = config_value_to_meta(&pandoc.meta);
+    let mut need_newline = write_meta(&meta_value, buf, ctx)?;
     for block in &pandoc.blocks {
         if need_newline {
             write!(buf, "\n")?

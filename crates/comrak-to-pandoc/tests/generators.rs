@@ -12,10 +12,9 @@
 use hashlink::LinkedHashMap;
 use proptest::prelude::*;
 use quarto_pandoc_types::{
-    Block, BulletList, Code, CodeBlock, Emph, Header, HorizontalRule, Image, Inline, Link,
-    OrderedList, Pandoc, Paragraph, Plain, Str, Strong,
+    Block, BulletList, Code, CodeBlock, ConfigValue, Emph, Header, HorizontalRule, Image, Inline,
+    Link, OrderedList, Pandoc, Paragraph, Plain, Str, Strong,
     attr::{AttrSourceInfo, TargetSourceInfo},
-    meta::MetaValueWithSourceInfo,
 };
 use quarto_source_map::{FileId, SourceInfo};
 
@@ -688,7 +687,7 @@ pub fn gen_pandoc(
     inline_features: InlineFeatures,
 ) -> impl Strategy<Value = Pandoc> {
     gen_blocks(block_features, inline_features).prop_map(|blocks| Pandoc {
-        meta: MetaValueWithSourceInfo::default(),
+        meta: ConfigValue::default(),
         blocks,
     })
 }

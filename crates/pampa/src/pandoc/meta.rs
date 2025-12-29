@@ -9,6 +9,7 @@
 
 use crate::pandoc::location::empty_source_info;
 use crate::readers;
+use crate::template::config_value_to_meta;
 use crate::utils::output::VerboseOutput;
 use hashlink::LinkedHashMap;
 use quarto_pandoc_types::{
@@ -862,7 +863,8 @@ pub fn parse_metadata_strings_with_source_info(
                         diagnostics.add(warning);
                     }
                     // Merge parsed metadata, preserving full MetaMapEntry with key_source
-                    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
+                    let meta_value = config_value_to_meta(&pandoc.meta);
+                    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta_value {
                         for entry in entries {
                             outer_metadata.push(entry);
                         }
@@ -956,8 +958,9 @@ pub fn parse_metadata_strings(meta: MetaValue, outer_metadata: &mut Meta) -> Met
             match result {
                 Ok((mut pandoc, _context, _warnings)) => {
                     // TODO: Handle warnings from recursive parse
-                    // pandoc.meta is now MetaValueWithSourceInfo, convert it to Meta
-                    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta {
+                    // pandoc.meta is ConfigValue, convert to MetaValueWithSourceInfo then to Meta
+                    let meta_value = config_value_to_meta(&pandoc.meta);
+                    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta_value {
                         for entry in entries {
                             outer_metadata.insert(entry.key, entry.value.to_meta_value());
                         }

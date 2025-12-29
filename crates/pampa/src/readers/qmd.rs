@@ -12,8 +12,9 @@ use crate::pandoc::block::MetaBlock;
 use crate::pandoc::meta::parse_metadata_strings_with_source_info;
 use crate::pandoc::rawblock_to_config_value;
 use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
-use crate::template::config_value_to_meta;
+use crate::template::{config_value_to_meta, meta_to_config_value};
 use crate::readers::qmd_error_messages::{produce_diagnostic_messages, produce_error_message_json};
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_parse_errors::TreeSitterLogObserverTrait;
@@ -241,9 +242,11 @@ pub fn read<T: Write>(
                     parsed_meta
                 };
 
+                // Convert MetaValueWithSourceInfo to ConfigValue for MetaBlock.meta
+                let meta_config = meta_to_config_value(&final_meta);
                 return FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
-                        meta: final_meta,
+                        meta: meta_config,
                         source_info: rb.source_info.clone(),
                     })],
                     false,
@@ -283,19 +286,21 @@ pub fn read<T: Write>(
     };
 
     // Merge meta_from_parses into result.meta
-    // result.meta is MetaValueWithSourceInfo::MetaMap, so we need to append entries
+    // result.meta is ConfigValue with ConfigValueKind::Map, so we need to append entries
     // Now meta_from_parses contains complete MetaMapEntry objects with key_source preserved
-    if let MetaValueWithSourceInfo::MetaMap {
-        entries,
-        source_info,
-    } = &mut result.meta
-    {
+    if let ConfigValueKind::Map(ref mut entries) = result.meta.value {
         for entry in meta_from_parses.into_iter() {
-            entries.push(entry);
+            // Convert MetaMapEntry to ConfigMapEntry
+            let config_entry = ConfigMapEntry {
+                key: entry.key,
+                key_source: entry.key_source,
+                value: meta_to_config_value(&entry.value),
+            };
+            entries.push(config_entry);
         }
         // Update the overall metadata source_info if we captured one
         if let Some(captured_source_info) = meta_source_info {
-            *source_info = captured_source_info;
+            result.meta.source_info = captured_source_info;
         }
     }
 

@@ -10,6 +10,7 @@
 //! These tests exercise the full render pipeline from QMD input to HTML output,
 //! verifying that all components work together correctly.
 
+use pampa::template::config_value_to_meta;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
@@ -127,8 +128,9 @@ fn run_render(input_path: &Path, output_path: &Path) -> Result<(), String> {
     let body = String::from_utf8_lossy(&body_buf).into_owned();
 
     // Render with template
+    let meta_value = config_value_to_meta(&pandoc.meta);
     let html =
-        quarto_core::template::render_with_resources(&body, &pandoc.meta, &resource_paths.css)
+        quarto_core::template::render_with_resources(&body, &meta_value, &resource_paths.css)
             .map_err(|e| e.to_string())?;
 
     // Write output

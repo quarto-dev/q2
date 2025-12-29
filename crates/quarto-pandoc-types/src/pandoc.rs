@@ -4,7 +4,7 @@
  */
 
 pub use crate::block::Blocks;
-pub use crate::meta::MetaValueWithSourceInfo;
+pub use crate::config_value::ConfigValue;
 
 /*
  * A data structure that mimics Pandoc's `data Pandoc` type.
@@ -13,6 +13,11 @@ pub use crate::meta::MetaValueWithSourceInfo;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Pandoc {
-    pub meta: MetaValueWithSourceInfo,
+    /// Document metadata (frontmatter).
+    ///
+    /// This is a ConfigValue (usually a Map) containing the document's
+    /// metadata from YAML frontmatter. Use `meta.get("key")` to access
+    /// individual fields.
+    pub meta: ConfigValue,
     pub blocks: Blocks,
 }

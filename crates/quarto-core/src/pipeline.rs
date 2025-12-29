@@ -33,6 +33,7 @@
 
 use std::path::PathBuf;
 
+use pampa::template::config_value_to_meta;
 use quarto_doctemplate::Template;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -235,9 +236,10 @@ fn apply_template(
     config: &HtmlRenderConfig,
     _ctx: &RenderContext,
 ) -> Result<String> {
+    let meta_value = config_value_to_meta(&pandoc.meta);
     match config.template {
         Some(template) => {
-            crate::template::render_with_custom_template(template, body, &pandoc.meta)
+            crate::template::render_with_custom_template(template, body, &meta_value)
         }
         None => {
             // When no CSS paths are provided, use the default CSS artifact path.
@@ -247,7 +249,7 @@ fn apply_template(
             } else {
                 config.css_paths.to_vec()
             };
-            crate::template::render_with_resources(body, &pandoc.meta, &css_paths)
+            crate::template::render_with_resources(body, &meta_value, &css_paths)
         }
     }
 }

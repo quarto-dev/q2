@@ -315,10 +315,7 @@ mod tests {
     #[test]
     fn test_convert_simple_callout() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Div(Div {
                 attr: callout_attr("warning"),
                 content: vec![Block::Paragraph(Paragraph {
@@ -357,10 +354,7 @@ mod tests {
     #[test]
     fn test_convert_callout_with_title() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Div(Div {
                 attr: callout_attr("tip"),
                 content: vec![
@@ -425,10 +419,7 @@ mod tests {
     #[test]
     fn test_nested_callout_in_blockquote() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
                 content: vec![Block::Div(Div {
                     attr: callout_attr("note"),

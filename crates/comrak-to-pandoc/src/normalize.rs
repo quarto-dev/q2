@@ -209,9 +209,7 @@ fn strip_leading_trailing_spaces(mut inlines: Vec<Inline>) -> Vec<Inline> {
 mod tests {
     use super::*;
     use hashlink::LinkedHashMap;
-    use quarto_pandoc_types::{
-        Header, Link, attr::TargetSourceInfo, meta::MetaValueWithSourceInfo,
-    };
+    use quarto_pandoc_types::{ConfigValue, Header, Link, attr::TargetSourceInfo};
     use quarto_source_map::{FileId, SourceInfo};
 
     fn empty_source_info() -> SourceInfo {
@@ -221,7 +219,7 @@ mod tests {
     #[test]
     fn test_normalize_strips_heading_id() {
         let ast = Pandoc {
-            meta: MetaValueWithSourceInfo::default(),
+            meta: ConfigValue::default(),
             blocks: vec![Block::Header(Header {
                 level: 1,
                 content: vec![],
@@ -241,7 +239,7 @@ mod tests {
     #[test]
     fn test_normalize_strips_uri_class() {
         let ast = Pandoc {
-            meta: MetaValueWithSourceInfo::default(),
+            meta: ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Link(Link {
                     content: vec![],

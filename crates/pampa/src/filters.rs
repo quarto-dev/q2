@@ -8,6 +8,7 @@ use crate::pandoc::{
     self, AsInline, Block, Blocks, Inline, Inlines, MetaBlock, MetaMapEntry,
     MetaValueWithSourceInfo,
 };
+use crate::template::{config_value_to_meta, meta_to_config_value};
 
 // filters are destructive and take ownership of the input
 
@@ -756,20 +757,23 @@ pub fn topdown_traverse_block(
         // quarto extensions
         Block::BlockMetadata(meta) => {
             if let Some(f) = &mut filter.meta {
-                return match f(meta.meta, ctx) {
+                // Convert ConfigValue to MetaValueWithSourceInfo for filter compatibility
+                let meta_value = config_value_to_meta(&meta.meta);
+                return match f(meta_value, ctx) {
                     FilterReturn::Unchanged(m) => vec![Block::BlockMetadata(MetaBlock {
-                        meta: m,
+                        meta: meta_to_config_value(&m),
                         source_info: meta.source_info,
                     })],
                     FilterReturn::FilterResult(new_meta, recurse) => {
                         if !recurse {
                             vec![Block::BlockMetadata(MetaBlock {
-                                meta: new_meta,
+                                meta: meta_to_config_value(&new_meta),
                                 source_info: meta.source_info,
                             })]
                         } else {
+                            let traversed = topdown_traverse_meta(new_meta, filter, ctx);
                             vec![Block::BlockMetadata(MetaBlock {
-                                meta: topdown_traverse_meta(new_meta, filter, ctx),
+                                meta: meta_to_config_value(&traversed),
                                 source_info: meta.source_info,
                             })]
                         }
@@ -1203,8 +1207,12 @@ pub fn topdown_traverse(
     filter: &mut Filter,
     ctx: &mut FilterContext,
 ) -> pandoc::Pandoc {
+    // Convert ConfigValue to MetaValueWithSourceInfo for filter processing
+    let meta_value = config_value_to_meta(&doc.meta);
+    let filtered_meta = topdown_traverse_meta(meta_value, filter, ctx);
+    // Convert back to ConfigValue
     pandoc::Pandoc {
-        meta: topdown_traverse_meta(doc.meta, filter, ctx),
+        meta: meta_to_config_value(&filtered_meta),
         blocks: topdown_traverse_blocks(doc.blocks, filter, ctx),
     }
 }

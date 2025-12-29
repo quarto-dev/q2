@@ -7,6 +7,7 @@ use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
+use crate::template::config_value_to_meta;
 use hashlink::LinkedHashMap;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
 use quarto_source_map::{FileId, SourceInfo};
@@ -1073,12 +1074,16 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             &bulletlist.source_info,
             ctx,
         ),
-        Block::BlockMetadata(meta) => node_with_source(
-            "BlockMetadata",
-            Some(write_meta_value_with_source_info(&meta.meta, ctx)),
-            &meta.source_info,
-            ctx,
-        ),
+        Block::BlockMetadata(meta) => {
+            // Convert ConfigValue to MetaValueWithSourceInfo for serialization
+            let meta_value = config_value_to_meta(&meta.meta);
+            node_with_source(
+                "BlockMetadata",
+                Some(write_meta_value_with_source_info(&meta_value, ctx)),
+                &meta.source_info,
+                ctx,
+            )
+        }
         Block::NoteDefinitionPara(refdef) => node_with_source(
             "NoteDefinitionPara",
             Some(json!([refdef.id, write_inlines(&refdef.content, ctx)])),
@@ -1408,8 +1413,11 @@ pub(crate) fn write_pandoc(
     // Create the JSON writer context
     let mut ctx = JsonWriterContext::new(ast_context, config);
 
+    // Convert ConfigValue to MetaValueWithSourceInfo for serialization
+    let meta_value = config_value_to_meta(&pandoc.meta);
+
     // Serialize AST, which will build the pool
-    let meta_json = write_meta(&pandoc.meta, &mut ctx);
+    let meta_json = write_meta(&meta_value, &mut ctx);
     let blocks_json = write_blocks(&pandoc.blocks, &mut ctx);
 
     // Check if any errors were accumulated
@@ -1418,8 +1426,9 @@ pub(crate) fn write_pandoc(
     }
 
     // Extract top-level key sources from metadata using the serializer
+    use quarto_pandoc_types::ConfigValueKind;
     let meta_top_level_key_sources: serde_json::Map<String, Value> =
-        if let crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } = &pandoc.meta {
+        if let ConfigValueKind::Map(ref entries) = pandoc.meta.value {
             entries
                 .iter()
                 .map(|entry| {
@@ -1886,10 +1895,7 @@ mod tests {
 
         // Create a minimal Pandoc document with this block
         let pandoc = crate::pandoc::Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![block],
         };
 
@@ -1946,10 +1952,7 @@ mod tests {
 
         // Create a minimal Pandoc document with this inline in a paragraph
         let pandoc = crate::pandoc::Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![inline],
                 source_info: SourceInfo::default(),
@@ -2012,10 +2015,7 @@ mod tests {
 
         // Create a minimal Pandoc document
         let pandoc = crate::pandoc::Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![block],
         };
 

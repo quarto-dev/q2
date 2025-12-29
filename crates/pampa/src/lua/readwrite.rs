@@ -17,6 +17,7 @@ use crate::options::{
     merge_with_defaults, normalize_reader_format, normalize_writer_format, parse_format_string,
 };
 use crate::pandoc::{MetaValueWithSourceInfo, Pandoc};
+use crate::template::{config_value_to_meta, meta_to_config_value};
 
 use super::types::{blocks_to_lua_table, lua_table_to_blocks, meta_value_to_lua};
 
@@ -267,8 +268,9 @@ fn rust_pandoc_to_lua_table(lua: &Lua, pandoc: &Pandoc) -> Result<Value> {
     let blocks_lua = blocks_to_lua_table(lua, &pandoc.blocks)?;
     doc.set("blocks", blocks_lua)?;
 
-    // Convert meta (MetaValueWithSourceInfo -> Lua table)
-    let meta_lua = meta_with_source_to_lua(lua, &pandoc.meta)?;
+    // Convert meta (ConfigValue -> MetaValueWithSourceInfo -> Lua table)
+    let meta_value = config_value_to_meta(&pandoc.meta);
+    let meta_lua = meta_with_source_to_lua(lua, &meta_value)?;
     doc.set("meta", meta_lua)?;
 
     // Set pandoc-api-version (we use 1.23 for compatibility)
@@ -293,9 +295,10 @@ fn lua_pandoc_to_rust(lua: &Lua, val: Value) -> Result<Pandoc> {
             let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
             let blocks = lua_table_to_blocks(lua, blocks_val)?;
 
-            // Get meta (convert to MetaValueWithSourceInfo)
+            // Get meta (convert Lua -> MetaValueWithSourceInfo -> ConfigValue)
             let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);
-            let meta = lua_to_meta_with_source(lua, meta_val)?;
+            let meta_source = lua_to_meta_with_source(lua, meta_val)?;
+            let meta = meta_to_config_value(&meta_source);
 
             Ok(Pandoc { blocks, meta })
         }

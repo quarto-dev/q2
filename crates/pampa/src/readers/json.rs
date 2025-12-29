@@ -14,6 +14,7 @@ use crate::pandoc::{
     RawBlock, RawInline, Row, Slot, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong,
     Subscript, Superscript, Table, TableBody, TableFoot, TableHead, Underline,
 };
+use crate::template::meta_to_config_value;
 use hashlink::LinkedHashMap;
 use quarto_source_map::FileId;
 use serde_json::Value;
@@ -1114,7 +1115,7 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         None
     };
 
-    let meta = read_meta_with_key_sources(
+    let meta_value = read_meta_with_key_sources(
         obj.get("meta")
             .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
         key_sources,
@@ -1126,6 +1127,8 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         &deserializer,
     )?;
 
+    // Convert MetaValueWithSourceInfo to ConfigValue for Pandoc.meta
+    let meta = meta_to_config_value(&meta_value);
     Ok((Pandoc { meta, blocks }, context))
 }
 
@@ -1946,7 +1949,9 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             // BlockMetadata uses MetaValueWithSourceInfo format (not top-level meta)
-            let meta = read_meta_value_with_source_info(c, deserializer)?;
+            // Convert to ConfigValue for the new MetaBlock.meta type
+            let meta_value = read_meta_value_with_source_info(c, deserializer)?;
+            let meta = meta_to_config_value(&meta_value);
             Ok(Block::BlockMetadata(MetaBlock { meta, source_info }))
         }
         "NoteDefinitionPara" => {

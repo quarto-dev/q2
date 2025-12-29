@@ -5,6 +5,7 @@
 
 use pampa::pandoc::MetaValueWithSourceInfo;
 use pampa::readers;
+use pampa::template::config_value_to_meta;
 use pampa::writers;
 
 /// Helper to resolve a SourceInfo chain to absolute file offset
@@ -73,7 +74,8 @@ fn test_metadata_source_tracking_002_qmd() {
     .expect("Failed to parse QMD");
 
     // Verify document-level metadata: title: metadata1
-    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = pandoc.meta {
+    let meta_value = config_value_to_meta(&pandoc.meta);
+    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_value {
         let title_entry = entries
             .iter()
             .find(|e| e.key == "title")
@@ -118,7 +120,8 @@ fn test_metadata_source_tracking_002_qmd() {
 
     // Step 4: Verify source info is preserved through JSON roundtrip
     // Check document-level metadata
-    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = pandoc_from_json.meta {
+    let meta_from_json = config_value_to_meta(&pandoc_from_json.meta);
+    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_from_json {
         let title_entry = entries
             .iter()
             .find(|e| e.key == "title")
@@ -173,7 +176,8 @@ description: This is a description
     .expect("Failed to parse");
 
     // Extract metadata
-    let MetaValueWithSourceInfo::MetaMap { entries, .. } = pandoc.meta else {
+    let meta_value = config_value_to_meta(&pandoc.meta);
+    let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta_value else {
         panic!("Expected MetaMap");
     };
 
@@ -276,10 +280,11 @@ Some content here.
     .expect("Failed to parse");
 
     // Extract metadata
+    let meta_value = config_value_to_meta(&pandoc.meta);
     let MetaValueWithSourceInfo::MetaMap {
         entries,
         source_info,
-    } = pandoc.meta
+    } = meta_value
     else {
         panic!("Expected MetaMap");
     };
@@ -359,7 +364,8 @@ fn test_yaml_tagged_value_source_tracking() {
     .expect("Failed to parse QMD");
 
     // Get metadata
-    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = pandoc.meta {
+    let meta_value = config_value_to_meta(&pandoc.meta);
+    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_value {
         let compute_entry = entries
             .iter()
             .find(|e| e.key == "compute")

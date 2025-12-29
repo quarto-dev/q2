@@ -8,7 +8,8 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::{Block, RawBlock};
-use crate::pandoc::pandoc::{MetaValueWithSourceInfo, Pandoc};
+use crate::pandoc::pandoc::Pandoc;
+use quarto_pandoc_types::ConfigValue;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -44,7 +45,7 @@ pub fn process_document(
     });
     PandocNativeIntermediate::IntermediatePandoc(Pandoc {
         // Legitimate default: Initial document creation - metadata populated later from YAML
-        meta: MetaValueWithSourceInfo::default(),
+        meta: ConfigValue::default(),
         blocks,
     })
 }

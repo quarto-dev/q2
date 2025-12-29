@@ -14,6 +14,7 @@
 //! This is a simplified version of Quarto's title block handling for
 //! prototyping purposes.
 
+use pampa::template::config_value_to_meta;
 use quarto_pandoc_types::attr::{AttrSourceInfo, empty_attr};
 use quarto_pandoc_types::block::{Block, Header};
 use quarto_pandoc_types::inline::{Inline, Str};
@@ -56,7 +57,8 @@ impl AstTransform for TitleBlockTransform {
         }
 
         // Try to get title from metadata
-        if let Some(title_text) = extract_title(&ast.meta) {
+        let meta_value = config_value_to_meta(&ast.meta);
+        if let Some(title_text) = extract_title(&meta_value) {
             // Create a level-1 header with the title
             let header = create_title_header(&title_text);
             ast.blocks.insert(0, header);
@@ -145,6 +147,7 @@ fn create_title_header(title: &str) -> Block {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pampa::template::meta_to_config_value;
     use quarto_pandoc_types::block::Paragraph;
     use quarto_pandoc_types::meta::MetaMapEntry;
     use quarto_source_map::{FileId, Location, Range};
@@ -185,7 +188,7 @@ mod tests {
     #[test]
     fn test_adds_title_header_when_missing() {
         let mut ast = Pandoc {
-            meta: MetaValueWithSourceInfo::MetaMap {
+            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
                 entries: vec![MetaMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
@@ -195,7 +198,7 @@ mod tests {
                     },
                 }],
                 source_info: dummy_source_info(),
-            },
+            }),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -233,7 +236,7 @@ mod tests {
     #[test]
     fn test_does_not_add_when_h1_exists() {
         let mut ast = Pandoc {
-            meta: MetaValueWithSourceInfo::MetaMap {
+            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
                 entries: vec![MetaMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
@@ -243,7 +246,7 @@ mod tests {
                     },
                 }],
                 source_info: dummy_source_info(),
-            },
+            }),
             blocks: vec![
                 Block::Header(Header {
                     level: 1,
@@ -290,10 +293,10 @@ mod tests {
     #[test]
     fn test_does_nothing_without_title_metadata() {
         let mut ast = Pandoc {
-            meta: MetaValueWithSourceInfo::MetaMap {
+            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
                 entries: vec![],
                 source_info: dummy_source_info(),
-            },
+            }),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),

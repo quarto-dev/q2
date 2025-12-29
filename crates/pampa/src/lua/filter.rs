@@ -1624,10 +1624,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Span(crate::pandoc::Span {
                     attr: (
@@ -1684,10 +1681,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Span(crate::pandoc::Span {
                     attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
@@ -1729,10 +1723,7 @@ end
         let filter_path = create_uppercase_filter(&dir);
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello world".to_string(),
@@ -1762,10 +1753,7 @@ end
         let filter_path = create_identity_filter(&dir);
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
@@ -1807,10 +1795,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
@@ -1874,10 +1859,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "expand".to_string(),
@@ -1933,10 +1915,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
@@ -1997,10 +1976,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Header(crate::pandoc::Header {
                 level: 1,
                 content: vec![
@@ -2063,10 +2039,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
@@ -2108,10 +2081,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Emph(crate::pandoc::Emph {
                     content: vec![
@@ -2199,10 +2169,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Emph(crate::pandoc::Emph {
                     content: vec![Inline::Str(crate::pandoc::Str {
@@ -2250,10 +2217,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "original".to_string(),
@@ -2320,10 +2284,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
@@ -2373,10 +2334,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Emph(crate::pandoc::Emph {
                     content: vec![
@@ -2465,10 +2423,7 @@ end
 
         // Document with two paragraphs, each with a Str
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
@@ -2532,10 +2487,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
@@ -2582,10 +2534,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
@@ -2644,10 +2593,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
@@ -2708,10 +2654,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
@@ -2788,10 +2731,7 @@ end
         // The Div should be visited, but its children should NOT be visited due to stop signal
         // The second Para and its Str should be visited
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
                 Block::Div(crate::pandoc::Div {
                     content: vec![Block::Paragraph(crate::pandoc::Paragraph {
@@ -2864,10 +2804,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![
                 Block::Paragraph(crate::pandoc::Paragraph {
                     content: vec![Inline::Str(crate::pandoc::Str {
@@ -2948,10 +2885,7 @@ end
 
         // Document: Div containing two paragraphs, each with one Str
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Div(crate::pandoc::Div {
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
@@ -3028,10 +2962,7 @@ end
 
         // Document: Div containing Para with Str "hello"
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Div(crate::pandoc::Div {
                 attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
                 attr_source: crate::pandoc::AttrSourceInfo::empty(),
@@ -3105,10 +3036,7 @@ end
 
         // Document: Para with two Str elements
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![
                     Inline::Str(crate::pandoc::Str {
@@ -3164,10 +3092,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
@@ -3232,10 +3157,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
@@ -3281,10 +3203,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),
@@ -3344,10 +3263,7 @@ end
         .unwrap();
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "test".to_string(),

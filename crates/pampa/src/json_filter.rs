@@ -266,10 +266,7 @@ sys.exit(1)
 
         // Create a simple document
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "Hello".to_string(),
@@ -301,10 +298,7 @@ sys.exit(1)
 
         // Create a simple document
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "hello world".to_string(),
@@ -335,10 +329,7 @@ sys.exit(1)
         let filter_path = create_failing_filter(&dir);
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![],
         };
         let context = ASTContext::new();
@@ -362,10 +353,7 @@ sys.exit(1)
         let uppercase = create_uppercase_filter(&dir);
 
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
                 content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
                     text: "hello".to_string(),
@@ -393,10 +381,7 @@ sys.exit(1)
     #[test]
     fn test_nonexistent_filter() {
         let pandoc = Pandoc {
-            meta: crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: quarto_source_map::SourceInfo::default(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![],
         };
         let context = ASTContext::new();

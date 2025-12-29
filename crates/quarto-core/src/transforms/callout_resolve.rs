@@ -370,10 +370,7 @@ mod tests {
         );
 
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Custom(custom)],
         };
 
@@ -443,10 +440,7 @@ mod tests {
         );
 
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Custom(custom)],
         };
 
@@ -523,10 +517,7 @@ mod tests {
         custom.plain_data = json!({"type": "note"});
 
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::BlockQuote(quarto_pandoc_types::block::BlockQuote {
                 content: vec![Block::Custom(custom)],
                 source_info: dummy_source_info(),

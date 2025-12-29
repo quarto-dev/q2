@@ -5,16 +5,18 @@
 
 use hashlink::LinkedHashMap;
 use pampa::pandoc::ast_context::ASTContext;
-use pampa::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
+use pampa::pandoc::{Block, Inline, MetaValueWithSourceInfo, Pandoc, Paragraph, Str};
 use pampa::readers;
+use pampa::template::{config_value_to_meta, meta_to_config_value};
 use pampa::writers::json;
+use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::{FileId, Location, Range, SourceInfo};
 
 #[test]
 fn test_json_roundtrip_simple_paragraph() {
     // Create a simple Pandoc document
     let original = Pandoc {
-        meta: pampa::pandoc::MetaValueWithSourceInfo::default(),
+        meta: ConfigValue::default(),
         blocks: vec![Block::Paragraph(Paragraph {
             content: vec![Inline::Str(Str {
                 text: "Hello, world!".to_string(),
@@ -86,17 +88,17 @@ fn test_json_roundtrip_simple_paragraph() {
 fn test_json_roundtrip_complex_document() {
     // Create a more complex document with multiple block types
     let original = Pandoc {
-        meta: pampa::pandoc::MetaValueWithSourceInfo::MetaMap {
+        meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
             entries: vec![pampa::pandoc::MetaMapEntry {
                 key: "title".to_string(),
                 key_source: quarto_source_map::SourceInfo::default(),
-                value: pampa::pandoc::MetaValueWithSourceInfo::MetaString {
+                value: MetaValueWithSourceInfo::MetaString {
                     value: "Test Document".to_string(),
                     source_info: quarto_source_map::SourceInfo::default(),
                 },
             }],
             source_info: quarto_source_map::SourceInfo::default(),
-        },
+        }),
         blocks: vec![
             Block::Paragraph(Paragraph {
                 content: vec![
@@ -223,10 +225,11 @@ fn test_json_roundtrip_complex_document() {
 
     // Verify basic structure
     assert_eq!(parsed.blocks.len(), 2);
-    assert!(parsed.meta.contains_key("title"));
+    let meta_value = config_value_to_meta(&parsed.meta);
+    assert!(meta_value.contains_key("title"));
 
-    match parsed.meta.get("title") {
-        Some(pampa::pandoc::MetaValueWithSourceInfo::MetaString { value, .. }) => {
+    match meta_value.get("title") {
+        Some(MetaValueWithSourceInfo::MetaString { value, .. }) => {
             assert_eq!(value, "Test Document");
         }
         _ => panic!("Expected MetaString for title"),
@@ -255,7 +258,7 @@ fn test_json_write_then_read_matches_original_structure() {
     // with the same basic structure, even if exact equality is not possible
 
     let original = Pandoc {
-        meta: pampa::pandoc::MetaValueWithSourceInfo::default(),
+        meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![
             Block::Plain(pampa::pandoc::Plain {
                 content: vec![Inline::Str(Str {

@@ -412,10 +412,7 @@ mod tests {
     #[test]
     fn test_collects_local_images() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Image {
                     attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
@@ -448,10 +445,7 @@ mod tests {
     #[test]
     fn test_skips_external_urls() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Image {
                     attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
@@ -481,10 +475,7 @@ mod tests {
     #[test]
     fn test_skips_data_urls() {
         let mut ast = Pandoc {
-            meta: quarto_pandoc_types::meta::MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            },
+            meta: quarto_pandoc_types::ConfigValue::default(),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Image(Image {
                     attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),

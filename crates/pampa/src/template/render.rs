@@ -12,6 +12,7 @@ use crate::pandoc::Pandoc;
 use crate::pandoc::ast_context::ASTContext;
 use crate::template::bundle::{BundleError, TemplateBundle};
 use crate::template::config_merge::merged_metadata_to_context;
+use crate::template::config_value_to_meta;
 use crate::template::context::MetaWriter;
 use crate::writers::{html, plaintext};
 use quarto_doctemplate::{PartialResolver, Template, TemplateError};
@@ -177,7 +178,8 @@ pub fn render_with_compiled_template<R: PartialResolver>(
     // Convert metadata to template context using the merged config system.
     // This merges template defaults (lang, pagetitle) with document metadata.
     let meta_writer = body_format.meta_writer();
-    let (template_ctx, meta_diags) = merged_metadata_to_context(&pandoc.meta, body, meta_writer);
+    let meta_value = config_value_to_meta(&pandoc.meta);
+    let (template_ctx, meta_diags) = merged_metadata_to_context(&meta_value, body, meta_writer);
     all_diagnostics.extend(meta_diags);
 
     // Render the template
@@ -255,6 +257,7 @@ mod tests {
     use super::*;
     use crate::pandoc::block::{Block, Paragraph};
     use crate::pandoc::inline::{Inline, Space, Str};
+    use crate::template::meta_to_config_value;
     use quarto_pandoc_types::meta::{MetaMapEntry, MetaValueWithSourceInfo};
     use quarto_source_map::SourceInfo;
 
@@ -263,7 +266,7 @@ mod tests {
     }
 
     fn make_simple_pandoc() -> (Pandoc, ASTContext) {
-        let meta = MetaValueWithSourceInfo::MetaMap {
+        let meta_value = MetaValueWithSourceInfo::MetaMap {
             entries: vec![MetaMapEntry {
                 key: "title".to_string(),
                 key_source: dummy_source_info(),
@@ -274,6 +277,7 @@ mod tests {
             }],
             source_info: dummy_source_info(),
         };
+        let meta = meta_to_config_value(&meta_value);
 
         let blocks = vec![Block::Paragraph(Paragraph {
             content: vec![

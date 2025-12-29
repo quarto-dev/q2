@@ -206,7 +206,6 @@ line two
     #[test]
     #[ignore = "studying qmd_writer output for two lists"]
     fn debug_qmd_writer_two_lists_in_blockquote() {
-        use hashlink::LinkedHashMap;
         use quarto_pandoc_types::*;
         use quarto_source_map::{FileId, SourceInfo};
 
@@ -216,7 +215,7 @@ line two
 
         // Create the AST that the proptest minimized to
         let ast = Pandoc {
-            meta: meta::MetaValueWithSourceInfo::default(),
+            meta: ConfigValue::default(),
             blocks: vec![Block::BlockQuote(BlockQuote {
                 content: vec![
                     Block::BulletList(BulletList {

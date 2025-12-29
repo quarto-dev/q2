@@ -12,12 +12,13 @@
 use crate::block::Blocks;
 use crate::inline::{Inline, Inlines};
 use quarto_source_map::SourceInfo;
+use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
 /// Merge operation for a value.
 ///
 /// Controls how values from different configuration layers are combined.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum MergeOp {
     /// This value overrides/resets previous values (from `!prefer` tag).
     ///
@@ -105,7 +106,7 @@ pub enum InterpretationContext {
 /// - `!expr` creates `Expr(String)`
 /// - `!md` creates `PandocInlines` or `PandocBlocks`
 /// - `!str` creates `Scalar(Yaml::String)`
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConfigValue {
     /// The underlying value
     pub value: ConfigValueKind,
@@ -120,7 +121,7 @@ pub struct ConfigValue {
 /// Map entry with key source tracking.
 ///
 /// This allows error messages to point to the key location in the source file.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConfigMapEntry {
     /// The key string
     pub key: String,
@@ -136,7 +137,7 @@ pub struct ConfigMapEntry {
 ///
 /// This mirrors YAML/JSON value types plus Pandoc AST types for
 /// already-interpreted values, plus deferred interpretation variants.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ConfigValueKind {
     // === Scalar values (interpretation resolved or not applicable) ===
     /// Atomic values (String, Int, Float, Bool, Null).
@@ -175,6 +176,210 @@ pub enum ConfigValueKind {
 
     /// Objects with key source tracking: merge_op controls field-wise merge vs replace.
     Map(Vec<ConfigMapEntry>),
+}
+
+// Custom serialization for ConfigValueKind to handle Yaml type
+impl Serialize for ConfigValueKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        match self {
+            ConfigValueKind::Scalar(yaml) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Scalar", &yaml_to_serde_value(yaml))?;
+                map.end()
+            }
+            ConfigValueKind::PandocInlines(inlines) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("PandocInlines", inlines)?;
+                map.end()
+            }
+            ConfigValueKind::PandocBlocks(blocks) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("PandocBlocks", blocks)?;
+                map.end()
+            }
+            ConfigValueKind::Path(s) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Path", s)?;
+                map.end()
+            }
+            ConfigValueKind::Glob(s) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Glob", s)?;
+                map.end()
+            }
+            ConfigValueKind::Expr(s) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Expr", s)?;
+                map.end()
+            }
+            ConfigValueKind::Array(items) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Array", items)?;
+                map.end()
+            }
+            ConfigValueKind::Map(entries) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Map", entries)?;
+                map.end()
+            }
+        }
+    }
+}
+
+/// Convert Yaml to a serde-serializable value
+fn yaml_to_serde_value(yaml: &Yaml) -> serde_json::Value {
+    match yaml {
+        Yaml::String(s) => serde_json::Value::String(s.clone()),
+        Yaml::Integer(i) => serde_json::Value::Number((*i).into()),
+        Yaml::Real(s) => {
+            if let Ok(f) = s.parse::<f64>() {
+                serde_json::Number::from_f64(f)
+                    .map(serde_json::Value::Number)
+                    .unwrap_or(serde_json::Value::String(s.clone()))
+            } else {
+                serde_json::Value::String(s.clone())
+            }
+        }
+        Yaml::Boolean(b) => serde_json::Value::Bool(*b),
+        Yaml::Null => serde_json::Value::Null,
+        Yaml::Array(arr) => {
+            serde_json::Value::Array(arr.iter().map(yaml_to_serde_value).collect())
+        }
+        Yaml::Hash(hash) => {
+            let mut map = serde_json::Map::new();
+            for (k, v) in hash {
+                if let Yaml::String(key) = k {
+                    map.insert(key.clone(), yaml_to_serde_value(v));
+                }
+            }
+            serde_json::Value::Object(map)
+        }
+        Yaml::Alias(_) => serde_json::Value::Null, // Aliases are resolved during parsing
+        Yaml::BadValue => serde_json::Value::Null,
+    }
+}
+
+impl<'de> Deserialize<'de> for ConfigValueKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{MapAccess, Visitor};
+        use std::fmt;
+
+        struct ConfigValueKindVisitor;
+
+        impl<'de> Visitor<'de> for ConfigValueKindVisitor {
+            type Value = ConfigValueKind;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a ConfigValueKind variant")
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                let key: String = map
+                    .next_key()?
+                    .ok_or_else(|| serde::de::Error::custom("expected variant key"))?;
+
+                match key.as_str() {
+                    "Scalar" => {
+                        let value: serde_json::Value = map.next_value()?;
+                        Ok(ConfigValueKind::Scalar(serde_value_to_yaml(&value)))
+                    }
+                    "PandocInlines" => {
+                        let inlines: Inlines = map.next_value()?;
+                        Ok(ConfigValueKind::PandocInlines(inlines))
+                    }
+                    "PandocBlocks" => {
+                        let blocks: Blocks = map.next_value()?;
+                        Ok(ConfigValueKind::PandocBlocks(blocks))
+                    }
+                    "Path" => {
+                        let s: String = map.next_value()?;
+                        Ok(ConfigValueKind::Path(s))
+                    }
+                    "Glob" => {
+                        let s: String = map.next_value()?;
+                        Ok(ConfigValueKind::Glob(s))
+                    }
+                    "Expr" => {
+                        let s: String = map.next_value()?;
+                        Ok(ConfigValueKind::Expr(s))
+                    }
+                    "Array" => {
+                        let items: Vec<ConfigValue> = map.next_value()?;
+                        Ok(ConfigValueKind::Array(items))
+                    }
+                    "Map" => {
+                        let entries: Vec<ConfigMapEntry> = map.next_value()?;
+                        Ok(ConfigValueKind::Map(entries))
+                    }
+                    other => Err(serde::de::Error::unknown_variant(
+                        other,
+                        &[
+                            "Scalar",
+                            "PandocInlines",
+                            "PandocBlocks",
+                            "Path",
+                            "Glob",
+                            "Expr",
+                            "Array",
+                            "Map",
+                        ],
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(ConfigValueKindVisitor)
+    }
+}
+
+/// Convert serde_json::Value to Yaml
+fn serde_value_to_yaml(value: &serde_json::Value) -> Yaml {
+    match value {
+        serde_json::Value::String(s) => Yaml::String(s.clone()),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Yaml::Integer(i)
+            } else if let Some(f) = n.as_f64() {
+                Yaml::Real(f.to_string())
+            } else {
+                Yaml::String(n.to_string())
+            }
+        }
+        serde_json::Value::Bool(b) => Yaml::Boolean(*b),
+        serde_json::Value::Null => Yaml::Null,
+        serde_json::Value::Array(arr) => {
+            Yaml::Array(arr.iter().map(serde_value_to_yaml).collect())
+        }
+        serde_json::Value::Object(obj) => {
+            let mut hash = yaml_rust2::yaml::Hash::new();
+            for (k, v) in obj {
+                hash.insert(Yaml::String(k.clone()), serde_value_to_yaml(v));
+            }
+            Yaml::Hash(hash)
+        }
+    }
+}
+
+impl Default for ConfigValue {
+    /// Default is an empty Map, matching the convention for document metadata.
+    fn default() -> Self {
+        Self {
+            value: ConfigValueKind::Map(vec![]),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::Concat,
+        }
+    }
 }
 
 impl ConfigValue {

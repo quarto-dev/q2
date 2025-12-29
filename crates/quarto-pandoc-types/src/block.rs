@@ -5,10 +5,10 @@
 
 use crate::attr::{Attr, AttrSourceInfo};
 use crate::caption::Caption;
+use crate::config_value::ConfigValue;
 use crate::custom::CustomNode;
 use crate::inline::Inlines;
 use crate::list::ListAttributes;
-use crate::meta::MetaValueWithSourceInfo;
 use crate::table::Table;
 use serde::{Deserialize, Serialize};
 
@@ -133,7 +133,7 @@ pub struct Div {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MetaBlock {
-    pub meta: MetaValueWithSourceInfo,
+    pub meta: ConfigValue,
     pub source_info: quarto_source_map::SourceInfo,
 }
 

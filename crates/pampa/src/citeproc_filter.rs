@@ -17,6 +17,7 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::{Block, Div, Inline, Pandoc};
+use crate::template::config_value_to_meta;
 use crate::unified_filter::CiteprocFilterError;
 
 /// Default CSL style (Chicago Manual of Style, author-date format).
@@ -622,6 +623,8 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
 fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
     use crate::pandoc::MetaValueWithSourceInfo;
 
+    // Convert ConfigValue to MetaValueWithSourceInfo for metadata extraction
+    let meta = config_value_to_meta(&pandoc.meta);
     let mut config = CiteprocConfig::default();
 
     // Helper to get a string value from metadata
@@ -688,17 +691,17 @@ fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
     }
 
     // Extract configuration values
-    config.csl = get_meta_string(&pandoc.meta, "csl");
-    config.bibliography = get_meta_string_list(&pandoc.meta, "bibliography");
-    config.lang = get_meta_string(&pandoc.meta, "lang");
-    config.link_citations = get_meta_bool(&pandoc.meta, "link-citations").unwrap_or(false);
-    config.link_bibliography = get_meta_bool(&pandoc.meta, "link-bibliography").unwrap_or(true);
-    config.nocite = get_meta_string_list(&pandoc.meta, "nocite");
+    config.csl = get_meta_string(&meta, "csl");
+    config.bibliography = get_meta_string_list(&meta, "bibliography");
+    config.lang = get_meta_string(&meta, "lang");
+    config.link_citations = get_meta_bool(&meta, "link-citations").unwrap_or(false);
+    config.link_bibliography = get_meta_bool(&meta, "link-bibliography").unwrap_or(true);
+    config.nocite = get_meta_string_list(&meta, "nocite");
     config.suppress_bibliography =
-        get_meta_bool(&pandoc.meta, "suppress-bibliography").unwrap_or(false);
+        get_meta_bool(&meta, "suppress-bibliography").unwrap_or(false);
 
     // Extract inline references from metadata
-    config.references = extract_references(&pandoc.meta);
+    config.references = extract_references(&meta);
 
     config
 }
