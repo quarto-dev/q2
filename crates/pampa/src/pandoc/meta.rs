@@ -804,7 +804,8 @@ pub fn rawblock_to_config_value(
 
     // Transform YamlWithSourceInfo to ConfigValue using document metadata context
     // (strings are parsed as markdown by default)
-    let mut result = yaml_to_config_value(yaml, InterpretationContext::DocumentMetadata, diagnostics);
+    let mut result =
+        yaml_to_config_value(yaml, InterpretationContext::DocumentMetadata, diagnostics);
 
     // For the top-level metadata, replace the source_info with yaml_parent
     // to ensure it spans the entire YAML content, not just where the mapping starts

@@ -17,8 +17,8 @@ use quarto_error_reporting::DiagnosticMessage;
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::{Block, Div, Inline, Pandoc};
-use crate::template::config_value_to_meta;
 use crate::unified_filter::CiteprocFilterError;
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 
 /// Default CSL style (Chicago Manual of Style, author-date format).
 const DEFAULT_CSL_STYLE: &str = include_str!("../resources/csl/chicago-author-date.csl");
@@ -621,24 +621,23 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
 
 /// Extract citeproc configuration from document metadata.
 fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
-    use crate::pandoc::MetaValueWithSourceInfo;
-
-    // Convert ConfigValue to MetaValueWithSourceInfo for metadata extraction
-    let meta = config_value_to_meta(&pandoc.meta);
+    let meta = &pandoc.meta;
     let mut config = CiteprocConfig::default();
 
     // Helper to get a string value from metadata
-    fn get_meta_string(meta: &MetaValueWithSourceInfo, key: &str) -> Option<String> {
-        if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+    fn get_meta_string(meta: &ConfigValue, key: &str) -> Option<String> {
+        if let ConfigValueKind::Map(entries) = &meta.value {
             for entry in entries {
                 if entry.key == key {
-                    return match &entry.value {
-                        MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-                        MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                            Some(inlines_to_text(content))
-                        }
-                        _ => None,
-                    };
+                    // Try as string first
+                    if let Some(s) = entry.value.as_str() {
+                        return Some(s.to_string());
+                    }
+                    // Try as inlines
+                    if let ConfigValueKind::PandocInlines(content) = &entry.value.value {
+                        return Some(inlines_to_text(content));
+                    }
+                    return None;
                 }
             }
         }
@@ -646,14 +645,16 @@ fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
     }
 
     // Helper to get a boolean value from metadata
-    fn get_meta_bool(meta: &MetaValueWithSourceInfo, key: &str) -> Option<bool> {
-        if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+    fn get_meta_bool(meta: &ConfigValue, key: &str) -> Option<bool> {
+        if let ConfigValueKind::Map(entries) = &meta.value {
             for entry in entries {
                 if entry.key == key {
-                    return match &entry.value {
-                        MetaValueWithSourceInfo::MetaBool { value, .. } => Some(*value),
-                        _ => None,
-                    };
+                    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(value)) =
+                        &entry.value.value
+                    {
+                        return Some(*value);
+                    }
+                    return None;
                 }
             }
         }
@@ -661,29 +662,34 @@ fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
     }
 
     // Helper to get a string list from metadata
-    fn get_meta_string_list(meta: &MetaValueWithSourceInfo, key: &str) -> Vec<String> {
-        if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+    fn get_meta_string_list(meta: &ConfigValue, key: &str) -> Vec<String> {
+        if let ConfigValueKind::Map(entries) = &meta.value {
             for entry in entries {
                 if entry.key == key {
-                    return match &entry.value {
-                        MetaValueWithSourceInfo::MetaString { value, .. } => vec![value.clone()],
-                        MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                            vec![inlines_to_text(content)]
-                        }
-                        MetaValueWithSourceInfo::MetaList { items, .. } => items
+                    // Try as string first
+                    if let Some(s) = entry.value.as_str() {
+                        return vec![s.to_string()];
+                    }
+                    // Try as inlines
+                    if let ConfigValueKind::PandocInlines(content) = &entry.value.value {
+                        return vec![inlines_to_text(content)];
+                    }
+                    // Try as array
+                    if let ConfigValueKind::Array(items) = &entry.value.value {
+                        return items
                             .iter()
-                            .filter_map(|item| match item {
-                                MetaValueWithSourceInfo::MetaString { value, .. } => {
-                                    Some(value.clone())
+                            .filter_map(|item| {
+                                if let Some(s) = item.as_str() {
+                                    return Some(s.to_string());
                                 }
-                                MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                                    Some(inlines_to_text(content))
+                                if let ConfigValueKind::PandocInlines(content) = &item.value {
+                                    return Some(inlines_to_text(content));
                                 }
-                                _ => None,
+                                None
                             })
-                            .collect(),
-                        _ => vec![],
-                    };
+                            .collect();
+                    }
+                    return vec![];
                 }
             }
         }
@@ -691,39 +697,36 @@ fn extract_config(pandoc: &Pandoc) -> CiteprocConfig {
     }
 
     // Extract configuration values
-    config.csl = get_meta_string(&meta, "csl");
-    config.bibliography = get_meta_string_list(&meta, "bibliography");
-    config.lang = get_meta_string(&meta, "lang");
-    config.link_citations = get_meta_bool(&meta, "link-citations").unwrap_or(false);
-    config.link_bibliography = get_meta_bool(&meta, "link-bibliography").unwrap_or(true);
-    config.nocite = get_meta_string_list(&meta, "nocite");
-    config.suppress_bibliography =
-        get_meta_bool(&meta, "suppress-bibliography").unwrap_or(false);
+    config.csl = get_meta_string(meta, "csl");
+    config.bibliography = get_meta_string_list(meta, "bibliography");
+    config.lang = get_meta_string(meta, "lang");
+    config.link_citations = get_meta_bool(meta, "link-citations").unwrap_or(false);
+    config.link_bibliography = get_meta_bool(meta, "link-bibliography").unwrap_or(true);
+    config.nocite = get_meta_string_list(meta, "nocite");
+    config.suppress_bibliography = get_meta_bool(meta, "suppress-bibliography").unwrap_or(false);
 
     // Extract inline references from metadata
-    config.references = extract_references(&meta);
+    config.references = extract_references(meta);
 
     config
 }
 
 /// Extract inline references from the 'references' metadata field.
-fn extract_references(meta: &crate::pandoc::MetaValueWithSourceInfo) -> Vec<Reference> {
-    use crate::pandoc::MetaValueWithSourceInfo;
-
-    let references_list = if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
-        entries
-            .iter()
-            .find(|e| e.key == "references")
-            .and_then(|e| {
-                if let MetaValueWithSourceInfo::MetaList { items, .. } = &e.value {
-                    Some(items)
-                } else {
-                    None
-                }
-            })
-    } else {
-        None
+fn extract_references(meta: &ConfigValue) -> Vec<Reference> {
+    let ConfigValueKind::Map(entries) = &meta.value else {
+        return vec![];
     };
+
+    let references_list = entries
+        .iter()
+        .find(|e| e.key == "references")
+        .and_then(|e| {
+            if let ConfigValueKind::Array(items) = &e.value.value {
+                Some(items)
+            } else {
+                None
+            }
+        });
 
     let Some(items) = references_list else {
         return vec![];
@@ -736,26 +739,24 @@ fn extract_references(meta: &crate::pandoc::MetaValueWithSourceInfo) -> Vec<Refe
 }
 
 /// Convert a metadata map to a Reference.
-fn meta_to_reference(meta: &crate::pandoc::MetaValueWithSourceInfo) -> Option<Reference> {
-    use crate::pandoc::MetaValueWithSourceInfo;
+fn meta_to_reference(meta: &ConfigValue) -> Option<Reference> {
     use quarto_citeproc::reference::StringOrNumber;
 
-    let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta else {
+    let ConfigValueKind::Map(entries) = &meta.value else {
         return None;
     };
 
     // Helper to get a string from an entry
     let get_string = |key: &str| -> Option<String> {
-        entries
-            .iter()
-            .find(|e| e.key == key)
-            .and_then(|e| match &e.value {
-                MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-                MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                    Some(inlines_to_text(content))
-                }
-                _ => None,
-            })
+        entries.iter().find(|e| e.key == key).and_then(|e| {
+            if let Some(s) = e.value.as_str() {
+                return Some(s.to_string());
+            }
+            if let ConfigValueKind::PandocInlines(content) = &e.value.value {
+                return Some(inlines_to_text(content));
+            }
+            None
+        })
     };
 
     // Get the required ID field
@@ -814,41 +815,34 @@ fn meta_to_reference(meta: &crate::pandoc::MetaValueWithSourceInfo) -> Option<Re
 
 /// Extract names from a metadata entry.
 fn extract_names(
-    entries: &[crate::pandoc::MetaMapEntry],
+    entries: &[ConfigMapEntry],
     key: &str,
 ) -> Option<Vec<quarto_citeproc::reference::Name>> {
-    use crate::pandoc::MetaValueWithSourceInfo;
     use quarto_citeproc::reference::Name;
 
     let entry = entries.iter().find(|e| e.key == key)?;
 
-    let names_list = match &entry.value {
-        MetaValueWithSourceInfo::MetaList { items, .. } => items,
-        _ => return None,
+    let ConfigValueKind::Array(names_list) = &entry.value.value else {
+        return None;
     };
 
     let names: Vec<Name> = names_list
         .iter()
         .filter_map(|item| {
-            let MetaValueWithSourceInfo::MetaMap {
-                entries: name_entries,
-                ..
-            } = item
-            else {
+            let ConfigValueKind::Map(name_entries) = &item.value else {
                 return None;
             };
 
             let get_name_part = |key: &str| -> Option<String> {
-                name_entries
-                    .iter()
-                    .find(|e| e.key == key)
-                    .and_then(|e| match &e.value {
-                        MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-                        MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                            Some(inlines_to_text(content))
-                        }
-                        _ => None,
-                    })
+                name_entries.iter().find(|e| e.key == key).and_then(|e| {
+                    if let Some(s) = e.value.as_str() {
+                        return Some(s.to_string());
+                    }
+                    if let ConfigValueKind::PandocInlines(content) = &e.value.value {
+                        return Some(inlines_to_text(content));
+                    }
+                    None
+                })
             };
 
             let family = get_name_part("family");
@@ -878,28 +872,20 @@ fn extract_names(
 
 /// Extract a date from a metadata entry.
 fn extract_date(
-    entries: &[crate::pandoc::MetaMapEntry],
+    entries: &[ConfigMapEntry],
     key: &str,
 ) -> Option<quarto_citeproc::reference::DateVariable> {
-    use crate::pandoc::MetaValueWithSourceInfo;
     use quarto_citeproc::reference::DateVariable;
 
     let entry = entries.iter().find(|e| e.key == key)?;
 
-    let MetaValueWithSourceInfo::MetaMap {
-        entries: date_entries,
-        ..
-    } = &entry.value
-    else {
+    let ConfigValueKind::Map(date_entries) = &entry.value.value else {
         return None;
     };
 
     // Look for date-parts
     let date_parts_entry = date_entries.iter().find(|e| e.key == "date-parts")?;
-    let MetaValueWithSourceInfo::MetaList {
-        items: outer_list, ..
-    } = &date_parts_entry.value
-    else {
+    let ConfigValueKind::Array(outer_list) = &date_parts_entry.value.value else {
         return None;
     };
 
@@ -907,21 +893,24 @@ fn extract_date(
     let date_parts: Vec<Vec<i32>> = outer_list
         .iter()
         .filter_map(|inner| {
-            let MetaValueWithSourceInfo::MetaList {
-                items: parts_list, ..
-            } = inner
-            else {
+            let ConfigValueKind::Array(parts_list) = &inner.value else {
                 return None;
             };
 
             let nums: Vec<i32> = parts_list
                 .iter()
-                .filter_map(|p| match p {
-                    MetaValueWithSourceInfo::MetaString { value, .. } => value.parse().ok(),
-                    MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                        inlines_to_text(content).parse().ok()
+                .filter_map(|p| {
+                    // Try integer first (years like 2019 are parsed as integers by YAML)
+                    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)) = &p.value {
+                        return i32::try_from(*i).ok();
                     }
-                    _ => None,
+                    if let Some(s) = p.as_str() {
+                        return s.parse().ok();
+                    }
+                    if let ConfigValueKind::PandocInlines(content) = &p.value {
+                        return inlines_to_text(content).parse().ok();
+                    }
+                    None
                 })
                 .collect();
 

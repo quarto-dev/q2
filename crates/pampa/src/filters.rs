@@ -4,11 +4,8 @@
  */
 
 use crate::filter_context::FilterContext;
-use crate::pandoc::{
-    self, AsInline, Block, Blocks, Inline, Inlines, MetaBlock, MetaMapEntry,
-    MetaValueWithSourceInfo,
-};
-use crate::template::{config_value_to_meta, meta_to_config_value};
+use crate::pandoc::{self, AsInline, Block, Blocks, Inline, Inlines, MetaBlock};
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 
 // filters are destructive and take ownership of the input
 
@@ -19,13 +16,8 @@ pub enum FilterReturn<T, U> {
 
 type InlineFilterFn<'a, T> = Box<dyn FnMut(T, &mut FilterContext) -> FilterReturn<T, Inlines> + 'a>;
 type BlockFilterFn<'a, T> = Box<dyn FnMut(T, &mut FilterContext) -> FilterReturn<T, Blocks> + 'a>;
-type MetaFilterFn<'a> = Box<
-    dyn FnMut(
-            MetaValueWithSourceInfo,
-            &mut FilterContext,
-        ) -> FilterReturn<MetaValueWithSourceInfo, MetaValueWithSourceInfo>
-        + 'a,
->;
+type MetaFilterFn<'a> =
+    Box<dyn FnMut(ConfigValue, &mut FilterContext) -> FilterReturn<ConfigValue, ConfigValue> + 'a>;
 type InlineFilterField<'a, T> = Option<InlineFilterFn<'a, T>>;
 type BlockFilterField<'a, T> = Option<BlockFilterFn<'a, T>>;
 type MetaFilterField<'a> = Option<MetaFilterFn<'a>>;
@@ -165,11 +157,7 @@ impl<'a> Filter<'a> {
 
     pub fn with_meta<F>(mut self, f: F) -> Filter<'a>
     where
-        F: FnMut(
-                MetaValueWithSourceInfo,
-                &mut FilterContext,
-            ) -> FilterReturn<MetaValueWithSourceInfo, MetaValueWithSourceInfo>
-            + 'a,
+        F: FnMut(ConfigValue, &mut FilterContext) -> FilterReturn<ConfigValue, ConfigValue> + 'a,
     {
         self.meta = Some(Box::new(f));
         self
@@ -757,23 +745,21 @@ pub fn topdown_traverse_block(
         // quarto extensions
         Block::BlockMetadata(meta) => {
             if let Some(f) = &mut filter.meta {
-                // Convert ConfigValue to MetaValueWithSourceInfo for filter compatibility
-                let meta_value = config_value_to_meta(&meta.meta);
-                return match f(meta_value, ctx) {
+                return match f(meta.meta, ctx) {
                     FilterReturn::Unchanged(m) => vec![Block::BlockMetadata(MetaBlock {
-                        meta: meta_to_config_value(&m),
+                        meta: m,
                         source_info: meta.source_info,
                     })],
                     FilterReturn::FilterResult(new_meta, recurse) => {
                         if !recurse {
                             vec![Block::BlockMetadata(MetaBlock {
-                                meta: meta_to_config_value(&new_meta),
+                                meta: new_meta,
                                 source_info: meta.source_info,
                             })]
                         } else {
-                            let traversed = topdown_traverse_meta(new_meta, filter, ctx);
+                            let traversed = topdown_traverse_config_value(new_meta, filter, ctx);
                             vec![Block::BlockMetadata(MetaBlock {
-                                meta: meta_to_config_value(&traversed),
+                                meta: traversed,
                                 source_info: meta.source_info,
                             })]
                         }
@@ -1129,62 +1115,60 @@ pub fn topdown_traverse_blocks(
     }
 }
 
-pub fn topdown_traverse_meta_value_with_source_info(
-    value: MetaValueWithSourceInfo,
+/// Recursively traverse a ConfigValue, processing any blocks/inlines within.
+pub fn topdown_traverse_config_value(
+    value: ConfigValue,
     filter: &mut Filter,
     ctx: &mut FilterContext,
-) -> MetaValueWithSourceInfo {
-    match value {
-        MetaValueWithSourceInfo::MetaMap {
-            entries,
-            source_info,
-        } => {
+) -> ConfigValue {
+    match value.value {
+        ConfigValueKind::Map(entries) => {
             let new_entries = entries
                 .into_iter()
-                .map(|entry| MetaMapEntry {
+                .map(|entry| ConfigMapEntry {
                     key: entry.key,
                     key_source: entry.key_source,
-                    value: topdown_traverse_meta_value_with_source_info(entry.value, filter, ctx),
+                    value: topdown_traverse_config_value(entry.value, filter, ctx),
                 })
                 .collect();
-            MetaValueWithSourceInfo::MetaMap {
-                entries: new_entries,
-                source_info,
+            ConfigValue {
+                value: ConfigValueKind::Map(new_entries),
+                source_info: value.source_info,
+                merge_op: value.merge_op,
             }
         }
-        MetaValueWithSourceInfo::MetaList { items, source_info } => {
+        ConfigValueKind::Array(items) => {
             let new_items = items
                 .into_iter()
-                .map(|item| topdown_traverse_meta_value_with_source_info(item, filter, ctx))
+                .map(|item| topdown_traverse_config_value(item, filter, ctx))
                 .collect();
-            MetaValueWithSourceInfo::MetaList {
-                items: new_items,
-                source_info,
+            ConfigValue {
+                value: ConfigValueKind::Array(new_items),
+                source_info: value.source_info,
+                merge_op: value.merge_op,
             }
         }
-        MetaValueWithSourceInfo::MetaBlocks {
-            content,
-            source_info,
-        } => MetaValueWithSourceInfo::MetaBlocks {
-            content: topdown_traverse_blocks(content, filter, ctx),
-            source_info,
+        ConfigValueKind::PandocBlocks(content) => ConfigValue {
+            value: ConfigValueKind::PandocBlocks(topdown_traverse_blocks(content, filter, ctx)),
+            source_info: value.source_info,
+            merge_op: value.merge_op,
         },
-        MetaValueWithSourceInfo::MetaInlines {
-            content,
-            source_info,
-        } => MetaValueWithSourceInfo::MetaInlines {
-            content: topdown_traverse_inlines(content, filter, ctx),
-            source_info,
+        ConfigValueKind::PandocInlines(content) => ConfigValue {
+            value: ConfigValueKind::PandocInlines(topdown_traverse_inlines(content, filter, ctx)),
+            source_info: value.source_info,
+            merge_op: value.merge_op,
         },
-        value => value,
+        // Other variants don't need traversal
+        _ => value,
     }
 }
 
+/// Traverse metadata, applying the meta filter if present.
 pub fn topdown_traverse_meta(
-    meta: MetaValueWithSourceInfo,
+    meta: ConfigValue,
     filter: &mut Filter,
     ctx: &mut FilterContext,
-) -> MetaValueWithSourceInfo {
+) -> ConfigValue {
     if let Some(f) = &mut filter.meta {
         return match f(meta, ctx) {
             FilterReturn::FilterResult(new_meta, recurse) => {
@@ -1193,26 +1177,21 @@ pub fn topdown_traverse_meta(
                 }
                 topdown_traverse_meta(new_meta, filter, ctx)
             }
-            FilterReturn::Unchanged(m) => {
-                topdown_traverse_meta_value_with_source_info(m, filter, ctx)
-            }
+            FilterReturn::Unchanged(m) => topdown_traverse_config_value(m, filter, ctx),
         };
     } else {
-        return topdown_traverse_meta_value_with_source_info(meta, filter, ctx);
+        topdown_traverse_config_value(meta, filter, ctx)
     }
 }
 
+/// Traverse an entire Pandoc document, applying filters to all content.
 pub fn topdown_traverse(
     doc: pandoc::Pandoc,
     filter: &mut Filter,
     ctx: &mut FilterContext,
 ) -> pandoc::Pandoc {
-    // Convert ConfigValue to MetaValueWithSourceInfo for filter processing
-    let meta_value = config_value_to_meta(&doc.meta);
-    let filtered_meta = topdown_traverse_meta(meta_value, filter, ctx);
-    // Convert back to ConfigValue
     pandoc::Pandoc {
-        meta: meta_to_config_value(&filtered_meta),
+        meta: topdown_traverse_meta(doc.meta, filter, ctx),
         blocks: topdown_traverse_blocks(doc.blocks, filter, ctx),
     }
 }

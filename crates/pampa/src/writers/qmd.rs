@@ -12,8 +12,8 @@ use crate::pandoc::{
     Block, BlockQuote, BulletList, CodeBlock, DefinitionList, Figure, Header, HorizontalRule,
     LineBlock, OrderedList, Pandoc, Paragraph, Plain, RawBlock, Str,
 };
-use crate::template::config_value_to_meta;
 use hashlink::LinkedHashMap;
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use std::io::{self, Write};
 use yaml_rust2::{Yaml, YamlEmitter};
 
@@ -246,17 +246,16 @@ impl<'a, W: Write + ?Sized> Write for OrderedListContext<'a, W> {
     }
 }
 
-/// Convert a MetaValueWithSourceInfo to a yaml_rust2::Yaml value
-/// MetaInlines and MetaBlocks are rendered using the qmd writer
-fn meta_value_with_source_info_to_yaml(
-    value: &crate::pandoc::MetaValueWithSourceInfo,
-) -> std::io::Result<Yaml> {
-    match value {
-        crate::pandoc::MetaValueWithSourceInfo::MetaString { value, .. } => {
-            Ok(Yaml::String(value.clone()))
+/// Convert a ConfigValue to a yaml_rust2::Yaml value
+/// Phase 5: Works directly with ConfigValue without MetaValueWithSourceInfo conversion
+/// PandocInlines and PandocBlocks are rendered using the qmd writer
+fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
+    match &value.value {
+        ConfigValueKind::Scalar(yaml) => {
+            // Pass through the yaml value directly
+            Ok(yaml.clone())
         }
-        crate::pandoc::MetaValueWithSourceInfo::MetaBool { value, .. } => Ok(Yaml::Boolean(*value)),
-        crate::pandoc::MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+        ConfigValueKind::PandocInlines(content) => {
             // Render inlines using the qmd writer
             let mut buffer = Vec::<u8>::new();
             let mut ctx = QmdWriterContext::new(); // Errors in metadata inlines are unexpected
@@ -277,7 +276,7 @@ fn meta_value_with_source_info_to_yaml(
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
             Ok(Yaml::String(result))
         }
-        crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
+        ConfigValueKind::PandocBlocks(content) => {
             // Render blocks using the qmd writer
             let mut buffer = Vec::<u8>::new();
             let mut ctx = QmdWriterContext::new(); // Errors in metadata blocks are unexpected
@@ -303,45 +302,50 @@ fn meta_value_with_source_info_to_yaml(
             let trimmed = result.trim_end();
             Ok(Yaml::String(trimmed.to_string()))
         }
-        crate::pandoc::MetaValueWithSourceInfo::MetaList { items, .. } => {
+        ConfigValueKind::Array(items) => {
             let mut yaml_list = Vec::new();
             for item in items {
-                yaml_list.push(meta_value_with_source_info_to_yaml(item)?);
+                yaml_list.push(config_value_to_yaml(item)?);
             }
             Ok(Yaml::Array(yaml_list))
         }
-        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+        ConfigValueKind::Map(entries) => {
             // LinkedHashMap preserves insertion order
             let mut yaml_map = LinkedHashMap::new();
             for entry in entries {
                 yaml_map.insert(
                     Yaml::String(entry.key.clone()),
-                    meta_value_with_source_info_to_yaml(&entry.value)?,
+                    config_value_to_yaml(&entry.value)?,
                 );
             }
             Ok(Yaml::Hash(yaml_map))
         }
+        // Path, Glob, and Expr are special types - serialize as their string representation
+        ConfigValueKind::Path(p) => Ok(Yaml::String(p.clone())),
+        ConfigValueKind::Glob(g) => Ok(Yaml::String(g.clone())),
+        ConfigValueKind::Expr(e) => Ok(Yaml::String(format!("!expr {}", e))),
     }
 }
 
-fn write_meta<T: std::io::Write + ?Sized>(
-    meta: &crate::pandoc::MetaValueWithSourceInfo,
+/// Phase 5: Write ConfigValue metadata directly to YAML format
+fn write_config_value_meta<T: std::io::Write + ?Sized>(
+    meta: &ConfigValue,
     buf: &mut T,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<bool> {
-    // meta should be a MetaMap variant
-    match meta {
-        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+    // meta should be a Map variant
+    match &meta.value {
+        ConfigValueKind::Map(entries) => {
             if entries.is_empty() {
                 Ok(false)
             } else {
-                // Convert Meta to YAML
+                // Convert ConfigValue entries to YAML
                 // LinkedHashMap preserves insertion order
                 let mut yaml_map = LinkedHashMap::new();
                 for entry in entries {
                     yaml_map.insert(
                         Yaml::String(entry.key.clone()),
-                        meta_value_with_source_info_to_yaml(&entry.value)?,
+                        config_value_to_yaml(&entry.value)?,
                     );
                 }
                 let yaml = Yaml::Hash(yaml_map);
@@ -368,7 +372,7 @@ fn write_meta<T: std::io::Write + ?Sized>(
             }
         }
         _ => {
-            // Defensive error: metadata should always be MetaMap
+            // Defensive error: metadata should always be a Map
             ctx.errors.push(
                 quarto_error_reporting::DiagnosticMessageBuilder::error(
                     "Invalid metadata structure",
@@ -748,9 +752,8 @@ fn write_metablock(
     buf: &mut dyn std::io::Write,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<bool> {
-    // Convert ConfigValue to MetaValueWithSourceInfo for serialization
-    let meta_value = config_value_to_meta(&metablock.meta);
-    write_meta(&meta_value, buf, ctx)
+    // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
+    write_config_value_meta(&metablock.meta, buf, ctx)
 }
 
 fn write_inlinerefdef(
@@ -1881,9 +1884,8 @@ fn write_impl<T: std::io::Write>(
     buf: &mut T,
     ctx: &mut QmdWriterContext,
 ) -> std::io::Result<()> {
-    // Convert ConfigValue to MetaValueWithSourceInfo for serialization
-    let meta_value = config_value_to_meta(&pandoc.meta);
-    let mut need_newline = write_meta(&meta_value, buf, ctx)?;
+    // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
+    let mut need_newline = write_config_value_meta(&pandoc.meta, buf, ctx)?;
     for block in &pandoc.blocks {
         if need_newline {
             write!(buf, "\n")?

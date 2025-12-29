@@ -9,7 +9,7 @@
 
 use pampa::pandoc::ast_context::ASTContext;
 use pampa::pandoc::location::{Location, Range, SourceInfo};
-use pampa::pandoc::{rawblock_to_config_value, rawblock_to_meta_with_source_info, RawBlock};
+use pampa::pandoc::{RawBlock, rawblock_to_config_value, rawblock_to_meta_with_source_info};
 use pampa::template::config_value_to_meta;
 use pampa::utils::diagnostic_collector::DiagnosticCollector;
 use quarto_pandoc_types::{ConfigValueKind, Inline, MetaValueWithSourceInfo};
@@ -83,7 +83,10 @@ toc: true
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let toc = entries.iter().find(|e| e.key == "toc").expect("toc not found");
+            let toc = entries
+                .iter()
+                .find(|e| e.key == "toc")
+                .expect("toc not found");
             match &toc.value.value {
                 ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)) => {
                     assert!(*b);
@@ -190,7 +193,9 @@ format:
                                 ConfigValueKind::PandocInlines(_) => {
                                     // "cosmo" parsed as markdown
                                 }
-                                other => panic!("Expected PandocInlines for theme, got: {:?}", other),
+                                other => {
+                                    panic!("Expected PandocInlines for theme, got: {:?}", other)
+                                }
                             }
                         }
                         other => panic!("Expected Map for html, got: {:?}", other),
@@ -260,7 +265,10 @@ filename: !str _foo_.py
                 .expect("filename not found");
             match &filename.value.value {
                 ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
-                    assert_eq!(s, "_foo_.py", "!str should keep underscore-surrounded text literal");
+                    assert_eq!(
+                        s, "_foo_.py",
+                        "!str should keep underscore-surrounded text literal"
+                    );
                 }
                 other => panic!("Expected Scalar string for !str, got: {:?}", other),
             }
@@ -432,7 +440,10 @@ fn compare_meta_values(
             MetaValueWithSourceInfo::MetaString { value: vb, .. },
         ) => {
             if va != vb {
-                Some(format!("{}: string values differ: {:?} vs {:?}", path, va, vb))
+                Some(format!(
+                    "{}: string values differ: {:?} vs {:?}",
+                    path, va, vb
+                ))
             } else {
                 None
             }
@@ -442,7 +453,10 @@ fn compare_meta_values(
             MetaValueWithSourceInfo::MetaBool { value: vb, .. },
         ) => {
             if va != vb {
-                Some(format!("{}: bool values differ: {:?} vs {:?}", path, va, vb))
+                Some(format!(
+                    "{}: bool values differ: {:?} vs {:?}",
+                    path, va, vb
+                ))
             } else {
                 None
             }
@@ -669,7 +683,10 @@ filename: !str _foo_.py
             match &entry.value {
                 // Config path: !str → Scalar(String) → MetaString
                 MetaValueWithSourceInfo::MetaString { value, .. } => value.clone(),
-                _ => panic!("Expected MetaString from config path, got: {:?}", entry.value),
+                _ => panic!(
+                    "Expected MetaString from config path, got: {:?}",
+                    entry.value
+                ),
             }
         }
         _ => panic!("Expected MetaMap"),

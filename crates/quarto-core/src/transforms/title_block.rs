@@ -14,12 +14,11 @@
 //! This is a simplified version of Quarto's title block handling for
 //! prototyping purposes.
 
-use pampa::template::config_value_to_meta;
 use quarto_pandoc_types::attr::{AttrSourceInfo, empty_attr};
 use quarto_pandoc_types::block::{Block, Header};
 use quarto_pandoc_types::inline::{Inline, Str};
-use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use quarto_source_map::SourceInfo;
 
 use crate::Result;
@@ -57,8 +56,7 @@ impl AstTransform for TitleBlockTransform {
         }
 
         // Try to get title from metadata
-        let meta_value = config_value_to_meta(&ast.meta);
-        if let Some(title_text) = extract_title(&meta_value) {
+        if let Some(title_text) = extract_title(&ast.meta) {
             // Create a level-1 header with the title
             let header = create_title_header(&title_text);
             ast.blocks.insert(0, header);
@@ -76,8 +74,8 @@ fn has_level1_header(blocks: &[Block]) -> bool {
 }
 
 /// Extract title text from metadata.
-fn extract_title(meta: &MetaValueWithSourceInfo) -> Option<String> {
-    let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta else {
+fn extract_title(meta: &ConfigValue) -> Option<String> {
+    let ConfigValueKind::Map(entries) = &meta.value else {
         return None;
     };
 
@@ -86,13 +84,15 @@ fn extract_title(meta: &MetaValueWithSourceInfo) -> Option<String> {
 }
 
 /// Extract plain text from a metadata value.
-fn extract_plain_text(meta: &MetaValueWithSourceInfo) -> Option<String> {
-    match meta {
-        MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-        MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-            Some(inlines_to_plain_text(content))
-        }
-        MetaValueWithSourceInfo::MetaBlocks { content, .. } => Some(blocks_to_plain_text(content)),
+fn extract_plain_text(meta: &ConfigValue) -> Option<String> {
+    // Check for string scalar first
+    if let Some(s) = meta.as_str() {
+        return Some(s.to_string());
+    }
+    // Check for Pandoc content
+    match &meta.value {
+        ConfigValueKind::PandocInlines(content) => Some(inlines_to_plain_text(content)),
+        ConfigValueKind::PandocBlocks(content) => Some(blocks_to_plain_text(content)),
         _ => None,
     }
 }
@@ -147,9 +147,8 @@ fn create_title_header(title: &str) -> Block {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pampa::template::meta_to_config_value;
     use quarto_pandoc_types::block::Paragraph;
-    use quarto_pandoc_types::meta::MetaMapEntry;
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_source_map::{FileId, Location, Range};
     use std::path::PathBuf;
 
@@ -188,17 +187,14 @@ mod tests {
     #[test]
     fn test_adds_title_header_when_missing() {
         let mut ast = Pandoc {
-            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-                entries: vec![MetaMapEntry {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "My Document".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("My Document", dummy_source_info()),
                 }],
-                source_info: dummy_source_info(),
-            }),
+                dummy_source_info(),
+            ),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),
@@ -236,17 +232,14 @@ mod tests {
     #[test]
     fn test_does_not_add_when_h1_exists() {
         let mut ast = Pandoc {
-            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-                entries: vec![MetaMapEntry {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "My Document".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("My Document", dummy_source_info()),
                 }],
-                source_info: dummy_source_info(),
-            }),
+                dummy_source_info(),
+            ),
             blocks: vec![
                 Block::Header(Header {
                     level: 1,
@@ -293,10 +286,7 @@ mod tests {
     #[test]
     fn test_does_nothing_without_title_metadata() {
         let mut ast = Pandoc {
-            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-                entries: vec![],
-                source_info: dummy_source_info(),
-            }),
+            meta: ConfigValue::new_map(vec![], dummy_source_info()),
             blocks: vec![Block::Paragraph(Paragraph {
                 content: vec![Inline::Str(Str {
                     text: "Content".to_string(),

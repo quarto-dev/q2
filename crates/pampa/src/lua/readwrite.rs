@@ -16,8 +16,8 @@ use crate::options::{
     default_writer_options, is_supported_reader_format, is_supported_writer_format,
     merge_with_defaults, normalize_reader_format, normalize_writer_format, parse_format_string,
 };
-use crate::pandoc::{MetaValueWithSourceInfo, Pandoc};
-use crate::template::{config_value_to_meta, meta_to_config_value};
+use crate::pandoc::Pandoc;
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 
 use super::types::{blocks_to_lua_table, lua_table_to_blocks, meta_value_to_lua};
 
@@ -196,30 +196,82 @@ fn parse_format_spec_from_lua(_lua: &Lua, value: Value) -> Result<ParsedFormat> 
     }
 }
 
-/// Convert MetaValueWithSourceInfo to a Lua table (loses source info).
-fn meta_with_source_to_lua(lua: &Lua, meta: &MetaValueWithSourceInfo) -> Result<Value> {
-    // Convert to the old MetaValue format and then to Lua
-    let meta_value = meta.to_meta_value();
-    meta_value_to_lua(lua, &meta_value)
+/// Phase 5: Convert ConfigValue to a Lua table (loses source info).
+fn config_value_to_lua(lua: &Lua, config: &ConfigValue) -> Result<Value> {
+    match &config.value {
+        ConfigValueKind::Scalar(yaml) => match yaml {
+            yaml_rust2::Yaml::String(s) => Ok(Value::String(lua.create_string(s)?)),
+            yaml_rust2::Yaml::Boolean(b) => Ok(Value::Boolean(*b)),
+            yaml_rust2::Yaml::Integer(i) => Ok(Value::Integer(*i)),
+            yaml_rust2::Yaml::Real(r) => Ok(Value::Number(r.parse().unwrap_or(0.0))),
+            yaml_rust2::Yaml::Null => Ok(Value::Nil),
+            _ => Ok(Value::Nil),
+        },
+        ConfigValueKind::PandocInlines(inlines) => {
+            // Convert to MetaValue and then to Lua using existing converter
+            use crate::pandoc::MetaValue;
+            let meta_value = MetaValue::MetaInlines(inlines.clone());
+            meta_value_to_lua(lua, &meta_value)
+        }
+        ConfigValueKind::PandocBlocks(blocks) => {
+            // Convert to MetaValue and then to Lua using existing converter
+            use crate::pandoc::MetaValue;
+            let meta_value = MetaValue::MetaBlocks(blocks.clone());
+            meta_value_to_lua(lua, &meta_value)
+        }
+        ConfigValueKind::Array(items) => {
+            let table = lua.create_table()?;
+            for (i, item) in items.iter().enumerate() {
+                table.set(i + 1, config_value_to_lua(lua, item)?)?;
+            }
+            Ok(Value::Table(table))
+        }
+        ConfigValueKind::Map(entries) => {
+            let table = lua.create_table()?;
+            for entry in entries {
+                table.set(entry.key.as_str(), config_value_to_lua(lua, &entry.value)?)?;
+            }
+            Ok(Value::Table(table))
+        }
+        ConfigValueKind::Path(p) => Ok(Value::String(lua.create_string(p)?)),
+        ConfigValueKind::Glob(g) => Ok(Value::String(lua.create_string(g)?)),
+        ConfigValueKind::Expr(e) => Ok(Value::String(lua.create_string(e)?)),
+    }
 }
 
-/// Convert a Lua table to MetaValueWithSourceInfo.
-fn lua_to_meta_with_source(lua: &Lua, val: Value) -> Result<MetaValueWithSourceInfo> {
-    use crate::pandoc::MetaMapEntry;
+/// Phase 5: Convert a Lua table to ConfigValue.
+fn lua_to_config_value(lua: &Lua, val: Value) -> Result<ConfigValue> {
+    use quarto_pandoc_types::MergeOp;
     use quarto_source_map::SourceInfo;
 
+    let merge_op = MergeOp::default();
+    let source_info = SourceInfo::default();
+
     match val {
-        Value::Nil => Ok(MetaValueWithSourceInfo::MetaMap {
-            entries: Vec::new(),
-            source_info: SourceInfo::default(),
+        Value::Nil => Ok(ConfigValue {
+            value: ConfigValueKind::Map(Vec::new()),
+            source_info,
+            merge_op,
         }),
-        Value::Boolean(b) => Ok(MetaValueWithSourceInfo::MetaBool {
-            value: b,
-            source_info: SourceInfo::default(),
+        Value::Boolean(b) => Ok(ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)),
+            source_info,
+            merge_op,
         }),
-        Value::String(s) => Ok(MetaValueWithSourceInfo::MetaString {
-            value: s.to_str()?.to_string(),
-            source_info: SourceInfo::default(),
+        Value::String(s) => Ok(ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_str()?.to_string())),
+            source_info,
+            merge_op,
+        }),
+        Value::Integer(i) => Ok(ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)),
+            source_info,
+            merge_op,
+        }),
+        Value::Number(n) => Ok(ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real(n.to_string())),
+            source_info,
+            merge_op,
         }),
         Value::Table(t) => {
             // Check if it's a sequence (array) or a map
@@ -229,32 +281,32 @@ fn lua_to_meta_with_source(lua: &Lua, val: Value) -> Result<MetaValueWithSourceI
                 let mut items = Vec::new();
                 for i in 1..=len {
                     let item: Value = t.get(i)?;
-                    items.push(lua_to_meta_with_source(lua, item)?);
+                    items.push(lua_to_config_value(lua, item)?);
                 }
-                Ok(MetaValueWithSourceInfo::MetaList {
-                    items,
-                    source_info: SourceInfo::default(),
+                Ok(ConfigValue {
+                    value: ConfigValueKind::Array(items),
+                    source_info,
+                    merge_op,
                 })
             } else {
                 // It's a map
                 let mut entries = Vec::new();
                 for pair in t.pairs::<String, Value>() {
                     let (k, v) = pair?;
-                    entries.push(MetaMapEntry {
+                    entries.push(ConfigMapEntry {
                         key: k,
                         key_source: SourceInfo::default(),
-                        value: lua_to_meta_with_source(lua, v)?,
+                        value: lua_to_config_value(lua, v)?,
                     });
                 }
-                Ok(MetaValueWithSourceInfo::MetaMap {
-                    entries,
-                    source_info: SourceInfo::default(),
+                Ok(ConfigValue {
+                    value: ConfigValueKind::Map(entries),
+                    source_info,
+                    merge_op,
                 })
             }
         }
-        _ => Err(Error::runtime(
-            "cannot convert value to MetaValueWithSourceInfo",
-        )),
+        _ => Err(Error::runtime("cannot convert value to ConfigValue")),
     }
 }
 
@@ -268,9 +320,8 @@ fn rust_pandoc_to_lua_table(lua: &Lua, pandoc: &Pandoc) -> Result<Value> {
     let blocks_lua = blocks_to_lua_table(lua, &pandoc.blocks)?;
     doc.set("blocks", blocks_lua)?;
 
-    // Convert meta (ConfigValue -> MetaValueWithSourceInfo -> Lua table)
-    let meta_value = config_value_to_meta(&pandoc.meta);
-    let meta_lua = meta_with_source_to_lua(lua, &meta_value)?;
+    // Phase 5: Convert meta directly from ConfigValue to Lua
+    let meta_lua = config_value_to_lua(lua, &pandoc.meta)?;
     doc.set("meta", meta_lua)?;
 
     // Set pandoc-api-version (we use 1.23 for compatibility)
@@ -295,10 +346,9 @@ fn lua_pandoc_to_rust(lua: &Lua, val: Value) -> Result<Pandoc> {
             let blocks_val: Value = t.get("blocks").unwrap_or(Value::Nil);
             let blocks = lua_table_to_blocks(lua, blocks_val)?;
 
-            // Get meta (convert Lua -> MetaValueWithSourceInfo -> ConfigValue)
+            // Phase 5: Convert meta directly from Lua to ConfigValue
             let meta_val: Value = t.get("meta").unwrap_or(Value::Nil);
-            let meta_source = lua_to_meta_with_source(lua, meta_val)?;
-            let meta = meta_to_config_value(&meta_source);
+            let meta = lua_to_config_value(lua, meta_val)?;
 
             Ok(Pandoc { blocks, meta })
         }

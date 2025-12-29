@@ -2,7 +2,7 @@
 
 **Issue:** k-2tu9
 **Date:** 2025-12-29
-**Status:** In Progress - Phases 1-4 Complete
+**Status:** In Progress - Phases 1-4 Complete, Phase 5 In Progress (native migration underway)
 **Blocks:** k-ic1o (ConfigValue integration into pipeline)
 
 ## Overview
@@ -455,53 +455,66 @@ and convert at boundaries that still need MetaValueWithSourceInfo.
 3. `!str` via ConfigValue produces `MetaString` vs legacy `MetaInlines { Str }`
    - Semantically equivalent, minor structural difference
 
-### Phase 5: Migrate Consumers (Largest Phase)
+### Phase 5: Migrate Consumers (Largest Phase) - IN PROGRESS
 
-Files to update (32 total, grouped by area):
+**Approach**: Two-phase migration
 
-**quarto-pandoc-types** (definition):
-- [ ] `meta.rs` - Remove `MetaValueWithSourceInfo`, keep only `ConfigValue` re-export
-- [ ] `lib.rs` - Update exports
-- [ ] `pandoc.rs` - `Pandoc.meta` type
-- [ ] `block.rs` - Any metadata references
+1. **Phase 5a** (completed): Boundary conversion - Get `Pandoc.meta` using ConfigValue
+2. **Phase 5b** (in progress): Native migration - Update internal code to use ConfigValue directly
 
-**pampa readers/writers** (core):
-- [ ] `readers/qmd.rs`
-- [ ] `readers/json.rs`
-- [ ] `writers/html.rs`
-- [ ] `writers/json.rs`
-- [ ] `writers/qmd.rs`
+**Completed work - Boundary conversions (2025-12-29 AM)**:
+- [x] `pandoc.rs` - Changed `Pandoc.meta` type from `MetaValueWithSourceInfo` to `ConfigValue`
+- [x] `readers/qmd.rs` - Added `config_value_to_meta()` conversion at boundary
+- [x] `readers/json.rs` - Added conversion at boundary
+- [x] `writers/html.rs` - Added `meta_to_config_value()` conversion, added `make_config()` test helper
+- [x] `writers/json.rs` - Added conversion at boundary, updated tests to use `ConfigValue::default()`
+- [x] `writers/qmd.rs` - Added conversion at boundary
+- [x] `lua/readwrite.rs` - Added conversions at Lua boundary
+- [x] `template/render.rs` - Added conversion, updated tests
+- [x] `transforms/callout.rs` - Updated tests to use `ConfigValue::default()`
+- [x] `transforms/callout_resolve.rs` - Updated tests
+- [x] `transforms/resource_collector.rs` - Updated tests
+- [x] `pipeline.rs` - Added conversion at call site
+- [x] `quarto/tests/render_integration.rs` - Added conversion
+- [x] `pampa/tests/test_json_roundtrip.rs` - Updated to use ConfigValue
+- [x] `comrak-to-pandoc/tests/generators.rs` - Updated to use ConfigValue
+- [x] `comrak-to-pandoc/src/normalize.rs` - Updated test imports
+- [x] All 2668 tests pass
 
-**pampa internal** (supporting):
-- [ ] `pandoc/meta.rs` - Conversion functions
-- [ ] `pandoc/treesitter_utils/document.rs`
-- [ ] `template/context.rs`
-- [ ] `template/render.rs`
-- [ ] `template/config_merge.rs`
-- [ ] `lua/filter.rs`
-- [ ] `lua/readwrite.rs`
-- [ ] `filters.rs`
-- [ ] `json_filter.rs`
-- [ ] `citeproc_filter.rs`
+**Completed work - Native migration (2025-12-29 PM)**:
+- [x] `pampa/src/template/config_merge.rs` - Updated functions to accept `&ConfigValue` directly
+- [x] `pampa/src/template/render.rs` - Removed boundary conversion, passes `&pandoc.meta` directly
+- [x] `quarto-core/src/transforms/metadata_normalize.rs` - Migrated to use ConfigValue natively
+- [x] `quarto-core/src/transforms/title_block.rs` - Migrated to use ConfigValue natively
+- [x] `pampa/src/filters.rs` - Migrated Filter struct to use ConfigValue for meta filters
+  - Changed `MetaFilterFn` type to use `ConfigValue`
+  - Replaced `topdown_traverse_meta_value_with_source_info` with `topdown_traverse_config_value`
+  - Removed boundary conversions in `topdown_traverse`
+- [x] `pampa/src/citeproc_filter.rs` - Migrated all helper functions to use ConfigValue
+  - `extract_config` - Works directly with `&pandoc.meta`
+  - `get_meta_string`, `get_meta_bool`, `get_meta_string_list` - Use ConfigValue
+  - `extract_references`, `meta_to_reference` - Use ConfigValue
+  - `extract_names`, `extract_date` - Use ConfigMapEntry
+- [x] `quarto-pandoc-types/src/config_value.rs` - Added `new_string()` helper method
+- [x] All 2668 tests pass
 
-**quarto-core transforms**:
-- [ ] `transforms/callout.rs`
-- [ ] `transforms/callout_resolve.rs`
-- [ ] `transforms/metadata_normalize.rs`
-- [ ] `transforms/resource_collector.rs`
-- [ ] `transforms/title_block.rs`
-- [ ] `template.rs`
+**Remaining work for full migration** (~289 occurrences across 17 files):
 
-**Tests**:
-- [ ] `pampa/tests/test_yaml_tag_regression.rs`
-- [ ] `pampa/tests/test_metadata_source_tracking.rs`
-- [ ] `pampa/tests/test_json_roundtrip.rs`
+Still using `MetaValueWithSourceInfo` internally:
+- [ ] `quarto-pandoc-types/src/meta.rs` - Core type definition (28 uses) - Keep for backward compat
+- [ ] `pampa/src/pandoc/meta.rs` - Conversion logic (37 uses)
+- [ ] `pampa/src/template/config_merge.rs` - Conversion functions (56 uses) - Need for boundary
+- [ ] `pampa/src/template/context.rs` - Template context (25 uses)
+- [ ] `quarto-core/src/template.rs` - Template rendering (33 uses)
+- [ ] `pampa/src/writers/json.rs` - JSON serialization (16 uses)
+- [ ] `pampa/src/lua/readwrite.rs` - Lua interop (13 uses)
+- [ ] `pampa/src/readers/json.rs` - JSON deserialization (12 uses)
+- [ ] `pampa/src/writers/qmd.rs` - QMD writer (12 uses)
+- [ ] `pampa/src/writers/html.rs` - HTML writer (7 uses)
+- [ ] `pampa/src/readers/qmd.rs` - QMD reader (7 uses)
+- [ ] Various test files
 
-**comrak-to-pandoc** (auxiliary):
-- [ ] `block.rs`
-- [ ] `normalize.rs`
-- [ ] `tests/generators.rs`
-- [ ] `tests/debug.rs`
+**Next priority**: Migrate `template/context.rs` (feeds templates) and readers/writers.
 
 ### Phase 6: Remove Legacy Types
 

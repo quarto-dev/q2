@@ -7,9 +7,9 @@ use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
-use crate::template::config_value_to_meta;
 use hashlink::LinkedHashMap;
 use quarto_error_reporting::{DiagnosticMessage, DiagnosticMessageBuilder};
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 use quarto_source_map::{FileId, SourceInfo};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -1075,11 +1075,10 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
             ctx,
         ),
         Block::BlockMetadata(meta) => {
-            // Convert ConfigValue to MetaValueWithSourceInfo for serialization
-            let meta_value = config_value_to_meta(&meta.meta);
+            // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
             node_with_source(
                 "BlockMetadata",
-                Some(write_meta_value_with_source_info(&meta_value, ctx)),
+                Some(write_config_value(&meta.meta, ctx)),
                 &meta.source_info,
                 ctx,
             )
@@ -1298,93 +1297,143 @@ fn write_custom_inline(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterC
     Value::Object(obj)
 }
 
-fn write_meta_value_with_source_info(
-    value: &crate::pandoc::MetaValueWithSourceInfo,
-    ctx: &mut JsonWriterContext,
-) -> Value {
-    match value {
-        crate::pandoc::MetaValueWithSourceInfo::MetaString { value, source_info } => json!({
-            "t": "MetaString",
-            "c": value,
-            "s": ctx.serializer.to_json_ref(source_info)
-        }),
-        crate::pandoc::MetaValueWithSourceInfo::MetaBool { value, source_info } => json!({
-            "t": "MetaBool",
-            "c": value,
-            "s": ctx.serializer.to_json_ref(source_info)
-        }),
-        crate::pandoc::MetaValueWithSourceInfo::MetaInlines {
-            content,
-            source_info,
-        } => json!({
+/// Write a ConfigValue directly to JSON format
+fn write_config_value(value: &ConfigValue, ctx: &mut JsonWriterContext) -> Value {
+    match &value.value {
+        ConfigValueKind::Scalar(yaml) => match yaml {
+            yaml_rust2::Yaml::String(s) => json!({
+                "t": "MetaString",
+                "c": s,
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            }),
+            yaml_rust2::Yaml::Boolean(b) => json!({
+                "t": "MetaBool",
+                "c": b,
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            }),
+            yaml_rust2::Yaml::Integer(i) => json!({
+                "t": "MetaString",
+                "c": i.to_string(),
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            }),
+            yaml_rust2::Yaml::Real(r) => json!({
+                "t": "MetaString",
+                "c": r,
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            }),
+            yaml_rust2::Yaml::Null => json!({
+                "t": "MetaString",
+                "c": "",
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            }),
+            _ => json!({
+                "t": "MetaString",
+                "c": "",
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            }),
+        },
+        ConfigValueKind::PandocInlines(inlines) => json!({
             "t": "MetaInlines",
-            "c": write_inlines(content, ctx),
-            "s": ctx.serializer.to_json_ref(source_info)
+            "c": write_inlines(inlines, ctx),
+            "s": ctx.serializer.to_json_ref(&value.source_info)
         }),
-        crate::pandoc::MetaValueWithSourceInfo::MetaBlocks {
-            content,
-            source_info,
-        } => json!({
+        ConfigValueKind::PandocBlocks(blocks) => json!({
             "t": "MetaBlocks",
-            "c": write_blocks(content, ctx),
-            "s": ctx.serializer.to_json_ref(source_info)
+            "c": write_blocks(blocks, ctx),
+            "s": ctx.serializer.to_json_ref(&value.source_info)
         }),
-        crate::pandoc::MetaValueWithSourceInfo::MetaList { items, source_info } => json!({
+        // Path: serialize as MetaInlines with a single Str (preserving the path string)
+        ConfigValueKind::Path(s) => {
+            let inlines = vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+                text: s.clone(),
+                source_info: value.source_info.clone(),
+            })];
+            json!({
+                "t": "MetaInlines",
+                "c": write_inlines(&inlines, ctx),
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            })
+        }
+        // Glob, Expr: serialize as MetaInlines with tagged Span wrapper
+        ConfigValueKind::Glob(s) => {
+            let mut attributes = LinkedHashMap::new();
+            attributes.insert("tag".to_string(), "glob".to_string());
+            let span = crate::pandoc::Span {
+                attr: (
+                    String::new(),
+                    vec!["yaml-tagged-string".to_string()],
+                    attributes,
+                ),
+                content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+                    text: s.clone(),
+                    source_info: value.source_info.clone(),
+                })],
+                source_info: SourceInfo::default(),
+                attr_source: AttrSourceInfo::empty(),
+            };
+            let inlines = vec![crate::pandoc::Inline::Span(span)];
+            json!({
+                "t": "MetaInlines",
+                "c": write_inlines(&inlines, ctx),
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            })
+        }
+        ConfigValueKind::Expr(s) => {
+            let mut attributes = LinkedHashMap::new();
+            attributes.insert("tag".to_string(), "expr".to_string());
+            let span = crate::pandoc::Span {
+                attr: (
+                    String::new(),
+                    vec!["yaml-tagged-string".to_string()],
+                    attributes,
+                ),
+                content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+                    text: s.clone(),
+                    source_info: value.source_info.clone(),
+                })],
+                source_info: SourceInfo::default(),
+                attr_source: AttrSourceInfo::empty(),
+            };
+            let inlines = vec![crate::pandoc::Inline::Span(span)];
+            json!({
+                "t": "MetaInlines",
+                "c": write_inlines(&inlines, ctx),
+                "s": ctx.serializer.to_json_ref(&value.source_info)
+            })
+        }
+        ConfigValueKind::Array(items) => json!({
             "t": "MetaList",
-            "c": items.iter().map(|item| write_meta_value_with_source_info(item, ctx)).collect::<Vec<_>>(),
-            "s": ctx.serializer.to_json_ref(source_info)
+            "c": items.iter().map(|item| write_config_value(item, ctx)).collect::<Vec<_>>(),
+            "s": ctx.serializer.to_json_ref(&value.source_info)
         }),
-        crate::pandoc::MetaValueWithSourceInfo::MetaMap {
-            entries,
-            source_info,
-        } => json!({
+        ConfigValueKind::Map(entries) => json!({
             "t": "MetaMap",
             "c": entries.iter().map(|entry| json!({
                 "key": entry.key,
                 "key_source": ctx.serializer.to_json_ref(&entry.key_source),
-                "value": write_meta_value_with_source_info(&entry.value, ctx)
+                "value": write_config_value(&entry.value, ctx)
             })).collect::<Vec<_>>(),
-            "s": ctx.serializer.to_json_ref(source_info)
+            "s": ctx.serializer.to_json_ref(&value.source_info)
         }),
     }
 }
 
-fn write_meta(meta: &crate::pandoc::MetaValueWithSourceInfo, ctx: &mut JsonWriterContext) -> Value {
-    // meta should be a MetaMap variant
-    // Write as Pandoc-compatible object format
-    match meta {
-        crate::pandoc::MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+/// Write ConfigValue as top-level metadata map
+fn write_config_value_as_meta(meta: &ConfigValue, ctx: &mut JsonWriterContext) -> Value {
+    match &meta.value {
+        ConfigValueKind::Map(entries) => {
             let map: serde_json::Map<String, Value> = entries
                 .iter()
-                .map(|entry| {
-                    (
-                        entry.key.clone(),
-                        write_meta_value_with_source_info(&entry.value, ctx),
-                    )
-                })
+                .map(|entry| (entry.key.clone(), write_config_value(&entry.value, ctx)))
                 .collect();
             Value::Object(map)
         }
-        other => {
-            // Defensive: Pandoc.meta should always be MetaMap in valid AST
+        _ => {
+            // Defensive: Pandoc.meta should always be Map
             ctx.errors.push(
                 DiagnosticMessageBuilder::error("Invalid metadata structure in JSON writer")
                     .with_code("Q-3-40")
-                    .problem("Pandoc metadata is not a MetaMap structure")
-                    .add_detail(format!(
-                        "Found {:?} instead of MetaMap",
-                        match other {
-                            crate::pandoc::MetaValueWithSourceInfo::MetaString { .. } =>
-                                "MetaString",
-                            crate::pandoc::MetaValueWithSourceInfo::MetaBool { .. } => "MetaBool",
-                            crate::pandoc::MetaValueWithSourceInfo::MetaInlines { .. } =>
-                                "MetaInlines",
-                            crate::pandoc::MetaValueWithSourceInfo::MetaList { .. } => "MetaList",
-                            crate::pandoc::MetaValueWithSourceInfo::MetaBlocks { .. } =>
-                                "MetaBlocks",
-                            _ => "unknown",
-                        }
-                    ))
+                    .problem("Pandoc metadata is not a Map structure")
                     .add_hint("This may indicate a malformed AST or parsing error")
                     .build(),
             );
@@ -1413,11 +1462,9 @@ pub(crate) fn write_pandoc(
     // Create the JSON writer context
     let mut ctx = JsonWriterContext::new(ast_context, config);
 
-    // Convert ConfigValue to MetaValueWithSourceInfo for serialization
-    let meta_value = config_value_to_meta(&pandoc.meta);
-
+    // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
     // Serialize AST, which will build the pool
-    let meta_json = write_meta(&meta_value, &mut ctx);
+    let meta_json = write_config_value_as_meta(&pandoc.meta, &mut ctx);
     let blocks_json = write_blocks(&pandoc.blocks, &mut ctx);
 
     // Check if any errors were accumulated

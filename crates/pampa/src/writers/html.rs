@@ -1207,8 +1207,8 @@ mod tests {
     use crate::pandoc::block::Paragraph;
     use crate::pandoc::inline::Str;
     use crate::template::meta_to_config_value;
-    use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
     use quarto_pandoc_types::ConfigValue;
+    use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
     use quarto_source_map::SourceInfo;
 
     fn dummy_source_info() -> SourceInfo {

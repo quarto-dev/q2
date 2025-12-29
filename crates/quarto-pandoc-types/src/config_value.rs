@@ -392,6 +392,30 @@ impl ConfigValue {
         }
     }
 
+    /// Create a new string scalar ConfigValue.
+    ///
+    /// This is a convenience method that wraps a string in `Yaml::String`.
+    /// Use this when you need to create a string value without importing yaml_rust2.
+    pub fn new_string(s: impl Into<String>, source_info: SourceInfo) -> Self {
+        Self {
+            value: ConfigValueKind::Scalar(Yaml::String(s.into())),
+            source_info,
+            merge_op: MergeOp::Concat,
+        }
+    }
+
+    /// Create a new boolean scalar ConfigValue.
+    ///
+    /// This is a convenience method that wraps a bool in `Yaml::Boolean`.
+    /// Use this when you need to create a boolean value without importing yaml_rust2.
+    pub fn new_bool(b: bool, source_info: SourceInfo) -> Self {
+        Self {
+            value: ConfigValueKind::Scalar(Yaml::Boolean(b)),
+            source_info,
+            merge_op: MergeOp::Concat,
+        }
+    }
+
     /// Create a new array ConfigValue with default merge semantics.
     pub fn new_array(items: Vec<ConfigValue>, source_info: SourceInfo) -> Self {
         Self {
@@ -552,6 +576,27 @@ impl ConfigValue {
             ConfigValueKind::Expr(s) => Some(s),
             _ => None,
         }
+    }
+
+    /// Get the boolean value if this is a boolean scalar.
+    pub fn as_bool(&self) -> Option<bool> {
+        match &self.value {
+            ConfigValueKind::Scalar(Yaml::Boolean(b)) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// Get the integer value if this is an integer scalar.
+    pub fn as_int(&self) -> Option<i64> {
+        match &self.value {
+            ConfigValueKind::Scalar(Yaml::Integer(i)) => Some(*i),
+            _ => None,
+        }
+    }
+
+    /// Check if this is a null/empty value.
+    pub fn is_null(&self) -> bool {
+        matches!(&self.value, ConfigValueKind::Scalar(Yaml::Null))
     }
 
     /// Check if this ConfigValue represents a string with a specific value.

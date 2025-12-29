@@ -656,7 +656,7 @@ mod tests {
         let (lua, runtime, mediabag) = create_test_lua();
 
         // Create temp directory
-        let temp = runtime.temp_dir("mediabag_test").unwrap();
+        let temp = runtime.temp_dir("mediabag_write_single").unwrap();
         let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
 
         // Insert a file
@@ -687,7 +687,7 @@ mod tests {
     fn test_write_all_files() {
         let (lua, runtime, mediabag) = create_test_lua();
 
-        let temp = runtime.temp_dir("mediabag_test").unwrap();
+        let temp = runtime.temp_dir("mediabag_write_all").unwrap();
         let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
 
         // Insert multiple files

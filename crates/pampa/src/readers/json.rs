@@ -9,13 +9,13 @@ use crate::pandoc::{
     Alignment, Attr, AttrSourceInfo, Block, BlockQuote, BulletList, Caption, Cell, Citation,
     CitationMode, Cite, Code, CodeBlock, ColSpec, ColWidth, CustomNode, DefinitionList, Div, Emph,
     Figure, Header, HorizontalRule, Image, Inline, Inlines, LineBlock, Link, ListAttributes,
-    ListNumberDelim, ListNumberStyle, Math, MathType, MetaBlock, MetaMapEntry,
-    MetaValueWithSourceInfo, Note, OrderedList, Pandoc, Paragraph, Plain, QuoteType, Quoted,
-    RawBlock, RawInline, Row, Slot, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong,
-    Subscript, Superscript, Table, TableBody, TableFoot, TableHead, Underline,
+    ListNumberDelim, ListNumberStyle, Math, MathType, MetaBlock, Note, OrderedList, Pandoc,
+    Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, Row, Slot, SmallCaps, SoftBreak,
+    Space, Span, Str, Strikeout, Strong, Subscript, Superscript, Table, TableBody, TableFoot,
+    TableHead, Underline,
 };
-use crate::template::meta_to_config_value;
 use hashlink::LinkedHashMap;
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind};
 use quarto_source_map::FileId;
 use serde_json::Value;
 use std::sync::Arc;
@@ -1115,7 +1115,8 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         None
     };
 
-    let meta_value = read_meta_with_key_sources(
+    // Phase 5: Read ConfigValue directly without MetaValueWithSourceInfo intermediate
+    let meta = read_config_value_top_level(
         obj.get("meta")
             .ok_or_else(|| JsonReadError::MissingField("meta".to_string()))?,
         key_sources,
@@ -1127,8 +1128,6 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
         &deserializer,
     )?;
 
-    // Convert MetaValueWithSourceInfo to ConfigValue for Pandoc.meta
-    let meta = meta_to_config_value(&meta_value);
     Ok((Pandoc { meta, blocks }, context))
 }
 
@@ -1948,10 +1947,8 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
             let c = obj
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
-            // BlockMetadata uses MetaValueWithSourceInfo format (not top-level meta)
-            // Convert to ConfigValue for the new MetaBlock.meta type
-            let meta_value = read_meta_value_with_source_info(c, deserializer)?;
-            let meta = meta_to_config_value(&meta_value);
+            // Phase 5: Read ConfigValue directly without MetaValueWithSourceInfo intermediate
+            let meta = read_config_value(c, deserializer)?;
             Ok(Block::BlockMetadata(MetaBlock { meta, source_info }))
         }
         "NoteDefinitionPara" => {
@@ -2016,11 +2013,13 @@ fn read_block(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<Bl
     }
 }
 
-fn read_meta_with_key_sources(
+/// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
+/// This function reads the top-level metadata from Pandoc JSON format.
+fn read_config_value_top_level(
     value: &Value,
     key_sources: Option<&Value>,
     deserializer: &SourceInfoDeserializer,
-) -> Result<MetaValueWithSourceInfo> {
+) -> Result<ConfigValue> {
     // meta is an object with key-value pairs (Pandoc-compatible format)
     let obj = value
         .as_object()
@@ -2046,24 +2045,23 @@ fn read_meta_with_key_sources(
             quarto_source_map::SourceInfo::default()
         };
 
-        entries.push(MetaMapEntry {
+        entries.push(ConfigMapEntry {
             key: key.clone(),
             key_source,
-            value: read_meta_value_with_source_info(val, deserializer)?,
+            value: read_config_value(val, deserializer)?,
         });
     }
 
-    Ok(MetaValueWithSourceInfo::MetaMap {
-        entries,
-        // Legitimate default: MetaMap itself doesn't have source tracking in JSON (only entries do)
+    Ok(ConfigValue {
+        value: ConfigValueKind::Map(entries),
+        // Legitimate default: top-level meta doesn't have source tracking in JSON
         source_info: quarto_source_map::SourceInfo::default(),
+        merge_op: quarto_pandoc_types::MergeOp::default(),
     })
 }
 
-fn read_meta_value_with_source_info(
-    value: &Value,
-    deserializer: &SourceInfoDeserializer,
-) -> Result<MetaValueWithSourceInfo> {
+/// Phase 5: Read ConfigValue directly from JSON without MetaValueWithSourceInfo intermediate
+fn read_config_value(value: &Value, deserializer: &SourceInfoDeserializer) -> Result<ConfigValue> {
     let obj = value
         .as_object()
         .ok_or_else(|| JsonReadError::InvalidType("Expected object for MetaValue".to_string()))?;
@@ -2080,14 +2078,17 @@ fn read_meta_value_with_source_info(
         quarto_source_map::SourceInfo::default()
     };
 
+    let merge_op = quarto_pandoc_types::MergeOp::default();
+
     match t {
         "MetaString" => {
             let c = obj.get("c").and_then(|v| v.as_str()).ok_or_else(|| {
                 JsonReadError::InvalidType("MetaString content must be string".to_string())
             })?;
-            Ok(MetaValueWithSourceInfo::MetaString {
-                value: c.to_string(),
+            Ok(ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(c.to_string())),
                 source_info,
+                merge_op,
             })
         }
         "MetaInlines" => {
@@ -2095,9 +2096,10 @@ fn read_meta_value_with_source_info(
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let inlines = read_inlines(c, deserializer)?;
-            Ok(MetaValueWithSourceInfo::MetaInlines {
-                content: inlines,
+            Ok(ConfigValue {
+                value: ConfigValueKind::PandocInlines(inlines),
                 source_info,
+                merge_op,
             })
         }
         "MetaBlocks" => {
@@ -2105,18 +2107,20 @@ fn read_meta_value_with_source_info(
                 .get("c")
                 .ok_or_else(|| JsonReadError::MissingField("c".to_string()))?;
             let blocks = read_blocks(c, deserializer)?;
-            Ok(MetaValueWithSourceInfo::MetaBlocks {
-                content: blocks,
+            Ok(ConfigValue {
+                value: ConfigValueKind::PandocBlocks(blocks),
                 source_info,
+                merge_op,
             })
         }
         "MetaBool" => {
             let c = obj.get("c").and_then(|v| v.as_bool()).ok_or_else(|| {
                 JsonReadError::InvalidType("MetaBool content must be boolean".to_string())
             })?;
-            Ok(MetaValueWithSourceInfo::MetaBool {
-                value: c,
+            Ok(ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(c)),
                 source_info,
+                merge_op,
             })
         }
         "MetaList" => {
@@ -2128,11 +2132,12 @@ fn read_meta_value_with_source_info(
             })?;
             let list = arr
                 .iter()
-                .map(|v| read_meta_value_with_source_info(v, deserializer))
+                .map(|v| read_config_value(v, deserializer))
                 .collect::<Result<Vec<_>>>()?;
-            Ok(MetaValueWithSourceInfo::MetaList {
-                items: list,
+            Ok(ConfigValue {
+                value: ConfigValueKind::Array(list),
                 source_info,
+                merge_op,
             })
         }
         "MetaMap" => {
@@ -2160,7 +2165,7 @@ fn read_meta_value_with_source_info(
                         // Legitimate default: JSON entry doesn't have key_source (backward compat)
                         quarto_source_map::SourceInfo::default()
                     };
-                    let value = read_meta_value_with_source_info(
+                    let value = read_config_value(
                         obj.get("value").ok_or_else(|| {
                             JsonReadError::MissingField("MetaMap entry missing 'value'".to_string())
                         })?,
@@ -2180,7 +2185,7 @@ fn read_meta_value_with_source_info(
                             JsonReadError::InvalidType("MetaMap key must be string".to_string())
                         })?
                         .to_string();
-                    let value = read_meta_value_with_source_info(&kv_arr[1], deserializer)?;
+                    let value = read_config_value(&kv_arr[1], deserializer)?;
                     // Legitimate default: Old JSON format [key, value] doesn't have key_source
                     (key, quarto_source_map::SourceInfo::default(), value)
                 } else {
@@ -2189,15 +2194,16 @@ fn read_meta_value_with_source_info(
                     ));
                 };
 
-                entries.push(MetaMapEntry {
+                entries.push(ConfigMapEntry {
                     key,
                     key_source,
                     value,
                 });
             }
-            Ok(MetaValueWithSourceInfo::MetaMap {
-                entries,
+            Ok(ConfigValue {
+                value: ConfigValueKind::Map(entries),
                 source_info,
+                merge_op,
             })
         }
         _ => Err(JsonReadError::UnsupportedVariant(format!(

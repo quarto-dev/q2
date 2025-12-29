@@ -9,14 +9,12 @@ use crate::filters::topdown_traverse;
 use crate::filters::{Filter, FilterReturn};
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
-use crate::pandoc::meta::parse_metadata_strings_with_source_info;
 use crate::pandoc::rawblock_to_config_value;
-use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
-use crate::template::{config_value_to_meta, meta_to_config_value};
+use crate::pandoc::{self, Block};
 use crate::readers::qmd_error_messages::{produce_diagnostic_messages, produce_error_message_json};
-use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind};
 use quarto_parse_errors::TreeSitterLogObserverTrait;
 use std::io::Write;
 use tree_sitter::LogType;
@@ -188,8 +186,8 @@ pub fn read<T: Write>(
             return Err(diagnostics);
         }
     };
-    // Store complete MetaMapEntry objects to preserve key_source information
-    let mut meta_from_parses: Vec<crate::pandoc::MetaMapEntry> = Vec::new();
+    // Store ConfigMapEntry objects directly (Phase 5: no MetaValueWithSourceInfo conversion)
+    let mut meta_from_parses: Vec<ConfigMapEntry> = Vec::new();
     // Track the source_info of the metadata block (for simple case with single block)
     let mut meta_source_info: Option<quarto_source_map::SourceInfo> = None;
     // Create a separate diagnostic collector for metadata parsing warnings
@@ -200,83 +198,37 @@ pub fn read<T: Write>(
             if rb.format != "quarto_minus_metadata" {
                 return Unchanged(rb);
             }
-            // Phase 4: Use rawblock_to_config_value then convert to MetaValueWithSourceInfo
-            // This proves the new ConfigValue-based code path works correctly.
+            // Phase 5: Work directly with ConfigValue, no MetaValueWithSourceInfo conversion
+            // rawblock_to_config_value uses DocumentMetadata context, so strings are already
+            // parsed as markdown (PandocInlines/PandocBlocks), not raw Scalar(String).
             let config_value = rawblock_to_config_value(&rb, &mut meta_diagnostics);
-            let meta_with_source = config_value_to_meta(&config_value);
 
-            // Check if this is lexical metadata
-            let is_lexical =
-                if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_with_source {
-                    entries
-                        .iter()
-                        .any(|e| e.key == "_scope" && e.value.is_string_value("lexical"))
-                } else {
-                    false
-                };
+            // Check if this is lexical metadata directly on ConfigValue
+            let is_lexical = config_value
+                .get("_scope")
+                .map(|v| v.is_string_value("lexical"))
+                .unwrap_or(false);
 
             if is_lexical {
-                // Lexical metadata - parse strings and return as BlockMetadata
-                let mut inner_meta_from_parses = Vec::new();
-                let parsed_meta = parse_metadata_strings_with_source_info(
-                    meta_with_source,
-                    &mut inner_meta_from_parses,
-                    &mut meta_diagnostics,
-                );
-
-                // Merge inner metadata if needed
-                let final_meta = if let MetaValueWithSourceInfo::MetaMap {
-                    mut entries,
-                    source_info,
-                } = parsed_meta
-                {
-                    // Now inner_meta_from_parses preserves full MetaMapEntry with key_source
-                    for entry in inner_meta_from_parses {
-                        entries.push(entry);
-                    }
-                    MetaValueWithSourceInfo::MetaMap {
-                        entries,
-                        source_info,
-                    }
-                } else {
-                    parsed_meta
-                };
-
-                // Convert MetaValueWithSourceInfo to ConfigValue for MetaBlock.meta
-                let meta_config = meta_to_config_value(&final_meta);
+                // Lexical metadata - return as BlockMetadata
+                // ConfigValue is already fully processed (strings parsed as markdown)
                 return FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
-                        meta: meta_config,
+                        meta: config_value,
                         source_info: rb.source_info.clone(),
                     })],
                     false,
                 );
             } else {
-                // Document-level metadata - parse strings and merge into meta_from_parses
-                let mut inner_meta = Vec::new();
-                let parsed_meta = parse_metadata_strings_with_source_info(
-                    meta_with_source,
-                    &mut inner_meta,
-                    &mut meta_diagnostics,
-                );
-
-                // Extract MetaMapEntry objects (preserving key_source) and store them
-                if let MetaValueWithSourceInfo::MetaMap {
-                    entries,
-                    source_info,
-                } = parsed_meta
-                {
+                // Document-level metadata - extract entries and merge into meta_from_parses
+                if let ConfigValueKind::Map(entries) = config_value.value {
                     // Store the source_info (for simple case with single metadata block)
                     if meta_source_info.is_none() {
-                        meta_source_info = Some(source_info);
+                        meta_source_info = Some(config_value.source_info);
                     }
                     for entry in entries {
                         meta_from_parses.push(entry);
                     }
-                }
-                // Also add any inner metadata entries (now preserves key_source)
-                for entry in inner_meta {
-                    meta_from_parses.push(entry);
                 }
                 return FilterReturn::FilterResult(vec![], false);
             }
@@ -286,17 +238,10 @@ pub fn read<T: Write>(
     };
 
     // Merge meta_from_parses into result.meta
-    // result.meta is ConfigValue with ConfigValueKind::Map, so we need to append entries
-    // Now meta_from_parses contains complete MetaMapEntry objects with key_source preserved
+    // Both are now ConfigMapEntry - no conversion needed
     if let ConfigValueKind::Map(ref mut entries) = result.meta.value {
         for entry in meta_from_parses.into_iter() {
-            // Convert MetaMapEntry to ConfigMapEntry
-            let config_entry = ConfigMapEntry {
-                key: entry.key,
-                key_source: entry.key_source,
-                value: meta_to_config_value(&entry.value),
-            };
-            entries.push(config_entry);
+            entries.push(entry);
         }
         // Update the overall metadata source_info if we captured one
         if let Some(captured_source_info) = meta_source_info {

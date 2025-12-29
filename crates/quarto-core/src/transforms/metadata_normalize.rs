@@ -14,12 +14,11 @@
 //!
 //! More derived fields can be added in the future (author-meta, date-meta, etc.)
 
-use pampa::template::{config_value_to_meta, meta_to_config_value};
-use quarto_pandoc_types::Slot;
 use quarto_pandoc_types::block::Block;
 use quarto_pandoc_types::inline::Inline;
-use quarto_pandoc_types::meta::{MetaMapEntry, MetaValueWithSourceInfo};
 use quarto_pandoc_types::pandoc::Pandoc;
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, Slot};
+use quarto_source_map::SourceInfo;
 
 use crate::Result;
 use crate::render::RenderContext;
@@ -53,34 +52,25 @@ impl AstTransform for MetadataNormalizeTransform {
     }
 
     fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
-        // Convert ConfigValue to MetaValueWithSourceInfo, modify, convert back
-        let mut meta_value = config_value_to_meta(&ast.meta);
-        normalize_metadata(&mut meta_value);
-        ast.meta = meta_to_config_value(&meta_value);
+        normalize_metadata(&mut ast.meta);
         Ok(())
     }
 }
 
 /// Normalize document metadata by adding derived fields.
-fn normalize_metadata(meta: &mut MetaValueWithSourceInfo) {
-    // Only process if meta is a MetaMap
-    let MetaValueWithSourceInfo::MetaMap {
-        entries,
-        source_info,
-    } = meta
-    else {
+fn normalize_metadata(meta: &mut ConfigValue) {
+    // Only process if meta is a Map
+    let ConfigValueKind::Map(entries) = &mut meta.value else {
         return;
     };
+    let source_info = meta.source_info.clone();
 
     // Add pagetitle if not present
-    add_pagetitle_if_missing(entries, source_info.clone());
+    add_pagetitle_if_missing(entries, source_info);
 }
 
 /// Add `pagetitle` field derived from `title` if not already present.
-fn add_pagetitle_if_missing(
-    entries: &mut Vec<MetaMapEntry>,
-    source_info: quarto_source_map::SourceInfo,
-) {
+fn add_pagetitle_if_missing(entries: &mut Vec<ConfigMapEntry>, source_info: SourceInfo) {
     // Check if pagetitle already exists
     let has_pagetitle = entries.iter().any(|e| e.key == "pagetitle");
     if has_pagetitle {
@@ -92,26 +82,25 @@ fn add_pagetitle_if_missing(
     if let Some(entry) = title_entry {
         let plain_text = extract_plain_text(&entry.value);
         if let Some(text) = plain_text {
-            entries.push(MetaMapEntry {
+            entries.push(ConfigMapEntry {
                 key: "pagetitle".to_string(),
                 key_source: source_info.clone(),
-                value: MetaValueWithSourceInfo::MetaString {
-                    value: text,
-                    source_info,
-                },
+                value: ConfigValue::new_string(text, source_info),
             });
         }
     }
 }
 
 /// Extract plain text from a metadata value.
-fn extract_plain_text(meta: &MetaValueWithSourceInfo) -> Option<String> {
-    match meta {
-        MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-        MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-            Some(inlines_to_plain_text(content))
-        }
-        MetaValueWithSourceInfo::MetaBlocks { content, .. } => Some(blocks_to_plain_text(content)),
+fn extract_plain_text(meta: &ConfigValue) -> Option<String> {
+    // Check for string scalar first
+    if let Some(s) = meta.as_str() {
+        return Some(s.to_string());
+    }
+    // Check for Pandoc content
+    match &meta.value {
+        ConfigValueKind::PandocInlines(content) => Some(inlines_to_plain_text(content)),
+        ConfigValueKind::PandocBlocks(content) => Some(blocks_to_plain_text(content)),
         _ => None,
     }
 }
@@ -267,9 +256,8 @@ fn blocks_to_plain_text(blocks: &[Block]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pampa::template::{config_value_to_meta, meta_to_config_value};
     use quarto_pandoc_types::inline::Str;
-    use quarto_source_map::{FileId, Location, Range, SourceInfo};
+    use quarto_source_map::{FileId, Location, Range};
     use std::path::PathBuf;
 
     use crate::format::Format;
@@ -307,17 +295,14 @@ mod tests {
     #[test]
     fn test_adds_pagetitle_from_string_title() {
         let mut ast = Pandoc {
-            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-                entries: vec![MetaMapEntry {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "My Document".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("My Document", dummy_source_info()),
                 }],
-                source_info: dummy_source_info(),
-            }),
+                dummy_source_info(),
+            ),
             blocks: vec![],
         };
 
@@ -331,39 +316,35 @@ mod tests {
         transform.transform(&mut ast, &mut ctx).unwrap();
 
         // Check that pagetitle was added
-        let meta_value = config_value_to_meta(&ast.meta);
-        if let MetaValueWithSourceInfo::MetaMap { entries, .. } = &meta_value {
+        if let ConfigValueKind::Map(entries) = &ast.meta.value {
             let pagetitle = entries.iter().find(|e| e.key == "pagetitle");
             assert!(pagetitle.is_some());
             if let Some(entry) = pagetitle {
-                if let MetaValueWithSourceInfo::MetaString { value, .. } = &entry.value {
-                    assert_eq!(value, "My Document");
-                } else {
-                    panic!("Expected MetaString for pagetitle");
-                }
+                let value = entry.value.as_str().expect("Expected string for pagetitle");
+                assert_eq!(value, "My Document");
             }
         } else {
-            panic!("Expected MetaMap");
+            panic!("Expected Map");
         }
     }
 
     #[test]
     fn test_adds_pagetitle_from_inlines_title() {
         let mut ast = Pandoc {
-            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-                entries: vec![MetaMapEntry {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaInlines {
-                        content: vec![Inline::Str(Str {
+                    value: ConfigValue::new_inlines(
+                        vec![Inline::Str(Str {
                             text: "Inline Title".to_string(),
                             source_info: dummy_source_info(),
                         })],
-                        source_info: dummy_source_info(),
-                    },
+                        dummy_source_info(),
+                    ),
                 }],
-                source_info: dummy_source_info(),
-            }),
+                dummy_source_info(),
+            ),
             blocks: vec![],
         };
 
@@ -376,16 +357,12 @@ mod tests {
         let transform = MetadataNormalizeTransform::new();
         transform.transform(&mut ast, &mut ctx).unwrap();
 
-        let meta_value = config_value_to_meta(&ast.meta);
-        if let MetaValueWithSourceInfo::MetaMap { entries, .. } = &meta_value {
+        if let ConfigValueKind::Map(entries) = &ast.meta.value {
             let pagetitle = entries.iter().find(|e| e.key == "pagetitle");
             assert!(pagetitle.is_some());
             if let Some(entry) = pagetitle {
-                if let MetaValueWithSourceInfo::MetaString { value, .. } = &entry.value {
-                    assert_eq!(value, "Inline Title");
-                } else {
-                    panic!("Expected MetaString for pagetitle");
-                }
+                let value = entry.value.as_str().expect("Expected string for pagetitle");
+                assert_eq!(value, "Inline Title");
             }
         }
     }
@@ -393,27 +370,21 @@ mod tests {
     #[test]
     fn test_preserves_existing_pagetitle() {
         let mut ast = Pandoc {
-            meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-                entries: vec![
-                    MetaMapEntry {
+            meta: ConfigValue::new_map(
+                vec![
+                    ConfigMapEntry {
                         key: "title".to_string(),
                         key_source: dummy_source_info(),
-                        value: MetaValueWithSourceInfo::MetaString {
-                            value: "My Document".to_string(),
-                            source_info: dummy_source_info(),
-                        },
+                        value: ConfigValue::new_string("My Document", dummy_source_info()),
                     },
-                    MetaMapEntry {
+                    ConfigMapEntry {
                         key: "pagetitle".to_string(),
                         key_source: dummy_source_info(),
-                        value: MetaValueWithSourceInfo::MetaString {
-                            value: "Custom Page Title".to_string(),
-                            source_info: dummy_source_info(),
-                        },
+                        value: ConfigValue::new_string("Custom Page Title", dummy_source_info()),
                     },
                 ],
-                source_info: dummy_source_info(),
-            }),
+                dummy_source_info(),
+            ),
             blocks: vec![],
         };
 
@@ -427,14 +398,15 @@ mod tests {
         transform.transform(&mut ast, &mut ctx).unwrap();
 
         // Check that pagetitle was NOT overwritten
-        let meta_value = config_value_to_meta(&ast.meta);
-        if let MetaValueWithSourceInfo::MetaMap { entries, .. } = &meta_value {
+        if let ConfigValueKind::Map(entries) = &ast.meta.value {
             let pagetitle_entries: Vec<_> =
                 entries.iter().filter(|e| e.key == "pagetitle").collect();
             assert_eq!(pagetitle_entries.len(), 1);
-            if let MetaValueWithSourceInfo::MetaString { value, .. } = &pagetitle_entries[0].value {
-                assert_eq!(value, "Custom Page Title");
-            }
+            let value = pagetitle_entries[0]
+                .value
+                .as_str()
+                .expect("Expected string for pagetitle");
+            assert_eq!(value, "Custom Page Title");
         }
     }
 

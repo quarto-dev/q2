@@ -21,7 +21,7 @@
 //! overall document structure while the HTML writer controls content rendering.
 
 use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
-use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
+use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 
 use crate::Result;
 
@@ -63,11 +63,11 @@ pub fn default_html_template() -> Result<Template> {
 ///
 /// # Arguments
 /// * `body` - The rendered body content (HTML)
-/// * `meta` - Document metadata from the Pandoc AST
+/// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
 ///
 /// # Returns
 /// The complete HTML document as a string.
-pub fn render_with_template(body: &str, meta: &MetaValueWithSourceInfo) -> Result<String> {
+pub fn render_with_template(body: &str, meta: &ConfigValue) -> Result<String> {
     let template = default_html_template()?;
 
     // Build template context from metadata
@@ -90,14 +90,14 @@ pub fn render_with_template(body: &str, meta: &MetaValueWithSourceInfo) -> Resul
 /// # Arguments
 /// * `template` - A compiled template
 /// * `body` - The rendered body content (HTML)
-/// * `meta` - Document metadata from the Pandoc AST
+/// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
 ///
 /// # Returns
 /// The complete HTML document as a string.
 pub fn render_with_custom_template(
     template: &Template,
     body: &str,
-    meta: &MetaValueWithSourceInfo,
+    meta: &ConfigValue,
 ) -> Result<String> {
     let mut ctx = TemplateContext::new();
     ctx.insert("body", TemplateValue::String(body.to_string()));
@@ -116,14 +116,14 @@ pub fn render_with_custom_template(
 ///
 /// # Arguments
 /// * `body` - The rendered body content (HTML)
-/// * `meta` - Document metadata from the Pandoc AST
+/// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
 /// * `css_paths` - Paths to CSS files (relative to output HTML)
 ///
 /// # Returns
 /// The complete HTML document as a string.
 pub fn render_with_resources(
     body: &str,
-    meta: &MetaValueWithSourceInfo,
+    meta: &ConfigValue,
     css_paths: &[String],
 ) -> Result<String> {
     let template = default_html_template()?;
@@ -154,14 +154,14 @@ pub fn render_with_resources(
 
 /// Add metadata from the Pandoc AST to the template context, excluding specific keys.
 fn add_metadata_to_context_except(
-    meta: &MetaValueWithSourceInfo,
+    meta: &ConfigValue,
     ctx: &mut TemplateContext,
     exclude: &[&str],
 ) {
-    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+    if let ConfigValueKind::Map(entries) = &meta.value {
         for entry in entries {
             if !exclude.contains(&entry.key.as_str()) {
-                let value = meta_value_to_template_value(&entry.value);
+                let value = config_value_to_template_value(&entry.value);
                 ctx.insert(&entry.key, value);
             }
         }
@@ -169,24 +169,24 @@ fn add_metadata_to_context_except(
 }
 
 /// Extract CSS paths from document metadata.
-fn extract_css_from_meta(meta: &MetaValueWithSourceInfo) -> Option<Vec<TemplateValue>> {
-    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+fn extract_css_from_meta(meta: &ConfigValue) -> Option<Vec<TemplateValue>> {
+    if let ConfigValueKind::Map(entries) = &meta.value {
         for entry in entries {
             if entry.key == "css" {
-                return Some(match &entry.value {
-                    MetaValueWithSourceInfo::MetaString { value, .. } => {
-                        vec![TemplateValue::String(value.clone())]
-                    }
-                    MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                        // YAML values like `css: custom.css` are often parsed as inlines
-                        let text = inlines_to_text(content);
-                        vec![TemplateValue::String(text)]
-                    }
-                    MetaValueWithSourceInfo::MetaList { items, .. } => {
-                        items.iter().map(meta_value_to_template_value).collect()
-                    }
-                    _ => Vec::new(),
-                });
+                // Try string first
+                if let Some(s) = entry.value.as_str() {
+                    return Some(vec![TemplateValue::String(s.to_string())]);
+                }
+                // Try inlines (YAML values like `css: custom.css` are often parsed as inlines)
+                if let ConfigValueKind::PandocInlines(content) = &entry.value.value {
+                    let text = inlines_to_text(content);
+                    return Some(vec![TemplateValue::String(text)]);
+                }
+                // Try array
+                if let ConfigValueKind::Array(items) = &entry.value.value {
+                    return Some(items.iter().map(config_value_to_template_value).collect());
+                }
+                return Some(Vec::new());
             }
         }
     }
@@ -194,43 +194,65 @@ fn extract_css_from_meta(meta: &MetaValueWithSourceInfo) -> Option<Vec<TemplateV
 }
 
 /// Add metadata from the Pandoc AST to the template context.
-fn add_metadata_to_context(meta: &MetaValueWithSourceInfo, ctx: &mut TemplateContext) {
-    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+fn add_metadata_to_context(meta: &ConfigValue, ctx: &mut TemplateContext) {
+    if let ConfigValueKind::Map(entries) = &meta.value {
         for entry in entries {
-            let value = meta_value_to_template_value(&entry.value);
+            let value = config_value_to_template_value(&entry.value);
             ctx.insert(&entry.key, value);
         }
     }
 }
 
-/// Convert a Pandoc MetaValue to a TemplateValue.
-fn meta_value_to_template_value(meta: &MetaValueWithSourceInfo) -> TemplateValue {
-    match meta {
-        MetaValueWithSourceInfo::MetaString { value, .. } => TemplateValue::String(value.clone()),
-        MetaValueWithSourceInfo::MetaBool { value, .. } => TemplateValue::Bool(*value),
-        MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+/// Convert a ConfigValue to a TemplateValue.
+fn config_value_to_template_value(meta: &ConfigValue) -> TemplateValue {
+    // Try string-like values first (handles Scalar(String), Path, Glob, Expr)
+    if let Some(s) = meta.as_str() {
+        return TemplateValue::String(s.to_string());
+    }
+
+    // Try boolean
+    if let Some(b) = meta.as_bool() {
+        return TemplateValue::Bool(b);
+    }
+
+    // Try integer
+    if let Some(i) = meta.as_int() {
+        return TemplateValue::String(i.to_string());
+    }
+
+    // Check for null
+    if meta.is_null() {
+        return TemplateValue::Null;
+    }
+
+    // Handle other variants
+    match &meta.value {
+        ConfigValueKind::PandocInlines(content) => {
             // Convert inlines to plain text for template use
             let text = inlines_to_text(content);
             TemplateValue::String(text)
         }
-        MetaValueWithSourceInfo::MetaBlocks { content, .. } => {
+        ConfigValueKind::PandocBlocks(content) => {
             // Convert blocks to plain text for template use
             let text = blocks_to_text(content);
             TemplateValue::String(text)
         }
-        MetaValueWithSourceInfo::MetaList { items, .. } => {
+        ConfigValueKind::Array(items) => {
             let list_items: Vec<TemplateValue> =
-                items.iter().map(meta_value_to_template_value).collect();
+                items.iter().map(config_value_to_template_value).collect();
             TemplateValue::List(list_items)
         }
-        MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+        ConfigValueKind::Map(entries) => {
             let mut map = std::collections::HashMap::new();
             for entry in entries {
-                let value = meta_value_to_template_value(&entry.value);
+                let value = config_value_to_template_value(&entry.value);
                 map.insert(entry.key.clone(), value);
             }
             TemplateValue::Map(map)
         }
+        // Scalar variants already handled above (string, bool, int, null)
+        // Path, Glob, Expr already handled by as_str()
+        _ => TemplateValue::Null,
     }
 }
 
@@ -314,7 +336,7 @@ fn blocks_to_text(blocks: &[quarto_pandoc_types::block::Block]) -> String {
 mod tests {
     use super::*;
     use quarto_pandoc_types::inline::Str;
-    use quarto_pandoc_types::meta::MetaMapEntry;
+    use quarto_pandoc_types::ConfigMapEntry;
     use quarto_source_map::{FileId, Location, Range, SourceInfo};
 
     fn dummy_source_info() -> SourceInfo {
@@ -343,17 +365,14 @@ mod tests {
 
     #[test]
     fn test_render_simple_document() {
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![MetaMapEntry {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
                 key: "pagetitle".to_string(),
                 key_source: dummy_source_info(),
-                value: MetaValueWithSourceInfo::MetaString {
-                    value: "Test Document".to_string(),
-                    source_info: dummy_source_info(),
-                },
+                value: ConfigValue::new_string("Test Document", dummy_source_info()),
             }],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
         let body = "<p>Hello, World!</p>";
         let result = render_with_template(body, &meta);
@@ -367,36 +386,27 @@ mod tests {
 
     #[test]
     fn test_render_with_css() {
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![
-                MetaMapEntry {
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
                     key: "pagetitle".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "Test".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("Test", dummy_source_info()),
                 },
-                MetaMapEntry {
+                ConfigMapEntry {
                     key: "css".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaList {
-                        items: vec![
-                            MetaValueWithSourceInfo::MetaString {
-                                value: "style1.css".to_string(),
-                                source_info: dummy_source_info(),
-                            },
-                            MetaValueWithSourceInfo::MetaString {
-                                value: "style2.css".to_string(),
-                                source_info: dummy_source_info(),
-                            },
+                    value: ConfigValue::new_array(
+                        vec![
+                            ConfigValue::new_string("style1.css", dummy_source_info()),
+                            ConfigValue::new_string("style2.css", dummy_source_info()),
                         ],
-                        source_info: dummy_source_info(),
-                    },
+                        dummy_source_info(),
+                    ),
                 },
             ],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
         let body = "<p>Content</p>";
         let result = render_with_template(body, &meta);
@@ -408,29 +418,23 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_value_conversion_string() {
-        let meta = MetaValueWithSourceInfo::MetaString {
-            value: "test".to_string(),
-            source_info: dummy_source_info(),
-        };
-        let value = meta_value_to_template_value(&meta);
+    fn test_config_value_conversion_string() {
+        let meta = ConfigValue::new_string("test", dummy_source_info());
+        let value = config_value_to_template_value(&meta);
         assert_eq!(value, TemplateValue::String("test".to_string()));
     }
 
     #[test]
-    fn test_meta_value_conversion_bool() {
-        let meta = MetaValueWithSourceInfo::MetaBool {
-            value: true,
-            source_info: dummy_source_info(),
-        };
-        let value = meta_value_to_template_value(&meta);
+    fn test_config_value_conversion_bool() {
+        let meta = ConfigValue::new_bool(true, dummy_source_info());
+        let value = config_value_to_template_value(&meta);
         assert_eq!(value, TemplateValue::Bool(true));
     }
 
     #[test]
-    fn test_meta_value_conversion_inlines() {
-        let meta = MetaValueWithSourceInfo::MetaInlines {
-            content: vec![
+    fn test_config_value_conversion_inlines() {
+        let meta = ConfigValue::new_inlines(
+            vec![
                 quarto_pandoc_types::inline::Inline::Str(Str {
                     text: "Hello".to_string(),
                     source_info: dummy_source_info(),
@@ -443,28 +447,22 @@ mod tests {
                     source_info: dummy_source_info(),
                 }),
             ],
-            source_info: dummy_source_info(),
-        };
-        let value = meta_value_to_template_value(&meta);
+            dummy_source_info(),
+        );
+        let value = config_value_to_template_value(&meta);
         assert_eq!(value, TemplateValue::String("Hello World".to_string()));
     }
 
     #[test]
-    fn test_meta_value_conversion_list() {
-        let meta = MetaValueWithSourceInfo::MetaList {
-            items: vec![
-                MetaValueWithSourceInfo::MetaString {
-                    value: "a".to_string(),
-                    source_info: dummy_source_info(),
-                },
-                MetaValueWithSourceInfo::MetaString {
-                    value: "b".to_string(),
-                    source_info: dummy_source_info(),
-                },
+    fn test_config_value_conversion_list() {
+        let meta = ConfigValue::new_array(
+            vec![
+                ConfigValue::new_string("a", dummy_source_info()),
+                ConfigValue::new_string("b", dummy_source_info()),
             ],
-            source_info: dummy_source_info(),
-        };
-        let value = meta_value_to_template_value(&meta);
+            dummy_source_info(),
+        );
+        let value = config_value_to_template_value(&meta);
         match value {
             TemplateValue::List(items) => {
                 assert_eq!(items.len(), 2);

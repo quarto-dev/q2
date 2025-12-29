@@ -38,9 +38,9 @@ use hashlink::LinkedHashMap;
 use quarto_config::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp, MergedConfig};
 use quarto_doctemplate::{TemplateContext, TemplateValue};
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_pandoc_types::AttrSourceInfo;
 use quarto_pandoc_types::inline::{Inline, Span, Str};
 use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
-use quarto_pandoc_types::AttrSourceInfo;
 use quarto_source_map::SourceInfo;
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
@@ -369,7 +369,7 @@ pub fn config_to_template_context(
 /// These defaults are meant to be merged with document metadata using
 /// `MergedConfig::new(vec![&defaults, &doc_meta])` so document values
 /// can override them.
-pub fn compute_template_defaults(meta: &MetaValueWithSourceInfo) -> ConfigValue {
+pub fn compute_template_defaults(meta: &ConfigValue) -> ConfigValue {
     let mut defaults: Vec<ConfigMapEntry> = Vec::new();
 
     // Default language
@@ -395,15 +395,15 @@ pub fn compute_template_defaults(meta: &MetaValueWithSourceInfo) -> ConfigValue 
 ///
 /// Pandoc derives `pagetitle` by rendering the `title` field to plain text.
 /// This is used for the HTML `<title>` element, which cannot contain markup.
-fn derive_pagetitle(meta: &MetaValueWithSourceInfo) -> Option<String> {
-    // meta should be a MetaMap at the root
-    if let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta {
+fn derive_pagetitle(meta: &ConfigValue) -> Option<String> {
+    // meta should be a Map at the root
+    if let ConfigValueKind::Map(entries) = &meta.value {
         // Find the "title" entry
         for entry in entries {
             if entry.key == "title" {
-                return match &entry.value {
-                    MetaValueWithSourceInfo::MetaString { value, .. } => Some(value.clone()),
-                    MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                return match &entry.value.value {
+                    ConfigValueKind::Scalar(Yaml::String(s)) => Some(s.clone()),
+                    ConfigValueKind::PandocInlines(content) => {
                         let (plain_text, _diags) = plaintext::inlines_to_string(content);
                         Some(plain_text)
                     }
@@ -422,15 +422,14 @@ fn derive_pagetitle(meta: &MetaValueWithSourceInfo) -> Option<String> {
 /// Merge template defaults with document metadata and convert to TemplateContext.
 ///
 /// This is the main entry point for template metadata preparation. It:
-/// 1. Converts document metadata to ConfigValue
-/// 2. Computes template defaults (lang, pagetitle)
-/// 3. Merges defaults with document metadata (doc values override defaults)
-/// 4. Materializes the merged result
-/// 5. Converts to TemplateContext
+/// 1. Computes template defaults (lang, pagetitle)
+/// 2. Merges defaults with document metadata (doc values override defaults)
+/// 3. Materializes the merged result
+/// 4. Converts to TemplateContext
 ///
 /// # Arguments
 ///
-/// * `meta` - The document metadata
+/// * `meta` - The document metadata as ConfigValue
 /// * `body` - The pre-rendered body content
 /// * `writer` - The writer to use for rendering inlines/blocks
 ///
@@ -438,22 +437,19 @@ fn derive_pagetitle(meta: &MetaValueWithSourceInfo) -> Option<String> {
 ///
 /// A tuple of (context, diagnostics).
 pub fn merged_metadata_to_context(
-    meta: &MetaValueWithSourceInfo,
+    meta: &ConfigValue,
     body: String,
     writer: MetaWriter,
 ) -> (TemplateContext, Vec<DiagnosticMessage>) {
     let mut all_diagnostics = Vec::new();
 
-    // Step 1: Convert document metadata to ConfigValue
-    let doc_meta = meta_to_config_value(meta);
-
-    // Step 2: Compute template defaults
+    // Step 1: Compute template defaults
     let template_meta = compute_template_defaults(meta);
 
-    // Step 3: Merge (template_meta has lower priority, doc_meta has higher priority)
-    let merged = MergedConfig::new(vec![&template_meta, &doc_meta]);
+    // Step 2: Merge (template_meta has lower priority, meta has higher priority)
+    let merged = MergedConfig::new(vec![&template_meta, meta]);
 
-    // Step 4: Materialize
+    // Step 3: Materialize
     let materialized = match merged.materialize() {
         Ok(config) => config,
         Err(e) => {
@@ -464,11 +460,11 @@ pub fn merged_metadata_to_context(
                     .build(),
             );
             // Fall back to just document metadata
-            doc_meta.clone()
+            meta.clone()
         }
     };
 
-    // Step 5: Convert to TemplateContext
+    // Step 4: Convert to TemplateContext
     let (mut template_ctx, conv_diags) = config_to_template_context(&materialized, writer);
     all_diagnostics.extend(conv_diags);
 
@@ -482,7 +478,6 @@ pub fn merged_metadata_to_context(
 mod tests {
     use super::*;
     use crate::pandoc::inline::{Emph, Inline, Space, Str};
-    use quarto_pandoc_types::meta::MetaMapEntry;
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::default()
@@ -502,48 +497,8 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_string_to_config_value() {
-        let meta = MetaValueWithSourceInfo::MetaString {
-            value: "hello".to_string(),
-            source_info: dummy_source_info(),
-        };
-        let config = meta_to_config_value(&meta);
-
-        assert!(
-            matches!(config.value, ConfigValueKind::Scalar(Yaml::String(ref s)) if s == "hello")
-        );
-    }
-
-    #[test]
-    fn test_meta_bool_to_config_value() {
-        let meta = MetaValueWithSourceInfo::MetaBool {
-            value: true,
-            source_info: dummy_source_info(),
-        };
-        let config = meta_to_config_value(&meta);
-
-        assert!(matches!(
-            config.value,
-            ConfigValueKind::Scalar(Yaml::Boolean(true))
-        ));
-    }
-
-    #[test]
-    fn test_meta_inlines_to_config_value() {
-        let inlines = vec![make_str("hello"), make_space(), make_str("world")];
-        let meta = MetaValueWithSourceInfo::MetaInlines {
-            content: inlines,
-            source_info: dummy_source_info(),
-        };
-        let config = meta_to_config_value(&meta);
-
-        assert!(matches!(config.value, ConfigValueKind::PandocInlines(_)));
-        assert_eq!(config.merge_op, MergeOp::Prefer);
-    }
-
-    #[test]
     fn test_config_to_template_value_scalar() {
-        let config = ConfigValue::new_scalar(Yaml::String("test".to_string()), dummy_source_info());
+        let config = ConfigValue::new_string("test", dummy_source_info());
         let mut ctx = ConfigConversionContext::new(MetaWriter::Html);
         let result = config_to_template_value(&config, &mut ctx);
 
@@ -551,20 +506,37 @@ mod tests {
     }
 
     #[test]
+    fn test_config_to_template_value_bool() {
+        let config = ConfigValue::new_bool(true, dummy_source_info());
+        let mut ctx = ConfigConversionContext::new(MetaWriter::Html);
+        let result = config_to_template_value(&config, &mut ctx);
+
+        assert_eq!(result, TemplateValue::Bool(true));
+    }
+
+    #[test]
+    fn test_config_to_template_value_inlines() {
+        let inlines = vec![make_str("hello"), make_space(), make_str("world")];
+        let config = ConfigValue::new_inlines(inlines, dummy_source_info());
+        let mut ctx = ConfigConversionContext::new(MetaWriter::Html);
+        let result = config_to_template_value(&config, &mut ctx);
+
+        // Inlines rendered to HTML
+        assert_eq!(result, TemplateValue::String("hello world".to_string()));
+    }
+
+    #[test]
     fn test_derive_pagetitle_from_string() {
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![MetaMapEntry {
+        let config = ConfigValue::new_map(
+            vec![ConfigMapEntry {
                 key: "title".to_string(),
                 key_source: dummy_source_info(),
-                value: MetaValueWithSourceInfo::MetaString {
-                    value: "My Title".to_string(),
-                    source_info: dummy_source_info(),
-                },
+                value: ConfigValue::new_string("My Title", dummy_source_info()),
             }],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
-        let pagetitle = derive_pagetitle(&meta);
+        let pagetitle = derive_pagetitle(&config);
         assert_eq!(pagetitle, Some("My Title".to_string()));
     }
 
@@ -580,52 +552,42 @@ mod tests {
             }),
         ];
 
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![MetaMapEntry {
+        let config = ConfigValue::new_map(
+            vec![ConfigMapEntry {
                 key: "title".to_string(),
                 key_source: dummy_source_info(),
-                value: MetaValueWithSourceInfo::MetaInlines {
-                    content: inlines,
-                    source_info: dummy_source_info(),
-                },
+                value: ConfigValue::new_inlines(inlines, dummy_source_info()),
             }],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
-        let pagetitle = derive_pagetitle(&meta);
+        let pagetitle = derive_pagetitle(&config);
         assert_eq!(pagetitle, Some("Hello world".to_string()));
     }
 
     #[test]
     fn test_compute_template_defaults_has_lang() {
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![],
-            source_info: dummy_source_info(),
-        };
+        let config = ConfigValue::new_map(vec![], dummy_source_info());
 
-        let defaults = compute_template_defaults(&meta);
+        let defaults = compute_template_defaults(&config);
 
-        // Use ConfigValue's get() method instead of entries.get()
         let lang = defaults.get("lang").expect("lang should be present");
         assert!(matches!(&lang.value, ConfigValueKind::Scalar(Yaml::String(s)) if s == "en"));
     }
 
     #[test]
     fn test_merged_metadata_includes_defaults() {
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![MetaMapEntry {
+        let config = ConfigValue::new_map(
+            vec![ConfigMapEntry {
                 key: "title".to_string(),
                 key_source: dummy_source_info(),
-                value: MetaValueWithSourceInfo::MetaString {
-                    value: "Test Title".to_string(),
-                    source_info: dummy_source_info(),
-                },
+                value: ConfigValue::new_string("Test Title", dummy_source_info()),
             }],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
         let (ctx, diags) =
-            merged_metadata_to_context(&meta, "<p>Body</p>".to_string(), MetaWriter::Html);
+            merged_metadata_to_context(&config, "<p>Body</p>".to_string(), MetaWriter::Html);
 
         assert!(diags.is_empty(), "Expected no diagnostics: {:?}", diags);
 
@@ -657,29 +619,23 @@ mod tests {
     #[test]
     fn test_document_values_override_defaults() {
         // Document explicitly sets lang
-        let meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![
-                MetaMapEntry {
+        let config = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "Test".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("Test", dummy_source_info()),
                 },
-                MetaMapEntry {
+                ConfigMapEntry {
                     key: "lang".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "de".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("de", dummy_source_info()),
                 },
             ],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
-        let (ctx, _diags) = merged_metadata_to_context(&meta, "".to_string(), MetaWriter::Html);
+        let (ctx, _diags) = merged_metadata_to_context(&config, "".to_string(), MetaWriter::Html);
 
         // Document's lang should override default
         assert_eq!(
@@ -688,151 +644,84 @@ mod tests {
         );
     }
 
-    // =========================================================================
-    // Bidirectional conversion tests (ConfigValue <-> MetaValueWithSourceInfo)
-    // =========================================================================
-
     #[test]
-    fn test_config_string_to_meta() {
-        let config =
-            ConfigValue::new_scalar(Yaml::String("hello".to_string()), dummy_source_info());
-        let meta = config_value_to_meta(&config);
-
-        assert!(matches!(
-            meta,
-            MetaValueWithSourceInfo::MetaString { ref value, .. } if value == "hello"
-        ));
-    }
-
-    #[test]
-    fn test_config_bool_to_meta() {
-        let config = ConfigValue::new_scalar(Yaml::Boolean(true), dummy_source_info());
-        let meta = config_value_to_meta(&config);
-
-        assert!(matches!(
-            meta,
-            MetaValueWithSourceInfo::MetaBool { value: true, .. }
-        ));
-    }
-
-    #[test]
-    fn test_config_inlines_to_meta() {
-        let inlines = vec![make_str("hello")];
-        let config = ConfigValue::new_inlines(inlines.clone(), dummy_source_info());
-        let meta = config_value_to_meta(&config);
-
-        match meta {
-            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                assert_eq!(content.len(), 1);
-            }
-            _ => panic!("Expected MetaInlines"),
-        }
-    }
-
-    #[test]
-    fn test_config_array_to_meta() {
+    fn test_config_to_template_value_array() {
         let items = vec![
-            ConfigValue::new_scalar(Yaml::String("a".to_string()), dummy_source_info()),
-            ConfigValue::new_scalar(Yaml::String("b".to_string()), dummy_source_info()),
+            ConfigValue::new_string("a", dummy_source_info()),
+            ConfigValue::new_string("b", dummy_source_info()),
         ];
         let config = ConfigValue::new_array(items, dummy_source_info());
-        let meta = config_value_to_meta(&config);
+        let mut ctx = ConfigConversionContext::new(MetaWriter::Html);
+        let result = config_to_template_value(&config, &mut ctx);
 
-        match meta {
-            MetaValueWithSourceInfo::MetaList { items, .. } => {
+        match result {
+            TemplateValue::List(items) => {
                 assert_eq!(items.len(), 2);
+                assert_eq!(items[0], TemplateValue::String("a".to_string()));
+                assert_eq!(items[1], TemplateValue::String("b".to_string()));
             }
-            _ => panic!("Expected MetaList"),
+            _ => panic!("Expected List"),
         }
     }
 
     #[test]
-    fn test_config_map_to_meta() {
-        let entries = vec![quarto_config::ConfigMapEntry {
+    fn test_config_to_template_value_map() {
+        let entries = vec![ConfigMapEntry {
             key: "key".to_string(),
             key_source: dummy_source_info(),
-            value: ConfigValue::new_scalar(Yaml::String("value".to_string()), dummy_source_info()),
+            value: ConfigValue::new_string("value", dummy_source_info()),
         }];
         let config = ConfigValue::new_map(entries, dummy_source_info());
-        let meta = config_value_to_meta(&config);
+        let mut ctx = ConfigConversionContext::new(MetaWriter::Html);
+        let result = config_to_template_value(&config, &mut ctx);
 
-        match meta {
-            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
-                assert_eq!(entries.len(), 1);
-                assert_eq!(entries[0].key, "key");
+        match result {
+            TemplateValue::Map(map) => {
+                assert_eq!(map.len(), 1);
+                assert_eq!(
+                    map.get("key"),
+                    Some(&TemplateValue::String("value".to_string()))
+                );
             }
-            _ => panic!("Expected MetaMap"),
+            _ => panic!("Expected Map"),
         }
     }
 
     #[test]
-    fn test_config_path_to_meta_inlines() {
-        // Path variant should convert to MetaInlines with plain Str (matches legacy behavior)
+    fn test_config_to_template_value_path() {
+        // Path variant should convert to string
         let config = ConfigValue::new_path("./data.csv".to_string(), dummy_source_info());
-        let meta = config_value_to_meta(&config);
+        let mut ctx = ConfigConversionContext::new(MetaWriter::Html);
+        let result = config_to_template_value(&config, &mut ctx);
 
-        match meta {
-            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                assert_eq!(content.len(), 1);
-                if let Inline::Str(s) = &content[0] {
-                    assert_eq!(s.text, "./data.csv");
-                } else {
-                    panic!("Expected Str inline");
-                }
-            }
-            _ => panic!("Expected MetaInlines for Path"),
-        }
+        assert_eq!(result, TemplateValue::String("./data.csv".to_string()));
     }
 
     #[test]
-    fn test_roundtrip_meta_to_config_to_meta() {
-        // Test that meta -> config -> meta preserves the essential structure
-        let original_meta = MetaValueWithSourceInfo::MetaMap {
-            entries: vec![
-                MetaMapEntry {
+    fn test_config_to_template_context() {
+        let config = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
                     key: "title".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaString {
-                        value: "Hello".to_string(),
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_string("Hello", dummy_source_info()),
                 },
-                MetaMapEntry {
+                ConfigMapEntry {
                     key: "enabled".to_string(),
                     key_source: dummy_source_info(),
-                    value: MetaValueWithSourceInfo::MetaBool {
-                        value: true,
-                        source_info: dummy_source_info(),
-                    },
+                    value: ConfigValue::new_bool(true, dummy_source_info()),
                 },
             ],
-            source_info: dummy_source_info(),
-        };
+            dummy_source_info(),
+        );
 
-        // Convert to config and back
-        let config = meta_to_config_value(&original_meta);
-        let roundtrip_meta = config_value_to_meta(&config);
+        let (ctx, diags) = config_to_template_context(&config, MetaWriter::Html);
+        assert!(diags.is_empty());
 
-        // Check structure is preserved
-        match &roundtrip_meta {
-            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
-                assert_eq!(entries.len(), 2);
-
-                // Check title
-                let title = entries.iter().find(|e| e.key == "title").unwrap();
-                assert!(matches!(
-                    &title.value,
-                    MetaValueWithSourceInfo::MetaString { value, .. } if value == "Hello"
-                ));
-
-                // Check enabled
-                let enabled = entries.iter().find(|e| e.key == "enabled").unwrap();
-                assert!(matches!(
-                    &enabled.value,
-                    MetaValueWithSourceInfo::MetaBool { value: true, .. }
-                ));
-            }
-            _ => panic!("Expected MetaMap after roundtrip"),
-        }
+        assert_eq!(
+            ctx.get("title"),
+            Some(&TemplateValue::String("Hello".to_string()))
+        );
+        assert_eq!(ctx.get("enabled"), Some(&TemplateValue::Bool(true)));
     }
 }
