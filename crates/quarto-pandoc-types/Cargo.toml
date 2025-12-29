@@ -17,6 +17,8 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 hashlink = { version = "0.10.0", features = ["serde_impl"] }
 rustc-hash = "2.1"
+yaml-rust2 = { workspace = true }
+indexmap = "2.0"
 
 [lints]
 workspace = true

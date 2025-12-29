@@ -26,8 +26,7 @@
 //! ```
 
 use crate::merged::{MergedConfig, MergedCursor, MergedValue};
-use crate::types::{ConfigError, ConfigValue, ConfigValueKind, MergeOp};
-use indexmap::IndexMap;
+use crate::types::{ConfigError, ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::SourceInfo;
 
@@ -90,7 +89,6 @@ fn materialize_cursor(
                 value: scalar.value.value.clone(),
                 source_info: scalar.value.source_info.clone(),
                 merge_op: scalar.value.merge_op,
-                interpretation: scalar.value.interpretation,
             })
         }
         Some(MergedValue::Array(array)) => {
@@ -104,7 +102,6 @@ fn materialize_cursor(
                     value: item.value.value.clone(),
                     source_info: item.value.source_info.clone(),
                     merge_op: item.value.merge_op,
-                    interpretation: item.value.interpretation,
                 })
                 .collect();
 
@@ -119,19 +116,22 @@ fn materialize_cursor(
                 value: ConfigValueKind::Array(items),
                 source_info,
                 merge_op: MergeOp::Concat, // Materialized arrays don't have prefer semantics
-                interpretation: None,
             })
         }
         Some(MergedValue::Map(map)) => {
             // Materialize map entries recursively
-            let mut entries = IndexMap::new();
+            let mut entries: Vec<ConfigMapEntry> = Vec::new();
             let mut path = path.to_vec();
 
             for (key, child_cursor) in map.iter() {
                 path.push(key.to_string());
                 let child_value = materialize_cursor(&child_cursor, depth + 1, options, &path)?;
                 path.pop();
-                entries.insert(key.to_string(), child_value);
+                entries.push(ConfigMapEntry {
+                    key: key.to_string(),
+                    key_source: SourceInfo::default(), // We lose key source info during materialization
+                    value: child_value,
+                });
             }
 
             // Source info: use the cursor's path to find a representative source
@@ -158,7 +158,6 @@ fn materialize_cursor(
                 value: ConfigValueKind::Map(entries),
                 source_info,
                 merge_op: MergeOp::Concat,
-                interpretation: None,
             })
         }
         None => {
@@ -229,12 +228,12 @@ fn validate_layer(
             }
         }
         ConfigValueKind::Map(entries) => {
-            for value in entries.values() {
-                validate_layer(value, _diagnostics)?;
+            for entry in entries {
+                validate_layer(&entry.value, _diagnostics)?;
             }
         }
         _ => {
-            // Scalars and Pandoc types are always valid
+            // Scalars, Pandoc types, and deferred interpretations (Path/Glob/Expr) are always valid
         }
     }
     Ok(())
@@ -243,7 +242,6 @@ fn validate_layer(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Interpretation;
     use yaml_rust2::Yaml;
 
     // Helpers
@@ -256,11 +254,15 @@ mod tests {
     }
 
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let map: IndexMap<String, ConfigValue> = entries
+        let map_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
-            .map(|(k, v)| (k.to_string(), v))
+            .map(|(k, v)| ConfigMapEntry {
+                key: k.to_string(),
+                key_source: SourceInfo::default(),
+                value: v,
+            })
             .collect();
-        ConfigValue::new_map(map, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::default())
     }
 
     #[test]
@@ -271,8 +273,7 @@ mod tests {
         let result = merged.materialize().unwrap();
         assert!(result.is_map());
 
-        let map = result.as_map().unwrap();
-        let title = map.get("title").unwrap();
+        let title = result.get("title").unwrap();
         assert_eq!(title.as_yaml().unwrap().as_str(), Some("Hello"));
     }
 
@@ -282,8 +283,7 @@ mod tests {
         let merged = MergedConfig::new(vec![&config]);
 
         let result = merged.materialize().unwrap();
-        let map = result.as_map().unwrap();
-        let items = map.get("items").unwrap();
+        let items = result.get("items").unwrap();
         assert!(items.is_array());
         assert_eq!(items.as_array().unwrap().len(), 2);
     }
@@ -297,9 +297,9 @@ mod tests {
         let merged = MergedConfig::new(vec![&config]);
 
         let result = merged.materialize().unwrap();
-        let format = result.as_map().unwrap().get("format").unwrap();
-        let html = format.as_map().unwrap().get("html").unwrap();
-        let theme = html.as_map().unwrap().get("theme").unwrap();
+        let format = result.get("format").unwrap();
+        let html = format.get("html").unwrap();
+        let theme = html.get("theme").unwrap();
         assert_eq!(theme.as_yaml().unwrap().as_str(), Some("cosmo"));
     }
 
@@ -310,14 +310,22 @@ mod tests {
         let merged = MergedConfig::new(vec![&layer1, &layer2]);
 
         let result = merged.materialize().unwrap();
-        let map = result.as_map().unwrap();
 
         // a from layer1
-        assert_eq!(map.get("a").unwrap().as_yaml().unwrap().as_str(), Some("1"));
+        assert_eq!(
+            result.get("a").unwrap().as_yaml().unwrap().as_str(),
+            Some("1")
+        );
         // b overridden by layer2
-        assert_eq!(map.get("b").unwrap().as_yaml().unwrap().as_str(), Some("3"));
+        assert_eq!(
+            result.get("b").unwrap().as_yaml().unwrap().as_str(),
+            Some("3")
+        );
         // c from layer2
-        assert_eq!(map.get("c").unwrap().as_yaml().unwrap().as_str(), Some("4"));
+        assert_eq!(
+            result.get("c").unwrap().as_yaml().unwrap().as_str(),
+            Some("4")
+        );
     }
 
     #[test]
@@ -384,26 +392,13 @@ mod tests {
     }
 
     #[test]
-    fn test_materialize_preserves_interpretation() {
-        let mut config = scalar("**bold**");
-        config.interpretation = Some(Interpretation::Markdown);
-
-        let wrapper = map(vec![("content", config)]);
-        let merged = MergedConfig::new(vec![&wrapper]);
-
-        let result = merged.materialize().unwrap();
-        let content = result.as_map().unwrap().get("content").unwrap();
-        assert_eq!(content.interpretation, Some(Interpretation::Markdown));
-    }
-
-    #[test]
     fn test_materialize_empty_map() {
         let config = map(vec![]);
         let merged = MergedConfig::new(vec![&config]);
 
         let result = merged.materialize().unwrap();
         assert!(result.is_map());
-        assert!(result.as_map().unwrap().is_empty());
+        assert!(result.is_empty());
     }
 
     #[test]
@@ -412,7 +407,7 @@ mod tests {
         let merged = MergedConfig::new(vec![&config]);
 
         let result = merged.materialize().unwrap();
-        let items = result.as_map().unwrap().get("items").unwrap();
+        let items = result.get("items").unwrap();
         assert!(items.is_array());
         assert!(items.as_array().unwrap().is_empty());
     }

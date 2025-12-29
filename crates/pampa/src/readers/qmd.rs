@@ -10,8 +10,9 @@ use crate::filters::{Filter, FilterReturn};
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::block::MetaBlock;
 use crate::pandoc::meta::parse_metadata_strings_with_source_info;
-use crate::pandoc::rawblock_to_meta_with_source_info;
+use crate::pandoc::rawblock_to_config_value;
 use crate::pandoc::{self, Block, MetaValueWithSourceInfo};
+use crate::template::config_value_to_meta;
 use crate::readers::qmd_error_messages::{produce_diagnostic_messages, produce_error_message_json};
 use crate::traversals;
 use crate::utils::diagnostic_collector::DiagnosticCollector;
@@ -198,9 +199,10 @@ pub fn read<T: Write>(
             if rb.format != "quarto_minus_metadata" {
                 return Unchanged(rb);
             }
-            // Use new rawblock_to_meta_with_source_info - preserves source info!
-            let meta_with_source =
-                rawblock_to_meta_with_source_info(&rb, &context, &mut meta_diagnostics);
+            // Phase 4: Use rawblock_to_config_value then convert to MetaValueWithSourceInfo
+            // This proves the new ConfigValue-based code path works correctly.
+            let config_value = rawblock_to_config_value(&rb, &mut meta_diagnostics);
+            let meta_with_source = config_value_to_meta(&config_value);
 
             // Check if this is lexical metadata
             let is_lexical =

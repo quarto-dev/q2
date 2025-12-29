@@ -28,7 +28,7 @@
 //! ```
 
 use crate::types::{ConfigValue, ConfigValueKind, MergeOp};
-use indexmap::IndexMap;
+use std::collections::HashSet;
 
 /// A lazily-evaluated merged configuration.
 ///
@@ -198,7 +198,8 @@ impl<'a> MergedCursor<'a> {
     /// Returns keys in a deterministic order: keys from earlier layers first,
     /// then keys from later layers that weren't already present.
     pub fn keys(&self) -> Vec<String> {
-        let mut seen_keys = IndexMap::new();
+        let mut result_keys: Vec<(String, usize)> = Vec::new();
+        let mut seen_keys: HashSet<String> = HashSet::new();
         let mut reset_point = 0;
 
         // Walk layers in order, tracking reset points from !prefer
@@ -206,21 +207,25 @@ impl<'a> MergedCursor<'a> {
             if let Some(value) = self.navigate_to(layer) {
                 // Check if this layer resets the map
                 if value.merge_op == MergeOp::Prefer {
+                    result_keys.clear();
                     seen_keys.clear();
                     reset_point = layer_idx;
                 }
 
                 // Add keys from this layer's map
-                if let ConfigValueKind::Map(map) = &value.value {
-                    for key in map.keys() {
-                        seen_keys.entry(key.clone()).or_insert(layer_idx);
+                if let ConfigValueKind::Map(entries) = &value.value {
+                    for entry in entries {
+                        if !seen_keys.contains(&entry.key) {
+                            seen_keys.insert(entry.key.clone());
+                            result_keys.push((entry.key.clone(), layer_idx));
+                        }
                     }
                 }
             }
         }
 
         // Only return keys from layers at or after the reset point
-        seen_keys
+        result_keys
             .into_iter()
             .filter(|(_, idx)| *idx >= reset_point)
             .map(|(key, _)| key)
@@ -237,7 +242,10 @@ impl<'a> MergedCursor<'a> {
                 return match &value.value {
                     ConfigValueKind::Scalar(_)
                     | ConfigValueKind::PandocInlines(_)
-                    | ConfigValueKind::PandocBlocks(_) => Some(MergedValue::Scalar(MergedScalar {
+                    | ConfigValueKind::PandocBlocks(_)
+                    | ConfigValueKind::Path(_)
+                    | ConfigValueKind::Glob(_)
+                    | ConfigValueKind::Expr(_) => Some(MergedValue::Scalar(MergedScalar {
                         value,
                         layer_index: i,
                     })),
@@ -251,7 +259,7 @@ impl<'a> MergedCursor<'a> {
 
     /// Resolve as scalar (last-wins semantics).
     ///
-    /// Scalars, PandocInlines, and PandocBlocks all default to `!prefer` (last wins).
+    /// Scalars, PandocInlines, PandocBlocks, Path, Glob, and Expr all default to `!prefer` (last wins).
     pub fn as_scalar(&self) -> Option<MergedScalar<'a>> {
         // Walk layers in reverse (highest priority first)
         for (i, layer) in self.config.layers.iter().enumerate().rev() {
@@ -261,6 +269,9 @@ impl<'a> MergedCursor<'a> {
                     ConfigValueKind::Scalar(_)
                         | ConfigValueKind::PandocInlines(_)
                         | ConfigValueKind::PandocBlocks(_)
+                        | ConfigValueKind::Path(_)
+                        | ConfigValueKind::Glob(_)
+                        | ConfigValueKind::Expr(_)
                 ) {
                     return Some(MergedScalar {
                         value,
@@ -346,12 +357,7 @@ impl<'a> MergedCursor<'a> {
     fn navigate_to(&self, root: &'a ConfigValue) -> Option<&'a ConfigValue> {
         let mut current = root;
         for key in &self.path {
-            match &current.value {
-                ConfigValueKind::Map(map) => {
-                    current = map.get(key)?;
-                }
-                _ => return None,
-            }
+            current = current.get(key)?;
         }
         Some(current)
     }
@@ -433,6 +439,7 @@ impl<'a> MergedArray<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ConfigMapEntry;
     use quarto_source_map::SourceInfo;
     use yaml_rust2::Yaml;
 
@@ -448,11 +455,15 @@ mod tests {
 
     // Helper to create a map ConfigValue
     fn map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
-        let map: IndexMap<String, ConfigValue> = entries
+        let map_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
-            .map(|(k, v)| (k.to_string(), v))
+            .map(|(k, v)| ConfigMapEntry {
+                key: k.to_string(),
+                key_source: SourceInfo::default(),
+                value: v,
+            })
             .collect();
-        ConfigValue::new_map(map, SourceInfo::default())
+        ConfigValue::new_map(map_entries, SourceInfo::default())
     }
 
     // Helper to create a map with prefer semantics

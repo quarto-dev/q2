@@ -43,7 +43,10 @@ mod merged;
 mod tag;
 mod types;
 
-pub use types::{ConfigError, ConfigValue, ConfigValueKind, Interpretation, MergeOp};
+pub use types::{
+    ConfigError, ConfigMapEntry, ConfigValue, ConfigValueKind, Interpretation,
+    InterpretationContext, MergeOp,
+};
 
 pub use tag::{ParsedTag, parse_tag};
 

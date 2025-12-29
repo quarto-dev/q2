@@ -476,9 +476,7 @@ pub fn structural_eq_block(a: &Block, b: &Block) -> bool {
                     .zip(&b.content)
                     .all(|(a, b)| structural_eq_inlines(a, b))
         }
-        (Block::CodeBlock(a), Block::CodeBlock(b)) => {
-            attr_eq(&a.attr, &b.attr) && a.text == b.text
-        }
+        (Block::CodeBlock(a), Block::CodeBlock(b)) => attr_eq(&a.attr, &b.attr) && a.text == b.text,
         (Block::RawBlock(a), Block::RawBlock(b)) => a.format == b.format && a.text == b.text,
         (Block::BlockQuote(a), Block::BlockQuote(b)) => {
             structural_eq_blocks(&a.content, &b.content)
@@ -500,11 +498,14 @@ pub fn structural_eq_block(a: &Block, b: &Block) -> bool {
         }
         (Block::DefinitionList(a), Block::DefinitionList(b)) => {
             a.content.len() == b.content.len()
-                && a.content.iter().zip(&b.content).all(|((ta, da), (tb, db))| {
-                    structural_eq_inlines(ta, tb)
-                        && da.len() == db.len()
-                        && da.iter().zip(db).all(|(a, b)| structural_eq_blocks(a, b))
-                })
+                && a.content
+                    .iter()
+                    .zip(&b.content)
+                    .all(|((ta, da), (tb, db))| {
+                        structural_eq_inlines(ta, tb)
+                            && da.len() == db.len()
+                            && da.iter().zip(db).all(|(a, b)| structural_eq_blocks(a, b))
+                    })
         }
         (Block::Header(a), Block::Header(b)) => {
             a.level == b.level

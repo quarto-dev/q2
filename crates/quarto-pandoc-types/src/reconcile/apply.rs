@@ -26,8 +26,7 @@ pub fn apply_reconciliation(
     executed: Pandoc,
     plan: &ReconciliationPlan,
 ) -> Pandoc {
-    let result_blocks =
-        apply_reconciliation_to_blocks(original.blocks, executed.blocks, plan);
+    let result_blocks = apply_reconciliation_to_blocks(original.blocks, executed.blocks, plan);
 
     Pandoc {
         // For v1, executed metadata wins entirely
@@ -128,11 +127,8 @@ fn apply_block_container_reconciliation(
                 orig.content.iter_mut().zip(exec.content.into_iter())
             {
                 for (orig_def, exec_def) in orig_defs.iter_mut().zip(exec_defs.into_iter()) {
-                    *orig_def = apply_reconciliation_to_blocks(
-                        std::mem::take(orig_def),
-                        exec_def,
-                        plan,
-                    );
+                    *orig_def =
+                        apply_reconciliation_to_blocks(std::mem::take(orig_def), exec_def, plan);
                 }
             }
             Block::DefinitionList(orig)
@@ -150,8 +146,7 @@ fn apply_list_reconciliation(
 ) -> Vec<Vec<Block>> {
     // Simple pairwise reconciliation
     for (orig_item, exec_item) in orig_items.iter_mut().zip(exec_items.into_iter()) {
-        *orig_item =
-            apply_reconciliation_to_blocks(std::mem::take(orig_item), exec_item, plan);
+        *orig_item = apply_reconciliation_to_blocks(std::mem::take(orig_item), exec_item, plan);
     }
     orig_items
 }
@@ -164,18 +159,15 @@ fn apply_inline_block_reconciliation(
 ) -> Block {
     match (orig_block, exec_block) {
         (Block::Paragraph(mut orig), Block::Paragraph(exec)) => {
-            orig.content =
-                apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
+            orig.content = apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
             Block::Paragraph(orig)
         }
         (Block::Plain(mut orig), Block::Plain(exec)) => {
-            orig.content =
-                apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
+            orig.content = apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
             Block::Plain(orig)
         }
         (Block::Header(mut orig), Block::Header(exec)) => {
-            orig.content =
-                apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
+            orig.content = apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
             Block::Header(orig)
         }
         // Fallback
@@ -196,16 +188,12 @@ fn apply_reconciliation_to_inlines(
 
     for (alignment_idx, alignment) in plan.inline_alignments.iter().enumerate() {
         let inline = match alignment {
-            InlineAlignment::KeepBefore(orig_idx) => {
-                orig_slots[*orig_idx]
-                    .take()
-                    .expect("Original inline already used")
-            }
-            InlineAlignment::UseAfter(exec_idx) => {
-                exec_slots[*exec_idx]
-                    .take()
-                    .expect("Executed inline already used")
-            }
+            InlineAlignment::KeepBefore(orig_idx) => orig_slots[*orig_idx]
+                .take()
+                .expect("Original inline already used"),
+            InlineAlignment::UseAfter(exec_idx) => exec_slots[*exec_idx]
+                .take()
+                .expect("Executed inline already used"),
             InlineAlignment::RecurseIntoContainer {
                 before_idx,
                 after_idx,
@@ -244,8 +232,7 @@ fn apply_note_reconciliation(
 ) -> Inline {
     match (orig_inline, exec_inline) {
         (Inline::Note(mut orig), Inline::Note(exec)) => {
-            orig.content =
-                apply_reconciliation_to_blocks(orig.content, exec.content, block_plan);
+            orig.content = apply_reconciliation_to_blocks(orig.content, exec.content, block_plan);
             Inline::Note(orig)
         }
         (orig, _) => orig,
@@ -405,8 +392,8 @@ fn apply_custom_node_reconciliation(
     CustomNode {
         type_name: orig.type_name, // Should equal exec.type_name
         slots: result_slots,
-        plain_data: exec.plain_data, // Use executed's plain_data
-        attr: orig.attr,             // Preserve original attr (source info)
+        plain_data: exec.plain_data,   // Use executed's plain_data
+        attr: orig.attr,               // Preserve original attr (source info)
         source_info: orig.source_info, // Preserve original source
     }
 }
@@ -458,8 +445,8 @@ fn apply_inline_slot_reconciliation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Div, Paragraph, Str};
     use crate::reconcile::compute::compute_reconciliation;
+    use crate::{Div, Paragraph, Str};
     use hashlink::LinkedHashMap;
     use quarto_source_map::{FileId, SourceInfo};
 

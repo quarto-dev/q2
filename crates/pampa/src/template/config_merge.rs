@@ -34,11 +34,13 @@ use crate::pandoc::block::Block;
 use crate::pandoc::inline::Inlines;
 use crate::template::context::MetaWriter;
 use crate::writers::plaintext;
-use indexmap::IndexMap;
-use quarto_config::{ConfigValue, ConfigValueKind, MergeOp, MergedConfig};
+use hashlink::LinkedHashMap;
+use quarto_config::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp, MergedConfig};
 use quarto_doctemplate::{TemplateContext, TemplateValue};
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_pandoc_types::inline::{Inline, Span, Str};
 use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
+use quarto_pandoc_types::AttrSourceInfo;
 use quarto_source_map::SourceInfo;
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
@@ -57,13 +59,11 @@ pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::String(value.clone())),
             source_info: source_info.clone(),
             merge_op: MergeOp::Concat,
-            interpretation: None,
         },
         MetaValueWithSourceInfo::MetaBool { value, source_info } => ConfigValue {
             value: ConfigValueKind::Scalar(Yaml::Boolean(*value)),
             source_info: source_info.clone(),
             merge_op: MergeOp::Concat,
-            interpretation: None,
         },
         MetaValueWithSourceInfo::MetaInlines {
             content,
@@ -72,7 +72,6 @@ pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
             value: ConfigValueKind::PandocInlines(content.clone()),
             source_info: source_info.clone(),
             merge_op: MergeOp::Prefer, // Inlines default to prefer (last wins)
-            interpretation: None,
         },
         MetaValueWithSourceInfo::MetaBlocks {
             content,
@@ -81,7 +80,6 @@ pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
             value: ConfigValueKind::PandocBlocks(content.clone()),
             source_info: source_info.clone(),
             merge_op: MergeOp::Prefer, // Blocks default to prefer (last wins)
-            interpretation: None,
         },
         MetaValueWithSourceInfo::MetaList { items, source_info } => {
             let config_items: Vec<ConfigValue> = items.iter().map(meta_to_config_value).collect();
@@ -89,24 +87,157 @@ pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
                 value: ConfigValueKind::Array(config_items),
                 source_info: source_info.clone(),
                 merge_op: MergeOp::Concat,
-                interpretation: None,
             }
         }
         MetaValueWithSourceInfo::MetaMap {
             entries,
             source_info,
         } => {
-            let config_entries: IndexMap<String, ConfigValue> = entries
+            let config_entries: Vec<ConfigMapEntry> = entries
                 .iter()
-                .map(|entry| (entry.key.clone(), meta_to_config_value(&entry.value)))
+                .map(|entry| ConfigMapEntry {
+                    key: entry.key.clone(),
+                    key_source: entry.key_source.clone(),
+                    value: meta_to_config_value(&entry.value),
+                })
                 .collect();
             ConfigValue {
                 value: ConfigValueKind::Map(config_entries),
                 source_info: source_info.clone(),
                 merge_op: MergeOp::Concat,
-                interpretation: None,
             }
         }
+    }
+}
+
+// =============================================================================
+// ConfigValue -> MetaValueWithSourceInfo
+// =============================================================================
+
+/// Convert a `ConfigValue` back to `MetaValueWithSourceInfo`.
+///
+/// This is the inverse of `meta_to_config_value`, used during migration
+/// to allow gradual adoption of ConfigValue while maintaining compatibility
+/// with code that still expects MetaValueWithSourceInfo.
+///
+/// # Note on merge_op
+///
+/// The `merge_op` field in ConfigValue has no equivalent in MetaValueWithSourceInfo,
+/// so it is discarded during this conversion. The merge semantics are only
+/// relevant during config merging, not after materialization.
+///
+/// # Note on Path/Glob/Expr variants
+///
+/// These ConfigValueKind variants have no direct equivalent in MetaValueWithSourceInfo.
+/// They are converted to MetaString, which loses the semantic information about
+/// the intended interpretation. This is acceptable for backward compatibility
+/// during migration, but code consuming these values should migrate to using
+/// ConfigValue directly to preserve the full semantics.
+pub fn config_value_to_meta(config: &ConfigValue) -> MetaValueWithSourceInfo {
+    use quarto_pandoc_types::meta::MetaMapEntry;
+
+    match &config.value {
+        ConfigValueKind::Scalar(yaml) => match yaml {
+            Yaml::String(s) => MetaValueWithSourceInfo::MetaString {
+                value: s.clone(),
+                source_info: config.source_info.clone(),
+            },
+            Yaml::Boolean(b) => MetaValueWithSourceInfo::MetaBool {
+                value: *b,
+                source_info: config.source_info.clone(),
+            },
+            Yaml::Integer(i) => MetaValueWithSourceInfo::MetaString {
+                value: i.to_string(),
+                source_info: config.source_info.clone(),
+            },
+            Yaml::Real(r) => MetaValueWithSourceInfo::MetaString {
+                value: r.clone(),
+                source_info: config.source_info.clone(),
+            },
+            Yaml::Null => MetaValueWithSourceInfo::MetaString {
+                value: String::new(),
+                source_info: config.source_info.clone(),
+            },
+            // Array and Hash in Yaml should not appear in Scalar variant
+            _ => MetaValueWithSourceInfo::MetaString {
+                value: String::new(),
+                source_info: config.source_info.clone(),
+            },
+        },
+        ConfigValueKind::PandocInlines(inlines) => MetaValueWithSourceInfo::MetaInlines {
+            content: inlines.clone(),
+            source_info: config.source_info.clone(),
+        },
+        ConfigValueKind::PandocBlocks(blocks) => MetaValueWithSourceInfo::MetaBlocks {
+            content: blocks.clone(),
+            source_info: config.source_info.clone(),
+        },
+        // Path: produces MetaInlines with plain Str (matches legacy !path behavior)
+        ConfigValueKind::Path(s) => MetaValueWithSourceInfo::MetaInlines {
+            content: vec![Inline::Str(Str {
+                text: s.clone(),
+                source_info: config.source_info.clone(),
+            })],
+            source_info: config.source_info.clone(),
+        },
+        // Glob, Expr: produces MetaInlines with Span wrapper (matches legacy !glob, !expr behavior)
+        ConfigValueKind::Glob(s) => {
+            let mut attributes = LinkedHashMap::new();
+            attributes.insert("tag".to_string(), "glob".to_string());
+            let span = Span {
+                attr: (
+                    String::new(),
+                    vec!["yaml-tagged-string".to_string()],
+                    attributes,
+                ),
+                content: vec![Inline::Str(Str {
+                    text: s.clone(),
+                    source_info: config.source_info.clone(),
+                })],
+                source_info: SourceInfo::default(),
+                attr_source: AttrSourceInfo::empty(),
+            };
+            MetaValueWithSourceInfo::MetaInlines {
+                content: vec![Inline::Span(span)],
+                source_info: config.source_info.clone(),
+            }
+        }
+        ConfigValueKind::Expr(s) => {
+            let mut attributes = LinkedHashMap::new();
+            attributes.insert("tag".to_string(), "expr".to_string());
+            let span = Span {
+                attr: (
+                    String::new(),
+                    vec!["yaml-tagged-string".to_string()],
+                    attributes,
+                ),
+                content: vec![Inline::Str(Str {
+                    text: s.clone(),
+                    source_info: config.source_info.clone(),
+                })],
+                source_info: SourceInfo::default(),
+                attr_source: AttrSourceInfo::empty(),
+            };
+            MetaValueWithSourceInfo::MetaInlines {
+                content: vec![Inline::Span(span)],
+                source_info: config.source_info.clone(),
+            }
+        }
+        ConfigValueKind::Array(items) => MetaValueWithSourceInfo::MetaList {
+            items: items.iter().map(config_value_to_meta).collect(),
+            source_info: config.source_info.clone(),
+        },
+        ConfigValueKind::Map(entries) => MetaValueWithSourceInfo::MetaMap {
+            entries: entries
+                .iter()
+                .map(|entry| MetaMapEntry {
+                    key: entry.key.clone(),
+                    key_source: entry.key_source.clone(),
+                    value: config_value_to_meta(&entry.value),
+                })
+                .collect(),
+            source_info: config.source_info.clone(),
+        },
     }
 }
 
@@ -142,6 +273,10 @@ pub fn config_to_template_value(
 ) -> TemplateValue {
     match &config.value {
         ConfigValueKind::Scalar(yaml) => yaml_to_template_value(yaml),
+        ConfigValueKind::Path(s) | ConfigValueKind::Glob(s) | ConfigValueKind::Expr(s) => {
+            // Deferred interpretation variants - just return as string
+            TemplateValue::String(s.clone())
+        }
         ConfigValueKind::Array(items) => {
             let values: Vec<TemplateValue> = items
                 .iter()
@@ -152,7 +287,12 @@ pub fn config_to_template_value(
         ConfigValueKind::Map(entries) => {
             let map: HashMap<String, TemplateValue> = entries
                 .iter()
-                .map(|(key, value)| (key.clone(), config_to_template_value(value, ctx)))
+                .map(|entry| {
+                    (
+                        entry.key.clone(),
+                        config_to_template_value(&entry.value, ctx),
+                    )
+                })
                 .collect();
             TemplateValue::Map(map)
         }
@@ -207,9 +347,9 @@ pub fn config_to_template_context(
     let mut conv_ctx = ConfigConversionContext::new(writer);
 
     if let ConfigValueKind::Map(entries) = &config.value {
-        for (key, value) in entries {
-            let template_value = config_to_template_value(value, &mut conv_ctx);
-            ctx.insert(key.clone(), template_value);
+        for entry in entries {
+            let template_value = config_to_template_value(&entry.value, &mut conv_ctx);
+            ctx.insert(entry.key.clone(), template_value);
         }
     }
 
@@ -230,20 +370,22 @@ pub fn config_to_template_context(
 /// `MergedConfig::new(vec![&defaults, &doc_meta])` so document values
 /// can override them.
 pub fn compute_template_defaults(meta: &MetaValueWithSourceInfo) -> ConfigValue {
-    let mut defaults: IndexMap<String, ConfigValue> = IndexMap::new();
+    let mut defaults: Vec<ConfigMapEntry> = Vec::new();
 
     // Default language
-    defaults.insert(
-        "lang".to_string(),
-        ConfigValue::new_scalar(Yaml::String("en".to_string()), SourceInfo::default()),
-    );
+    defaults.push(ConfigMapEntry {
+        key: "lang".to_string(),
+        key_source: SourceInfo::default(),
+        value: ConfigValue::new_scalar(Yaml::String("en".to_string()), SourceInfo::default()),
+    });
 
     // Derive pagetitle from title
     if let Some(pagetitle) = derive_pagetitle(meta) {
-        defaults.insert(
-            "pagetitle".to_string(),
-            ConfigValue::new_scalar(Yaml::String(pagetitle), SourceInfo::default()),
-        );
+        defaults.push(ConfigMapEntry {
+            key: "pagetitle".to_string(),
+            key_source: SourceInfo::default(),
+            value: ConfigValue::new_scalar(Yaml::String(pagetitle), SourceInfo::default()),
+        });
     }
 
     ConfigValue::new_map(defaults, SourceInfo::default())
@@ -463,12 +605,9 @@ mod tests {
 
         let defaults = compute_template_defaults(&meta);
 
-        if let ConfigValueKind::Map(entries) = &defaults.value {
-            let lang = entries.get("lang").expect("lang should be present");
-            assert!(matches!(&lang.value, ConfigValueKind::Scalar(Yaml::String(s)) if s == "en"));
-        } else {
-            panic!("Expected Map");
-        }
+        // Use ConfigValue's get() method instead of entries.get()
+        let lang = defaults.get("lang").expect("lang should be present");
+        assert!(matches!(&lang.value, ConfigValueKind::Scalar(Yaml::String(s)) if s == "en"));
     }
 
     #[test]
@@ -547,5 +686,153 @@ mod tests {
             ctx.get("lang"),
             Some(&TemplateValue::String("de".to_string()))
         );
+    }
+
+    // =========================================================================
+    // Bidirectional conversion tests (ConfigValue <-> MetaValueWithSourceInfo)
+    // =========================================================================
+
+    #[test]
+    fn test_config_string_to_meta() {
+        let config =
+            ConfigValue::new_scalar(Yaml::String("hello".to_string()), dummy_source_info());
+        let meta = config_value_to_meta(&config);
+
+        assert!(matches!(
+            meta,
+            MetaValueWithSourceInfo::MetaString { ref value, .. } if value == "hello"
+        ));
+    }
+
+    #[test]
+    fn test_config_bool_to_meta() {
+        let config = ConfigValue::new_scalar(Yaml::Boolean(true), dummy_source_info());
+        let meta = config_value_to_meta(&config);
+
+        assert!(matches!(
+            meta,
+            MetaValueWithSourceInfo::MetaBool { value: true, .. }
+        ));
+    }
+
+    #[test]
+    fn test_config_inlines_to_meta() {
+        let inlines = vec![make_str("hello")];
+        let config = ConfigValue::new_inlines(inlines.clone(), dummy_source_info());
+        let meta = config_value_to_meta(&config);
+
+        match meta {
+            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                assert_eq!(content.len(), 1);
+            }
+            _ => panic!("Expected MetaInlines"),
+        }
+    }
+
+    #[test]
+    fn test_config_array_to_meta() {
+        let items = vec![
+            ConfigValue::new_scalar(Yaml::String("a".to_string()), dummy_source_info()),
+            ConfigValue::new_scalar(Yaml::String("b".to_string()), dummy_source_info()),
+        ];
+        let config = ConfigValue::new_array(items, dummy_source_info());
+        let meta = config_value_to_meta(&config);
+
+        match meta {
+            MetaValueWithSourceInfo::MetaList { items, .. } => {
+                assert_eq!(items.len(), 2);
+            }
+            _ => panic!("Expected MetaList"),
+        }
+    }
+
+    #[test]
+    fn test_config_map_to_meta() {
+        let entries = vec![quarto_config::ConfigMapEntry {
+            key: "key".to_string(),
+            key_source: dummy_source_info(),
+            value: ConfigValue::new_scalar(Yaml::String("value".to_string()), dummy_source_info()),
+        }];
+        let config = ConfigValue::new_map(entries, dummy_source_info());
+        let meta = config_value_to_meta(&config);
+
+        match meta {
+            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+                assert_eq!(entries.len(), 1);
+                assert_eq!(entries[0].key, "key");
+            }
+            _ => panic!("Expected MetaMap"),
+        }
+    }
+
+    #[test]
+    fn test_config_path_to_meta_inlines() {
+        // Path variant should convert to MetaInlines with plain Str (matches legacy behavior)
+        let config = ConfigValue::new_path("./data.csv".to_string(), dummy_source_info());
+        let meta = config_value_to_meta(&config);
+
+        match meta {
+            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
+                assert_eq!(content.len(), 1);
+                if let Inline::Str(s) = &content[0] {
+                    assert_eq!(s.text, "./data.csv");
+                } else {
+                    panic!("Expected Str inline");
+                }
+            }
+            _ => panic!("Expected MetaInlines for Path"),
+        }
+    }
+
+    #[test]
+    fn test_roundtrip_meta_to_config_to_meta() {
+        // Test that meta -> config -> meta preserves the essential structure
+        let original_meta = MetaValueWithSourceInfo::MetaMap {
+            entries: vec![
+                MetaMapEntry {
+                    key: "title".to_string(),
+                    key_source: dummy_source_info(),
+                    value: MetaValueWithSourceInfo::MetaString {
+                        value: "Hello".to_string(),
+                        source_info: dummy_source_info(),
+                    },
+                },
+                MetaMapEntry {
+                    key: "enabled".to_string(),
+                    key_source: dummy_source_info(),
+                    value: MetaValueWithSourceInfo::MetaBool {
+                        value: true,
+                        source_info: dummy_source_info(),
+                    },
+                },
+            ],
+            source_info: dummy_source_info(),
+        };
+
+        // Convert to config and back
+        let config = meta_to_config_value(&original_meta);
+        let roundtrip_meta = config_value_to_meta(&config);
+
+        // Check structure is preserved
+        match &roundtrip_meta {
+            MetaValueWithSourceInfo::MetaMap { entries, .. } => {
+                assert_eq!(entries.len(), 2);
+
+                // Check title
+                let title = entries.iter().find(|e| e.key == "title").unwrap();
+                assert!(matches!(
+                    &title.value,
+                    MetaValueWithSourceInfo::MetaString { value, .. } if value == "Hello"
+                ));
+
+                // Check enabled
+                let enabled = entries.iter().find(|e| e.key == "enabled").unwrap();
+                assert!(matches!(
+                    &enabled.value,
+                    MetaValueWithSourceInfo::MetaBool { value: true, .. }
+                ));
+            }
+            _ => panic!("Expected MetaMap after roundtrip"),
+        }
     }
 }

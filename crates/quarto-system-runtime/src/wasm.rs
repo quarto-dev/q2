@@ -609,12 +609,16 @@ mod tests {
         assert_eq!(content, b"# Hello\n\nWorld");
 
         // Check existence
-        assert!(runtime
-            .path_exists(Path::new("/project/test.qmd"), Some(PathKind::File))
-            .unwrap());
-        assert!(runtime
-            .path_exists(Path::new("/project"), Some(PathKind::Directory))
-            .unwrap());
+        assert!(
+            runtime
+                .path_exists(Path::new("/project/test.qmd"), Some(PathKind::File))
+                .unwrap()
+        );
+        assert!(
+            runtime
+                .path_exists(Path::new("/project"), Some(PathKind::Directory))
+                .unwrap()
+        );
     }
 
     #[test]
@@ -632,9 +636,11 @@ mod tests {
         runtime
             .dir_create(Path::new("/project/subdir"), false)
             .unwrap();
-        assert!(runtime
-            .path_exists(Path::new("/project/subdir"), Some(PathKind::Directory))
-            .unwrap());
+        assert!(
+            runtime
+                .path_exists(Path::new("/project/subdir"), Some(PathKind::Directory))
+                .unwrap()
+        );
 
         // Add a file in the directory
         runtime
@@ -646,17 +652,21 @@ mod tests {
         assert_eq!(entries.len(), 1);
 
         // Can't remove non-empty directory without recursive
-        assert!(runtime
-            .dir_remove(Path::new("/project/subdir"), false)
-            .is_err());
+        assert!(
+            runtime
+                .dir_remove(Path::new("/project/subdir"), false)
+                .is_err()
+        );
 
         // Can remove with recursive
         runtime
             .dir_remove(Path::new("/project/subdir"), true)
             .unwrap();
-        assert!(!runtime
-            .path_exists(Path::new("/project/subdir"), None)
-            .unwrap());
+        assert!(
+            !runtime
+                .path_exists(Path::new("/project/subdir"), None)
+                .unwrap()
+        );
     }
 
     #[test]
@@ -685,12 +695,16 @@ mod tests {
             .path_rename(Path::new("/project/old.txt"), Path::new("/project/new.txt"))
             .unwrap();
 
-        assert!(!runtime
-            .path_exists(Path::new("/project/old.txt"), None)
-            .unwrap());
-        assert!(runtime
-            .path_exists(Path::new("/project/new.txt"), None)
-            .unwrap());
+        assert!(
+            !runtime
+                .path_exists(Path::new("/project/old.txt"), None)
+                .unwrap()
+        );
+        assert!(
+            runtime
+                .path_exists(Path::new("/project/new.txt"), None)
+                .unwrap()
+        );
     }
 
     #[test]

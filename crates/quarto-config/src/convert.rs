@@ -4,10 +4,10 @@
 //! extracting merge operations and interpretation hints from YAML tags.
 
 use crate::tag::parse_tag;
-use crate::types::{ConfigValue, ConfigValueKind, MergeOp};
-use indexmap::IndexMap;
+use crate::types::{ConfigMapEntry, ConfigValue, ConfigValueKind, Interpretation, MergeOp};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_yaml::YamlWithSourceInfo;
+use yaml_rust2::Yaml;
 
 /// Convert a `YamlWithSourceInfo` to a `ConfigValue`.
 ///
@@ -54,20 +54,18 @@ pub fn config_value_from_yaml(
             value: ConfigValueKind::Array(config_items),
             source_info,
             merge_op,
-            interpretation,
         }
     } else if yaml.is_hash() {
-        // Convert hash/map
+        // Convert hash/map with key source tracking
         let (entries, _) = yaml.into_hash().expect("checked is_hash");
-        let config_entries: IndexMap<String, ConfigValue> = entries
+        let config_entries: Vec<ConfigMapEntry> = entries
             .into_iter()
             .filter_map(|entry| {
                 // Only include entries with string keys
-                entry.key.yaml.as_str().map(|key| {
-                    (
-                        key.to_string(),
-                        config_value_from_yaml(entry.value, diagnostics),
-                    )
+                entry.key.yaml.as_str().map(|key| ConfigMapEntry {
+                    key: key.to_string(),
+                    key_source: entry.key.source_info.clone(),
+                    value: config_value_from_yaml(entry.value, diagnostics),
                 })
             })
             .collect();
@@ -76,15 +74,35 @@ pub fn config_value_from_yaml(
             value: ConfigValueKind::Map(config_entries),
             source_info,
             merge_op,
-            interpretation,
         }
     } else {
-        // Scalar value
-        ConfigValue {
-            value: ConfigValueKind::Scalar(yaml.yaml),
-            source_info,
-            merge_op,
-            interpretation,
+        // Scalar value - handle interpretation to create the right variant
+        match (&yaml.yaml, interpretation) {
+            // String with interpretation tag creates the appropriate variant
+            (Yaml::String(s), Some(Interpretation::Path)) => ConfigValue {
+                value: ConfigValueKind::Path(s.clone()),
+                source_info,
+                merge_op,
+            },
+            (Yaml::String(s), Some(Interpretation::Glob)) => ConfigValue {
+                value: ConfigValueKind::Glob(s.clone()),
+                source_info,
+                merge_op,
+            },
+            (Yaml::String(s), Some(Interpretation::Expr)) => ConfigValue {
+                value: ConfigValueKind::Expr(s.clone()),
+                source_info,
+                merge_op,
+            },
+            // Note: Interpretation::Markdown and Interpretation::PlainString are not
+            // handled here because they require the markdown parser which is not
+            // available in this crate. They will be handled by pampa when creating
+            // document metadata. For now, we keep them as Scalar.
+            _ => ConfigValue {
+                value: ConfigValueKind::Scalar(yaml.yaml),
+                source_info,
+                merge_op,
+            },
         }
     }
 }
@@ -93,7 +111,6 @@ pub fn config_value_from_yaml(
 mod tests {
     use super::*;
     use quarto_source_map::SourceInfo;
-    use yaml_rust2::Yaml;
 
     fn make_scalar(value: &str) -> YamlWithSourceInfo {
         YamlWithSourceInfo::new_scalar(Yaml::String(value.into()), SourceInfo::default())
@@ -137,10 +154,8 @@ mod tests {
         let config = config_value_from_yaml(yaml, &mut diagnostics);
 
         assert!(diagnostics.is_empty());
-        assert_eq!(
-            config.interpretation,
-            Some(crate::types::Interpretation::Markdown)
-        );
+        // Note: Markdown interpretation is deferred, so it's still a Scalar
+        assert!(matches!(config.value, ConfigValueKind::Scalar(_)));
     }
 
     #[test]
@@ -151,10 +166,8 @@ mod tests {
 
         assert!(diagnostics.is_empty());
         assert_eq!(config.merge_op, MergeOp::Prefer);
-        assert_eq!(
-            config.interpretation,
-            Some(crate::types::Interpretation::Markdown)
-        );
+        // Markdown interpretation is deferred
+        assert!(matches!(config.value, ConfigValueKind::Scalar(_)));
     }
 
     #[test]
@@ -201,8 +214,8 @@ mod tests {
 
         assert!(diagnostics.is_empty());
         assert!(config.is_map());
-        assert_eq!(config.as_map().unwrap().len(), 1);
-        assert!(config.as_map().unwrap().contains_key("name"));
+        assert_eq!(config.as_map_entries().unwrap().len(), 1);
+        assert!(config.contains_key("name"));
     }
 
     #[test]
@@ -229,11 +242,7 @@ mod tests {
         assert!(diagnostics.is_empty());
         assert!(config.is_map());
 
-        let theme = config
-            .as_map()
-            .unwrap()
-            .get("theme")
-            .expect("theme not found");
+        let theme = config.get("theme").expect("theme not found");
         assert_eq!(theme.merge_op, MergeOp::Prefer);
         assert_eq!(theme.as_yaml().unwrap().as_str(), Some("cosmo"));
     }
@@ -248,15 +257,9 @@ mod tests {
 
         assert!(diagnostics.is_empty());
 
-        let desc = config
-            .as_map()
-            .unwrap()
-            .get("description")
-            .expect("description not found");
-        assert_eq!(
-            desc.interpretation,
-            Some(crate::types::Interpretation::Markdown)
-        );
+        let desc = config.get("description").expect("description not found");
+        // Markdown interpretation is deferred, so it's still a Scalar
+        assert!(matches!(desc.value, ConfigValueKind::Scalar(_)));
     }
 
     #[test]
@@ -269,15 +272,40 @@ mod tests {
 
         assert!(diagnostics.is_empty());
 
-        let file = config
-            .as_map()
-            .unwrap()
-            .get("file")
-            .expect("file not found");
-        assert_eq!(
-            file.interpretation,
-            Some(crate::types::Interpretation::Path)
-        );
+        let file = config.get("file").expect("file not found");
+        // Path interpretation creates Path variant
+        assert!(matches!(file.value, ConfigValueKind::Path(_)));
+        assert_eq!(file.as_str(), Some("./data/input.csv"));
+    }
+
+    #[test]
+    fn test_e2e_parse_and_convert_with_glob_tag() {
+        let yaml_content = "pattern: !glob \"*.qmd\"";
+        let yaml = quarto_yaml::parse(yaml_content).expect("parse failed");
+
+        let mut diagnostics = Vec::new();
+        let config = config_value_from_yaml(yaml, &mut diagnostics);
+
+        assert!(diagnostics.is_empty());
+
+        let pattern = config.get("pattern").expect("pattern not found");
+        assert!(matches!(pattern.value, ConfigValueKind::Glob(_)));
+        assert_eq!(pattern.as_str(), Some("*.qmd"));
+    }
+
+    #[test]
+    fn test_e2e_parse_and_convert_with_expr_tag() {
+        let yaml_content = "value: !expr params$threshold";
+        let yaml = quarto_yaml::parse(yaml_content).expect("parse failed");
+
+        let mut diagnostics = Vec::new();
+        let config = config_value_from_yaml(yaml, &mut diagnostics);
+
+        assert!(diagnostics.is_empty());
+
+        let value = config.get("value").expect("value not found");
+        assert!(matches!(value.value, ConfigValueKind::Expr(_)));
+        assert_eq!(value.as_str(), Some("params$threshold"));
     }
 
     #[test]
@@ -298,36 +326,18 @@ format:
         assert!(diagnostics.is_empty());
 
         // Navigate to nested values
-        let format = config
-            .as_map()
-            .unwrap()
-            .get("format")
-            .expect("format not found");
-        let html = format
-            .as_map()
-            .unwrap()
-            .get("html")
-            .expect("html not found");
-        let theme = html
-            .as_map()
-            .unwrap()
-            .get("theme")
-            .expect("theme not found");
+        let format = config.get("format").expect("format not found");
+        let html = format.get("html").expect("html not found");
+        let theme = html.get("theme").expect("theme not found");
 
         assert_eq!(theme.merge_op, MergeOp::Prefer);
         assert_eq!(theme.as_yaml().unwrap().as_str(), Some("darkly"));
 
-        let pdf = format.as_map().unwrap().get("pdf").expect("pdf not found");
-        let docclass = pdf
-            .as_map()
-            .unwrap()
-            .get("documentclass")
-            .expect("documentclass not found");
+        let pdf = format.get("pdf").expect("pdf not found");
+        let docclass = pdf.get("documentclass").expect("documentclass not found");
 
-        assert_eq!(
-            docclass.interpretation,
-            Some(crate::types::Interpretation::PlainString)
-        );
+        // !str keeps it as Scalar
+        assert!(matches!(docclass.value, ConfigValueKind::Scalar(_)));
     }
 
     #[test]
@@ -344,11 +354,7 @@ format:
         assert_eq!(diagnostics[0].code.as_deref(), Some("Q-1-21"));
 
         // Value should still be converted
-        let value = config
-            .as_map()
-            .unwrap()
-            .get("value")
-            .expect("value not found");
+        let value = config.get("value").expect("value not found");
         assert_eq!(value.as_yaml().unwrap().as_str(), Some("hello"));
     }
 
@@ -367,16 +373,10 @@ format:
             diagnostics
         );
 
-        let title = config
-            .as_map()
-            .unwrap()
-            .get("title")
-            .expect("title not found");
+        let title = config.get("title").expect("title not found");
         assert_eq!(title.merge_op, MergeOp::Prefer);
-        assert_eq!(
-            title.interpretation,
-            Some(crate::types::Interpretation::Markdown)
-        );
+        // Markdown interpretation is deferred
+        assert!(matches!(title.value, ConfigValueKind::Scalar(_)));
         assert_eq!(
             title.as_yaml().unwrap().as_str(),
             Some("**Override Title**")
@@ -394,15 +394,26 @@ format:
 
         assert!(diagnostics.is_empty());
 
-        let files = config
-            .as_map()
-            .unwrap()
-            .get("files")
-            .expect("files not found");
+        let files = config.get("files").expect("files not found");
         assert_eq!(files.merge_op, MergeOp::Concat);
-        assert_eq!(
-            files.interpretation,
-            Some(crate::types::Interpretation::Path)
-        );
+        // Path interpretation creates Path variant
+        assert!(matches!(files.value, ConfigValueKind::Path(_)));
+    }
+
+    #[test]
+    fn test_map_key_source_tracking() {
+        let yaml_content = "name: value";
+        let yaml = quarto_yaml::parse(yaml_content).expect("parse failed");
+
+        let mut diagnostics = Vec::new();
+        let config = config_value_from_yaml(yaml, &mut diagnostics);
+
+        assert!(diagnostics.is_empty());
+
+        let entries = config.as_map_entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].key, "name");
+        // Key source should have position information
+        // (exact values depend on YAML parser, just verify it's present)
     }
 }

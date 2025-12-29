@@ -48,10 +48,7 @@ pub enum BlockAlignment {
     /// Action: MOVE container from before, but recurse into children.
     /// The nested ReconciliationPlan specifies how to reconcile children.
     #[serde(rename = "recurse")]
-    RecurseIntoContainer {
-        before_idx: usize,
-        after_idx: usize,
-    },
+    RecurseIntoContainer { before_idx: usize, after_idx: usize },
 }
 
 /// Alignment decision for a single inline in the result.
@@ -68,10 +65,7 @@ pub enum InlineAlignment {
 
     /// Container inline (Emph, Strong, Link, etc.) with changed children.
     #[serde(rename = "recurse")]
-    RecurseIntoContainer {
-        before_idx: usize,
-        after_idx: usize,
-    },
+    RecurseIntoContainer { before_idx: usize, after_idx: usize },
 }
 
 /// Statistics about the reconciliation process.

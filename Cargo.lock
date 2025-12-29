@@ -1985,10 +1985,12 @@ name = "quarto-pandoc-types"
 version = "0.0.0"
 dependencies = [
  "hashlink",
+ "indexmap",
  "quarto-source-map",
  "rustc-hash",
  "serde",
  "serde_json",
+ "yaml-rust2",
 ]
 
 [[package]]

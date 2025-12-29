@@ -170,7 +170,11 @@ mod tests {
 
         assert_eq!(files.config_files.len(), 2);
         assert!(files.config_files.contains(&PathBuf::from("_quarto.yml")));
-        assert!(files.config_files.contains(&PathBuf::from("subproject/_quarto.yaml")));
+        assert!(
+            files
+                .config_files
+                .contains(&PathBuf::from("subproject/_quarto.yaml"))
+        );
         assert_eq!(files.qmd_files.len(), 1);
         assert_eq!(files.total_count(), 3);
     }

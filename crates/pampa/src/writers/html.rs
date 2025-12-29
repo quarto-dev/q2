@@ -372,18 +372,8 @@ const HTML5_ATTRIBUTES: &[&str] = &[
 ///
 /// The array MUST be sorted for binary search to work correctly.
 const RDFA_ATTRIBUTES: &[&str] = &[
-    "about",
-    "content",
-    "datatype",
-    "href",
-    "prefix",
-    "property",
-    "rel",
-    "resource",
-    "rev",
-    "src",
-    "typeof",
-    "vocab",
+    "about", "content", "datatype", "href", "prefix", "property", "rel", "resource", "rev", "src",
+    "typeof", "vocab",
 ];
 
 /// Check if an attribute name is a standard HTML5 attribute.

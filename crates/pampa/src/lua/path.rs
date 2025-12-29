@@ -28,7 +28,11 @@ use super::runtime::{PathKind, SystemRuntime};
 ///
 /// The `runtime` parameter is used for the `exists` function which requires
 /// filesystem access.
-pub fn register_pandoc_path(lua: &Lua, pandoc: &Table, runtime: Arc<dyn SystemRuntime>) -> Result<()> {
+pub fn register_pandoc_path(
+    lua: &Lua,
+    pandoc: &Table,
+    runtime: Arc<dyn SystemRuntime>,
+) -> Result<()> {
     let path = lua.create_table()?;
 
     // ═══════════════════════════════════════════════════════════════════════

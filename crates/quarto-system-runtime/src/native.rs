@@ -770,7 +770,8 @@ mod tests {
         }
 
         // Test with a definitely nonexistent binary
-        let nonexistent = rt.find_binary("definitely_not_a_real_binary_12345", "NONEXISTENT_ENV_VAR");
+        let nonexistent =
+            rt.find_binary("definitely_not_a_real_binary_12345", "NONEXISTENT_ENV_VAR");
         assert!(nonexistent.is_none());
     }
 

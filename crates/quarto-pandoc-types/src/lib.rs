@@ -13,6 +13,7 @@
 pub mod attr;
 pub mod block;
 pub mod caption;
+pub mod config_value;
 pub mod custom;
 pub mod inline;
 pub mod list;
@@ -45,3 +46,8 @@ pub use meta::{
 pub use pandoc::Pandoc;
 pub use shortcode::{Shortcode, ShortcodeArg};
 pub use table::{Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead};
+
+// Re-export ConfigValue types (used for config merging and metadata)
+pub use config_value::{
+    ConfigMapEntry, ConfigValue, ConfigValueKind, Interpretation, InterpretationContext, MergeOp,
+};

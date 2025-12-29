@@ -24,8 +24,8 @@ mod types;
 pub use apply::apply_reconciliation;
 pub use compute::compute_reconciliation;
 pub use hash::{
-    compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block, structural_eq_inline,
-    HashCache,
+    HashCache, compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block,
+    structural_eq_inline,
 };
 pub use types::{
     BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
@@ -114,7 +114,11 @@ mod tests {
 
     fn make_div(blocks: Vec<crate::Block>, source: SourceInfo) -> crate::Block {
         crate::Block::Div(Div {
-            attr: (String::new(), vec!["cell".to_string()], LinkedHashMap::new()),
+            attr: (
+                String::new(),
+                vec!["cell".to_string()],
+                LinkedHashMap::new(),
+            ),
             content: blocks,
             source_info: source,
             attr_source: crate::AttrSourceInfo::empty(),
@@ -380,7 +384,10 @@ mod tests {
         }
 
         // At least some blocks should be kept
-        assert!(plan.stats.blocks_kept >= 2, "Expected at least 2 blocks kept");
+        assert!(
+            plan.stats.blocks_kept >= 2,
+            "Expected at least 2 blocks kept"
+        );
     }
 
     /// Test that multiple identical paragraphs at different positions are matched correctly.
@@ -550,7 +557,7 @@ mod tests {
             meta: Default::default(),
             blocks: vec![crate::Block::Custom(make_custom_node(
                 "Callout",
-                "Note", // Title unchanged
+                "Note",             // Title unchanged
                 "Changed content.", // Content changed
                 source_executed(),
             ))],
@@ -771,9 +778,9 @@ mod tests {
         let executed = Pandoc {
             meta: Default::default(),
             blocks: vec![crate::Block::Custom(make_complex_callout(
-                "Important",                   // Title unchanged
-                "First paragraph unchanged.",  // First para unchanged
-                "Second paragraph CHANGED!",   // Second para changed
+                "Important",                  // Title unchanged
+                "First paragraph unchanged.", // First para unchanged
+                "Second paragraph CHANGED!",  // Second para changed
                 source_executed(),
             ))],
         };

@@ -9,8 +9,8 @@
  */
 
 use super::hash::{
-    compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block, structural_eq_inline,
-    HashCache,
+    HashCache, compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block,
+    structural_eq_inline,
 };
 use super::types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
@@ -132,8 +132,7 @@ pub fn compute_reconciliation_for_blocks<'a>(
         if let Some((orig_idx, orig_block)) = type_match_inline {
             // Block with inline content (Paragraph, Header, etc.)
             // Compute inline reconciliation plan to see if any inlines match
-            if let Some(inline_plan) =
-                compute_inline_plan_for_block(orig_block, exec_block, cache)
+            if let Some(inline_plan) = compute_inline_plan_for_block(orig_block, exec_block, cache)
             {
                 // Check if any inlines are kept from original
                 let has_kept_inlines = inline_plan
@@ -302,9 +301,11 @@ fn compute_custom_node_slot_plan<'a>(
                 let plan = compute_reconciliation_for_blocks(orig_bs, exec_bs, cache);
 
                 // Only store if there's actual reconciliation work to do
-                let needs_plan = plan.block_alignments.iter().any(|a| {
-                    !matches!(a, BlockAlignment::KeepBefore(_))
-                }) || !plan.block_container_plans.is_empty()
+                let needs_plan = plan
+                    .block_alignments
+                    .iter()
+                    .any(|a| !matches!(a, BlockAlignment::KeepBefore(_)))
+                    || !plan.block_container_plans.is_empty()
                     || !plan.inline_plans.is_empty()
                     || !plan.custom_node_plans.is_empty();
 
@@ -328,9 +329,11 @@ fn compute_custom_node_slot_plan<'a>(
             (Slot::Inlines(orig_is), Slot::Inlines(exec_is)) => {
                 let plan = compute_inline_alignments(orig_is, exec_is, cache);
 
-                let needs_plan = plan.inline_alignments.iter().any(|a| {
-                    !matches!(a, InlineAlignment::KeepBefore(_))
-                }) || !plan.inline_container_plans.is_empty()
+                let needs_plan = plan
+                    .inline_alignments
+                    .iter()
+                    .any(|a| !matches!(a, InlineAlignment::KeepBefore(_)))
+                    || !plan.inline_container_plans.is_empty()
                     || !plan.note_block_plans.is_empty()
                     || !plan.custom_node_plans.is_empty();
 
@@ -358,15 +361,21 @@ fn compute_inline_plan_for_block<'a>(
     cache: &mut HashCache<'a>,
 ) -> Option<InlineReconciliationPlan> {
     match (orig_block, exec_block) {
-        (Block::Paragraph(orig), Block::Paragraph(exec)) => {
-            Some(compute_inline_alignments(&orig.content, &exec.content, cache))
-        }
-        (Block::Plain(orig), Block::Plain(exec)) => {
-            Some(compute_inline_alignments(&orig.content, &exec.content, cache))
-        }
-        (Block::Header(orig), Block::Header(exec)) => {
-            Some(compute_inline_alignments(&orig.content, &exec.content, cache))
-        }
+        (Block::Paragraph(orig), Block::Paragraph(exec)) => Some(compute_inline_alignments(
+            &orig.content,
+            &exec.content,
+            cache,
+        )),
+        (Block::Plain(orig), Block::Plain(exec)) => Some(compute_inline_alignments(
+            &orig.content,
+            &exec.content,
+            cache,
+        )),
+        (Block::Header(orig), Block::Header(exec)) => Some(compute_inline_alignments(
+            &orig.content,
+            &exec.content,
+            cache,
+        )),
         _ => None,
     }
 }

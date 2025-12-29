@@ -8,7 +8,7 @@
 
 use clap::Parser;
 use pampa::readers;
-use quarto_pandoc_types::reconcile::{compute_reconciliation, ReconciliationPlan};
+use quarto_pandoc_types::reconcile::{ReconciliationPlan, compute_reconciliation};
 use serde::Serialize;
 use std::io;
 
@@ -226,10 +226,7 @@ fn main() {
             }
         }
         _ => {
-            eprintln!(
-                "Unknown format: {}. Use 'json' or 'summary'.",
-                args.format
-            );
+            eprintln!("Unknown format: {}. Use 'json' or 'summary'.", args.format);
             std::process::exit(1);
         }
     }
