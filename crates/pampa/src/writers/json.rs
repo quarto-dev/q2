@@ -127,6 +127,10 @@ struct SerializableSourcePiece {
 struct SourceInfoSerializer<'a> {
     pool: Vec<SerializableSourceInfo>,
     id_map: HashMap<*const SourceInfo, usize>,
+    // Store clones of SourceInfo for content-based deduplication.
+    // When a clone is created (e.g., in write_config_value for Path), the pointer lookup
+    // will fail, so we fall back to checking content equality against this list.
+    content_map: Vec<(SourceInfo, usize)>,
     context: &'a ASTContext,
     config: &'a JsonConfig,
 }
@@ -136,6 +140,7 @@ impl<'a> SourceInfoSerializer<'a> {
         SourceInfoSerializer {
             pool: Vec::new(),
             id_map: HashMap::new(),
+            content_map: Vec::new(),
             context,
             config,
         }
@@ -151,9 +156,20 @@ impl<'a> SourceInfoSerializer<'a> {
         // underlying data. We use the data pointer address for this.
         let ptr = source_info as *const SourceInfo;
 
-        // Check if already interned
+        // Check if already interned by pointer
         if let Some(&id) = self.id_map.get(&ptr) {
             return id;
+        }
+
+        // Fallback: check for content equality against previously interned SourceInfos.
+        // This handles cases where SourceInfo is cloned (e.g., in write_config_value for Path).
+        // Clones have different addresses but identical content.
+        for (existing, id) in &self.content_map {
+            if existing == source_info {
+                // Cache this pointer for future lookups
+                self.id_map.insert(ptr, *id);
+                return *id;
+            }
         }
 
         // Extract offsets and recursively intern parents to build the serializable mapping
@@ -219,6 +235,9 @@ impl<'a> SourceInfoSerializer<'a> {
 
         // Record this pointer's ID for future lookups
         self.id_map.insert(ptr, id);
+
+        // Also store a clone for content-based deduplication of future clones
+        self.content_map.push((source_info.clone(), id));
 
         id
     }

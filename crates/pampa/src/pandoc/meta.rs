@@ -153,6 +153,7 @@ pub fn yaml_to_config_value(
 
     let merge_op = parsed_tag.merge_op.unwrap_or(MergeOp::Concat);
     let interpretation = parsed_tag.interpretation;
+    let unknown_components = parsed_tag.unknown_components;
 
     // Handle compound types first (arrays and maps)
     if yaml.is_array() {
@@ -210,20 +211,43 @@ pub fn yaml_to_config_value(
                     parse_yaml_string_as_markdown_to_config(&s, &source_info, true, diagnostics)
                 }
                 None => {
-                    // No tag: Use context-dependent default
-                    match context {
-                        InterpretationContext::DocumentMetadata => {
-                            // Document metadata: parse as markdown
-                            parse_yaml_string_as_markdown_to_config(
-                                &s,
-                                &source_info,
-                                false,
-                                diagnostics,
-                            )
-                        }
-                        InterpretationContext::ProjectConfig => {
-                            // Project config: keep literal
-                            ConfigValueKind::Scalar(Yaml::String(s))
+                    // Check if there are unknown tag components to preserve
+                    if !unknown_components.is_empty() {
+                        // Create Span wrapper to preserve unknown tag information
+                        // Use the first unknown component as the tag name (e.g., "date" from !date)
+                        let tag_name = unknown_components.join("_");
+                        let mut attributes = LinkedHashMap::new();
+                        attributes.insert("tag".to_string(), tag_name);
+                        let span = Span {
+                            attr: (
+                                String::new(),
+                                vec!["yaml-tagged-string".to_string()],
+                                attributes,
+                            ),
+                            content: vec![Inline::Str(Str {
+                                text: s,
+                                source_info: source_info.clone(),
+                            })],
+                            source_info: quarto_source_map::SourceInfo::default(),
+                            attr_source: AttrSourceInfo::empty(),
+                        };
+                        ConfigValueKind::PandocInlines(vec![Inline::Span(span)])
+                    } else {
+                        // No tag: Use context-dependent default
+                        match context {
+                            InterpretationContext::DocumentMetadata => {
+                                // Document metadata: parse as markdown
+                                parse_yaml_string_as_markdown_to_config(
+                                    &s,
+                                    &source_info,
+                                    false,
+                                    diagnostics,
+                                )
+                            }
+                            InterpretationContext::ProjectConfig => {
+                                // Project config: keep literal
+                                ConfigValueKind::Scalar(Yaml::String(s))
+                            }
                         }
                     }
                 }

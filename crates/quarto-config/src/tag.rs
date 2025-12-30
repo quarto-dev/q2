@@ -28,6 +28,11 @@ pub struct ParsedTag {
 
     /// True if any errors occurred during parsing (not just warnings)
     pub had_errors: bool,
+
+    /// Unknown tag components that were not recognized.
+    /// These emit warnings but are preserved for downstream handling.
+    /// For example, `!date` would have `unknown_components: vec!["date"]`.
+    pub unknown_components: Vec<String>,
 }
 
 impl ParsedTag {
@@ -209,6 +214,9 @@ pub fn parse_tag(
 
                 diagnostics.push(builder.build());
                 // Note: warnings don't set had_errors
+
+                // Preserve the unknown component for downstream handling
+                result.unknown_components.push(unknown.to_string());
             }
         }
     }
