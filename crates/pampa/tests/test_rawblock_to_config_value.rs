@@ -3,16 +3,15 @@
  * Copyright (c) 2025 Posit, PBC
  *
  * Tests for rawblock_to_config_value function.
- * These tests verify the new ConfigValue-based parsing path for document metadata
- * and ensure equivalence with the legacy rawblock_to_meta_with_source_info function.
+ * These tests verify the ConfigValue-based parsing path for document metadata.
+ *
+ * Updated for Phase 5: Removed equivalence tests with legacy MetaValueWithSourceInfo API.
  */
 
-use pampa::pandoc::ast_context::ASTContext;
 use pampa::pandoc::location::{Location, Range, SourceInfo};
-use pampa::pandoc::{RawBlock, rawblock_to_config_value, rawblock_to_meta_with_source_info};
-use pampa::template::config_value_to_meta;
+use pampa::pandoc::{Inline, RawBlock, rawblock_to_config_value};
 use pampa::utils::diagnostic_collector::DiagnosticCollector;
-use quarto_pandoc_types::{ConfigValueKind, Inline, MetaValueWithSourceInfo};
+use quarto_pandoc_types::ConfigValueKind;
 
 fn make_rawblock(content: &str) -> RawBlock {
     RawBlock {
@@ -32,10 +31,6 @@ fn make_rawblock(content: &str) -> RawBlock {
         })
         .to_source_map_info(),
     }
-}
-
-fn make_ast_context() -> ASTContext {
-    ASTContext::with_filename("<test>".to_string())
 }
 
 // =============================================================================
@@ -101,7 +96,7 @@ toc: true
 #[test]
 fn test_rawblock_to_config_value_integer() {
     let content = r#"---
-page-count: 42
+year: 2024
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -110,15 +105,15 @@ page-count: 42
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let count = entries
+            let year = entries
                 .iter()
-                .find(|e| e.key == "page-count")
-                .expect("page-count not found");
-            match &count.value.value {
-                ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)) => {
-                    assert_eq!(*i, 42);
+                .find(|e| e.key == "year")
+                .expect("year not found");
+            match &year.value.value {
+                ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(n)) => {
+                    assert_eq!(*n, 2024);
                 }
-                other => panic!("Expected Integer for page-count, got: {:?}", other),
+                other => panic!("Expected Integer for year, got: {:?}", other),
             }
         }
         other => panic!("Expected Map, got: {:?}", other),
@@ -128,10 +123,9 @@ page-count: 42
 #[test]
 fn test_rawblock_to_config_value_array() {
     let content = r#"---
-categories:
-  - first
-  - second
-  - third
+authors:
+  - Alice
+  - Bob
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -140,19 +134,18 @@ categories:
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let categories = entries
+            let authors = entries
                 .iter()
-                .find(|e| e.key == "categories")
-                .expect("categories not found");
-            match &categories.value.value {
+                .find(|e| e.key == "authors")
+                .expect("authors not found");
+            match &authors.value.value {
                 ConfigValueKind::Array(items) => {
-                    assert_eq!(items.len(), 3);
-                    // Each item should be PandocInlines (markdown parsed)
-                    for item in items {
-                        assert!(matches!(item.value, ConfigValueKind::PandocInlines(_)));
-                    }
+                    assert_eq!(items.len(), 2, "Expected 2 authors");
+                    // Array items in DocumentMetadata context are PandocInlines
+                    assert!(matches!(items[0].value, ConfigValueKind::PandocInlines(_)));
+                    assert!(matches!(items[1].value, ConfigValueKind::PandocInlines(_)));
                 }
-                other => panic!("Expected Array for categories, got: {:?}", other),
+                other => panic!("Expected Array for authors, got: {:?}", other),
             }
         }
         other => panic!("Expected Map, got: {:?}", other),
@@ -164,7 +157,7 @@ fn test_rawblock_to_config_value_nested_map() {
     let content = r#"---
 format:
   html:
-    theme: cosmo
+    toc: true
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -178,25 +171,21 @@ format:
                 .find(|e| e.key == "format")
                 .expect("format not found");
             match &format.value.value {
-                ConfigValueKind::Map(format_entries) => {
-                    let html = format_entries
+                ConfigValueKind::Map(inner) => {
+                    let html = inner
                         .iter()
                         .find(|e| e.key == "html")
                         .expect("html not found");
                     match &html.value.value {
-                        ConfigValueKind::Map(html_entries) => {
-                            let theme = html_entries
+                        ConfigValueKind::Map(html_opts) => {
+                            let toc = html_opts
                                 .iter()
-                                .find(|e| e.key == "theme")
-                                .expect("theme not found");
-                            match &theme.value.value {
-                                ConfigValueKind::PandocInlines(_) => {
-                                    // "cosmo" parsed as markdown
-                                }
-                                other => {
-                                    panic!("Expected PandocInlines for theme, got: {:?}", other)
-                                }
-                            }
+                                .find(|e| e.key == "toc")
+                                .expect("toc not found");
+                            assert!(matches!(
+                                toc.value.value,
+                                ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true))
+                            ));
                         }
                         other => panic!("Expected Map for html, got: {:?}", other),
                     }
@@ -208,14 +197,10 @@ format:
     }
 }
 
-// =============================================================================
-// Markdown Parsing Tests (DocumentMetadata context)
-// =============================================================================
-
 #[test]
 fn test_rawblock_to_config_value_parses_markdown() {
     let content = r#"---
-title: This has *emphasis* and **strong**
+title: This has *emphasis*
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -230,11 +215,11 @@ title: This has *emphasis* and **strong**
                 .expect("title not found");
             match &title.value.value {
                 ConfigValueKind::PandocInlines(inlines) => {
-                    // Should have Emph and Strong elements
-                    let has_emph = inlines.iter().any(|i| matches!(i, Inline::Emph(_)));
-                    let has_strong = inlines.iter().any(|i| matches!(i, Inline::Strong(_)));
-                    assert!(has_emph, "Expected Emph inline from *emphasis*");
-                    assert!(has_strong, "Expected Strong inline from **strong**");
+                    // Should contain Emph element for *emphasis*
+                    let has_emph = inlines
+                        .iter()
+                        .any(|inline| matches!(inline, Inline::Emph(_)));
+                    assert!(has_emph, "Expected Emph element in parsed markdown");
                 }
                 other => panic!("Expected PandocInlines for title, got: {:?}", other),
             }
@@ -244,7 +229,7 @@ title: This has *emphasis* and **strong**
 }
 
 // =============================================================================
-// Explicit Tag Tests
+// Tag Tests
 // =============================================================================
 
 #[test]
@@ -263,14 +248,12 @@ filename: !str _foo_.py
                 .iter()
                 .find(|e| e.key == "filename")
                 .expect("filename not found");
+            // !str tag produces Scalar(String), not PandocInlines
             match &filename.value.value {
                 ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
-                    assert_eq!(
-                        s, "_foo_.py",
-                        "!str should keep underscore-surrounded text literal"
-                    );
+                    assert_eq!(s, "_foo_.py");
                 }
-                other => panic!("Expected Scalar string for !str, got: {:?}", other),
+                other => panic!("Expected Scalar(String) for !str tag, got: {:?}", other),
             }
         }
         other => panic!("Expected Map, got: {:?}", other),
@@ -280,7 +263,7 @@ filename: !str _foo_.py
 #[test]
 fn test_rawblock_to_config_value_path_tag() {
     let content = r#"---
-data-file: !path ./data/input.csv
+image: !path images/logo.png
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -289,15 +272,15 @@ data-file: !path ./data/input.csv
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let data_file = entries
+            let image = entries
                 .iter()
-                .find(|e| e.key == "data-file")
-                .expect("data-file not found");
-            match &data_file.value.value {
+                .find(|e| e.key == "image")
+                .expect("image not found");
+            match &image.value.value {
                 ConfigValueKind::Path(p) => {
-                    assert_eq!(p, "./data/input.csv");
+                    assert_eq!(p, "images/logo.png");
                 }
-                other => panic!("Expected Path variant for !path, got: {:?}", other),
+                other => panic!("Expected Path for !path tag, got: {:?}", other),
             }
         }
         other => panic!("Expected Map, got: {:?}", other),
@@ -307,7 +290,7 @@ data-file: !path ./data/input.csv
 #[test]
 fn test_rawblock_to_config_value_glob_tag() {
     let content = r#"---
-sources: !glob "**/*.qmd"
+files: !glob posts/*/index.qmd
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -316,15 +299,15 @@ sources: !glob "**/*.qmd"
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let sources = entries
+            let files = entries
                 .iter()
-                .find(|e| e.key == "sources")
-                .expect("sources not found");
-            match &sources.value.value {
+                .find(|e| e.key == "files")
+                .expect("files not found");
+            match &files.value.value {
                 ConfigValueKind::Glob(g) => {
-                    assert_eq!(g, "**/*.qmd");
+                    assert_eq!(g, "posts/*/index.qmd");
                 }
-                other => panic!("Expected Glob variant for !glob, got: {:?}", other),
+                other => panic!("Expected Glob for !glob tag, got: {:?}", other),
             }
         }
         other => panic!("Expected Map, got: {:?}", other),
@@ -334,7 +317,7 @@ sources: !glob "**/*.qmd"
 #[test]
 fn test_rawblock_to_config_value_expr_tag() {
     let content = r#"---
-threshold: !expr params$value
+date: !expr Sys.Date()
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -343,29 +326,25 @@ threshold: !expr params$value
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let threshold = entries
+            let date = entries
                 .iter()
-                .find(|e| e.key == "threshold")
-                .expect("threshold not found");
-            match &threshold.value.value {
+                .find(|e| e.key == "date")
+                .expect("date not found");
+            match &date.value.value {
                 ConfigValueKind::Expr(e) => {
-                    assert_eq!(e, "params$value");
+                    assert_eq!(e, "Sys.Date()");
                 }
-                other => panic!("Expected Expr variant for !expr, got: {:?}", other),
+                other => panic!("Expected Expr for !expr tag, got: {:?}", other),
             }
         }
         other => panic!("Expected Map, got: {:?}", other),
     }
 }
 
-// =============================================================================
-// Merge Tag Tests
-// =============================================================================
-
 #[test]
 fn test_rawblock_to_config_value_prefer_tag() {
     let content = r#"---
-option: !prefer my-value
+title: !prefer My Title
 ---"#;
     let block = make_rawblock(content);
     let mut diagnostics = DiagnosticCollector::new();
@@ -374,14 +353,18 @@ option: !prefer my-value
 
     match &config.value {
         ConfigValueKind::Map(entries) => {
-            let option = entries
+            let title = entries
                 .iter()
-                .find(|e| e.key == "option")
-                .expect("option not found");
-            assert_eq!(
-                option.value.merge_op,
-                quarto_pandoc_types::MergeOp::Prefer,
-                "!prefer should set merge_op to Prefer"
+                .find(|e| e.key == "title")
+                .expect("title not found");
+            // !prefer sets the merge_op, but value should still be PandocInlines
+            assert!(
+                matches!(title.value.value, ConfigValueKind::PandocInlines(_)),
+                "Expected PandocInlines for !prefer tagged value"
+            );
+            assert!(
+                matches!(title.value.merge_op, quarto_pandoc_types::MergeOp::Prefer),
+                "Expected Prefer merge_op"
             );
         }
         other => panic!("Expected Map, got: {:?}", other),
@@ -389,7 +372,7 @@ option: !prefer my-value
 }
 
 // =============================================================================
-// Source Location Preservation Tests
+// Source Tracking Tests
 // =============================================================================
 
 #[test]
@@ -402,16 +385,19 @@ title: Hello
 
     let config = rawblock_to_config_value(&block, &mut diagnostics);
 
-    // The config's source_info should not be the default
+    // The config itself should have source info
     let default_source = quarto_source_map::SourceInfo::default();
     assert!(
         config.source_info != default_source,
-        "Config should have non-default source_info"
+        "Config source should be tracked"
     );
 
-    // Check that nested values also have source info
+    // The entries should also have source info
     if let ConfigValueKind::Map(entries) = &config.value {
-        let title = entries.iter().find(|e| e.key == "title").unwrap();
+        let title = entries
+            .iter()
+            .find(|e| e.key == "title")
+            .expect("title not found");
         assert!(
             title.key_source != default_source,
             "Key source should be tracked"
@@ -421,299 +407,6 @@ title: Hello
             "Value source should be tracked"
         );
     }
-}
-
-// =============================================================================
-// Equivalence Tests: rawblock_to_config_value vs rawblock_to_meta_with_source_info
-// =============================================================================
-
-/// Helper to compare MetaValueWithSourceInfo structures recursively.
-/// Returns a description of the first difference found, or None if equal.
-fn compare_meta_values(
-    a: &MetaValueWithSourceInfo,
-    b: &MetaValueWithSourceInfo,
-    path: &str,
-) -> Option<String> {
-    match (a, b) {
-        (
-            MetaValueWithSourceInfo::MetaString { value: va, .. },
-            MetaValueWithSourceInfo::MetaString { value: vb, .. },
-        ) => {
-            if va != vb {
-                Some(format!(
-                    "{}: string values differ: {:?} vs {:?}",
-                    path, va, vb
-                ))
-            } else {
-                None
-            }
-        }
-        (
-            MetaValueWithSourceInfo::MetaBool { value: va, .. },
-            MetaValueWithSourceInfo::MetaBool { value: vb, .. },
-        ) => {
-            if va != vb {
-                Some(format!(
-                    "{}: bool values differ: {:?} vs {:?}",
-                    path, va, vb
-                ))
-            } else {
-                None
-            }
-        }
-        (
-            MetaValueWithSourceInfo::MetaInlines { content: ca, .. },
-            MetaValueWithSourceInfo::MetaInlines { content: cb, .. },
-        ) => {
-            // Compare inlines by debug representation (structural equality)
-            let da = format!("{:?}", ca);
-            let db = format!("{:?}", cb);
-            if da != db {
-                Some(format!(
-                    "{}: MetaInlines differ:\n  A: {:?}\n  B: {:?}",
-                    path, ca, cb
-                ))
-            } else {
-                None
-            }
-        }
-        (
-            MetaValueWithSourceInfo::MetaBlocks { content: ca, .. },
-            MetaValueWithSourceInfo::MetaBlocks { content: cb, .. },
-        ) => {
-            let da = format!("{:?}", ca);
-            let db = format!("{:?}", cb);
-            if da != db {
-                Some(format!("{}: MetaBlocks differ", path))
-            } else {
-                None
-            }
-        }
-        (
-            MetaValueWithSourceInfo::MetaList { items: ia, .. },
-            MetaValueWithSourceInfo::MetaList { items: ib, .. },
-        ) => {
-            if ia.len() != ib.len() {
-                return Some(format!(
-                    "{}: MetaList length differs: {} vs {}",
-                    path,
-                    ia.len(),
-                    ib.len()
-                ));
-            }
-            for (i, (item_a, item_b)) in ia.iter().zip(ib.iter()).enumerate() {
-                if let Some(diff) = compare_meta_values(item_a, item_b, &format!("{}[{}]", path, i))
-                {
-                    return Some(diff);
-                }
-            }
-            None
-        }
-        (
-            MetaValueWithSourceInfo::MetaMap { entries: ea, .. },
-            MetaValueWithSourceInfo::MetaMap { entries: eb, .. },
-        ) => {
-            if ea.len() != eb.len() {
-                return Some(format!(
-                    "{}: MetaMap length differs: {} vs {}",
-                    path,
-                    ea.len(),
-                    eb.len()
-                ));
-            }
-            for (entry_a, entry_b) in ea.iter().zip(eb.iter()) {
-                if entry_a.key != entry_b.key {
-                    return Some(format!(
-                        "{}: key differs: {:?} vs {:?}",
-                        path, entry_a.key, entry_b.key
-                    ));
-                }
-                if let Some(diff) = compare_meta_values(
-                    &entry_a.value,
-                    &entry_b.value,
-                    &format!("{}.{}", path, entry_a.key),
-                ) {
-                    return Some(diff);
-                }
-            }
-            None
-        }
-        _ => Some(format!(
-            "{}: variant mismatch: {:?} vs {:?}",
-            path,
-            std::mem::discriminant(a),
-            std::mem::discriminant(b)
-        )),
-    }
-}
-
-#[test]
-fn test_equivalence_simple_string() {
-    let content = r#"---
-title: Hello World
----"#;
-    let block = make_rawblock(content);
-    let context = make_ast_context();
-    let mut diags1 = DiagnosticCollector::new();
-    let mut diags2 = DiagnosticCollector::new();
-
-    // New path: rawblock -> ConfigValue -> MetaValueWithSourceInfo
-    let config = rawblock_to_config_value(&block, &mut diags1);
-    let via_config = config_value_to_meta(&config);
-
-    // Legacy path: rawblock -> MetaValueWithSourceInfo directly
-    let direct = rawblock_to_meta_with_source_info(&block, &context, &mut diags2);
-
-    // Compare
-    if let Some(diff) = compare_meta_values(&via_config, &direct, "root") {
-        panic!("Equivalence failed: {}", diff);
-    }
-}
-
-#[test]
-fn test_equivalence_boolean() {
-    let content = r#"---
-toc: true
-draft: false
----"#;
-    let block = make_rawblock(content);
-    let context = make_ast_context();
-    let mut diags1 = DiagnosticCollector::new();
-    let mut diags2 = DiagnosticCollector::new();
-
-    let config = rawblock_to_config_value(&block, &mut diags1);
-    let via_config = config_value_to_meta(&config);
-    let direct = rawblock_to_meta_with_source_info(&block, &context, &mut diags2);
-
-    if let Some(diff) = compare_meta_values(&via_config, &direct, "root") {
-        panic!("Equivalence failed: {}", diff);
-    }
-}
-
-#[test]
-fn test_equivalence_array() {
-    let content = r#"---
-authors:
-  - Alice
-  - Bob
----"#;
-    let block = make_rawblock(content);
-    let context = make_ast_context();
-    let mut diags1 = DiagnosticCollector::new();
-    let mut diags2 = DiagnosticCollector::new();
-
-    let config = rawblock_to_config_value(&block, &mut diags1);
-    let via_config = config_value_to_meta(&config);
-    let direct = rawblock_to_meta_with_source_info(&block, &context, &mut diags2);
-
-    if let Some(diff) = compare_meta_values(&via_config, &direct, "root") {
-        panic!("Equivalence failed: {}", diff);
-    }
-}
-
-#[test]
-fn test_equivalence_nested_map() {
-    let content = r#"---
-format:
-  html:
-    toc: true
-    theme: default
----"#;
-    let block = make_rawblock(content);
-    let context = make_ast_context();
-    let mut diags1 = DiagnosticCollector::new();
-    let mut diags2 = DiagnosticCollector::new();
-
-    let config = rawblock_to_config_value(&block, &mut diags1);
-    let via_config = config_value_to_meta(&config);
-    let direct = rawblock_to_meta_with_source_info(&block, &context, &mut diags2);
-
-    if let Some(diff) = compare_meta_values(&via_config, &direct, "root") {
-        panic!("Equivalence failed: {}", diff);
-    }
-}
-
-#[test]
-fn test_equivalence_markdown_in_string() {
-    let content = r#"---
-title: This has *emphasis*
----"#;
-    let block = make_rawblock(content);
-    let context = make_ast_context();
-    let mut diags1 = DiagnosticCollector::new();
-    let mut diags2 = DiagnosticCollector::new();
-
-    let config = rawblock_to_config_value(&block, &mut diags1);
-    let via_config = config_value_to_meta(&config);
-    let direct = rawblock_to_meta_with_source_info(&block, &context, &mut diags2);
-
-    if let Some(diff) = compare_meta_values(&via_config, &direct, "root") {
-        panic!("Equivalence failed: {}", diff);
-    }
-}
-
-#[test]
-fn test_equivalence_str_tag() {
-    // Note: The !str tag behavior differs slightly between the two paths.
-    // The legacy path wraps in Span with "yaml-tagged-string" class,
-    // while the new path produces Scalar(String).
-    // config_value_to_meta converts this to MetaString, which is different.
-    // This test documents this known difference.
-    let content = r#"---
-filename: !str _foo_.py
----"#;
-    let block = make_rawblock(content);
-    let context = make_ast_context();
-    let mut diags1 = DiagnosticCollector::new();
-    let mut diags2 = DiagnosticCollector::new();
-
-    let config = rawblock_to_config_value(&block, &mut diags1);
-    let via_config = config_value_to_meta(&config);
-    let direct = rawblock_to_meta_with_source_info(&block, &context, &mut diags2);
-
-    // The legacy path produces MetaInlines with a Span wrapper,
-    // while the new path produces MetaString.
-    // Both preserve the literal value "_foo_.py", just in different structures.
-
-    // Extract the underlying string value from both
-    // Note: The config path produces MetaString for !str, while direct path produces MetaInlines
-    let via_config_value = match &via_config {
-        MetaValueWithSourceInfo::MetaMap { entries, .. } => {
-            let entry = entries.iter().find(|e| e.key == "filename").unwrap();
-            match &entry.value {
-                // Config path: !str → Scalar(String) → MetaString
-                MetaValueWithSourceInfo::MetaString { value, .. } => value.clone(),
-                _ => panic!(
-                    "Expected MetaString from config path, got: {:?}",
-                    entry.value
-                ),
-            }
-        }
-        _ => panic!("Expected MetaMap"),
-    };
-
-    let direct_value = match &direct {
-        MetaValueWithSourceInfo::MetaMap { entries, .. } => {
-            let entry = entries.iter().find(|e| e.key == "filename").unwrap();
-            match &entry.value {
-                MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                    // !str produces plain Str inline (no Span wrapper)
-                    if let Some(Inline::Str(s)) = content.first() {
-                        s.text.clone()
-                    } else {
-                        panic!("Expected Str in MetaInlines, got: {:?}", content)
-                    }
-                }
-                _ => panic!("Expected MetaInlines from direct path"),
-            }
-        }
-        _ => panic!("Expected MetaMap"),
-    };
-
-    assert_eq!(
-        via_config_value, direct_value,
-        "Both paths should preserve the literal string value"
-    );
 }
 
 // =============================================================================

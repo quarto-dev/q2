@@ -1,15 +1,16 @@
 /*
  * test_json_roundtrip.rs
  * Copyright (c) 2025 Posit, PBC
+ *
+ * Updated to use ConfigValue API directly (Phase 5 migration).
  */
 
 use hashlink::LinkedHashMap;
 use pampa::pandoc::ast_context::ASTContext;
-use pampa::pandoc::{Block, Inline, MetaValueWithSourceInfo, Pandoc, Paragraph, Str};
+use pampa::pandoc::{Block, Inline, Pandoc, Paragraph, Str};
 use pampa::readers;
-use pampa::template::{config_value_to_meta, meta_to_config_value};
 use pampa::writers::json;
-use quarto_pandoc_types::ConfigValue;
+use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
 use quarto_source_map::{FileId, Location, Range, SourceInfo};
 
 #[test]
@@ -88,17 +89,21 @@ fn test_json_roundtrip_simple_paragraph() {
 fn test_json_roundtrip_complex_document() {
     // Create a more complex document with multiple block types
     let original = Pandoc {
-        meta: meta_to_config_value(&MetaValueWithSourceInfo::MetaMap {
-            entries: vec![pampa::pandoc::MetaMapEntry {
+        meta: ConfigValue {
+            value: ConfigValueKind::Map(vec![ConfigMapEntry {
                 key: "title".to_string(),
-                key_source: quarto_source_map::SourceInfo::default(),
-                value: MetaValueWithSourceInfo::MetaString {
-                    value: "Test Document".to_string(),
-                    source_info: quarto_source_map::SourceInfo::default(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue {
+                    value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(
+                        "Test Document".to_string(),
+                    )),
+                    source_info: SourceInfo::default(),
+                    merge_op: MergeOp::default(),
                 },
-            }],
-            source_info: quarto_source_map::SourceInfo::default(),
-        }),
+            }]),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        },
         blocks: vec![
             Block::Paragraph(Paragraph {
                 content: vec![
@@ -225,14 +230,22 @@ fn test_json_roundtrip_complex_document() {
 
     // Verify basic structure
     assert_eq!(parsed.blocks.len(), 2);
-    let meta_value = config_value_to_meta(&parsed.meta);
-    assert!(meta_value.contains_key("title"));
 
-    match meta_value.get("title") {
-        Some(MetaValueWithSourceInfo::MetaString { value, .. }) => {
-            assert_eq!(value, "Test Document");
+    // Check metadata using ConfigValue API
+    if let ConfigValueKind::Map(entries) = &parsed.meta.value {
+        let title_entry = entries.iter().find(|e| e.key == "title");
+        assert!(title_entry.is_some(), "Should have 'title' in metadata");
+
+        if let Some(entry) = title_entry {
+            match &entry.value.value {
+                ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) => {
+                    assert_eq!(s, "Test Document");
+                }
+                other => panic!("Expected String for title, got {:?}", other),
+            }
         }
-        _ => panic!("Expected MetaString for title"),
+    } else {
+        panic!("Expected Map for metadata");
     }
 
     // Verify first block (paragraph)

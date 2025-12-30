@@ -8,19 +8,15 @@
 //! This module provides the integration between the quarto-config merging system
 //! and template rendering. It handles:
 //!
-//! 1. Converting document metadata (`MetaValueWithSourceInfo`) to `ConfigValue`
-//! 2. Computing template defaults (like `lang` and `pagetitle`)
-//! 3. Merging defaults with document metadata
-//! 4. Converting the merged result to `TemplateContext`
+//! 1. Computing template defaults (like `lang` and `pagetitle`)
+//! 2. Merging defaults with document metadata
+//! 3. Converting the merged result to `TemplateContext`
 //!
 //! # Example
 //!
 //! ```ignore
-//! // Convert document metadata to ConfigValue
-//! let doc_meta = meta_to_config_value(&pandoc.meta);
-//!
 //! // Compute template defaults (lang, pagetitle derived from title)
-//! let template_meta = compute_template_defaults(&pandoc.meta);
+//! let template_meta = compute_template_defaults(&doc_meta);
 //!
 //! // Merge: template_meta (defaults) <> doc_meta (document values override)
 //! let merged = MergedConfig::new(vec![&template_meta, &doc_meta]);
@@ -30,216 +26,14 @@
 //! let template_ctx = config_to_template_context(&materialized, MetaWriter::Html);
 //! ```
 
-use crate::pandoc::block::Block;
-use crate::pandoc::inline::Inlines;
 use crate::template::context::MetaWriter;
 use crate::writers::plaintext;
-use hashlink::LinkedHashMap;
 use quarto_config::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp, MergedConfig};
 use quarto_doctemplate::{TemplateContext, TemplateValue};
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_pandoc_types::AttrSourceInfo;
-use quarto_pandoc_types::inline::{Inline, Span, Str};
-use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
 use quarto_source_map::SourceInfo;
 use std::collections::HashMap;
 use yaml_rust2::Yaml;
-
-// =============================================================================
-// MetaValueWithSourceInfo -> ConfigValue
-// =============================================================================
-
-/// Convert a `MetaValueWithSourceInfo` to a `ConfigValue`.
-///
-/// This preserves source information and maps Pandoc metadata types
-/// to the corresponding ConfigValue types.
-pub fn meta_to_config_value(meta: &MetaValueWithSourceInfo) -> ConfigValue {
-    match meta {
-        MetaValueWithSourceInfo::MetaString { value, source_info } => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::String(value.clone())),
-            source_info: source_info.clone(),
-            merge_op: MergeOp::Concat,
-        },
-        MetaValueWithSourceInfo::MetaBool { value, source_info } => ConfigValue {
-            value: ConfigValueKind::Scalar(Yaml::Boolean(*value)),
-            source_info: source_info.clone(),
-            merge_op: MergeOp::Concat,
-        },
-        MetaValueWithSourceInfo::MetaInlines {
-            content,
-            source_info,
-        } => ConfigValue {
-            value: ConfigValueKind::PandocInlines(content.clone()),
-            source_info: source_info.clone(),
-            merge_op: MergeOp::Prefer, // Inlines default to prefer (last wins)
-        },
-        MetaValueWithSourceInfo::MetaBlocks {
-            content,
-            source_info,
-        } => ConfigValue {
-            value: ConfigValueKind::PandocBlocks(content.clone()),
-            source_info: source_info.clone(),
-            merge_op: MergeOp::Prefer, // Blocks default to prefer (last wins)
-        },
-        MetaValueWithSourceInfo::MetaList { items, source_info } => {
-            let config_items: Vec<ConfigValue> = items.iter().map(meta_to_config_value).collect();
-            ConfigValue {
-                value: ConfigValueKind::Array(config_items),
-                source_info: source_info.clone(),
-                merge_op: MergeOp::Concat,
-            }
-        }
-        MetaValueWithSourceInfo::MetaMap {
-            entries,
-            source_info,
-        } => {
-            let config_entries: Vec<ConfigMapEntry> = entries
-                .iter()
-                .map(|entry| ConfigMapEntry {
-                    key: entry.key.clone(),
-                    key_source: entry.key_source.clone(),
-                    value: meta_to_config_value(&entry.value),
-                })
-                .collect();
-            ConfigValue {
-                value: ConfigValueKind::Map(config_entries),
-                source_info: source_info.clone(),
-                merge_op: MergeOp::Concat,
-            }
-        }
-    }
-}
-
-// =============================================================================
-// ConfigValue -> MetaValueWithSourceInfo
-// =============================================================================
-
-/// Convert a `ConfigValue` back to `MetaValueWithSourceInfo`.
-///
-/// This is the inverse of `meta_to_config_value`, used during migration
-/// to allow gradual adoption of ConfigValue while maintaining compatibility
-/// with code that still expects MetaValueWithSourceInfo.
-///
-/// # Note on merge_op
-///
-/// The `merge_op` field in ConfigValue has no equivalent in MetaValueWithSourceInfo,
-/// so it is discarded during this conversion. The merge semantics are only
-/// relevant during config merging, not after materialization.
-///
-/// # Note on Path/Glob/Expr variants
-///
-/// These ConfigValueKind variants have no direct equivalent in MetaValueWithSourceInfo.
-/// They are converted to MetaString, which loses the semantic information about
-/// the intended interpretation. This is acceptable for backward compatibility
-/// during migration, but code consuming these values should migrate to using
-/// ConfigValue directly to preserve the full semantics.
-pub fn config_value_to_meta(config: &ConfigValue) -> MetaValueWithSourceInfo {
-    use quarto_pandoc_types::meta::MetaMapEntry;
-
-    match &config.value {
-        ConfigValueKind::Scalar(yaml) => match yaml {
-            Yaml::String(s) => MetaValueWithSourceInfo::MetaString {
-                value: s.clone(),
-                source_info: config.source_info.clone(),
-            },
-            Yaml::Boolean(b) => MetaValueWithSourceInfo::MetaBool {
-                value: *b,
-                source_info: config.source_info.clone(),
-            },
-            Yaml::Integer(i) => MetaValueWithSourceInfo::MetaString {
-                value: i.to_string(),
-                source_info: config.source_info.clone(),
-            },
-            Yaml::Real(r) => MetaValueWithSourceInfo::MetaString {
-                value: r.clone(),
-                source_info: config.source_info.clone(),
-            },
-            Yaml::Null => MetaValueWithSourceInfo::MetaString {
-                value: String::new(),
-                source_info: config.source_info.clone(),
-            },
-            // Array and Hash in Yaml should not appear in Scalar variant
-            _ => MetaValueWithSourceInfo::MetaString {
-                value: String::new(),
-                source_info: config.source_info.clone(),
-            },
-        },
-        ConfigValueKind::PandocInlines(inlines) => MetaValueWithSourceInfo::MetaInlines {
-            content: inlines.clone(),
-            source_info: config.source_info.clone(),
-        },
-        ConfigValueKind::PandocBlocks(blocks) => MetaValueWithSourceInfo::MetaBlocks {
-            content: blocks.clone(),
-            source_info: config.source_info.clone(),
-        },
-        // Path: produces MetaInlines with plain Str (matches legacy !path behavior)
-        ConfigValueKind::Path(s) => MetaValueWithSourceInfo::MetaInlines {
-            content: vec![Inline::Str(Str {
-                text: s.clone(),
-                source_info: config.source_info.clone(),
-            })],
-            source_info: config.source_info.clone(),
-        },
-        // Glob, Expr: produces MetaInlines with Span wrapper (matches legacy !glob, !expr behavior)
-        ConfigValueKind::Glob(s) => {
-            let mut attributes = LinkedHashMap::new();
-            attributes.insert("tag".to_string(), "glob".to_string());
-            let span = Span {
-                attr: (
-                    String::new(),
-                    vec!["yaml-tagged-string".to_string()],
-                    attributes,
-                ),
-                content: vec![Inline::Str(Str {
-                    text: s.clone(),
-                    source_info: config.source_info.clone(),
-                })],
-                source_info: SourceInfo::default(),
-                attr_source: AttrSourceInfo::empty(),
-            };
-            MetaValueWithSourceInfo::MetaInlines {
-                content: vec![Inline::Span(span)],
-                source_info: config.source_info.clone(),
-            }
-        }
-        ConfigValueKind::Expr(s) => {
-            let mut attributes = LinkedHashMap::new();
-            attributes.insert("tag".to_string(), "expr".to_string());
-            let span = Span {
-                attr: (
-                    String::new(),
-                    vec!["yaml-tagged-string".to_string()],
-                    attributes,
-                ),
-                content: vec![Inline::Str(Str {
-                    text: s.clone(),
-                    source_info: config.source_info.clone(),
-                })],
-                source_info: SourceInfo::default(),
-                attr_source: AttrSourceInfo::empty(),
-            };
-            MetaValueWithSourceInfo::MetaInlines {
-                content: vec![Inline::Span(span)],
-                source_info: config.source_info.clone(),
-            }
-        }
-        ConfigValueKind::Array(items) => MetaValueWithSourceInfo::MetaList {
-            items: items.iter().map(config_value_to_meta).collect(),
-            source_info: config.source_info.clone(),
-        },
-        ConfigValueKind::Map(entries) => MetaValueWithSourceInfo::MetaMap {
-            entries: entries
-                .iter()
-                .map(|entry| MetaMapEntry {
-                    key: entry.key.clone(),
-                    key_source: entry.key_source.clone(),
-                    value: config_value_to_meta(&entry.value),
-                })
-                .collect(),
-            source_info: config.source_info.clone(),
-        },
-    }
-}
 
 // =============================================================================
 // ConfigValue -> TemplateValue

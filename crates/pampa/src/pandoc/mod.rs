@@ -24,12 +24,9 @@ pub use quarto_pandoc_types::table;
 
 // Re-export parsing and conversion functions from local modules
 // These are public API used by integration tests and external crates
+// Phase 5: Removed legacy MetaValueWithSourceInfo-based functions
 #[allow(unused_imports)]
-pub use crate::pandoc::meta::{
-    parse_metadata_strings, parse_metadata_strings_with_source_info, rawblock_to_config_value,
-    rawblock_to_meta, rawblock_to_meta_with_source_info, yaml_to_config_value,
-    yaml_to_meta_with_source_info,
-};
+pub use crate::pandoc::meta::{rawblock_to_config_value, yaml_to_config_value};
 #[allow(unused_imports)]
 pub use crate::pandoc::shortcode::shortcode_to_span;
 

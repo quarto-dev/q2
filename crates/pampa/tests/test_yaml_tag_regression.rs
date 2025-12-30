@@ -3,15 +3,14 @@
  * Copyright (c) 2025 Posit, PBC
  *
  * Tests for k-62: YAML tag information lost in new API
+ *
+ * Updated to use ConfigValue API (Phase 5 migration).
  */
 
-use pampa::pandoc::ast_context::ASTContext;
 use pampa::pandoc::location::{Location, Range, SourceInfo};
-use pampa::pandoc::{
-    Inline, MetaValueWithSourceInfo, RawBlock, parse_metadata_strings_with_source_info,
-    rawblock_to_meta_with_source_info,
-};
+use pampa::pandoc::{Inline, RawBlock, rawblock_to_config_value};
 use pampa::utils::diagnostic_collector::DiagnosticCollector;
+use quarto_pandoc_types::ConfigValueKind;
 
 #[test]
 fn test_yaml_tags_preserved_in_new_api() {
@@ -41,63 +40,76 @@ regular: This has *emphasis*
         .to_source_map_info(),
     };
 
-    let context = ASTContext::default();
     let mut diagnostics = DiagnosticCollector::new();
-    let meta = rawblock_to_meta_with_source_info(&block, &context, &mut diagnostics);
+    let config = rawblock_to_config_value(&block, &mut diagnostics);
 
-    let mut outer_meta = Vec::new();
-    let parsed_meta =
-        parse_metadata_strings_with_source_info(meta, &mut outer_meta, &mut diagnostics);
-
-    // Extract entries
-    let entries = if let MetaValueWithSourceInfo::MetaMap { entries, .. } = parsed_meta {
+    // Extract entries from ConfigValue
+    let entries = if let ConfigValueKind::Map(entries) = &config.value {
         entries
     } else {
-        panic!("Expected MetaMap");
+        panic!("Expected Map, got {:?}", config.value);
     };
 
-    // Check tagged_path - should be MetaInlines with Span wrapper
+    // Check tagged_path - should be Path variant
     let tagged_path_entry = entries
         .iter()
         .find(|e| e.key == "tagged_path")
         .expect("tagged_path not found");
 
-    if let MetaValueWithSourceInfo::MetaInlines {
-        content: inlines, ..
-    } = &tagged_path_entry.value
-    {
-        assert_eq!(inlines.len(), 1, "Expected exactly one inline");
-        // !path tag should produce plain Str (no Span wrapper)
-        if let Inline::Str(s) = &inlines[0] {
-            assert_eq!(s.text, "images/*.png");
-        } else {
-            panic!(
-                "Expected plain Str inline for !path tag, got: {:?}",
-                inlines[0]
-            );
-        }
+    if let ConfigValueKind::Path(path) = &tagged_path_entry.value.value {
+        assert_eq!(path, "images/*.png");
     } else {
         panic!(
-            "Expected MetaInlines for tagged_path, got: {:?}",
-            tagged_path_entry.value
+            "Expected Path for tagged_path, got: {:?}",
+            tagged_path_entry.value.value
         );
     }
 
-    // Check regular - should parse markdown normally (Emph element)
+    // Check tagged_glob - should be Glob variant
+    let tagged_glob_entry = entries
+        .iter()
+        .find(|e| e.key == "tagged_glob")
+        .expect("tagged_glob not found");
+
+    if let ConfigValueKind::Glob(glob) = &tagged_glob_entry.value.value {
+        assert_eq!(glob, "posts/*/index.qmd");
+    } else {
+        panic!(
+            "Expected Glob for tagged_glob, got: {:?}",
+            tagged_glob_entry.value.value
+        );
+    }
+
+    // Check tagged_str - should be Scalar(String), not parsed as markdown
+    let tagged_str_entry = entries
+        .iter()
+        .find(|e| e.key == "tagged_str")
+        .expect("tagged_str not found");
+
+    if let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s)) = &tagged_str_entry.value.value {
+        assert_eq!(s, "_foo_.py");
+    } else {
+        panic!(
+            "Expected Scalar(String) for tagged_str, got: {:?}",
+            tagged_str_entry.value.value
+        );
+    }
+
+    // Check regular - should be PandocInlines with Emph element from *emphasis*
     let regular_entry = entries
         .iter()
         .find(|e| e.key == "regular")
         .expect("regular not found");
 
-    if let MetaValueWithSourceInfo::MetaInlines {
-        content: inlines, ..
-    } = &regular_entry.value
-    {
+    if let ConfigValueKind::PandocInlines(inlines) = &regular_entry.value.value {
         let has_emph = inlines
             .iter()
             .any(|inline| matches!(inline, Inline::Emph(_)));
         assert!(has_emph, "regular should have Emph element from *emphasis*");
     } else {
-        panic!("Expected MetaInlines for regular");
+        panic!(
+            "Expected PandocInlines for regular, got: {:?}",
+            regular_entry.value.value
+        );
     }
 }

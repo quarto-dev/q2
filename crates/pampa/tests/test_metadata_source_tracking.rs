@@ -1,12 +1,14 @@
 /*
  * test_metadata_source_tracking.rs
  * Test that metadata source tracking is correct in PandocAST
+ *
+ * Updated to use ConfigValue API directly (Phase 5 migration).
  */
 
-use pampa::pandoc::MetaValueWithSourceInfo;
+use pampa::pandoc::Inline;
 use pampa::readers;
-use pampa::template::config_value_to_meta;
 use pampa::writers;
+use quarto_pandoc_types::ConfigValueKind;
 
 /// Helper to resolve a SourceInfo chain to absolute file offset
 fn resolve_source_offset(source: &quarto_source_map::SourceInfo) -> usize {
@@ -74,8 +76,7 @@ fn test_metadata_source_tracking_002_qmd() {
     .expect("Failed to parse QMD");
 
     // Verify document-level metadata: title: metadata1
-    let meta_value = config_value_to_meta(&pandoc.meta);
-    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_value {
+    if let ConfigValueKind::Map(entries) = &pandoc.meta.value {
         let title_entry = entries
             .iter()
             .find(|e| e.key == "title")
@@ -88,9 +89,9 @@ fn test_metadata_source_tracking_002_qmd() {
         assert_eq!(key_offset, 4, "Key 'title' should start at file offset 4");
 
         // Verify value source: "metadata1"
-        match &title_entry.value {
-            MetaValueWithSourceInfo::MetaInlines { source_info, .. } => {
-                let value_offset = resolve_source_offset(source_info);
+        match &title_entry.value.value {
+            ConfigValueKind::PandocInlines(_) => {
+                let value_offset = resolve_source_offset(&title_entry.value.source_info);
                 // "metadata1" starts at position 7 in the YAML string "title: metadata1\n"
                 // Absolute offset should be 4 + 7 = 11
                 assert_eq!(
@@ -98,10 +99,10 @@ fn test_metadata_source_tracking_002_qmd() {
                     "Value 'metadata1' should start at file offset 11"
                 );
             }
-            other => panic!("Expected MetaInlines for title value, got {:?}", other),
+            other => panic!("Expected PandocInlines for title value, got {:?}", other),
         }
     } else {
-        panic!("Expected MetaMap for pandoc.meta");
+        panic!("Expected Map for pandoc.meta");
     }
 
     // NOTE: Lexical metadata (nested: meta) test skipped for now
@@ -120,8 +121,7 @@ fn test_metadata_source_tracking_002_qmd() {
 
     // Step 4: Verify source info is preserved through JSON roundtrip
     // Check document-level metadata
-    let meta_from_json = config_value_to_meta(&pandoc_from_json.meta);
-    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_from_json {
+    if let ConfigValueKind::Map(entries) = &pandoc_from_json.meta.value {
         let title_entry = entries
             .iter()
             .find(|e| e.key == "title")
@@ -134,8 +134,8 @@ fn test_metadata_source_tracking_002_qmd() {
             "After JSON roundtrip: Key 'title' should still start at file offset 4"
         );
 
-        if let MetaValueWithSourceInfo::MetaInlines { source_info, .. } = &title_entry.value {
-            let value_offset = resolve_source_offset(source_info);
+        if let ConfigValueKind::PandocInlines(_) = &title_entry.value.value {
+            let value_offset = resolve_source_offset(&title_entry.value.source_info);
             assert_eq!(
                 value_offset, 11,
                 "After JSON roundtrip: Value 'metadata1' should still start at file offset 11"
@@ -176,9 +176,8 @@ description: This is a description
     .expect("Failed to parse");
 
     // Extract metadata
-    let meta_value = config_value_to_meta(&pandoc.meta);
-    let MetaValueWithSourceInfo::MetaMap { entries, .. } = meta_value else {
-        panic!("Expected MetaMap");
+    let ConfigValueKind::Map(entries) = &pandoc.meta.value else {
+        panic!("Expected Map");
     };
 
     // Verify both entries have proper key_source tracking
@@ -280,19 +279,14 @@ Some content here.
     .expect("Failed to parse");
 
     // Extract metadata
-    let meta_value = config_value_to_meta(&pandoc.meta);
-    let MetaValueWithSourceInfo::MetaMap {
-        entries,
-        source_info,
-    } = meta_value
-    else {
-        panic!("Expected MetaMap");
+    let ConfigValueKind::Map(entries) = &pandoc.meta.value else {
+        panic!("Expected Map");
     };
 
     // Verify the overall metadata source info
     // The YAML content starts at offset 4 (after "---\n")
     // and should span the entire YAML content area
-    let meta_offset = resolve_source_offset(&source_info);
+    let meta_offset = resolve_source_offset(&pandoc.meta.source_info);
 
     eprintln!("\nMetadata block resolved offset: {}", meta_offset);
     eprintln!("Metadata entries count: {}", entries.len());
@@ -363,22 +357,28 @@ fn test_yaml_tagged_value_source_tracking() {
     )
     .expect("Failed to parse QMD");
 
-    // Get metadata
-    let meta_value = config_value_to_meta(&pandoc.meta);
-    if let MetaValueWithSourceInfo::MetaMap { ref entries, .. } = meta_value {
+    // Get metadata - check for Expr variant (tagged with !expr)
+    if let ConfigValueKind::Map(entries) = &pandoc.meta.value {
         let compute_entry = entries
             .iter()
             .find(|e| e.key == "compute")
             .expect("Should have 'compute' in metadata");
 
-        // The value should be MetaInlines containing a Span
-        match &compute_entry.value {
-            MetaValueWithSourceInfo::MetaInlines { content, .. } => {
-                assert_eq!(content.len(), 1, "Should have one inline element (Span)");
+        // The value should be Expr variant (from !expr tag)
+        match &compute_entry.value.value {
+            ConfigValueKind::Expr(expr) => {
+                // Verify the expression content
+                assert_eq!(expr, "x + 1", "Expression should be 'x + 1'");
+                eprintln!("\n✅ YAML tagged value test passed!");
+                eprintln!("   !expr tag correctly produced Expr variant with value: {}", expr);
+            }
+            ConfigValueKind::PandocInlines(inlines) => {
+                // If it's PandocInlines, check for the Span wrapper
+                assert_eq!(inlines.len(), 1, "Should have one inline element (Span)");
 
                 // Check it's a Span
-                match &content[0] {
-                    pampa::pandoc::Inline::Span(span) => {
+                match &inlines[0] {
+                    Inline::Span(span) => {
                         // Check the attr has "yaml-tagged-string" class
                         assert!(
                             span.attr.1.contains(&"yaml-tagged-string".to_string()),
@@ -415,9 +415,9 @@ fn test_yaml_tagged_value_source_tracking() {
                     other => panic!("Expected Span, got {:?}", other),
                 }
             }
-            other => panic!("Expected MetaInlines, got {:?}", other),
+            other => panic!("Expected Expr or PandocInlines, got {:?}", other),
         }
     } else {
-        panic!("Expected MetaMap for metadata");
+        panic!("Expected Map for metadata");
     }
 }

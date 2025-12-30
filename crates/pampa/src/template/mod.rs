@@ -49,9 +49,9 @@ pub mod render;
 // Re-export main types for convenience
 pub use builtin::{BUILTIN_TEMPLATE_NAMES, get_builtin_template, is_builtin_template};
 pub use bundle::TemplateBundle;
+// Phase 5: Removed legacy config_value_to_meta and meta_to_config_value exports
 pub use config_merge::{
-    compute_template_defaults, config_to_template_context, config_value_to_meta,
-    merged_metadata_to_context, meta_to_config_value,
+    compute_template_defaults, config_to_template_context, merged_metadata_to_context,
 };
 pub use context::{MetaWriter, meta_to_template_value, pandoc_to_context};
 pub use render::{BodyFormat, TemplateRenderError, render_with_bundle, render_with_resolver};

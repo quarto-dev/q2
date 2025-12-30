@@ -1206,9 +1206,7 @@ mod tests {
     use super::*;
     use crate::pandoc::block::Paragraph;
     use crate::pandoc::inline::Str;
-    use crate::template::meta_to_config_value;
-    use quarto_pandoc_types::ConfigValue;
-    use quarto_pandoc_types::meta::MetaValueWithSourceInfo;
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValue, ConfigValueKind, MergeOp};
     use quarto_source_map::SourceInfo;
 
     fn dummy_source_info() -> SourceInfo {
@@ -1336,52 +1334,53 @@ mod tests {
     }
 
     // =========================================================================
-    // Metadata-based configuration tests
+    // Metadata-based configuration tests (Phase 5: uses ConfigValue directly)
     // =========================================================================
 
-    fn make_meta_entry(
-        key: &str,
-        value: MetaValueWithSourceInfo,
-    ) -> quarto_pandoc_types::meta::MetaMapEntry {
-        quarto_pandoc_types::meta::MetaMapEntry {
+    fn make_config_entry(key: &str, value: ConfigValue) -> ConfigMapEntry {
+        ConfigMapEntry {
             key: key.to_string(),
             key_source: dummy_source_info(),
             value,
         }
     }
 
-    fn make_meta_string(value: &str) -> MetaValueWithSourceInfo {
-        MetaValueWithSourceInfo::MetaString {
-            value: value.to_string(),
+    fn make_config_string(value: &str) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(value.to_string())),
             source_info: dummy_source_info(),
+            merge_op: MergeOp::default(),
         }
     }
 
-    fn make_meta_map(
-        entries: Vec<quarto_pandoc_types::meta::MetaMapEntry>,
-    ) -> MetaValueWithSourceInfo {
-        MetaValueWithSourceInfo::MetaMap {
-            entries,
+    fn make_config_bool(value: bool) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(value)),
             source_info: dummy_source_info(),
+            merge_op: MergeOp::default(),
         }
     }
 
-    fn make_config(entries: Vec<quarto_pandoc_types::meta::MetaMapEntry>) -> ConfigValue {
-        meta_to_config_value(&make_meta_map(entries))
+    fn make_config_map(entries: Vec<ConfigMapEntry>) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Map(entries),
+            source_info: dummy_source_info(),
+            merge_op: MergeOp::default(),
+        }
     }
 
     #[test]
     fn test_extract_config_empty_metadata() {
-        let meta = make_config(vec![]);
+        let meta = make_config_map(vec![]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);
     }
 
     #[test]
     fn test_extract_config_no_format_key() {
-        let meta = make_config(vec![make_meta_entry(
+        let meta = make_config_map(vec![make_config_entry(
             "title",
-            make_meta_string("My Document"),
+            make_config_string("My Document"),
         )]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);
@@ -1389,9 +1388,12 @@ mod tests {
 
     #[test]
     fn test_extract_config_format_without_html() {
-        let meta = make_config(vec![make_meta_entry(
+        let meta = make_config_map(vec![make_config_entry(
             "format",
-            make_meta_map(vec![make_meta_entry("pdf", make_meta_map(vec![]))]),
+            make_config_map(vec![make_config_entry(
+                "pdf",
+                make_config_map(vec![]),
+            )]),
         )]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);
@@ -1399,17 +1401,11 @@ mod tests {
 
     #[test]
     fn test_extract_config_html_without_source_location() {
-        let meta = make_config(vec![make_meta_entry(
+        let meta = make_config_map(vec![make_config_entry(
             "format",
-            make_meta_map(vec![make_meta_entry(
+            make_config_map(vec![make_config_entry(
                 "html",
-                make_meta_map(vec![make_meta_entry(
-                    "toc",
-                    MetaValueWithSourceInfo::MetaBool {
-                        value: true,
-                        source_info: dummy_source_info(),
-                    },
-                )]),
+                make_config_map(vec![make_config_entry("toc", make_config_bool(true))]),
             )]),
         )]);
         let config = extract_config_from_metadata(&meta);
@@ -1418,13 +1414,13 @@ mod tests {
 
     #[test]
     fn test_extract_config_source_location_full() {
-        let meta = make_config(vec![make_meta_entry(
+        let meta = make_config_map(vec![make_config_entry(
             "format",
-            make_meta_map(vec![make_meta_entry(
+            make_config_map(vec![make_config_entry(
                 "html",
-                make_meta_map(vec![make_meta_entry(
+                make_config_map(vec![make_config_entry(
                     "source-location",
-                    make_meta_string("full"),
+                    make_config_string("full"),
                 )]),
             )]),
         )]);
@@ -1434,13 +1430,13 @@ mod tests {
 
     #[test]
     fn test_extract_config_source_location_other_value() {
-        let meta = make_config(vec![make_meta_entry(
+        let meta = make_config_map(vec![make_config_entry(
             "format",
-            make_meta_map(vec![make_meta_entry(
+            make_config_map(vec![make_config_entry(
                 "html",
-                make_meta_map(vec![make_meta_entry(
+                make_config_map(vec![make_config_entry(
                     "source-location",
-                    make_meta_string("none"),
+                    make_config_string("none"),
                 )]),
             )]),
         )]);
@@ -1461,7 +1457,7 @@ mod tests {
             source_info: dummy_source_info(),
         });
         let pandoc = Pandoc {
-            meta: make_config(vec![]),
+            meta: make_config_map(vec![]),
             blocks: vec![para],
         };
 
@@ -1508,13 +1504,13 @@ mod tests {
 
         // Create metadata with format.html.source-location: full
         let pandoc = Pandoc {
-            meta: make_config(vec![make_meta_entry(
+            meta: make_config_map(vec![make_config_entry(
                 "format",
-                make_meta_map(vec![make_meta_entry(
+                make_config_map(vec![make_config_entry(
                     "html",
-                    make_meta_map(vec![make_meta_entry(
+                    make_config_map(vec![make_config_entry(
                         "source-location",
-                        make_meta_string("full"),
+                        make_config_string("full"),
                     )]),
                 )]),
             )]),

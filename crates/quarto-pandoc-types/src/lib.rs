@@ -39,10 +39,7 @@ pub use inline::{
     Superscript, Target, Underline, is_empty_target, make_cite_inline, make_span_inline,
 };
 pub use list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-pub use meta::{
-    Meta, MetaMapEntry, MetaValue, MetaValueWithSourceInfo, meta_from_legacy,
-    meta_value_from_legacy,
-};
+pub use meta::{Meta, MetaValue};
 pub use pandoc::Pandoc;
 pub use shortcode::{Shortcode, ShortcodeArg};
 pub use table::{Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead};
