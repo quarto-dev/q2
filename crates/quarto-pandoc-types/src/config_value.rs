@@ -488,6 +488,40 @@ impl ConfigValue {
         }
     }
 
+    /// Create a nested map structure from a path and string value.
+    ///
+    /// This is useful for programmatically creating configuration, e.g., in WASM
+    /// to inject settings without parsing YAML.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let config = ConfigValue::from_path(&["format", "html", "source-location"], "full");
+    /// // Creates: { format: { html: { source-location: "full" } } }
+    /// ```
+    pub fn from_path(path: &[&str], value: &str) -> Self {
+        let source_info = SourceInfo::default();
+
+        if path.is_empty() {
+            return Self::new_string(value, source_info);
+        }
+
+        // Start with the leaf value
+        let mut result = Self::new_string(value, source_info.clone());
+
+        // Build up the nested map structure from right to left
+        for key in path.iter().rev() {
+            let entry = ConfigMapEntry {
+                key: (*key).to_string(),
+                key_source: source_info.clone(),
+                value: result,
+            };
+            result = Self::new_map(vec![entry], source_info.clone());
+        }
+
+        result
+    }
+
     /// Set the merge operation.
     pub fn with_merge_op(mut self, merge_op: MergeOp) -> Self {
         self.merge_op = merge_op;

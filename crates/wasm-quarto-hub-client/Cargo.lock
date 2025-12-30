@@ -679,6 +679,7 @@ dependencies = [
  "anyhow",
  "hashlink",
  "pampa",
+ "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",
  "quarto-pandoc-types",
@@ -746,10 +747,12 @@ name = "quarto-pandoc-types"
 version = "0.0.0"
 dependencies = [
  "hashlink",
+ "indexmap",
  "quarto-source-map",
  "rustc-hash",
  "serde",
  "serde_json",
+ "yaml-rust2",
 ]
 
 [[package]]
@@ -1312,6 +1315,7 @@ dependencies = [
  "pampa",
  "quarto-core",
  "quarto-error-reporting",
+ "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-system-runtime",
  "serde",

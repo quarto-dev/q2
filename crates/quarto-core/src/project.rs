@@ -19,6 +19,7 @@
 
 use std::path::{Path, PathBuf};
 
+use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::error::{QuartoError, Result};
@@ -77,6 +78,26 @@ pub struct ProjectConfig {
 
     /// Raw configuration value for format-specific settings
     pub raw: serde_json::Value,
+
+    /// Format configuration for merging with document metadata.
+    ///
+    /// This is used by the render pipeline to merge project-level format settings
+    /// (like `format.html.source-location: full`) with document metadata.
+    /// When present, values in document metadata override values here.
+    pub format_config: Option<ConfigValue>,
+}
+
+impl ProjectConfig {
+    /// Create a ProjectConfig with format configuration.
+    ///
+    /// This is useful for programmatically creating a project config
+    /// (e.g., in WASM) with specific format settings.
+    pub fn with_format_config(format_config: ConfigValue) -> Self {
+        Self {
+            format_config: Some(format_config),
+            ..Default::default()
+        }
+    }
 }
 
 /// Information about a document to be rendered
@@ -312,6 +333,7 @@ impl ProjectContext {
             output_dir,
             render_patterns,
             raw: value,
+            format_config: None, // TODO: Parse with quarto-config for full source tracking
         })
     }
 

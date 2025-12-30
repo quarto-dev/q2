@@ -1887,6 +1887,7 @@ dependencies = [
  "anyhow",
  "hashlink",
  "pampa",
+ "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",
  "quarto-pandoc-types",

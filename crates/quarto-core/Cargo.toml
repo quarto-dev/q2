@@ -22,6 +22,7 @@ quarto-pandoc-types.workspace = true
 quarto-source-map.workspace = true
 quarto-doctemplate.workspace = true
 quarto-error-reporting.workspace = true
+quarto-config.workspace = true
 pampa.workspace = true
 
 [dev-dependencies]

@@ -2,49 +2,47 @@
 
 **Issue:** k-ic1o
 **Date:** 2025-12-29
-**Status:** Planning
+**Status:** Implementation
 **Blocks:** k-suww (matched scrolling)
 
 ## Overview
 
-Integrate the existing `quarto-config` crate into the render pipeline to enable project-level control of rendering options. This allows WASM (hub-client) to inject settings like `format.html.source-location: full` into project configuration, which then gets merged with document metadata during rendering.
+Integrate project-level configuration into the render pipeline to enable settings like `format.html.source-location: full` to be injected by WASM (hub-client), which then gets merged with document metadata during rendering.
 
 ## Background
 
-### Current State
+### Current State (Post k-2tu9 Refactoring)
 
-1. **quarto-config crate** - **FULLY IMPLEMENTED**:
+1. **ConfigValue is now the unified type** - The k-2tu9 refactoring unified `MetaValueWithSourceInfo` and `ConfigValue`. They are now the same type (`ConfigValue`), defined in `quarto-pandoc-types`.
+
+2. **quarto-config crate** - **FULLY IMPLEMENTED**:
    - `ConfigValue`, `ConfigValueKind`, `MergeOp`, `Interpretation` - core types
    - `MergedConfig<'a>`, `MergedCursor<'a>` - lazy cursor-based merging
    - `config_value_from_yaml()` - conversion from YAML with tag parsing
-   - `materialize()` - conversion to owned values
    - Tag parsing for `!prefer`, `!concat`, `!md`, `!path`, etc.
-   - Comprehensive test suite
 
-2. **ProjectConfig** (`quarto-core/src/project.rs:68-80`) - **NOT YET INTEGRATED**:
+3. **HTML writer** (`pampa/src/writers/html.rs`):
+   - Already uses `ConfigValue` for metadata
+   - `extract_config_from_metadata(meta: &ConfigValue)` reads source-location config
+   - Looks for `format.html.source-location: full`
+
+4. **ProjectConfig** (`quarto-core/src/project.rs:68-80`) - **NEEDS UPDATE**:
    ```rust
    pub struct ProjectConfig {
        pub project_type: ProjectType,
        pub output_dir: Option<PathBuf>,
        pub render_patterns: Vec<String>,
-       pub raw: serde_json::Value,  // ← Still using raw JSON, not ConfigValue
+       pub raw: serde_json::Value,  // ← Should be Option<ConfigValue>
    }
    ```
 
-3. **render_qmd_to_html** (`quarto-core/src/pipeline.rs`):
-   - Parses QMD content into Pandoc AST
-   - Runs transform pipeline
-   - Calls `pampa::writers::html::write()` which reads source location config from `pandoc.meta`
-   - **Does not merge project config with document metadata**
+5. **render_qmd_to_html** (`quarto-core/src/pipeline.rs`):
+   - Does not merge project config with document metadata
+   - Needs to accept project config and merge it
 
-4. **HTML writer** (`pampa/src/writers/html.rs`):
-   - Reads `format.html.source-location` from document metadata
-   - If value is `"full"`, enables source tracking with `data-loc` attributes
-
-5. **WASM renderer** (`wasm-quarto-hub-client/src/lib.rs`):
-   - Creates a minimal `ProjectContext` with no config
-   - Calls `render_qmd_to_html`
-   - No way to inject project-level settings
+6. **WASM renderer** (`wasm-quarto-hub-client/src/lib.rs`):
+   - Creates `ProjectContext` with `config: None`
+   - `render_qmd_content` doesn't accept config options
 
 ### Goal
 
@@ -59,239 +57,110 @@ HTML writer: reads merged config, sees source-location: full
 Output: HTML with data-loc attributes
 ```
 
-## Design
-
-### Integration Tasks
-
-The `quarto-config` crate is fully implemented. The work is **integration**:
-
-1. **Replace `ProjectConfig.raw`** with `ConfigValue`
-2. **Add conversion functions** between `MetaValueWithSourceInfo` and `ConfigValue`
-3. **Add config merging** in `render_qmd_to_html` to combine project config with document metadata
-4. **Add WASM API** to inject config values into `ProjectContext`
-
-### Using MergedConfig for Project + Document
-
-The existing `MergedConfig<'a>` is designed exactly for this use case:
-
-```rust
-// In render_qmd_to_html:
-let project_config: &ConfigValue = &ctx.project.config.format_config;
-let doc_config: ConfigValue = config_from_meta(&pandoc.meta);  // New conversion
-
-let merged = MergedConfig::new(vec![project_config, &doc_config]);
-// Document values override project values (later layers win)
-
-// Read merged config for HTML writer
-if merged.get_scalar(&["format", "html", "source-location"])
-    .and_then(|s| s.value.as_yaml())
-    .and_then(|y| y.as_str())
-    == Some("full")
-{
-    // Enable source location tracking
-}
-```
-
-### Missing Piece: MetaValueWithSourceInfo ↔ ConfigValue Conversion
-
-We need bidirectional conversion between:
-- `MetaValueWithSourceInfo` (Pandoc AST metadata)
-- `ConfigValue` (quarto-config)
-
-This allows:
-1. **Project config** → merge → **effective config** (using `MergedConfig`)
-2. **Document metadata** → `ConfigValue` → merge with project config
-3. **Merged config** → `MetaValueWithSourceInfo` → pass to HTML writer
-
-**Approach**: Convert merged config to `MetaValueWithSourceInfo` before calling HTML writer (less invasive, HTML writer unchanged)
-
-### Conversion Functions
-
-```rust
-// New file: quarto-config/src/meta_convert.rs
-
-/// Convert MetaValueWithSourceInfo to ConfigValue
-pub fn config_from_meta(meta: &MetaValueWithSourceInfo) -> ConfigValue {
-    match meta {
-        MetaValueWithSourceInfo::MetaString { value, source_info } => {
-            ConfigValue::new_scalar(Yaml::String(value.clone()), source_info.clone())
-        }
-        MetaValueWithSourceInfo::MetaBool { value, source_info } => {
-            ConfigValue::new_scalar(Yaml::Boolean(*value), source_info.clone())
-        }
-        MetaValueWithSourceInfo::MetaMap { entries, source_info } => {
-            let map: IndexMap<String, ConfigValue> = entries
-                .iter()
-                .map(|e| (e.key.clone(), config_from_meta(&e.value)))
-                .collect();
-            ConfigValue::new_map(map, source_info.clone())
-        }
-        MetaValueWithSourceInfo::MetaList { items, source_info } => {
-            let items: Vec<ConfigValue> = items
-                .iter()
-                .map(config_from_meta)
-                .collect();
-            ConfigValue::new_array(items, source_info.clone())
-        }
-        MetaValueWithSourceInfo::MetaInlines { inlines, source_info } => {
-            ConfigValue::new_inlines(inlines.clone(), source_info.clone())
-        }
-        MetaValueWithSourceInfo::MetaBlocks { blocks, source_info } => {
-            ConfigValue::new_blocks(blocks.clone(), source_info.clone())
-        }
-    }
-}
-
-/// Convert ConfigValue to MetaValueWithSourceInfo
-pub fn meta_from_config(config: &ConfigValue) -> MetaValueWithSourceInfo {
-    match &config.value {
-        ConfigValueKind::Scalar(yaml) => match yaml {
-            Yaml::String(s) => MetaValueWithSourceInfo::MetaString {
-                value: s.clone(),
-                source_info: config.source_info.clone(),
-            },
-            Yaml::Boolean(b) => MetaValueWithSourceInfo::MetaBool {
-                value: *b,
-                source_info: config.source_info.clone(),
-            },
-            // ... handle other Yaml variants
-        },
-        ConfigValueKind::Map(entries) => {
-            let meta_entries: Vec<MetaMapEntry> = entries
-                .iter()
-                .map(|(k, v)| MetaMapEntry {
-                    key: k.clone(),
-                    key_source: SourceInfo::default(),
-                    value: meta_from_config(v),
-                })
-                .collect();
-            MetaValueWithSourceInfo::MetaMap {
-                entries: meta_entries,
-                source_info: config.source_info.clone(),
-            }
-        }
-        ConfigValueKind::Array(items) => {
-            let meta_items: Vec<MetaValueWithSourceInfo> = items
-                .iter()
-                .map(meta_from_config)
-                .collect();
-            MetaValueWithSourceInfo::MetaList {
-                items: meta_items,
-                source_info: config.source_info.clone(),
-            }
-        }
-        ConfigValueKind::PandocInlines(inlines) => MetaValueWithSourceInfo::MetaInlines {
-            inlines: inlines.clone(),
-            source_info: config.source_info.clone(),
-        },
-        ConfigValueKind::PandocBlocks(blocks) => MetaValueWithSourceInfo::MetaBlocks {
-            blocks: blocks.clone(),
-            source_info: config.source_info.clone(),
-        },
-    }
-}
-```
-
-### Programmatic ConfigValue Creation
-
-For WASM to inject config without parsing YAML:
-
-```rust
-impl ConfigValue {
-    /// Create a nested map structure from a path and value
-    ///
-    /// Example: `ConfigValue::from_path(&["format", "html", "source-location"], "full")`
-    /// Creates: `{ format: { html: { source-location: "full" } } }`
-    pub fn from_path(path: &[&str], value: &str) -> ConfigValue {
-        if path.is_empty() {
-            return ConfigValue::new_scalar(
-                Yaml::String(value.to_string()),
-                SourceInfo::default()
-            );
-        }
-
-        let mut result = ConfigValue::new_scalar(
-            Yaml::String(value.to_string()),
-            SourceInfo::default()
-        );
-
-        for key in path.iter().rev() {
-            let mut map = IndexMap::new();
-            map.insert(key.to_string(), result);
-            result = ConfigValue::new_map(map, SourceInfo::default());
-        }
-
-        result
-    }
-}
-```
-
 ## Implementation Plan
 
-### Phase 1: Conversion Functions
+### Phase 1: Update ProjectConfig to use ConfigValue
 
-- [ ] Add `quarto-config/src/meta_convert.rs` with `config_from_meta()` and `meta_from_config()`
-- [ ] Add `ConfigValue::from_path()` helper for programmatic construction
-- [ ] Unit tests for conversion round-tripping
-- [ ] Export from `quarto-config/src/lib.rs`
+**Files:**
+- `quarto-core/src/project.rs`
 
-### Phase 2: ProjectConfig Integration
+**Changes:**
+1. Add dependency on `quarto-config` crate
+2. Change `raw: serde_json::Value` to `format_config: Option<ConfigValue>`
+3. Update `parse_config()` to use `config_value_from_yaml()` instead of `serde_yaml`
+4. Add helper method `ProjectConfig::with_format_config()` for programmatic creation
 
-- [ ] Update `ProjectConfig` to use `ConfigValue` instead of `serde_json::Value`
-- [ ] Update project loading code to use `config_value_from_yaml()`
-- [ ] Update any code that creates `ProjectConfig` (including WASM)
-- [ ] Integration tests
+**Notes:**
+- No conversion functions needed since types are unified
+- Source location tracking comes for free with `config_value_from_yaml()`
 
-### Phase 3: Pipeline Config Merging
+### Phase 2: Add config merging to render pipeline
 
-- [ ] Add `merge_config_into_pipeline()` function to `quarto-core/src/pipeline.rs`
-- [ ] Modify `render_qmd_to_html` to:
-  1. Convert document metadata to `ConfigValue`
-  2. Create `MergedConfig` with project config + document config
-  3. Convert merged config back to `MetaValueWithSourceInfo`
-  4. Replace `pandoc.meta` with merged metadata
-- [ ] Integration tests: verify project config merges with document metadata
+**Files:**
+- `quarto-core/src/pipeline.rs`
 
-### Phase 4: WASM API
+**Changes:**
+1. Import `MergedConfig` from `quarto-config`
+2. In `render_qmd_to_html`:
+   - If project has format_config, merge with document metadata
+   - Use `MergedConfig::new(vec![&project_config, &doc_meta])`
+   - Document values override project values (later layers win)
+3. Pass merged config to HTML writer (already uses ConfigValue)
 
-- [ ] Add `render_qmd_content_with_options(content, template_bundle, options_json)` to WASM
-- [ ] Parse options JSON, build `ConfigValue` using `from_path()`
-- [ ] Inject into `ProjectContext.config`
-- [ ] Update TypeScript bindings in `hub-client/src/services/wasmRenderer.ts`
-- [ ] End-to-end test: verify `data-loc` attributes appear in output
+**Key insight:** The HTML writer's `extract_config_from_metadata()` already takes `&ConfigValue`. We need to materialize the merged config before passing it.
 
-### Phase 5: Hub-Client Integration (Part of k-suww)
+### Phase 3: Add WASM API for injecting config
 
-- [ ] Update `renderToHtml()` to accept options parameter
-- [ ] Wire through scroll sync toggle to enable source location tracking
-- [ ] Verify matched scrolling works end-to-end
+**Files:**
+- `quarto-config/src/types.rs` - Add `ConfigValue::from_path()` helper
+- `wasm-quarto-hub-client/src/lib.rs` - Modify API
+
+**Changes:**
+
+1. Add `ConfigValue::from_path()`:
+   ```rust
+   /// Create a nested map from a path and value
+   /// Example: from_path(&["format", "html", "source-location"], "full")
+   /// Creates: { format: { html: { source-location: "full" } } }
+   pub fn from_path(path: &[&str], value: &str) -> ConfigValue
+   ```
+
+2. Modify `render_qmd_content()` to accept options:
+   ```rust
+   #[wasm_bindgen]
+   pub fn render_qmd_content(content: &str, template_bundle: &str, options: &str) -> String
+   ```
+   Where `options` is JSON like: `{"source_location": true}`
+
+3. Parse options and inject into ProjectConfig:
+   ```rust
+   if options.source_location {
+       let config = ConfigValue::from_path(
+           &["format", "html", "source-location"],
+           "full"
+       );
+       project.config = Some(ProjectConfig {
+           format_config: Some(config),
+           ..Default::default()
+       });
+   }
+   ```
+
+### Phase 4: Update TypeScript bindings
+
+**Files:**
+- `hub-client/src/services/wasmRenderer.ts`
+
+**Changes:**
+1. Update `renderToHtml()` to accept options parameter
+2. Define `RenderOptions` interface:
+   ```typescript
+   interface RenderOptions {
+     sourceLocation?: boolean;
+   }
+   ```
+3. Pass options to WASM `render_qmd_content()`
 
 ## File Changes Summary
 
-### New Files
-- `quarto-config/src/meta_convert.rs` - MetaValueWithSourceInfo ↔ ConfigValue conversion
-
 ### Modified Files
-- `quarto-config/src/lib.rs` - Export new module
-- `quarto-config/src/types.rs` - Add `ConfigValue::from_path()`
+- `quarto-core/Cargo.toml` - Add quarto-config dependency
 - `quarto-core/src/project.rs` - Update ProjectConfig to use ConfigValue
 - `quarto-core/src/pipeline.rs` - Add config merging logic
+- `quarto-config/src/types.rs` - Add `ConfigValue::from_path()`
 - `wasm-quarto-hub-client/src/lib.rs` - Add options-aware render function
 - `hub-client/src/services/wasmRenderer.ts` - TypeScript bindings
+
+## Open Questions
+
+1. **Materialization vs lazy merging**: Should we materialize the merged config or pass it lazily?
+   - **Decision**: Materialize for now since HTML writer expects `&ConfigValue`
+
+2. **Error handling for malformed options JSON**: How to handle parse errors?
+   - **Decision**: Log warning and ignore invalid options, don't fail rendering
 
 ## Relationship to Other Issues
 
 - **k-suww** (matched scrolling): This issue enables source location tracking needed for scroll sync
+- **k-2tu9** (type unification): COMPLETED - simplified this implementation significantly
 - **k-zvzm** (config merging design): This implements integration of that design
-- **k-vpgx** (MergedConfig lifetime design): Already implemented in quarto-config
-
-## Open Questions
-
-1. **Dependency direction**: Should `quarto-config` depend on `quarto-pandoc-types` for the conversion, or should the conversion live elsewhere?
-   - **Recommendation**: Put conversion in `quarto-config` since it already depends on `quarto-pandoc-types` (for `PandocInlines`/`PandocBlocks`)
-
-2. **Error handling**: What if conversion fails (e.g., unexpected MetaValue variant)?
-   - **Recommendation**: Return `Result<ConfigValue, ConfigError>` with clear error messages
-
-3. **Performance**: Is there overhead from converting to ConfigValue and back?
-   - **Mitigation**: Only convert when project config exists; optimize later if needed

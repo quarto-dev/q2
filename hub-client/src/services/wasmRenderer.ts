@@ -144,6 +144,33 @@ export function renderQmdContent(content: string, templateBundle: string = ''): 
 }
 
 /**
+ * Options for rendering QMD content.
+ */
+export interface WasmRenderOptions {
+  /**
+   * Enable source location tracking in HTML output.
+   *
+   * When true, adds `data-loc` attributes to HTML elements for scroll sync.
+   */
+  sourceLocation?: boolean;
+}
+
+/**
+ * Render QMD content with options (without VFS)
+ */
+export function renderQmdContentWithOptions(
+  content: string,
+  templateBundle: string = '',
+  options: WasmRenderOptions = {}
+): RenderResponse {
+  const wasm = getWasm();
+  const optionsJson = JSON.stringify({
+    source_location: options.sourceLocation ?? false,
+  });
+  return JSON.parse(wasm.render_qmd_content_with_options(content, templateBundle, optionsJson));
+}
+
+/**
  * Get a built-in template bundle
  */
 export function getBuiltinTemplate(name: string): string {
@@ -169,19 +196,44 @@ export interface RenderResult {
 }
 
 /**
+ * Options for the high-level renderToHtml function.
+ */
+export interface RenderToHtmlOptions {
+  /**
+   * Enable source location tracking in HTML output.
+   *
+   * When true, adds `data-loc` attributes to HTML elements for scroll sync.
+   * Default: false
+   */
+  sourceLocation?: boolean;
+}
+
+/**
  * Render QMD content to HTML, handling errors gracefully.
  *
  * Returns structured diagnostics with source locations that can be
  * converted to Monaco editor markers using diagnosticsToMarkers().
+ *
+ * @param qmdContent - The QMD source content to render
+ * @param options - Optional render options (e.g., enable source location tracking)
  */
-export async function renderToHtml(qmdContent: string): Promise<RenderResult> {
+export async function renderToHtml(
+  qmdContent: string,
+  options: RenderToHtmlOptions = {}
+): Promise<RenderResult> {
   try {
     await initWasm();
 
-    const result: RenderResponse = renderQmdContent(
-      qmdContent,
-      htmlTemplateBundle || ''
-    );
+    console.log('[renderToHtml] sourceLocation option:', options.sourceLocation);
+
+    // Use the options-aware render function if options are specified
+    const result: RenderResponse = options.sourceLocation
+      ? renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
+          sourceLocation: options.sourceLocation,
+        })
+      : renderQmdContent(qmdContent, htmlTemplateBundle || '');
+
+    console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
 
     if (result.success) {
       return {

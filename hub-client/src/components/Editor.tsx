@@ -4,9 +4,10 @@ import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
 import type { Patch } from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
+import { initWasm, renderToHtml, isWasmReady, vfsReadFile } from '../services/wasmRenderer';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
+import { useScrollSync } from '../hooks/useScrollSync';
 import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import './Editor.css';
@@ -162,14 +163,38 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   }, [fileContents]);
 
   const [content, setContent] = useState<string>(getContent(currentFile));
-  const [previewHtml, setPreviewHtml] = useState<string>('');
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Double-buffered iframes to prevent flash during updates
+  const iframeARef = useRef<HTMLIFrameElement>(null);
+  const iframeBRef = useRef<HTMLIFrameElement>(null);
+  const [activeIframe, setActiveIframe] = useState<'A' | 'B'>('A');
+  const activeIframeRef = useRef<'A' | 'B'>('A'); // Ref for use in callbacks
+  const [iframeAHtml, setIframeAHtml] = useState<string>('');
+  const [iframeBHtml, setIframeBHtml] = useState<string>('');
+  // Track if we're waiting for inactive iframe to load before swapping
+  const [swapPending, setSwapPending] = useState(false);
+  // iframeRef points to the currently active iframe (for scroll sync and post-processing)
+  const iframeRef = activeIframe === 'A' ? iframeARef : iframeBRef;
+  const inactiveIframeRef = activeIframe === 'A' ? iframeBRef : iframeARef;
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    activeIframeRef.current = activeIframe;
+  }, [activeIframe]);
 
   // Diagnostics state for Monaco markers
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [unlocatedErrors, setUnlocatedErrors] = useState<Diagnostic[]>([]);
+
+  // Scroll sync state (enabled by default)
+  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
+  // Track if editor has focus (to prevent scroll feedback loop)
+  const editorHasFocusRef = useRef(false);
+  // Track when editor is mounted (for scroll sync initialization)
+  const [editorReady, setEditorReady] = useState(false);
+  const [iframeLoadCount, setIframeLoadCount] = useState(0);
 
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);
@@ -188,9 +213,76 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   );
 
   // Post-process iframe content after render (replace CSS links with data URIs)
-  const { handleLoad } = useIframePostProcessor(iframeRef, {
+  // Note: We pass the active iframeRef here, but we'll also process inactive iframe manually
+  const { handleLoad: handlePostProcess } = useIframePostProcessor(iframeRef, {
     currentFilePath: currentFile?.path ?? '',
     onQmdLinkClick: handleQmdLinkClick,
+  });
+
+  // Handler for when the inactive iframe finishes loading new content
+  const handleInactiveIframeLoad = useCallback(() => {
+    // Only process if we're waiting for a swap
+    if (!swapPending) return;
+
+    const activeIframeEl = iframeRef.current;
+    const inactiveIframeEl = inactiveIframeRef.current;
+
+    // Save scroll position from currently active iframe
+    let scrollPos: { x: number; y: number } | null = null;
+    if (activeIframeEl?.contentWindow) {
+      scrollPos = {
+        x: activeIframeEl.contentWindow.scrollX,
+        y: activeIframeEl.contentWindow.scrollY,
+      };
+    }
+
+    // Post-process the inactive iframe (CSS data URIs, link handlers)
+    if (inactiveIframeEl?.contentDocument) {
+      const doc = inactiveIframeEl.contentDocument;
+      // Inline the post-processing logic for the inactive iframe
+      doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
+        const href = link.getAttribute('href');
+        if (href?.startsWith('/.quarto/')) {
+          const result = vfsReadFile(href);
+          if (result.success && result.content) {
+            const dataUri = `data:text/css;base64,${btoa(result.content)}`;
+            link.setAttribute('href', dataUri);
+          }
+        }
+      });
+    }
+
+    // Swap: make inactive become active
+    setActiveIframe((prev) => (prev === 'A' ? 'B' : 'A'));
+    setSwapPending(false);
+    setIframeLoadCount((n) => n + 1);
+
+    // Restore scroll position to the now-active iframe (after swap, inactiveIframeRef is now the visible one)
+    // We need to do this after React re-renders, so use setTimeout
+    if (scrollPos) {
+      setTimeout(() => {
+        // After swap, the previously inactive iframe is now active
+        const nowActiveIframe = inactiveIframeEl;
+        if (nowActiveIframe?.contentWindow) {
+          nowActiveIframe.contentWindow.scrollTo(scrollPos!.x, scrollPos!.y);
+        }
+      }, 0);
+    }
+  }, [swapPending, iframeRef, inactiveIframeRef]);
+
+  // Handler for active iframe load (used for initial load and post-processing)
+  const handleActiveIframeLoad = useCallback(() => {
+    handlePostProcess();
+    setIframeLoadCount((n) => n + 1);
+  }, [handlePostProcess]);
+
+  // Scroll synchronization between editor and preview
+  useScrollSync({
+    editorRef,
+    iframeRef,
+    enabled: scrollSyncEnabled && editorReady,
+    iframeLoadCount,
+    editorHasFocusRef,
   });
 
   // Debounce rendering
@@ -220,18 +312,35 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     return () => { cancelled = true; };
   }, []);
 
+  // Helper to set HTML on the inactive iframe (uses ref for current active state)
+  const setInactiveHtml = useCallback((html: string) => {
+    if (activeIframeRef.current === 'A') {
+      setIframeBHtml(html);
+    } else {
+      setIframeAHtml(html);
+    }
+  }, []);
+
   // Render function that uses WASM when available
   const doRender = useCallback(async (qmdContent: string) => {
     lastContentRef.current = qmdContent;
 
+    console.log('[doRender] scrollSyncEnabled:', scrollSyncEnabled);
+
     if (!isWasmReady()) {
-      setPreviewHtml(renderFallback(qmdContent, 'Loading WASM renderer...'));
+      // For initial load before WASM is ready, load into inactive iframe and swap
+      setInactiveHtml(renderFallback(qmdContent, 'Loading WASM renderer...'));
+      setSwapPending(true);
       setDiagnostics([]);
       return;
     }
 
     try {
-      const result = await renderToHtml(qmdContent);
+      // Enable source location tracking when scroll sync is enabled
+      console.log('[doRender] calling renderToHtml with sourceLocation:', scrollSyncEnabled);
+      const result = await renderToHtml(qmdContent, {
+        sourceLocation: scrollSyncEnabled,
+      });
 
       // Check if content changed while we were rendering
       if (qmdContent !== lastContentRef.current) {
@@ -246,25 +355,26 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       setDiagnostics(allDiagnostics);
 
       if (result.success) {
-        // The render pipeline now produces complete HTML with CSS links.
-        // The useIframePostProcessor hook will replace CSS links with
-        // data URIs after the iframe loads.
-        setPreviewHtml(result.html);
+        // Load new content into inactive iframe (will swap on load)
+        setInactiveHtml(result.html);
+        setSwapPending(true);
       } else {
         const errorMsg =
           typeof result.error === 'string'
             ? result.error
             : JSON.stringify(result.error, null, 2) || 'Unknown error';
-        // Show error in preview pane (fallback display)
-        setPreviewHtml(renderError(qmdContent, errorMsg));
+        // Show error in preview pane
+        setInactiveHtml(renderError(qmdContent, errorMsg));
+        setSwapPending(true);
       }
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : JSON.stringify(err, null, 2);
-      setPreviewHtml(renderError(qmdContent, errorMsg));
+      setInactiveHtml(renderError(qmdContent, errorMsg));
+      setSwapPending(true);
       setDiagnostics([]);
     }
-  }, []);
+  }, [scrollSyncEnabled, setInactiveHtml]);
 
   // Debounced render update
   const updatePreview = useCallback((newContent: string) => {
@@ -276,10 +386,10 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     }, 300);
   }, [doRender]);
 
-  // Re-render when content changes or WASM becomes ready
+  // Re-render when content changes, WASM becomes ready, or scroll sync is toggled
   useEffect(() => {
     updatePreview(content);
-  }, [content, updatePreview, wasmStatus]);
+  }, [content, updatePreview, wasmStatus, scrollSyncEnabled]);
 
   // Apply Monaco markers when diagnostics change
   useEffect(() => {
@@ -354,6 +464,17 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     editorRef.current = editor;
     monacoRef.current = monaco;
     onPresenceEditorMount(editor);
+
+    // Track editor focus state for scroll sync
+    editor.onDidFocusEditorText(() => {
+      editorHasFocusRef.current = true;
+    });
+    editor.onDidBlurEditorText(() => {
+      editorHasFocusRef.current = false;
+    });
+
+    // Signal that editor is ready for scroll sync
+    setEditorReady(true);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -398,9 +519,19 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           </select>
           <button className="new-file-btn" title="New file">+</button>
         </div>
-        <button className="disconnect-btn" onClick={onDisconnect}>
-          Disconnect
-        </button>
+        <div className="toolbar-actions">
+          <label className="scroll-sync-toggle" title="Sync editor and preview scroll positions">
+            <input
+              type="checkbox"
+              checked={scrollSyncEnabled}
+              onChange={(e) => setScrollSyncEnabled(e.target.checked)}
+            />
+            <span>Scroll sync</span>
+          </label>
+          <button className="disconnect-btn" onClick={onDisconnect}>
+            Disconnect
+          </button>
+        </div>
       </header>
 
       {wasmError && (
@@ -441,12 +572,22 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           />
         </div>
         <div className="pane preview-pane">
+          {/* Double-buffered iframes: one visible, one loading in background */}
           <iframe
-            ref={iframeRef}
-            srcDoc={previewHtml}
-            title="Preview"
+            ref={iframeARef}
+            srcDoc={iframeAHtml}
+            title="Preview A"
             sandbox="allow-same-origin"
-            onLoad={handleLoad}
+            onLoad={activeIframe === 'A' ? handleActiveIframeLoad : handleInactiveIframeLoad}
+            className={activeIframe === 'A' ? 'preview-active' : 'preview-hidden'}
+          />
+          <iframe
+            ref={iframeBRef}
+            srcDoc={iframeBHtml}
+            title="Preview B"
+            sandbox="allow-same-origin"
+            onLoad={activeIframe === 'B' ? handleActiveIframeLoad : handleInactiveIframeLoad}
+            className={activeIframe === 'B' ? 'preview-active' : 'preview-hidden'}
           />
         </div>
       </main>

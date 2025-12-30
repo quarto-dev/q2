@@ -143,6 +143,7 @@ When fixing ANY bug:
 ## Testing instructions
 
 - **CRITICAL**: Use `cargo nextest run` instead of `cargo test`.
+- **CRITICAL**: Do NOT pipe `cargo nextest run` through `tail` or other commands - it causes hangs. Run it directly.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
 
 ## Coding instructions

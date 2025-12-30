@@ -33,6 +33,7 @@
 
 use std::path::PathBuf;
 
+use quarto_config::MergedConfig;
 use quarto_doctemplate::Template;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_pandoc_types::pandoc::Pandoc;
@@ -125,6 +126,24 @@ pub fn render_qmd_to_html(
     let parse_result = parse_qmd(content, source_name)?;
     let mut pandoc = parse_result.pandoc;
     let ast_context = parse_result.ast_context;
+
+    // Stage 1.5: Merge project config with document metadata
+    // Project format_config provides defaults that document metadata can override.
+    // This enables WASM to inject settings like `format.html.source-location: full`.
+    if let Some(format_config) = ctx
+        .project
+        .config
+        .as_ref()
+        .and_then(|c| c.format_config.as_ref())
+    {
+        // MergedConfig: later layers (document) override earlier layers (project)
+        let merged = MergedConfig::new(vec![format_config, &pandoc.meta]);
+        if let Ok(materialized) = merged.materialize() {
+            pandoc.meta = materialized;
+        }
+        // Note: If materialization fails (shouldn't happen with well-formed configs),
+        // we silently continue with the original document metadata.
+    }
 
     // Stage 2: Run transform pipeline
     let pipeline = build_transform_pipeline();

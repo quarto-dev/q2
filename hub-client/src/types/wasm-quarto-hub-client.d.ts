@@ -11,6 +11,11 @@ declare module 'wasm-quarto-hub-client' {
   export function vfs_read_file(path: string): string;
   export function render_qmd(path: string): string;
   export function render_qmd_content(content: string, template_bundle: string): string;
+  export function render_qmd_content_with_options(
+    content: string,
+    template_bundle: string,
+    options_json: string
+  ): string;
   export function get_builtin_template(name: string): string;
 
   export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
