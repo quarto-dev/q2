@@ -1390,10 +1390,7 @@ mod tests {
     fn test_extract_config_format_without_html() {
         let meta = make_config_map(vec![make_config_entry(
             "format",
-            make_config_map(vec![make_config_entry(
-                "pdf",
-                make_config_map(vec![]),
-            )]),
+            make_config_map(vec![make_config_entry("pdf", make_config_map(vec![]))]),
         )]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);

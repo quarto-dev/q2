@@ -370,7 +370,10 @@ fn test_yaml_tagged_value_source_tracking() {
                 // Verify the expression content
                 assert_eq!(expr, "x + 1", "Expression should be 'x + 1'");
                 eprintln!("\n✅ YAML tagged value test passed!");
-                eprintln!("   !expr tag correctly produced Expr variant with value: {}", expr);
+                eprintln!(
+                    "   !expr tag correctly produced Expr variant with value: {}",
+                    expr
+                );
             }
             ConfigValueKind::PandocInlines(inlines) => {
                 // If it's PandocInlines, check for the Span wrapper

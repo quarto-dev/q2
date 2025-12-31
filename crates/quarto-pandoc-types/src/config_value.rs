@@ -247,9 +247,7 @@ fn yaml_to_serde_value(yaml: &Yaml) -> serde_json::Value {
         }
         Yaml::Boolean(b) => serde_json::Value::Bool(*b),
         Yaml::Null => serde_json::Value::Null,
-        Yaml::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(yaml_to_serde_value).collect())
-        }
+        Yaml::Array(arr) => serde_json::Value::Array(arr.iter().map(yaml_to_serde_value).collect()),
         Yaml::Hash(hash) => {
             let mut map = serde_json::Map::new();
             for (k, v) in hash {
@@ -358,9 +356,7 @@ fn serde_value_to_yaml(value: &serde_json::Value) -> Yaml {
         }
         serde_json::Value::Bool(b) => Yaml::Boolean(*b),
         serde_json::Value::Null => Yaml::Null,
-        serde_json::Value::Array(arr) => {
-            Yaml::Array(arr.iter().map(serde_value_to_yaml).collect())
-        }
+        serde_json::Value::Array(arr) => Yaml::Array(arr.iter().map(serde_value_to_yaml).collect()),
         serde_json::Value::Object(obj) => {
             let mut hash = yaml_rust2::yaml::Hash::new();
             for (k, v) in obj {
