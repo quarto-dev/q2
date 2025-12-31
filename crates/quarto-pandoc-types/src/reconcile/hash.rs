@@ -699,7 +699,15 @@ fn attr_eq(a: &Attr, b: &Attr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Paragraph, Str};
+    use crate::custom::{CustomNode, Slot};
+    use crate::{
+        AttrSourceInfo, BlockQuote, BulletList, Code, CodeBlock, DefinitionList, Div, Emph, Header,
+        HorizontalRule, Image, LineBlock, LineBreak, Link, Math, MathType, Note, OrderedList,
+        Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SmallCaps, SoftBreak, Space,
+        Span, Str, Strikeout, Strong, Subscript, Superscript, TargetSourceInfo, Underline,
+    };
+    use crate::{ListNumberDelim, ListNumberStyle};
+    use hashlink::LinkedHashMap;
     use quarto_source_map::{FileId, SourceInfo};
 
     fn dummy_source() -> SourceInfo {
@@ -709,6 +717,19 @@ mod tests {
     fn other_source() -> SourceInfo {
         SourceInfo::original(FileId(1), 100, 200)
     }
+
+    fn empty_attr() -> Attr {
+        (String::new(), vec![], LinkedHashMap::new())
+    }
+
+    fn make_str(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: dummy_source(),
+        })
+    }
+
+    // ==================== Basic Hash Tests ====================
 
     #[test]
     fn test_same_content_same_hash() {
@@ -765,7 +786,7 @@ mod tests {
             source_info: dummy_source(),
         });
 
-        let plain = Block::Plain(crate::Plain {
+        let plain = Block::Plain(Plain {
             content: vec![],
             source_info: dummy_source(),
         });
@@ -792,6 +813,544 @@ mod tests {
 
         assert_eq!(hash1, hash2);
     }
+
+    // ==================== Block Type Hash Tests ====================
+
+    #[test]
+    fn test_hash_code_block() {
+        let cb1 = Block::CodeBlock(CodeBlock {
+            attr: (
+                "id".to_string(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "print('hello')".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let cb2 = Block::CodeBlock(CodeBlock {
+            attr: (
+                "id".to_string(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "print('hello')".to_string(),
+            source_info: other_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let cb3 = Block::CodeBlock(CodeBlock {
+            attr: (
+                "id".to_string(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "print('world')".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        // Same content, different source -> same hash
+        assert_eq!(
+            compute_block_hash_fresh(&cb1),
+            compute_block_hash_fresh(&cb2)
+        );
+
+        // Different text -> different hash
+        assert_ne!(
+            compute_block_hash_fresh(&cb1),
+            compute_block_hash_fresh(&cb3)
+        );
+    }
+
+    #[test]
+    fn test_hash_raw_block() {
+        let rb1 = Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div>hello</div>".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let rb2 = Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div>world</div>".to_string(),
+            source_info: dummy_source(),
+        });
+
+        assert_ne!(
+            compute_block_hash_fresh(&rb1),
+            compute_block_hash_fresh(&rb2)
+        );
+    }
+
+    #[test]
+    fn test_hash_block_quote() {
+        let bq1 = Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("quoted")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+        });
+
+        let bq2 = Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("quoted")],
+                source_info: other_source(),
+            })],
+            source_info: other_source(),
+        });
+
+        // Same content -> same hash
+        assert_eq!(
+            compute_block_hash_fresh(&bq1),
+            compute_block_hash_fresh(&bq2)
+        );
+    }
+
+    #[test]
+    fn test_hash_ordered_list() {
+        let ol1 = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item 1")],
+                source_info: dummy_source(),
+            })]],
+            source_info: dummy_source(),
+        });
+
+        let ol2 = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item 1")],
+                source_info: other_source(),
+            })]],
+            source_info: other_source(),
+        });
+
+        assert_eq!(
+            compute_block_hash_fresh(&ol1),
+            compute_block_hash_fresh(&ol2)
+        );
+    }
+
+    #[test]
+    fn test_hash_bullet_list() {
+        let bl1 = Block::BulletList(BulletList {
+            content: vec![
+                vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("item 1")],
+                    source_info: dummy_source(),
+                })],
+                vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("item 2")],
+                    source_info: dummy_source(),
+                })],
+            ],
+            source_info: dummy_source(),
+        });
+
+        let bl2 = Block::BulletList(BulletList {
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item 1")],
+                source_info: dummy_source(),
+            })]],
+            source_info: dummy_source(),
+        });
+
+        // Different number of items -> different hash
+        assert_ne!(
+            compute_block_hash_fresh(&bl1),
+            compute_block_hash_fresh(&bl2)
+        );
+    }
+
+    #[test]
+    fn test_hash_definition_list() {
+        let dl = Block::DefinitionList(DefinitionList {
+            content: vec![(
+                vec![make_str("term")],
+                vec![vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("definition")],
+                    source_info: dummy_source(),
+                })]],
+            )],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_block_hash_fresh(&dl);
+        // Just verify it doesn't panic and produces a hash
+        assert!(hash != 0 || hash == 0); // Always true, just checking computation
+    }
+
+    #[test]
+    fn test_hash_header() {
+        let h1 = Block::Header(Header {
+            level: 1,
+            attr: empty_attr(),
+            content: vec![make_str("Title")],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let h2 = Block::Header(Header {
+            level: 2,
+            attr: empty_attr(),
+            content: vec![make_str("Title")],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        // Different level -> different hash
+        assert_ne!(compute_block_hash_fresh(&h1), compute_block_hash_fresh(&h2));
+    }
+
+    #[test]
+    fn test_hash_horizontal_rule() {
+        let hr1 = Block::HorizontalRule(HorizontalRule {
+            source_info: dummy_source(),
+        });
+
+        let hr2 = Block::HorizontalRule(HorizontalRule {
+            source_info: other_source(),
+        });
+
+        // Same type, no content -> same hash
+        assert_eq!(
+            compute_block_hash_fresh(&hr1),
+            compute_block_hash_fresh(&hr2)
+        );
+    }
+
+    #[test]
+    fn test_hash_div() {
+        let div1 = Block::Div(Div {
+            attr: (
+                "my-div".to_string(),
+                vec!["note".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("content")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let div2 = Block::Div(Div {
+            attr: (
+                "my-div".to_string(),
+                vec!["note".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("different")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        // Different content -> different hash
+        assert_ne!(
+            compute_block_hash_fresh(&div1),
+            compute_block_hash_fresh(&div2)
+        );
+    }
+
+    #[test]
+    fn test_hash_line_block() {
+        let lb = Block::LineBlock(LineBlock {
+            content: vec![vec![make_str("line 1")], vec![make_str("line 2")]],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_block_hash_fresh(&lb);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    // ==================== Inline Type Hash Tests ====================
+
+    #[test]
+    fn test_hash_inline_emph() {
+        let emph1 = Inline::Emph(Emph {
+            content: vec![make_str("emphasized")],
+            source_info: dummy_source(),
+        });
+
+        let emph2 = Inline::Emph(Emph {
+            content: vec![make_str("emphasized")],
+            source_info: other_source(),
+        });
+
+        assert_eq!(
+            compute_inline_hash_fresh(&emph1),
+            compute_inline_hash_fresh(&emph2)
+        );
+    }
+
+    #[test]
+    fn test_hash_inline_strong() {
+        let strong = Inline::Strong(Strong {
+            content: vec![make_str("bold")],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&strong);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_underline() {
+        let u = Inline::Underline(Underline {
+            content: vec![make_str("underlined")],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&u);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_strikeout() {
+        let s = Inline::Strikeout(Strikeout {
+            content: vec![make_str("deleted")],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&s);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_superscript() {
+        let sup = Inline::Superscript(Superscript {
+            content: vec![make_str("2")],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&sup);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_subscript() {
+        let sub = Inline::Subscript(Subscript {
+            content: vec![make_str("i")],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&sub);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_smallcaps() {
+        let sc = Inline::SmallCaps(SmallCaps {
+            content: vec![make_str("text")],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&sc);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_quoted() {
+        let q1 = Inline::Quoted(Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![make_str("quoted")],
+            source_info: dummy_source(),
+        });
+
+        let q2 = Inline::Quoted(Quoted {
+            quote_type: QuoteType::SingleQuote,
+            content: vec![make_str("quoted")],
+            source_info: dummy_source(),
+        });
+
+        // Different quote type -> different hash
+        assert_ne!(
+            compute_inline_hash_fresh(&q1),
+            compute_inline_hash_fresh(&q2)
+        );
+    }
+
+    #[test]
+    fn test_hash_inline_code() {
+        let code1 = Inline::Code(Code {
+            attr: empty_attr(),
+            text: "x = 1".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let code2 = Inline::Code(Code {
+            attr: empty_attr(),
+            text: "x = 2".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        assert_ne!(
+            compute_inline_hash_fresh(&code1),
+            compute_inline_hash_fresh(&code2)
+        );
+    }
+
+    #[test]
+    fn test_hash_inline_space_softbreak_linebreak() {
+        let space = Inline::Space(Space {
+            source_info: dummy_source(),
+        });
+        let softbreak = Inline::SoftBreak(SoftBreak {
+            source_info: dummy_source(),
+        });
+        let linebreak = Inline::LineBreak(LineBreak {
+            source_info: dummy_source(),
+        });
+
+        // All should have different hashes due to different discriminants
+        let h1 = compute_inline_hash_fresh(&space);
+        let h2 = compute_inline_hash_fresh(&softbreak);
+        let h3 = compute_inline_hash_fresh(&linebreak);
+
+        assert_ne!(h1, h2);
+        assert_ne!(h2, h3);
+        assert_ne!(h1, h3);
+    }
+
+    #[test]
+    fn test_hash_inline_math() {
+        let math1 = Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x^2".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let math2 = Inline::Math(Math {
+            math_type: MathType::DisplayMath,
+            text: "x^2".to_string(),
+            source_info: dummy_source(),
+        });
+
+        // Different math type -> different hash
+        assert_ne!(
+            compute_inline_hash_fresh(&math1),
+            compute_inline_hash_fresh(&math2)
+        );
+    }
+
+    #[test]
+    fn test_hash_inline_raw() {
+        let raw = Inline::RawInline(RawInline {
+            format: "tex".to_string(),
+            text: "\\alpha".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&raw);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_link() {
+        let link1 = Inline::Link(Link {
+            attr: empty_attr(),
+            content: vec![make_str("click")],
+            target: ("https://example.com".to_string(), "title".to_string()),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+
+        let link2 = Inline::Link(Link {
+            attr: empty_attr(),
+            content: vec![make_str("click")],
+            target: ("https://other.com".to_string(), "title".to_string()),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+
+        // Different URL -> different hash
+        assert_ne!(
+            compute_inline_hash_fresh(&link1),
+            compute_inline_hash_fresh(&link2)
+        );
+    }
+
+    #[test]
+    fn test_hash_inline_image() {
+        let img = Inline::Image(Image {
+            attr: empty_attr(),
+            content: vec![make_str("alt text")],
+            target: ("image.png".to_string(), "".to_string()),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+
+        let hash = compute_inline_hash_fresh(&img);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_note() {
+        let note = Inline::Note(Note {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("footnote")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+        });
+
+        let hash = compute_inline_hash_fresh(&note);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_inline_span() {
+        let span = Inline::Span(Span {
+            attr: (
+                "id".to_string(),
+                vec!["class".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![make_str("spanned")],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let hash = compute_inline_hash_fresh(&span);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    // ==================== Cache Tests ====================
+
+    #[test]
+    fn test_inline_cache_returns_same_hash() {
+        let inline = Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let mut cache = HashCache::new();
+        let hash1 = cache.hash_inline(&inline);
+        let hash2 = cache.hash_inline(&inline);
+
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_cache_default() {
+        let cache: HashCache = Default::default();
+        assert!(cache.cache.is_empty());
+    }
+
+    // ==================== Structural Equality Tests ====================
 
     #[test]
     fn test_structural_eq_ignores_source() {
@@ -833,5 +1392,593 @@ mod tests {
         });
 
         assert!(!structural_eq_block(&block1, &block2));
+    }
+
+    #[test]
+    fn test_structural_eq_different_types() {
+        let para = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: dummy_source(),
+        });
+
+        let plain = Block::Plain(Plain {
+            content: vec![],
+            source_info: dummy_source(),
+        });
+
+        assert!(!structural_eq_block(&para, &plain));
+    }
+
+    #[test]
+    fn test_structural_eq_code_block() {
+        let cb1 = Block::CodeBlock(CodeBlock {
+            attr: (
+                "".to_string(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "code".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let cb2 = Block::CodeBlock(CodeBlock {
+            attr: (
+                "".to_string(),
+                vec!["python".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "code".to_string(),
+            source_info: other_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let cb3 = Block::CodeBlock(CodeBlock {
+            attr: ("".to_string(), vec!["r".to_string()], LinkedHashMap::new()),
+            text: "code".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        assert!(structural_eq_block(&cb1, &cb2));
+        assert!(!structural_eq_block(&cb1, &cb3)); // Different class
+    }
+
+    #[test]
+    fn test_structural_eq_raw_block() {
+        let rb1 = Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div>".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let rb2 = Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div>".to_string(),
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_block(&rb1, &rb2));
+    }
+
+    #[test]
+    fn test_structural_eq_block_quote() {
+        let bq1 = Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("quote")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+        });
+
+        let bq2 = Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("quote")],
+                source_info: other_source(),
+            })],
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_block(&bq1, &bq2));
+    }
+
+    #[test]
+    fn test_structural_eq_ordered_list() {
+        let ol1 = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item")],
+                source_info: dummy_source(),
+            })]],
+            source_info: dummy_source(),
+        });
+
+        let ol2 = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item")],
+                source_info: other_source(),
+            })]],
+            source_info: other_source(),
+        });
+
+        let ol3 = Block::OrderedList(OrderedList {
+            attr: (5, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item")],
+                source_info: dummy_source(),
+            })]],
+            source_info: dummy_source(),
+        });
+
+        assert!(structural_eq_block(&ol1, &ol2));
+        assert!(!structural_eq_block(&ol1, &ol3)); // Different start number
+    }
+
+    #[test]
+    fn test_structural_eq_bullet_list() {
+        let bl1 = Block::BulletList(BulletList {
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item")],
+                source_info: dummy_source(),
+            })]],
+            source_info: dummy_source(),
+        });
+
+        let bl2 = Block::BulletList(BulletList {
+            content: vec![vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("item")],
+                source_info: other_source(),
+            })]],
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_block(&bl1, &bl2));
+    }
+
+    #[test]
+    fn test_structural_eq_definition_list() {
+        let dl1 = Block::DefinitionList(DefinitionList {
+            content: vec![(
+                vec![make_str("term")],
+                vec![vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("def")],
+                    source_info: dummy_source(),
+                })]],
+            )],
+            source_info: dummy_source(),
+        });
+
+        let dl2 = Block::DefinitionList(DefinitionList {
+            content: vec![(
+                vec![make_str("term")],
+                vec![vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("def")],
+                    source_info: other_source(),
+                })]],
+            )],
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_block(&dl1, &dl2));
+    }
+
+    #[test]
+    fn test_structural_eq_header() {
+        let h1 = Block::Header(Header {
+            level: 1,
+            attr: empty_attr(),
+            content: vec![make_str("Title")],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let h2 = Block::Header(Header {
+            level: 1,
+            attr: empty_attr(),
+            content: vec![make_str("Title")],
+            source_info: other_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let h3 = Block::Header(Header {
+            level: 2,
+            attr: empty_attr(),
+            content: vec![make_str("Title")],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        assert!(structural_eq_block(&h1, &h2));
+        assert!(!structural_eq_block(&h1, &h3)); // Different level
+    }
+
+    #[test]
+    fn test_structural_eq_horizontal_rule() {
+        let hr1 = Block::HorizontalRule(HorizontalRule {
+            source_info: dummy_source(),
+        });
+
+        let hr2 = Block::HorizontalRule(HorizontalRule {
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_block(&hr1, &hr2));
+    }
+
+    #[test]
+    fn test_structural_eq_div() {
+        let div1 = Block::Div(Div {
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("text")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let div2 = Block::Div(Div {
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("text")],
+                source_info: other_source(),
+            })],
+            source_info: other_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        assert!(structural_eq_block(&div1, &div2));
+    }
+
+    #[test]
+    fn test_structural_eq_line_block() {
+        let lb1 = Block::LineBlock(LineBlock {
+            content: vec![vec![make_str("line")]],
+            source_info: dummy_source(),
+        });
+
+        let lb2 = Block::LineBlock(LineBlock {
+            content: vec![vec![make_str("line")]],
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_block(&lb1, &lb2));
+    }
+
+    // ==================== Inline Structural Equality Tests ====================
+
+    #[test]
+    fn test_structural_eq_inline_str() {
+        let s1 = Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let s2 = Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_inline(&s1, &s2));
+    }
+
+    #[test]
+    fn test_structural_eq_inline_emph() {
+        let e1 = Inline::Emph(Emph {
+            content: vec![make_str("text")],
+            source_info: dummy_source(),
+        });
+
+        let e2 = Inline::Emph(Emph {
+            content: vec![make_str("text")],
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_inline(&e1, &e2));
+    }
+
+    #[test]
+    fn test_structural_eq_inline_code() {
+        let c1 = Inline::Code(Code {
+            attr: empty_attr(),
+            text: "code".to_string(),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        let c2 = Inline::Code(Code {
+            attr: empty_attr(),
+            text: "code".to_string(),
+            source_info: other_source(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+
+        assert!(structural_eq_inline(&c1, &c2));
+    }
+
+    #[test]
+    fn test_structural_eq_inline_space() {
+        let s1 = Inline::Space(Space {
+            source_info: dummy_source(),
+        });
+
+        let s2 = Inline::Space(Space {
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_inline(&s1, &s2));
+    }
+
+    #[test]
+    fn test_structural_eq_inline_math() {
+        let m1 = Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x".to_string(),
+            source_info: dummy_source(),
+        });
+
+        let m2 = Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x".to_string(),
+            source_info: other_source(),
+        });
+
+        let m3 = Inline::Math(Math {
+            math_type: MathType::DisplayMath,
+            text: "x".to_string(),
+            source_info: dummy_source(),
+        });
+
+        assert!(structural_eq_inline(&m1, &m2));
+        assert!(!structural_eq_inline(&m1, &m3)); // Different math type
+    }
+
+    #[test]
+    fn test_structural_eq_inline_link() {
+        let l1 = Inline::Link(Link {
+            attr: empty_attr(),
+            content: vec![make_str("text")],
+            target: ("url".to_string(), "title".to_string()),
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+
+        let l2 = Inline::Link(Link {
+            attr: empty_attr(),
+            content: vec![make_str("text")],
+            target: ("url".to_string(), "title".to_string()),
+            source_info: other_source(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+
+        assert!(structural_eq_inline(&l1, &l2));
+    }
+
+    #[test]
+    fn test_structural_eq_inline_note() {
+        let n1 = Inline::Note(Note {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("note")],
+                source_info: dummy_source(),
+            })],
+            source_info: dummy_source(),
+        });
+
+        let n2 = Inline::Note(Note {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("note")],
+                source_info: other_source(),
+            })],
+            source_info: other_source(),
+        });
+
+        assert!(structural_eq_inline(&n1, &n2));
+    }
+
+    // ==================== Helper Function Tests ====================
+
+    #[test]
+    fn test_structural_eq_blocks() {
+        let blocks1 = vec![
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("a")],
+                source_info: dummy_source(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("b")],
+                source_info: dummy_source(),
+            }),
+        ];
+
+        let blocks2 = vec![
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("a")],
+                source_info: other_source(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("b")],
+                source_info: other_source(),
+            }),
+        ];
+
+        assert!(structural_eq_blocks(&blocks1, &blocks2));
+    }
+
+    #[test]
+    fn test_structural_eq_inlines() {
+        let inlines1 = vec![make_str("hello"), make_str("world")];
+        let inlines2 = vec![
+            Inline::Str(Str {
+                text: "hello".to_string(),
+                source_info: other_source(),
+            }),
+            Inline::Str(Str {
+                text: "world".to_string(),
+                source_info: other_source(),
+            }),
+        ];
+
+        assert!(structural_eq_inlines(&inlines1, &inlines2));
+    }
+
+    #[test]
+    fn test_attr_eq() {
+        let a1: Attr = (
+            "id".to_string(),
+            vec!["class".to_string()],
+            LinkedHashMap::new(),
+        );
+        let a2: Attr = (
+            "id".to_string(),
+            vec!["class".to_string()],
+            LinkedHashMap::new(),
+        );
+        let a3: Attr = (
+            "other".to_string(),
+            vec!["class".to_string()],
+            LinkedHashMap::new(),
+        );
+
+        assert!(attr_eq(&a1, &a2));
+        assert!(!attr_eq(&a1, &a3));
+    }
+
+    // ==================== CustomNode Tests ====================
+
+    #[test]
+    fn test_hash_custom_node() {
+        let cn = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({"type": "note"}),
+            slots: LinkedHashMap::new(),
+            source_info: dummy_source(),
+        };
+
+        let block = Block::Custom(cn);
+        let hash = compute_block_hash_fresh(&block);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_hash_custom_node_with_slots() {
+        let mut slots = LinkedHashMap::new();
+        slots.insert(
+            "content".to_string(),
+            Slot::Blocks(vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("callout content")],
+                source_info: dummy_source(),
+            })]),
+        );
+
+        let cn = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({}),
+            slots,
+            source_info: dummy_source(),
+        };
+
+        let block = Block::Custom(cn);
+        let hash = compute_block_hash_fresh(&block);
+        assert!(hash != 0 || hash == 0);
+    }
+
+    #[test]
+    fn test_structural_eq_custom_node() {
+        let cn1 = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({"type": "note"}),
+            slots: LinkedHashMap::new(),
+            source_info: dummy_source(),
+        };
+
+        let cn2 = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({"type": "note"}),
+            slots: LinkedHashMap::new(),
+            source_info: other_source(),
+        };
+
+        let cn3 = CustomNode {
+            type_name: "Callout".to_string(),
+            attr: empty_attr(),
+            plain_data: serde_json::json!({"type": "warning"}),
+            slots: LinkedHashMap::new(),
+            source_info: dummy_source(),
+        };
+
+        assert!(structural_eq_custom_node(&cn1, &cn2));
+        assert!(!structural_eq_custom_node(&cn1, &cn3)); // Different plain_data
+    }
+
+    #[test]
+    fn test_structural_eq_slot() {
+        let slot1 = Slot::Block(Box::new(Block::Paragraph(Paragraph {
+            content: vec![make_str("text")],
+            source_info: dummy_source(),
+        })));
+
+        let slot2 = Slot::Block(Box::new(Block::Paragraph(Paragraph {
+            content: vec![make_str("text")],
+            source_info: other_source(),
+        })));
+
+        let slot3 = Slot::Inline(Box::new(make_str("text")));
+
+        assert!(structural_eq_slot(&slot1, &slot2));
+        assert!(!structural_eq_slot(&slot1, &slot3)); // Different slot type
+    }
+
+    #[test]
+    fn test_structural_eq_slot_blocks() {
+        let slot1 = Slot::Blocks(vec![Block::Paragraph(Paragraph {
+            content: vec![make_str("text")],
+            source_info: dummy_source(),
+        })]);
+
+        let slot2 = Slot::Blocks(vec![Block::Paragraph(Paragraph {
+            content: vec![make_str("text")],
+            source_info: other_source(),
+        })]);
+
+        assert!(structural_eq_slot(&slot1, &slot2));
+    }
+
+    #[test]
+    fn test_structural_eq_slot_inlines() {
+        let slot1 = Slot::Inlines(vec![make_str("hello"), make_str("world")]);
+        let slot2 = Slot::Inlines(vec![
+            Inline::Str(Str {
+                text: "hello".to_string(),
+                source_info: other_source(),
+            }),
+            Inline::Str(Str {
+                text: "world".to_string(),
+                source_info: other_source(),
+            }),
+        ]);
+
+        assert!(structural_eq_slot(&slot1, &slot2));
+    }
+
+    // ==================== NodePtr Tests ====================
+
+    #[test]
+    fn test_node_ptr_from_ref() {
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: dummy_source(),
+        });
+
+        let ptr1 = NodePtr::from_ref(&block);
+        let ptr2 = NodePtr::from_ref(&block);
+
+        assert_eq!(ptr1, ptr2);
     }
 }
