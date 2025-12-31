@@ -806,7 +806,7 @@ fn meta_to_reference(meta: &ConfigValue) -> Option<Reference> {
         event_date: extract_date(entries, "event-date"),
         original_date: extract_date(entries, "original-date"),
         submitted: extract_date(entries, "submitted"),
-        other: std::collections::HashMap::new(),
+        other: hashlink::LinkedHashMap::new(),
         disambiguation: None,
     };
 

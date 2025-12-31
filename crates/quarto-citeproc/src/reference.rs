@@ -3,8 +3,8 @@
 //! This module defines types for parsing and representing bibliographic
 //! references in CSL-JSON format.
 
+use hashlink::LinkedHashMap;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::HashMap;
 
 /// Disambiguation state for a reference.
 ///
@@ -14,7 +14,7 @@ pub struct DisambiguationData {
     /// Assigned year suffix (1=a, 2=b, etc.). None means no suffix assigned.
     pub year_suffix: Option<i32>,
     /// Hints for expanding names (per-name map).
-    pub name_hints: HashMap<String, NameHint>,
+    pub name_hints: LinkedHashMap<String, NameHint>,
     /// Override for et-al-use-first (show more names for disambiguation).
     pub et_al_names: Option<u32>,
     /// Whether the disambiguate="true" condition should match.
@@ -139,7 +139,7 @@ pub struct Reference {
 
     // Other fields captured in a map for extensibility
     #[serde(flatten)]
-    pub other: HashMap<String, serde_json::Value>,
+    pub other: LinkedHashMap<String, serde_json::Value>,
 
     /// Disambiguation state (computed at runtime, not serialized).
     #[serde(skip)]

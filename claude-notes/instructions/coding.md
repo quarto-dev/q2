@@ -1,4 +1,28 @@
+## Before Committing
+
+**Read `claude-notes/instructions/review.md` and complete the checklist before every commit.** This is mandatory - do not skip the review step.
+
+## General
+
 - Try hard to avoid "TODO" comments in the code base. If are running low on context and you do have to add it, make sure there's a beads task (even if low-priority) to track the TODO, and add the issue id to the TODO line.
+
+## Rust: HashMap and Determinism
+
+**CRITICAL**: This codebase requires deterministic output for snapshot tests and reproducible builds.
+
+1. **Never use `std::collections::HashMap` or `rustc_hash::FxHashMap` in structs that are serialized** (anything with `#[derive(Serialize)]`). Use `hashlink::LinkedHashMap` instead - it preserves insertion order.
+
+2. **Default to `LinkedHashMap`** for any map where you iterate over entries or where the map could eventually be serialized. When in doubt, use `LinkedHashMap`.
+
+3. **`FxHashMap` is only acceptable for**:
+   - Internal caches keyed by pointers or indices
+   - Lookup-only maps where you never iterate over keys/values
+   - Performance-critical code where you've verified order doesn't affect output
+
+4. **Red flags to watch for**:
+   - `#[serde(flatten)]` on HashMap fields (serialization order becomes non-deterministic)
+   - HashMap fields in structs that implement `Serialize`
+   - Iterating over HashMap entries in any code path that affects output
 
 ## hub-client (TypeScript/React)
 

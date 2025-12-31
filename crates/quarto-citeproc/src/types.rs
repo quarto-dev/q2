@@ -8,7 +8,6 @@ use hashlink::LinkedHashMap;
 use quarto_csl::Style;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
 /// A computed sort key value with its sort direction.
 #[derive(Debug, Clone)]
@@ -258,11 +257,11 @@ pub struct Processor {
     references: LinkedHashMap<String, Reference>,
 
     /// Initial citation numbers (assigned based on citation order, used for sorting).
-    initial_citation_numbers: HashMap<String, i32>,
+    initial_citation_numbers: LinkedHashMap<String, i32>,
 
     /// Final citation numbers (reassigned after bibliography sorting, used for rendering).
     /// If None, falls back to initial_citation_numbers.
-    final_citation_numbers: Option<HashMap<String, i32>>,
+    final_citation_numbers: Option<LinkedHashMap<String, i32>>,
 
     /// Next citation number for initial assignment.
     next_citation_number: i32,
@@ -280,14 +279,14 @@ pub struct Processor {
 struct CitationHistory {
     /// Last item cited in each note (for ibid detection within same note).
     /// Maps note_index -> (item_id, locator, label)
-    last_item_in_note: HashMap<i32, (String, Option<String>, Option<String>)>,
+    last_item_in_note: LinkedHashMap<i32, (String, Option<String>, Option<String>)>,
     /// The globally last item cited in the immediately previous citation.
     /// For ibid detection across notes. Only tracked for single-item citations.
     /// (item_id, locator, label, note_index)
     last_single_citation_item: Option<(String, Option<String>, Option<String>, i32)>,
     /// Last citation info for each item (for near-note and subsequent detection).
     /// Maps item_id -> (note_index, locator, label)
-    last_cited: HashMap<String, (i32, Option<String>, Option<String>)>,
+    last_cited: LinkedHashMap<String, (i32, Option<String>, Option<String>)>,
 }
 
 impl Processor {
@@ -298,7 +297,7 @@ impl Processor {
             style,
             locales: LocaleManager::new(default_locale),
             references: LinkedHashMap::new(),
-            initial_citation_numbers: HashMap::new(),
+            initial_citation_numbers: LinkedHashMap::new(),
             final_citation_numbers: None,
             next_citation_number: 1,
             citation_history: CitationHistory::default(),
@@ -477,7 +476,7 @@ impl Processor {
     /// Reassign citation numbers based on the final bibliography order.
     /// Called after bibliography sorting to update numbers for rendering.
     pub fn reassign_citation_numbers(&mut self, sorted_ids: &[String]) {
-        let mut final_numbers = HashMap::new();
+        let mut final_numbers = LinkedHashMap::new();
         for (index, id) in sorted_ids.iter().enumerate() {
             final_numbers.insert(id.clone(), (index + 1) as i32);
         }

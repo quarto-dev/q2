@@ -5,7 +5,7 @@
  * Types for AST reconciliation plans.
  */
 
-use rustc_hash::FxHashMap;
+use hashlink::LinkedHashMap;
 use serde::{Deserialize, Serialize};
 
 /// Plan for reconciling a CustomNode's slots.
@@ -21,13 +21,13 @@ pub struct CustomNodeSlotPlan {
     /// - Content is identical (use original slot entirely)
     /// - Slot doesn't exist in original (use executed slot)
     /// - Slot type changed (use executed slot)
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub block_slot_plans: FxHashMap<String, ReconciliationPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub block_slot_plans: LinkedHashMap<String, ReconciliationPlan>,
 
     /// Plans for slots containing inlines (Slot::Inline or Slot::Inlines).
     /// Key: slot name.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub inline_slot_plans: FxHashMap<String, InlineReconciliationPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub inline_slot_plans: LinkedHashMap<String, InlineReconciliationPlan>,
 }
 
 /// Alignment decision for a single block in the result.
@@ -99,19 +99,19 @@ pub struct InlineReconciliationPlan {
 
     /// Nested plans for inline containers (Emph, Strong, Link, etc.).
     /// Key: index into inline_alignments where alignment is RecurseIntoContainer.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub inline_container_plans: FxHashMap<usize, InlineReconciliationPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub inline_container_plans: LinkedHashMap<usize, InlineReconciliationPlan>,
 
     /// For Note inlines, which contain Blocks.
     /// Key: index into inline_alignments.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub note_block_plans: FxHashMap<usize, ReconciliationPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub note_block_plans: LinkedHashMap<usize, ReconciliationPlan>,
 
     /// Plans for inline CustomNode slots (Inline::Custom).
     /// Key: index into inline_alignments where alignment is RecurseIntoContainer
     /// and the inline is a Custom node.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub custom_node_plans: FxHashMap<usize, CustomNodeSlotPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub custom_node_plans: LinkedHashMap<usize, CustomNodeSlotPlan>,
 }
 
 /// Complete plan for reconciling a Pandoc AST.
@@ -122,19 +122,19 @@ pub struct ReconciliationPlan {
 
     /// Nested plans for block containers (Div, BlockQuote, etc.).
     /// Key: index into block_alignments where alignment is RecurseIntoContainer.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub block_container_plans: FxHashMap<usize, ReconciliationPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub block_container_plans: LinkedHashMap<usize, ReconciliationPlan>,
 
     /// Inline plans for blocks with inline content (Paragraph, Header, etc.).
     /// Key: index into block_alignments.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub inline_plans: FxHashMap<usize, InlineReconciliationPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub inline_plans: LinkedHashMap<usize, InlineReconciliationPlan>,
 
     /// Plans for CustomNode slots (Block::Custom).
     /// Key: index into block_alignments where alignment is RecurseIntoContainer
     /// and the block is a Custom node.
-    #[serde(skip_serializing_if = "FxHashMap::is_empty", default)]
-    pub custom_node_plans: FxHashMap<usize, CustomNodeSlotPlan>,
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub custom_node_plans: LinkedHashMap<usize, CustomNodeSlotPlan>,
 
     /// Diagnostics.
     pub stats: ReconciliationStats,
@@ -171,5 +171,333 @@ impl InlineReconciliationPlan {
             inline_alignments: (0..count).map(InlineAlignment::KeepBefore).collect(),
             ..Default::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== ReconciliationStats Tests ====================
+
+    #[test]
+    fn test_stats_default() {
+        let stats = ReconciliationStats::default();
+        assert_eq!(stats.blocks_kept, 0);
+        assert_eq!(stats.blocks_replaced, 0);
+        assert_eq!(stats.blocks_recursed, 0);
+        assert_eq!(stats.inlines_kept, 0);
+        assert_eq!(stats.inlines_replaced, 0);
+        assert_eq!(stats.inlines_recursed, 0);
+    }
+
+    #[test]
+    fn test_stats_merge() {
+        let mut stats1 = ReconciliationStats {
+            blocks_kept: 5,
+            blocks_replaced: 2,
+            blocks_recursed: 1,
+            inlines_kept: 10,
+            inlines_replaced: 3,
+            inlines_recursed: 2,
+        };
+
+        let stats2 = ReconciliationStats {
+            blocks_kept: 3,
+            blocks_replaced: 1,
+            blocks_recursed: 2,
+            inlines_kept: 5,
+            inlines_replaced: 2,
+            inlines_recursed: 1,
+        };
+
+        stats1.merge(&stats2);
+
+        assert_eq!(stats1.blocks_kept, 8);
+        assert_eq!(stats1.blocks_replaced, 3);
+        assert_eq!(stats1.blocks_recursed, 3);
+        assert_eq!(stats1.inlines_kept, 15);
+        assert_eq!(stats1.inlines_replaced, 5);
+        assert_eq!(stats1.inlines_recursed, 3);
+    }
+
+    #[test]
+    fn test_stats_merge_with_empty() {
+        let mut stats = ReconciliationStats {
+            blocks_kept: 10,
+            blocks_replaced: 5,
+            blocks_recursed: 3,
+            inlines_kept: 20,
+            inlines_replaced: 8,
+            inlines_recursed: 4,
+        };
+
+        let empty = ReconciliationStats::default();
+        stats.merge(&empty);
+
+        // Values should remain unchanged
+        assert_eq!(stats.blocks_kept, 10);
+        assert_eq!(stats.blocks_replaced, 5);
+        assert_eq!(stats.blocks_recursed, 3);
+        assert_eq!(stats.inlines_kept, 20);
+        assert_eq!(stats.inlines_replaced, 8);
+        assert_eq!(stats.inlines_recursed, 4);
+    }
+
+    // ==================== ReconciliationPlan Tests ====================
+
+    #[test]
+    fn test_plan_new() {
+        let plan = ReconciliationPlan::new();
+        assert!(plan.block_alignments.is_empty());
+        assert!(plan.block_container_plans.is_empty());
+        assert!(plan.inline_plans.is_empty());
+        assert!(plan.custom_node_plans.is_empty());
+        assert_eq!(plan.stats, ReconciliationStats::default());
+    }
+
+    #[test]
+    fn test_plan_default() {
+        let plan: ReconciliationPlan = Default::default();
+        assert!(plan.block_alignments.is_empty());
+        assert!(plan.block_container_plans.is_empty());
+    }
+
+    #[test]
+    fn test_plan_all_kept() {
+        let plan = ReconciliationPlan::all_kept(5);
+
+        assert_eq!(plan.block_alignments.len(), 5);
+        for (i, alignment) in plan.block_alignments.iter().enumerate() {
+            assert_eq!(*alignment, BlockAlignment::KeepBefore(i));
+        }
+
+        assert_eq!(plan.stats.blocks_kept, 5);
+        assert_eq!(plan.stats.blocks_replaced, 0);
+        assert_eq!(plan.stats.blocks_recursed, 0);
+    }
+
+    #[test]
+    fn test_plan_all_kept_zero() {
+        let plan = ReconciliationPlan::all_kept(0);
+        assert!(plan.block_alignments.is_empty());
+        assert_eq!(plan.stats.blocks_kept, 0);
+    }
+
+    // ==================== InlineReconciliationPlan Tests ====================
+
+    #[test]
+    fn test_inline_plan_new() {
+        let plan = InlineReconciliationPlan::new();
+        assert!(plan.inline_alignments.is_empty());
+        assert!(plan.inline_container_plans.is_empty());
+        assert!(plan.note_block_plans.is_empty());
+        assert!(plan.custom_node_plans.is_empty());
+    }
+
+    #[test]
+    fn test_inline_plan_default() {
+        let plan: InlineReconciliationPlan = Default::default();
+        assert!(plan.inline_alignments.is_empty());
+    }
+
+    #[test]
+    fn test_inline_plan_all_kept() {
+        let plan = InlineReconciliationPlan::all_kept(3);
+
+        assert_eq!(plan.inline_alignments.len(), 3);
+        for (i, alignment) in plan.inline_alignments.iter().enumerate() {
+            assert_eq!(*alignment, InlineAlignment::KeepBefore(i));
+        }
+    }
+
+    #[test]
+    fn test_inline_plan_all_kept_zero() {
+        let plan = InlineReconciliationPlan::all_kept(0);
+        assert!(plan.inline_alignments.is_empty());
+    }
+
+    // ==================== CustomNodeSlotPlan Tests ====================
+
+    #[test]
+    fn test_custom_node_slot_plan_default() {
+        let plan: CustomNodeSlotPlan = Default::default();
+        assert!(plan.block_slot_plans.is_empty());
+        assert!(plan.inline_slot_plans.is_empty());
+    }
+
+    // ==================== Alignment Enum Tests ====================
+
+    #[test]
+    fn test_block_alignment_keep_before() {
+        let alignment = BlockAlignment::KeepBefore(5);
+        match alignment {
+            BlockAlignment::KeepBefore(idx) => assert_eq!(idx, 5),
+            _ => panic!("Expected KeepBefore"),
+        }
+    }
+
+    #[test]
+    fn test_block_alignment_use_after() {
+        let alignment = BlockAlignment::UseAfter(10);
+        match alignment {
+            BlockAlignment::UseAfter(idx) => assert_eq!(idx, 10),
+            _ => panic!("Expected UseAfter"),
+        }
+    }
+
+    #[test]
+    fn test_block_alignment_recurse() {
+        let alignment = BlockAlignment::RecurseIntoContainer {
+            before_idx: 2,
+            after_idx: 3,
+        };
+        match alignment {
+            BlockAlignment::RecurseIntoContainer {
+                before_idx,
+                after_idx,
+            } => {
+                assert_eq!(before_idx, 2);
+                assert_eq!(after_idx, 3);
+            }
+            _ => panic!("Expected RecurseIntoContainer"),
+        }
+    }
+
+    #[test]
+    fn test_inline_alignment_keep_before() {
+        let alignment = InlineAlignment::KeepBefore(7);
+        match alignment {
+            InlineAlignment::KeepBefore(idx) => assert_eq!(idx, 7),
+            _ => panic!("Expected KeepBefore"),
+        }
+    }
+
+    #[test]
+    fn test_inline_alignment_use_after() {
+        let alignment = InlineAlignment::UseAfter(15);
+        match alignment {
+            InlineAlignment::UseAfter(idx) => assert_eq!(idx, 15),
+            _ => panic!("Expected UseAfter"),
+        }
+    }
+
+    #[test]
+    fn test_inline_alignment_recurse() {
+        let alignment = InlineAlignment::RecurseIntoContainer {
+            before_idx: 4,
+            after_idx: 5,
+        };
+        match alignment {
+            InlineAlignment::RecurseIntoContainer {
+                before_idx,
+                after_idx,
+            } => {
+                assert_eq!(before_idx, 4);
+                assert_eq!(after_idx, 5);
+            }
+            _ => panic!("Expected RecurseIntoContainer"),
+        }
+    }
+
+    // ==================== Serialization Tests ====================
+
+    #[test]
+    fn test_block_alignment_serialization() {
+        let alignment = BlockAlignment::KeepBefore(3);
+        let json = serde_json::to_string(&alignment).unwrap();
+        assert!(json.contains("use_before"));
+
+        let deserialized: BlockAlignment = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, alignment);
+    }
+
+    #[test]
+    fn test_inline_alignment_serialization() {
+        let alignment = InlineAlignment::UseAfter(5);
+        let json = serde_json::to_string(&alignment).unwrap();
+        assert!(json.contains("use_after"));
+
+        let deserialized: InlineAlignment = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, alignment);
+    }
+
+    #[test]
+    fn test_reconciliation_plan_serialization() {
+        let plan = ReconciliationPlan::all_kept(2);
+        let json = serde_json::to_string(&plan).unwrap();
+        let deserialized: ReconciliationPlan = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(
+            deserialized.block_alignments.len(),
+            plan.block_alignments.len()
+        );
+        assert_eq!(deserialized.stats.blocks_kept, plan.stats.blocks_kept);
+    }
+
+    #[test]
+    fn test_inline_plan_serialization() {
+        let plan = InlineReconciliationPlan::all_kept(3);
+        let json = serde_json::to_string(&plan).unwrap();
+        let deserialized: InlineReconciliationPlan = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(
+            deserialized.inline_alignments.len(),
+            plan.inline_alignments.len()
+        );
+    }
+
+    #[test]
+    fn test_stats_equality() {
+        let stats1 = ReconciliationStats {
+            blocks_kept: 5,
+            blocks_replaced: 2,
+            blocks_recursed: 1,
+            inlines_kept: 10,
+            inlines_replaced: 3,
+            inlines_recursed: 2,
+        };
+
+        let stats2 = ReconciliationStats {
+            blocks_kept: 5,
+            blocks_replaced: 2,
+            blocks_recursed: 1,
+            inlines_kept: 10,
+            inlines_replaced: 3,
+            inlines_recursed: 2,
+        };
+
+        let stats3 = ReconciliationStats {
+            blocks_kept: 6, // Different
+            blocks_replaced: 2,
+            blocks_recursed: 1,
+            inlines_kept: 10,
+            inlines_replaced: 3,
+            inlines_recursed: 2,
+        };
+
+        assert_eq!(stats1, stats2);
+        assert_ne!(stats1, stats3);
+    }
+
+    #[test]
+    fn test_empty_plan_serialization_skips_empty_maps() {
+        let plan = ReconciliationPlan::new();
+        let json = serde_json::to_string(&plan).unwrap();
+
+        // Empty HashMaps should be skipped due to skip_serializing_if
+        assert!(!json.contains("block_container_plans"));
+        assert!(!json.contains("inline_plans"));
+        assert!(!json.contains("custom_node_plans"));
+    }
+
+    #[test]
+    fn test_custom_node_slot_plan_serialization() {
+        let plan = CustomNodeSlotPlan::default();
+        let json = serde_json::to_string(&plan).unwrap();
+        let deserialized: CustomNodeSlotPlan = serde_json::from_str(&json).unwrap();
+
+        assert!(deserialized.block_slot_plans.is_empty());
+        assert!(deserialized.inline_slot_plans.is_empty());
     }
 }
