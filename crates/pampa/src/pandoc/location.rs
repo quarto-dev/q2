@@ -223,8 +223,7 @@ pub fn node_source_info_with_options(
             .source_context
             .get_file(context.current_file_id())
             .and_then(|f| f.content.as_ref())
-            .map(|s| s.as_str())
-            .unwrap_or("");
+            .map_or("", |s| s.as_str());
 
         crate::utils::trim_source_location::trim_whitespace(
             &base_source_info,

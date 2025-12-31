@@ -674,7 +674,7 @@ impl Output {
             } => {
                 let new_children: Vec<_> = children
                     .iter()
-                    .map(|c| Self::remove_name_nodes(c))
+                    .map(Self::remove_name_nodes)
                     .filter(|c| !c.is_null())
                     .collect();
                 // Prepend substitute to the remaining content
@@ -710,7 +710,7 @@ impl Output {
             } => {
                 let new_children: Vec<_> = children
                     .iter()
-                    .map(|c| Self::remove_name_nodes(c))
+                    .map(Self::remove_name_nodes)
                     .filter(|c| !c.is_null())
                     .collect();
                 if new_children.is_empty() {
@@ -725,7 +725,7 @@ impl Output {
             Output::Linked { url, children } => {
                 let new_children: Vec<_> = children
                     .iter()
-                    .map(|c| Self::remove_name_nodes(c))
+                    .map(Self::remove_name_nodes)
                     .filter(|c| !c.is_null())
                     .collect();
                 if new_children.is_empty() {
@@ -2888,8 +2888,8 @@ fn apply_affixes(
     use quarto_pandoc_types::{Inline, Str};
 
     // Apply prefix with punctuation collision handling
-    if let Some(prefix) = prefix {
-        if !prefix.is_empty() {
+    if let Some(prefix) = prefix
+        && !prefix.is_empty() {
             let prefix_end = prefix.chars().last();
             let content_start = get_leading_char(inner);
             if let (Some(x_end), Some(y_start)) = (prefix_end, content_start) {
@@ -2924,11 +2924,10 @@ fn apply_affixes(
                 *inner = result;
             }
         }
-    }
 
     // Apply suffix with punctuation collision handling
-    if let Some(suffix) = suffix {
-        if !suffix.is_empty() {
+    if let Some(suffix) = suffix
+        && !suffix.is_empty() {
             let content_end = get_trailing_char(inner);
             let suffix_start = suffix.chars().next();
             if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
@@ -2958,7 +2957,6 @@ fn apply_affixes(
                 }));
             }
         }
-    }
 }
 
 /// Move periods and commas from after closing quotes to inside them.
@@ -2993,8 +2991,8 @@ fn move_punct_in_children(children: Vec<Output>) -> Vec<Output> {
         // Check if current ends with a quoted node (direct or nested)
         if let Some(quoted_path) = find_trailing_quoted(&current) {
             // Look ahead to see if next sibling starts with punctuation
-            if let Some(next) = iter.peek() {
-                if let Some((punct, rest)) = extract_leading_punct(next) {
+            if let Some(next) = iter.peek()
+                && let Some((punct, rest)) = extract_leading_punct(next) {
                     // Check that quoted content doesn't already end with this punctuation
                     if !ends_with_punct_in_path(&current, &quoted_path, punct) {
                         // Move punctuation inside the quoted node
@@ -3010,7 +3008,6 @@ fn move_punct_in_children(children: Vec<Output>) -> Vec<Output> {
                         continue;
                     }
                 }
-            }
         }
 
         // Recursively process the current node
@@ -3072,11 +3069,10 @@ fn ends_with_punct_in_path(output: &Output, path: &[usize], punct: char) -> bool
 
     match output {
         Output::Formatted { children, .. } => {
-            if let Some(&idx) = path.first() {
-                if let Some(child) = children.get(idx) {
+            if let Some(&idx) = path.first()
+                && let Some(child) = children.get(idx) {
                     return ends_with_punct_in_path(child, &path[1..], punct);
                 }
-            }
             false
         }
         Output::Tagged { child, .. } => {
@@ -3330,8 +3326,8 @@ fn insert_punct_before_trailing_quote(children: &mut Vec<Output>, punct: char) -
 fn insert_punct_before_trailing_quote_in_node(output: &mut Output, punct: char) -> bool {
     match output {
         Output::Literal(s) => {
-            if let Some(last_char) = s.chars().last() {
-                if is_quote_char(last_char) {
+            if let Some(last_char) = s.chars().last()
+                && is_quote_char(last_char) {
                     // Insert punctuation before the trailing quote
                     let mut chars: Vec<char> = s.chars().collect();
                     let insert_pos = chars.len() - 1;
@@ -3339,7 +3335,6 @@ fn insert_punct_before_trailing_quote_in_node(output: &mut Output, punct: char) 
                     *s = chars.into_iter().collect();
                     return true;
                 }
-            }
             false
         }
         Output::Tagged { child, .. } => {
@@ -3569,11 +3564,10 @@ fn output_ends_with_char(output: &Output, c: char) -> bool {
             children,
         } => {
             // If there's a suffix, check the suffix for the ending character
-            if let Some(ref suffix) = formatting.suffix {
-                if !suffix.is_empty() {
+            if let Some(ref suffix) = formatting.suffix
+                && !suffix.is_empty() {
                     return suffix.ends_with(c);
                 }
-            }
             // Otherwise check children
             ends_with_punct(children, c)
         }
@@ -3681,8 +3675,8 @@ impl<'a> RichTextParser<'a> {
 
         while self.pos < self.input.len() {
             // Check for end tag
-            if let Some(tag) = end_tag {
-                if self.remaining().starts_with(tag) {
+            if let Some(tag) = end_tag
+                && self.remaining().starts_with(tag) {
                     // Flush accumulated text
                     if self.pos > text_start {
                         children.push(Output::Literal(
@@ -3692,7 +3686,6 @@ impl<'a> RichTextParser<'a> {
                     self.pos += tag.len();
                     return children;
                 }
-            }
 
             // Check for start of a tag
             if self.remaining().starts_with('<') {
@@ -3926,8 +3919,8 @@ impl<'a> RichTextParser<'a> {
                         vec![]
                     } else {
                         let mut inner_parser = RichTextParser::new(content);
-                        let children = inner_parser.parse_children(None);
-                        children
+                        
+                        inner_parser.parse_children(None)
                     };
 
                     // Wrap with quotes formatting
@@ -4178,7 +4171,7 @@ fn has_internal_uppercase(s: &str) -> bool {
 
 /// Check if a string starts with an alphabetic character.
 fn starts_with_letter(s: &str) -> bool {
-    s.chars().next().map_or(false, |c| c.is_alphabetic())
+    s.chars().next().is_some_and(|c| c.is_alphabetic())
 }
 
 /// Title case a single word (may contain hyphens or slashes).
@@ -4544,11 +4537,7 @@ fn title_case_with_state_and_last(
             }
             result.push(c);
             if let Some(&next_c) = chars.peek() {
-                if next_c.is_alphanumeric() {
-                    force_next = true;
-                } else {
-                    force_next = false;
-                }
+                force_next = next_c.is_alphanumeric();
             } else {
                 force_next = false;
             }
@@ -4871,7 +4860,7 @@ fn render_block_to_csl_html(
             for inner_block in &d.content {
                 render_block_to_csl_html(inner_block, output, ctx, quotes);
             }
-            if classes.first().is_some() {
+            if !classes.is_empty() {
                 output.push_str("</div>");
             }
         }
@@ -4893,14 +4882,13 @@ fn render_inline_to_csl_html_with_ctx(
             // Check if this is a single Unicode superscript character that should
             // be converted to <sup> tags. This matches Pandoc citeproc's behavior.
             let mut chars = s.text.chars();
-            if let (Some(first), None) = (chars.next(), chars.next()) {
-                if let Some(base) = superscript_char_to_base(first) {
+            if let (Some(first), None) = (chars.next(), chars.next())
+                && let Some(base) = superscript_char_to_base(first) {
                     output.push_str("<sup>");
                     output.push_str(&html_escape(base));
                     output.push_str("</sup>");
                     return;
                 }
-            }
 
             // Convert straight apostrophes to curly (typographic) apostrophes
             // and escape HTML special characters

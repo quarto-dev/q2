@@ -506,13 +506,13 @@ pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {
                 continue;
             }
             _ => {
-                result.extend(space_run.drain(..));
+                result.append(&mut space_run);
                 result.push(inline);
                 at_start = false;
             }
         }
     }
-    if space_run.len() > 0 {
+    if !space_run.is_empty() {
         changed = true;
     }
     (result, changed)
@@ -626,14 +626,13 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
 
                 // If we didn't coalesce with any Str nodes but have a Space following
                 // the abbreviation, include the space in the abbreviation to match Pandoc
-                if j == original_j && j < inlines.len() && matches!(inlines[j], Inline::Space(_)) {
-                    if let Inline::Space(space_info) = &inlines[j] {
+                if j == original_j && j < inlines.len() && matches!(inlines[j], Inline::Space(_))
+                    && let Inline::Space(space_info) = &inlines[j] {
                         current_text.push('\u{00A0}');
                         end_info = space_info.source_info.clone();
                         j += 1;
                         did_coalesce = true;
                     }
-                }
             }
 
             // Create the Str node (possibly coalesced)
@@ -775,10 +774,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
             .with_superscript(|mut superscript, _ctx| {
                 let (content, changed) = trim_inlines(superscript.content);
                 if !changed {
-                    return Unchanged(Superscript {
+                    Unchanged(Superscript {
                         content,
                         ..superscript
-                    });
+                    })
                 } else {
                     superscript.content = content;
                     FilterResult(vec![Inline::Superscript(superscript)], true)
@@ -793,7 +792,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let is_last_attr = header
                     .content
                     .last()
-                    .map_or(false, |v| matches!(v, Inline::Attr(_, _)));
+                    .is_some_and(|v| matches!(v, Inline::Attr(_, _)));
                 if !is_last_attr {
                     let mut attr = header.attr.clone();
                     if attr.0.is_empty() {
@@ -838,13 +837,13 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 let trailing_lb_converted = convert_trailing_linebreak_to_str(&mut para.content);
 
                 // Check for single-image paragraph (for figure conversion)
-                if para.content.len() == 1 {
-                    if let Some(Inline::Image(image)) = para.content.first() {
-                        if !image.content.is_empty() {
+                if para.content.len() == 1
+                    && let Some(Inline::Image(image)) = para.content.first()
+                        && !image.content.is_empty() {
                             let figure_attr: Attr =
                                 (image.attr.0.clone(), vec![], LinkedHashMap::new());
                             let image_attr: Attr =
-                                ("".to_string(), image.attr.1.clone(), image.attr.2.clone());
+                                (String::new(), image.attr.1.clone(), image.attr.2.clone());
 
                             // Split attr_source between figure and image
                             let figure_attr_source = crate::pandoc::attr::AttrSourceInfo {
@@ -888,8 +887,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 true,
                             );
                         }
-                    }
-                }
 
                 // Not a figure conversion case, but may have converted trailing LineBreak
                 if trailing_lb_converted {
@@ -993,7 +990,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         .caption
                         .long
                         .as_ref()
-                        .map_or(true, |blocks| blocks.is_empty());
+                        .is_none_or(|blocks| blocks.is_empty());
 
                 if !caption_is_empty || table.bodies.is_empty() {
                     return Unchanged(table);
@@ -1087,7 +1084,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 FilterResult(
                     vec![Inline::Span(Span {
                         attr: (
-                            "".to_string(),
+                            String::new(),
                             vec!["quarto-note-reference".to_string()],
                             kv,
                         ),
@@ -1195,8 +1192,8 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                             && matches!(break_cleaned[i + 1], Inline::Space(_));
                         let attr_idx = if has_space { i + 2 } else { i + 1 };
 
-                        if attr_idx < break_cleaned.len() {
-                            if let Inline::Attr(attr, attr_source) = &break_cleaned[attr_idx] {
+                        if attr_idx < break_cleaned.len()
+                            && let Inline::Attr(attr, attr_source) = &break_cleaned[attr_idx] {
                                 // Found Math + (Space?) + Attr pattern
                                 // Wrap Math in a Span with the attribute
                                 let mut classes = vec!["quarto-math-with-attribute".to_string()];
@@ -1219,7 +1216,6 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 i = attr_idx + 1;
                                 continue;
                             }
-                        }
                     }
 
                     // Not a Math + Attr pattern, add as is
@@ -1316,7 +1312,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                                     }
                                                     if !word.is_empty() {
                                                         bracketed_content.push(Inline::Str(Str {
-                                                            text: word.to_string(),
+                                                            text: (*word).to_string(),
                                                             source_info: s.source_info.clone(),
                                                         }));
                                                     }
@@ -1379,11 +1375,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 // Handle any pending cite at the end
                 if let Some(cite) = pending_cite {
                     result.push(Inline::Cite(cite));
-                    if state == 2 {
-                        if let Some(space) = pending_space {
+                    if state == 2
+                        && let Some(space) = pending_space {
                             result.push(Inline::Space(space));
                         }
-                    }
                 }
 
                 FilterResult(result, true)
@@ -1472,11 +1467,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                 if table.attr.0.is_empty() && !caption_attr_value.0.is_empty() {
                                     table.attr.0 = caption_attr_value.0;
                                     // Also merge the source location
-                                    if let Some(caption_attr_source_value) = caption_attr_source {
-                                        if table.attr_source.id.is_none() {
+                                    if let Some(caption_attr_source_value) = caption_attr_source
+                                        && table.attr_source.id.is_none() {
                                             table.attr_source.id = caption_attr_source_value.id;
                                         }
-                                    }
                                 }
                             }
 

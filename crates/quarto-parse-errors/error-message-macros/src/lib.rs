@@ -84,7 +84,7 @@ pub fn include_error_table(input: TokenStream) -> TokenStream {
     let full_path = Path::new(&manifest_dir).join(&path_str);
 
     let json_content = fs::read_to_string(&full_path)
-        .expect(&format!("Failed to read JSON file at {:?}", full_path));
+        .unwrap_or_else(|_| panic!("Failed to read JSON file at {:?}", full_path));
 
     let entries: Vec<ErrorEntry> =
         serde_json::from_str(&json_content).expect("Failed to parse JSON");

@@ -94,8 +94,7 @@ impl DiagnosticCollector {
         self.diagnostics.sort_by_key(|diag| {
             diag.location
                 .as_ref()
-                .map(|loc| loc.start_offset())
-                .unwrap_or(0)
+                .map_or(0, |loc| loc.start_offset())
         });
         self.diagnostics
     }

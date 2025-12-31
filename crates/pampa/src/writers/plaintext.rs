@@ -95,7 +95,7 @@ fn write_inline<T: std::io::Write>(
         Inline::Str(s) => write!(buf, "{}", s.text)?,
         Inline::Space(_) => write!(buf, " ")?,
         Inline::SoftBreak(_) => write!(buf, " ")?,
-        Inline::LineBreak(_) => write!(buf, "\n")?,
+        Inline::LineBreak(_) => writeln!(buf)?,
 
         // Recurse into content (strip structure markers)
         Inline::Emph(Emph { content, .. }) => write_inlines(content, buf, ctx)?,

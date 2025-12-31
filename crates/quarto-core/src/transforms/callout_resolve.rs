@@ -284,7 +284,7 @@ fn extract_content_blocks(custom: &mut CustomNode) -> Vec<Block> {
 fn make_attr(classes: &[&str]) -> Attr {
     (
         String::new(),
-        classes.iter().map(|s| s.to_string()).collect(),
+        classes.iter().map(|s| (*s).to_string()).collect(),
         LinkedHashMap::new(),
     )
 }

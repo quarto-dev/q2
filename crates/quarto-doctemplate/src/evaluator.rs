@@ -197,15 +197,14 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
     match resolve_variable(var, ctx.variables) {
         Some(value) => {
             // Handle literal separator for arrays: $var[, ]$
-            if let Some(sep) = &var.separator {
-                if let TemplateValue::List(items) = value {
+            if let Some(sep) = &var.separator
+                && let TemplateValue::List(items) = value {
                     let docs: Vec<Doc> = items
                         .iter()
                         .map(|v| v.to_doc().remove_final_newline())
                         .collect();
                     return intersperse_docs(docs, Doc::text(sep));
                 }
-            }
             // TODO: Apply pipes
             // Strip final newline from variable values (matches Pandoc's removeFinalNl)
             value.to_doc().remove_final_newline()
@@ -231,11 +230,10 @@ fn evaluate_conditional(
 ) -> TemplateResult<Doc> {
     // Try each if/elseif branch
     for (condition, body) in branches {
-        if let Some(value) = resolve_variable(condition, ctx.variables) {
-            if value.is_truthy() {
+        if let Some(value) = resolve_variable(condition, ctx.variables)
+            && value.is_truthy() {
                 return evaluate_nodes(body, ctx);
             }
-        }
     }
 
     // No branch matched, try else
@@ -268,7 +266,7 @@ fn evaluate_for_loop(
     }
 
     // Get the variable name for binding (use the last path component)
-    let var_name = var.path.last().map(|s| s.as_str()).unwrap_or("");
+    let var_name = var.path.last().map_or("", |s| s.as_str());
 
     // Render separator if present
     let sep_doc = if let Some(sep_nodes) = separator {

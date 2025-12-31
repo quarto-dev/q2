@@ -12,14 +12,11 @@ pub fn process_language_attribute(
     _context: &ASTContext,
 ) -> PandocNativeIntermediate {
     for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                return PandocNativeIntermediate::IntermediateBaseText(
-                    "{".to_string() + &text + "}",
-                    range,
-                );
-            }
-            _ => {}
+        if let PandocNativeIntermediate::IntermediateBaseText(text, range) = child {
+            return PandocNativeIntermediate::IntermediateBaseText(
+                "{".to_string() + &text + "}",
+                range,
+            );
         }
     }
     panic!("Expected language_attribute to have a language, but found none");

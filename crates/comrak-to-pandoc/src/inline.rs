@@ -20,9 +20,7 @@ use std::cell::RefCell;
 
 /// Helper to get source info from context or empty
 fn get_source_info(ast: &Ast, source_ctx: Option<&SourceLocationContext>) -> SourceInfo {
-    source_ctx
-        .map(|ctx| ctx.sourcepos_to_source_info(&ast.sourcepos))
-        .unwrap_or_else(empty_source_info)
+    source_ctx.map_or_else(empty_source_info, |ctx| ctx.sourcepos_to_source_info(&ast.sourcepos))
 }
 
 /// Convert a comrak node's inline children to Pandoc inlines with source tracking.

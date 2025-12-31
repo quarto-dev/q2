@@ -120,18 +120,9 @@ pub fn process_shortcode(
     let mut keyword_args: HashMap<String, ShortcodeArg> = HashMap::new();
     for (node, child) in children {
         match (node.as_str(), child) {
-            (
-                "shortcode_naked_string",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
-            )
-            | (
-                "shortcode_name",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
-            )
-            | (
-                "shortcode_string",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
-            ) => {
+            ("shortcode_naked_string" | "shortcode_name" | "shortcode_string",
+PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text),
+_)) => {
                 if name.is_empty() {
                     name = text;
                 } else {
@@ -149,8 +140,8 @@ pub fn process_shortcode(
             ("shortcode", PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(arg))) => {
                 positional_args.push(ShortcodeArg::Shortcode(arg));
             }
-            ("shortcode_number", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _))
-            | ("shortcode_boolean", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _)) => {
+            ("shortcode_number" | "shortcode_boolean",
+PandocNativeIntermediate::IntermediateShortcodeArg(arg, _)) => {
                 positional_args.push(arg);
             }
             ("key_value_specifier", PandocNativeIntermediate::IntermediateKeyValueSpec(specs)) => {

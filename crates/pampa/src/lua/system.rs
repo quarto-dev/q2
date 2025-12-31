@@ -206,9 +206,7 @@ pub fn register_pandoc_system(
             for (i, entry) in entries.iter().enumerate() {
                 // Return just the filename, not the full path
                 let name = entry
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| entry.to_string_lossy().to_string());
+                    .file_name().map_or_else(|| entry.to_string_lossy().to_string(), |n| n.to_string_lossy().to_string());
                 table.set(i + 1, name)?;
             }
             Ok(table)
@@ -287,7 +285,7 @@ pub fn register_pandoc_system(
             }
 
             // Clear variables not in new environment
-            for (key, _) in &current_env {
+            for key in current_env.keys() {
                 if env_table.get::<Value>(key.clone())?.is_nil() {
                     // SAFETY: We're in a single-threaded Lua context
                     unsafe {
@@ -344,11 +342,11 @@ pub fn register_pandoc_system(
                 let temp_path = temp.path().to_string_lossy().to_string();
 
                 // Execute callback with temp directory path
-                let result = callback.call::<MultiValue>(temp_path);
+                
 
                 // temp directory is cleaned up when `temp` drops
 
-                result
+                callback.call::<MultiValue>(temp_path)
             },
         )?,
     )?;
@@ -427,7 +425,7 @@ pub fn register_pandoc_system(
                         Ok(Value::Table(table))
                     } else {
                         Ok(Value::String(
-                            lua.create_string(&path.to_string_lossy().to_string())?,
+                            lua.create_string(path.to_string_lossy().to_string())?,
                         ))
                     }
                 }

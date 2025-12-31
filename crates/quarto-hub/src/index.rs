@@ -92,11 +92,10 @@ impl IndexDocument {
 
                 // Iterate over all keys in the map
                 for key in keys {
-                    if let Some((value, _)) = doc.get(&files_obj, &key).ok().flatten() {
-                        if let Some(doc_id) = value.to_str() {
+                    if let Some((value, _)) = doc.get(&files_obj, &key).ok().flatten()
+                        && let Some(doc_id) = value.to_str() {
                             files.insert(key, doc_id.to_string());
                         }
-                    }
                 }
             }
 

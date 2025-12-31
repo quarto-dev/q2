@@ -164,8 +164,8 @@ fn check_elements_for_undefined_macros(
 fn check_element_for_undefined_macros(element: &Element, defined: &HashSet<&str>) -> Result<()> {
     match &element.element_type {
         ElementType::Text(text) => {
-            if let TextSource::Macro { name, name_source } = &text.source {
-                if !defined.contains(name.as_str()) {
+            if let TextSource::Macro { name, name_source } = &text.source
+                && !defined.contains(name.as_str()) {
                     let suggestion = find_similar_macro(name, defined);
                     return Err(Error::UndefinedMacro {
                         name: name.clone(),
@@ -173,7 +173,6 @@ fn check_element_for_undefined_macros(element: &Element, defined: &HashSet<&str>
                         suggestion,
                     });
                 }
-            }
         }
         ElementType::Group(group) => {
             check_elements_for_undefined_macros(&group.elements, defined)?;
@@ -1215,8 +1214,8 @@ impl CslParser {
         let mut family_formatting = None;
         let mut given_formatting = None;
         for child in element.all_children() {
-            if child.name == "name-part" {
-                if let Some(name_attr) = self.get_attr(child, "name") {
+            if child.name == "name-part"
+                && let Some(name_attr) = self.get_attr(child, "name") {
                     let formatting = self.parse_formatting(child);
                     // Only store if there's actual formatting
                     let has_formatting = formatting.font_style.is_some()
@@ -1235,7 +1234,6 @@ impl CslParser {
                         }
                     }
                 }
-            }
         }
 
         Ok(Name {

@@ -154,7 +154,7 @@ fn main() {
             .expect("Failed to read input file");
     }
 
-    if !input.ends_with("\n") {
+    if !input.ends_with('\n') {
         let warning = DiagnosticMessageBuilder::warning("Missing Newline at End of File")
             .with_code("Q-7-1")
             .problem(format!(
@@ -397,8 +397,7 @@ fn main() {
                     include_inline_locations: args
                         .json_source_location
                         .as_ref()
-                        .map(|s| s == "full")
-                        .unwrap_or(false),
+                        .is_some_and(|s| s == "full"),
                 };
                 writers::json::write_with_config(&pandoc, &context, &mut buf, &json_config)
             }
@@ -458,7 +457,7 @@ fn main() {
     // Write output to file or stdout
     if let Some(output_path) = args.output {
         std::fs::write(&output_path, &buf)
-            .expect(&format!("Failed to write output to file: {}", output_path));
+            .unwrap_or_else(|_| panic!("Failed to write output to file: {}", output_path));
     } else {
         let output = String::from_utf8(buf).expect("Invalid UTF-8 in output");
         print!("{}", output);

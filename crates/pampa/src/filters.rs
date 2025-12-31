@@ -22,6 +22,7 @@ type InlineFilterField<'a, T> = Option<InlineFilterFn<'a, T>>;
 type BlockFilterField<'a, T> = Option<BlockFilterFn<'a, T>>;
 type MetaFilterField<'a> = Option<MetaFilterFn<'a>>;
 
+#[derive(Default)]
 pub struct Filter<'a> {
     pub inlines: InlineFilterField<'a, Inlines>,
     pub blocks: BlockFilterField<'a, Blocks>,
@@ -75,62 +76,6 @@ pub struct Filter<'a> {
     pub meta: MetaFilterField<'a>,
 }
 
-impl Default for Filter<'static> {
-    fn default() -> Filter<'static> {
-        Filter {
-            inlines: None,
-            blocks: None,
-            inline: None,
-            block: None,
-
-            str: None,
-            emph: None,
-            underline: None,
-            strong: None,
-            strikeout: None,
-            superscript: None,
-            subscript: None,
-            small_caps: None,
-            quoted: None,
-            cite: None,
-            code: None,
-            space: None,
-            soft_break: None,
-            line_break: None,
-            math: None,
-            raw_inline: None,
-            link: None,
-            image: None,
-            note: None,
-            span: None,
-            shortcode: None,
-            note_reference: None,
-
-            paragraph: None,
-            plain: None,
-            code_block: None,
-            raw_block: None,
-            bullet_list: None,
-            ordered_list: None,
-            block_quote: None,
-            div: None,
-            figure: None,
-            line_block: None,
-            definition_list: None,
-            header: None,
-            table: None,
-            horizontal_rule: None,
-            attr: None,
-
-            insert: None,
-            delete: None,
-            highlight: None,
-            edit_comment: None,
-
-            meta: None,
-        }
-    }
-}
 
 impl Filter<'static> {
     pub fn new() -> Filter<'static> {
@@ -1170,7 +1115,7 @@ pub fn topdown_traverse_meta(
     ctx: &mut FilterContext,
 ) -> ConfigValue {
     if let Some(f) = &mut filter.meta {
-        return match f(meta, ctx) {
+        match f(meta, ctx) {
             FilterReturn::FilterResult(new_meta, recurse) => {
                 if !recurse {
                     return new_meta;
@@ -1178,7 +1123,7 @@ pub fn topdown_traverse_meta(
                 topdown_traverse_meta(new_meta, filter, ctx)
             }
             FilterReturn::Unchanged(m) => topdown_traverse_config_value(m, filter, ctx),
-        };
+        }
     } else {
         topdown_traverse_config_value(meta, filter, ctx)
     }

@@ -306,8 +306,8 @@ impl Name {
     pub fn extract_particles(&mut self) {
         // Extract dropping particle from end of given name
         // e.g., "Givenname al" -> given="Givenname", dropping_particle="al"
-        if self.dropping_particle.is_none() {
-            if let Some(given) = self.given.clone() {
+        if self.dropping_particle.is_none()
+            && let Some(given) = self.given.clone() {
                 // Don't process quoted names (CSL-JSON convention for literal names)
                 if given.starts_with('"') && given.ends_with('"') {
                     self.given = Some(given[1..given.len() - 1].to_string());
@@ -333,12 +333,11 @@ impl Name {
                     }
                 }
             }
-        }
 
         // Extract non-dropping particle from start of family name
         // e.g., "van Gogh" -> non_dropping_particle="van", family="Gogh"
-        if self.non_dropping_particle.is_none() {
-            if let Some(family) = self.family.clone() {
+        if self.non_dropping_particle.is_none()
+            && let Some(family) = self.family.clone() {
                 // Don't process quoted names
                 if family.starts_with('"') && family.ends_with('"') {
                     self.family = Some(family[1..family.len() - 1].to_string());
@@ -360,14 +359,13 @@ impl Name {
                     }
                 }
             }
-        }
 
         // If no space-separated non-dropping particle found, try punctuation-connected extraction
         // e.g., "d'Aubignac" -> non_dropping_particle="d'", family="Aubignac"
         // e.g., "al-One" -> non_dropping_particle="al-", family="One"
         // Reference: Haskell citeproc Types.hs:1253-1258
-        if self.non_dropping_particle.is_none() {
-            if let Some(family) = self.family.clone() {
+        if self.non_dropping_particle.is_none()
+            && let Some(family) = self.family.clone() {
                 // Find first particle punctuation character
                 if let Some(punct_idx) = family.find(is_particle_punct) {
                     let before = &family[..punct_idx];
@@ -389,7 +387,6 @@ impl Name {
                     }
                 }
             }
-        }
     }
 
     /// Get the display name in "family, given" format.
@@ -689,12 +686,7 @@ impl Reference {
                     Some(n.to_string())
                 } else if let Some(n) = v.as_u64() {
                     Some(n.to_string())
-                } else if let Some(n) = v.as_f64() {
-                    // Format floats without trailing zeros
-                    Some(format!("{}", n))
-                } else {
-                    None
-                }
+                } else { v.as_f64().map(|n| format!("{}", n)) }
             }),
         }
     }
@@ -858,18 +850,18 @@ fn is_particle_punct(c: char) -> bool {
 fn is_byzantine_char(c: char) -> bool {
     c == '-'
         || c.is_ascii_alphanumeric()
-        || (c >= '\u{00c0}' && c <= '\u{017f}') // Latin Extended
-        || (c >= '\u{0370}' && c <= '\u{03ff}') // Greek
-        || (c >= '\u{0400}' && c <= '\u{052f}') // Cyrillic
-        || (c >= '\u{0590}' && c <= '\u{05d4}') // Hebrew (part 1)
-        || (c >= '\u{05d6}' && c <= '\u{05ff}') // Hebrew (part 2)
-        || (c >= '\u{0600}' && c <= '\u{06ff}') // Arabic
-        || (c >= '\u{0e01}' && c <= '\u{0e5b}') // Thai
-        || (c >= '\u{1f00}' && c <= '\u{1fff}') // Greek Extended
-        || (c >= '\u{200c}' && c <= '\u{200e}') // Zero-width characters
-        || (c >= '\u{2018}' && c <= '\u{2019}') // Curly quotes
-        || (c >= '\u{021a}' && c <= '\u{021b}') // Romanian letters
-        || (c >= '\u{202a}' && c <= '\u{202e}') // Directional formatting
+        || ('\u{00c0}'..='\u{017f}').contains(&c) // Latin Extended
+        || ('\u{0370}'..='\u{03ff}').contains(&c) // Greek
+        || ('\u{0400}'..='\u{052f}').contains(&c) // Cyrillic
+        || ('\u{0590}'..='\u{05d4}').contains(&c) // Hebrew (part 1)
+        || ('\u{05d6}'..='\u{05ff}').contains(&c) // Hebrew (part 2)
+        || ('\u{0600}'..='\u{06ff}').contains(&c) // Arabic
+        || ('\u{0e01}'..='\u{0e5b}').contains(&c) // Thai
+        || ('\u{1f00}'..='\u{1fff}').contains(&c) // Greek Extended
+        || ('\u{200c}'..='\u{200e}').contains(&c) // Zero-width characters
+        || ('\u{2018}'..='\u{2019}').contains(&c) // Curly quotes
+        || ('\u{021a}'..='\u{021b}').contains(&c) // Romanian letters
+        || ('\u{202a}'..='\u{202e}').contains(&c) // Directional formatting
 }
 
 /// Strip common particles from the beginning of a family name.

@@ -18,7 +18,7 @@ pub fn process_raw_specifier(
     let source_info = node_source_info_with_context(node, context);
     let range =
         crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
-    if raw.chars().nth(0) == Some('<') {
+    if raw.starts_with('<') {
         PandocNativeIntermediate::IntermediateBaseText(
             "pandoc-reader:".to_string() + &raw[1..],
             range.clone(),

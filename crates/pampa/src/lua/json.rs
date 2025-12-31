@@ -61,14 +61,12 @@ fn create_decode(lua: &Lua) -> Result<Function> {
 fn create_encode(lua: &Lua) -> Result<Function> {
     lua.create_function(|lua, value: Value| {
         // Check for __tojson metamethod
-        if let Value::Table(ref t) = value {
-            if let Some(mt) = t.metatable() {
-                if let Ok(tojson) = mt.get::<Function>("__tojson") {
+        if let Value::Table(ref t) = value
+            && let Some(mt) = t.metatable()
+                && let Ok(tojson) = mt.get::<Function>("__tojson") {
                     let result: String = tojson.call(value.clone())?;
                     return Ok(result);
                 }
-            }
-        }
 
         // Convert Lua value to JSON
         let json_value = lua_to_json(lua, &value)?;

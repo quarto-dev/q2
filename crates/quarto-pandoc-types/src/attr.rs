@@ -8,7 +8,7 @@ use quarto_source_map::SourceInfo;
 use serde::{Deserialize, Serialize};
 
 pub fn empty_attr() -> Attr {
-    ("".to_string(), vec![], LinkedHashMap::new())
+    (String::new(), vec![], LinkedHashMap::new())
 }
 
 pub type Attr = (String, Vec<String>, LinkedHashMap<String, String>);
@@ -58,13 +58,11 @@ impl AttrSourceInfo {
         }
 
         // Add all class sources
-        for class_src in &self.classes {
-            if let Some(src) = class_src {
-                result = match result {
-                    Some(r) => Some(r.combine(src)),
-                    None => Some(src.clone()),
-                };
-            }
+        for src in self.classes.iter().flatten() {
+            result = match result {
+                Some(r) => Some(r.combine(src)),
+                None => Some(src.clone()),
+            };
         }
 
         // Add all key-value attribute sources

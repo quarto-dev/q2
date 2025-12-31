@@ -44,7 +44,7 @@ pub fn produce_error_message_json(tree_sitter_log: &TreeSitterLogObserver) -> Ve
     let mut seen_errors: HashSet<(String, usize)> = HashSet::new();
 
     for parse in &tree_sitter_log.parses {
-        let process_log = parse.processes.get(&0).unwrap();
+        let process_log = &parse.processes[&0];
         if process_log.is_good() {
             continue;
         }
@@ -85,7 +85,7 @@ pub fn produce_error_message_json(tree_sitter_log: &TreeSitterLogObserver) -> Ve
             }));
         }
 
-        if error_states.len() == 0 {
+        if error_states.is_empty() {
             panic!("We should have found an error");
         }
         return serde_json::to_string_pretty(&serde_json::json!({

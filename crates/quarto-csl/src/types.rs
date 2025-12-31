@@ -233,8 +233,10 @@ pub struct Macro {
 ///
 /// Controls how citations are grouped and collapsed within a single citation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum Collapse {
     /// No collapsing.
+    #[default]
     None,
     /// Collapse by citation number into ranges: "[1-3]" instead of "[1, 2, 3]".
     CitationNumber,
@@ -246,11 +248,6 @@ pub enum Collapse {
     YearSuffixRanged,
 }
 
-impl Default for Collapse {
-    fn default() -> Self {
-        Collapse::None
-    }
-}
 
 /// Disambiguation strategy for citations.
 ///

@@ -181,15 +181,14 @@ impl AnsiConfig {
     /// Can be overridden with QUARTO_TERMINAL_WIDTH environment variable
     fn detect_terminal_width() -> usize {
         // Check for environment variable override first
-        if let Ok(width_str) = std::env::var("QUARTO_TERMINAL_WIDTH") {
-            if let Ok(width) = width_str.parse::<usize>() {
+        if let Ok(width_str) = std::env::var("QUARTO_TERMINAL_WIDTH")
+            && let Ok(width) = width_str.parse::<usize>() {
                 return width;
             }
-        }
 
         // Otherwise detect from terminal
         use crossterm::terminal::size;
-        size().ok().map(|(cols, _rows)| cols as usize).unwrap_or(80)
+        size().ok().map_or(80, |(cols, _rows)| cols as usize)
     }
 
     /// Detect if the terminal supports hyperlinks
@@ -417,7 +416,7 @@ impl<'a, W: Write + ?Sized> Write for DivContext<'a, W> {
         for &byte in buf {
             if byte == b'\n' {
                 self.flush_line()?;
-                self.inner.write_all(&[b'\n'])?;
+                self.inner.write_all(b"\n")?;
             } else {
                 self.line_buffer.push(byte);
             }
@@ -1079,15 +1078,14 @@ fn parse_color_value(value: &str) -> Option<Color> {
     if value.starts_with("rgb(") && value.ends_with(')') {
         let inner = &value[4..value.len() - 1];
         let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
-        if parts.len() == 3 {
-            if let (Ok(r), Ok(g), Ok(b)) = (
+        if parts.len() == 3
+            && let (Ok(r), Ok(g), Ok(b)) = (
                 parts[0].parse::<u8>(),
                 parts[1].parse::<u8>(),
                 parts[2].parse::<u8>(),
             ) {
                 return Some(Color::Rgb { r, g, b });
             }
-        }
     }
 
     // ANSI palette: ansi(42) or ansi-42
@@ -1096,12 +1094,10 @@ fn parse_color_value(value: &str) -> Option<Color> {
         if let Ok(ansi_value) = num_str.parse::<u8>() {
             return Some(Color::AnsiValue(ansi_value));
         }
-    } else if value.starts_with("ansi-") {
-        let num_str = &value[5..];
-        if let Ok(ansi_value) = num_str.parse::<u8>() {
+    } else if let Some(num_str) = value.strip_prefix("ansi-")
+        && let Ok(ansi_value) = num_str.parse::<u8>() {
             return Some(Color::AnsiValue(ansi_value));
         }
-    }
 
     None
 }
@@ -1146,10 +1142,10 @@ fn write_inline<T: Write + ?Sized>(
             write!(buf, " ")?;
         }
         Inline::SoftBreak(_) => {
-            write!(buf, "\n")?;
+            writeln!(buf)?;
         }
         Inline::LineBreak(_) => {
-            write!(buf, "\n")?;
+            writeln!(buf)?;
         }
 
         // Styled text

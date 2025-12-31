@@ -50,14 +50,12 @@ impl LocaleManager {
         }
 
         // Try base language (e.g., "en" for "en-US")
-        if let Some(base) = lang.split('-').next() {
-            if base != lang {
-                if let Some(locale) = load_embedded_locale(base) {
+        if let Some(base) = lang.split('-').next()
+            && base != lang
+                && let Some(locale) = load_embedded_locale(base) {
                     self.locales.insert(lang.to_string(), locale);
                     return self.locales.get(lang);
                 }
-            }
-        }
 
         None
     }
@@ -70,20 +68,17 @@ impl LocaleManager {
         }
 
         // Try base language
-        if let Some(base) = self.default_locale.split('-').next() {
-            if base != self.default_locale {
-                if let Some(term) = self.get_term_from_locale(base, name, form, plural) {
+        if let Some(base) = self.default_locale.split('-').next()
+            && base != self.default_locale
+                && let Some(term) = self.get_term_from_locale(base, name, form, plural) {
                     return Some(term);
                 }
-            }
-        }
 
         // Fall back to en-US
-        if self.default_locale != "en-US" {
-            if let Some(term) = self.get_term_from_locale("en-US", name, form, plural) {
+        if self.default_locale != "en-US"
+            && let Some(term) = self.get_term_from_locale("en-US", name, form, plural) {
                 return Some(term);
             }
-        }
 
         None
     }
@@ -131,31 +126,25 @@ impl LocaleManager {
     /// Returns None if no locale has this option set.
     pub fn get_punctuation_in_quote(&self) -> Option<bool> {
         // Try the default locale
-        if let Some(locale) = self.locales.get(&self.default_locale) {
-            if let Some(ref opts) = locale.options {
+        if let Some(locale) = self.locales.get(&self.default_locale)
+            && let Some(ref opts) = locale.options {
                 return Some(opts.punctuation_in_quote);
             }
-        }
 
         // Try base language
-        if let Some(base) = self.default_locale.split('-').next() {
-            if base != self.default_locale {
-                if let Some(locale) = self.locales.get(base) {
-                    if let Some(ref opts) = locale.options {
+        if let Some(base) = self.default_locale.split('-').next()
+            && base != self.default_locale
+                && let Some(locale) = self.locales.get(base)
+                    && let Some(ref opts) = locale.options {
                         return Some(opts.punctuation_in_quote);
                     }
-                }
-            }
-        }
 
         // Fall back to en-US
-        if self.default_locale != "en-US" {
-            if let Some(locale) = self.locales.get("en-US") {
-                if let Some(ref opts) = locale.options {
+        if self.default_locale != "en-US"
+            && let Some(locale) = self.locales.get("en-US")
+                && let Some(ref opts) = locale.options {
                     return Some(opts.punctuation_in_quote);
                 }
-            }
-        }
 
         None
     }
@@ -201,28 +190,25 @@ impl LocaleManager {
         }
 
         // Try base language
-        if let Some(base) = self.default_locale.split('-').next() {
-            if base != self.default_locale {
-                if let Some(locale) = self.locales.get(base) {
+        if let Some(base) = self.default_locale.split('-').next()
+            && base != self.default_locale
+                && let Some(locale) = self.locales.get(base) {
                     for df in &locale.date_formats {
                         if df.form == form {
                             return Some(df);
                         }
                     }
                 }
-            }
-        }
 
         // Fall back to en-US
-        if self.default_locale != "en-US" {
-            if let Some(locale) = self.locales.get("en-US") {
+        if self.default_locale != "en-US"
+            && let Some(locale) = self.locales.get("en-US") {
                 for df in &locale.date_formats {
                     if df.form == form {
                         return Some(df);
                     }
                 }
             }
-        }
 
         None
     }
@@ -258,12 +244,11 @@ fn load_embedded_locale(lang: &str) -> Option<Locale> {
         // Look for any file starting with the base language
         for entry in LocaleFiles::iter() {
             let entry_str = entry.as_ref();
-            if entry_str.starts_with(lang) && entry_str.ends_with(".xml") {
-                if let Some(file) = LocaleFiles::get(entry_str) {
+            if entry_str.starts_with(lang) && entry_str.ends_with(".xml")
+                && let Some(file) = LocaleFiles::get(entry_str) {
                     let xml = std::str::from_utf8(file.data.as_ref()).ok()?;
                     return parse_locale_xml(xml).ok();
                 }
-            }
         }
     }
 

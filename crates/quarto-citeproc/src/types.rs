@@ -804,10 +804,8 @@ impl Processor {
                         if let Some(ref m) = term.multiple {
                             return Some(m.clone());
                         }
-                    } else {
-                        if let Some(ref s) = term.single {
-                            return Some(s.clone());
-                        }
+                    } else if let Some(ref s) = term.single {
+                        return Some(s.clone());
                     }
                     if let Some(ref v) = term.value {
                         return Some(v.clone());
@@ -836,30 +834,28 @@ impl Processor {
 
         // Priority 1: Exact language match (e.g., xml:lang="en-US" for en-US)
         for locale in &self.style.locales {
-            if let Some(ref lang) = locale.lang {
-                if lang == effective_lang {
+            if let Some(ref lang) = locale.lang
+                && lang == effective_lang {
                     for df in &locale.date_formats {
                         if df.form == form {
                             return Some(df);
                         }
                     }
                 }
-            }
         }
 
         // Priority 2: Base language match (e.g., xml:lang="en" for en-US)
         // Only if it differs from the exact match
         if base_lang != effective_lang {
             for locale in &self.style.locales {
-                if let Some(ref lang) = locale.lang {
-                    if lang == base_lang {
+                if let Some(ref lang) = locale.lang
+                    && lang == base_lang {
                         for df in &locale.date_formats {
                             if df.form == form {
                                 return Some(df);
                             }
                         }
                     }
-                }
             }
         }
 
@@ -1118,8 +1114,8 @@ impl Processor {
 
         // 1. Apply global name disambiguation for non-ByCite rules
         // This runs even without ambiguities (global name disambiguation)
-        if let Some(rule) = add_givenname {
-            if rule != GivenNameDisambiguationRule::ByCite {
+        if let Some(rule) = add_givenname
+            && rule != GivenNameDisambiguationRule::ByCite {
                 apply_global_name_disambiguation(self, &disamb_data, rule);
                 // Re-render (without collapse) and refresh ambiguities
                 outputs = citations_with_positions
@@ -1129,7 +1125,6 @@ impl Processor {
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data.clone());
             }
-        }
 
         // 2. Add names (expand et-al) if still ambiguous
         if add_names && !ambiguities.is_empty() {
@@ -1147,8 +1142,8 @@ impl Processor {
         // The ByCite rule needs to operate on the original ambiguity groups,
         // not the refreshed ones after add_names. This is because ByCite
         // incrementally expands givennames within the original groups.
-        if let Some(GivenNameDisambiguationRule::ByCite) = add_givenname {
-            if !initial_ambiguities.is_empty() {
+        if let Some(GivenNameDisambiguationRule::ByCite) = add_givenname
+            && !initial_ambiguities.is_empty() {
                 try_add_given_names_with_rule(
                     self,
                     &initial_ambiguities,
@@ -1162,7 +1157,6 @@ impl Processor {
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data.clone());
             }
-        }
 
         // 4. Add year suffixes if enabled
         // We need to handle two cases:

@@ -15,10 +15,10 @@ pub fn process_commonmark_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
+    let mut attr = (String::new(), vec![], LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
-    children.into_iter().for_each(|(node, child)| match child {
+    for (node, child) in children { match child {
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
             if node == "attribute_id" {
                 attr.0 = text;
@@ -54,7 +54,7 @@ pub fn process_commonmark_attribute(
         }
         PandocNativeIntermediate::IntermediateUnknown(_) => {}
         _ => panic!("Unexpected child in commonmark_attribute: {:?}", child),
-    });
+    }; }
 
     PandocNativeIntermediate::IntermediateAttr(attr, attr_source)
 }

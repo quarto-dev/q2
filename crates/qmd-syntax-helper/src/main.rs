@@ -411,7 +411,7 @@ fn print_check_summary(results: &[rule::CheckResult], total_files: usize) {
             *issues_by_rule.entry(result.rule_name.clone()).or_insert(0) += result.issue_count;
             files_by_rule
                 .entry(result.rule_name.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(result.file_path.clone());
         }
     }

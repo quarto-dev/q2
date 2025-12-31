@@ -338,11 +338,7 @@ pub fn make_span_inline(
     }
     if attr.1.contains(&"smallcaps".to_string()) {
         let mut new_attr = attr.clone();
-        new_attr.1 = new_attr
-            .1
-            .into_iter()
-            .filter(|s| s != "smallcaps")
-            .collect();
+        new_attr.1.retain(|s| s != "smallcaps");
         if is_empty_attr(&new_attr) {
             return Inline::SmallCaps(SmallCaps {
                 content,
@@ -363,7 +359,7 @@ pub fn make_span_inline(
         });
     } else if attr.1.contains(&"ul".to_string()) {
         let mut new_attr = attr.clone();
-        new_attr.1 = new_attr.1.into_iter().filter(|s| s != "ul").collect();
+        new_attr.1.retain(|s| s != "ul");
         if is_empty_attr(&new_attr) {
             return Inline::Underline(Underline {
                 content,
@@ -384,11 +380,7 @@ pub fn make_span_inline(
         });
     } else if attr.1.contains(&"underline".to_string()) {
         let mut new_attr = attr.clone();
-        new_attr.1 = new_attr
-            .1
-            .into_iter()
-            .filter(|s| s != "underline")
-            .collect();
+        new_attr.1.retain(|s| s != "underline");
         if is_empty_attr(&new_attr) {
             return Inline::Underline(Underline {
                 content,
@@ -466,8 +458,8 @@ pub fn make_cite_inline(
             let mut suffix: Inlines = vec![];
 
             // now we build prefix and suffix around a Cite. If there's none, we return None
-            inlines.into_iter().for_each(|inline| {
-                if cite == None {
+            for inline in inlines.into_iter() {
+                if cite.is_none() {
                     if let Inline::Cite(c) = inline {
                         cite = Some(c);
                     } else {
@@ -476,7 +468,7 @@ pub fn make_cite_inline(
                 } else {
                     suffix.push(inline);
                 }
-            });
+            }
             let Some(mut c) = cite else {
                 panic!("Cite inline should have at least one citation, found none")
             };

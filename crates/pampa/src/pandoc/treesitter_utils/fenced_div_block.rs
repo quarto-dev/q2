@@ -21,7 +21,7 @@ pub fn process_fenced_div_block<T: Write>(
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    let mut attr: Attr = ("".to_string(), vec![], LinkedHashMap::new());
+    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut content: Vec<Block> = Vec::new();
     for (node, child) in children {

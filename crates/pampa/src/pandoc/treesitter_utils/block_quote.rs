@@ -22,8 +22,8 @@ pub fn process_block_quote<T: Write>(
     let mut content: Blocks = Vec::new();
     for (node_type, child) in children {
         if node_type == "block_quote_marker" {
-            if matches!(child, PandocNativeIntermediate::IntermediateUnknown(_)) {
-                if node_type != "block_continuation" {
+            if matches!(child, PandocNativeIntermediate::IntermediateUnknown(_))
+                && node_type != "block_continuation" {
                     writeln!(
                         buf,
                         "Warning: Unhandled node kind in block_quote: {}, {:?}",
@@ -31,7 +31,6 @@ pub fn process_block_quote<T: Write>(
                     )
                     .unwrap();
                 }
-            }
             continue;
         }
         match child {

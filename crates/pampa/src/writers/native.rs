@@ -24,14 +24,14 @@ fn write_safe_string<T: std::io::Write>(text: &str, buf: &mut T) -> std::io::Res
 fn write_native_attr<T: std::io::Write>(attr: &Attr, buf: &mut T) -> std::io::Result<()> {
     let (id, classes, attrs) = attr;
     write!(buf, "( ")?;
-    write_safe_string(&id, buf)?;
+    write_safe_string(id, buf)?;
     write!(buf, " , [")?;
 
     for (i, class) in classes.iter().enumerate() {
         if i > 0 {
             write!(buf, ", ")?;
         }
-        write_safe_string(&class, buf)?;
+        write_safe_string(class, buf)?;
     }
 
     write!(buf, "] , [")?;

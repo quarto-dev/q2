@@ -220,12 +220,11 @@ fn create_tostring_method(lua: &Lua) -> Result<Function> {
         let mut result = String::new();
 
         // Get name from metatable
-        if let Some(mt) = table.metatable() {
-            if let Ok(name) = mt.get::<String>("__name") {
+        if let Some(mt) = table.metatable()
+            && let Ok(name) = mt.get::<String>("__name") {
                 result.push_str(&name);
                 result.push(' ');
             }
-        }
 
         result.push('{');
 

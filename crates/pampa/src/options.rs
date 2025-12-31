@@ -114,7 +114,7 @@ pub fn parse_format_string(spec: &str) -> ParsedFormat {
     let mut disable = Vec::new();
 
     // Find the first + or - to determine where the base format ends
-    let base_end = spec.find(|c| c == '+' || c == '-').unwrap_or(spec.len());
+    let base_end = spec.find(['+', '-']).unwrap_or(spec.len());
     let base_format = spec[..base_end].to_string();
 
     // Parse extension modifiers
@@ -132,7 +132,7 @@ pub fn parse_format_string(spec: &str) -> ParsedFormat {
 
         // Find the end of this extension name (next + or - or end of string)
         let ext_end = remaining
-            .find(|c| c == '+' || c == '-')
+            .find(['+', '-'])
             .unwrap_or(remaining.len());
         let ext_name = remaining[..ext_end].to_string();
 

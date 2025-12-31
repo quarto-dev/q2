@@ -69,7 +69,7 @@ impl TreeSitterParseLog {
     pub fn is_good(&self) -> bool {
         // For every process, there can't be any version that reached a state
         // with error states
-        for (_, process) in &self.processes {
+        for process in self.processes.values() {
             if !process.is_good() {
                 return false;
             }
@@ -89,15 +89,11 @@ pub trait TreeSitterLogObserverTrait {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Fast log observer that only tracks whether errors occurred (no detailed state).
+#[derive(Default)]
 pub struct TreeSitterLogObserverFast {
     pub saw_error: bool,
 }
 
-impl Default for TreeSitterLogObserverFast {
-    fn default() -> Self {
-        TreeSitterLogObserverFast { saw_error: false }
-    }
-}
 
 impl TreeSitterLogObserverTrait for TreeSitterLogObserverFast {
     fn had_errors(&self) -> bool {
@@ -208,8 +204,8 @@ impl TreeSitterLogObserverTrait for TreeSitterLogObserver {
                         let popped_tokens = current_parse
                             .consumed_tokens
                             .split_off(current_parse.consumed_tokens.len() - child_count);
-                        let row = popped_tokens.get(0).unwrap().row;
-                        let column = popped_tokens.get(0).unwrap().column;
+                        let row = popped_tokens.first().unwrap().row;
+                        let column = popped_tokens.first().unwrap().column;
                         let size = popped_tokens.iter().map(|x| x.size).sum();
                         let new_token = ConsumedToken {
                             row,
@@ -317,8 +313,7 @@ impl TreeSitterLogObserverTrait for TreeSitterLogObserver {
                 let size = current_parse
                     .current_lookahead
                     .as_ref()
-                    .map(|(_, s)| *s)
-                    .unwrap_or(0);
+                    .map_or(0, |(_, s)| *s);
                 match self.state {
                     TreeSitterLogState::InParse => {
                         let new_token = ConsumedToken {

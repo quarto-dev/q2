@@ -17,11 +17,8 @@ pub fn process_raw_attribute(
     let range =
         crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
     for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateBaseText(raw, _) => {
-                return PandocNativeIntermediate::IntermediateRawFormat(raw, range);
-            }
-            _ => {}
+        if let PandocNativeIntermediate::IntermediateBaseText(raw, _) = child {
+            return PandocNativeIntermediate::IntermediateRawFormat(raw, range);
         }
     }
     panic!("Expected raw_attribute to have a format, but found none");

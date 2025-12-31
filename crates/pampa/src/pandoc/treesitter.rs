@@ -143,29 +143,23 @@ fn process_list(
         else {
             panic!("Expected Blocks in list_item, got {:?}", child);
         };
-        if is_ordered_list == None {
-            match ordered_list {
-                attr @ Some(_) => is_ordered_list = attr,
-                _ => {}
-            }
-        }
+        if is_ordered_list.is_none()
+            && let attr @ Some(_) = ordered_list { is_ordered_list = attr }
 
         // is the last item loose? Check the last paragraph end row
-        if let Some(last_para_end) = last_para_end_row {
-            if last_para_end != child_range.start.row {
+        if let Some(last_para_end) = last_para_end_row
+            && last_para_end != child_range.start.row {
                 // if the last paragraph ends on a different line than the current item starts,
                 // then the last item was loose, mark it
                 has_loose_item = true;
             }
-        }
 
         // Check if there's a blank line between the last item and this item
-        if let Some(last_end) = last_item_end_row {
-            if child_range.start.row > last_end {
+        if let Some(last_end) = last_item_end_row
+            && child_range.start.row > last_end {
                 // There's at least one blank line between items
                 has_loose_item = true;
             }
-        }
 
         // is this item definitely loose?
         if blocks
@@ -259,8 +253,8 @@ fn process_list(
                     return blocks;
                 };
                 let mut result = vec![Block::Plain(Plain {
-                    content: content,
-                    source_info: source_info,
+                    content,
+                    source_info,
                 })];
                 result.extend(blocks);
                 result
@@ -381,7 +375,7 @@ fn process_native_inline<T: Write>(
             }
         }
         PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-            if let Some(_) = whitespace_re.find(&text) {
+            if whitespace_re.find(&text).is_some() {
                 Inline::Space(Space {
                     source_info: quarto_source_map::SourceInfo::from_range(
                         context.current_file_id(),
@@ -453,7 +447,7 @@ fn process_native_inlines<T: Write>(
                 inlines.extend(inner_inlines)
             }
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                if let Some(_) = whitespace_re.find(&text) {
+                if whitespace_re.find(&text).is_some() {
                     inlines.push(Inline::Space(Space {
                         source_info: quarto_source_map::SourceInfo::from_range(
                             context.current_file_id(),
@@ -507,8 +501,8 @@ fn native_visitor<T: Write>(
             child,
             &whitespace_re,
             &mut inline_buf,
-            &node_text,
-            &node_source_info_fn,
+            node_text,
+            node_source_info_fn,
             context,
         )
     };
@@ -794,7 +788,7 @@ fn native_visitor<T: Write>(
             let trimmed = text.trim();
 
             // Verify format and extract ID
-            if trimmed.starts_with("[^") && trimmed.ends_with("]") {
+            if trimmed.starts_with("[^") && trimmed.ends_with(']') {
                 let id = trimmed[2..trimmed.len() - 1].to_string();
 
                 // Calculate the adjusted source range for the note reference
@@ -968,7 +962,7 @@ fn native_visitor<T: Write>(
             use hashlink::LinkedHashMap;
 
             let attr = (
-                "".to_string(),
+                String::new(),
                 vec!["unnumbered".to_string()],
                 LinkedHashMap::new(),
             );
@@ -997,7 +991,7 @@ fn native_visitor<T: Write>(
             // If no commonmark_specifier or raw_specifier found, return empty attr
             use hashlink::LinkedHashMap;
             PandocNativeIntermediate::IntermediateAttr(
-                ("".to_string(), vec![], LinkedHashMap::new()),
+                (String::new(), vec![], LinkedHashMap::new()),
                 AttrSourceInfo::empty(),
             )
         }
@@ -1127,7 +1121,7 @@ pub fn treesitter_to_pandoc<T: Write>(
         &mut |node, children, input_bytes, context| {
             native_visitor(buf, node, children, input_bytes, context, error_collector)
         },
-        &input_bytes,
+        input_bytes,
         context,
     );
     let (_, PandocNativeIntermediate::IntermediatePandoc(pandoc)) = result else {

@@ -171,11 +171,10 @@ fn load_and_validate_enabled_tests(
         }
 
         // Check if test exists
-        if !valid_tests.contains(&name) {
-            if !nonexistent.contains(&name) {
+        if !valid_tests.contains(&name)
+            && !nonexistent.contains(&name) {
                 nonexistent.push(name.clone());
             }
-        }
 
         enabled.insert(name);
     }

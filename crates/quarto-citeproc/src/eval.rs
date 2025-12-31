@@ -275,11 +275,10 @@ impl<'a> EvalContext<'a> {
 
         // Title case only applies to English references (CSL spec 2.4.2)
         // If text_case is Title and reference is non-English, skip title case
-        if formatting.text_case == Some(quarto_csl::TextCase::Title) {
-            if !self.is_english_reference() {
+        if formatting.text_case == Some(quarto_csl::TextCase::Title)
+            && !self.is_english_reference() {
                 formatting.text_case = None;
             }
-        }
 
         formatting
     }
@@ -549,7 +548,7 @@ fn evaluate_citation_to_output_impl(
     let combined = if apply_collapse {
         match layout.collapse {
             Collapse::Year | Collapse::YearSuffix | Collapse::YearSuffixRanged => {
-                collapse_by_year(item_outputs, &layout, layout.collapse.clone())
+                collapse_by_year(item_outputs, &layout, layout.collapse)
             }
             Collapse::CitationNumber => collapse_by_citation_number(item_outputs, &layout),
             Collapse::None => {
@@ -1402,7 +1401,7 @@ fn evaluate_text(
                     // Nothing for page-range-format when the label isn't "page".
                     let is_page_like = name == "page"
                         || (name == "locator"
-                            && ctx.get_locator_label().map_or(true, |l| l == "page"));
+                            && ctx.get_locator_label().is_none_or(|l| l == "page"));
 
                     if name == "page" || name == "locator" {
                         let delimiter = ctx.get_page_range_delimiter();
@@ -1504,7 +1503,7 @@ fn evaluate_names(
     let mut all_empty = true;
     for var in &names_el.variables {
         let names = ctx.reference.get_names(var);
-        let has_names = names.as_ref().map_or(false, |n| !n.is_empty());
+        let has_names = names.as_ref().is_some_and(|n| !n.is_empty());
         ctx.record_var_call(has_names);
         if has_names {
             all_empty = false;
@@ -1522,11 +1521,10 @@ fn evaluate_names(
         // For form="count", sum counts across all variables
         let mut total_count: usize = 0;
         for var in &names_el.variables {
-            if let Some(names) = ctx.reference.get_names(var) {
-                if !names.is_empty() {
+            if let Some(names) = ctx.reference.get_names(var)
+                && !names.is_empty() {
                     total_count += get_names_count(ctx, names, names_el);
                 }
-            }
         }
         // Output the total count (empty string if 0)
         if total_count > 0 {
@@ -1540,8 +1538,8 @@ fn evaluate_names(
     // Note: var calls were already recorded in step 1
     let mut var_outputs: Vec<Output> = Vec::new();
     for var in &names_el.variables {
-        if let Some(names) = ctx.reference.get_names(var) {
-            if !names.is_empty() {
+        if let Some(names) = ctx.reference.get_names(var)
+            && !names.is_empty() {
                 // Format the names - now returns structured Output
                 let formatted = format_names(ctx, names, names_el);
 
@@ -1631,7 +1629,6 @@ fn evaluate_names(
 
                 var_outputs.push(var_with_label);
             }
-        }
     }
 
     // We get here only when all_empty=false, so var_outputs should have content
@@ -1870,7 +1867,7 @@ fn format_names(
         let last_idx = formatted_names.len() - 1;
         let mut iter = formatted_names.into_iter().enumerate();
 
-        while let Some((i, name_output)) = iter.next() {
+        for (i, name_output) in iter {
             if i == last_idx {
                 // Last name
                 if use_and_connector {
@@ -1970,7 +1967,7 @@ fn format_names(
 /// Per Haskell citeproc: apostrophe, curly apostrophe, hyphen, en-dash, or non-breaking space.
 /// Used when joining non-dropping particle with family name.
 fn ends_with_particle_punct(s: &str) -> bool {
-    s.chars().last().map_or(false, |c| {
+    s.chars().last().is_some_and(|c| {
         c == '\'' || c == '\u{2019}' || c == '-' || c == '\u{2013}' || c == '\u{00a0}'
     })
 }
@@ -2062,7 +2059,7 @@ fn format_single_name(
             let delimiter = if name
                 .non_dropping_particle
                 .as_ref()
-                .map_or(false, |ndp| ends_with_particle_punct(ndp))
+                .is_some_and(|ndp| ends_with_particle_punct(ndp))
             {
                 ""
             } else if name.is_byzantine() {
@@ -2140,8 +2137,8 @@ fn format_single_name(
             // Affixes are applied differently for inverted vs display order
             let family_core: Option<Output> = {
                 let mut fp: Vec<Output> = Vec::new();
-                if !demote_particle {
-                    if let Some(ref ndp) = name.non_dropping_particle {
+                if !demote_particle
+                    && let Some(ref ndp) = name.non_dropping_particle {
                         let base = Output::literal(ndp.clone());
                         let formatted = if let Some(ref fmt) = family_font_styling {
                             Output::formatted(fmt.clone(), vec![base])
@@ -2150,7 +2147,6 @@ fn format_single_name(
                         };
                         fp.push(formatted);
                     }
-                }
                 if let Some(ref family) = name.family {
                     let base = Output::literal(family.clone());
                     let formatted = if let Some(ref fmt) = family_font_styling {
@@ -2169,7 +2165,7 @@ fn format_single_name(
                         && name
                             .non_dropping_particle
                             .as_ref()
-                            .map_or(false, |ndp| ends_with_particle_punct(ndp))
+                            .is_some_and(|ndp| ends_with_particle_punct(ndp))
                     {
                         ""
                     } else if name.is_byzantine() {
@@ -2532,7 +2528,7 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
                     if current.len() <= 2 {
                         // Short tokens at period boundary are initials (e.g., "M", "Ph")
                         tokens.push(Token::Initial(current.clone()));
-                    } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+                    } else if current.chars().next().is_some_and(|c| c.is_uppercase())
                         && current.chars().skip(1).any(|c| c.is_lowercase())
                     {
                         // Mixed case word like "John" - it's a word
@@ -2548,13 +2544,13 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
                 // Space ends a token
                 if !current.is_empty() {
                     if current.len() == 1
-                        && current.chars().next().map_or(false, |c| c.is_uppercase())
+                        && current.chars().next().is_some_and(|c| c.is_uppercase())
                     {
                         tokens.push(Token::Initial(current.clone()));
                     } else if current.len() > 1 && current.chars().all(|c| c.is_uppercase()) {
                         // Consecutive uppercase at space boundary - preserve unchanged
                         tokens.push(Token::Unchanged(current.clone()));
-                    } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+                    } else if current.chars().next().is_some_and(|c| c.is_uppercase())
                         && current.chars().skip(1).any(|c| c.is_lowercase())
                     {
                         // Mixed case starting with uppercase (like "John") - it's a word
@@ -2573,15 +2569,15 @@ fn normalize_given_name(given: &str, initialize_with: &str) -> String {
 
     // Handle final token
     if !current.is_empty() {
-        if current.len() == 1 && current.chars().next().map_or(false, |c| c.is_uppercase()) {
+        if current.len() == 1 && current.chars().next().is_some_and(|c| c.is_uppercase()) {
             tokens.push(Token::Initial(current));
         } else if current.len() > 1 && current.chars().all(|c| c.is_uppercase()) {
             // Consecutive uppercase at end without period - preserve unchanged
             tokens.push(Token::Unchanged(current));
-        } else if current.chars().next().map_or(false, |c| c.is_uppercase()) && current.len() <= 2 {
+        } else if current.chars().next().is_some_and(|c| c.is_uppercase()) && current.len() <= 2 {
             // Short mixed case like "Me" at end - preserve with trailing period if original had it
             tokens.push(Token::Unchanged(current));
-        } else if current.chars().next().map_or(false, |c| c.is_uppercase())
+        } else if current.chars().next().is_some_and(|c| c.is_uppercase())
             && current.chars().skip(1).any(|c| c.is_lowercase())
         {
             tokens.push(Token::Word(current));
@@ -2777,8 +2773,8 @@ fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: b
             }
             Token::HyphenPart(s) => {
                 // Hyphenated part: check if first char is uppercase
-                if let Some(first_char) = s.chars().next() {
-                    if first_char.is_uppercase() {
+                if let Some(first_char) = s.chars().next()
+                    && first_char.is_uppercase() {
                         if initialize_with_hyphen {
                             result.push('-');
                         }
@@ -2786,7 +2782,6 @@ fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: b
                         result.push_str(trimmed);
                     }
                     // Lowercase parts after hyphen are skipped (e.g., Ji-ping -> J.)
-                }
                 prev_was_initial_or_word = true;
                 prev_was_particle = false;
             }
@@ -3003,9 +2998,9 @@ fn evaluate_condition(
             };
 
             if use_all {
-                required_positions.iter().all(|p| matches_position(p))
+                required_positions.iter().all(&matches_position)
             } else {
-                required_positions.iter().any(|p| matches_position(p))
+                required_positions.iter().any(matches_position)
             }
         }
         ConditionType::Disambiguate(expected) => {
@@ -3470,11 +3465,10 @@ where
 
         if let Some(v) = value {
             // Add delimiter before this part (except for the first part)
-            if !outputs.is_empty() {
-                if let Some(d) = delimiter {
+            if !outputs.is_empty()
+                && let Some(d) = delimiter {
                     outputs.push(Output::literal(d));
                 }
-            }
 
             // Apply the value (with any strip-periods handling)
             let final_value = if part.strip_periods {
@@ -3629,11 +3623,10 @@ where
 
         if !start_diff.is_null() || !end_diff.is_null() {
             // Add delimiter before range if we have leading parts
-            if !outputs.is_empty() {
-                if let Some(d) = delimiter {
+            if !outputs.is_empty()
+                && let Some(d) = delimiter {
                     outputs.push(Output::literal(d));
                 }
-            }
             outputs.push(start_diff);
             outputs.push(Output::literal(range_delimiter));
             outputs.push(end_diff);
@@ -3646,11 +3639,10 @@ where
             render_date_parts(ctx, start_parts, trailing_same, should_include, delimiter);
         if !trailing.is_null() {
             // Add delimiter between differing parts and trailing same parts
-            if !outputs.is_empty() {
-                if let Some(d) = delimiter {
+            if !outputs.is_empty()
+                && let Some(d) = delimiter {
                     outputs.push(Output::literal(d));
                 }
-            }
             outputs.push(trailing);
         }
     }
@@ -3724,18 +3716,16 @@ where
             let is_last = idx == num_parts - 1;
 
             // Add delimiter before this part (except for the first part)
-            if !is_first {
-                if let Some(d) = delimiter {
+            if !is_first
+                && let Some(d) = delimiter {
                     outputs.push(Output::literal(d));
                 }
-            }
 
             // Apply prefix (skip if strip_first_prefix and this is first)
-            if !(strip_first_prefix && is_first) {
-                if let Some(ref prefix) = part.formatting.prefix {
+            if !(strip_first_prefix && is_first)
+                && let Some(ref prefix) = part.formatting.prefix {
                     outputs.push(Output::literal(prefix));
                 }
-            }
 
             // Apply the value
             let final_value = if part.strip_periods {
@@ -3746,11 +3736,10 @@ where
             outputs.push(Output::literal(final_value));
 
             // Apply suffix (skip if strip_last_suffix and this is last)
-            if !(strip_last_suffix && is_last) {
-                if let Some(ref suffix) = part.formatting.suffix {
+            if !(strip_last_suffix && is_last)
+                && let Some(ref suffix) = part.formatting.suffix {
                     outputs.push(Output::literal(suffix));
                 }
-            }
         }
     }
 
@@ -3979,7 +3968,7 @@ where
         quarto_csl::NumberForm::LongOrdinal => {
             // For long-ordinal, numbers 1-10 are spelled out, others fall back to ordinal
             if let Ok(n) = value.trim().parse::<i64>() {
-                if n >= 1 && n <= 10 {
+                if (1..=10).contains(&n) {
                     // Try to look up "long-ordinal-01" through "long-ordinal-10"
                     let term_name = format!("long-ordinal-{:02}", n);
                     if let Some(spelled_out) = get_term(&term_name) {
@@ -4390,7 +4379,7 @@ fn chicago16_abbreviate(start: &str, end: &str) -> String {
 /// Examples of non-numeric strings: "Fifth", "5a5", "annotated edition"
 pub fn is_numeric_string(s: &str) -> bool {
     // Split by delimiters: comma, hyphen, ampersand, en-dash
-    let chunks = s.split(|c| c == ',' || c == '-' || c == '&' || c == '\u{2013}');
+    let chunks = s.split([',', '-', '&', '\u{2013}']);
 
     let mut has_chunks = false;
     for chunk in chunks {

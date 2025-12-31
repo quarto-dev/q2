@@ -119,7 +119,7 @@ fn lua_index_to_rust(lua_idx: i64, len: i64) -> usize {
         // Negative index: count from end
         // lua_idx -1 -> last char (len - 1 in Rust)
         // lua_idx -2 -> second to last (len - 2 in Rust)
-        if (-lua_idx) as i64 > len {
+        if (-lua_idx) > len {
             0
         } else {
             (len + lua_idx) as usize

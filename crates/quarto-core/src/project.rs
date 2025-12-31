@@ -209,9 +209,7 @@ impl ProjectContext {
         // Determine output directory
         let output_dir = config
             .as_ref()
-            .and_then(|c| c.output_dir.as_ref())
-            .map(|o| dir.join(o))
-            .unwrap_or_else(|| dir.clone());
+            .and_then(|c| c.output_dir.as_ref()).map_or_else(|| dir.clone(), |o| dir.join(o));
 
         // Build file list
         let files = if let Some(input) = input_file {

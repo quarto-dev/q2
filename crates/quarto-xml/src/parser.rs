@@ -272,7 +272,7 @@ impl<'a> XmlParser<'a> {
 
     fn handle_end(&mut self, e: BytesEnd<'_>) -> Result<XmlElement> {
         let end_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-        let end_local_name = end_name.split(':').last().unwrap_or(&end_name);
+        let end_local_name = end_name.split(':').next_back().unwrap_or(&end_name);
 
         let node = self.stack.pop().ok_or_else(|| Error::InvalidStructure {
             message: format!("Unexpected closing tag </{}>", end_name),

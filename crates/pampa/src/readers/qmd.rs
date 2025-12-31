@@ -38,16 +38,13 @@ pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
     let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
     parser
         .parser
-        .set_logger(Some(Box::new(|log_type, message| match log_type {
-            LogType::Parse => {
-                log_observer.log(log_type, message);
-            }
-            _ => {}
+        .set_logger(Some(Box::new(|log_type, message| if log_type == LogType::Parse {
+            log_observer.log(log_type, message);
         })));
     let _tree = parser
-        .parse(&input_bytes, None)
+        .parse(input_bytes, None)
         .expect("Failed to parse input");
-    return produce_error_message_json(&log_observer);
+    produce_error_message_json(&log_observer)
 }
 
 pub fn read<T: Write>(
@@ -71,11 +68,8 @@ pub fn read<T: Write>(
 
     parser
         .parser
-        .set_logger(Some(Box::new(|log_type, message| match log_type {
-            LogType::Parse => {
-                fast_log_observer.log(log_type, message);
-            }
-            _ => {}
+        .set_logger(Some(Box::new(|log_type, message| if log_type == LogType::Parse {
+            fast_log_observer.log(log_type, message);
         })));
 
     // inefficient, but safe: if no trailing newline, add one
@@ -94,7 +88,7 @@ pub fn read<T: Write>(
     }
 
     let tree = parser
-        .parse(&input_bytes, None)
+        .parse(input_bytes, None)
         .expect("Failed to parse input");
 
     // Create ASTContext early so we can use it for error diagnostics
@@ -111,14 +105,11 @@ pub fn read<T: Write>(
     if fast_log_observer.had_errors() {
         parser
             .parser
-            .set_logger(Some(Box::new(|log_type, message| match log_type {
-                LogType::Parse => {
-                    log_observer.log(log_type, message);
-                }
-                _ => {}
+            .set_logger(Some(Box::new(|log_type, message| if log_type == LogType::Parse {
+                log_observer.log(log_type, message);
             })));
         parser
-            .parse(&input_bytes, None)
+            .parse(input_bytes, None)
             .expect("Failed to parse input");
         log_observer.parses.iter().for_each(|parse| {
             writeln!(output_stream, "tree-sitter parse:").unwrap();
@@ -176,7 +167,7 @@ pub fn read<T: Write>(
     let mut result = match pandoc::treesitter_to_pandoc(
         &mut output_stream,
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     ) {
@@ -206,19 +197,18 @@ pub fn read<T: Write>(
             // Check if this is lexical metadata directly on ConfigValue
             let is_lexical = config_value
                 .get("_scope")
-                .map(|v| v.is_string_value("lexical"))
-                .unwrap_or(false);
+                .is_some_and(|v| v.is_string_value("lexical"));
 
             if is_lexical {
                 // Lexical metadata - return as BlockMetadata
                 // ConfigValue is already fully processed (strings parsed as markdown)
-                return FilterReturn::FilterResult(
+                FilterReturn::FilterResult(
                     vec![Block::BlockMetadata(MetaBlock {
                         meta: config_value,
                         source_info: rb.source_info.clone(),
                     })],
                     false,
-                );
+                )
             } else {
                 // Document-level metadata - extract entries and merge into meta_from_parses
                 if let ConfigValueKind::Map(entries) = config_value.value {
@@ -230,7 +220,7 @@ pub fn read<T: Write>(
                         meta_from_parses.push(entry);
                     }
                 }
-                return FilterReturn::FilterResult(vec![], false);
+                FilterReturn::FilterResult(vec![], false)
             }
         });
         let mut ctx = FilterContext::new();
@@ -240,7 +230,7 @@ pub fn read<T: Write>(
     // Merge meta_from_parses into result.meta
     // Both are now ConfigMapEntry - no conversion needed
     if let ConfigValueKind::Map(ref mut entries) = result.meta.value {
-        for entry in meta_from_parses.into_iter() {
+        for entry in meta_from_parses {
             entries.push(entry);
         }
         // Update the overall metadata source_info if we captured one

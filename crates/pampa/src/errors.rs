@@ -39,14 +39,14 @@ fn is_error_node<'a>(cursor: &tree_sitter_qmd::MarkdownCursor<'a>) -> Option<Tre
     if byte_range.start == byte_range.end && !node_can_have_empty_text(cursor) {
         return Some(TreeSitterError::MissingNode); // empty node, indicates that tree-sitter inserted a "missing" node?
     }
-    return None;
+    None
 }
 
 fn accumulate_error_nodes<'a>(
     cursor: &mut tree_sitter_qmd::MarkdownCursor<'a>,
     errors: &mut Vec<(bool, usize)>,
 ) {
-    if let Some(_) = is_error_node(cursor) {
+    if is_error_node(cursor).is_some() {
         errors.push(cursor.id());
         return;
     }
@@ -61,7 +61,7 @@ fn accumulate_error_nodes<'a>(
     }
 }
 
-pub fn parse_is_good<'a>(tree: &'a MarkdownTree) -> Vec<(bool, usize)> {
+pub fn parse_is_good(tree: &MarkdownTree) -> Vec<(bool, usize)> {
     let mut errors = Vec::new();
     let mut cursor = tree.walk();
     accumulate_error_nodes(&mut cursor, &mut errors);
@@ -72,7 +72,7 @@ pub fn error_message(error: &mut tree_sitter_qmd::MarkdownCursor, input_bytes: &
     // assert!(error.goto_parent());
     // assert!(error.goto_first_child());
 
-    if let Some(which_error) = is_error_node(&error) {
+    if let Some(which_error) = is_error_node(error) {
         match which_error {
             TreeSitterError::MissingNode => {
                 return format!(
@@ -93,5 +93,5 @@ pub fn error_message(error: &mut tree_sitter_qmd::MarkdownCursor, input_bytes: &
         }
     }
     assert!(false, "No error message available for this node");
-    return String::new(); // unreachable
+    String::new()// unreachable
 }
