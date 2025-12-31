@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn test_code_with_backticks() {
         let inlines = vec![Inline::Code(Code {
-            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -528,7 +528,7 @@ mod tests {
     #[test]
     fn test_code_block_fenced() {
         let blocks = vec![Block::CodeBlock(CodeBlock {
-            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "let x = 1;".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),

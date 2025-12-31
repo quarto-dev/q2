@@ -203,7 +203,7 @@ mod tests {
 
         assert!(TemplateValue::String("hello".to_string()).is_truthy());
         assert!(TemplateValue::String("false".to_string()).is_truthy()); // "false" string is truthy!
-        assert!(!TemplateValue::String("".to_string()).is_truthy());
+        assert!(!TemplateValue::String(String::new()).is_truthy());
 
         assert!(TemplateValue::List(vec![TemplateValue::Bool(true)]).is_truthy());
         assert!(!TemplateValue::List(vec![TemplateValue::Bool(false)]).is_truthy());

@@ -1387,7 +1387,7 @@ mod tests {
     #[test]
     fn test_config_defaults() {
         let config = AnsiConfig::default();
-        assert_eq!(config.colors, true);
+        assert!(config.colors);
         // Width should match what detect_terminal_width returns
         let expected_width = AnsiConfig::detect_terminal_width();
         assert_eq!(config.width, expected_width);

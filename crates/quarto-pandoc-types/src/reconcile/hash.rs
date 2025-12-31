@@ -1287,7 +1287,7 @@ mod tests {
         let img = Inline::Image(Image {
             attr: empty_attr(),
             content: vec![make_str("alt text")],
-            target: ("image.png".to_string(), "".to_string()),
+            target: ("image.png".to_string(), String::new()),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),
             target_source: TargetSourceInfo::empty(),
@@ -1413,7 +1413,7 @@ mod tests {
     fn test_structural_eq_code_block() {
         let cb1 = Block::CodeBlock(CodeBlock {
             attr: (
-                "".to_string(),
+                String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
             ),
@@ -1424,7 +1424,7 @@ mod tests {
 
         let cb2 = Block::CodeBlock(CodeBlock {
             attr: (
-                "".to_string(),
+                String::new(),
                 vec!["python".to_string()],
                 LinkedHashMap::new(),
             ),
@@ -1434,7 +1434,7 @@ mod tests {
         });
 
         let cb3 = Block::CodeBlock(CodeBlock {
-            attr: ("".to_string(), vec!["r".to_string()], LinkedHashMap::new()),
+            attr: (String::new(), vec!["r".to_string()], LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: dummy_source(),
             attr_source: AttrSourceInfo::empty(),

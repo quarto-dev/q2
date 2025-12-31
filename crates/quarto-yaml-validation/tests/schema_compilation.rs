@@ -112,7 +112,7 @@ object:
             match obj.properties.get("lazy_prop") {
                 Some(Schema::Ref(lazy_ref)) => {
                     assert_eq!(lazy_ref.reference, "target");
-                    assert_eq!(lazy_ref.eager, false);
+                    assert!(!lazy_ref.eager);
                 }
                 _ => panic!("Expected lazy_prop to remain as Ref"),
             }
@@ -252,7 +252,7 @@ object:
         Schema::Object(obj) => match obj.properties.get("person") {
             Some(Schema::Ref(r)) => {
                 assert_eq!(r.reference, "non-existent");
-                assert_eq!(r.eager, false);
+                assert!(!r.eager);
             }
             _ => panic!("Expected Ref schema"),
         },
@@ -293,7 +293,7 @@ object:
             match obj.properties.get("parent") {
                 Some(Schema::Ref(r)) => {
                     assert_eq!(r.reference, "person");
-                    assert_eq!(r.eager, false);
+                    assert!(!r.eager);
                 }
                 _ => panic!("Expected Ref schema for parent"),
             }

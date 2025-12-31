@@ -595,8 +595,8 @@ mod tests {
         let content = vec![make_str("see"), make_space(), multi_cite];
 
         let result = make_cite_inline(
-            ("".to_string(), vec![], LinkedHashMap::new()),
-            ("".to_string(), "".to_string()),
+            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), String::new()),
             content,
             dummy_source_info(),
             AttrSourceInfo::empty(),
@@ -644,8 +644,8 @@ mod tests {
         ];
 
         let result = make_cite_inline(
-            ("".to_string(), vec![], LinkedHashMap::new()),
-            ("".to_string(), "".to_string()),
+            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), String::new()),
             content,
             dummy_source_info(),
             AttrSourceInfo::empty(),
