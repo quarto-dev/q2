@@ -718,9 +718,54 @@ fn yaml_to_json_value(value: &Yaml) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{BooleanSchema, SchemaAnnotations};
-    use quarto_yaml::SourceInfo;
+    use crate::schema::{
+        AllOfSchema, AnyOfSchema, AnySchema, ArraySchema, BooleanSchema, EnumSchema, NullSchema,
+        NumberSchema, ObjectSchema, RefSchema, SchemaAnnotations, StringSchema,
+    };
+    use quarto_yaml::{SourceInfo, YamlHashEntry};
+    use std::collections::HashMap;
     use yaml_rust2::Yaml;
+
+    // Helper to create a simple YAML scalar
+    fn yaml_scalar(yaml: Yaml) -> YamlWithSourceInfo {
+        YamlWithSourceInfo::new_scalar(yaml, SourceInfo::default())
+    }
+
+    // Helper to create a YAML array
+    fn yaml_array(items: Vec<Yaml>) -> YamlWithSourceInfo {
+        let children: Vec<YamlWithSourceInfo> = items
+            .into_iter()
+            .map(|y| YamlWithSourceInfo::new_scalar(y, SourceInfo::default()))
+            .collect();
+        let yaml_items: Vec<Yaml> = children.iter().map(|c| c.yaml.clone()).collect();
+        YamlWithSourceInfo::new_array(Yaml::Array(yaml_items), SourceInfo::default(), children)
+    }
+
+    // Helper to create a YAML object
+    fn yaml_object(entries: Vec<(&str, Yaml)>) -> YamlWithSourceInfo {
+        let hash_entries: Vec<YamlHashEntry> = entries
+            .into_iter()
+            .map(|(k, v)| YamlHashEntry {
+                key: YamlWithSourceInfo::new_scalar(
+                    Yaml::String(k.to_string()),
+                    SourceInfo::default(),
+                ),
+                value: YamlWithSourceInfo::new_scalar(v, SourceInfo::default()),
+                key_span: SourceInfo::default(),
+                value_span: SourceInfo::default(),
+                entry_span: SourceInfo::default(),
+            })
+            .collect();
+        let mut yaml_hash = yaml_rust2::yaml::Hash::new();
+        for entry in &hash_entries {
+            if let Yaml::String(ref k) = entry.key.yaml {
+                yaml_hash.insert(Yaml::String(k.clone()), entry.value.yaml.clone());
+            }
+        }
+        YamlWithSourceInfo::new_hash(Yaml::Hash(yaml_hash), SourceInfo::default(), hash_entries)
+    }
+
+    // ==================== Boolean Tests ====================
 
     #[test]
     fn test_validate_boolean() {
@@ -730,8 +775,10 @@ mod tests {
             annotations: SchemaAnnotations::default(),
         });
 
-        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Boolean(true), SourceInfo::default());
+        let yaml = yaml_scalar(Yaml::Boolean(true));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
 
+        let yaml = yaml_scalar(Yaml::Boolean(false));
         assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
     }
 
@@ -743,11 +790,1113 @@ mod tests {
             annotations: SchemaAnnotations::default(),
         });
 
-        let yaml = YamlWithSourceInfo::new_scalar(
-            Yaml::String("not a boolean".to_string()),
-            SourceInfo::default(),
+        let yaml = yaml_scalar(Yaml::String("not a boolean".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Number Tests ====================
+
+    #[test]
+    fn test_validate_number_integer() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::Integer(42));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_number_real() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::Real("3.14".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_number_wrong_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::String("not a number".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_number_minimum() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: Some(10.0),
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        });
+
+        // Valid: at minimum
+        let yaml = yaml_scalar(Yaml::Integer(10));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Valid: above minimum
+        let yaml = yaml_scalar(Yaml::Integer(15));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: below minimum
+        let yaml = yaml_scalar(Yaml::Integer(5));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_number_maximum() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: Some(100.0),
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: None,
+        });
+
+        // Valid: at maximum
+        let yaml = yaml_scalar(Yaml::Integer(100));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Valid: below maximum
+        let yaml = yaml_scalar(Yaml::Integer(50));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: above maximum
+        let yaml = yaml_scalar(Yaml::Integer(150));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_number_exclusive_minimum() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: Some(10.0),
+            exclusive_maximum: None,
+            multiple_of: None,
+        });
+
+        // Valid: above exclusive minimum
+        let yaml = yaml_scalar(Yaml::Integer(11));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: at exclusive minimum
+        let yaml = yaml_scalar(Yaml::Integer(10));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+
+        // Invalid: below exclusive minimum
+        let yaml = yaml_scalar(Yaml::Integer(5));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_number_exclusive_maximum() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: Some(100.0),
+            multiple_of: None,
+        });
+
+        // Valid: below exclusive maximum
+        let yaml = yaml_scalar(Yaml::Integer(99));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: at exclusive maximum
+        let yaml = yaml_scalar(Yaml::Integer(100));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+
+        // Invalid: above exclusive maximum
+        let yaml = yaml_scalar(Yaml::Integer(150));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_number_multiple_of() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Number(NumberSchema {
+            annotations: SchemaAnnotations::default(),
+            minimum: None,
+            maximum: None,
+            exclusive_minimum: None,
+            exclusive_maximum: None,
+            multiple_of: Some(5.0),
+        });
+
+        // Valid: multiple of 5
+        let yaml = yaml_scalar(Yaml::Integer(15));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Valid: zero is multiple of anything
+        let yaml = yaml_scalar(Yaml::Integer(0));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: not a multiple of 5
+        let yaml = yaml_scalar(Yaml::Integer(7));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== String Tests ====================
+
+    #[test]
+    fn test_validate_string() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::String(StringSchema {
+            annotations: SchemaAnnotations::default(),
+            min_length: None,
+            max_length: None,
+            pattern: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::String("hello".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_string_wrong_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::String(StringSchema {
+            annotations: SchemaAnnotations::default(),
+            min_length: None,
+            max_length: None,
+            pattern: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::Integer(42));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_string_min_length() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::String(StringSchema {
+            annotations: SchemaAnnotations::default(),
+            min_length: Some(5),
+            max_length: None,
+            pattern: None,
+        });
+
+        // Valid: exactly min length
+        let yaml = yaml_scalar(Yaml::String("hello".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Valid: above min length
+        let yaml = yaml_scalar(Yaml::String("hello world".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: below min length
+        let yaml = yaml_scalar(Yaml::String("hi".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_string_max_length() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::String(StringSchema {
+            annotations: SchemaAnnotations::default(),
+            min_length: None,
+            max_length: Some(10),
+            pattern: None,
+        });
+
+        // Valid: exactly max length
+        let yaml = yaml_scalar(Yaml::String("0123456789".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Valid: below max length
+        let yaml = yaml_scalar(Yaml::String("hello".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: above max length
+        let yaml = yaml_scalar(Yaml::String("this is too long".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_string_pattern() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::String(StringSchema {
+            annotations: SchemaAnnotations::default(),
+            min_length: None,
+            max_length: None,
+            pattern: Some("^[a-z]+$".to_string()),
+        });
+
+        // Valid: matches pattern
+        let yaml = yaml_scalar(Yaml::String("hello".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: doesn't match pattern
+        let yaml = yaml_scalar(Yaml::String("Hello123".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Null Tests ====================
+
+    #[test]
+    fn test_validate_null() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Null(NullSchema {
+            annotations: SchemaAnnotations::default(),
+        });
+
+        let yaml = yaml_scalar(Yaml::Null);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_null_wrong_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Null(NullSchema {
+            annotations: SchemaAnnotations::default(),
+        });
+
+        let yaml = yaml_scalar(Yaml::String("not null".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Enum Tests ====================
+
+    #[test]
+    fn test_validate_enum() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Enum(EnumSchema {
+            annotations: SchemaAnnotations::default(),
+            values: vec![
+                serde_json::json!("red"),
+                serde_json::json!("green"),
+                serde_json::json!("blue"),
+            ],
+        });
+
+        // Valid: matches enum value
+        let yaml = yaml_scalar(Yaml::String("red".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        let yaml = yaml_scalar(Yaml::String("green".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_enum_invalid() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Enum(EnumSchema {
+            annotations: SchemaAnnotations::default(),
+            values: vec![
+                serde_json::json!("red"),
+                serde_json::json!("green"),
+                serde_json::json!("blue"),
+            ],
+        });
+
+        // Invalid: not in enum
+        let yaml = yaml_scalar(Yaml::String("yellow".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_enum_integer() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Enum(EnumSchema {
+            annotations: SchemaAnnotations::default(),
+            values: vec![serde_json::json!(1), serde_json::json!(2), serde_json::json!(3)],
+        });
+
+        // Valid: matches enum value
+        let yaml = yaml_scalar(Yaml::Integer(2));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: not in enum
+        let yaml = yaml_scalar(Yaml::Integer(5));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Array Tests ====================
+
+    #[test]
+    fn test_validate_array() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: None,
+            min_items: None,
+            max_items: None,
+            unique_items: None,
+        });
+
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_array_wrong_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: None,
+            min_items: None,
+            max_items: None,
+            unique_items: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::String("not an array".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_array_min_items() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: None,
+            min_items: Some(2),
+            max_items: None,
+            unique_items: None,
+        });
+
+        // Valid: at min items
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: below min items
+        let yaml = yaml_array(vec![Yaml::Integer(1)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_array_max_items() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: None,
+            min_items: None,
+            max_items: Some(3),
+            unique_items: None,
+        });
+
+        // Valid: at max items
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: above max items
+        let yaml = yaml_array(vec![
+            Yaml::Integer(1),
+            Yaml::Integer(2),
+            Yaml::Integer(3),
+            Yaml::Integer(4),
+        ]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_array_unique_items() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: None,
+            min_items: None,
+            max_items: None,
+            unique_items: Some(true),
+        });
+
+        // Valid: all unique
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: duplicates
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(1)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_array_items_schema() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Array(ArraySchema {
+            annotations: SchemaAnnotations::default(),
+            items: Some(Box::new(Schema::Number(NumberSchema {
+                annotations: SchemaAnnotations::default(),
+                minimum: None,
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            }))),
+            min_items: None,
+            max_items: None,
+            unique_items: None,
+        });
+
+        // Valid: all items are numbers
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: contains non-number
+        let yaml = yaml_array(vec![
+            Yaml::Integer(1),
+            Yaml::String("not a number".to_string()),
+        ]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Object Tests ====================
+
+    #[test]
+    fn test_validate_object() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        let yaml = yaml_object(vec![("name", Yaml::String("test".to_string()))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_object_wrong_type() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        let yaml = yaml_scalar(Yaml::String("not an object".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_required() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec!["name".to_string()],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Valid: has required property
+        let yaml = yaml_object(vec![("name", Yaml::String("test".to_string()))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: missing required property
+        let yaml = yaml_object(vec![("other", Yaml::String("test".to_string()))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_min_properties() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: Some(2),
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Valid: at min properties
+        let yaml = yaml_object(vec![("a", Yaml::Integer(1)), ("b", Yaml::Integer(2))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: below min properties
+        let yaml = yaml_object(vec![("a", Yaml::Integer(1))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_max_properties() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: None,
+            max_properties: Some(2),
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Valid: at max properties
+        let yaml = yaml_object(vec![("a", Yaml::Integer(1)), ("b", Yaml::Integer(2))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: above max properties
+        let yaml = yaml_object(vec![
+            ("a", Yaml::Integer(1)),
+            ("b", Yaml::Integer(2)),
+            ("c", Yaml::Integer(3)),
+        ]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_closed() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        let mut properties = HashMap::new();
+        properties.insert(
+            "name".to_string(),
+            Schema::String(StringSchema {
+                annotations: SchemaAnnotations::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
         );
 
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties,
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: None,
+            max_properties: None,
+            closed: true,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Valid: only known property
+        let yaml = yaml_object(vec![("name", Yaml::String("test".to_string()))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: unknown property in closed object
+        let yaml = yaml_object(vec![
+            ("name", Yaml::String("test".to_string())),
+            ("unknown", Yaml::Integer(42)),
+        ]);
         assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_property_schema() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        let mut properties = HashMap::new();
+        properties.insert(
+            "count".to_string(),
+            Schema::Number(NumberSchema {
+                annotations: SchemaAnnotations::default(),
+                minimum: Some(0.0),
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            }),
+        );
+
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties,
+            pattern_properties: HashMap::new(),
+            additional_properties: None,
+            required: vec![],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Valid: count is a valid number
+        let yaml = yaml_object(vec![("count", Yaml::Integer(5))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: count is negative
+        let yaml = yaml_object(vec![("count", Yaml::Integer(-1))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_object_additional_properties() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+
+        let schema = Schema::Object(ObjectSchema {
+            annotations: SchemaAnnotations::default(),
+            properties: HashMap::new(),
+            pattern_properties: HashMap::new(),
+            additional_properties: Some(Box::new(Schema::Number(NumberSchema {
+                annotations: SchemaAnnotations::default(),
+                minimum: None,
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+                multiple_of: None,
+            }))),
+            required: vec![],
+            min_properties: None,
+            max_properties: None,
+            closed: false,
+            property_names: None,
+            naming_convention: None,
+            base_schema: None,
+        });
+
+        // Valid: additional property is a number
+        let yaml = yaml_object(vec![("anything", Yaml::Integer(42))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: additional property is not a number
+        let yaml = yaml_object(vec![("anything", Yaml::String("not a number".to_string()))]);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== AnyOf Tests ====================
+
+    #[test]
+    fn test_validate_any_of() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::AnyOf(AnyOfSchema {
+            annotations: SchemaAnnotations::default(),
+            schemas: vec![
+                Schema::String(StringSchema {
+                    annotations: SchemaAnnotations::default(),
+                    min_length: None,
+                    max_length: None,
+                    pattern: None,
+                }),
+                Schema::Number(NumberSchema {
+                    annotations: SchemaAnnotations::default(),
+                    minimum: None,
+                    maximum: None,
+                    exclusive_minimum: None,
+                    exclusive_maximum: None,
+                    multiple_of: None,
+                }),
+            ],
+        });
+
+        // Valid: matches first schema (string)
+        let yaml = yaml_scalar(Yaml::String("hello".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Valid: matches second schema (number)
+        let yaml = yaml_scalar(Yaml::Integer(42));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: matches neither
+        let yaml = yaml_scalar(Yaml::Boolean(true));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== AllOf Tests ====================
+
+    #[test]
+    fn test_validate_all_of() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::AllOf(AllOfSchema {
+            annotations: SchemaAnnotations::default(),
+            schemas: vec![
+                Schema::Number(NumberSchema {
+                    annotations: SchemaAnnotations::default(),
+                    minimum: Some(0.0),
+                    maximum: None,
+                    exclusive_minimum: None,
+                    exclusive_maximum: None,
+                    multiple_of: None,
+                }),
+                Schema::Number(NumberSchema {
+                    annotations: SchemaAnnotations::default(),
+                    minimum: None,
+                    maximum: Some(100.0),
+                    exclusive_minimum: None,
+                    exclusive_maximum: None,
+                    multiple_of: None,
+                }),
+            ],
+        });
+
+        // Valid: matches both schemas (0 <= x <= 100)
+        let yaml = yaml_scalar(Yaml::Integer(50));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: fails first schema (< 0)
+        let yaml = yaml_scalar(Yaml::Integer(-5));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+
+        // Invalid: fails second schema (> 100)
+        let yaml = yaml_scalar(Yaml::Integer(150));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Schema::True and Schema::Any Tests ====================
+
+    #[test]
+    fn test_validate_true() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::True;
+
+        // True schema accepts anything
+        let yaml = yaml_scalar(Yaml::String("anything".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        let yaml = yaml_scalar(Yaml::Integer(42));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        let yaml = yaml_scalar(Yaml::Null);
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    #[test]
+    fn test_validate_any() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Any(AnySchema {
+            annotations: SchemaAnnotations::default(),
+        });
+
+        // Any schema accepts anything
+        let yaml = yaml_scalar(Yaml::String("anything".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        let yaml = yaml_scalar(Yaml::Integer(42));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+    }
+
+    // ==================== Ref Tests ====================
+
+    #[test]
+    fn test_validate_ref() {
+        let mut registry = SchemaRegistry::new();
+
+        // Register a schema
+        registry.register(
+            "string-schema".to_string(),
+            Schema::String(StringSchema {
+                annotations: SchemaAnnotations::default(),
+                min_length: None,
+                max_length: None,
+                pattern: None,
+            }),
+        );
+
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Ref(RefSchema {
+            annotations: SchemaAnnotations::default(),
+            reference: "string-schema".to_string(),
+            eager: false,
+        });
+
+        // Valid: matches referenced schema
+        let yaml = yaml_scalar(Yaml::String("hello".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_ok());
+
+        // Invalid: doesn't match referenced schema
+        let yaml = yaml_scalar(Yaml::Integer(42));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    #[test]
+    fn test_validate_ref_unresolved() {
+        let registry = SchemaRegistry::new();
+        let source_ctx = SourceContext::new();
+        let schema = Schema::Ref(RefSchema {
+            annotations: SchemaAnnotations::default(),
+            reference: "nonexistent".to_string(),
+            eager: false,
+        });
+
+        // Error: unresolved reference
+        let yaml = yaml_scalar(Yaml::String("anything".to_string()));
+        assert!(validate(&yaml, &schema, &registry, &source_ctx).is_err());
+    }
+
+    // ==================== Navigate Tests ====================
+
+    #[test]
+    fn test_navigate_empty_path() {
+        let yaml = yaml_scalar(Yaml::String("test".to_string()));
+        let path = InstancePath::new();
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_navigate_object_key() {
+        let yaml = yaml_object(vec![
+            ("name", Yaml::String("test".to_string())),
+            ("age", Yaml::Integer(30)),
+        ]);
+
+        let mut path = InstancePath::new();
+        path.push_key("name".to_string());
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_some());
+        if let Some(node) = result {
+            assert_eq!(node.yaml, Yaml::String("test".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_navigate_array_index() {
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]);
+
+        let mut path = InstancePath::new();
+        path.push_index(1);
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_some());
+        if let Some(node) = result {
+            assert_eq!(node.yaml, Yaml::Integer(2));
+        }
+    }
+
+    #[test]
+    fn test_navigate_nested() {
+        // Create nested structure: { "items": [1, 2, 3] }
+        let items_array = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]);
+        let hash_entries = vec![YamlHashEntry {
+            key: YamlWithSourceInfo::new_scalar(
+                Yaml::String("items".to_string()),
+                SourceInfo::default(),
+            ),
+            value: items_array,
+            key_span: SourceInfo::default(),
+            value_span: SourceInfo::default(),
+            entry_span: SourceInfo::default(),
+        }];
+        let mut yaml_hash = yaml_rust2::yaml::Hash::new();
+        yaml_hash.insert(
+            Yaml::String("items".to_string()),
+            Yaml::Array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]),
+        );
+        let yaml =
+            YamlWithSourceInfo::new_hash(Yaml::Hash(yaml_hash), SourceInfo::default(), hash_entries);
+
+        let mut path = InstancePath::new();
+        path.push_key("items".to_string());
+        path.push_index(2);
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_some());
+        if let Some(node) = result {
+            assert_eq!(node.yaml, Yaml::Integer(3));
+        }
+    }
+
+    #[test]
+    fn test_navigate_key_not_found() {
+        let yaml = yaml_object(vec![("name", Yaml::String("test".to_string()))]);
+
+        let mut path = InstancePath::new();
+        path.push_key("nonexistent".to_string());
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_navigate_index_out_of_bounds() {
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2)]);
+
+        let mut path = InstancePath::new();
+        path.push_index(10);
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_navigate_index_on_object() {
+        let yaml = yaml_object(vec![("name", Yaml::String("test".to_string()))]);
+
+        let mut path = InstancePath::new();
+        path.push_index(0);
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_navigate_key_on_array() {
+        let yaml = yaml_array(vec![Yaml::Integer(1), Yaml::Integer(2)]);
+
+        let mut path = InstancePath::new();
+        path.push_key("name".to_string());
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_navigate_into_scalar() {
+        let yaml = yaml_scalar(Yaml::String("test".to_string()));
+
+        let mut path = InstancePath::new();
+        path.push_key("name".to_string());
+
+        let result = navigate(&path, &yaml, false, 0);
+        assert!(result.is_none());
+    }
+
+    // ==================== yaml_type_name Tests ====================
+
+    #[test]
+    fn test_yaml_type_name() {
+        assert_eq!(yaml_type_name(&Yaml::Null), "null");
+        assert_eq!(yaml_type_name(&Yaml::Boolean(true)), "boolean");
+        assert_eq!(yaml_type_name(&Yaml::Integer(42)), "integer");
+        assert_eq!(yaml_type_name(&Yaml::Real("3.14".to_string())), "float");
+        assert_eq!(yaml_type_name(&Yaml::String("test".to_string())), "string");
+        assert_eq!(yaml_type_name(&Yaml::Array(vec![])), "array");
+        assert_eq!(
+            yaml_type_name(&Yaml::Hash(yaml_rust2::yaml::Hash::new())),
+            "object"
+        );
+        assert_eq!(yaml_type_name(&Yaml::BadValue), "null");
+        assert_eq!(yaml_type_name(&Yaml::Alias(0)), "alias");
+    }
+
+    // ==================== yaml_to_json_value Tests ====================
+
+    #[test]
+    fn test_yaml_to_json_value() {
+        assert_eq!(yaml_to_json_value(&Yaml::Null), serde_json::Value::Null);
+        assert_eq!(
+            yaml_to_json_value(&Yaml::Boolean(true)),
+            serde_json::Value::Bool(true)
+        );
+        assert_eq!(
+            yaml_to_json_value(&Yaml::Integer(42)),
+            serde_json::json!(42)
+        );
+        assert_eq!(
+            yaml_to_json_value(&Yaml::String("test".to_string())),
+            serde_json::json!("test")
+        );
+        assert_eq!(yaml_to_json_value(&Yaml::BadValue), serde_json::Value::Null);
+        assert_eq!(yaml_to_json_value(&Yaml::Alias(0)), serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_yaml_to_json_value_real() {
+        let result = yaml_to_json_value(&Yaml::Real("3.14".to_string()));
+        if let serde_json::Value::Number(n) = result {
+            assert!((n.as_f64().unwrap() - 3.14).abs() < 0.001);
+        } else {
+            panic!("Expected Number");
+        }
+    }
+
+    #[test]
+    fn test_yaml_to_json_value_array() {
+        let yaml = Yaml::Array(vec![Yaml::Integer(1), Yaml::Integer(2)]);
+        assert_eq!(yaml_to_json_value(&yaml), serde_json::json!([1, 2]));
+    }
+
+    #[test]
+    fn test_yaml_to_json_value_hash() {
+        let mut hash = yaml_rust2::yaml::Hash::new();
+        hash.insert(Yaml::String("key".to_string()), Yaml::Integer(42));
+        let yaml = Yaml::Hash(hash);
+        assert_eq!(yaml_to_json_value(&yaml), serde_json::json!({"key": 42}));
     }
 }
