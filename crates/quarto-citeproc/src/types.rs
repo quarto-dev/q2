@@ -561,7 +561,7 @@ impl Processor {
         let ids: Vec<String> = self.references.keys().cloned().collect();
 
         // Get sort keys from bibliography
-        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys: &[_] = bib.sort.as_ref().map_or(&[], |s| &s.keys);
 
         // Check if any sort key uses citation-number
         let uses_citation_number = sort_keys.iter().any(
@@ -630,7 +630,7 @@ impl Processor {
         let ids: Vec<String> = self.references.keys().cloned().collect();
 
         // Get sort keys from bibliography
-        let sort_keys = sort_keys_opt.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys: &[_] = sort_keys_opt.as_ref().map_or(&[], |s| &s.keys);
 
         // Check if any sort key uses citation-number
         let uses_citation_number = sort_keys.iter().any(
@@ -927,7 +927,7 @@ impl Processor {
             None => return vec![],
         };
 
-        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys: &[_] = bib.sort.as_ref().map_or(&[], |s| &s.keys);
         self.compute_sort_keys(id, sort_keys)
     }
 

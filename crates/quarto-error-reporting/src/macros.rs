@@ -13,7 +13,7 @@ mod tests {
         assert!(error.title.contains("Test error message"));
         assert!(error.title.contains(file!()));
         // Line number is included but varies depending on where macro is called
-        assert!(error.title.contains(":"));
+        assert!(error.title.contains(':'));
     }
 
     #[test]

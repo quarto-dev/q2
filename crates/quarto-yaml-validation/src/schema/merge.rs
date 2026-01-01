@@ -107,29 +107,31 @@ pub fn merge_object_schemas(
     // Apply remaining base schema annotations (later bases override earlier)
     for base in base_objects.iter().skip(1) {
         if base.annotations.id.is_some() {
-            result.annotations.id = base.annotations.id.clone();
+            result.annotations.id.clone_from(&base.annotations.id);
         }
         if base.annotations.description.is_some() {
-            result.annotations.description = base.annotations.description.clone();
+            result.annotations.description.clone_from(&base.annotations.description);
         }
         if base.annotations.documentation.is_some() {
-            result.annotations.documentation = base.annotations.documentation.clone();
+            result.annotations.documentation.clone_from(&base.annotations.documentation);
         }
         if base.annotations.error_message.is_some() {
-            result.annotations.error_message = base.annotations.error_message.clone();
+            result.annotations.error_message.clone_from(&base.annotations.error_message);
         }
         if base.annotations.hidden.is_some() {
             result.annotations.hidden = base.annotations.hidden;
         }
         if base.annotations.completions.is_some() {
-            result.annotations.completions = base.annotations.completions.clone();
+            result.annotations.completions.clone_from(&base.annotations.completions);
         }
         if base.annotations.additional_completions.is_some() {
-            result.annotations.additional_completions =
-                base.annotations.additional_completions.clone();
+            result
+                .annotations
+                .additional_completions
+                .clone_from(&base.annotations.additional_completions);
         }
         if base.annotations.tags.is_some() {
-            result.annotations.tags = base.annotations.tags.clone();
+            result.annotations.tags.clone_from(&base.annotations.tags);
         }
     }
 
@@ -236,12 +238,15 @@ pub fn merge_object_schemas(
         result.max_properties = derived.max_properties;
     }
     if derived.naming_convention.is_some() {
-        result.naming_convention = derived.naming_convention.clone();
+        result.naming_convention.clone_from(&derived.naming_convention);
     }
 
     // Apply derived description if present (override base)
     if derived.annotations.description.is_some() {
-        result.annotations.description = derived.annotations.description.clone();
+        result
+            .annotations
+            .description
+            .clone_from(&derived.annotations.description);
     }
 
     Ok(result)

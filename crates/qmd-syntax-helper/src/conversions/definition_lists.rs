@@ -106,7 +106,6 @@ impl DefinitionListConverter {
                                 // Found another term-definition pair
                                 end_idx = j;
                                 i = j + 1;
-                                continue;
                             } else {
                                 // No more definition items
                                 break;
@@ -115,7 +114,6 @@ impl DefinitionListConverter {
                             // This IS a definition line (continuation of same term)
                             end_idx = i;
                             i += 1;
-                            continue;
                         }
                     } else {
                         break;

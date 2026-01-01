@@ -28,7 +28,7 @@ fn qmd_to_json_ast(input: &str) -> Value {
         &treesitter_to_pandoc(
             &mut std::io::sink(),
             &tree,
-            &input_bytes,
+            input_bytes,
             &context,
             &mut error_collector,
         )

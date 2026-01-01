@@ -28,7 +28,7 @@ fn unit_test_simple_qmd_parses() {
             &treesitter_to_pandoc(
                 &mut std::io::sink(),
                 &tree,
-                &input_bytes,
+                input_bytes,
                 &ASTContext::anonymous(),
                 &mut error_collector,
             )
@@ -57,7 +57,7 @@ fn test_unnumbered_section_specifier() {
         &treesitter_to_pandoc(
             &mut std::io::sink(),
             &tree,
-            &input_bytes,
+            input_bytes,
             &ASTContext::anonymous(),
             &mut error_collector,
         )
@@ -304,8 +304,7 @@ fn unit_test_snapshots_json() {
                 .map(|e| format!("{}: {}", e.code.as_deref().unwrap_or("ERROR"), e.title))
                 .collect::<Vec<_>>()
                 .join("; ");
-            Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            Box::new(std::io::Error::other(
                 error_messages,
             )) as Box<dyn std::error::Error>
         })
@@ -336,7 +335,7 @@ where
                 eprintln!("Testing snapshot: {}", path.display());
                 let mut buffer = Vec::new();
                 let mut input = std::fs::read_to_string(&path).expect("Failed to read file");
-                if !input.ends_with("\n") {
+                if !input.ends_with('\n') {
                     input.push('\n'); // ensure the input ends with a newline
                 }
                 let mut output_stream = VerboseOutput::Sink(io::sink());

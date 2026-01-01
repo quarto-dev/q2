@@ -667,7 +667,7 @@ mod tests {
         );
 
         // Write via Lua
-        lua.load(&format!(
+        lua.load(format!(
             r#"pandoc.mediabag.write("{}", "output.txt")"#,
             temp_path
         ))
@@ -699,7 +699,7 @@ mod tests {
             .insert("b.txt".to_string(), "text/plain".to_string(), b"B".to_vec());
 
         // Write all via Lua (pass nil for second argument)
-        lua.load(&format!(r#"pandoc.mediabag.write("{}")"#, temp_path))
+        lua.load(format!(r#"pandoc.mediabag.write("{}")"#, temp_path))
             .exec()
             .unwrap();
 
@@ -721,7 +721,7 @@ mod tests {
 
         // Fetch via Lua
         let (mime, content): (String, String) = lua
-            .load(&format!(r#"return pandoc.mediabag.fetch("{}")"#, file_path))
+            .load(format!(r#"return pandoc.mediabag.fetch("{}")"#, file_path))
             .eval()
             .unwrap();
 

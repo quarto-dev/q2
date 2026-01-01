@@ -567,7 +567,7 @@ mod tests {
         let test_dir_str = test_dir.to_string_lossy().to_string();
 
         // Create directory
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.make_directory('{}', false)",
             test_dir_str.replace('\\', "\\\\")
         ))
@@ -577,7 +577,7 @@ mod tests {
         assert!(test_dir.exists());
 
         // Remove directory
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.remove_directory('{}', false)",
             test_dir_str.replace('\\', "\\\\")
         ))
@@ -599,7 +599,7 @@ mod tests {
             .replace('\\', "\\\\");
 
         // Write file
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.write_file('{}', 'Hello, World!')",
             test_file_str
         ))
@@ -610,7 +610,7 @@ mod tests {
 
         // Read file
         let content: String = lua
-            .load(&format!("pandoc.system.read_file('{}')", test_file_str))
+            .load(format!("pandoc.system.read_file('{}')", test_file_str))
             .eval()
             .unwrap();
 
@@ -632,7 +632,7 @@ mod tests {
         let dst_str = dst.to_string_lossy().to_string().replace('\\', "\\\\");
 
         // Copy file
-        lua.load(&format!("pandoc.system.copy('{}', '{}')", src_str, dst_str))
+        lua.load(format!("pandoc.system.copy('{}', '{}')", src_str, dst_str))
             .exec()
             .unwrap();
 
@@ -653,7 +653,7 @@ mod tests {
         let old_str = old.to_string_lossy().to_string().replace('\\', "\\\\");
         let new_str = new.to_string_lossy().to_string().replace('\\', "\\\\");
 
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.rename('{}', '{}')",
             old_str, new_str
         ))
@@ -676,7 +676,7 @@ mod tests {
 
         let file_str = file.to_string_lossy().to_string().replace('\\', "\\\\");
 
-        lua.load(&format!("pandoc.system.remove('{}')", file_str))
+        lua.load(format!("pandoc.system.remove('{}')", file_str))
             .exec()
             .unwrap();
 

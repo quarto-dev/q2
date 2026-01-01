@@ -1,4 +1,3 @@
-use quarto_yaml;
 use quarto_yaml_validation::{Schema, SchemaRegistry};
 
 /// Test compiling a schema with inheritance

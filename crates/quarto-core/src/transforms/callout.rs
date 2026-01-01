@@ -200,7 +200,7 @@ fn convert_div_to_callout(div: &mut Div, callout_type: &str) -> CustomNode {
     let collapse = extract_attr_value(&div.attr, "collapse")
         .is_some_and(|v| v == "true");
     let icon = extract_attr_value(&div.attr, "icon")
-        .map_or(true, |v| v != "false");
+        .is_none_or(|v| v != "false");
 
     // Build the plain_data JSON
     let plain_data = json!({

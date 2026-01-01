@@ -46,6 +46,6 @@ mod tests {
     #[test]
     fn test_error_table_loading() {
         let table = get_error_table();
-        assert!(table.len() > 0, "Error table should not be empty");
+        assert!(!table.is_empty(), "Error table should not be empty");
     }
 }

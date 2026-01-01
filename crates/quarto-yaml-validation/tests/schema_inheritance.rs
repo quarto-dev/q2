@@ -1,4 +1,3 @@
-use quarto_yaml;
 use quarto_yaml_validation::{Schema, SchemaRegistry, merge_object_schemas};
 
 /// Test based on real quarto-cli definitions.yml schema

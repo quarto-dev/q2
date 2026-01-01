@@ -427,10 +427,7 @@ pub fn make_cite_inline(
     };
 
     let is_good_cite = content.split(is_semicolon).all(|slice| {
-        slice.iter().any(|inline| match inline {
-            Inline::Cite(_) => true,
-            _ => false,
-        })
+        slice.iter().any(|inline| matches!(inline, Inline::Cite(_)))
     });
 
     if !is_good_cite {
@@ -458,7 +455,7 @@ pub fn make_cite_inline(
             let mut suffix: Inlines = vec![];
 
             // now we build prefix and suffix around a Cite. If there's none, we return None
-            for inline in inlines.into_iter() {
+            for inline in inlines {
                 if cite.is_none() {
                     if let Inline::Cite(c) = inline {
                         cite = Some(c);

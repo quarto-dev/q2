@@ -217,14 +217,14 @@ mod tests {
 
         let a = Block::Header(Header {
             level: 1,
-            attr: ("".to_string(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         });
         let b = Block::Header(Header {
             level: 1,
-            attr: ("".to_string(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: other_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
@@ -238,14 +238,14 @@ mod tests {
 
         let a = Block::Header(Header {
             level: 1,
-            attr: ("".to_string(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         });
         let b = Block::Header(Header {
             level: 2,
-            attr: ("".to_string(), vec![], LinkedHashMap::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![],
             source_info: dummy_source(),
             attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),

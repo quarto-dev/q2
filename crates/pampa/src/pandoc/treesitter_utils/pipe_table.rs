@@ -32,7 +32,7 @@ pub fn process_pipe_table_delimiter_cell(
         } else if node == "pipe_table_align_left" {
             has_starter_colon = true;
         } else if node == "-" {
-            continue;
+            // Skip dash nodes
         } else {
             panic!("Unexpected node in pipe_table_delimiter_cell: {}", node);
         }

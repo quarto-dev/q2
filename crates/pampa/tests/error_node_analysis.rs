@@ -117,7 +117,7 @@ fn analyze_categorical_predictors_errors() {
                     if diag_start < *err_end && diag_end > *err_start {
                         diagnostics_by_error_node
                             .entry(error_idx)
-                            .or_insert(Vec::new())
+                            .or_default()
                             .push(diag_idx);
                         found = true;
                         break;
@@ -169,7 +169,7 @@ fn analyze_categorical_predictors_errors() {
                     if diag_start < err_end && diag_end > err_start {
                         diagnostics_by_outer_error
                             .entry(*outer_idx)
-                            .or_insert(Vec::new())
+                            .or_default()
                             .push(diag_idx);
                         found = true;
                         break;

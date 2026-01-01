@@ -217,7 +217,7 @@ impl<'a> XmlParser<'a> {
                 Ok(Event::CData(e)) => {
                     self.handle_cdata(e, event_start)?;
                 }
-                Ok(Event::Comment(_)) | Ok(Event::PI(_)) | Ok(Event::Decl(_)) => {
+                Ok(Event::Comment(_) | Event::PI(_) | Event::Decl(_)) => {
                     // Skip comments, processing instructions, and XML declarations
                 }
                 Ok(Event::DocType(_)) => {
@@ -499,8 +499,7 @@ impl<'a> XmlParser<'a> {
                     // Unquoted value (find end at whitespace or >)
                     let value_end_rel = search_area[value_start_rel..]
                         .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
-                        .map(|p| value_start_rel + p)
-                        .unwrap_or(search_area.len());
+                        .map_or(search_area.len(), |p| value_start_rel + p);
                     (
                         content_start + search_start + value_start_rel,
                         content_start + search_start + value_end_rel,
@@ -660,7 +659,7 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::MismatchedEndTag { .. }) | Err(Error::XmlSyntax { .. })
+                Err(Error::MismatchedEndTag { .. } | Error::XmlSyntax { .. })
             ),
             "Expected MismatchedEndTag or XmlSyntax error, got: {:?}",
             result

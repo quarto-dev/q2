@@ -351,7 +351,7 @@ impl DiagnosticMessage {
             self.location.is_some() || self.details.iter().any(|d| d.location.is_some());
 
         // If we have location info and source context, render ariadne source display
-        let has_ariadne = if has_any_location && ctx.is_some() {
+        let has_ariadne = if let (true, Some(ctx_val)) = (has_any_location, ctx) {
             // Use main location if available, otherwise use first detail location
             let location = self
                 .location
@@ -360,7 +360,7 @@ impl DiagnosticMessage {
 
             if let Some(loc) = location {
                 if let Some(ariadne_output) =
-                    self.render_ariadne_source_context(loc, ctx.unwrap(), options.enable_hyperlinks)
+                    self.render_ariadne_source_context(loc, ctx_val, options.enable_hyperlinks)
                 {
                     result.push_str(&ariadne_output);
                     true

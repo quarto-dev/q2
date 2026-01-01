@@ -498,12 +498,10 @@ pub fn trim_inlines(inlines: Inlines) -> (Inlines, bool) {
             Inline::Space(_) if at_start => {
                 // skip leading spaces
                 changed = true;
-                continue;
             }
             Inline::Space(_) => {
                 // collect spaces
                 space_run.push(inline);
-                continue;
             }
             _ => {
                 result.append(&mut space_run);

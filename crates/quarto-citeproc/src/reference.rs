@@ -198,7 +198,7 @@ where
         serde_json::Value::Bool(b) => Ok(Some(b)),
         serde_json::Value::Number(n) => {
             // 0 = false, any other number = true
-            Ok(Some(n.as_i64().map(|i| i != 0).unwrap_or(false)))
+            Ok(Some(n.as_i64().is_some_and(|i| i != 0)))
         }
         serde_json::Value::Null => Ok(None),
         _ => Ok(None),
@@ -292,8 +292,7 @@ impl Name {
     pub fn is_byzantine(&self) -> bool {
         self.family
             .as_ref()
-            .map(|family| family.chars().any(is_byzantine_char))
-            .unwrap_or(false)
+            .is_some_and(|family| family.chars().any(is_byzantine_char))
     }
 
     /// Extract dropping and non-dropping particles from given/family names.
@@ -619,8 +618,7 @@ impl DateVariable {
     pub fn is_range(&self) -> bool {
         self.date_parts
             .as_ref()
-            .map(|p| p.len() > 1)
-            .unwrap_or(false)
+            .is_some_and(|p| p.len() > 1)
     }
 }
 

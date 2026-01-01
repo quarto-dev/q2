@@ -78,7 +78,7 @@ fn test_parse_all_test_data_csl_files() {
         .expect("Failed to read test-data directory")
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| p.extension().map_or(false, |ext| ext == "csl"))
+        .filter(|p| p.extension().is_some_and(|ext| ext == "csl"))
         .collect();
 
     assert!(

@@ -2,7 +2,7 @@
 
 **Read this file and complete the checklist before making any commit. Do not skip items.**
 
-**When checklist is finished, report results to user and wait for approval before committing.**
+**When checklist is finished, stage your changes, report results to user and wait for approval before making the final commit.**
 
 ## Determinism
 

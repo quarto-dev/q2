@@ -28,7 +28,7 @@ fn parse_qmd_to_pandoc_ast(input: &str) -> String {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &ASTContext::anonymous(),
         &mut error_collector,
     )
@@ -55,7 +55,7 @@ fn parse_qmd_to_json(input: &str) -> String {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     )
@@ -630,7 +630,7 @@ fn test_atx_heading_h1_single_word() {
         "Should contain Header: {}",
         result
     );
-    assert!(result.contains("1"), "Should contain level 1: {}", result);
+    assert!(result.contains('1'), "Should contain level 1: {}", result);
     assert!(
         result.contains("Str \"Hello\""),
         "Should contain Str \"Hello\": {}",
@@ -650,7 +650,7 @@ fn test_atx_heading_h2() {
         "Should contain Header: {}",
         result
     );
-    assert!(result.contains("2"), "Should contain level 2: {}", result);
+    assert!(result.contains('2'), "Should contain level 2: {}", result);
     assert!(
         result.contains("Str \"Second\""),
         "Should contain Str \"Second\": {}",
@@ -674,7 +674,7 @@ fn test_atx_heading_h3() {
         "Should contain Header: {}",
         result
     );
-    assert!(result.contains("3"), "Should contain level 3: {}", result);
+    assert!(result.contains('3'), "Should contain level 3: {}", result);
 }
 
 /// Test H4 heading
@@ -688,7 +688,7 @@ fn test_atx_heading_h4() {
         "Should contain Header: {}",
         result
     );
-    assert!(result.contains("4"), "Should contain level 4: {}", result);
+    assert!(result.contains('4'), "Should contain level 4: {}", result);
 }
 
 /// Test H5 heading
@@ -702,7 +702,7 @@ fn test_atx_heading_h5() {
         "Should contain Header: {}",
         result
     );
-    assert!(result.contains("5"), "Should contain level 5: {}", result);
+    assert!(result.contains('5'), "Should contain level 5: {}", result);
 }
 
 /// Test H6 heading
@@ -716,7 +716,7 @@ fn test_atx_heading_h6() {
         "Should contain Header: {}",
         result
     );
-    assert!(result.contains("6"), "Should contain level 6: {}", result);
+    assert!(result.contains('6'), "Should contain level 6: {}", result);
 }
 
 /// Test heading with multiple words
@@ -1193,7 +1193,7 @@ fn test_multiple_backslash_escapes() {
     // The str might be split or combined depending on grammar
     // Just verify the escaped characters appear without backslashes
     assert!(
-        result.contains("*") && result.contains("!"),
+        result.contains('*') && result.contains('!'),
         "Should contain * and ! without backslashes: {}",
         result
     );
@@ -3092,12 +3092,12 @@ fn test_bullet_list_simple() {
         result
     );
     assert!(
-        result.contains("Item") && result.contains("1"),
+        result.contains("Item") && result.contains('1'),
         "Should contain first item: {}",
         result
     );
     assert!(
-        result.contains("2") && result.contains("3"),
+        result.contains('2') && result.contains('3'),
         "Should contain other items: {}",
         result
     );

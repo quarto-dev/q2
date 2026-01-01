@@ -40,8 +40,7 @@ fn main() {
             entry
                 .path()
                 .extension()
-                .map(|ext| ext == "txt")
-                .unwrap_or(false)
+                .is_some_and(|ext| ext == "txt")
         })
         .collect();
 

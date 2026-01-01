@@ -746,7 +746,7 @@ mod tests {
         source: &str,
         partials: impl IntoIterator<Item = (&'static str, &'static str)>,
     ) -> Template {
-        let resolver = MemoryResolver::with_partials(partials.into_iter());
+        let resolver = MemoryResolver::with_partials(partials);
         Template::compile_with_resolver(source, Path::new("test.html"), &resolver, 0)
             .expect("template should compile")
     }

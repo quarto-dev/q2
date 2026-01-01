@@ -90,7 +90,6 @@ impl AttributeOrderingConverter {
                 }
                 Err(e) => {
                     eprintln!("Warning: Could not locate attribute block: {}", e);
-                    continue;
                 }
             }
         }

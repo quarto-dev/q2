@@ -289,43 +289,47 @@ impl SystemRuntime for NativeRuntime {
         let base = match kind {
             XdgDirKind::Config => {
                 // $XDG_CONFIG_HOME or ~/.config
-                std::env::var("XDG_CONFIG_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_CONFIG_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".config")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
             XdgDirKind::Data => {
                 // $XDG_DATA_HOME or ~/.local/share
-                std::env::var("XDG_DATA_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_DATA_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".local/share")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
             XdgDirKind::Cache => {
                 // $XDG_CACHE_HOME or ~/.cache
-                std::env::var("XDG_CACHE_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_CACHE_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".cache")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
             XdgDirKind::State => {
                 // $XDG_STATE_HOME or ~/.local/state
-                std::env::var("XDG_STATE_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_STATE_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".local/state")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
         };
 

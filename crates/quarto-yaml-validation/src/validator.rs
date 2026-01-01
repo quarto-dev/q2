@@ -680,8 +680,7 @@ fn yaml_to_json_value(value: &Yaml) -> serde_json::Value {
         Yaml::Real(s) => {
             if let Ok(f) = s.parse::<f64>() {
                 serde_json::Number::from_f64(f)
-                    .map(serde_json::Value::Number)
-                    .unwrap_or(serde_json::Value::Null)
+                    .map_or(serde_json::Value::Null, serde_json::Value::Number)
             } else {
                 serde_json::Value::Null
             }
@@ -1866,9 +1865,9 @@ mod tests {
 
     #[test]
     fn test_yaml_to_json_value_real() {
-        let result = yaml_to_json_value(&Yaml::Real("3.14".to_string()));
+        let result = yaml_to_json_value(&Yaml::Real("1.234".to_string()));
         if let serde_json::Value::Number(n) = result {
-            assert!((n.as_f64().unwrap() - 3.14).abs() < 0.001);
+            assert!((n.as_f64().unwrap() - 1.234).abs() < 0.001);
         } else {
             panic!("Expected Number");
         }

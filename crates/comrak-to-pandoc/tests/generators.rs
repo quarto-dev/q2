@@ -104,6 +104,7 @@ impl InlineFeatures {
     }
 
     /// Level 6: Add Autolink
+    #[allow(dead_code)]
     pub fn with_autolink() -> Self {
         Self {
             emph: true,

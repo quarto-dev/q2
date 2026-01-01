@@ -118,7 +118,7 @@ fn parse_impl(
                     end: Location {
                         offset: content.len(),
                         row: content.lines().count().saturating_sub(1),
-                        column: content.lines().last().map(|l| l.len()).unwrap_or(0),
+                        column: content.lines().last().map_or(0, |l| l.len()),
                     },
                 },
             )

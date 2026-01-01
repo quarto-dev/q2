@@ -452,8 +452,7 @@ impl CslParser {
 
         let init_hyphen = self
             .get_attr(element, "initialize-with-hyphen")
-            .map(|a| a.value == "true")
-            .unwrap_or(true);
+            .is_none_or(|a| a.value == "true");
 
         let page_range =
             self.get_attr(element, "page-range-format")
@@ -468,13 +467,11 @@ impl CslParser {
 
         let limit_day_ordinals = self
             .get_attr(element, "limit-day-ordinals-to-day-1")
-            .map(|a| a.value == "true")
-            .unwrap_or(false);
+            .is_some_and(|a| a.value == "true");
 
         let punctuation_in_quote = self
             .get_attr(element, "punctuation-in-quote")
-            .map(|a| a.value == "true")
-            .unwrap_or(false);
+            .is_some_and(|a| a.value == "true");
 
         StyleOptions {
             demote_non_dropping_particle: demote,
@@ -624,24 +621,22 @@ impl CslParser {
 
     fn parse_term_form(&self, element: &XmlElement) -> TermForm {
         self.get_attr(element, "form")
-            .map(|a| match a.value.as_str() {
+            .map_or(TermForm::Long, |a| match a.value.as_str() {
                 "short" => TermForm::Short,
                 "verb" => TermForm::Verb,
                 "verb-short" => TermForm::VerbShort,
                 "symbol" => TermForm::Symbol,
                 _ => TermForm::Long,
             })
-            .unwrap_or(TermForm::Long)
     }
 
     fn parse_date_format(&self, element: &XmlElement) -> Result<DateFormat> {
         let form = self
             .get_attr(element, "form")
-            .map(|a| match a.value.as_str() {
+            .map_or(DateForm::Text, |a| match a.value.as_str() {
                 "numeric" => DateForm::Numeric,
                 _ => DateForm::Text,
-            })
-            .unwrap_or(DateForm::Text);
+            });
 
         let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
 
@@ -719,14 +714,13 @@ impl CslParser {
         // Parse collapse attributes (only meaningful for citation, but parse anyway)
         let collapse = self
             .get_attr(element, "collapse")
-            .map(|a| match a.value.as_str() {
+            .map_or(Collapse::None, |a| match a.value.as_str() {
                 "citation-number" => Collapse::CitationNumber,
                 "year" => Collapse::Year,
                 "year-suffix" => Collapse::YearSuffix,
                 "year-suffix-ranged" => Collapse::YearSuffixRanged,
                 _ => Collapse::None,
-            })
-            .unwrap_or(Collapse::None);
+            });
 
         let cite_group_delimiter = self
             .get_attr(element, "cite-group-delimiter")
@@ -806,13 +800,11 @@ impl CslParser {
     fn parse_disambiguation_strategy(&self, element: &XmlElement) -> DisambiguationStrategy {
         let add_names = self
             .get_attr(element, "disambiguate-add-names")
-            .map(|a| a.value == "true")
-            .unwrap_or(false);
+            .is_some_and(|a| a.value == "true");
 
         let add_year_suffix = self
             .get_attr(element, "disambiguate-add-year-suffix")
-            .map(|a| a.value == "true")
-            .unwrap_or(false);
+            .is_some_and(|a| a.value == "true");
 
         // disambiguate-add-givenname enables given name disambiguation
         // givenname-disambiguation-rule specifies the rule (defaults to by-cite)
@@ -822,7 +814,7 @@ impl CslParser {
                 if a.value == "true" {
                     let rule = self
                         .get_attr(element, "givenname-disambiguation-rule")
-                        .map(|r| match r.value.as_str() {
+                        .map_or(GivenNameDisambiguationRule::ByCite, |r| match r.value.as_str() {
                             "all-names" => GivenNameDisambiguationRule::AllNames,
                             "all-names-with-initials" => {
                                 GivenNameDisambiguationRule::AllNamesWithInitials
@@ -832,8 +824,7 @@ impl CslParser {
                                 GivenNameDisambiguationRule::PrimaryNameWithInitials
                             }
                             _ => GivenNameDisambiguationRule::ByCite, // default
-                        })
-                        .unwrap_or(GivenNameDisambiguationRule::ByCite);
+                        });
                     Some(rule)
                 } else {
                     None
@@ -1022,11 +1013,10 @@ impl CslParser {
         let source = if let Some(attr) = self.get_attr(element, "variable") {
             let form = self
                 .get_attr(element, "form")
-                .map(|a| match a.value.as_str() {
+                .map_or(VariableForm::Long, |a| match a.value.as_str() {
                     "short" => VariableForm::Short,
                     _ => VariableForm::Long,
-                })
-                .unwrap_or(VariableForm::Long);
+                });
             TextSource::Variable {
                 name: attr.value.clone(),
                 name_source: attr.value_source.clone(),
@@ -1043,8 +1033,7 @@ impl CslParser {
                 form: self.parse_term_form(element),
                 plural: self
                     .get_attr(element, "plural")
-                    .map(|a| a.value == "true")
-                    .unwrap_or(false),
+                    .is_some_and(|a| a.value == "true"),
             }
         } else if let Some(attr) = self.get_attr(element, "value") {
             TextSource::Value {
@@ -1359,8 +1348,7 @@ impl CslParser {
 
         let strip_periods = self
             .get_attr(element, "strip-periods")
-            .map(|a| a.value == "true")
-            .unwrap_or(false);
+            .is_some_and(|a| a.value == "true");
 
         Ok(DatePart {
             name,
@@ -1582,12 +1570,10 @@ impl CslParser {
                 }),
             quotes: self
                 .get_attr(element, "quotes")
-                .map(|a| a.value == "true")
-                .unwrap_or(false),
+                .is_some_and(|a| a.value == "true"),
             strip_periods: self
                 .get_attr(element, "strip-periods")
-                .map(|a| a.value == "true")
-                .unwrap_or(false),
+                .is_some_and(|a| a.value == "true"),
             // Delimiter between children (e.g., between multiple name variables)
             delimiter: self.get_attr(element, "delimiter").map(|a| a.value.clone()),
             // Default to false; set to true for layout elements in parse_layout

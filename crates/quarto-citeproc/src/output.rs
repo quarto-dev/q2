@@ -1402,7 +1402,7 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                         // Smart delimiter: skip if next element starts with punctuation
                         // (This is Pandoc's addDelimiters behavior)
                         let first_char = get_leading_char(&child_inlines);
-                        if !matches!(first_char, Some(',') | Some(';') | Some('.')) {
+                        if !matches!(first_char, Some(',' | ';' | '.')) {
                             result.push(vec![Inline::Str(Str {
                                 text: delim.clone(),
                                 source_info: empty_source_info(),
@@ -2708,7 +2708,7 @@ fn get_trailing_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
                     return Some(c);
                 }
             }
-            _ => continue,
+            _ => {}
         }
     }
     None
@@ -2752,7 +2752,7 @@ fn get_leading_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
                     return Some(c);
                 }
             }
-            _ => continue,
+            _ => {}
         }
     }
     None
@@ -2812,7 +2812,7 @@ fn trim_trailing_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
                 }
                 return;
             }
-            _ => continue,
+            _ => {}
         }
     }
 }
@@ -2871,7 +2871,7 @@ fn trim_leading_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
                 }
                 return;
             }
-            _ => continue,
+            _ => {}
         }
     }
 }
@@ -3214,7 +3214,7 @@ fn move_delimiter_punct_into_quotes(
     };
 
     let first_char = delim.chars().next();
-    if !matches!(first_char, Some('.') | Some(',')) {
+    if !matches!(first_char, Some('.' | ',')) {
         return (children, formatting);
     }
 
@@ -3259,7 +3259,7 @@ fn move_suffix_punct_into_quoted_content(
     };
 
     let first_char = suffix.chars().next();
-    if !matches!(first_char, Some('.') | Some(',')) {
+    if !matches!(first_char, Some('.' | ',')) {
         return children;
     }
 
@@ -3395,7 +3395,7 @@ fn move_suffix_punct_into_quoted_child(
     };
 
     let first_char = suffix.chars().next();
-    if !matches!(first_char, Some('.') | Some(',')) {
+    if !matches!(first_char, Some('.' | ',')) {
         return children;
     }
 
@@ -3726,9 +3726,9 @@ impl<'a> RichTextParser<'a> {
                     None
                 };
                 let is_followed_by_non_space =
-                    next_char.map(|c| !c.is_whitespace()).unwrap_or(false);
+                    next_char.is_some_and(|c| !c.is_whitespace());
                 let is_preceded_by_alphanumeric =
-                    prev_char.map(|c| c.is_alphanumeric()).unwrap_or(false);
+                    prev_char.is_some_and(|c| c.is_alphanumeric());
 
                 if is_followed_by_non_space && !is_preceded_by_alphanumeric {
                     // Flush accumulated text
@@ -3756,8 +3756,7 @@ impl<'a> RichTextParser<'a> {
                     .remaining()
                     .chars()
                     .next()
-                    .map(|c| c.len_utf8())
-                    .unwrap_or(1);
+                    .map_or(1, |c| c.len_utf8());
             }
         }
 
@@ -3918,8 +3917,7 @@ impl<'a> RichTextParser<'a> {
                 // See Pandoc citeproc pCslText: apostrophe handling
                 let next_after_quote = self.remaining().chars().nth(1);
                 let is_valid_closing_quote = next_after_quote
-                    .map(|c| !c.is_alphanumeric())
-                    .unwrap_or(true);
+                    .is_none_or(|c| !c.is_alphanumeric());
 
                 if is_valid_closing_quote {
                     // Found closing quote

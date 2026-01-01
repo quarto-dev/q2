@@ -123,15 +123,13 @@ fn error_diagnostic_from_parse_state(
     let span_end = {
         let size = parse_state.size.max(1);
         let substring = &input_str[byte_offset..];
-        let mut char_count = 0;
         let mut byte_count = 0;
 
-        for ch in substring.chars() {
+        for (char_count, ch) in substring.chars().enumerate() {
             if char_count >= size {
                 break;
             }
             byte_count += ch.len_utf8();
-            char_count += 1;
         }
 
         (byte_offset + byte_count).min(input_str.len())
@@ -200,15 +198,13 @@ fn error_diagnostic_from_parse_state(
                                 let mut token_span_end = {
                                     let size = token.size.max(1);
                                     let substring = &input_str[token_byte_offset..];
-                                    let mut char_count = 0;
                                     let mut byte_count = 0;
 
-                                    for ch in substring.chars() {
+                                    for (char_count, ch) in substring.chars().enumerate() {
                                         if char_count >= size {
                                             break;
                                         }
                                         byte_count += ch.len_utf8();
-                                        char_count += 1;
                                     }
 
                                     (token_byte_offset + byte_count).min(input_str.len())
@@ -487,11 +483,10 @@ pub fn get_outer_error_nodes(error_nodes: &[(usize, usize)]) -> Vec<usize> {
         let (start_i, end_i) = error_nodes[i];
         let mut is_outer = true;
 
-        for j in 0..error_nodes.len() {
+        for (j, &(start_j, end_j)) in error_nodes.iter().enumerate() {
             if i == j {
                 continue;
             }
-            let (start_j, end_j) = error_nodes[j];
 
             // Check if node i is contained within node j
             if start_i >= start_j && end_i <= end_j {
@@ -655,7 +650,7 @@ pub fn prune_diagnostics_by_error_nodes(
                 // Primary: earliest start offset
                 // Secondary: highest score (negated for min_by_key)
                 let score = diagnostic_score(diag);
-                (start_offset, std::usize::MAX - score)
+                (start_offset, usize::MAX - score)
             })
             .copied()
             .unwrap();

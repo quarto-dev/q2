@@ -19,7 +19,7 @@ fn test_json_error_format() {
 
     assert!(result.is_err());
     let diagnostics = result.unwrap_err();
-    assert!(diagnostics.len() > 0, "Should have at least one diagnostic");
+    assert!(!diagnostics.is_empty(), "Should have at least one diagnostic");
 
     // Verify the first diagnostic can be serialized to JSON
     let json_value = diagnostics[0].to_json();
@@ -65,7 +65,7 @@ fn test_newline_warning_json() {
 
     // Run the binary with --json-errors flag
     let output = Command::new(env!("CARGO_BIN_EXE_pampa"))
-        .args(&["-i", temp_file, "--json-errors"])
+        .args(["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -78,7 +78,7 @@ fn test_newline_warning_json() {
     // Parse the JSON from stderr
     let json_lines: Vec<&str> = stderr
         .lines()
-        .filter(|line| line.starts_with("{"))
+        .filter(|line| line.starts_with('{'))
         .collect();
 
     assert!(!json_lines.is_empty(), "Expected JSON output on stderr");
@@ -118,7 +118,7 @@ fn test_newline_warning_text() {
 
     // Run the binary WITHOUT --json-errors flag (text output)
     let output = Command::new(env!("CARGO_BIN_EXE_pampa"))
-        .args(&["-i", temp_file])
+        .args(["-i", temp_file])
         .output()
         .expect("Failed to execute command");
 
@@ -157,7 +157,7 @@ fn test_no_newline_warning_when_present() {
 
     // Run the binary with --json-errors flag
     let output = Command::new(env!("CARGO_BIN_EXE_pampa"))
-        .args(&["-i", temp_file, "--json-errors"])
+        .args(["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -192,7 +192,7 @@ description: "[incomplete link"
 
     // Run the binary with --json-errors flag
     let output = Command::new(env!("CARGO_BIN_EXE_pampa"))
-        .args(&["-i", temp_file, "--json-errors"])
+        .args(["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -202,7 +202,7 @@ description: "[incomplete link"
     // Parse the JSON from stderr
     let json_lines: Vec<&str> = stderr
         .lines()
-        .filter(|line| line.starts_with("{"))
+        .filter(|line| line.starts_with('{'))
         .collect();
 
     assert!(!json_lines.is_empty(), "Expected JSON output on stderr");
@@ -231,7 +231,7 @@ fn test_json_errors_flag_with_error() {
 
     // Run the binary with --json-errors flag
     let output = Command::new(env!("CARGO_BIN_EXE_pampa"))
-        .args(&["-i", temp_file, "--json-errors"])
+        .args(["-i", temp_file, "--json-errors"])
         .output()
         .expect("Failed to execute command");
 
@@ -244,7 +244,7 @@ fn test_json_errors_flag_with_error() {
     // Parse the JSON from stdout
     let json_lines: Vec<&str> = stdout
         .lines()
-        .filter(|line| line.starts_with("{"))
+        .filter(|line| line.starts_with('{'))
         .collect();
 
     assert!(

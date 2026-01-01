@@ -1434,7 +1434,7 @@ fn evaluate_text(
             // the entire macro output is suppressed.
             if let Some(macro_def) = ctx.processor.style.macros.get(name).cloned() {
                 let old_var_count = ctx.get_var_count();
-                let delimiter = "".to_string();
+                let delimiter = String::new();
                 let result = evaluate_elements(ctx, &macro_def.elements, &delimiter)?;
                 let new_var_count = ctx.get_var_count();
 
@@ -1491,9 +1491,7 @@ fn evaluate_names(
         form == quarto_csl::NameForm::Count
     } else if ctx.in_substitute {
         // No explicit form - check inherited from substitute context
-        inherited_form
-            .map(|f| f == quarto_csl::NameForm::Count)
-            .unwrap_or(false)
+        inherited_form.is_some_and(|f| f == quarto_csl::NameForm::Count)
     } else {
         false
     };
@@ -1557,7 +1555,7 @@ fn evaluate_names(
                 let names_output = Output::tagged(
                     Tag::Names {
                         variable: var.clone(),
-                        names: names.to_vec(),
+                        names: names.clone(),
                     },
                     formatted,
                 );
@@ -1865,9 +1863,7 @@ fn format_names(
     } else {
         // 3+ names
         let last_idx = formatted_names.len() - 1;
-        let mut iter = formatted_names.into_iter().enumerate();
-
-        for (i, name_output) in iter {
+        for (i, name_output) in formatted_names.into_iter().enumerate() {
             if i == last_idx {
                 // Last name
                 if use_and_connector {
@@ -2910,16 +2906,14 @@ fn evaluate_condition(
     // This allows "5th", "3rd", "1-10" to be numeric.
     let is_numeric = |v: &str| {
         ctx.get_variable(v)
-            .map(|s| is_numeric_string(&s))
-            .unwrap_or(false)
+            .is_some_and(|s| is_numeric_string(&s))
     };
 
     // Helper to check if a date is uncertain
     let is_uncertain_date = |v: &str| {
         ctx.reference
             .get_date(v)
-            .map(|d| d.circa.unwrap_or(false))
-            .unwrap_or(false)
+            .is_some_and(|d| d.circa.unwrap_or(false))
     };
 
     // For match="all", require ALL values in a multi-value condition
@@ -3008,8 +3002,7 @@ fn evaluate_condition(
             ctx.reference
                 .disambiguation
                 .as_ref()
-                .map(|d| d.disamb_condition == *expected)
-                .unwrap_or(!expected) // If no disambiguation data, condition is false
+                .map_or(!expected, |d| d.disamb_condition == *expected) // If no disambiguation data, condition is false
         }
     }
 }
@@ -3136,8 +3129,7 @@ fn evaluate_label(
             // Check if the value indicates plural (ranges, "and", multiple values)
             value_for_plural
                 .as_ref()
-                .map(|v| is_plural_value(v, &term_name))
-                .unwrap_or(false)
+                .is_some_and(|v| is_plural_value(v, &term_name))
         }
     };
 
@@ -3579,8 +3571,7 @@ where
     let trailing_same_idx = active_parts[first_diff_idx..]
         .iter()
         .rposition(|p| !is_same(p.name))
-        .map(|i| first_diff_idx + i + 1)
-        .unwrap_or(active_parts.len());
+        .map_or(active_parts.len(), |i| first_diff_idx + i + 1);
 
     // Split into: leading_same, differing (includes the range), trailing_same
     let leading_same = &active_parts[..first_diff_idx];
@@ -4239,8 +4230,7 @@ fn split_prefix_digits(s: &str) -> (&str, &str) {
         .rev()
         .take_while(|(_, c)| c.is_ascii_digit())
         .last()
-        .map(|(i, _)| i)
-        .unwrap_or(s.len());
+        .map_or(s.len(), |(i, _)| i);
 
     (&s[..digit_start], &s[digit_start..])
 }

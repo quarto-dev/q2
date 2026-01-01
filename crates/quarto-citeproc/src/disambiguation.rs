@@ -124,7 +124,7 @@ pub fn find_ambiguities(items: Vec<DisambData>) -> Vec<Vec<DisambData>> {
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -174,7 +174,7 @@ pub fn find_year_suffix_ambiguities(
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -233,7 +233,7 @@ pub fn find_year_suffix_with_full_author_match(
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -323,7 +323,7 @@ pub fn merge_ambiguity_groups(
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -650,7 +650,7 @@ pub fn assign_year_suffixes(
 
         // Assign sequential suffixes
         for (idx, (id, _, _)) in sorted_items.iter().enumerate() {
-            suffixes.insert((*id).to_string(), (idx + 1) as i32);
+            suffixes.insert((**id).to_string(), (idx + 1) as i32);
         }
     }
 

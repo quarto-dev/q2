@@ -23,7 +23,7 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
 /// Helper to load a template from fixtures
 fn load_template(name: &str) -> Template {
     let path = fixture_path(name);
-    Template::compile_from_file(&path).expect(&format!("Failed to load template: {}", name))
+    Template::compile_from_file(&path).unwrap_or_else(|_| panic!("Failed to load template: {}", name))
 }
 
 fn test_context() -> TemplateContext {

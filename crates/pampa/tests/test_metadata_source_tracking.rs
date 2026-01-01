@@ -21,7 +21,7 @@ fn resolve_source_offset(source: &quarto_source_map::SourceInfo) -> usize {
         } => start_offset + resolve_source_offset(parent),
         quarto_source_map::SourceInfo::Concat { pieces } => {
             // For concat, use the start offset of the first piece
-            pieces.first().map(|p| p.offset_in_concat).unwrap_or(0)
+            pieces.first().map_or(0, |p| p.offset_in_concat)
         }
         quarto_source_map::SourceInfo::FilterProvenance { .. } => {
             // Filter provenance doesn't have a traditional offset

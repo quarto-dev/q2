@@ -981,7 +981,7 @@ mod tests {
 
         let hash = compute_block_hash_fresh(&dl);
         // Just verify it doesn't panic and produces a hash
-        assert!(hash != 0 || hash == 0); // Always true, just checking computation
+        let _ = hash; // Ensure hash is computed
     }
 
     #[test]
@@ -1068,7 +1068,7 @@ mod tests {
         });
 
         let hash = compute_block_hash_fresh(&lb);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     // ==================== Inline Type Hash Tests ====================
@@ -1099,7 +1099,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&strong);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1110,7 +1110,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&u);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1121,7 +1121,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&s);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1132,7 +1132,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&sup);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1143,7 +1143,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&sub);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1154,7 +1154,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&sc);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1252,7 +1252,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&raw);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1294,7 +1294,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&img);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1308,7 +1308,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&note);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1325,7 +1325,7 @@ mod tests {
         });
 
         let hash = compute_inline_hash_fresh(&span);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     // ==================== Cache Tests ====================
@@ -1860,7 +1860,7 @@ mod tests {
 
         let block = Block::Custom(cn);
         let hash = compute_block_hash_fresh(&block);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
@@ -1884,7 +1884,7 @@ mod tests {
 
         let block = Block::Custom(cn);
         let hash = compute_block_hash_fresh(&block);
-        assert!(hash != 0 || hash == 0);
+        let _ = hash;
     }
 
     #[test]
