@@ -93,5 +93,5 @@ pub fn error_message(error: &mut tree_sitter_qmd::MarkdownCursor, input_bytes: &
         }
     }
     assert!(false, "No error message available for this node");
-    String::new()// unreachable
+    String::new() // unreachable
 }

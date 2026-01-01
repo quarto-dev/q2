@@ -19,7 +19,10 @@ fn test_json_error_format() {
 
     assert!(result.is_err());
     let diagnostics = result.unwrap_err();
-    assert!(!diagnostics.is_empty(), "Should have at least one diagnostic");
+    assert!(
+        !diagnostics.is_empty(),
+        "Should have at least one diagnostic"
+    );
 
     // Verify the first diagnostic can be serialized to JSON
     let json_value = diagnostics[0].to_json();

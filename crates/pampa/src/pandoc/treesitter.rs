@@ -144,22 +144,27 @@ fn process_list(
             panic!("Expected Blocks in list_item, got {:?}", child);
         };
         if is_ordered_list.is_none()
-            && let attr @ Some(_) = ordered_list { is_ordered_list = attr }
+            && let attr @ Some(_) = ordered_list
+        {
+            is_ordered_list = attr
+        }
 
         // is the last item loose? Check the last paragraph end row
         if let Some(last_para_end) = last_para_end_row
-            && last_para_end != child_range.start.row {
-                // if the last paragraph ends on a different line than the current item starts,
-                // then the last item was loose, mark it
-                has_loose_item = true;
-            }
+            && last_para_end != child_range.start.row
+        {
+            // if the last paragraph ends on a different line than the current item starts,
+            // then the last item was loose, mark it
+            has_loose_item = true;
+        }
 
         // Check if there's a blank line between the last item and this item
         if let Some(last_end) = last_item_end_row
-            && child_range.start.row > last_end {
-                // There's at least one blank line between items
-                has_loose_item = true;
-            }
+            && child_range.start.row > last_end
+        {
+            // There's at least one blank line between items
+            has_loose_item = true;
+        }
 
         // is this item definitely loose?
         if blocks

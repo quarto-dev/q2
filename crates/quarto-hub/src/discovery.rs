@@ -38,21 +38,23 @@ impl ProjectFiles {
             if path.is_file() {
                 // Check for config files first (by name)
                 if let Some(file_name) = path.file_name()
-                    && (file_name == "_quarto.yml" || file_name == "_quarto.yaml") {
-                        if let Ok(relative) = path.strip_prefix(project_root) {
-                            debug!(?relative, "Discovered config file");
-                            files.config_files.push(relative.to_path_buf());
-                        }
-                        continue;
+                    && (file_name == "_quarto.yml" || file_name == "_quarto.yaml")
+                {
+                    if let Ok(relative) = path.strip_prefix(project_root) {
+                        debug!(?relative, "Discovered config file");
+                        files.config_files.push(relative.to_path_buf());
                     }
+                    continue;
+                }
 
                 // Check for .qmd files (by extension)
                 if let Some(ext) = path.extension()
                     && ext == "qmd"
-                        && let Ok(relative) = path.strip_prefix(project_root) {
-                            debug!(?relative, "Discovered .qmd file");
-                            files.qmd_files.push(relative.to_path_buf());
-                        }
+                    && let Ok(relative) = path.strip_prefix(project_root)
+                {
+                    debug!(?relative, "Discovered .qmd file");
+                    files.qmd_files.push(relative.to_path_buf());
+                }
             }
         }
 

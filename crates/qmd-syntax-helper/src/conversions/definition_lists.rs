@@ -294,10 +294,9 @@ impl Rule for DefinitionListConverter {
 
         let new_content = lines.join("\n") + "\n";
 
-        if !check_mode
-            && in_place {
-                write_file(file_path, &new_content)?;
-            }
+        if !check_mode && in_place {
+            write_file(file_path, &new_content)?;
+        }
 
         Ok(ConvertResult {
             rule_name: self.name().to_string(),

@@ -49,9 +49,10 @@ pub(super) fn get_hash_number(yaml: &YamlWithSourceInfo, key: &str) -> SchemaRes
 pub(super) fn get_hash_usize(yaml: &YamlWithSourceInfo, key: &str) -> SchemaResult<Option<usize>> {
     if let Some(value) = yaml.get_hash_value(key) {
         if let Some(i) = value.yaml.as_i64()
-            && i >= 0 {
-                return Ok(Some(i as usize));
-            }
+            && i >= 0
+        {
+            return Ok(Some(i as usize));
+        }
         return Err(SchemaError::InvalidStructure {
             message: format!("Field '{}' must be a non-negative integer", key),
             location: value.source_info.clone(),
@@ -143,9 +144,10 @@ pub(super) fn yaml_to_json_value(
         Yaml::Integer(i) => Ok(serde_json::Value::Number((*i).into())),
         Yaml::Real(r) => {
             if let Ok(f) = r.parse::<f64>()
-                && let Some(n) = serde_json::Number::from_f64(f) {
-                    return Ok(serde_json::Value::Number(n));
-                }
+                && let Some(n) = serde_json::Number::from_f64(f)
+            {
+                return Ok(serde_json::Value::Number(n));
+            }
             Err(SchemaError::InvalidStructure {
                 message: format!("Invalid number: {}", r),
                 location: location.clone(),

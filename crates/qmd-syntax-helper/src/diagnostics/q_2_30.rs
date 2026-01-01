@@ -114,9 +114,7 @@ impl Q230Checker {
         }
 
         // Find the start of the line containing the paragraph
-        let line_start = content[..para_start]
-            .rfind('\n')
-            .map_or(0, |pos| pos + 1);
+        let line_start = content[..para_start].rfind('\n').map_or(0, |pos| pos + 1);
 
         // Get the text from line start to paragraph start
         let leading_text = &content[line_start..para_start];
@@ -132,9 +130,7 @@ impl Q230Checker {
 
     /// Convert byte offset to column number (0-indexed)
     fn offset_to_column(&self, content: &str, offset: usize) -> usize {
-        let line_start = content[..offset]
-            .rfind('\n')
-            .map_or(0, |pos| pos + 1);
+        let line_start = content[..offset].rfind('\n').map_or(0, |pos| pos + 1);
         offset - line_start
     }
 }

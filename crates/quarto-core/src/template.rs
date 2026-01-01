@@ -153,11 +153,7 @@ pub fn render_with_resources(
 }
 
 /// Add metadata from the Pandoc AST to the template context, excluding specific keys.
-fn add_metadata_to_context_except(
-    meta: &ConfigValue,
-    ctx: &mut TemplateContext,
-    exclude: &[&str],
-) {
+fn add_metadata_to_context_except(meta: &ConfigValue, ctx: &mut TemplateContext, exclude: &[&str]) {
     if let ConfigValueKind::Map(entries) = &meta.value {
         for entry in entries {
             if !exclude.contains(&entry.key.as_str()) {
@@ -335,8 +331,8 @@ fn blocks_to_text(blocks: &[quarto_pandoc_types::block::Block]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_pandoc_types::inline::Str;
     use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_pandoc_types::inline::Str;
     use quarto_source_map::{FileId, Location, Range, SourceInfo};
 
     fn dummy_source_info() -> SourceInfo {

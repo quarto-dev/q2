@@ -63,11 +63,7 @@ pub fn produce_diagnostic_messages(
     }
 
     // Sort diagnostics by file position (start offset)
-    result.sort_by_key(|diag| {
-        diag.location
-            .as_ref()
-            .map_or(0, |loc| loc.start_offset())
-    });
+    result.sort_by_key(|diag| diag.location.as_ref().map_or(0, |loc| loc.start_offset()));
 
     result
 }
@@ -509,7 +505,9 @@ fn range_gap_distance(r1_start: usize, r1_end: usize, r2_start: usize, r2_end: u
     if r1_end <= r2_start {
         // r1 is before r2
         r2_start - r1_end
-    } else { r1_start.saturating_sub(r2_end) }
+    } else {
+        r1_start.saturating_sub(r2_end)
+    }
 }
 
 /// Collect all location ranges from a diagnostic (main location + detail locations)
@@ -620,14 +618,14 @@ pub fn prune_diagnostics_by_error_nodes(
         }
 
         // If no overlap, find closest ERROR node by distance
-        if !assigned
-            && let Some(closest_idx) = find_closest_error_node(&diag_ranges, &outer_ranges) {
-                diagnostics_by_range
-                    .entry(closest_idx)
-                    .or_default()
-                    .push(diag_idx);
-            }
-            // If still not assigned, diagnostic has no location or ERROR nodes are empty
+        if !assigned && let Some(closest_idx) = find_closest_error_node(&diag_ranges, &outer_ranges)
+        {
+            diagnostics_by_range
+                .entry(closest_idx)
+                .or_default()
+                .push(diag_idx);
+        }
+        // If still not assigned, diagnostic has no location or ERROR nodes are empty
     }
 
     // For each ERROR node, keep only the earliest diagnostic (tiebreak with score)
@@ -643,10 +641,7 @@ pub fn prune_diagnostics_by_error_nodes(
             .iter()
             .min_by_key(|&&idx| {
                 let diag = &diagnostics[idx];
-                let start_offset = diag
-                    .location
-                    .as_ref()
-                    .map_or(0, |loc| loc.start_offset());
+                let start_offset = diag.location.as_ref().map_or(0, |loc| loc.start_offset());
                 // Primary: earliest start offset
                 // Secondary: highest score (negated for min_by_key)
                 let score = diagnostic_score(diag);

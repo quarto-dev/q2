@@ -182,9 +182,10 @@ impl AnsiConfig {
     fn detect_terminal_width() -> usize {
         // Check for environment variable override first
         if let Ok(width_str) = std::env::var("QUARTO_TERMINAL_WIDTH")
-            && let Ok(width) = width_str.parse::<usize>() {
-                return width;
-            }
+            && let Ok(width) = width_str.parse::<usize>()
+        {
+            return width;
+        }
 
         // Otherwise detect from terminal
         use crossterm::terminal::size;
@@ -1083,9 +1084,10 @@ fn parse_color_value(value: &str) -> Option<Color> {
                 parts[0].parse::<u8>(),
                 parts[1].parse::<u8>(),
                 parts[2].parse::<u8>(),
-            ) {
-                return Some(Color::Rgb { r, g, b });
-            }
+            )
+        {
+            return Some(Color::Rgb { r, g, b });
+        }
     }
 
     // ANSI palette: ansi(42) or ansi-42
@@ -1095,9 +1097,10 @@ fn parse_color_value(value: &str) -> Option<Color> {
             return Some(Color::AnsiValue(ansi_value));
         }
     } else if let Some(num_str) = value.strip_prefix("ansi-")
-        && let Ok(ansi_value) = num_str.parse::<u8>() {
-            return Some(Color::AnsiValue(ansi_value));
-        }
+        && let Ok(ansi_value) = num_str.parse::<u8>()
+    {
+        return Some(Color::AnsiValue(ansi_value));
+    }
 
     None
 }

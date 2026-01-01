@@ -29,12 +29,7 @@ fn main() {
     let mut test_files: Vec<_> = fs::read_dir(&test_dir)
         .expect("Failed to read test-data/csl-suite")
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .is_some_and(|ext| ext == "txt")
-        })
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "txt"))
         .collect();
 
     // Sort for deterministic output
@@ -170,10 +165,9 @@ fn load_and_validate_enabled_tests(
         }
 
         // Check if test exists
-        if !valid_tests.contains(&name)
-            && !nonexistent.contains(&name) {
-                nonexistent.push(name.clone());
-            }
+        if !valid_tests.contains(&name) && !nonexistent.contains(&name) {
+            nonexistent.push(name.clone());
+        }
 
         enabled.insert(name);
     }

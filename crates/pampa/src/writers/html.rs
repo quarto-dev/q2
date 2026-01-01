@@ -911,11 +911,12 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
 
             // Caption (if any)
             if let Some(ref long_caption) = table.caption.long
-                && !long_caption.is_empty() {
-                    writeln!(ctx, "<caption>")?;
-                    write_blocks(long_caption, ctx)?;
-                    writeln!(ctx, "</caption>")?;
-                }
+                && !long_caption.is_empty()
+            {
+                writeln!(ctx, "<caption>")?;
+                write_blocks(long_caption, ctx)?;
+                writeln!(ctx, "</caption>")?;
+            }
 
             // Column group (for alignment)
             if !table.colspec.is_empty() {
@@ -968,11 +969,12 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, ">")?;
             write_blocks(&figure.content, ctx)?;
             if let Some(ref long_caption) = figure.caption.long
-                && !long_caption.is_empty() {
-                    writeln!(ctx, "<figcaption>")?;
-                    write_blocks(long_caption, ctx)?;
-                    writeln!(ctx, "</figcaption>")?;
-                }
+                && !long_caption.is_empty()
+            {
+                writeln!(ctx, "<figcaption>")?;
+                write_blocks(long_caption, ctx)?;
+                writeln!(ctx, "</figcaption>")?;
+            }
             writeln!(ctx, "</figure>")?;
         }
         Block::Div(div) => {

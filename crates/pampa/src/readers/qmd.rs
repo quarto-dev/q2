@@ -36,11 +36,11 @@ fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf:
 pub fn read_bad_qmd_for_error_message(input_bytes: &[u8]) -> Vec<String> {
     let mut parser = MarkdownParser::default();
     let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
-    parser
-        .parser
-        .set_logger(Some(Box::new(|log_type, message| if log_type == LogType::Parse {
+    parser.parser.set_logger(Some(Box::new(|log_type, message| {
+        if log_type == LogType::Parse {
             log_observer.log(log_type, message);
-        })));
+        }
+    })));
     let _tree = parser
         .parse(input_bytes, None)
         .expect("Failed to parse input");
@@ -66,11 +66,11 @@ pub fn read<T: Write>(
     let mut fast_log_observer = quarto_parse_errors::TreeSitterLogObserverFast::default();
     let mut log_observer = quarto_parse_errors::TreeSitterLogObserver::default();
 
-    parser
-        .parser
-        .set_logger(Some(Box::new(|log_type, message| if log_type == LogType::Parse {
+    parser.parser.set_logger(Some(Box::new(|log_type, message| {
+        if log_type == LogType::Parse {
             fast_log_observer.log(log_type, message);
-        })));
+        }
+    })));
 
     // inefficient, but safe: if no trailing newline, add one
     if !input_bytes.ends_with(b"\n") {
@@ -103,11 +103,11 @@ pub fn read<T: Write>(
         .add_file(filename.to_string(), Some(input_str));
 
     if fast_log_observer.had_errors() {
-        parser
-            .parser
-            .set_logger(Some(Box::new(|log_type, message| if log_type == LogType::Parse {
+        parser.parser.set_logger(Some(Box::new(|log_type, message| {
+            if log_type == LogType::Parse {
                 log_observer.log(log_type, message);
-            })));
+            }
+        })));
         parser
             .parse(input_bytes, None)
             .expect("Failed to parse input");

@@ -36,12 +36,7 @@ fn main() {
     let mut test_files: Vec<_> = fs::read_dir(&test_dir)
         .expect("Failed to read test-data/csl-suite")
         .filter_map(|entry| entry.ok())
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .is_some_and(|ext| ext == "txt")
-        })
+        .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "txt"))
         .collect();
 
     test_files.sort_by_key(|e| e.path());
@@ -680,10 +675,8 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
 
         let mut citations = Vec::new();
         for cite_group in raw {
-            let items: Vec<CitationItem> = cite_group
-                .iter()
-                .filter_map(parse_citation_item)
-                .collect();
+            let items: Vec<CitationItem> =
+                cite_group.iter().filter_map(parse_citation_item).collect();
 
             if !items.is_empty() {
                 citations.push(Citation {
@@ -764,10 +757,7 @@ fn parse_simple_citations_format(
             .as_array()
             .ok_or("Citation group must be an array")?;
 
-        let items: Vec<CitationItem> = group_array
-            .iter()
-            .filter_map(parse_citation_item)
-            .collect();
+        let items: Vec<CitationItem> = group_array.iter().filter_map(parse_citation_item).collect();
 
         if !items.is_empty() {
             citations.push(Citation {
@@ -783,17 +773,18 @@ fn parse_simple_citations_format(
 fn is_complex_citations_format(test: &CslTest) -> bool {
     if let Some(ref citations_json) = test.citations
         && let Ok(raw) = serde_json::from_str::<serde_json::Value>(citations_json)
-            && let Some(outer_array) = raw.as_array() {
-                return outer_array.first().is_some_and(|first| {
-                    if let Some(arr) = first.as_array() {
-                        arr.first()
-                            .and_then(|obj| obj.get("citationItems"))
-                            .is_some()
-                    } else {
-                        false
-                    }
-                });
+        && let Some(outer_array) = raw.as_array()
+    {
+        return outer_array.first().is_some_and(|first| {
+            if let Some(arr) = first.as_array() {
+                arr.first()
+                    .and_then(|obj| obj.get("citationItems"))
+                    .is_some()
+            } else {
+                false
             }
+        });
+    }
     false
 }
 

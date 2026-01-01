@@ -76,7 +76,6 @@ pub struct Filter<'a> {
     pub meta: MetaFilterField<'a>,
 }
 
-
 impl Filter<'static> {
     pub fn new() -> Filter<'static> {
         Self::default()

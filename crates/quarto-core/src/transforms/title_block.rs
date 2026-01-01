@@ -147,8 +147,8 @@ fn create_title_header(title: &str) -> Block {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quarto_pandoc_types::block::Paragraph;
     use quarto_pandoc_types::ConfigMapEntry;
+    use quarto_pandoc_types::block::Paragraph;
     use quarto_source_map::{FileId, Location, Range};
     use std::path::PathBuf;
 

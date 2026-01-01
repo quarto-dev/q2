@@ -400,13 +400,14 @@ fn pandoc_read(lua: &Lua, args: mlua::MultiValue) -> Result<Value> {
     if let Value::Table(opts_table) = reader_options_val {
         let user_opts: serde_json::Value = lua.from_value(Value::Table(opts_table))?;
         if let serde_json::Value::Object(user_map) = user_opts
-            && let serde_json::Value::Object(ref mut opts_map) = opts_json {
-                for (key, value) in user_map {
-                    if key != "extensions" {
-                        opts_map.insert(key, value);
-                    }
+            && let serde_json::Value::Object(ref mut opts_map) = opts_json
+        {
+            for (key, value) in user_map {
+                if key != "extensions" {
+                    opts_map.insert(key, value);
                 }
             }
+        }
     }
 
     // Fourth argument: read_env (optional, not implemented yet)
@@ -505,13 +506,14 @@ fn pandoc_write(lua: &Lua, args: mlua::MultiValue) -> Result<mlua::String> {
     if let Value::Table(opts_table) = writer_options_val {
         let user_opts: serde_json::Value = lua.from_value(Value::Table(opts_table))?;
         if let serde_json::Value::Object(user_map) = user_opts
-            && let serde_json::Value::Object(ref mut opts_map) = _opts_json {
-                for (key, value) in user_map {
-                    if key != "extensions" {
-                        opts_map.insert(key, value);
-                    }
+            && let serde_json::Value::Object(ref mut opts_map) = _opts_json
+        {
+            for (key, value) in user_map {
+                if key != "extensions" {
+                    opts_map.insert(key, value);
                 }
             }
+        }
     }
 
     // Dispatch to the appropriate writer

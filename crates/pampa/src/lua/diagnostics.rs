@@ -305,13 +305,14 @@ fn get_caller_location(lua: &Lua) -> (String, i64) {
             // Skip C functions (internal mlua calls)
             // Accept "Lua", "main" (for main chunks), and any other non-C sources
             if source.what != "C"
-                && let Some(src) = source.source {
-                    // Only return if it looks like a real source (has meaningful content)
-                    let src_str = src.to_string();
-                    if !src_str.is_empty() && src_str != "=[C]" {
-                        return (src_str, line as i64);
-                    }
+                && let Some(src) = source.source
+            {
+                // Only return if it looks like a real source (has meaningful content)
+                let src_str = src.to_string();
+                if !src_str.is_empty() && src_str != "=[C]" {
+                    return (src_str, line as i64);
                 }
+            }
         }
     }
     ("unknown".to_string(), 0)

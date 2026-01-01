@@ -118,14 +118,15 @@ pub fn navigate<'a>(
             PathSegment::Key(search_key) => {
                 for entry in entries.iter().rev() {
                     if let Yaml::String(ref key_str) = entry.key.yaml
-                        && key_str == search_key {
-                            let target = if return_key && path_index == path.segments().len() - 1 {
-                                &entry.key
-                            } else {
-                                &entry.value
-                            };
-                            return navigate(path, target, return_key, path_index + 1);
-                        }
+                        && key_str == search_key
+                    {
+                        let target = if return_key && path_index == path.segments().len() - 1 {
+                            &entry.key
+                        } else {
+                            &entry.value
+                        };
+                        return navigate(path, target, return_key, path_index + 1);
+                    }
                 }
                 None
             }
@@ -244,80 +245,85 @@ fn validate_number(
 
     // Check minimum
     if let Some(min) = schema.minimum
-        && num < min {
-            context.add_error(
-                ValidationErrorKind::NumberOutOfRange {
-                    value: num,
-                    minimum: Some(min),
-                    maximum: None,
-                    exclusive_minimum: None,
-                    exclusive_maximum: None,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && num < min
+    {
+        context.add_error(
+            ValidationErrorKind::NumberOutOfRange {
+                value: num,
+                minimum: Some(min),
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check maximum
     if let Some(max) = schema.maximum
-        && num > max {
-            context.add_error(
-                ValidationErrorKind::NumberOutOfRange {
-                    value: num,
-                    minimum: None,
-                    maximum: Some(max),
-                    exclusive_minimum: None,
-                    exclusive_maximum: None,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && num > max
+    {
+        context.add_error(
+            ValidationErrorKind::NumberOutOfRange {
+                value: num,
+                minimum: None,
+                maximum: Some(max),
+                exclusive_minimum: None,
+                exclusive_maximum: None,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check exclusive minimum
     if let Some(min) = schema.exclusive_minimum
-        && num <= min {
-            context.add_error(
-                ValidationErrorKind::NumberOutOfRange {
-                    value: num,
-                    minimum: None,
-                    maximum: None,
-                    exclusive_minimum: Some(min),
-                    exclusive_maximum: None,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && num <= min
+    {
+        context.add_error(
+            ValidationErrorKind::NumberOutOfRange {
+                value: num,
+                minimum: None,
+                maximum: None,
+                exclusive_minimum: Some(min),
+                exclusive_maximum: None,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check exclusive maximum
     if let Some(max) = schema.exclusive_maximum
-        && num >= max {
-            context.add_error(
-                ValidationErrorKind::NumberOutOfRange {
-                    value: num,
-                    minimum: None,
-                    maximum: None,
-                    exclusive_minimum: None,
-                    exclusive_maximum: Some(max),
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && num >= max
+    {
+        context.add_error(
+            ValidationErrorKind::NumberOutOfRange {
+                value: num,
+                minimum: None,
+                maximum: None,
+                exclusive_minimum: None,
+                exclusive_maximum: Some(max),
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check multiple of
     if let Some(multiple) = schema.multiple_of
-        && (num % multiple).abs() > f64::EPSILON {
-            context.add_error(
-                ValidationErrorKind::NumberNotMultipleOf {
-                    value: num,
-                    multiple_of: multiple,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && (num % multiple).abs() > f64::EPSILON
+    {
+        context.add_error(
+            ValidationErrorKind::NumberNotMultipleOf {
+                value: num,
+                multiple_of: multiple,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     Ok(())
 }
@@ -344,31 +350,33 @@ fn validate_string(
 
     // Check min length
     if let Some(min) = schema.min_length
-        && s.len() < min {
-            context.add_error(
-                ValidationErrorKind::StringLengthInvalid {
-                    length: s.len(),
-                    min_length: Some(min),
-                    max_length: None,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && s.len() < min
+    {
+        context.add_error(
+            ValidationErrorKind::StringLengthInvalid {
+                length: s.len(),
+                min_length: Some(min),
+                max_length: None,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check max length
     if let Some(max) = schema.max_length
-        && s.len() > max {
-            context.add_error(
-                ValidationErrorKind::StringLengthInvalid {
-                    length: s.len(),
-                    min_length: None,
-                    max_length: Some(max),
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && s.len() > max
+    {
+        context.add_error(
+            ValidationErrorKind::StringLengthInvalid {
+                length: s.len(),
+                min_length: None,
+                max_length: Some(max),
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check pattern
     if let Some(pattern) = &schema.pattern {
@@ -508,31 +516,33 @@ fn validate_array(
 
     // Check min items
     if let Some(min) = schema.min_items
-        && items.len() < min {
-            context.add_error(
-                ValidationErrorKind::ArrayLengthInvalid {
-                    length: items.len(),
-                    min_items: Some(min),
-                    max_items: None,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && items.len() < min
+    {
+        context.add_error(
+            ValidationErrorKind::ArrayLengthInvalid {
+                length: items.len(),
+                min_items: Some(min),
+                max_items: None,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check max items
     if let Some(max) = schema.max_items
-        && items.len() > max {
-            context.add_error(
-                ValidationErrorKind::ArrayLengthInvalid {
-                    length: items.len(),
-                    min_items: None,
-                    max_items: Some(max),
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && items.len() > max
+    {
+        context.add_error(
+            ValidationErrorKind::ArrayLengthInvalid {
+                length: items.len(),
+                min_items: None,
+                max_items: Some(max),
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Check unique items
     if let Some(true) = schema.unique_items {
@@ -601,30 +611,32 @@ fn validate_object(
 
     // Check min/max properties
     if let Some(min) = schema.min_properties
-        && entries.len() < min {
-            context.add_error(
-                ValidationErrorKind::ObjectPropertyCountInvalid {
-                    count: entries.len(),
-                    min_properties: Some(min),
-                    max_properties: None,
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && entries.len() < min
+    {
+        context.add_error(
+            ValidationErrorKind::ObjectPropertyCountInvalid {
+                count: entries.len(),
+                min_properties: Some(min),
+                max_properties: None,
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     if let Some(max) = schema.max_properties
-        && entries.len() > max {
-            context.add_error(
-                ValidationErrorKind::ObjectPropertyCountInvalid {
-                    count: entries.len(),
-                    min_properties: None,
-                    max_properties: Some(max),
-                },
-                value,
-            );
-            return Err(context.errors[0].clone());
-        }
+        && entries.len() > max
+    {
+        context.add_error(
+            ValidationErrorKind::ObjectPropertyCountInvalid {
+                count: entries.len(),
+                min_properties: None,
+                max_properties: Some(max),
+            },
+            value,
+        );
+        return Err(context.errors[0].clone());
+    }
 
     // Validate each property
     for entry in entries {
@@ -1137,7 +1149,11 @@ mod tests {
         let source_ctx = SourceContext::new();
         let schema = Schema::Enum(EnumSchema {
             annotations: SchemaAnnotations::default(),
-            values: vec![serde_json::json!(1), serde_json::json!(2), serde_json::json!(3)],
+            values: vec![
+                serde_json::json!(1),
+                serde_json::json!(2),
+                serde_json::json!(3),
+            ],
         });
 
         // Valid: matches enum value
@@ -1755,8 +1771,11 @@ mod tests {
             Yaml::String("items".to_string()),
             Yaml::Array(vec![Yaml::Integer(1), Yaml::Integer(2), Yaml::Integer(3)]),
         );
-        let yaml =
-            YamlWithSourceInfo::new_hash(Yaml::Hash(yaml_hash), SourceInfo::default(), hash_entries);
+        let yaml = YamlWithSourceInfo::new_hash(
+            Yaml::Hash(yaml_hash),
+            SourceInfo::default(),
+            hash_entries,
+        );
 
         let mut path = InstancePath::new();
         path.push_key("items".to_string());

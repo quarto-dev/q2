@@ -139,9 +139,10 @@ fn load_csl_style(config: &CiteprocConfig) -> Result<quarto_csl::Style, Citeproc
     };
 
     parse_csl(&csl_content).map_err(|e| {
-        let path = config
-            .csl
-            .as_ref().map_or_else(|| Path::new("<default>").to_owned(), |s| Path::new(s).to_owned());
+        let path = config.csl.as_ref().map_or_else(
+            || Path::new("<default>").to_owned(),
+            |s| Path::new(s).to_owned(),
+        );
         CiteprocFilterError::StyleParseError(path, e.to_string())
     })
 }
@@ -588,18 +589,19 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
     // Attr is a tuple: (id, classes, attributes)
     for block in blocks.iter_mut() {
         if let Block::Div(d) = block
-            && d.attr.0 == "refs" {
-                // Replace contents of existing #refs div
-                d.content = bib_blocks;
-                // Add required classes if not present
-                if !d.attr.1.contains(&"references".to_string()) {
-                    d.attr.1.push("references".to_string());
-                }
-                if !d.attr.1.contains(&"csl-bib-body".to_string()) {
-                    d.attr.1.push("csl-bib-body".to_string());
-                }
-                return;
+            && d.attr.0 == "refs"
+        {
+            // Replace contents of existing #refs div
+            d.content = bib_blocks;
+            // Add required classes if not present
+            if !d.attr.1.contains(&"references".to_string()) {
+                d.attr.1.push("references".to_string());
             }
+            if !d.attr.1.contains(&"csl-bib-body".to_string()) {
+                d.attr.1.push("csl-bib-body".to_string());
+            }
+            return;
+        }
     }
 
     // No #refs div found, create one at the end
@@ -729,10 +731,7 @@ fn extract_references(meta: &ConfigValue) -> Vec<Reference> {
         return vec![];
     };
 
-    items
-        .iter()
-        .filter_map(meta_to_reference)
-        .collect()
+    items.iter().filter_map(meta_to_reference).collect()
 }
 
 /// Convert a metadata map to a Reference.

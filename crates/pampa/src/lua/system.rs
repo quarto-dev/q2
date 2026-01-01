@@ -205,8 +205,10 @@ pub fn register_pandoc_system(
             let table = lua.create_table()?;
             for (i, entry) in entries.iter().enumerate() {
                 // Return just the filename, not the full path
-                let name = entry
-                    .file_name().map_or_else(|| entry.to_string_lossy().to_string(), |n| n.to_string_lossy().to_string());
+                let name = entry.file_name().map_or_else(
+                    || entry.to_string_lossy().to_string(),
+                    |n| n.to_string_lossy().to_string(),
+                );
                 table.set(i + 1, name)?;
             }
             Ok(table)
@@ -342,7 +344,6 @@ pub fn register_pandoc_system(
                 let temp_path = temp.path().to_string_lossy().to_string();
 
                 // Execute callback with temp directory path
-                
 
                 // temp directory is cleaned up when `temp` drops
 

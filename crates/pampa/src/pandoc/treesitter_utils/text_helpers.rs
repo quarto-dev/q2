@@ -261,56 +261,57 @@ where
 
     for (node_name, child) in &children {
         if node_name == delimiter_name
-            && let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                let text = std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                    .unwrap();
+            && let PandocNativeIntermediate::IntermediateUnknown(range) = child
+        {
+            let text =
+                std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset]).unwrap();
 
-                if first_delimiter {
-                    first_delimiter_range = Some(range.clone());
-                    // Opening delimiter - check for leading space
-                    if text.starts_with(char::is_whitespace) {
-                        // Count leading whitespace characters
-                        leading_ws_count = text.chars().take_while(|c| c.is_whitespace()).count();
-                        // Calculate the range for just the leading whitespace
-                        let ws_end_offset = range.start.offset + leading_ws_count;
-                        leading_space_range = Some(quarto_source_map::Range {
-                            start: quarto_source_map::Location {
-                                offset: range.start.offset,
-                                row: range.start.row,
-                                column: range.start.column,
-                            },
-                            end: quarto_source_map::Location {
-                                offset: ws_end_offset,
-                                row: range.start.row,
-                                column: range.start.column + leading_ws_count,
-                            },
-                        });
-                    }
-                    first_delimiter = false;
-                } else {
-                    last_delimiter_range = Some(range.clone());
-                    // Closing delimiter - check for trailing space
-                    if text.ends_with(char::is_whitespace) {
-                        // Count trailing whitespace characters
-                        trailing_ws_count =
-                            text.chars().rev().take_while(|c| c.is_whitespace()).count();
-                        // Calculate the range for just the trailing whitespace
-                        let ws_start_offset = range.end.offset - trailing_ws_count;
-                        trailing_space_range = Some(quarto_source_map::Range {
-                            start: quarto_source_map::Location {
-                                offset: ws_start_offset,
-                                row: range.end.row,
-                                column: range.end.column - trailing_ws_count,
-                            },
-                            end: quarto_source_map::Location {
-                                offset: range.end.offset,
-                                row: range.end.row,
-                                column: range.end.column,
-                            },
-                        });
-                    }
+            if first_delimiter {
+                first_delimiter_range = Some(range.clone());
+                // Opening delimiter - check for leading space
+                if text.starts_with(char::is_whitespace) {
+                    // Count leading whitespace characters
+                    leading_ws_count = text.chars().take_while(|c| c.is_whitespace()).count();
+                    // Calculate the range for just the leading whitespace
+                    let ws_end_offset = range.start.offset + leading_ws_count;
+                    leading_space_range = Some(quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: range.start.offset,
+                            row: range.start.row,
+                            column: range.start.column,
+                        },
+                        end: quarto_source_map::Location {
+                            offset: ws_end_offset,
+                            row: range.start.row,
+                            column: range.start.column + leading_ws_count,
+                        },
+                    });
+                }
+                first_delimiter = false;
+            } else {
+                last_delimiter_range = Some(range.clone());
+                // Closing delimiter - check for trailing space
+                if text.ends_with(char::is_whitespace) {
+                    // Count trailing whitespace characters
+                    trailing_ws_count =
+                        text.chars().rev().take_while(|c| c.is_whitespace()).count();
+                    // Calculate the range for just the trailing whitespace
+                    let ws_start_offset = range.end.offset - trailing_ws_count;
+                    trailing_space_range = Some(quarto_source_map::Range {
+                        start: quarto_source_map::Location {
+                            offset: ws_start_offset,
+                            row: range.end.row,
+                            column: range.end.column - trailing_ws_count,
+                        },
+                        end: quarto_source_map::Location {
+                            offset: range.end.offset,
+                            row: range.end.row,
+                            column: range.end.column,
+                        },
+                    });
                 }
             }
+        }
     }
 
     // Calculate the adjusted range for the inline element (excluding delimiter spaces)

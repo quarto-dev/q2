@@ -77,9 +77,7 @@ pub fn extract_disamb_data_with_processor(
                 // Get names from the reference rather than the output
                 // This handles cases where collapsing suppresses author names
                 let names = if let Some(reference) = processor.get_reference(&item_id) {
-                    reference
-                        .author.clone()
-                        .unwrap_or_default()
+                    reference.author.clone().unwrap_or_default()
                 } else {
                     item_output.extract_all_names()
                 };
@@ -747,9 +745,10 @@ fn apply_disambiguation(
     // This adds given names to distinguish people with the same last name
     // across ALL citations, not just ambiguous ones
     if let Some(rule) = add_givenname
-        && rule != GivenNameDisambiguationRule::ByCite {
-            apply_global_name_disambiguation(processor, all_disamb_data, rule);
-        }
+        && rule != GivenNameDisambiguationRule::ByCite
+    {
+        apply_global_name_disambiguation(processor, all_disamb_data, rule);
+    }
 
     // 2. Add names (expand et-al)
     if add_names {

@@ -480,10 +480,11 @@ mod tests {
                     let (_, classes, _) = &div.attr;
                     if classes.contains(&"callout-title-container".to_string())
                         && let Block::Plain(plain) = &div.content[0]
-                            && let Inline::Str(s) = &plain.content[0] {
-                                assert_eq!(s.text, "Note");
-                                return;
-                            }
+                        && let Inline::Str(s) = &plain.content[0]
+                    {
+                        assert_eq!(s.text, "Note");
+                        return;
+                    }
                 }
             }
         }

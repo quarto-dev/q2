@@ -76,9 +76,10 @@ impl QmdWriterContext {
         // If parent uses asterisks (regardless of whether it's Emph or Strong),
         // use underscore to avoid creating *** sequences
         if let Some(parent) = self.emphasis_stack.last()
-            && matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
-                return EmphasisDelimiter::Underscore;
-            }
+            && matches!(parent.delimiter, EmphasisDelimiter::Asterisk)
+        {
+            return EmphasisDelimiter::Underscore;
+        }
         EmphasisDelimiter::Asterisk // Default
     }
 
@@ -87,9 +88,10 @@ impl QmdWriterContext {
         // If parent uses asterisks (regardless of whether it's Emph or Strong),
         // use underscore to avoid creating *** sequences
         if let Some(parent) = self.emphasis_stack.last()
-            && matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
-                return EmphasisDelimiter::Underscore;
-            }
+            && matches!(parent.delimiter, EmphasisDelimiter::Asterisk)
+        {
+            return EmphasisDelimiter::Underscore;
+        }
         EmphasisDelimiter::Asterisk // Default
     }
 }
@@ -268,12 +270,10 @@ fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
             }
             // If any errors accumulated, this is truly unexpected in metadata
             if !ctx.errors.is_empty() {
-                return Err(std::io::Error::other(
-                    format!(
-                        "Unexpected error in metadata inline: {}",
-                        ctx.errors[0].title
-                    ),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "Unexpected error in metadata inline: {}",
+                    ctx.errors[0].title
+                )));
             }
             let result = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -291,12 +291,10 @@ fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
             }
             // If any errors accumulated, this is truly unexpected in metadata
             if !ctx.errors.is_empty() {
-                return Err(std::io::Error::other(
-                    format!(
-                        "Unexpected error in metadata block: {}",
-                        ctx.errors[0].title
-                    ),
-                ));
+                return Err(std::io::Error::other(format!(
+                    "Unexpected error in metadata block: {}",
+                    ctx.errors[0].title
+                )));
             }
             let result = String::from_utf8(buffer)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
@@ -355,9 +353,7 @@ fn write_config_value_meta<T: std::io::Write + ?Sized>(
                 // Emit YAML to string
                 let mut yaml_str = String::new();
                 let mut emitter = YamlEmitter::new(&mut yaml_str);
-                emitter
-                    .dump(&yaml)
-                    .map_err(std::io::Error::other)?;
+                emitter.dump(&yaml).map_err(std::io::Error::other)?;
 
                 // The YamlEmitter adds "---\n" at the start and includes the content
                 // We need to add the closing "---\n"
@@ -735,14 +731,15 @@ fn write_figure(
             }
         }
     } else if let Some(ref short_caption) = figure.caption.short
-        && !short_caption.is_empty() {
-            writeln!(buf)?;
-            // Convert short caption (inlines) to a paragraph for consistency
-            for inline in short_caption {
-                write_inline(inline, buf, ctx)?;
-            }
-            writeln!(buf)?;
+        && !short_caption.is_empty()
+    {
+        writeln!(buf)?;
+        // Convert short caption (inlines) to a paragraph for consistency
+        for inline in short_caption {
+            write_inline(inline, buf, ctx)?;
         }
+        writeln!(buf)?;
+    }
 
     writeln!(buf, "\n:::")?;
     Ok(())
@@ -944,12 +941,13 @@ fn write_list_table(
 
     // Write caption if present
     if let Some(ref long_caption) = table.caption.long
-        && !long_caption.is_empty() {
-            for block in long_caption {
-                write_block(block, buf, ctx)?;
-            }
-            writeln!(buf)?;
+        && !long_caption.is_empty()
+    {
+        for block in long_caption {
+            write_block(block, buf, ctx)?;
         }
+        writeln!(buf)?;
+    }
 
     // Collect all rows
     let mut all_rows: Vec<&Row> = Vec::new();
@@ -1150,24 +1148,25 @@ fn write_table(
 
     // Write caption if it exists
     if let Some(ref long_caption) = table.caption.long
-        && !long_caption.is_empty() {
-            writeln!(buf)?; // Blank line before caption
-            for block in long_caption {
-                // Extract inline content from Plain or Paragraph blocks in caption
-                let content = match block {
-                    Block::Plain(plain) => Some(&plain.content),
-                    Block::Paragraph(para) => Some(&para.content),
-                    _ => None,
-                };
-                if let Some(inlines) = content {
-                    write!(buf, ": ")?;
-                    for inline in inlines {
-                        write_inline(inline, buf, ctx)?;
-                    }
-                    writeln!(buf)?;
+        && !long_caption.is_empty()
+    {
+        writeln!(buf)?; // Blank line before caption
+        for block in long_caption {
+            // Extract inline content from Plain or Paragraph blocks in caption
+            let content = match block {
+                Block::Plain(plain) => Some(&plain.content),
+                Block::Paragraph(para) => Some(&para.content),
+                _ => None,
+            };
+            if let Some(inlines) = content {
+                write!(buf, ": ")?;
+                for inline in inlines {
+                    write_inline(inline, buf, ctx)?;
                 }
+                writeln!(buf)?;
             }
         }
+    }
 
     Ok(())
 }

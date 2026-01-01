@@ -198,13 +198,14 @@ fn render_variable(var: &VariableRef, ctx: &mut EvalContext) -> Doc {
         Some(value) => {
             // Handle literal separator for arrays: $var[, ]$
             if let Some(sep) = &var.separator
-                && let TemplateValue::List(items) = value {
-                    let docs: Vec<Doc> = items
-                        .iter()
-                        .map(|v| v.to_doc().remove_final_newline())
-                        .collect();
-                    return intersperse_docs(docs, Doc::text(sep));
-                }
+                && let TemplateValue::List(items) = value
+            {
+                let docs: Vec<Doc> = items
+                    .iter()
+                    .map(|v| v.to_doc().remove_final_newline())
+                    .collect();
+                return intersperse_docs(docs, Doc::text(sep));
+            }
             // TODO: Apply pipes
             // Strip final newline from variable values (matches Pandoc's removeFinalNl)
             value.to_doc().remove_final_newline()
@@ -231,9 +232,10 @@ fn evaluate_conditional(
     // Try each if/elseif branch
     for (condition, body) in branches {
         if let Some(value) = resolve_variable(condition, ctx.variables)
-            && value.is_truthy() {
-                return evaluate_nodes(body, ctx);
-            }
+            && value.is_truthy()
+        {
+            return evaluate_nodes(body, ctx);
+        }
     }
 
     // No branch matched, try else

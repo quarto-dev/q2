@@ -66,16 +66,17 @@ pub fn compute_reconciliation_for_blocks<'a>(
 
         // Step 1: Try exact hash match first
         if let Some(indices) = hash_to_indices.get(&exec_hash)
-            && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i)) {
-                // Verify with structural equality (guards against hash collisions)
-                if structural_eq_block(&original[orig_idx], exec_block) {
-                    used_original.insert(orig_idx);
-                    alignments.push(BlockAlignment::KeepBefore(orig_idx));
-                    stats.blocks_kept += 1;
-                    continue;
-                }
-                // Hash collision - fall through to type-based matching
+            && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i))
+        {
+            // Verify with structural equality (guards against hash collisions)
+            if structural_eq_block(&original[orig_idx], exec_block) {
+                used_original.insert(orig_idx);
+                alignments.push(BlockAlignment::KeepBefore(orig_idx));
+                stats.blocks_kept += 1;
+                continue;
             }
+            // Hash collision - fall through to type-based matching
+        }
 
         // Step 2: No exact match - try type-based matching for containers
         let exec_discriminant = std::mem::discriminant(exec_block);
@@ -417,11 +418,12 @@ fn compute_inline_alignments<'a>(
         // Step 1: Try exact hash match
         if let Some(indices) = hash_to_indices.get(&exec_hash)
             && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i))
-                && structural_eq_inline(&original[orig_idx], exec_inline) {
-                    used_original.insert(orig_idx);
-                    alignments.push(InlineAlignment::KeepBefore(orig_idx));
-                    continue;
-                }
+            && structural_eq_inline(&original[orig_idx], exec_inline)
+        {
+            used_original.insert(orig_idx);
+            alignments.push(InlineAlignment::KeepBefore(orig_idx));
+            continue;
+        }
 
         // Step 2: Type-based matching for container inlines
         let exec_discriminant = std::mem::discriminant(exec_inline);

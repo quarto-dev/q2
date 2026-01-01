@@ -835,13 +835,14 @@ impl Processor {
         // Priority 1: Exact language match (e.g., xml:lang="en-US" for en-US)
         for locale in &self.style.locales {
             if let Some(ref lang) = locale.lang
-                && lang == effective_lang {
-                    for df in &locale.date_formats {
-                        if df.form == form {
-                            return Some(df);
-                        }
+                && lang == effective_lang
+            {
+                for df in &locale.date_formats {
+                    if df.form == form {
+                        return Some(df);
                     }
                 }
+            }
         }
 
         // Priority 2: Base language match (e.g., xml:lang="en" for en-US)
@@ -849,13 +850,14 @@ impl Processor {
         if base_lang != effective_lang {
             for locale in &self.style.locales {
                 if let Some(ref lang) = locale.lang
-                    && lang == base_lang {
-                        for df in &locale.date_formats {
-                            if df.form == form {
-                                return Some(df);
-                            }
+                    && lang == base_lang
+                {
+                    for df in &locale.date_formats {
+                        if df.form == form {
+                            return Some(df);
                         }
                     }
+                }
             }
         }
 
@@ -1115,16 +1117,17 @@ impl Processor {
         // 1. Apply global name disambiguation for non-ByCite rules
         // This runs even without ambiguities (global name disambiguation)
         if let Some(rule) = add_givenname
-            && rule != GivenNameDisambiguationRule::ByCite {
-                apply_global_name_disambiguation(self, &disamb_data, rule);
-                // Re-render (without collapse) and refresh ambiguities
-                outputs = citations_with_positions
-                    .iter()
-                    .map(|c| self.process_citation_to_output_no_collapse(c))
-                    .collect::<Result<Vec<_>>>()?;
-                disamb_data = extract_disamb_data(&outputs);
-                ambiguities = find_ambiguities(disamb_data.clone());
-            }
+            && rule != GivenNameDisambiguationRule::ByCite
+        {
+            apply_global_name_disambiguation(self, &disamb_data, rule);
+            // Re-render (without collapse) and refresh ambiguities
+            outputs = citations_with_positions
+                .iter()
+                .map(|c| self.process_citation_to_output_no_collapse(c))
+                .collect::<Result<Vec<_>>>()?;
+            disamb_data = extract_disamb_data(&outputs);
+            ambiguities = find_ambiguities(disamb_data.clone());
+        }
 
         // 2. Add names (expand et-al) if still ambiguous
         if add_names && !ambiguities.is_empty() {
@@ -1143,20 +1146,21 @@ impl Processor {
         // not the refreshed ones after add_names. This is because ByCite
         // incrementally expands givennames within the original groups.
         if let Some(GivenNameDisambiguationRule::ByCite) = add_givenname
-            && !initial_ambiguities.is_empty() {
-                try_add_given_names_with_rule(
-                    self,
-                    &initial_ambiguities,
-                    GivenNameDisambiguationRule::ByCite,
-                );
-                // Re-render (without collapse) and refresh ambiguities
-                outputs = citations_with_positions
-                    .iter()
-                    .map(|c| self.process_citation_to_output_no_collapse(c))
-                    .collect::<Result<Vec<_>>>()?;
-                disamb_data = extract_disamb_data(&outputs);
-                ambiguities = find_ambiguities(disamb_data.clone());
-            }
+            && !initial_ambiguities.is_empty()
+        {
+            try_add_given_names_with_rule(
+                self,
+                &initial_ambiguities,
+                GivenNameDisambiguationRule::ByCite,
+            );
+            // Re-render (without collapse) and refresh ambiguities
+            outputs = citations_with_positions
+                .iter()
+                .map(|c| self.process_citation_to_output_no_collapse(c))
+                .collect::<Result<Vec<_>>>()?;
+            disamb_data = extract_disamb_data(&outputs);
+            ambiguities = find_ambiguities(disamb_data.clone());
+        }
 
         // 4. Add year suffixes if enabled
         // We need to handle two cases:

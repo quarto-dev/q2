@@ -50,9 +50,10 @@ fn parse_yaml_string_as_markdown_to_config(
             }
             // Parse succeeded - return as PandocInlines or PandocBlocks
             if pandoc.blocks.len() == 1
-                && let quarto_pandoc_types::Block::Paragraph(p) = &mut pandoc.blocks[0] {
-                    return ConfigValueKind::PandocInlines(mem::take(&mut p.content));
-                }
+                && let quarto_pandoc_types::Block::Paragraph(p) = &mut pandoc.blocks[0]
+            {
+                return ConfigValueKind::PandocInlines(mem::take(&mut p.content));
+            }
             ConfigValueKind::PandocBlocks(pandoc.blocks)
         }
         Err(_parse_errors) => {

@@ -64,9 +64,10 @@ fn create_blocks_to_inlines(lua: &Lua) -> Result<Function> {
                 for i in 1..=t.raw_len() {
                     let val: Value = t.raw_get(i)?;
                     if let Value::UserData(ud) = val
-                        && let Ok(inline) = ud.borrow::<LuaInline>() {
-                            sep_inlines.push(inline.0.clone());
-                        }
+                        && let Ok(inline) = ud.borrow::<LuaInline>()
+                    {
+                        sep_inlines.push(inline.0.clone());
+                    }
                 }
                 sep_inlines
             }
@@ -103,9 +104,10 @@ fn extract_blocks(value: &Value) -> Result<Vec<Block>> {
             for i in 1..=table.raw_len() {
                 let val: Value = table.raw_get(i)?;
                 if let Value::UserData(ud) = val
-                    && let Ok(block) = ud.borrow::<LuaBlock>() {
-                        blocks.push(block.0.clone());
-                    }
+                    && let Ok(block) = ud.borrow::<LuaBlock>()
+                {
+                    blocks.push(block.0.clone());
+                }
             }
             Ok(blocks)
         }
@@ -268,9 +270,10 @@ fn create_type(lua: &Lua) -> Result<Function> {
             Value::Table(t) => {
                 // For tables, check for __name in metatable
                 if let Some(mt) = t.metatable()
-                    && let Ok(name) = mt.get::<String>("__name") {
-                        return Ok(name);
-                    }
+                    && let Ok(name) = mt.get::<String>("__name")
+                {
+                    return Ok(name);
+                }
             }
             Value::UserData(ud) => {
                 // For our Pandoc userdata types, return the specific element type
@@ -283,9 +286,10 @@ fn create_type(lua: &Lua) -> Result<Function> {
                 }
                 // For other userdata, try metatable __name
                 if let Ok(mt) = ud.metatable()
-                    && let Ok(name) = mt.get::<String>("__name") {
-                        return Ok(name);
-                    }
+                    && let Ok(name) = mt.get::<String>("__name")
+                {
+                    return Ok(name);
+                }
             }
             _ => {}
         }

@@ -275,10 +275,10 @@ impl<'a> EvalContext<'a> {
 
         // Title case only applies to English references (CSL spec 2.4.2)
         // If text_case is Title and reference is non-English, skip title case
-        if formatting.text_case == Some(quarto_csl::TextCase::Title)
-            && !self.is_english_reference() {
-                formatting.text_case = None;
-            }
+        if formatting.text_case == Some(quarto_csl::TextCase::Title) && !self.is_english_reference()
+        {
+            formatting.text_case = None;
+        }
 
         formatting
     }
@@ -1520,9 +1520,10 @@ fn evaluate_names(
         let mut total_count: usize = 0;
         for var in &names_el.variables {
             if let Some(names) = ctx.reference.get_names(var)
-                && !names.is_empty() {
-                    total_count += get_names_count(ctx, names, names_el);
-                }
+                && !names.is_empty()
+            {
+                total_count += get_names_count(ctx, names, names_el);
+            }
         }
         // Output the total count (empty string if 0)
         if total_count > 0 {
@@ -1537,96 +1538,97 @@ fn evaluate_names(
     let mut var_outputs: Vec<Output> = Vec::new();
     for var in &names_el.variables {
         if let Some(names) = ctx.reference.get_names(var)
-            && !names.is_empty() {
-                // Format the names - now returns structured Output
-                let formatted = format_names(ctx, names, names_el);
+            && !names.is_empty()
+        {
+            // Format the names - now returns structured Output
+            let formatted = format_names(ctx, names, names_el);
 
-                // Apply the <name> element's formatting (prefix, suffix, etc.) if present
-                let formatted = if let Some(ref name_el) = names_el.name {
-                    if let Some(ref fmt) = name_el.formatting {
-                        Output::formatted(fmt.clone(), vec![formatted])
-                    } else {
-                        formatted
-                    }
+            // Apply the <name> element's formatting (prefix, suffix, etc.) if present
+            let formatted = if let Some(ref name_el) = names_el.name {
+                if let Some(ref fmt) = name_el.formatting {
+                    Output::formatted(fmt.clone(), vec![formatted])
                 } else {
                     formatted
+                }
+            } else {
+                formatted
+            };
+
+            let names_output = Output::tagged(
+                Tag::Names {
+                    variable: var.clone(),
+                    names: names.clone(),
+                },
+                formatted,
+            );
+
+            // Check for label - use the element's own label, or inherit from parent
+            // in substitute context if no local label is defined
+            let (effective_label, effective_label_before_name) =
+                if let Some(ref label) = names_el.label {
+                    (Some(label.clone()), names_el.label_before_name)
+                } else if ctx.in_substitute {
+                    // Inherit label from parent <names> in substitute context
+                    (
+                        ctx.substitute_label.clone(),
+                        ctx.substitute_label_before_name,
+                    )
+                } else {
+                    (None, false)
                 };
 
-                let names_output = Output::tagged(
-                    Tag::Names {
-                        variable: var.clone(),
-                        names: names.clone(),
-                    },
-                    formatted,
-                );
+            let var_with_label = if let Some(ref label) = effective_label {
+                // Determine plural based on name count
+                let is_plural = match label.plural {
+                    quarto_csl::LabelPlural::Always => true,
+                    quarto_csl::LabelPlural::Never => false,
+                    quarto_csl::LabelPlural::Contextual => names.len() > 1,
+                };
 
-                // Check for label - use the element's own label, or inherit from parent
-                // in substitute context if no local label is defined
-                let (effective_label, effective_label_before_name) =
-                    if let Some(ref label) = names_el.label {
-                        (Some(label.clone()), names_el.label_before_name)
-                    } else if ctx.in_substitute {
-                        // Inherit label from parent <names> in substitute context
-                        (
-                            ctx.substitute_label.clone(),
-                            ctx.substitute_label_before_name,
-                        )
+                // Look up the term for this variable (e.g., "editor" -> "Ed." term)
+                if let Some(term) = ctx.get_term(var, label.form, is_plural) {
+                    // Apply formatting to term only (not prefix/suffix)
+                    // Prefix/suffix should be rendered outside the formatting
+                    let mut term_formatting = label.formatting.clone();
+                    let prefix = term_formatting.prefix.take();
+                    let suffix = term_formatting.suffix.take();
+
+                    // Build the label output: prefix + formatted_term + suffix
+                    let formatted_term = if term_formatting.has_any_formatting() {
+                        Output::formatted(term_formatting, vec![Output::literal(term)])
                     } else {
-                        (None, false)
+                        Output::literal(term)
                     };
 
-                let var_with_label = if let Some(ref label) = effective_label {
-                    // Determine plural based on name count
-                    let is_plural = match label.plural {
-                        quarto_csl::LabelPlural::Always => true,
-                        quarto_csl::LabelPlural::Never => false,
-                        quarto_csl::LabelPlural::Contextual => names.len() > 1,
-                    };
-
-                    // Look up the term for this variable (e.g., "editor" -> "Ed." term)
-                    if let Some(term) = ctx.get_term(var, label.form, is_plural) {
-                        // Apply formatting to term only (not prefix/suffix)
-                        // Prefix/suffix should be rendered outside the formatting
-                        let mut term_formatting = label.formatting.clone();
-                        let prefix = term_formatting.prefix.take();
-                        let suffix = term_formatting.suffix.take();
-
-                        // Build the label output: prefix + formatted_term + suffix
-                        let formatted_term = if term_formatting.has_any_formatting() {
-                            Output::formatted(term_formatting, vec![Output::literal(term)])
-                        } else {
-                            Output::literal(term)
-                        };
-
-                        let label_output = if prefix.is_some() || suffix.is_some() {
-                            let mut parts = Vec::new();
-                            if let Some(p) = prefix {
-                                parts.push(Output::literal(p));
-                            }
-                            parts.push(formatted_term);
-                            if let Some(s) = suffix {
-                                parts.push(Output::literal(s));
-                            }
-                            Output::sequence(parts)
-                        } else {
-                            formatted_term
-                        };
-
-                        // Combine label + names or names + label based on CSL order
-                        if effective_label_before_name {
-                            Output::sequence(vec![label_output, names_output])
-                        } else {
-                            Output::sequence(vec![names_output, label_output])
+                    let label_output = if prefix.is_some() || suffix.is_some() {
+                        let mut parts = Vec::new();
+                        if let Some(p) = prefix {
+                            parts.push(Output::literal(p));
                         }
+                        parts.push(formatted_term);
+                        if let Some(s) = suffix {
+                            parts.push(Output::literal(s));
+                        }
+                        Output::sequence(parts)
                     } else {
-                        names_output
+                        formatted_term
+                    };
+
+                    // Combine label + names or names + label based on CSL order
+                    if effective_label_before_name {
+                        Output::sequence(vec![label_output, names_output])
+                    } else {
+                        Output::sequence(vec![names_output, label_output])
                     }
                 } else {
                     names_output
-                };
+                }
+            } else {
+                names_output
+            };
 
-                var_outputs.push(var_with_label);
-            }
+            var_outputs.push(var_with_label);
+        }
     }
 
     // We get here only when all_empty=false, so var_outputs should have content
@@ -2133,16 +2135,15 @@ fn format_single_name(
             // Affixes are applied differently for inverted vs display order
             let family_core: Option<Output> = {
                 let mut fp: Vec<Output> = Vec::new();
-                if !demote_particle
-                    && let Some(ref ndp) = name.non_dropping_particle {
-                        let base = Output::literal(ndp.clone());
-                        let formatted = if let Some(ref fmt) = family_font_styling {
-                            Output::formatted(fmt.clone(), vec![base])
-                        } else {
-                            base
-                        };
-                        fp.push(formatted);
-                    }
+                if !demote_particle && let Some(ref ndp) = name.non_dropping_particle {
+                    let base = Output::literal(ndp.clone());
+                    let formatted = if let Some(ref fmt) = family_font_styling {
+                        Output::formatted(fmt.clone(), vec![base])
+                    } else {
+                        base
+                    };
+                    fp.push(formatted);
+                }
                 if let Some(ref family) = name.family {
                     let base = Output::literal(family.clone());
                     let formatted = if let Some(ref fmt) = family_font_styling {
@@ -2770,14 +2771,15 @@ fn initialize_name(given: &str, initialize_with: &str, initialize_with_hyphen: b
             Token::HyphenPart(s) => {
                 // Hyphenated part: check if first char is uppercase
                 if let Some(first_char) = s.chars().next()
-                    && first_char.is_uppercase() {
-                        if initialize_with_hyphen {
-                            result.push('-');
-                        }
-                        result.push_str(&first_char.to_uppercase().to_string());
-                        result.push_str(trimmed);
+                    && first_char.is_uppercase()
+                {
+                    if initialize_with_hyphen {
+                        result.push('-');
                     }
-                    // Lowercase parts after hyphen are skipped (e.g., Ji-ping -> J.)
+                    result.push_str(&first_char.to_uppercase().to_string());
+                    result.push_str(trimmed);
+                }
+                // Lowercase parts after hyphen are skipped (e.g., Ji-ping -> J.)
                 prev_was_initial_or_word = true;
                 prev_was_particle = false;
             }
@@ -2904,10 +2906,7 @@ fn evaluate_condition(
     // Implements CSL is-numeric semantics: strips leading/trailing letters from each
     // chunk (split by commas, hyphens, ampersands, en-dashes) and checks if cores are all digits.
     // This allows "5th", "3rd", "1-10" to be numeric.
-    let is_numeric = |v: &str| {
-        ctx.get_variable(v)
-            .is_some_and(|s| is_numeric_string(&s))
-    };
+    let is_numeric = |v: &str| ctx.get_variable(v).is_some_and(|s| is_numeric_string(&s));
 
     // Helper to check if a date is uncertain
     let is_uncertain_date = |v: &str| {
@@ -3458,9 +3457,10 @@ where
         if let Some(v) = value {
             // Add delimiter before this part (except for the first part)
             if !outputs.is_empty()
-                && let Some(d) = delimiter {
-                    outputs.push(Output::literal(d));
-                }
+                && let Some(d) = delimiter
+            {
+                outputs.push(Output::literal(d));
+            }
 
             // Apply the value (with any strip-periods handling)
             let final_value = if part.strip_periods {
@@ -3615,9 +3615,10 @@ where
         if !start_diff.is_null() || !end_diff.is_null() {
             // Add delimiter before range if we have leading parts
             if !outputs.is_empty()
-                && let Some(d) = delimiter {
-                    outputs.push(Output::literal(d));
-                }
+                && let Some(d) = delimiter
+            {
+                outputs.push(Output::literal(d));
+            }
             outputs.push(start_diff);
             outputs.push(Output::literal(range_delimiter));
             outputs.push(end_diff);
@@ -3631,9 +3632,10 @@ where
         if !trailing.is_null() {
             // Add delimiter between differing parts and trailing same parts
             if !outputs.is_empty()
-                && let Some(d) = delimiter {
-                    outputs.push(Output::literal(d));
-                }
+                && let Some(d) = delimiter
+            {
+                outputs.push(Output::literal(d));
+            }
             outputs.push(trailing);
         }
     }
@@ -3707,16 +3709,16 @@ where
             let is_last = idx == num_parts - 1;
 
             // Add delimiter before this part (except for the first part)
-            if !is_first
-                && let Some(d) = delimiter {
-                    outputs.push(Output::literal(d));
-                }
+            if !is_first && let Some(d) = delimiter {
+                outputs.push(Output::literal(d));
+            }
 
             // Apply prefix (skip if strip_first_prefix and this is first)
             if !(strip_first_prefix && is_first)
-                && let Some(ref prefix) = part.formatting.prefix {
-                    outputs.push(Output::literal(prefix));
-                }
+                && let Some(ref prefix) = part.formatting.prefix
+            {
+                outputs.push(Output::literal(prefix));
+            }
 
             // Apply the value
             let final_value = if part.strip_periods {
@@ -3728,9 +3730,10 @@ where
 
             // Apply suffix (skip if strip_last_suffix and this is last)
             if !(strip_last_suffix && is_last)
-                && let Some(ref suffix) = part.formatting.suffix {
-                    outputs.push(Output::literal(suffix));
-                }
+                && let Some(ref suffix) = part.formatting.suffix
+            {
+                outputs.push(Output::literal(suffix));
+            }
         }
     }
 

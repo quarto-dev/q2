@@ -165,14 +165,15 @@ fn check_element_for_undefined_macros(element: &Element, defined: &HashSet<&str>
     match &element.element_type {
         ElementType::Text(text) => {
             if let TextSource::Macro { name, name_source } = &text.source
-                && !defined.contains(name.as_str()) {
-                    let suggestion = find_similar_macro(name, defined);
-                    return Err(Error::UndefinedMacro {
-                        name: name.clone(),
-                        reference_location: name_source.clone(),
-                        suggestion,
-                    });
-                }
+                && !defined.contains(name.as_str())
+            {
+                let suggestion = find_similar_macro(name, defined);
+                return Err(Error::UndefinedMacro {
+                    name: name.clone(),
+                    reference_location: name_source.clone(),
+                    suggestion,
+                });
+            }
         }
         ElementType::Group(group) => {
             check_elements_for_undefined_macros(&group.elements, defined)?;
@@ -631,12 +632,12 @@ impl CslParser {
     }
 
     fn parse_date_format(&self, element: &XmlElement) -> Result<DateFormat> {
-        let form = self
-            .get_attr(element, "form")
-            .map_or(DateForm::Text, |a| match a.value.as_str() {
-                "numeric" => DateForm::Numeric,
-                _ => DateForm::Text,
-            });
+        let form =
+            self.get_attr(element, "form")
+                .map_or(DateForm::Text, |a| match a.value.as_str() {
+                    "numeric" => DateForm::Numeric,
+                    _ => DateForm::Text,
+                });
 
         let delimiter = self.get_attr(element, "delimiter").map(|a| a.value.clone());
 
@@ -814,16 +815,18 @@ impl CslParser {
                 if a.value == "true" {
                     let rule = self
                         .get_attr(element, "givenname-disambiguation-rule")
-                        .map_or(GivenNameDisambiguationRule::ByCite, |r| match r.value.as_str() {
-                            "all-names" => GivenNameDisambiguationRule::AllNames,
-                            "all-names-with-initials" => {
-                                GivenNameDisambiguationRule::AllNamesWithInitials
+                        .map_or(GivenNameDisambiguationRule::ByCite, |r| {
+                            match r.value.as_str() {
+                                "all-names" => GivenNameDisambiguationRule::AllNames,
+                                "all-names-with-initials" => {
+                                    GivenNameDisambiguationRule::AllNamesWithInitials
+                                }
+                                "primary-name" => GivenNameDisambiguationRule::PrimaryName,
+                                "primary-name-with-initials" => {
+                                    GivenNameDisambiguationRule::PrimaryNameWithInitials
+                                }
+                                _ => GivenNameDisambiguationRule::ByCite, // default
                             }
-                            "primary-name" => GivenNameDisambiguationRule::PrimaryName,
-                            "primary-name-with-initials" => {
-                                GivenNameDisambiguationRule::PrimaryNameWithInitials
-                            }
-                            _ => GivenNameDisambiguationRule::ByCite, // default
                         });
                     Some(rule)
                 } else {
@@ -1204,25 +1207,26 @@ impl CslParser {
         let mut given_formatting = None;
         for child in element.all_children() {
             if child.name == "name-part"
-                && let Some(name_attr) = self.get_attr(child, "name") {
-                    let formatting = self.parse_formatting(child);
-                    // Only store if there's actual formatting
-                    let has_formatting = formatting.font_style.is_some()
-                        || formatting.font_weight.is_some()
-                        || formatting.font_variant.is_some()
-                        || formatting.text_decoration.is_some()
-                        || formatting.vertical_align.is_some()
-                        || formatting.text_case.is_some()
-                        || formatting.prefix.is_some()
-                        || formatting.suffix.is_some();
-                    if has_formatting {
-                        match name_attr.value.as_str() {
-                            "family" => family_formatting = Some(formatting),
-                            "given" => given_formatting = Some(formatting),
-                            _ => {}
-                        }
+                && let Some(name_attr) = self.get_attr(child, "name")
+            {
+                let formatting = self.parse_formatting(child);
+                // Only store if there's actual formatting
+                let has_formatting = formatting.font_style.is_some()
+                    || formatting.font_weight.is_some()
+                    || formatting.font_variant.is_some()
+                    || formatting.text_decoration.is_some()
+                    || formatting.vertical_align.is_some()
+                    || formatting.text_case.is_some()
+                    || formatting.prefix.is_some()
+                    || formatting.suffix.is_some();
+                if has_formatting {
+                    match name_attr.value.as_str() {
+                        "family" => family_formatting = Some(formatting),
+                        "given" => given_formatting = Some(formatting),
+                        _ => {}
                     }
                 }
+            }
         }
 
         Ok(Name {

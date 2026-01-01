@@ -217,9 +217,10 @@ end
 
     // Verify the transformation happened
     if let Block::Paragraph(para) = &transformed.blocks[0]
-        && let Inline::Str(s) = &para.content[0] {
-            assert_eq!(s.text, "HELLO", "Walk should have uppercased the text");
-        }
+        && let Inline::Str(s) = &para.content[0]
+    {
+        assert_eq!(s.text, "HELLO", "Walk should have uppercased the text");
+    }
 }
 
 #[test]

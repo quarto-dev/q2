@@ -131,9 +131,7 @@ pub fn parse_format_string(spec: &str) -> ParsedFormat {
         remaining = &remaining[1..];
 
         // Find the end of this extension name (next + or - or end of string)
-        let ext_end = remaining
-            .find(['+', '-'])
-            .unwrap_or(remaining.len());
+        let ext_end = remaining.find(['+', '-']).unwrap_or(remaining.len());
         let ext_name = remaining[..ext_end].to_string();
 
         if !ext_name.is_empty() {

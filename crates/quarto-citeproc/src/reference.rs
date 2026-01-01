@@ -306,86 +306,87 @@ impl Name {
         // Extract dropping particle from end of given name
         // e.g., "Givenname al" -> given="Givenname", dropping_particle="al"
         if self.dropping_particle.is_none()
-            && let Some(given) = self.given.clone() {
-                // Don't process quoted names (CSL-JSON convention for literal names)
-                if given.starts_with('"') && given.ends_with('"') {
-                    self.given = Some(given[1..given.len() - 1].to_string());
-                } else {
-                    let words: Vec<&str> = given.split_whitespace().collect();
-                    if words.len() > 1 {
-                        // Find where particle words begin (all lowercase or particle punctuation)
-                        let break_point = words.iter().position(|w| {
-                            w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
-                        });
+            && let Some(given) = self.given.clone()
+        {
+            // Don't process quoted names (CSL-JSON convention for literal names)
+            if given.starts_with('"') && given.ends_with('"') {
+                self.given = Some(given[1..given.len() - 1].to_string());
+            } else {
+                let words: Vec<&str> = given.split_whitespace().collect();
+                if words.len() > 1 {
+                    // Find where particle words begin (all lowercase or particle punctuation)
+                    let break_point = words
+                        .iter()
+                        .position(|w| w.chars().all(|c| c.is_lowercase() || is_particle_punct(c)));
 
-                        if let Some(idx) = break_point {
-                            // Check if ALL remaining words are particle-like
-                            let all_particles = words[idx..].iter().all(|w| {
-                                w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
-                            });
+                    if let Some(idx) = break_point {
+                        // Check if ALL remaining words are particle-like
+                        let all_particles = words[idx..]
+                            .iter()
+                            .all(|w| w.chars().all(|c| c.is_lowercase() || is_particle_punct(c)));
 
-                            if all_particles && idx > 0 {
-                                self.given = Some(words[..idx].join(" "));
-                                self.dropping_particle = Some(words[idx..].join(" "));
-                            }
+                        if all_particles && idx > 0 {
+                            self.given = Some(words[..idx].join(" "));
+                            self.dropping_particle = Some(words[idx..].join(" "));
                         }
                     }
                 }
             }
+        }
 
         // Extract non-dropping particle from start of family name
         // e.g., "van Gogh" -> non_dropping_particle="van", family="Gogh"
         if self.non_dropping_particle.is_none()
-            && let Some(family) = self.family.clone() {
-                // Don't process quoted names
-                if family.starts_with('"') && family.ends_with('"') {
-                    self.family = Some(family[1..family.len() - 1].to_string());
-                } else {
-                    let words: Vec<&str> = family.split_whitespace().collect();
-                    if words.len() > 1 {
-                        // Find how many leading words are particle-like
-                        let particle_count = words
-                            .iter()
-                            .take_while(|w| {
-                                w.chars().all(|c| c.is_lowercase() || is_particle_punct(c))
-                            })
-                            .count();
+            && let Some(family) = self.family.clone()
+        {
+            // Don't process quoted names
+            if family.starts_with('"') && family.ends_with('"') {
+                self.family = Some(family[1..family.len() - 1].to_string());
+            } else {
+                let words: Vec<&str> = family.split_whitespace().collect();
+                if words.len() > 1 {
+                    // Find how many leading words are particle-like
+                    let particle_count = words
+                        .iter()
+                        .take_while(|w| w.chars().all(|c| c.is_lowercase() || is_particle_punct(c)))
+                        .count();
 
-                        if particle_count > 0 && particle_count < words.len() {
-                            self.non_dropping_particle = Some(words[..particle_count].join(" "));
-                            self.family = Some(words[particle_count..].join(" "));
-                        }
+                    if particle_count > 0 && particle_count < words.len() {
+                        self.non_dropping_particle = Some(words[..particle_count].join(" "));
+                        self.family = Some(words[particle_count..].join(" "));
                     }
                 }
             }
+        }
 
         // If no space-separated non-dropping particle found, try punctuation-connected extraction
         // e.g., "d'Aubignac" -> non_dropping_particle="d'", family="Aubignac"
         // e.g., "al-One" -> non_dropping_particle="al-", family="One"
         // Reference: Haskell citeproc Types.hs:1253-1258
         if self.non_dropping_particle.is_none()
-            && let Some(family) = self.family.clone() {
-                // Find first particle punctuation character
-                if let Some(punct_idx) = family.find(is_particle_punct) {
-                    let before = &family[..punct_idx];
-                    let punct_char = family[punct_idx..].chars().next().unwrap();
-                    let after = &family[punct_idx + punct_char.len_utf8()..];
+            && let Some(family) = self.family.clone()
+        {
+            // Find first particle punctuation character
+            if let Some(punct_idx) = family.find(is_particle_punct) {
+                let before = &family[..punct_idx];
+                let punct_char = family[punct_idx..].chars().next().unwrap();
+                let after = &family[punct_idx + punct_char.len_utf8()..];
 
-                    // Only extract if:
-                    // 1. "before" is not empty (must have particle text)
-                    // 2. "after" is not empty (must have actual family name)
-                    // 3. "before" is all particle characters (lowercase + punct)
-                    if !before.is_empty()
-                        && !after.is_empty()
-                        && before
-                            .chars()
-                            .all(|c| c.is_lowercase() || is_particle_punct(c))
-                    {
-                        self.non_dropping_particle = Some(format!("{}{}", before, punct_char));
-                        self.family = Some(after.to_string());
-                    }
+                // Only extract if:
+                // 1. "before" is not empty (must have particle text)
+                // 2. "after" is not empty (must have actual family name)
+                // 3. "before" is all particle characters (lowercase + punct)
+                if !before.is_empty()
+                    && !after.is_empty()
+                    && before
+                        .chars()
+                        .all(|c| c.is_lowercase() || is_particle_punct(c))
+                {
+                    self.non_dropping_particle = Some(format!("{}{}", before, punct_char));
+                    self.family = Some(after.to_string());
                 }
             }
+        }
     }
 
     /// Get the display name in "family, given" format.
@@ -616,9 +617,7 @@ impl DateVariable {
 
     /// Check if this is a date range.
     pub fn is_range(&self) -> bool {
-        self.date_parts
-            .as_ref()
-            .is_some_and(|p| p.len() > 1)
+        self.date_parts.as_ref().is_some_and(|p| p.len() > 1)
     }
 }
 
@@ -684,7 +683,9 @@ impl Reference {
                     Some(n.to_string())
                 } else if let Some(n) = v.as_u64() {
                     Some(n.to_string())
-                } else { v.as_f64().map(|n| format!("{}", n)) }
+                } else {
+                    v.as_f64().map(|n| format!("{}", n))
+                }
             }),
         }
     }

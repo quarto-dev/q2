@@ -606,9 +606,10 @@ fn visit_node(
             // Find the partial_name child
             for (kind, child) in children {
                 if kind == "partial_name"
-                    && let Intermediate::Text(name) = child {
-                        return Intermediate::Partial(name);
-                    }
+                    && let Intermediate::Text(name) = child
+                {
+                    return Intermediate::Partial(name);
+                }
             }
             let name = node_text();
             // Strip the () suffix if present
@@ -1078,18 +1079,20 @@ fn strip_leading_newline_from_nodes(nodes: &mut Vec<TemplateNode>) {
         strip_leading_newline_from_node(first);
         // If the node became empty, remove it
         if let TemplateNode::Literal(lit) = first
-            && lit.text.is_empty() {
-                nodes.remove(0);
-            }
+            && lit.text.is_empty()
+        {
+            nodes.remove(0);
+        }
     }
 }
 
 /// Strip a leading '\n' from a node if it's a Literal starting with '\n'.
 fn strip_leading_newline_from_node(node: &mut TemplateNode) {
     if let TemplateNode::Literal(lit) = node
-        && lit.text.starts_with('\n') {
-            lit.text = lit.text[1..].to_string();
-        }
+        && lit.text.starts_with('\n')
+    {
+        lit.text = lit.text[1..].to_string();
+    }
 }
 
 #[cfg(test)]

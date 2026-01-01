@@ -398,16 +398,17 @@ impl DiagnosticMessage {
                 // Try to map with context if available
                 if let Some(ctx) = ctx {
                     if let Some(mapped) = loc.map_offset(loc.start_offset(), ctx)
-                        && let Some(file) = ctx.get_file(mapped.file_id) {
-                            writeln!(
-                                result,
-                                "  at {}:{}:{}",
-                                file.path,
-                                mapped.location.row + 1,
-                                mapped.location.column + 1
-                            )
-                            .unwrap();
-                        }
+                        && let Some(file) = ctx.get_file(mapped.file_id)
+                    {
+                        writeln!(
+                            result,
+                            "  at {}:{}:{}",
+                            file.path,
+                            mapped.location.row + 1,
+                            mapped.location.column + 1
+                        )
+                        .unwrap();
+                    }
                 } else {
                     // No context: show immediate location (1-indexed for display)
                     // Note: Without context, we can't get row/column from offsets

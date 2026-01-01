@@ -23,7 +23,9 @@ use std::cell::RefCell;
 
 /// Helper to get source info from context or empty
 fn get_source_info(ast: &Ast, source_ctx: Option<&SourceLocationContext>) -> SourceInfo {
-    source_ctx.map_or_else(empty_source_info, |ctx| ctx.sourcepos_to_source_info(&ast.sourcepos))
+    source_ctx.map_or_else(empty_source_info, |ctx| {
+        ctx.sourcepos_to_source_info(&ast.sourcepos)
+    })
 }
 
 /// Convert a comrak document to a Pandoc document.

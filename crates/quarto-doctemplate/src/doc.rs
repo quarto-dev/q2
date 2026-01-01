@@ -29,8 +29,7 @@
 ///
 /// `Doc` allows us to represent template output in a way that preserves
 /// structural information needed for proper nesting and line breaking.
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Doc {
     /// Empty document (produces no output).
     #[default]
@@ -214,7 +213,6 @@ fn apply_prefix(s: &str, prefix: &str) -> String {
     }
     result
 }
-
 
 /// Concatenate multiple documents.
 pub fn concat_docs(docs: impl IntoIterator<Item = Doc>) -> Doc {

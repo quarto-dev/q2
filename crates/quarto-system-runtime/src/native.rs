@@ -54,9 +54,10 @@ impl SystemRuntime for NativeRuntime {
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
         // Create parent directories if they don't exist
         if let Some(parent) = path.parent()
-            && !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
         fs::write(path, contents).map_err(RuntimeError::from)
     }
 
@@ -101,9 +102,10 @@ impl SystemRuntime for NativeRuntime {
     fn file_copy(&self, src: &Path, dst: &Path) -> RuntimeResult<()> {
         // Create parent directories if they don't exist
         if let Some(parent) = dst.parent()
-            && !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
         fs::copy(src, dst)?;
         Ok(())
     }
@@ -111,9 +113,10 @@ impl SystemRuntime for NativeRuntime {
     fn path_rename(&self, old: &Path, new: &Path) -> RuntimeResult<()> {
         // Create parent directories if they don't exist
         if let Some(parent) = new.parent()
-            && !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
+        }
         fs::rename(old, new).map_err(RuntimeError::from)
     }
 
@@ -216,9 +219,10 @@ impl SystemRuntime for NativeRuntime {
 
         // Write stdin if provided
         if let Some(input) = stdin
-            && let Some(mut stdin_pipe) = child.stdin.take() {
-                stdin_pipe.write_all(input)?;
-            }
+            && let Some(mut stdin_pipe) = child.stdin.take()
+        {
+            stdin_pipe.write_all(input)?;
+        }
 
         let output = child.wait_with_output()?;
 

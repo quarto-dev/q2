@@ -110,9 +110,7 @@ impl Q216Converter {
 
     /// Convert byte offset to column number (0-indexed)
     fn offset_to_column(&self, content: &str, offset: usize) -> usize {
-        let line_start = content[..offset]
-            .rfind('\n')
-            .map_or(0, |pos| pos + 1);
+        let line_start = content[..offset].rfind('\n').map_or(0, |pos| pos + 1);
         offset - line_start
     }
 }

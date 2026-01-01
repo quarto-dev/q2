@@ -232,8 +232,7 @@ pub struct Macro {
 /// Citation collapse mode.
 ///
 /// Controls how citations are grouped and collapsed within a single citation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Collapse {
     /// No collapsing.
     #[default]
@@ -247,7 +246,6 @@ pub enum Collapse {
     /// Like YearSuffix but with ranges: "(Smith 2000a-c)".
     YearSuffixRanged,
 }
-
 
 /// Disambiguation strategy for citations.
 ///

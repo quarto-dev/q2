@@ -23,14 +23,15 @@ pub fn process_block_quote<T: Write>(
     for (node_type, child) in children {
         if node_type == "block_quote_marker" {
             if matches!(child, PandocNativeIntermediate::IntermediateUnknown(_))
-                && node_type != "block_continuation" {
-                    writeln!(
-                        buf,
-                        "Warning: Unhandled node kind in block_quote: {}, {:?}",
-                        node_type, child,
-                    )
-                    .unwrap();
-                }
+                && node_type != "block_continuation"
+            {
+                writeln!(
+                    buf,
+                    "Warning: Unhandled node kind in block_quote: {}, {:?}",
+                    node_type, child,
+                )
+                .unwrap();
+            }
             continue;
         }
         match child {

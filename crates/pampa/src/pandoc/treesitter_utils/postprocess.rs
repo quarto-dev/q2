@@ -624,13 +624,16 @@ pub fn coalesce_abbreviations(inlines: Vec<Inline>) -> (Vec<Inline>, bool) {
 
                 // If we didn't coalesce with any Str nodes but have a Space following
                 // the abbreviation, include the space in the abbreviation to match Pandoc
-                if j == original_j && j < inlines.len() && matches!(inlines[j], Inline::Space(_))
-                    && let Inline::Space(space_info) = &inlines[j] {
-                        current_text.push('\u{00A0}');
-                        end_info = space_info.source_info.clone();
-                        j += 1;
-                        did_coalesce = true;
-                    }
+                if j == original_j
+                    && j < inlines.len()
+                    && matches!(inlines[j], Inline::Space(_))
+                    && let Inline::Space(space_info) = &inlines[j]
+                {
+                    current_text.push('\u{00A0}');
+                    end_info = space_info.source_info.clone();
+                    j += 1;
+                    did_coalesce = true;
+                }
             }
 
             // Create the Str node (possibly coalesced)
@@ -837,54 +840,54 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 // Check for single-image paragraph (for figure conversion)
                 if para.content.len() == 1
                     && let Some(Inline::Image(image)) = para.content.first()
-                        && !image.content.is_empty() {
-                            let figure_attr: Attr =
-                                (image.attr.0.clone(), vec![], LinkedHashMap::new());
-                            let image_attr: Attr =
-                                (String::new(), image.attr.1.clone(), image.attr.2.clone());
+                    && !image.content.is_empty()
+                {
+                    let figure_attr: Attr = (image.attr.0.clone(), vec![], LinkedHashMap::new());
+                    let image_attr: Attr =
+                        (String::new(), image.attr.1.clone(), image.attr.2.clone());
 
-                            // Split attr_source between figure and image
-                            let figure_attr_source = crate::pandoc::attr::AttrSourceInfo {
-                                id: image.attr_source.id.clone(),
-                                classes: vec![],
-                                attributes: vec![],
-                            };
-                            let image_attr_source = crate::pandoc::attr::AttrSourceInfo {
-                                id: None,
-                                classes: image.attr_source.classes.clone(),
-                                attributes: image.attr_source.attributes.clone(),
-                            };
+                    // Split attr_source between figure and image
+                    let figure_attr_source = crate::pandoc::attr::AttrSourceInfo {
+                        id: image.attr_source.id.clone(),
+                        classes: vec![],
+                        attributes: vec![],
+                    };
+                    let image_attr_source = crate::pandoc::attr::AttrSourceInfo {
+                        id: None,
+                        classes: image.attr_source.classes.clone(),
+                        attributes: image.attr_source.attributes.clone(),
+                    };
 
-                            let mut new_image = image.clone();
-                            new_image.attr = image_attr;
-                            new_image.attr_source = image_attr_source;
+                    let mut new_image = image.clone();
+                    new_image.attr = image_attr;
+                    new_image.attr_source = image_attr_source;
 
-                            // Use proper source info from the original paragraph and image
-                            return FilterResult(
-                                vec![Block::Figure(Figure {
-                                    attr: figure_attr,
-                                    caption: Caption {
-                                        short: None,
-                                        long: Some(vec![Block::Plain(Plain {
-                                            content: image.content.clone(),
-                                            // Caption text comes from image's alt text
-                                            source_info: image.source_info.clone(),
-                                        })]),
-                                        // Caption as a whole also uses image's source info
-                                        source_info: image.source_info.clone(),
-                                    },
-                                    content: vec![Block::Plain(Plain {
-                                        content: vec![Inline::Image(new_image)],
-                                        // Content contains the image
-                                        source_info: image.source_info.clone(),
-                                    })],
-                                    // Figure spans the entire paragraph
-                                    source_info: para.source_info.clone(),
-                                    attr_source: figure_attr_source,
-                                })],
-                                true,
-                            );
-                        }
+                    // Use proper source info from the original paragraph and image
+                    return FilterResult(
+                        vec![Block::Figure(Figure {
+                            attr: figure_attr,
+                            caption: Caption {
+                                short: None,
+                                long: Some(vec![Block::Plain(Plain {
+                                    content: image.content.clone(),
+                                    // Caption text comes from image's alt text
+                                    source_info: image.source_info.clone(),
+                                })]),
+                                // Caption as a whole also uses image's source info
+                                source_info: image.source_info.clone(),
+                            },
+                            content: vec![Block::Plain(Plain {
+                                content: vec![Inline::Image(new_image)],
+                                // Content contains the image
+                                source_info: image.source_info.clone(),
+                            })],
+                            // Figure spans the entire paragraph
+                            source_info: para.source_info.clone(),
+                            attr_source: figure_attr_source,
+                        })],
+                        true,
+                    );
+                }
 
                 // Not a figure conversion case, but may have converted trailing LineBreak
                 if trailing_lb_converted {
@@ -1081,11 +1084,7 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 kv.insert("reference-id".to_string(), note_ref.id.clone());
                 FilterResult(
                     vec![Inline::Span(Span {
-                        attr: (
-                            String::new(),
-                            vec!["quarto-note-reference".to_string()],
-                            kv,
-                        ),
+                        attr: (String::new(), vec!["quarto-note-reference".to_string()], kv),
                         content: vec![],
                         source_info: note_ref.source_info,
                         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -1191,29 +1190,28 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                         let attr_idx = if has_space { i + 2 } else { i + 1 };
 
                         if attr_idx < break_cleaned.len()
-                            && let Inline::Attr(attr, attr_source) = &break_cleaned[attr_idx] {
-                                // Found Math + (Space?) + Attr pattern
-                                // Wrap Math in a Span with the attribute
-                                let mut classes = vec!["quarto-math-with-attribute".to_string()];
-                                classes.extend(attr.1.clone());
+                            && let Inline::Attr(attr, attr_source) = &break_cleaned[attr_idx]
+                        {
+                            // Found Math + (Space?) + Attr pattern
+                            // Wrap Math in a Span with the attribute
+                            let mut classes = vec!["quarto-math-with-attribute".to_string()];
+                            classes.extend(attr.1.clone());
 
-                                math_processed.push(Inline::Span(Span {
-                                    attr: (attr.0.clone(), classes, attr.2.clone()),
-                                    content: vec![Inline::Math(math.clone())],
-                                    source_info: if let Some(attr_overall) =
-                                        attr_source.combine_all()
-                                    {
-                                        math.source_info.combine(&attr_overall)
-                                    } else {
-                                        math.source_info.clone()
-                                    },
-                                    attr_source: attr_source.clone(),
-                                }));
+                            math_processed.push(Inline::Span(Span {
+                                attr: (attr.0.clone(), classes, attr.2.clone()),
+                                content: vec![Inline::Math(math.clone())],
+                                source_info: if let Some(attr_overall) = attr_source.combine_all() {
+                                    math.source_info.combine(&attr_overall)
+                                } else {
+                                    math.source_info.clone()
+                                },
+                                attr_source: attr_source.clone(),
+                            }));
 
-                                // Skip the Math, optional Space, and Attr
-                                i = attr_idx + 1;
-                                continue;
-                            }
+                            // Skip the Math, optional Space, and Attr
+                            i = attr_idx + 1;
+                            continue;
+                        }
                     }
 
                     // Not a Math + Attr pattern, add as is
@@ -1374,9 +1372,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 if let Some(cite) = pending_cite {
                     result.push(Inline::Cite(cite));
                     if state == 2
-                        && let Some(space) = pending_space {
-                            result.push(Inline::Space(space));
-                        }
+                        && let Some(space) = pending_space
+                    {
+                        result.push(Inline::Space(space));
+                    }
                 }
 
                 FilterResult(result, true)
@@ -1466,9 +1465,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                                     table.attr.0 = caption_attr_value.0;
                                     // Also merge the source location
                                     if let Some(caption_attr_source_value) = caption_attr_source
-                                        && table.attr_source.id.is_none() {
-                                            table.attr_source.id = caption_attr_source_value.id;
-                                        }
+                                        && table.attr_source.id.is_none()
+                                    {
+                                        table.attr_source.id = caption_attr_source_value.id;
+                                    }
                                 }
                             }
 

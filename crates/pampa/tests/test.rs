@@ -304,9 +304,7 @@ fn unit_test_snapshots_json() {
                 .map(|e| format!("{}: {}", e.code.as_deref().unwrap_or("ERROR"), e.title))
                 .collect::<Vec<_>>()
                 .join("; ");
-            Box::new(std::io::Error::other(
-                error_messages,
-            )) as Box<dyn std::error::Error>
+            Box::new(std::io::Error::other(error_messages)) as Box<dyn std::error::Error>
         })
     });
 }

@@ -272,12 +272,13 @@ impl<'a> MergedCursor<'a> {
                         | ConfigValueKind::Path(_)
                         | ConfigValueKind::Glob(_)
                         | ConfigValueKind::Expr(_)
-                ) {
-                    return Some(MergedScalar {
-                        value,
-                        layer_index: i,
-                    });
-                }
+                )
+            {
+                return Some(MergedScalar {
+                    value,
+                    layer_index: i,
+                });
+            }
         }
         None
     }
@@ -293,28 +294,29 @@ impl<'a> MergedCursor<'a> {
         // Walk layers in order (lowest priority first)
         for (i, layer) in self.config.layers.iter().enumerate() {
             if let Some(value) = self.navigate_to(layer)
-                && let ConfigValueKind::Array(arr) = &value.value {
-                    found_any = true;
+                && let ConfigValueKind::Array(arr) = &value.value
+            {
+                found_any = true;
 
-                    // Apply merge semantics
-                    match value.merge_op {
-                        MergeOp::Prefer => {
-                            // Reset: discard all previous items
-                            items.clear();
-                        }
-                        MergeOp::Concat => {
-                            // Concatenate: keep existing items
-                        }
+                // Apply merge semantics
+                match value.merge_op {
+                    MergeOp::Prefer => {
+                        // Reset: discard all previous items
+                        items.clear();
                     }
-
-                    // Add items from this layer
-                    for item in arr {
-                        items.push(MergedArrayItem {
-                            value: item,
-                            layer_index: i,
-                        });
+                    MergeOp::Concat => {
+                        // Concatenate: keep existing items
                     }
                 }
+
+                // Add items from this layer
+                for item in arr {
+                    items.push(MergedArrayItem {
+                        value: item,
+                        layer_index: i,
+                    });
+                }
+            }
         }
 
         if found_any {

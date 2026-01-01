@@ -197,10 +197,8 @@ fn convert_div_to_callout(div: &mut Div, callout_type: &str) -> CustomNode {
 
     // Extract additional attributes from the div
     let appearance = extract_attr_value(&div.attr, "appearance").unwrap_or("default".to_string());
-    let collapse = extract_attr_value(&div.attr, "collapse")
-        .is_some_and(|v| v == "true");
-    let icon = extract_attr_value(&div.attr, "icon")
-        .is_none_or(|v| v != "false");
+    let collapse = extract_attr_value(&div.attr, "collapse").is_some_and(|v| v == "true");
+    let icon = extract_attr_value(&div.attr, "icon").is_none_or(|v| v != "false");
 
     // Build the plain_data JSON
     let plain_data = json!({

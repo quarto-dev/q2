@@ -2889,74 +2889,76 @@ fn apply_affixes(
 
     // Apply prefix with punctuation collision handling
     if let Some(prefix) = prefix
-        && !prefix.is_empty() {
-            let prefix_end = prefix.chars().last();
-            let content_start = get_leading_char(inner);
-            if let (Some(x_end), Some(y_start)) = (prefix_end, content_start) {
-                let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
-                let actual_prefix = if keep_x_end {
-                    prefix.clone()
-                } else {
-                    // Trim last char from prefix
-                    prefix
-                        .chars()
-                        .take(prefix.chars().count().saturating_sub(1))
-                        .collect()
-                };
-                if !keep_y_start {
-                    trim_leading_char(inner);
-                }
-                if !actual_prefix.is_empty() {
-                    let mut result = vec![Inline::Str(Str {
-                        text: actual_prefix,
-                        source_info: empty_source_info(),
-                    })];
-                    result.append(inner);
-                    *inner = result;
-                }
+        && !prefix.is_empty()
+    {
+        let prefix_end = prefix.chars().last();
+        let content_start = get_leading_char(inner);
+        if let (Some(x_end), Some(y_start)) = (prefix_end, content_start) {
+            let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
+            let actual_prefix = if keep_x_end {
+                prefix.clone()
             } else {
-                // No collision possible, just prepend
+                // Trim last char from prefix
+                prefix
+                    .chars()
+                    .take(prefix.chars().count().saturating_sub(1))
+                    .collect()
+            };
+            if !keep_y_start {
+                trim_leading_char(inner);
+            }
+            if !actual_prefix.is_empty() {
                 let mut result = vec![Inline::Str(Str {
-                    text: prefix.clone(),
+                    text: actual_prefix,
                     source_info: empty_source_info(),
                 })];
                 result.append(inner);
                 *inner = result;
             }
+        } else {
+            // No collision possible, just prepend
+            let mut result = vec![Inline::Str(Str {
+                text: prefix.clone(),
+                source_info: empty_source_info(),
+            })];
+            result.append(inner);
+            *inner = result;
         }
+    }
 
     // Apply suffix with punctuation collision handling
     if let Some(suffix) = suffix
-        && !suffix.is_empty() {
-            let content_end = get_trailing_char(inner);
-            let suffix_start = suffix.chars().next();
-            if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
-                let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
-                if !keep_x_end {
-                    trim_trailing_char(inner);
-                }
-                if keep_y_start {
-                    inner.push(Inline::Str(Str {
-                        text: suffix.clone(),
-                        source_info: empty_source_info(),
-                    }));
-                } else {
-                    // Skip first char of suffix
-                    let trimmed_suffix: String = suffix.chars().skip(1).collect();
-                    if !trimmed_suffix.is_empty() {
-                        inner.push(Inline::Str(Str {
-                            text: trimmed_suffix,
-                            source_info: empty_source_info(),
-                        }));
-                    }
-                }
-            } else {
+        && !suffix.is_empty()
+    {
+        let content_end = get_trailing_char(inner);
+        let suffix_start = suffix.chars().next();
+        if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
+            let (keep_x_end, keep_y_start) = punct_collision_rule(x_end, y_start);
+            if !keep_x_end {
+                trim_trailing_char(inner);
+            }
+            if keep_y_start {
                 inner.push(Inline::Str(Str {
                     text: suffix.clone(),
                     source_info: empty_source_info(),
                 }));
+            } else {
+                // Skip first char of suffix
+                let trimmed_suffix: String = suffix.chars().skip(1).collect();
+                if !trimmed_suffix.is_empty() {
+                    inner.push(Inline::Str(Str {
+                        text: trimmed_suffix,
+                        source_info: empty_source_info(),
+                    }));
+                }
             }
+        } else {
+            inner.push(Inline::Str(Str {
+                text: suffix.clone(),
+                source_info: empty_source_info(),
+            }));
         }
+    }
 }
 
 /// Move periods and commas from after closing quotes to inside them.
@@ -2992,22 +2994,23 @@ fn move_punct_in_children(children: Vec<Output>) -> Vec<Output> {
         if let Some(quoted_path) = find_trailing_quoted(&current) {
             // Look ahead to see if next sibling starts with punctuation
             if let Some(next) = iter.peek()
-                && let Some((punct, rest)) = extract_leading_punct(next) {
-                    // Check that quoted content doesn't already end with this punctuation
-                    if !ends_with_punct_in_path(&current, &quoted_path, punct) {
-                        // Move punctuation inside the quoted node
-                        let modified = insert_punct_in_path(current, &quoted_path, punct);
+                && let Some((punct, rest)) = extract_leading_punct(next)
+            {
+                // Check that quoted content doesn't already end with this punctuation
+                if !ends_with_punct_in_path(&current, &quoted_path, punct) {
+                    // Move punctuation inside the quoted node
+                    let modified = insert_punct_in_path(current, &quoted_path, punct);
 
-                        result.push(recurse_punct_in_quotes(modified));
+                    result.push(recurse_punct_in_quotes(modified));
 
-                        // Consume the next element and push the remainder (if any)
-                        iter.next(); // consume the peeked element
-                        if let Some(rest_output) = rest {
-                            result.push(move_punctuation_inside_quotes(rest_output));
-                        }
-                        continue;
+                    // Consume the next element and push the remainder (if any)
+                    iter.next(); // consume the peeked element
+                    if let Some(rest_output) = rest {
+                        result.push(move_punctuation_inside_quotes(rest_output));
                     }
+                    continue;
                 }
+            }
         }
 
         // Recursively process the current node
@@ -3070,9 +3073,10 @@ fn ends_with_punct_in_path(output: &Output, path: &[usize], punct: char) -> bool
     match output {
         Output::Formatted { children, .. } => {
             if let Some(&idx) = path.first()
-                && let Some(child) = children.get(idx) {
-                    return ends_with_punct_in_path(child, &path[1..], punct);
-                }
+                && let Some(child) = children.get(idx)
+            {
+                return ends_with_punct_in_path(child, &path[1..], punct);
+            }
             false
         }
         Output::Tagged { child, .. } => {
@@ -3327,14 +3331,15 @@ fn insert_punct_before_trailing_quote_in_node(output: &mut Output, punct: char) 
     match output {
         Output::Literal(s) => {
             if let Some(last_char) = s.chars().last()
-                && is_quote_char(last_char) {
-                    // Insert punctuation before the trailing quote
-                    let mut chars: Vec<char> = s.chars().collect();
-                    let insert_pos = chars.len() - 1;
-                    chars.insert(insert_pos, punct);
-                    *s = chars.into_iter().collect();
-                    return true;
-                }
+                && is_quote_char(last_char)
+            {
+                // Insert punctuation before the trailing quote
+                let mut chars: Vec<char> = s.chars().collect();
+                let insert_pos = chars.len() - 1;
+                chars.insert(insert_pos, punct);
+                *s = chars.into_iter().collect();
+                return true;
+            }
             false
         }
         Output::Tagged { child, .. } => {
@@ -3565,9 +3570,10 @@ fn output_ends_with_char(output: &Output, c: char) -> bool {
         } => {
             // If there's a suffix, check the suffix for the ending character
             if let Some(ref suffix) = formatting.suffix
-                && !suffix.is_empty() {
-                    return suffix.ends_with(c);
-                }
+                && !suffix.is_empty()
+            {
+                return suffix.ends_with(c);
+            }
             // Otherwise check children
             ends_with_punct(children, c)
         }
@@ -3676,16 +3682,17 @@ impl<'a> RichTextParser<'a> {
         while self.pos < self.input.len() {
             // Check for end tag
             if let Some(tag) = end_tag
-                && self.remaining().starts_with(tag) {
-                    // Flush accumulated text
-                    if self.pos > text_start {
-                        children.push(Output::Literal(
-                            self.input[text_start..self.pos].to_string(),
-                        ));
-                    }
-                    self.pos += tag.len();
-                    return children;
+                && self.remaining().starts_with(tag)
+            {
+                // Flush accumulated text
+                if self.pos > text_start {
+                    children.push(Output::Literal(
+                        self.input[text_start..self.pos].to_string(),
+                    ));
                 }
+                self.pos += tag.len();
+                return children;
+            }
 
             // Check for start of a tag
             if self.remaining().starts_with('<') {
@@ -3725,10 +3732,8 @@ impl<'a> RichTextParser<'a> {
                 } else {
                     None
                 };
-                let is_followed_by_non_space =
-                    next_char.is_some_and(|c| !c.is_whitespace());
-                let is_preceded_by_alphanumeric =
-                    prev_char.is_some_and(|c| c.is_alphanumeric());
+                let is_followed_by_non_space = next_char.is_some_and(|c| !c.is_whitespace());
+                let is_preceded_by_alphanumeric = prev_char.is_some_and(|c| c.is_alphanumeric());
 
                 if is_followed_by_non_space && !is_preceded_by_alphanumeric {
                     // Flush accumulated text
@@ -3752,11 +3757,7 @@ impl<'a> RichTextParser<'a> {
                     self.pos += 1;
                 }
             } else {
-                self.pos += self
-                    .remaining()
-                    .chars()
-                    .next()
-                    .map_or(1, |c| c.len_utf8());
+                self.pos += self.remaining().chars().next().map_or(1, |c| c.len_utf8());
             }
         }
 
@@ -3916,8 +3917,7 @@ impl<'a> RichTextParser<'a> {
                 // This avoids matching mid-word apostrophes like "don't" or "l'ami".
                 // See Pandoc citeproc pCslText: apostrophe handling
                 let next_after_quote = self.remaining().chars().nth(1);
-                let is_valid_closing_quote = next_after_quote
-                    .is_none_or(|c| !c.is_alphanumeric());
+                let is_valid_closing_quote = next_after_quote.is_none_or(|c| !c.is_alphanumeric());
 
                 if is_valid_closing_quote {
                     // Found closing quote
@@ -3929,7 +3929,7 @@ impl<'a> RichTextParser<'a> {
                         vec![]
                     } else {
                         let mut inner_parser = RichTextParser::new(content);
-                        
+
                         inner_parser.parse_children(None)
                     };
 
@@ -4895,12 +4895,13 @@ fn render_inline_to_csl_html_with_ctx(
             // be converted to <sup> tags. This matches Pandoc citeproc's behavior.
             let mut chars = s.text.chars();
             if let (Some(first), None) = (chars.next(), chars.next())
-                && let Some(base) = superscript_char_to_base(first) {
-                    output.push_str("<sup>");
-                    output.push_str(&html_escape(base));
-                    output.push_str("</sup>");
-                    return;
-                }
+                && let Some(base) = superscript_char_to_base(first)
+            {
+                output.push_str("<sup>");
+                output.push_str(&html_escape(base));
+                output.push_str("</sup>");
+                return;
+            }
 
             // Convert straight apostrophes to curly (typographic) apostrophes
             // and escape HTML special characters

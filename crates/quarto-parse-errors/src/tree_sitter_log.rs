@@ -94,7 +94,6 @@ pub struct TreeSitterLogObserverFast {
     pub saw_error: bool,
 }
 
-
 impl TreeSitterLogObserverTrait for TreeSitterLogObserverFast {
     fn had_errors(&self) -> bool {
         self.saw_error

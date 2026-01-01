@@ -18,8 +18,7 @@ use crate::doc::Doc;
 /// A value that can be used in template evaluation.
 ///
 /// This mirrors the value types supported by Pandoc's doctemplates library.
-#[derive(Debug, Clone, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum TemplateValue {
     /// A string value.
     String(String),
@@ -142,7 +141,6 @@ impl TemplateValue {
         ctx
     }
 }
-
 
 /// A context for template evaluation containing variable bindings.
 #[derive(Debug, Clone, Default)]

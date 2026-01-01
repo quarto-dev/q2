@@ -16,8 +16,7 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// Configuration for JSON output format.
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct JsonConfig {
     /// If true, include resolved source locations ('l' field) in each node.
     /// The 'l' field contains an object with:
@@ -26,7 +25,6 @@ pub struct JsonConfig {
     /// - 'e': end position {o: offset, l: line (1-based), c: column (1-based)}
     pub include_inline_locations: bool,
 }
-
 
 /// Serializable version of SourceInfo that uses ID references instead of Rc pointers.
 ///
@@ -254,9 +252,10 @@ impl<'a> SourceInfoSerializer<'a> {
         obj.insert("s".to_string(), json!(id));
 
         if self.config.include_inline_locations
-            && let Some(location) = resolve_location(source_info, self.context) {
-                obj.insert("l".to_string(), location);
-            }
+            && let Some(location) = resolve_location(source_info, self.context)
+        {
+            obj.insert("l".to_string(), location);
+        }
     }
 }
 
@@ -732,7 +731,8 @@ fn write_caption(caption: &Caption, ctx: &mut JsonWriterContext) -> Value {
         &caption.short.as_ref().map(|s| write_inlines(s, ctx)),
         &caption
             .long
-            .as_ref().map_or_else(|| json!([]), |l| write_blocks(l, ctx)),
+            .as_ref()
+            .map_or_else(|| json!([]), |l| write_blocks(l, ctx)),
     ])
 }
 

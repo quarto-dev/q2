@@ -210,8 +210,7 @@ mod tests {
 
     #[test]
     fn test_memory_resolver_with_partials() {
-        let resolver =
-            MemoryResolver::with_partials([("a", "content a"), ("b", "content b")]);
+        let resolver = MemoryResolver::with_partials([("a", "content a"), ("b", "content b")]);
 
         assert_eq!(
             resolver.get_partial("a", Path::new("/x.html")),

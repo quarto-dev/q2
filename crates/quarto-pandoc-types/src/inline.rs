@@ -426,9 +426,9 @@ pub fn make_cite_inline(
         _ => false,
     };
 
-    let is_good_cite = content.split(is_semicolon).all(|slice| {
-        slice.iter().any(|inline| matches!(inline, Inline::Cite(_)))
-    });
+    let is_good_cite = content
+        .split(is_semicolon)
+        .all(|slice| slice.iter().any(|inline| matches!(inline, Inline::Cite(_))));
 
     if !is_good_cite {
         // if the content is not a good Cite, we backtrack and return a Span

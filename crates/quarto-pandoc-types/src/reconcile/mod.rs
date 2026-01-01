@@ -796,9 +796,10 @@ mod tests {
 
             // Title should keep original
             if let Some(Slot::Inlines(title)) = cn.slots.get("title")
-                && let crate::Inline::Str(s) = &title[0] {
-                    assert_eq!(s.source_info, source_original());
-                }
+                && let crate::Inline::Str(s) = &title[0]
+            {
+                assert_eq!(s.source_info, source_original());
+            }
 
             // Content slot - first para unchanged, second changed
             if let Some(Slot::Blocks(content)) = cn.slots.get("content") {

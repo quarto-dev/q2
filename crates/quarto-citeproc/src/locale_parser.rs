@@ -38,9 +38,10 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
             "terms" => {
                 for term_el in child.all_children() {
                     if term_el.name == "term"
-                        && let Ok(term) = parse_term(term_el) {
-                            terms.push(term);
-                        }
+                        && let Ok(term) = parse_term(term_el)
+                    {
+                        terms.push(term);
+                    }
                 }
             }
             "date" => {
@@ -155,9 +156,10 @@ fn parse_date_format(element: &XmlElement) -> Result<DateFormat, String> {
     let mut parts = Vec::new();
     for child in element.all_children() {
         if child.name == "date-part"
-            && let Ok(part) = parse_date_part(child) {
-                parts.push(part);
-            }
+            && let Ok(part) = parse_date_part(child)
+        {
+            parts.push(part);
+        }
     }
 
     Ok(DateFormat {
