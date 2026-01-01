@@ -10,3 +10,6 @@ description = "Shared utilities for Quarto"
 [dependencies]
 thiserror.workspace = true
 serde.workspace = true
+
+[lints]
+workspace = true

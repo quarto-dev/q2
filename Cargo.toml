@@ -102,6 +102,10 @@ path = "./crates/quarto-config"
 path = "./crates/quarto-system-runtime"
 
 [workspace.lints.clippy]
+# Architectural issues - fixing these requires significant refactoring
+large_enum_variant = "allow"  # Would require boxing large enum variants
+result_large_err = "allow"    # Would require boxing all error types
+
 assigning_clones = "warn"
 cfg_not_test = "warn"
 checked_conversions = "warn"

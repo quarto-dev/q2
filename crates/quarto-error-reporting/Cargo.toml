@@ -25,3 +25,6 @@ url = "2.5"
 
 [dev-dependencies]
 # No dev dependencies yet
+
+[lints]
+workspace = true

@@ -21,3 +21,6 @@ clap.workspace = true
 
 # JSON serialization
 serde_json.workspace = true
+
+[lints]
+workspace = true

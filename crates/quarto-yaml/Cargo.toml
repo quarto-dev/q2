@@ -22,3 +22,6 @@ harness = false
 [[bench]]
 name = "scaling_overhead"
 harness = false
+
+[lints]
+workspace = true
