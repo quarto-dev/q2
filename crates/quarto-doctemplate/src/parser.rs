@@ -1179,4 +1179,376 @@ mod tests {
             _ => panic!("Expected Literal node for trailing text"),
         }
     }
+
+    // ========================================================================
+    // Variable with pipes
+    // ========================================================================
+
+    #[test]
+    fn test_parse_variable_with_simple_pipe() {
+        let template = Template::compile("$name/uppercase$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Variable(var) => {
+                assert_eq!(var.path, vec!["name"]);
+                assert_eq!(var.pipes.len(), 1);
+                assert_eq!(var.pipes[0].name, "uppercase");
+            }
+            _ => panic!("Expected Variable node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_variable_with_multiple_pipes() {
+        let template = Template::compile("$name/uppercase/nowrap$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Variable(var) => {
+                assert_eq!(var.path, vec!["name"]);
+                assert_eq!(var.pipes.len(), 2);
+                assert_eq!(var.pipes[0].name, "uppercase");
+                assert_eq!(var.pipes[1].name, "nowrap");
+            }
+            _ => panic!("Expected Variable node"),
+        }
+    }
+
+    // Note: Pipes with arguments (left, right, center with width/border args)
+    // use brace syntax: ${name/left 20} - tested in integration tests
+
+    // ========================================================================
+    // Variable with separator
+    // ========================================================================
+
+    #[test]
+    fn test_parse_variable_with_separator() {
+        let template = Template::compile("$items[, ]$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Variable(var) => {
+                assert_eq!(var.path, vec!["items"]);
+                assert_eq!(var.separator, Some(", ".to_string()));
+            }
+            _ => panic!("Expected Variable node"),
+        }
+    }
+
+    // ========================================================================
+    // Conditionals
+    // ========================================================================
+
+    #[test]
+    fn test_parse_conditional_basic() {
+        let template = Template::compile("$if(show)$visible$endif$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Conditional(cond) => {
+                assert_eq!(cond.branches.len(), 1);
+                assert_eq!(cond.branches[0].0.path, vec!["show"]);
+                assert!(cond.else_branch.is_none());
+            }
+            _ => panic!("Expected Conditional node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_conditional_with_else() {
+        let template = Template::compile("$if(a)$yes$else$no$endif$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Conditional(cond) => {
+                assert_eq!(cond.branches.len(), 1);
+                assert!(cond.else_branch.is_some());
+            }
+            _ => panic!("Expected Conditional node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_conditional_with_elseif() {
+        let template = Template::compile("$if(a)$A$elseif(b)$B$endif$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Conditional(cond) => {
+                assert_eq!(cond.branches.len(), 2);
+                assert_eq!(cond.branches[0].0.path, vec!["a"]);
+                assert_eq!(cond.branches[1].0.path, vec!["b"]);
+            }
+            _ => panic!("Expected Conditional node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_conditional_with_elseif_and_else() {
+        let template = Template::compile("$if(a)$A$elseif(b)$B$elseif(c)$C$else$D$endif$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Conditional(cond) => {
+                assert_eq!(cond.branches.len(), 3);
+                assert!(cond.else_branch.is_some());
+            }
+            _ => panic!("Expected Conditional node"),
+        }
+    }
+
+    // ========================================================================
+    // For loops
+    // ========================================================================
+
+    #[test]
+    fn test_parse_forloop_basic() {
+        let template = Template::compile("$for(item)$[$item$]$endfor$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::ForLoop(for_loop) => {
+                assert_eq!(for_loop.var.path, vec!["item"]);
+                assert!(for_loop.separator.is_none());
+            }
+            _ => panic!("Expected ForLoop node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_forloop_with_separator() {
+        let template = Template::compile("$for(item)$$item$$sep$, $endfor$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::ForLoop(for_loop) => {
+                assert!(for_loop.separator.is_some());
+            }
+            _ => panic!("Expected ForLoop node"),
+        }
+    }
+
+    // ========================================================================
+    // Breakable blocks
+    // ========================================================================
+
+    #[test]
+    fn test_parse_breakable_block() {
+        let template = Template::compile("$~$content here$~$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::BreakableSpace(bs) => {
+                assert!(!bs.children.is_empty());
+            }
+            _ => panic!("Expected BreakableSpace node"),
+        }
+    }
+
+    // ========================================================================
+    // Partials
+    // ========================================================================
+
+    #[test]
+    fn test_parse_bare_partial() {
+        let template = Template::compile("$mypartial()$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Partial(partial) => {
+                assert_eq!(partial.name, "mypartial");
+                assert!(partial.var.is_none());
+            }
+            _ => panic!("Expected Partial node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_applied_partial() {
+        let template = Template::compile("$author:card()$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Partial(partial) => {
+                assert_eq!(partial.name, "card");
+                assert!(partial.var.is_some());
+                assert_eq!(partial.var.as_ref().unwrap().path, vec!["author"]);
+            }
+            _ => panic!("Expected Partial node"),
+        }
+    }
+
+    #[test]
+    fn test_parse_applied_partial_with_separator() {
+        // Partials can have separators for array iteration
+        let template = Template::compile("$authors:card()[, ]$").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+        match &template.nodes[0] {
+            TemplateNode::Partial(partial) => {
+                assert_eq!(partial.name, "card");
+                assert!(partial.var.is_some());
+                assert_eq!(partial.separator, Some(", ".to_string()));
+            }
+            _ => panic!("Expected Partial node"),
+        }
+    }
+
+    // ========================================================================
+    // Multiline normalization tests
+    // ========================================================================
+
+    #[test]
+    fn test_multiline_conditional_strips_newlines() {
+        let template = Template::compile("$if(x)$\ncontent\n$endif$\n").unwrap();
+        // The normalization should strip the newline after $if$ and after $endif$
+        match &template.nodes[0] {
+            TemplateNode::Conditional(cond) => {
+                // Check body doesn't start with newline after normalization
+                if let Some(TemplateNode::Literal(lit)) = cond.branches[0].1.first() {
+                    assert!(!lit.text.starts_with('\n'));
+                }
+            }
+            _ => panic!("Expected Conditional node"),
+        }
+    }
+
+    #[test]
+    fn test_multiline_forloop_strips_newlines() {
+        let template = Template::compile("$for(x)$\n$x$\n$endfor$\n").unwrap();
+        match &template.nodes[0] {
+            TemplateNode::ForLoop(for_loop) => {
+                // Check body doesn't start with newline after normalization
+                if let Some(TemplateNode::Literal(lit)) = for_loop.body.first() {
+                    assert!(!lit.text.starts_with('\n'));
+                }
+            }
+            _ => panic!("Expected ForLoop node"),
+        }
+    }
+
+    // ========================================================================
+    // ParserContext tests
+    // ========================================================================
+
+    #[test]
+    fn test_parser_context_new() {
+        let ctx = ParserContext::new(FileId(42));
+        assert_eq!(ctx.file_id, FileId(42));
+    }
+
+    // ========================================================================
+    // Template API tests
+    // ========================================================================
+
+    #[test]
+    fn test_template_nodes_accessor() {
+        let template = Template::compile("hello").unwrap();
+        let nodes = template.nodes();
+        assert_eq!(nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_compile_with_filename() {
+        let template = Template::compile_with_filename("$x$", "test.txt").unwrap();
+        assert_eq!(template.nodes.len(), 1);
+    }
+
+    #[test]
+    fn test_compile_with_source_context() {
+        let mut ctx = SourceContext::new();
+        let template = Template::compile_with_source_context("$y$", "my.txt", &mut ctx).unwrap();
+        assert_eq!(template.nodes.len(), 1);
+    }
+
+    // ========================================================================
+    // Helper function tests
+    // ========================================================================
+
+    #[test]
+    fn test_first_node_is_newline_literal_true() {
+        let nodes = vec![TemplateNode::Literal(Literal {
+            text: "\ncontent".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 8),
+        })];
+        assert!(first_node_is_newline_literal(&nodes));
+    }
+
+    #[test]
+    fn test_first_node_is_newline_literal_false() {
+        let nodes = vec![TemplateNode::Literal(Literal {
+            text: "content".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 7),
+        })];
+        assert!(!first_node_is_newline_literal(&nodes));
+    }
+
+    #[test]
+    fn test_first_node_is_newline_literal_empty() {
+        let nodes: Vec<TemplateNode> = vec![];
+        assert!(!first_node_is_newline_literal(&nodes));
+    }
+
+    #[test]
+    fn test_is_first_child_newline_literal_empty_branches() {
+        let branches: Vec<(VariableRef, Vec<TemplateNode>)> = vec![];
+        assert!(!is_first_child_newline_literal(&branches));
+    }
+
+    #[test]
+    fn test_strip_leading_newline_from_node() {
+        let mut node = TemplateNode::Literal(Literal {
+            text: "\nhello".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 6),
+        });
+        strip_leading_newline_from_node(&mut node);
+        match node {
+            TemplateNode::Literal(lit) => assert_eq!(lit.text, "hello"),
+            _ => panic!("Expected Literal"),
+        }
+    }
+
+    #[test]
+    fn test_strip_leading_newline_from_node_no_newline() {
+        let mut node = TemplateNode::Literal(Literal {
+            text: "hello".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 5),
+        });
+        strip_leading_newline_from_node(&mut node);
+        match node {
+            TemplateNode::Literal(lit) => assert_eq!(lit.text, "hello"),
+            _ => panic!("Expected Literal"),
+        }
+    }
+
+    #[test]
+    fn test_strip_leading_newline_from_nodes_removes_empty() {
+        let mut nodes = vec![TemplateNode::Literal(Literal {
+            text: "\n".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 1),
+        })];
+        strip_leading_newline_from_nodes(&mut nodes);
+        assert!(nodes.is_empty());
+    }
+
+    #[test]
+    fn test_collect_nodes() {
+        let children = vec![
+            (
+                "text".to_string(),
+                Intermediate::Node(TemplateNode::Literal(Literal {
+                    text: "a".to_string(),
+                    source_info: SourceInfo::original(FileId(0), 0, 1),
+                })),
+            ),
+            (
+                "text".to_string(),
+                Intermediate::Node(TemplateNode::Literal(Literal {
+                    text: "b".to_string(),
+                    source_info: SourceInfo::original(FileId(0), 1, 2),
+                })),
+            ),
+        ];
+        let nodes = collect_nodes(children);
+        assert_eq!(nodes.len(), 2);
+    }
+
+    #[test]
+    fn test_collect_nodes_with_nested() {
+        let inner_nodes = vec![TemplateNode::Literal(Literal {
+            text: "inner".to_string(),
+            source_info: SourceInfo::original(FileId(0), 0, 5),
+        })];
+        let children = vec![("_content".to_string(), Intermediate::Nodes(inner_nodes))];
+        let nodes = collect_nodes(children);
+        assert_eq!(nodes.len(), 1);
+    }
 }

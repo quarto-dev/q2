@@ -209,3 +209,170 @@ pub enum PipeArg {
     /// String argument (e.g., border in `left 20 "| "`).
     String(String),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_source_map::{FileId, SourceInfo};
+
+    fn test_source_info() -> SourceInfo {
+        SourceInfo::original(FileId(0), 0, 10)
+    }
+
+    // ========================================================================
+    // VariableRef tests
+    // ========================================================================
+
+    #[test]
+    fn test_variable_ref_new() {
+        let source = test_source_info();
+        let var = VariableRef::new(vec!["name".to_string()], source.clone());
+
+        assert_eq!(var.path, vec!["name".to_string()]);
+        assert!(var.pipes.is_empty());
+        assert!(var.separator.is_none());
+        assert_eq!(var.source_info, source);
+    }
+
+    #[test]
+    fn test_variable_ref_new_nested_path() {
+        let source = test_source_info();
+        let var = VariableRef::new(
+            vec!["employee".to_string(), "salary".to_string()],
+            source.clone(),
+        );
+
+        assert_eq!(var.path, vec!["employee".to_string(), "salary".to_string()]);
+    }
+
+    #[test]
+    fn test_variable_ref_with_pipes() {
+        let source = test_source_info();
+        let pipes = vec![Pipe::new("uppercase", source.clone())];
+        let var = VariableRef::with_pipes(vec!["name".to_string()], pipes.clone(), source.clone());
+
+        assert_eq!(var.path, vec!["name".to_string()]);
+        assert_eq!(var.pipes.len(), 1);
+        assert_eq!(var.pipes[0].name, "uppercase");
+        assert!(var.separator.is_none());
+    }
+
+    #[test]
+    fn test_variable_ref_with_separator() {
+        let source = test_source_info();
+        let var = VariableRef::with_separator(
+            vec!["items".to_string()],
+            vec![],
+            ", ".to_string(),
+            source.clone(),
+        );
+
+        assert_eq!(var.path, vec!["items".to_string()]);
+        assert!(var.pipes.is_empty());
+        assert_eq!(var.separator, Some(", ".to_string()));
+    }
+
+    #[test]
+    fn test_variable_ref_with_pipes_and_separator() {
+        let source = test_source_info();
+        let pipes = vec![Pipe::new("uppercase", source.clone())];
+        let var = VariableRef::with_separator(
+            vec!["items".to_string()],
+            pipes,
+            "; ".to_string(),
+            source.clone(),
+        );
+
+        assert_eq!(var.path, vec!["items".to_string()]);
+        assert_eq!(var.pipes.len(), 1);
+        assert_eq!(var.separator, Some("; ".to_string()));
+    }
+
+    // ========================================================================
+    // Pipe tests
+    // ========================================================================
+
+    #[test]
+    fn test_pipe_new() {
+        let source = test_source_info();
+        let pipe = Pipe::new("uppercase", source.clone());
+
+        assert_eq!(pipe.name, "uppercase");
+        assert!(pipe.args.is_empty());
+        assert_eq!(pipe.source_info, source);
+    }
+
+    #[test]
+    fn test_pipe_new_with_string_name() {
+        let source = test_source_info();
+        let pipe = Pipe::new(String::from("lowercase"), source.clone());
+
+        assert_eq!(pipe.name, "lowercase");
+    }
+
+    #[test]
+    fn test_pipe_with_args_integer() {
+        let source = test_source_info();
+        let args = vec![PipeArg::Integer(20)];
+        let pipe = Pipe::with_args("left", args, source.clone());
+
+        assert_eq!(pipe.name, "left");
+        assert_eq!(pipe.args.len(), 1);
+        assert_eq!(pipe.args[0], PipeArg::Integer(20));
+    }
+
+    #[test]
+    fn test_pipe_with_args_string() {
+        let source = test_source_info();
+        let args = vec![PipeArg::String("| ".to_string())];
+        let pipe = Pipe::with_args("wrap", args, source.clone());
+
+        assert_eq!(pipe.name, "wrap");
+        assert_eq!(pipe.args.len(), 1);
+        assert_eq!(pipe.args[0], PipeArg::String("| ".to_string()));
+    }
+
+    #[test]
+    fn test_pipe_with_multiple_args() {
+        let source = test_source_info();
+        let args = vec![
+            PipeArg::Integer(20),
+            PipeArg::String("| ".to_string()),
+            PipeArg::String(" |".to_string()),
+        ];
+        let pipe = Pipe::with_args("left", args, source.clone());
+
+        assert_eq!(pipe.name, "left");
+        assert_eq!(pipe.args.len(), 3);
+        assert_eq!(pipe.args[0], PipeArg::Integer(20));
+        assert_eq!(pipe.args[1], PipeArg::String("| ".to_string()));
+        assert_eq!(pipe.args[2], PipeArg::String(" |".to_string()));
+    }
+
+    // ========================================================================
+    // PipeArg tests
+    // ========================================================================
+
+    #[test]
+    fn test_pipe_arg_integer_equality() {
+        assert_eq!(PipeArg::Integer(42), PipeArg::Integer(42));
+        assert_ne!(PipeArg::Integer(42), PipeArg::Integer(43));
+    }
+
+    #[test]
+    fn test_pipe_arg_string_equality() {
+        assert_eq!(
+            PipeArg::String("test".to_string()),
+            PipeArg::String("test".to_string())
+        );
+        assert_ne!(
+            PipeArg::String("test".to_string()),
+            PipeArg::String("other".to_string())
+        );
+    }
+
+    #[test]
+    fn test_pipe_arg_type_inequality() {
+        assert_ne!(PipeArg::Integer(42), PipeArg::String("42".to_string()));
+    }
+}

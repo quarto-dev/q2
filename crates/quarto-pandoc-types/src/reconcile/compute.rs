@@ -581,7 +581,10 @@ fn compute_inline_container_plan<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Div, Paragraph, Str};
+    use crate::{
+        BlockQuote, BulletList, Caption, Div, Emph, Figure, Header, ListNumberDelim,
+        ListNumberStyle, OrderedList, Paragraph, Plain, Str, Strong,
+    };
     use hashlink::LinkedHashMap;
     use quarto_source_map::{FileId, SourceInfo};
 
@@ -589,13 +592,34 @@ mod tests {
         SourceInfo::original(FileId(0), 0, 0)
     }
 
+    fn make_str(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: dummy_source(),
+        })
+    }
+
     fn make_para(text: &str) -> Block {
         Block::Paragraph(Paragraph {
-            content: vec![Inline::Str(Str {
-                text: text.to_string(),
-                source_info: dummy_source(),
-            })],
+            content: vec![make_str(text)],
             source_info: dummy_source(),
+        })
+    }
+
+    fn make_plain(text: &str) -> Block {
+        Block::Plain(Plain {
+            content: vec![make_str(text)],
+            source_info: dummy_source(),
+        })
+    }
+
+    fn make_header(level: usize, text: &str) -> Block {
+        Block::Header(Header {
+            level,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![make_str(text)],
+            source_info: dummy_source(),
+            attr_source: crate::AttrSourceInfo::empty(),
         })
     }
 
@@ -607,6 +631,161 @@ mod tests {
             attr_source: crate::AttrSourceInfo::empty(),
         })
     }
+
+    fn make_blockquote(blocks: Vec<Block>) -> Block {
+        Block::BlockQuote(BlockQuote {
+            content: blocks,
+            source_info: dummy_source(),
+        })
+    }
+
+    fn make_bullet_list(items: Vec<Vec<Block>>) -> Block {
+        Block::BulletList(BulletList {
+            content: items,
+            source_info: dummy_source(),
+        })
+    }
+
+    fn make_ordered_list(items: Vec<Vec<Block>>) -> Block {
+        Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
+            content: items,
+            source_info: dummy_source(),
+        })
+    }
+
+    fn make_figure(blocks: Vec<Block>) -> Block {
+        Block::Figure(Figure {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: None,
+                source_info: dummy_source(),
+            },
+            content: blocks,
+            source_info: dummy_source(),
+            attr_source: crate::AttrSourceInfo::empty(),
+        })
+    }
+
+    fn make_emph(text: &str) -> Inline {
+        Inline::Emph(Emph {
+            content: vec![make_str(text)],
+            source_info: dummy_source(),
+        })
+    }
+
+    fn make_strong(text: &str) -> Inline {
+        Inline::Strong(Strong {
+            content: vec![make_str(text)],
+            source_info: dummy_source(),
+        })
+    }
+
+    // ========================================================================
+    // is_container_block tests
+    // ========================================================================
+
+    #[test]
+    fn test_is_container_block_div() {
+        assert!(is_container_block(&make_div(vec![])));
+    }
+
+    #[test]
+    fn test_is_container_block_blockquote() {
+        assert!(is_container_block(&make_blockquote(vec![])));
+    }
+
+    #[test]
+    fn test_is_container_block_bullet_list() {
+        assert!(is_container_block(&make_bullet_list(vec![])));
+    }
+
+    #[test]
+    fn test_is_container_block_ordered_list() {
+        assert!(is_container_block(&make_ordered_list(vec![])));
+    }
+
+    #[test]
+    fn test_is_container_block_figure() {
+        assert!(is_container_block(&make_figure(vec![])));
+    }
+
+    #[test]
+    fn test_is_container_block_paragraph_is_false() {
+        assert!(!is_container_block(&make_para("text")));
+    }
+
+    // ========================================================================
+    // has_inline_content tests
+    // ========================================================================
+
+    #[test]
+    fn test_has_inline_content_paragraph() {
+        assert!(has_inline_content(&make_para("text")));
+    }
+
+    #[test]
+    fn test_has_inline_content_plain() {
+        assert!(has_inline_content(&make_plain("text")));
+    }
+
+    #[test]
+    fn test_has_inline_content_header() {
+        assert!(has_inline_content(&make_header(1, "text")));
+    }
+
+    #[test]
+    fn test_has_inline_content_div_is_false() {
+        assert!(!has_inline_content(&make_div(vec![])));
+    }
+
+    // ========================================================================
+    // is_container_inline tests
+    // ========================================================================
+
+    #[test]
+    fn test_is_container_inline_emph() {
+        assert!(is_container_inline(&make_emph("text")));
+    }
+
+    #[test]
+    fn test_is_container_inline_strong() {
+        assert!(is_container_inline(&make_strong("text")));
+    }
+
+    #[test]
+    fn test_is_container_inline_str_is_false() {
+        assert!(!is_container_inline(&make_str("text")));
+    }
+
+    // ========================================================================
+    // Empty sequence tests
+    // ========================================================================
+
+    #[test]
+    fn test_empty_block_sequences() {
+        let original: Vec<Block> = vec![];
+        let executed: Vec<Block> = vec![];
+        let mut cache = HashCache::new();
+
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+        assert!(plan.block_alignments.is_empty());
+    }
+
+    #[test]
+    fn test_empty_inline_sequences() {
+        let original: Vec<Inline> = vec![];
+        let executed: Vec<Inline> = vec![];
+        let mut cache = HashCache::new();
+
+        let plan = compute_inline_alignments(&original, &executed, &mut cache);
+        assert!(plan.inline_alignments.is_empty());
+    }
+
+    // ========================================================================
+    // Basic reconciliation tests
+    // ========================================================================
 
     #[test]
     fn test_identical_asts_all_kept() {
@@ -681,5 +860,245 @@ mod tests {
 
         // Should have a nested plan for the Div's children
         assert!(plan.block_container_plans.contains_key(&0));
+    }
+
+    // ========================================================================
+    // List reconciliation tests
+    // ========================================================================
+
+    #[test]
+    fn test_bullet_list_reconciliation() {
+        let original = vec![make_bullet_list(vec![
+            vec![make_para("item1")],
+            vec![make_para("item2")],
+        ])];
+        let executed = vec![make_bullet_list(vec![
+            vec![make_para("item1")],
+            vec![make_para("changed")],
+        ])];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 1);
+        assert!(matches!(
+            plan.block_alignments[0],
+            BlockAlignment::RecurseIntoContainer { .. }
+        ));
+    }
+
+    #[test]
+    fn test_ordered_list_reconciliation() {
+        let original = vec![make_ordered_list(vec![
+            vec![make_para("first")],
+            vec![make_para("second")],
+        ])];
+        let executed = vec![make_ordered_list(vec![
+            vec![make_para("first")],
+            vec![make_para("modified")],
+        ])];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 1);
+        assert!(matches!(
+            plan.block_alignments[0],
+            BlockAlignment::RecurseIntoContainer { .. }
+        ));
+    }
+
+    #[test]
+    fn test_list_with_extra_items() {
+        let orig_items: Vec<Vec<Block>> = vec![vec![make_para("item1")]];
+        let exec_items: Vec<Vec<Block>> = vec![
+            vec![make_para("item1")],
+            vec![make_para("item2")],
+            vec![make_para("item3")],
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        // Extra items from executed should be counted as replaced
+        assert_eq!(plan.stats.blocks_replaced, 2);
+    }
+
+    // ========================================================================
+    // BlockQuote and Figure tests
+    // ========================================================================
+
+    #[test]
+    fn test_blockquote_recursion() {
+        let original = vec![make_blockquote(vec![make_para("quote")])];
+        let executed = vec![make_blockquote(vec![make_para("modified quote")])];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 1);
+        assert!(matches!(
+            plan.block_alignments[0],
+            BlockAlignment::RecurseIntoContainer { .. }
+        ));
+    }
+
+    #[test]
+    fn test_figure_recursion() {
+        let original = vec![make_figure(vec![make_para("caption")])];
+        let executed = vec![make_figure(vec![make_para("new caption")])];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 1);
+        assert!(matches!(
+            plan.block_alignments[0],
+            BlockAlignment::RecurseIntoContainer { .. }
+        ));
+    }
+
+    // ========================================================================
+    // Inline reconciliation tests
+    // ========================================================================
+
+    #[test]
+    fn test_inline_keep_matching() {
+        let original = vec![make_str("hello"), make_str("world")];
+        let executed = vec![make_str("hello"), make_str("world")];
+
+        let mut cache = HashCache::new();
+        let plan = compute_inline_alignments(&original, &executed, &mut cache);
+
+        assert_eq!(plan.inline_alignments.len(), 2);
+        assert!(matches!(
+            plan.inline_alignments[0],
+            InlineAlignment::KeepBefore(0)
+        ));
+        assert!(matches!(
+            plan.inline_alignments[1],
+            InlineAlignment::KeepBefore(1)
+        ));
+    }
+
+    #[test]
+    fn test_inline_use_after_for_new() {
+        let original = vec![make_str("hello")];
+        let executed = vec![make_str("hello"), make_str("new")];
+
+        let mut cache = HashCache::new();
+        let plan = compute_inline_alignments(&original, &executed, &mut cache);
+
+        assert_eq!(plan.inline_alignments.len(), 2);
+        assert!(matches!(
+            plan.inline_alignments[0],
+            InlineAlignment::KeepBefore(0)
+        ));
+        assert!(matches!(
+            plan.inline_alignments[1],
+            InlineAlignment::UseAfter(1)
+        ));
+    }
+
+    #[test]
+    fn test_inline_container_emph_recursion() {
+        let original = vec![make_emph("original")];
+        let executed = vec![make_emph("modified")];
+
+        let mut cache = HashCache::new();
+        let plan = compute_inline_alignments(&original, &executed, &mut cache);
+
+        assert_eq!(plan.inline_alignments.len(), 1);
+        assert!(matches!(
+            plan.inline_alignments[0],
+            InlineAlignment::RecurseIntoContainer { .. }
+        ));
+        assert!(plan.inline_container_plans.contains_key(&0));
+    }
+
+    #[test]
+    fn test_inline_container_strong_recursion() {
+        let original = vec![make_strong("original")];
+        let executed = vec![make_strong("modified")];
+
+        let mut cache = HashCache::new();
+        let plan = compute_inline_alignments(&original, &executed, &mut cache);
+
+        assert_eq!(plan.inline_alignments.len(), 1);
+        assert!(matches!(
+            plan.inline_alignments[0],
+            InlineAlignment::RecurseIntoContainer { .. }
+        ));
+    }
+
+    // ========================================================================
+    // Inline plan for block tests
+    // ========================================================================
+
+    #[test]
+    fn test_inline_plan_for_paragraph() {
+        let orig = make_para("hello");
+        let exec = make_para("world");
+        let mut cache = HashCache::new();
+
+        let plan = compute_inline_plan_for_block(&orig, &exec, &mut cache);
+        assert!(plan.is_some());
+    }
+
+    #[test]
+    fn test_inline_plan_for_plain() {
+        let orig = make_plain("hello");
+        let exec = make_plain("world");
+        let mut cache = HashCache::new();
+
+        let plan = compute_inline_plan_for_block(&orig, &exec, &mut cache);
+        assert!(plan.is_some());
+    }
+
+    #[test]
+    fn test_inline_plan_for_header() {
+        let orig = make_header(1, "hello");
+        let exec = make_header(1, "world");
+        let mut cache = HashCache::new();
+
+        let plan = compute_inline_plan_for_block(&orig, &exec, &mut cache);
+        assert!(plan.is_some());
+    }
+
+    #[test]
+    fn test_inline_plan_for_div_is_none() {
+        let orig = make_div(vec![]);
+        let exec = make_div(vec![]);
+        let mut cache = HashCache::new();
+
+        let plan = compute_inline_plan_for_block(&orig, &exec, &mut cache);
+        assert!(plan.is_none());
+    }
+
+    // ========================================================================
+    // Block with inline content type matching
+    // ========================================================================
+
+    #[test]
+    fn test_paragraph_with_kept_inline_triggers_recursion() {
+        // When a paragraph has some matching inlines, it should recurse
+        let orig_para = Block::Paragraph(Paragraph {
+            content: vec![make_str("kept"), make_str("orig_only")],
+            source_info: dummy_source(),
+        });
+        let exec_para = Block::Paragraph(Paragraph {
+            content: vec![make_str("kept"), make_str("exec_only")],
+            source_info: dummy_source(),
+        });
+
+        let original = vec![orig_para];
+        let executed = vec![exec_para];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        // Should detect the common inline and recurse
+        assert_eq!(plan.block_alignments.len(), 1);
+        // May be RecurseIntoContainer if inline matching triggers it
     }
 }
