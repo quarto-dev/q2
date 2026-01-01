@@ -34,7 +34,7 @@ fn parse_qmd_to_pandoc_ast(input: &str) -> String {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &ASTContext::anonymous(),
         &mut error_collector,
     )

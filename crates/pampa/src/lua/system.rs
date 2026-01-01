@@ -206,9 +206,7 @@ pub fn register_pandoc_system(
             for (i, entry) in entries.iter().enumerate() {
                 // Return just the filename, not the full path
                 let name = entry
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| entry.to_string_lossy().to_string());
+                    .file_name().map_or_else(|| entry.to_string_lossy().to_string(), |n| n.to_string_lossy().to_string());
                 table.set(i + 1, name)?;
             }
             Ok(table)
@@ -287,7 +285,7 @@ pub fn register_pandoc_system(
             }
 
             // Clear variables not in new environment
-            for (key, _) in &current_env {
+            for key in current_env.keys() {
                 if env_table.get::<Value>(key.clone())?.is_nil() {
                     // SAFETY: We're in a single-threaded Lua context
                     unsafe {
@@ -344,11 +342,11 @@ pub fn register_pandoc_system(
                 let temp_path = temp.path().to_string_lossy().to_string();
 
                 // Execute callback with temp directory path
-                let result = callback.call::<MultiValue>(temp_path);
+                
 
                 // temp directory is cleaned up when `temp` drops
 
-                result
+                callback.call::<MultiValue>(temp_path)
             },
         )?,
     )?;
@@ -427,7 +425,7 @@ pub fn register_pandoc_system(
                         Ok(Value::Table(table))
                     } else {
                         Ok(Value::String(
-                            lua.create_string(&path.to_string_lossy().to_string())?,
+                            lua.create_string(path.to_string_lossy().to_string())?,
                         ))
                     }
                 }
@@ -569,7 +567,7 @@ mod tests {
         let test_dir_str = test_dir.to_string_lossy().to_string();
 
         // Create directory
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.make_directory('{}', false)",
             test_dir_str.replace('\\', "\\\\")
         ))
@@ -579,7 +577,7 @@ mod tests {
         assert!(test_dir.exists());
 
         // Remove directory
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.remove_directory('{}', false)",
             test_dir_str.replace('\\', "\\\\")
         ))
@@ -601,7 +599,7 @@ mod tests {
             .replace('\\', "\\\\");
 
         // Write file
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.write_file('{}', 'Hello, World!')",
             test_file_str
         ))
@@ -612,7 +610,7 @@ mod tests {
 
         // Read file
         let content: String = lua
-            .load(&format!("pandoc.system.read_file('{}')", test_file_str))
+            .load(format!("pandoc.system.read_file('{}')", test_file_str))
             .eval()
             .unwrap();
 
@@ -634,7 +632,7 @@ mod tests {
         let dst_str = dst.to_string_lossy().to_string().replace('\\', "\\\\");
 
         // Copy file
-        lua.load(&format!("pandoc.system.copy('{}', '{}')", src_str, dst_str))
+        lua.load(format!("pandoc.system.copy('{}', '{}')", src_str, dst_str))
             .exec()
             .unwrap();
 
@@ -655,7 +653,7 @@ mod tests {
         let old_str = old.to_string_lossy().to_string().replace('\\', "\\\\");
         let new_str = new.to_string_lossy().to_string().replace('\\', "\\\\");
 
-        lua.load(&format!(
+        lua.load(format!(
             "pandoc.system.rename('{}', '{}')",
             old_str, new_str
         ))
@@ -678,7 +676,7 @@ mod tests {
 
         let file_str = file.to_string_lossy().to_string().replace('\\', "\\\\");
 
-        lua.load(&format!("pandoc.system.remove('{}')", file_str))
+        lua.load(format!("pandoc.system.remove('{}')", file_str))
             .exec()
             .unwrap();
 

@@ -166,8 +166,7 @@ impl Q228Converter {
     fn offset_to_column(&self, content: &str, offset: usize) -> usize {
         let line_start = content[..offset]
             .rfind('\n')
-            .map(|pos| pos + 1)
-            .unwrap_or(0);
+            .map_or(0, |pos| pos + 1);
         offset - line_start
     }
 }
@@ -193,7 +192,7 @@ impl Rule for Q228Converter {
                 issue_count: 1,
                 message: Some(format!(
                     "Q-2-28 line break before escaped shortcode close at line {}",
-                    v.error_location.as_ref().map(|l| l.row + 1).unwrap_or(0)
+                    v.error_location.as_ref().map_or(0, |l| l.row + 1)
                 )),
                 location: v.error_location,
                 error_code: Some("Q-2-28".to_string()),

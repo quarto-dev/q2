@@ -325,15 +325,14 @@ impl ValidationError {
     ) -> Self {
         // Extract location from the node using SourceContext
         // Map the offset to get proper file/line/column information
-        if let Some(mapped) = node.source_info.map_offset(0, ctx) {
-            if let Some(file) = ctx.get_file(mapped.file_id) {
+        if let Some(mapped) = node.source_info.map_offset(0, ctx)
+            && let Some(file) = ctx.get_file(mapped.file_id) {
                 self.location = Some(SourceLocation {
                     file: file.path.clone(),
                     line: mapped.location.row + 1, // 1-indexed for display
                     column: mapped.location.column + 1, // 1-indexed for display
                 });
             }
-        }
 
         // Still store the node for potential future use
         self.yaml_node = Some(node);

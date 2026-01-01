@@ -217,7 +217,7 @@ impl<'a> XmlParser<'a> {
                 Ok(Event::CData(e)) => {
                     self.handle_cdata(e, event_start)?;
                 }
-                Ok(Event::Comment(_)) | Ok(Event::PI(_)) | Ok(Event::Decl(_)) => {
+                Ok(Event::Comment(_) | Event::PI(_) | Event::Decl(_)) => {
                     // Skip comments, processing instructions, and XML declarations
                 }
                 Ok(Event::DocType(_)) => {
@@ -272,7 +272,7 @@ impl<'a> XmlParser<'a> {
 
     fn handle_end(&mut self, e: BytesEnd<'_>) -> Result<XmlElement> {
         let end_name = String::from_utf8_lossy(e.name().as_ref()).to_string();
-        let end_local_name = end_name.split(':').last().unwrap_or(&end_name);
+        let end_local_name = end_name.split(':').next_back().unwrap_or(&end_name);
 
         let node = self.stack.pop().ok_or_else(|| Error::InvalidStructure {
             message: format!("Unexpected closing tag </{}>", end_name),
@@ -499,8 +499,7 @@ impl<'a> XmlParser<'a> {
                     // Unquoted value (find end at whitespace or >)
                     let value_end_rel = search_area[value_start_rel..]
                         .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
-                        .map(|p| value_start_rel + p)
-                        .unwrap_or(search_area.len());
+                        .map_or(search_area.len(), |p| value_start_rel + p);
                     (
                         content_start + search_start + value_start_rel,
                         content_start + search_start + value_end_rel,
@@ -660,7 +659,7 @@ mod tests {
         assert!(
             matches!(
                 result,
-                Err(Error::MismatchedEndTag { .. }) | Err(Error::XmlSyntax { .. })
+                Err(Error::MismatchedEndTag { .. } | Error::XmlSyntax { .. })
             ),
             "Expected MismatchedEndTag or XmlSyntax error, got: {:?}",
             result

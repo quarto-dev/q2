@@ -21,7 +21,7 @@ pub fn process_code_span<T: Write>(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut is_raw: Option<String> = None;
-    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
+    let mut attr = (String::new(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
     let mut language_attribute: Option<String> = None;
     let mut inlines: Vec<_> = children
@@ -75,7 +75,7 @@ pub fn process_code_span<T: Write>(
             }
         })
         .collect();
-    if inlines.len() == 0 {
+    if inlines.is_empty() {
         writeln!(
             buf,
             "Warning: Expected exactly one inline in code_span, got none"
@@ -83,13 +83,13 @@ pub fn process_code_span<T: Write>(
         .unwrap();
         return PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
             attr,
-            text: "".to_string(),
+            text: String::new(),
             source_info: node_source_info_with_context(node, context),
             attr_source,
         }));
     }
     let (_, child) = inlines.remove(0);
-    if inlines.len() > 0 {
+    if !inlines.is_empty() {
         writeln!(
             buf,
             "Warning: Expected exactly one inline in code_span, got {}. Will ignore the rest.",
@@ -106,7 +106,7 @@ pub fn process_code_span<T: Write>(
                 child
             )
             .unwrap();
-            "".to_string()
+            String::new()
         }
     };
     if let Some(raw) = is_raw {
@@ -119,7 +119,7 @@ pub fn process_code_span<T: Write>(
         match language_attribute {
             Some(lang) => PandocNativeIntermediate::IntermediateInline(Inline::Code(Code {
                 attr,
-                text: lang + &" " + &text,
+                text: lang + " " + &text,
                 source_info: node_source_info_with_context(node, context),
                 attr_source: attr_source.clone(),
             })),

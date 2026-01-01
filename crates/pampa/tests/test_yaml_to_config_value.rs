@@ -461,11 +461,11 @@ fn test_float_values() {
         InterpretationContext::DocumentMetadata,
         InterpretationContext::ProjectConfig,
     ] {
-        let config = parse_yaml("3.14", context);
+        let config = parse_yaml("1.234", context);
         match &config.value {
             ConfigValueKind::Scalar(Yaml::Real(r)) => {
                 let f: f64 = r.parse().expect("Failed to parse float");
-                assert!((f - 3.14).abs() < 0.001);
+                assert!((f - 1.234).abs() < 0.001);
             }
             other => panic!("Expected Real, got: {:?}", other),
         }

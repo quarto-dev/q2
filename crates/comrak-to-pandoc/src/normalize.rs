@@ -142,7 +142,7 @@ fn is_single_image(inlines: &[Inline]) -> bool {
 fn normalize_inlines(inlines: Vec<Inline>) -> Vec<Inline> {
     inlines
         .into_iter()
-        .flat_map(|inline| normalize_inline_to_vec(inline))
+        .flat_map(normalize_inline_to_vec)
         .collect()
 }
 

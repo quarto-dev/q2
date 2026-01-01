@@ -19,6 +19,7 @@ use crate::doc::Doc;
 ///
 /// This mirrors the value types supported by Pandoc's doctemplates library.
 #[derive(Debug, Clone, PartialEq)]
+#[derive(Default)]
 pub enum TemplateValue {
     /// A string value.
     String(String),
@@ -33,6 +34,7 @@ pub enum TemplateValue {
     Map(HashMap<String, TemplateValue>),
 
     /// A null/missing value.
+    #[default]
     Null,
 }
 
@@ -141,11 +143,6 @@ impl TemplateValue {
     }
 }
 
-impl Default for TemplateValue {
-    fn default() -> Self {
-        TemplateValue::Null
-    }
-}
 
 /// A context for template evaluation containing variable bindings.
 #[derive(Debug, Clone, Default)]
@@ -206,7 +203,7 @@ mod tests {
 
         assert!(TemplateValue::String("hello".to_string()).is_truthy());
         assert!(TemplateValue::String("false".to_string()).is_truthy()); // "false" string is truthy!
-        assert!(!TemplateValue::String("".to_string()).is_truthy());
+        assert!(!TemplateValue::String(String::new()).is_truthy());
 
         assert!(TemplateValue::List(vec![TemplateValue::Bool(true)]).is_truthy());
         assert!(!TemplateValue::List(vec![TemplateValue::Bool(false)]).is_truthy());

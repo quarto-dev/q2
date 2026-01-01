@@ -32,7 +32,7 @@ pub fn process_pipe_table_delimiter_cell(
         } else if node == "pipe_table_align_left" {
             has_starter_colon = true;
         } else if node == "-" {
-            continue;
+            // Skip dash nodes
         } else {
             panic!("Unexpected node in pipe_table_delimiter_cell: {}", node);
         }
@@ -111,7 +111,7 @@ pub fn process_pipe_table_cell(
         alignment: Alignment::Default,
         col_span: 1,
         row_span: 1,
-        attr: ("".to_string(), vec![], LinkedHashMap::new()),
+        attr: (String::new(), vec![], LinkedHashMap::new()),
         content: vec![],
         source_info: node_source_info_with_context(node, context),
         attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -165,9 +165,9 @@ pub fn process_pipe_table(
         } else if node == "pipe_table_delimiter_row" {
             match child {
                 PandocNativeIntermediate::IntermediatePipeTableDelimiterRow(row) => {
-                    row.into_iter().for_each(|alignment| {
+                    for alignment in row {
                         colspec.push((alignment, ColWidth::Default));
-                    });
+                    }
                 }
                 _ => panic!(
                     "Expected PipeTableDelimiterRow in pipe_table_delimiter_row, got {:?}",
@@ -211,7 +211,7 @@ pub fn process_pipe_table(
     }
 
     // Check if header row has all empty cells
-    let header_is_empty = header.as_ref().map_or(false, |h| {
+    let header_is_empty = header.as_ref().is_some_and(|h| {
         h.cells.iter().all(|cell| {
             cell.content.iter().all(|block| {
                 if let Block::Plain(plain) = block {

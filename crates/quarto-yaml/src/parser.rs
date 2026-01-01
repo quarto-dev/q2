@@ -118,7 +118,7 @@ fn parse_impl(
                     end: Location {
                         offset: content.len(),
                         row: content.lines().count().saturating_sub(1),
-                        column: content.lines().last().map(|l| l.len()).unwrap_or(0),
+                        column: content.lines().last().map_or(0, |l| l.len()),
                     },
                 },
             )
@@ -397,7 +397,7 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
 
             Event::Scalar(value, _style, _anchor_id, tag) => {
                 // Capture tag information if present
-                let tag_info = tag.as_ref().and_then(|t| {
+                let tag_info = tag.as_ref().map(|t| {
                     // The marker points to the start of the VALUE, not the tag
                     // We need to find where the tag actually is in the source
                     let tag_len = 1 + t.suffix.len(); // ! + suffix
@@ -405,12 +405,12 @@ impl<'a> MarkedEventReceiver for YamlBuilder<'a> {
                     // Find the tag position by searching backwards in the source
                     if let Some(tag_offset) = self.find_tag_start_offset(&marker, &t.suffix) {
                         let tag_source_info = self.make_tag_source_info(tag_offset, tag_len);
-                        Some((t.suffix.clone(), tag_source_info))
+                        (t.suffix.clone(), tag_source_info)
                     } else {
                         // Fallback: if we can't find the tag, use the marker position
                         // This will be wrong but at least we won't panic
                         let tag_source_info = self.make_source_info(&marker, tag_len);
-                        Some((t.suffix.clone(), tag_source_info))
+                        (t.suffix.clone(), tag_source_info)
                     }
                 });
 

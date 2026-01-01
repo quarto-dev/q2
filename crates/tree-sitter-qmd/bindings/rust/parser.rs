@@ -138,7 +138,7 @@ impl<'a> MarkdownCursor<'a> {
     /// takes time O(n) to find the node, where n is the number of nodes in the tree.
     pub fn goto_id(&mut self, id: (bool, usize)) -> bool {
         self.goto_top();
-        return self.inner_goto_id(id);
+        self.inner_goto_id(id)
     }
 }
 

@@ -284,7 +284,7 @@ fn extract_content_blocks(custom: &mut CustomNode) -> Vec<Block> {
 fn make_attr(classes: &[&str]) -> Attr {
     (
         String::new(),
-        classes.iter().map(|s| s.to_string()).collect(),
+        classes.iter().map(|s| (*s).to_string()).collect(),
         LinkedHashMap::new(),
     )
 }
@@ -478,14 +478,12 @@ mod tests {
             for block in &header_div.content {
                 if let Block::Div(div) = block {
                     let (_, classes, _) = &div.attr;
-                    if classes.contains(&"callout-title-container".to_string()) {
-                        if let Block::Plain(plain) = &div.content[0] {
-                            if let Inline::Str(s) = &plain.content[0] {
+                    if classes.contains(&"callout-title-container".to_string())
+                        && let Block::Plain(plain) = &div.content[0]
+                            && let Inline::Str(s) = &plain.content[0] {
                                 assert_eq!(s.text, "Note");
                                 return;
                             }
-                        }
-                    }
                 }
             }
         }

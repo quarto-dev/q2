@@ -37,8 +37,7 @@ pub fn extract_config_from_metadata(meta: &ConfigValue) -> HtmlConfig {
         .get("format")
         .and_then(|f| f.get("html"))
         .and_then(|h| h.get("source-location"))
-        .map(|sl| sl.is_string_value("full"))
-        .unwrap_or(false);
+        .is_some_and(|sl| sl.is_string_value("full"));
 
     HtmlConfig {
         include_source_locations,
@@ -540,7 +539,7 @@ fn write_inline<W: Write>(
             write!(ctx, " ")?;
         }
         Inline::SoftBreak(_) => {
-            write!(ctx, "\n")?;
+            writeln!(ctx)?;
         }
         Inline::LineBreak(_) => {
             write!(ctx, "<br />")?;
@@ -911,13 +910,12 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, ">")?;
 
             // Caption (if any)
-            if let Some(ref long_caption) = table.caption.long {
-                if !long_caption.is_empty() {
+            if let Some(ref long_caption) = table.caption.long
+                && !long_caption.is_empty() {
                     writeln!(ctx, "<caption>")?;
                     write_blocks(long_caption, ctx)?;
                     writeln!(ctx, "</caption>")?;
                 }
-            }
 
             // Column group (for alignment)
             if !table.colspec.is_empty() {
@@ -969,13 +967,12 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             write_block_source_attrs(block, ctx)?;
             writeln!(ctx, ">")?;
             write_blocks(&figure.content, ctx)?;
-            if let Some(ref long_caption) = figure.caption.long {
-                if !long_caption.is_empty() {
+            if let Some(ref long_caption) = figure.caption.long
+                && !long_caption.is_empty() {
                     writeln!(ctx, "<figcaption>")?;
                     write_blocks(long_caption, ctx)?;
                     writeln!(ctx, "</figcaption>")?;
                 }
-            }
             writeln!(ctx, "</figure>")?;
         }
         Block::Div(div) => {
@@ -1390,10 +1387,7 @@ mod tests {
     fn test_extract_config_format_without_html() {
         let meta = make_config_map(vec![make_config_entry(
             "format",
-            make_config_map(vec![make_config_entry(
-                "pdf",
-                make_config_map(vec![]),
-            )]),
+            make_config_map(vec![make_config_entry("pdf", make_config_map(vec![]))]),
         )]);
         let config = extract_config_from_metadata(&meta);
         assert!(!config.include_source_locations);

@@ -15,7 +15,6 @@ use super::types::{
 use crate::custom::{CustomNode, Slot};
 use crate::{Block, Inline, Pandoc};
 use hashlink::LinkedHashMap;
-use std::collections::HashMap;
 
 /// Apply a reconciliation plan to produce a merged Pandoc AST.
 ///
@@ -358,7 +357,7 @@ fn apply_custom_node_reconciliation(
     slot_plan: &CustomNodeSlotPlan,
 ) -> CustomNode {
     // Drain orig slots into a map for selective taking
-    let mut orig_slots: HashMap<String, Slot> = orig.slots.into_iter().collect();
+    let mut orig_slots: LinkedHashMap<String, Slot> = orig.slots.into_iter().collect();
 
     // Build result slots following executed's slot structure (preserves order)
     let mut result_slots = LinkedHashMap::new();
@@ -446,7 +445,14 @@ fn apply_inline_slot_reconciliation(
 mod tests {
     use super::*;
     use crate::reconcile::compute::compute_reconciliation;
-    use crate::{Div, Paragraph, Str};
+    use crate::reconcile::types::{
+        BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
+    };
+    use crate::{
+        AttrSourceInfo, BlockQuote, BulletList, Div, Emph, Header, Note, OrderedList, Paragraph,
+        Plain, Str, Strong,
+    };
+    use crate::{ListNumberDelim, ListNumberStyle};
     use hashlink::LinkedHashMap;
     use quarto_source_map::{FileId, SourceInfo};
 
@@ -456,6 +462,13 @@ mod tests {
 
     fn source_b() -> SourceInfo {
         SourceInfo::original(FileId(1), 100, 200)
+    }
+
+    fn make_str(text: &str, source: SourceInfo) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: source,
+        })
     }
 
     fn make_para_with_source(text: &str, source: SourceInfo) -> Block {
@@ -476,6 +489,8 @@ mod tests {
             attr_source: crate::AttrSourceInfo::empty(),
         })
     }
+
+    // ==================== Basic Apply Tests ====================
 
     #[test]
     fn test_kept_blocks_preserve_source() {
@@ -562,6 +577,413 @@ mod tests {
             }
         } else {
             panic!("Expected Div");
+        }
+    }
+
+    // ==================== Block Container Tests ====================
+
+    #[test]
+    fn test_blockquote_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::BlockQuote(BlockQuote {
+                content: vec![make_para_with_source("quoted", source_a())],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::BlockQuote(BlockQuote {
+                content: vec![make_para_with_source("quoted", source_b())],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::BlockQuote(bq) = &result.blocks[0] {
+            assert_eq!(bq.source_info, source_a());
+        } else {
+            panic!("Expected BlockQuote");
+        }
+    }
+
+    #[test]
+    fn test_bullet_list_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::BulletList(BulletList {
+                content: vec![vec![make_para_with_source("item1", source_a())]],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::BulletList(BulletList {
+                content: vec![vec![make_para_with_source("item1", source_b())]],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::BulletList(bl) = &result.blocks[0] {
+            assert_eq!(bl.source_info, source_a());
+        } else {
+            panic!("Expected BulletList");
+        }
+    }
+
+    #[test]
+    fn test_ordered_list_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::OrderedList(OrderedList {
+                attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+                content: vec![vec![make_para_with_source("item1", source_a())]],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::OrderedList(OrderedList {
+                attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+                content: vec![vec![make_para_with_source("item1", source_b())]],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::OrderedList(ol) = &result.blocks[0] {
+            assert_eq!(ol.source_info, source_a());
+        } else {
+            panic!("Expected OrderedList");
+        }
+    }
+
+    // ==================== Inline Block Tests ====================
+
+    #[test]
+    fn test_header_inline_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Header(Header {
+                level: 1,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![make_str("Title", source_a())],
+                source_info: source_a(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Header(Header {
+                level: 1,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![make_str("Title", source_b())],
+                source_info: source_b(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::Header(h) = &result.blocks[0] {
+            assert_eq!(h.source_info, source_a());
+        } else {
+            panic!("Expected Header");
+        }
+    }
+
+    #[test]
+    fn test_plain_inline_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Plain(Plain {
+                content: vec![make_str("text", source_a())],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Plain(Plain {
+                content: vec![make_str("text", source_b())],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::Plain(p) = &result.blocks[0] {
+            assert_eq!(p.source_info, source_a());
+        } else {
+            panic!("Expected Plain");
+        }
+    }
+
+    // ==================== Inline Container Tests ====================
+
+    #[test]
+    fn test_emph_inline_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Emph(Emph {
+                    content: vec![make_str("emphasized", source_a())],
+                    source_info: source_a(),
+                })],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Emph(Emph {
+                    content: vec![make_str("emphasized", source_b())],
+                    source_info: source_b(),
+                })],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::Paragraph(p) = &result.blocks[0] {
+            if let Inline::Emph(e) = &p.content[0] {
+                assert_eq!(e.source_info, source_a());
+            } else {
+                panic!("Expected Emph");
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_strong_inline_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Strong(Strong {
+                    content: vec![make_str("bold", source_a())],
+                    source_info: source_a(),
+                })],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Strong(Strong {
+                    content: vec![make_str("bold", source_b())],
+                    source_info: source_b(),
+                })],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::Paragraph(p) = &result.blocks[0] {
+            if let Inline::Strong(s) = &p.content[0] {
+                assert_eq!(s.source_info, source_a());
+            } else {
+                panic!("Expected Strong");
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    // ==================== Note Reconciliation Tests ====================
+
+    #[test]
+    fn test_note_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Note(Note {
+                    content: vec![make_para_with_source("footnote", source_a())],
+                    source_info: source_a(),
+                })],
+                source_info: source_a(),
+            })],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Note(Note {
+                    content: vec![make_para_with_source("footnote", source_b())],
+                    source_info: source_b(),
+                })],
+                source_info: source_b(),
+            })],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        if let Block::Paragraph(p) = &result.blocks[0] {
+            if let Inline::Note(n) = &p.content[0] {
+                assert_eq!(n.source_info, source_a());
+            } else {
+                panic!("Expected Note");
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    // ==================== Direct Apply Function Tests ====================
+
+    #[test]
+    fn test_apply_reconciliation_to_blocks_keep_before() {
+        let original = vec![make_para_with_source("hello", source_a())];
+        let executed = vec![make_para_with_source("hello", source_b())];
+
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+
+        let result = apply_reconciliation_to_blocks(original, executed, &plan);
+
+        assert_eq!(result.len(), 1);
+        if let Block::Paragraph(p) = &result[0] {
+            assert_eq!(p.source_info, source_a());
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_apply_reconciliation_to_blocks_use_after() {
+        let original = vec![make_para_with_source("hello", source_a())];
+        let executed = vec![make_para_with_source("world", source_b())];
+
+        let plan = ReconciliationPlan {
+            block_alignments: vec![BlockAlignment::UseAfter(0)],
+            ..Default::default()
+        };
+
+        let result = apply_reconciliation_to_blocks(original, executed, &plan);
+
+        assert_eq!(result.len(), 1);
+        if let Block::Paragraph(p) = &result[0] {
+            assert_eq!(p.source_info, source_b());
+            if let Inline::Str(s) = &p.content[0] {
+                assert_eq!(s.text, "world");
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
+
+    #[test]
+    fn test_apply_reconciliation_to_inlines() {
+        let original = vec![make_str("hello", source_a())];
+        let executed = vec![make_str("hello", source_b())];
+
+        let plan = InlineReconciliationPlan {
+            inline_alignments: vec![InlineAlignment::KeepBefore(0)],
+            ..Default::default()
+        };
+
+        let result = apply_reconciliation_to_inlines(original, executed, &plan);
+
+        assert_eq!(result.len(), 1);
+        if let Inline::Str(s) = &result[0] {
+            assert_eq!(s.source_info, source_a());
+        } else {
+            panic!("Expected Str");
+        }
+    }
+
+    #[test]
+    fn test_apply_reconciliation_to_inlines_use_after() {
+        let original = vec![make_str("hello", source_a())];
+        let executed = vec![make_str("world", source_b())];
+
+        let plan = InlineReconciliationPlan {
+            inline_alignments: vec![InlineAlignment::UseAfter(0)],
+            ..Default::default()
+        };
+
+        let result = apply_reconciliation_to_inlines(original, executed, &plan);
+
+        assert_eq!(result.len(), 1);
+        if let Inline::Str(s) = &result[0] {
+            assert_eq!(s.source_info, source_b());
+            assert_eq!(s.text, "world");
+        } else {
+            panic!("Expected Str");
+        }
+    }
+
+    // ==================== Empty Cases ====================
+
+    #[test]
+    fn test_empty_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original, executed, &plan);
+
+        assert!(result.blocks.is_empty());
+    }
+
+    #[test]
+    fn test_multiple_blocks_reconciliation() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![
+                make_para_with_source("first", source_a()),
+                make_para_with_source("second", source_a()),
+                make_para_with_source("third", source_a()),
+            ],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![
+                make_para_with_source("first", source_b()),
+                make_para_with_source("changed", source_b()),
+                make_para_with_source("third", source_b()),
+            ],
+        };
+
+        let plan = compute_reconciliation(&original, &executed);
+        let result = apply_reconciliation(original.clone(), executed, &plan);
+
+        assert_eq!(result.blocks.len(), 3);
+
+        // First block should have source_a (kept)
+        if let Block::Paragraph(p) = &result.blocks[0] {
+            assert_eq!(p.source_info, source_a());
+        }
+
+        // Second block should have source_b (replaced)
+        if let Block::Paragraph(p) = &result.blocks[1] {
+            assert_eq!(p.source_info, source_b());
+        }
+
+        // Third block should have source_a (kept)
+        if let Block::Paragraph(p) = &result.blocks[2] {
+            assert_eq!(p.source_info, source_a());
         }
     }
 }

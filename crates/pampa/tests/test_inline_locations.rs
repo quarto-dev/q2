@@ -91,7 +91,7 @@ fn test_inline_source_locations() {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     )
@@ -188,7 +188,7 @@ fn test_merged_strings_preserve_location() {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     )
@@ -260,7 +260,7 @@ fn test_separate_strings_keep_separate_locations() {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     )
@@ -337,7 +337,7 @@ fn test_note_source_location() {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     )
@@ -441,7 +441,7 @@ fn test_note_reference_source_location() {
     let pandoc = treesitter_to_pandoc(
         &mut std::io::sink(),
         &tree,
-        &input_bytes,
+        input_bytes,
         &context,
         &mut error_collector,
     )

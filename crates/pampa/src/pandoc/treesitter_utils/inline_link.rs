@@ -24,9 +24,9 @@ pub fn process_inline_link<T: Write, F>(
 where
     F: Fn() -> String,
 {
-    let mut attr: Attr = ("".to_string(), vec![], LinkedHashMap::new());
+    let mut attr: Attr = (String::new(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
-    let mut target = ("".to_string(), "".to_string());
+    let mut target = (String::new(), String::new());
     let mut target_source = crate::pandoc::attr::TargetSourceInfo::empty();
     let mut content: Vec<Inline> = Vec::new();
 

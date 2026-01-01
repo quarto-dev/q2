@@ -105,7 +105,7 @@ fn test_html_element_produces_warning_not_error() {
     // Warnings should be Q-2-9 (not Q-2-6 errors)
     let html_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_ref().map(|c| c.as_str()) == Some("Q-2-9"))
+        .filter(|w| w.code.as_deref() == Some("Q-2-9"))
         .collect();
 
     assert!(
@@ -173,7 +173,7 @@ fn test_multiple_html_elements() {
     // Should have 4 warnings (two opening + two closing tags)
     let html_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_ref().map(|c| c.as_str()) == Some("Q-2-9"))
+        .filter(|w| w.code.as_deref() == Some("Q-2-9"))
         .collect();
 
     assert_eq!(
@@ -231,7 +231,7 @@ fn test_block_level_html_elements() {
     // Should have warnings for both div tags
     let html_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_ref().map(|c| c.as_str()) == Some("Q-2-9"))
+        .filter(|w| w.code.as_deref() == Some("Q-2-9"))
         .collect();
 
     assert!(
@@ -290,7 +290,7 @@ fn test_html_elements_source_locations() {
     // Get Q-2-9 warnings
     let html_warnings: Vec<_> = warnings
         .iter()
-        .filter(|w| w.code.as_ref().map(|c| c.as_str()) == Some("Q-2-9"))
+        .filter(|w| w.code.as_deref() == Some("Q-2-9"))
         .collect();
 
     assert_eq!(html_warnings.len(), 2, "Should have 2 warnings");

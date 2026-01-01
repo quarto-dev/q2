@@ -173,7 +173,7 @@ impl<'a> MergedCursor<'a> {
     /// Navigate to a path (multiple keys at once).
     pub fn at_path(&self, path: &[&str]) -> MergedCursor<'a> {
         let mut new_path = self.path.clone();
-        new_path.extend(path.iter().map(|s| s.to_string()));
+        new_path.extend(path.iter().map(|s| (*s).to_string()));
         MergedCursor {
             config: self.config,
             path: new_path,
@@ -263,8 +263,8 @@ impl<'a> MergedCursor<'a> {
     pub fn as_scalar(&self) -> Option<MergedScalar<'a>> {
         // Walk layers in reverse (highest priority first)
         for (i, layer) in self.config.layers.iter().enumerate().rev() {
-            if let Some(value) = self.navigate_to(layer) {
-                if matches!(
+            if let Some(value) = self.navigate_to(layer)
+                && matches!(
                     value.value,
                     ConfigValueKind::Scalar(_)
                         | ConfigValueKind::PandocInlines(_)
@@ -278,7 +278,6 @@ impl<'a> MergedCursor<'a> {
                         layer_index: i,
                     });
                 }
-            }
         }
         None
     }
@@ -293,8 +292,8 @@ impl<'a> MergedCursor<'a> {
 
         // Walk layers in order (lowest priority first)
         for (i, layer) in self.config.layers.iter().enumerate() {
-            if let Some(value) = self.navigate_to(layer) {
-                if let ConfigValueKind::Array(arr) = &value.value {
+            if let Some(value) = self.navigate_to(layer)
+                && let ConfigValueKind::Array(arr) = &value.value {
                     found_any = true;
 
                     // Apply merge semantics
@@ -316,7 +315,6 @@ impl<'a> MergedCursor<'a> {
                         });
                     }
                 }
-            }
         }
 
         if found_any {
@@ -337,8 +335,7 @@ impl<'a> MergedCursor<'a> {
             // Check if there's actually a map here (could be empty map)
             let has_map = self.config.layers.iter().any(|layer| {
                 self.navigate_to(layer)
-                    .map(|v| matches!(v.value, ConfigValueKind::Map(_)))
-                    .unwrap_or(false)
+                    .is_some_and(|v| matches!(v.value, ConfigValueKind::Map(_)))
             });
 
             if !has_map {

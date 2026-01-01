@@ -99,7 +99,7 @@ pub fn convert(document: JsValue, input_format: JsValue, output_format: JsValue)
     let input_format = as_string(&input_format, "input_format");
     let output_format = as_string(&output_format, "output_format");
     let (doc, context) = match input_format.as_str() {
-        "qmd" => wasm_entry_points::qmd_to_pandoc(&input.as_bytes()).unwrap(),
+        "qmd" => wasm_entry_points::qmd_to_pandoc(input.as_bytes()).unwrap(),
         "json" => json_to_pandoc(&input).unwrap(),
         _ => panic!("Unsupported input format: {}", input_format),
     };

@@ -78,9 +78,7 @@ pub fn extract_disamb_data_with_processor(
                 // This handles cases where collapsing suppresses author names
                 let names = if let Some(reference) = processor.get_reference(&item_id) {
                     reference
-                        .author
-                        .as_ref()
-                        .map(|a| a.clone())
+                        .author.clone()
                         .unwrap_or_default()
                 } else {
                     item_output.extract_all_names()
@@ -126,7 +124,7 @@ pub fn find_ambiguities(items: Vec<DisambData>) -> Vec<Vec<DisambData>> {
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -159,7 +157,7 @@ pub fn find_year_suffix_ambiguities(
         let family_names: Vec<&str> = data
             .names
             .iter()
-            .filter_map(|n| n.family.as_ref().map(|s| s.as_str()))
+            .filter_map(|n| n.family.as_deref())
             .collect();
         let name_part = family_names.join("|");
 
@@ -176,7 +174,7 @@ pub fn find_year_suffix_ambiguities(
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -235,7 +233,7 @@ pub fn find_year_suffix_with_full_author_match(
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -325,7 +323,7 @@ pub fn merge_ambiguity_groups(
         .into_values()
         .filter(|group| {
             let mut unique_ids: Vec<&str> = group.iter().map(|d| d.item_id.as_str()).collect();
-            unique_ids.sort();
+            unique_ids.sort_unstable();
             unique_ids.dedup();
             unique_ids.len() > 1
         })
@@ -652,7 +650,7 @@ pub fn assign_year_suffixes(
 
         // Assign sequential suffixes
         for (idx, (id, _, _)) in sorted_items.iter().enumerate() {
-            suffixes.insert((*id).to_string(), (idx + 1) as i32);
+            suffixes.insert((**id).to_string(), (idx + 1) as i32);
         }
     }
 
@@ -748,11 +746,10 @@ fn apply_disambiguation(
     // 1. For non-ByCite rules, apply global name disambiguation first
     // This adds given names to distinguish people with the same last name
     // across ALL citations, not just ambiguous ones
-    if let Some(rule) = add_givenname {
-        if rule != GivenNameDisambiguationRule::ByCite {
+    if let Some(rule) = add_givenname
+        && rule != GivenNameDisambiguationRule::ByCite {
             apply_global_name_disambiguation(processor, all_disamb_data, rule);
         }
-    }
 
     // 2. Add names (expand et-al)
     if add_names {

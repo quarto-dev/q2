@@ -18,7 +18,8 @@ use super::types::{
 };
 use crate::custom::{CustomNode, Slot};
 use crate::{Block, Inline, Pandoc};
-use rustc_hash::{FxHashMap, FxHashSet};
+use hashlink::LinkedHashMap;
+use rustc_hash::FxHashSet;
 
 /// Compute a reconciliation plan for two Pandoc ASTs.
 ///
@@ -44,15 +45,18 @@ pub fn compute_reconciliation_for_blocks<'a>(
     let original_hashes: Vec<u64> = original.iter().map(|b| cache.hash_block(b)).collect();
 
     // Build hash → indices multimap for original blocks
-    let mut hash_to_indices: FxHashMap<u64, Vec<usize>> = FxHashMap::default();
+    let mut hash_to_indices: LinkedHashMap<u64, Vec<usize>> = LinkedHashMap::new();
     for (idx, &hash) in original_hashes.iter().enumerate() {
-        hash_to_indices.entry(hash).or_default().push(idx);
+        hash_to_indices
+            .entry(hash)
+            .or_insert_with(Vec::new)
+            .push(idx);
     }
 
     let mut alignments = Vec::with_capacity(executed.len());
-    let mut block_container_plans = FxHashMap::default();
-    let mut inline_plans = FxHashMap::default();
-    let mut custom_node_plans = FxHashMap::default();
+    let mut block_container_plans = LinkedHashMap::new();
+    let mut inline_plans = LinkedHashMap::new();
+    let mut custom_node_plans = LinkedHashMap::new();
     let mut used_original: FxHashSet<usize> = FxHashSet::default();
     let mut stats = ReconciliationStats::default();
 
@@ -61,8 +65,8 @@ pub fn compute_reconciliation_for_blocks<'a>(
         let exec_hash = compute_block_hash_fresh(exec_block);
 
         // Step 1: Try exact hash match first
-        if let Some(indices) = hash_to_indices.get(&exec_hash) {
-            if let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i)) {
+        if let Some(indices) = hash_to_indices.get(&exec_hash)
+            && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i)) {
                 // Verify with structural equality (guards against hash collisions)
                 if structural_eq_block(&original[orig_idx], exec_block) {
                     used_original.insert(orig_idx);
@@ -72,7 +76,6 @@ pub fn compute_reconciliation_for_blocks<'a>(
                 }
                 // Hash collision - fall through to type-based matching
             }
-        }
 
         // Step 2: No exact match - try type-based matching for containers
         let exec_discriminant = std::mem::discriminant(exec_block);
@@ -267,8 +270,8 @@ fn compute_custom_node_slot_plan<'a>(
 ) -> CustomNodeSlotPlan {
     use super::hash::{structural_eq_block, structural_eq_inline};
 
-    let mut block_slot_plans = FxHashMap::default();
-    let mut inline_slot_plans = FxHashMap::default();
+    let mut block_slot_plans = LinkedHashMap::new();
+    let mut inline_slot_plans = LinkedHashMap::new();
 
     // For each slot in executed, check if we need reconciliation
     for (name, exec_slot) in &exec.slots {
@@ -394,30 +397,31 @@ fn compute_inline_alignments<'a>(
     let original_hashes: Vec<u64> = original.iter().map(|i| cache.hash_inline(i)).collect();
 
     // Build hash → indices multimap
-    let mut hash_to_indices: FxHashMap<u64, Vec<usize>> = FxHashMap::default();
+    let mut hash_to_indices: LinkedHashMap<u64, Vec<usize>> = LinkedHashMap::new();
     for (idx, &hash) in original_hashes.iter().enumerate() {
-        hash_to_indices.entry(hash).or_default().push(idx);
+        hash_to_indices
+            .entry(hash)
+            .or_insert_with(Vec::new)
+            .push(idx);
     }
 
     let mut alignments = Vec::with_capacity(executed.len());
-    let mut inline_container_plans = FxHashMap::default();
-    let mut note_block_plans = FxHashMap::default();
-    let mut custom_node_plans = FxHashMap::default();
+    let mut inline_container_plans = LinkedHashMap::new();
+    let mut note_block_plans = LinkedHashMap::new();
+    let mut custom_node_plans = LinkedHashMap::new();
     let mut used_original: FxHashSet<usize> = FxHashSet::default();
 
     for (exec_idx, exec_inline) in executed.iter().enumerate() {
         let exec_hash = compute_inline_hash_fresh(exec_inline);
 
         // Step 1: Try exact hash match
-        if let Some(indices) = hash_to_indices.get(&exec_hash) {
-            if let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i)) {
-                if structural_eq_inline(&original[orig_idx], exec_inline) {
+        if let Some(indices) = hash_to_indices.get(&exec_hash)
+            && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i))
+                && structural_eq_inline(&original[orig_idx], exec_inline) {
                     used_original.insert(orig_idx);
                     alignments.push(InlineAlignment::KeepBefore(orig_idx));
                     continue;
                 }
-            }
-        }
 
         // Step 2: Type-based matching for container inlines
         let exec_discriminant = std::mem::discriminant(exec_inline);

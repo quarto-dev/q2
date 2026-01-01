@@ -351,7 +351,7 @@ impl DiagnosticMessage {
             self.location.is_some() || self.details.iter().any(|d| d.location.is_some());
 
         // If we have location info and source context, render ariadne source display
-        let has_ariadne = if has_any_location && ctx.is_some() {
+        let has_ariadne = if let (true, Some(ctx_val)) = (has_any_location, ctx) {
             // Use main location if available, otherwise use first detail location
             let location = self
                 .location
@@ -360,7 +360,7 @@ impl DiagnosticMessage {
 
             if let Some(loc) = location {
                 if let Some(ariadne_output) =
-                    self.render_ariadne_source_context(loc, ctx.unwrap(), options.enable_hyperlinks)
+                    self.render_ariadne_source_context(loc, ctx_val, options.enable_hyperlinks)
                 {
                     result.push_str(&ariadne_output);
                     true
@@ -388,38 +388,37 @@ impl DiagnosticMessage {
                 DiagnosticKind::Note => "Note",
             };
             if let Some(code) = &self.code {
-                write!(result, "{} [{}]: {}\n", kind_str, code, self.title).unwrap();
+                writeln!(result, "{} [{}]: {}", kind_str, code, self.title).unwrap();
             } else {
-                write!(result, "{}: {}\n", kind_str, self.title).unwrap();
+                writeln!(result, "{}: {}", kind_str, self.title).unwrap();
             }
 
             // Show location info if available (but no ariadne rendering)
             if let Some(loc) = &self.location {
                 // Try to map with context if available
                 if let Some(ctx) = ctx {
-                    if let Some(mapped) = loc.map_offset(loc.start_offset(), ctx) {
-                        if let Some(file) = ctx.get_file(mapped.file_id) {
-                            write!(
+                    if let Some(mapped) = loc.map_offset(loc.start_offset(), ctx)
+                        && let Some(file) = ctx.get_file(mapped.file_id) {
+                            writeln!(
                                 result,
-                                "  at {}:{}:{}\n",
+                                "  at {}:{}:{}",
                                 file.path,
                                 mapped.location.row + 1,
                                 mapped.location.column + 1
                             )
                             .unwrap();
                         }
-                    }
                 } else {
                     // No context: show immediate location (1-indexed for display)
                     // Note: Without context, we can't get row/column from offsets
                     // We could map_offset with ctx to get Location, but ctx is None here
-                    write!(result, "  at offset {}\n", loc.start_offset()).unwrap();
+                    writeln!(result, "  at offset {}", loc.start_offset()).unwrap();
                 }
             }
 
             // Problem statement (optional additional context)
             if let Some(problem) = &self.problem {
-                write!(result, "{}\n", problem.as_str()).unwrap();
+                writeln!(result, "{}", problem.as_str()).unwrap();
             }
 
             // All details with appropriate bullets
@@ -429,12 +428,12 @@ impl DiagnosticMessage {
                     DetailKind::Info => "ℹ",
                     DetailKind::Note => "•",
                 };
-                write!(result, "{} {}\n", bullet, detail.content.as_str()).unwrap();
+                writeln!(result, "{} {}", bullet, detail.content.as_str()).unwrap();
             }
 
             // All hints
             for hint in &self.hints {
-                write!(result, "ℹ {}\n", hint.as_str()).unwrap();
+                writeln!(result, "ℹ {}", hint.as_str()).unwrap();
             }
         } else {
             // Have ariadne - only show details without locations and hints
@@ -448,13 +447,13 @@ impl DiagnosticMessage {
                         DetailKind::Info => "ℹ",
                         DetailKind::Note => "•",
                     };
-                    write!(result, "{} {}\n", bullet, detail.content.as_str()).unwrap();
+                    writeln!(result, "{} {}", bullet, detail.content.as_str()).unwrap();
                 }
             }
 
             // All hints (ariadne doesn't show hints)
             for hint in &self.hints {
-                write!(result, "ℹ {}\n", hint.as_str()).unwrap();
+                writeln!(result, "ℹ {}", hint.as_str()).unwrap();
             }
         }
 

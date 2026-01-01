@@ -19,7 +19,7 @@ fn shortcode_value_span(str: String) -> Inline {
 
     Inline::Span(Span {
         attr: (
-            "".to_string(),
+            String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
         ),
@@ -43,7 +43,7 @@ fn shortcode_key_value_span(key: String, value: String) -> Inline {
 
     Inline::Span(Span {
         attr: (
-            "".to_string(),
+            String::new(),
             vec!["quarto-shortcode__-param".to_string()],
             attr_hash,
         ),
@@ -137,7 +137,7 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
     attr_hash.insert("data-is-shortcode".to_string(), "1".to_string());
     Span {
         attr: (
-            "".to_string(),
+            String::new(),
             vec!["quarto-shortcode__".to_string()],
             attr_hash,
         ),

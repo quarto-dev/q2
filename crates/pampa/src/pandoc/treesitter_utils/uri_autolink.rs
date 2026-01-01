@@ -114,7 +114,7 @@ pub fn process_uri_autolink(
     }
 
     // Add the autolink as a Link node
-    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
+    let mut attr = (String::new(), vec![], LinkedHashMap::new());
     attr.1.push("uri".to_string()); // Pandoc adds the "uri" class to autolinks
 
     result.push(Inline::Link(Link {
@@ -126,7 +126,7 @@ pub fn process_uri_autolink(
             ),
         })],
         attr,
-        target: (url.to_string(), "".to_string()),
+        target: (url.to_string(), String::new()),
         source_info: quarto_source_map::SourceInfo::from_range(
             context.current_file_id(),
             autolink_range,

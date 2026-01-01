@@ -7,3 +7,6 @@ license = "MIT"
 
 [dependencies]
 tree-sitter = { workspace = true }
+
+[lints]
+workspace = true

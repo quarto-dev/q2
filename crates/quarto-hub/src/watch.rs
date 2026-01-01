@@ -115,8 +115,7 @@ impl FileWatcher {
 /// Check if a path is a .qmd file.
 fn is_qmd_file(path: &Path) -> bool {
     path.extension()
-        .map(|ext| ext.eq_ignore_ascii_case("qmd"))
-        .unwrap_or(false)
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("qmd"))
 }
 
 #[cfg(test)]

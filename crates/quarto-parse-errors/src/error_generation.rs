@@ -35,14 +35,14 @@ pub fn produce_diagnostic_messages(
     source_context: &quarto_source_map::SourceContext,
 ) -> Vec<quarto_error_reporting::DiagnosticMessage> {
     assert!(tree_sitter_log.had_errors());
-    assert!(tree_sitter_log.parses.len() > 0);
+    assert!(!tree_sitter_log.parses.is_empty());
 
     let mut result: Vec<quarto_error_reporting::DiagnosticMessage> = vec![];
     let mut seen_errors: std::collections::HashSet<(usize, usize)> =
         std::collections::HashSet::new();
 
     for parse in &tree_sitter_log.parses {
-        for (_, process_log) in &parse.processes {
+        for process_log in parse.processes.values() {
             for state in process_log.error_states.iter() {
                 if seen_errors.contains(&(state.row, state.column)) {
                     continue;
@@ -66,11 +66,10 @@ pub fn produce_diagnostic_messages(
     result.sort_by_key(|diag| {
         diag.location
             .as_ref()
-            .map(|loc| loc.start_offset())
-            .unwrap_or(0)
+            .map_or(0, |loc| loc.start_offset())
     });
 
-    return result;
+    result
 }
 
 fn appears_not_after(
@@ -95,7 +94,7 @@ fn find_matching_token<'a>(
 }
 
 pub fn diagnostic_score(diag: &DiagnosticMessage) -> usize {
-    diag.hints.len() + diag.details.len() + diag.code.as_ref().map(|_| 1).unwrap_or(0)
+    diag.hints.len() + diag.details.len() + diag.code.as_ref().map_or(0, |_| 1)
 }
 
 /// Convert a parse state error into a structured DiagnosticMessage
@@ -124,15 +123,13 @@ fn error_diagnostic_from_parse_state(
     let span_end = {
         let size = parse_state.size.max(1);
         let substring = &input_str[byte_offset..];
-        let mut char_count = 0;
         let mut byte_count = 0;
 
-        for ch in substring.chars() {
+        for (char_count, ch) in substring.chars().enumerate() {
             if char_count >= size {
                 break;
             }
             byte_count += ch.len_utf8();
-            char_count += 1;
         }
 
         (byte_offset + byte_count).min(input_str.len())
@@ -201,15 +198,13 @@ fn error_diagnostic_from_parse_state(
                                 let mut token_span_end = {
                                     let size = token.size.max(1);
                                     let substring = &input_str[token_byte_offset..];
-                                    let mut char_count = 0;
                                     let mut byte_count = 0;
 
-                                    for ch in substring.chars() {
+                                    for (char_count, ch) in substring.chars().enumerate() {
                                         if char_count >= size {
                                             break;
                                         }
                                         byte_count += ch.len_utf8();
-                                        char_count += 1;
                                     }
 
                                     (token_byte_offset + byte_count).min(input_str.len())
@@ -248,7 +243,6 @@ fn error_diagnostic_from_parse_state(
                                         let current_character = input_str
                                             .get(token_byte_offset..)
                                             .and_then(|s| s.chars().next())
-                                            .map(|c| c)
                                             .unwrap_or('\0');
                                         if current_character != ' ' {
                                             break;
@@ -391,7 +385,7 @@ pub fn produce_error_message_json(
     let mut seen_errors: HashSet<(String, usize)> = HashSet::new();
 
     for parse in &tree_sitter_log.parses {
-        let process_log = parse.processes.get(&0).unwrap();
+        let process_log = &parse.processes[&0];
         // for (_, process_log) in &parse.processes {
         if process_log.is_good() {
             continue;
@@ -433,7 +427,7 @@ pub fn produce_error_message_json(
             }));
         }
 
-        if error_states.len() == 0 {
+        if error_states.is_empty() {
             panic!("We should have found an error");
         }
         return serde_json::to_string_pretty(&serde_json::json!({
@@ -489,11 +483,10 @@ pub fn get_outer_error_nodes(error_nodes: &[(usize, usize)]) -> Vec<usize> {
         let (start_i, end_i) = error_nodes[i];
         let mut is_outer = true;
 
-        for j in 0..error_nodes.len() {
+        for (j, &(start_j, end_j)) in error_nodes.iter().enumerate() {
             if i == j {
                 continue;
             }
-            let (start_j, end_j) = error_nodes[j];
 
             // Check if node i is contained within node j
             if start_i >= start_j && end_i <= end_j {
@@ -516,13 +509,7 @@ fn range_gap_distance(r1_start: usize, r1_end: usize, r2_start: usize, r2_end: u
     if r1_end <= r2_start {
         // r1 is before r2
         r2_start - r1_end
-    } else if r2_end <= r1_start {
-        // r2 is before r1
-        r1_start - r2_end
-    } else {
-        // Overlapping
-        0
-    }
+    } else { r1_start.saturating_sub(r2_end) }
 }
 
 /// Collect all location ranges from a diagnostic (main location + detail locations)
@@ -625,7 +612,7 @@ pub fn prune_diagnostics_by_error_nodes(
             if any_range_overlaps(&diag_ranges, err_start, err_end) {
                 diagnostics_by_range
                     .entry(err_idx)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(diag_idx);
                 assigned = true;
                 break; // Assign to first overlapping node
@@ -633,15 +620,14 @@ pub fn prune_diagnostics_by_error_nodes(
         }
 
         // If no overlap, find closest ERROR node by distance
-        if !assigned {
-            if let Some(closest_idx) = find_closest_error_node(&diag_ranges, &outer_ranges) {
+        if !assigned
+            && let Some(closest_idx) = find_closest_error_node(&diag_ranges, &outer_ranges) {
                 diagnostics_by_range
                     .entry(closest_idx)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(diag_idx);
             }
             // If still not assigned, diagnostic has no location or ERROR nodes are empty
-        }
     }
 
     // For each ERROR node, keep only the earliest diagnostic (tiebreak with score)
@@ -660,12 +646,11 @@ pub fn prune_diagnostics_by_error_nodes(
                 let start_offset = diag
                     .location
                     .as_ref()
-                    .map(|loc| loc.start_offset())
-                    .unwrap_or(0);
+                    .map_or(0, |loc| loc.start_offset());
                 // Primary: earliest start offset
                 // Secondary: highest score (negated for min_by_key)
                 let score = diagnostic_score(diag);
-                (start_offset, std::usize::MAX - score)
+                (start_offset, usize::MAX - score)
             })
             .copied()
             .unwrap();
@@ -684,7 +669,7 @@ pub fn prune_diagnostics_by_error_nodes(
     }
 
     // Sort to maintain original order
-    kept_indices.sort();
+    kept_indices.sort_unstable();
 
     // Build result: kept error diagnostics + all non-error diagnostics
     let mut result = Vec::new();

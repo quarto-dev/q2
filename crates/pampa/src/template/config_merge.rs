@@ -429,7 +429,7 @@ mod tests {
             dummy_source_info(),
         );
 
-        let (ctx, _diags) = merged_metadata_to_context(&config, "".to_string(), MetaWriter::Html);
+        let (ctx, _diags) = merged_metadata_to_context(&config, String::new(), MetaWriter::Html);
 
         // Document's lang should override default
         assert_eq!(

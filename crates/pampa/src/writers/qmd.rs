@@ -46,6 +46,12 @@ pub struct QmdWriterContext {
     pub emphasis_stack: Vec<EmphasisStackFrame>,
 }
 
+impl Default for QmdWriterContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QmdWriterContext {
     pub fn new() -> Self {
         Self {
@@ -69,11 +75,10 @@ impl QmdWriterContext {
     pub fn choose_emph_delimiter(&self) -> EmphasisDelimiter {
         // If parent uses asterisks (regardless of whether it's Emph or Strong),
         // use underscore to avoid creating *** sequences
-        if let Some(parent) = self.emphasis_stack.last() {
-            if matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
+        if let Some(parent) = self.emphasis_stack.last()
+            && matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
                 return EmphasisDelimiter::Underscore;
             }
-        }
         EmphasisDelimiter::Asterisk // Default
     }
 
@@ -81,11 +86,10 @@ impl QmdWriterContext {
     pub fn choose_strong_delimiter(&self) -> EmphasisDelimiter {
         // If parent uses asterisks (regardless of whether it's Emph or Strong),
         // use underscore to avoid creating *** sequences
-        if let Some(parent) = self.emphasis_stack.last() {
-            if matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
+        if let Some(parent) = self.emphasis_stack.last()
+            && matches!(parent.delimiter, EmphasisDelimiter::Asterisk) {
                 return EmphasisDelimiter::Underscore;
             }
-        }
         EmphasisDelimiter::Asterisk // Default
     }
 }
@@ -264,8 +268,7 @@ fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
             }
             // If any errors accumulated, this is truly unexpected in metadata
             if !ctx.errors.is_empty() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(std::io::Error::other(
                     format!(
                         "Unexpected error in metadata inline: {}",
                         ctx.errors[0].title
@@ -288,8 +291,7 @@ fn config_value_to_yaml(value: &ConfigValue) -> std::io::Result<Yaml> {
             }
             // If any errors accumulated, this is truly unexpected in metadata
             if !ctx.errors.is_empty() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(std::io::Error::other(
                     format!(
                         "Unexpected error in metadata block: {}",
                         ctx.errors[0].title
@@ -355,7 +357,7 @@ fn write_config_value_meta<T: std::io::Write + ?Sized>(
                 let mut emitter = YamlEmitter::new(&mut yaml_str);
                 emitter
                     .dump(&yaml)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+                    .map_err(std::io::Error::other)?;
 
                 // The YamlEmitter adds "---\n" at the start and includes the content
                 // We need to add the closing "---\n"
@@ -392,7 +394,7 @@ fn write_config_value_meta<T: std::io::Write + ?Sized>(
 }
 
 fn escape_quotes(s: &str) -> String {
-    s.replace("\\", "\\\\").replace('"', "\\\"")
+    s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 fn write_attr<W: std::io::Write + ?Sized>(
@@ -732,8 +734,8 @@ fn write_figure(
                 write_block(block, buf, ctx)?;
             }
         }
-    } else if let Some(ref short_caption) = figure.caption.short {
-        if !short_caption.is_empty() {
+    } else if let Some(ref short_caption) = figure.caption.short
+        && !short_caption.is_empty() {
             writeln!(buf)?;
             // Convert short caption (inlines) to a paragraph for consistency
             for inline in short_caption {
@@ -741,7 +743,6 @@ fn write_figure(
             }
             writeln!(buf)?;
         }
-    }
 
     writeln!(buf, "\n:::")?;
     Ok(())
@@ -942,14 +943,13 @@ fn write_list_table(
     writeln!(buf)?;
 
     // Write caption if present
-    if let Some(ref long_caption) = table.caption.long {
-        if !long_caption.is_empty() {
+    if let Some(ref long_caption) = table.caption.long
+        && !long_caption.is_empty() {
             for block in long_caption {
                 write_block(block, buf, ctx)?;
             }
             writeln!(buf)?;
         }
-    }
 
     // Collect all rows
     let mut all_rows: Vec<&Row> = Vec::new();
@@ -1149,8 +1149,8 @@ fn write_table(
     }
 
     // Write caption if it exists
-    if let Some(ref long_caption) = table.caption.long {
-        if !long_caption.is_empty() {
+    if let Some(ref long_caption) = table.caption.long
+        && !long_caption.is_empty() {
             writeln!(buf)?; // Blank line before caption
             for block in long_caption {
                 // Extract inline content from Plain or Paragraph blocks in caption
@@ -1168,7 +1168,6 @@ fn write_table(
                 }
             }
         }
-    }
 
     Ok(())
 }
@@ -1548,8 +1547,7 @@ fn write_cite(
                 let ends_with_space = citation
                     .prefix
                     .last()
-                    .map(|inline| matches!(inline, crate::pandoc::Inline::Space(_)))
-                    .unwrap_or(false);
+                    .is_some_and(|inline| matches!(inline, crate::pandoc::Inline::Space(_)));
                 if !ends_with_space {
                     write!(buf, " ")?;
                 }
@@ -1888,7 +1886,7 @@ fn write_impl<T: std::io::Write>(
     let mut need_newline = write_config_value_meta(&pandoc.meta, buf, ctx)?;
     for block in &pandoc.blocks {
         if need_newline {
-            write!(buf, "\n")?
+            writeln!(buf)?
         };
         write_block(block, buf, ctx)?;
         need_newline = true;

@@ -8,7 +8,6 @@ use hashlink::LinkedHashMap;
 use quarto_csl::Style;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
-use std::collections::HashMap;
 
 /// A computed sort key value with its sort direction.
 #[derive(Debug, Clone)]
@@ -258,11 +257,11 @@ pub struct Processor {
     references: LinkedHashMap<String, Reference>,
 
     /// Initial citation numbers (assigned based on citation order, used for sorting).
-    initial_citation_numbers: HashMap<String, i32>,
+    initial_citation_numbers: LinkedHashMap<String, i32>,
 
     /// Final citation numbers (reassigned after bibliography sorting, used for rendering).
     /// If None, falls back to initial_citation_numbers.
-    final_citation_numbers: Option<HashMap<String, i32>>,
+    final_citation_numbers: Option<LinkedHashMap<String, i32>>,
 
     /// Next citation number for initial assignment.
     next_citation_number: i32,
@@ -280,14 +279,14 @@ pub struct Processor {
 struct CitationHistory {
     /// Last item cited in each note (for ibid detection within same note).
     /// Maps note_index -> (item_id, locator, label)
-    last_item_in_note: HashMap<i32, (String, Option<String>, Option<String>)>,
+    last_item_in_note: LinkedHashMap<i32, (String, Option<String>, Option<String>)>,
     /// The globally last item cited in the immediately previous citation.
     /// For ibid detection across notes. Only tracked for single-item citations.
     /// (item_id, locator, label, note_index)
     last_single_citation_item: Option<(String, Option<String>, Option<String>, i32)>,
     /// Last citation info for each item (for near-note and subsequent detection).
     /// Maps item_id -> (note_index, locator, label)
-    last_cited: HashMap<String, (i32, Option<String>, Option<String>)>,
+    last_cited: LinkedHashMap<String, (i32, Option<String>, Option<String>)>,
 }
 
 impl Processor {
@@ -298,7 +297,7 @@ impl Processor {
             style,
             locales: LocaleManager::new(default_locale),
             references: LinkedHashMap::new(),
-            initial_citation_numbers: HashMap::new(),
+            initial_citation_numbers: LinkedHashMap::new(),
             final_citation_numbers: None,
             next_citation_number: 1,
             citation_history: CitationHistory::default(),
@@ -477,7 +476,7 @@ impl Processor {
     /// Reassign citation numbers based on the final bibliography order.
     /// Called after bibliography sorting to update numbers for rendering.
     pub fn reassign_citation_numbers(&mut self, sorted_ids: &[String]) {
-        let mut final_numbers = HashMap::new();
+        let mut final_numbers = LinkedHashMap::new();
         for (index, id) in sorted_ids.iter().enumerate() {
             final_numbers.insert(id.clone(), (index + 1) as i32);
         }
@@ -562,7 +561,7 @@ impl Processor {
         let ids: Vec<String> = self.references.keys().cloned().collect();
 
         // Get sort keys from bibliography
-        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys: &[_] = bib.sort.as_ref().map_or(&[], |s| &s.keys);
 
         // Check if any sort key uses citation-number
         let uses_citation_number = sort_keys.iter().any(
@@ -631,7 +630,7 @@ impl Processor {
         let ids: Vec<String> = self.references.keys().cloned().collect();
 
         // Get sort keys from bibliography
-        let sort_keys = sort_keys_opt.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys: &[_] = sort_keys_opt.as_ref().map_or(&[], |s| &s.keys);
 
         // Check if any sort key uses citation-number
         let uses_citation_number = sort_keys.iter().any(
@@ -805,10 +804,8 @@ impl Processor {
                         if let Some(ref m) = term.multiple {
                             return Some(m.clone());
                         }
-                    } else {
-                        if let Some(ref s) = term.single {
-                            return Some(s.clone());
-                        }
+                    } else if let Some(ref s) = term.single {
+                        return Some(s.clone());
                     }
                     if let Some(ref v) = term.value {
                         return Some(v.clone());
@@ -837,30 +834,28 @@ impl Processor {
 
         // Priority 1: Exact language match (e.g., xml:lang="en-US" for en-US)
         for locale in &self.style.locales {
-            if let Some(ref lang) = locale.lang {
-                if lang == effective_lang {
+            if let Some(ref lang) = locale.lang
+                && lang == effective_lang {
                     for df in &locale.date_formats {
                         if df.form == form {
                             return Some(df);
                         }
                     }
                 }
-            }
         }
 
         // Priority 2: Base language match (e.g., xml:lang="en" for en-US)
         // Only if it differs from the exact match
         if base_lang != effective_lang {
             for locale in &self.style.locales {
-                if let Some(ref lang) = locale.lang {
-                    if lang == base_lang {
+                if let Some(ref lang) = locale.lang
+                    && lang == base_lang {
                         for df in &locale.date_formats {
                             if df.form == form {
                                 return Some(df);
                             }
                         }
                     }
-                }
             }
         }
 
@@ -932,7 +927,7 @@ impl Processor {
             None => return vec![],
         };
 
-        let sort_keys = bib.sort.as_ref().map(|s| &s.keys[..]).unwrap_or(&[]);
+        let sort_keys: &[_] = bib.sort.as_ref().map_or(&[], |s| &s.keys);
         self.compute_sort_keys(id, sort_keys)
     }
 
@@ -1119,8 +1114,8 @@ impl Processor {
 
         // 1. Apply global name disambiguation for non-ByCite rules
         // This runs even without ambiguities (global name disambiguation)
-        if let Some(rule) = add_givenname {
-            if rule != GivenNameDisambiguationRule::ByCite {
+        if let Some(rule) = add_givenname
+            && rule != GivenNameDisambiguationRule::ByCite {
                 apply_global_name_disambiguation(self, &disamb_data, rule);
                 // Re-render (without collapse) and refresh ambiguities
                 outputs = citations_with_positions
@@ -1130,7 +1125,6 @@ impl Processor {
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data.clone());
             }
-        }
 
         // 2. Add names (expand et-al) if still ambiguous
         if add_names && !ambiguities.is_empty() {
@@ -1148,8 +1142,8 @@ impl Processor {
         // The ByCite rule needs to operate on the original ambiguity groups,
         // not the refreshed ones after add_names. This is because ByCite
         // incrementally expands givennames within the original groups.
-        if let Some(GivenNameDisambiguationRule::ByCite) = add_givenname {
-            if !initial_ambiguities.is_empty() {
+        if let Some(GivenNameDisambiguationRule::ByCite) = add_givenname
+            && !initial_ambiguities.is_empty() {
                 try_add_given_names_with_rule(
                     self,
                     &initial_ambiguities,
@@ -1163,7 +1157,6 @@ impl Processor {
                 disamb_data = extract_disamb_data(&outputs);
                 ambiguities = find_ambiguities(disamb_data.clone());
             }
-        }
 
         // 4. Add year suffixes if enabled
         // We need to handle two cases:

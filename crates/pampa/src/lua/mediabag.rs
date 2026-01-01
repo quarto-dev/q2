@@ -255,7 +255,7 @@ pub fn register_pandoc_mediabag(
             let items_for_fn = items_rc.clone();
 
             let iter_fn = lua.create_function(move |lua, (_, idx): (Value, Option<i64>)| {
-                let current_idx = idx.map(|i| i as usize).unwrap_or(0);
+                let current_idx = idx.map_or(0, |i| i as usize);
                 let items = items_for_fn.borrow();
 
                 if current_idx >= items.len() {
@@ -410,23 +410,23 @@ fn guess_mime_type(filepath: &str) -> String {
     match ext.as_deref() {
         // Images
         Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("jpg" | "jpeg") => "image/jpeg",
         Some("gif") => "image/gif",
         Some("svg") => "image/svg+xml",
         Some("webp") => "image/webp",
         Some("bmp") => "image/bmp",
         Some("ico") => "image/x-icon",
-        Some("tiff") | Some("tif") => "image/tiff",
+        Some("tiff" | "tif") => "image/tiff",
 
         // Documents
         Some("pdf") => "application/pdf",
-        Some("html") | Some("htm") => "text/html",
+        Some("html" | "htm") => "text/html",
         Some("css") => "text/css",
         Some("js") => "application/javascript",
         Some("json") => "application/json",
         Some("xml") => "application/xml",
         Some("txt") => "text/plain",
-        Some("md") | Some("markdown") => "text/markdown",
+        Some("md" | "markdown") => "text/markdown",
         Some("tex") => "application/x-tex",
         Some("csv") => "text/csv",
 
@@ -667,7 +667,7 @@ mod tests {
         );
 
         // Write via Lua
-        lua.load(&format!(
+        lua.load(format!(
             r#"pandoc.mediabag.write("{}", "output.txt")"#,
             temp_path
         ))
@@ -699,7 +699,7 @@ mod tests {
             .insert("b.txt".to_string(), "text/plain".to_string(), b"B".to_vec());
 
         // Write all via Lua (pass nil for second argument)
-        lua.load(&format!(r#"pandoc.mediabag.write("{}")"#, temp_path))
+        lua.load(format!(r#"pandoc.mediabag.write("{}")"#, temp_path))
             .exec()
             .unwrap();
 
@@ -721,7 +721,7 @@ mod tests {
 
         // Fetch via Lua
         let (mime, content): (String, String) = lua
-            .load(&format!(r#"return pandoc.mediabag.fetch("{}")"#, file_path))
+            .load(format!(r#"return pandoc.mediabag.fetch("{}")"#, file_path))
             .eval()
             .unwrap();
 

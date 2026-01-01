@@ -27,3 +27,6 @@ quarto-error-reporting.workspace = true
 
 # Additional dependencies for validation
 regex = "1.10"
+
+[lints]
+workspace = true

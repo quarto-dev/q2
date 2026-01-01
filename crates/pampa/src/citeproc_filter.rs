@@ -141,9 +141,7 @@ fn load_csl_style(config: &CiteprocConfig) -> Result<quarto_csl::Style, Citeproc
     parse_csl(&csl_content).map_err(|e| {
         let path = config
             .csl
-            .as_ref()
-            .map(|s| Path::new(s).to_owned())
-            .unwrap_or_else(|| Path::new("<default>").to_owned());
+            .as_ref().map_or_else(|| Path::new("<default>").to_owned(), |s| Path::new(s).to_owned());
         CiteprocFilterError::StyleParseError(path, e.to_string())
     })
 }
@@ -589,8 +587,8 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
     // Look for existing #refs div
     // Attr is a tuple: (id, classes, attributes)
     for block in blocks.iter_mut() {
-        if let Block::Div(d) = block {
-            if d.attr.0 == "refs" {
+        if let Block::Div(d) = block
+            && d.attr.0 == "refs" {
                 // Replace contents of existing #refs div
                 d.content = bib_blocks;
                 // Add required classes if not present
@@ -602,7 +600,6 @@ fn insert_bibliography(blocks: &mut Vec<Block>, bib_blocks: Vec<Block>) {
                 }
                 return;
             }
-        }
     }
 
     // No #refs div found, create one at the end
@@ -734,7 +731,7 @@ fn extract_references(meta: &ConfigValue) -> Vec<Reference> {
 
     items
         .iter()
-        .filter_map(|item| meta_to_reference(item))
+        .filter_map(meta_to_reference)
         .collect()
 }
 
@@ -806,7 +803,7 @@ fn meta_to_reference(meta: &ConfigValue) -> Option<Reference> {
         event_date: extract_date(entries, "event-date"),
         original_date: extract_date(entries, "original-date"),
         submitted: extract_date(entries, "submitted"),
-        other: std::collections::HashMap::new(),
+        other: hashlink::LinkedHashMap::new(),
         disambiguation: None,
     };
 

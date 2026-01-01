@@ -48,12 +48,12 @@ fn estimate_yaml_with_source_memory(yaml: &quarto_yaml::YamlWithSourceInfo) -> u
     // For basic parsing, SourceInfo uses Original variant with FileId (just a usize)
 
     if let Some(children) = yaml.as_array() {
-        size += children.len() * mem::size_of::<quarto_yaml::YamlWithSourceInfo>();
+        size += std::mem::size_of_val(children);
         for child in children {
             size += estimate_yaml_with_source_memory(child);
         }
     } else if let Some(entries) = yaml.as_hash() {
-        size += entries.len() * mem::size_of::<quarto_yaml::YamlHashEntry>();
+        size += std::mem::size_of_val(entries);
         for entry in entries {
             size += estimate_yaml_with_source_memory(&entry.key);
             size += estimate_yaml_with_source_memory(&entry.value);

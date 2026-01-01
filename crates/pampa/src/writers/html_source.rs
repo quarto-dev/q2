@@ -171,11 +171,9 @@ fn walk_block(
                 // Caption: [short, long] where long is blocks
                 if let (Some(long_caption), Some(caption_json)) =
                     (&table.caption.long, arr.get(1).and_then(|v| v.as_array()))
-                {
-                    if let Some(long_json) = caption_json.get(1).and_then(|v| v.as_array()) {
+                    && let Some(long_json) = caption_json.get(1).and_then(|v| v.as_array()) {
                         walk_blocks(long_caption, long_json, map);
                     }
-                }
                 // Head, bodies, foot contain rows with cells containing blocks
                 // This is simplified - full implementation would walk all cells
             }
@@ -189,11 +187,9 @@ fn walk_block(
                 // Caption
                 if let (Some(long_caption), Some(caption_json)) =
                     (&figure.caption.long, arr.get(1).and_then(|v| v.as_array()))
-                {
-                    if let Some(long_json) = caption_json.get(1).and_then(|v| v.as_array()) {
+                    && let Some(long_json) = caption_json.get(1).and_then(|v| v.as_array()) {
                         walk_blocks(long_caption, long_json, map);
                     }
-                }
             }
         }
         Block::Div(div) => {

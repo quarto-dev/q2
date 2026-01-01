@@ -269,7 +269,7 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
 
         if let Some(outer_array) = raw.as_array() {
             // Check if this is the complex CITATIONS format by looking at the first element
-            let is_complex_format = outer_array.first().map_or(false, |first| {
+            let is_complex_format = outer_array.first().is_some_and(|first| {
                 // Complex format: first element is a 3-element array [citation_obj, pre, post]
                 // where citation_obj has "citationItems" key
                 if let Some(arr) = first.as_array() {
@@ -302,7 +302,7 @@ fn build_citations(test: &CslTest, references: &[Reference]) -> Result<Vec<Citat
         for cite_group in raw {
             let items: Vec<CitationItem> = cite_group
                 .iter()
-                .filter_map(|v| parse_citation_item(v))
+                .filter_map(parse_citation_item)
                 .collect();
 
             if !items.is_empty() {
@@ -367,7 +367,7 @@ fn parse_complex_citations_format(
 
         let items: Vec<CitationItem> = citation_items_array
             .iter()
-            .filter_map(|v| parse_citation_item(v))
+            .filter_map(parse_citation_item)
             .collect();
 
         if !items.is_empty() {
@@ -395,7 +395,7 @@ fn parse_simple_citations_format(
 
         let items: Vec<CitationItem> = group_array
             .iter()
-            .filter_map(|v| parse_citation_item(v))
+            .filter_map(parse_citation_item)
             .collect();
 
         if !items.is_empty() {
@@ -411,10 +411,10 @@ fn parse_simple_citations_format(
 
 /// Check if a test uses the complex CITATIONS format (with citationItems nested structure).
 fn is_complex_citations_format(test: &CslTest) -> bool {
-    if let Some(ref citations_json) = test.citations {
-        if let Ok(raw) = serde_json::from_str::<serde_json::Value>(citations_json) {
-            if let Some(outer_array) = raw.as_array() {
-                return outer_array.first().map_or(false, |first| {
+    if let Some(ref citations_json) = test.citations
+        && let Ok(raw) = serde_json::from_str::<serde_json::Value>(citations_json)
+            && let Some(outer_array) = raw.as_array() {
+                return outer_array.first().is_some_and(|first| {
                     if let Some(arr) = first.as_array() {
                         arr.first()
                             .and_then(|obj| obj.get("citationItems"))
@@ -424,8 +424,6 @@ fn is_complex_citations_format(test: &CslTest) -> bool {
                     }
                 });
             }
-        }
-    }
     false
 }
 

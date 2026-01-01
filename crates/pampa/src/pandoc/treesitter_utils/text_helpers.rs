@@ -260,8 +260,8 @@ where
     let mut first_delimiter = true;
 
     for (node_name, child) in &children {
-        if node_name == delimiter_name {
-            if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
+        if node_name == delimiter_name
+            && let PandocNativeIntermediate::IntermediateUnknown(range) = child {
                 let text = std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
                     .unwrap();
 
@@ -311,7 +311,6 @@ where
                     }
                 }
             }
-        }
     }
 
     // Calculate the adjusted range for the inline element (excluding delimiter spaces)

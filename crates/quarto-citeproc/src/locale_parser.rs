@@ -37,11 +37,10 @@ pub fn parse_locale_xml(xml: &str) -> Result<Locale, String> {
         match child.name.as_str() {
             "terms" => {
                 for term_el in child.all_children() {
-                    if term_el.name == "term" {
-                        if let Ok(term) = parse_term(term_el) {
+                    if term_el.name == "term"
+                        && let Ok(term) = parse_term(term_el) {
                             terms.push(term);
                         }
-                    }
                 }
             }
             "date" => {
@@ -71,8 +70,7 @@ fn parse_style_options(element: &XmlElement) -> StyleOptions {
         .attributes
         .iter()
         .find(|a| a.name == "punctuation-in-quote")
-        .map(|a| a.value == "true")
-        .unwrap_or(false);
+        .is_some_and(|a| a.value == "true");
 
     StyleOptions {
         demote_non_dropping_particle: quarto_csl::DemoteNonDroppingParticle::DisplayAndSort,
@@ -129,14 +127,13 @@ fn parse_term_form(element: &XmlElement) -> TermForm {
         .attributes
         .iter()
         .find(|a| a.name == "form")
-        .map(|a| match a.value.as_str() {
+        .map_or(TermForm::Long, |a| match a.value.as_str() {
             "short" => TermForm::Short,
             "verb" => TermForm::Verb,
             "verb-short" => TermForm::VerbShort,
             "symbol" => TermForm::Symbol,
             _ => TermForm::Long,
         })
-        .unwrap_or(TermForm::Long)
 }
 
 fn parse_date_format(element: &XmlElement) -> Result<DateFormat, String> {
@@ -144,11 +141,10 @@ fn parse_date_format(element: &XmlElement) -> Result<DateFormat, String> {
         .attributes
         .iter()
         .find(|a| a.name == "form")
-        .map(|a| match a.value.as_str() {
+        .map_or(DateForm::Text, |a| match a.value.as_str() {
             "numeric" => DateForm::Numeric,
             _ => DateForm::Text,
-        })
-        .unwrap_or(DateForm::Text);
+        });
 
     let delimiter = element
         .attributes
@@ -158,11 +154,10 @@ fn parse_date_format(element: &XmlElement) -> Result<DateFormat, String> {
 
     let mut parts = Vec::new();
     for child in element.all_children() {
-        if child.name == "date-part" {
-            if let Ok(part) = parse_date_part(child) {
+        if child.name == "date-part"
+            && let Ok(part) = parse_date_part(child) {
                 parts.push(part);
             }
-        }
     }
 
     Ok(DateFormat {

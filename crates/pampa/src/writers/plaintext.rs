@@ -95,7 +95,7 @@ fn write_inline<T: std::io::Write>(
         Inline::Str(s) => write!(buf, "{}", s.text)?,
         Inline::Space(_) => write!(buf, " ")?,
         Inline::SoftBreak(_) => write!(buf, " ")?,
-        Inline::LineBreak(_) => write!(buf, "\n")?,
+        Inline::LineBreak(_) => writeln!(buf)?,
 
         // Recurse into content (strip structure markers)
         Inline::Emph(Emph { content, .. }) => write_inlines(content, buf, ctx)?,
@@ -467,7 +467,7 @@ mod tests {
     #[test]
     fn test_code_with_backticks() {
         let inlines = vec![Inline::Code(Code {
-            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "code".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -528,7 +528,7 @@ mod tests {
     #[test]
     fn test_code_block_fenced() {
         let blocks = vec![Block::CodeBlock(CodeBlock {
-            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             text: "let x = 1;".to_string(),
             source_info: dummy_source_info(),
             attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
@@ -561,7 +561,7 @@ mod tests {
     #[test]
     fn test_table_dropped_with_warning() {
         let blocks = vec![Block::Table(Table {
-            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             caption: crate::pandoc::caption::Caption {
                 short: None,
                 long: None,
@@ -569,14 +569,14 @@ mod tests {
             },
             colspec: vec![],
             head: crate::pandoc::table::TableHead {
-                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             },
             bodies: vec![],
             foot: crate::pandoc::table::TableFoot {
-                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),

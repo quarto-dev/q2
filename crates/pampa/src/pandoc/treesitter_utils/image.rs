@@ -22,9 +22,9 @@ pub fn process_image<T: Write, F>(
 where
     F: Fn() -> String,
 {
-    let mut attr = ("".to_string(), vec![], LinkedHashMap::new());
+    let mut attr = (String::new(), vec![], LinkedHashMap::new());
     let mut attr_source = crate::pandoc::attr::AttrSourceInfo::empty();
-    let mut target: Target = ("".to_string(), "".to_string());
+    let mut target: Target = (String::new(), String::new());
     let mut target_source = crate::pandoc::attr::TargetSourceInfo::empty();
     let mut content: Vec<Inline> = Vec::new();
     for (node, child) in children {

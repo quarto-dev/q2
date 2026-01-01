@@ -1103,11 +1103,7 @@ fn read_pandoc(value: &Value) -> Result<(Pandoc, ASTContext)> {
     // Extract metaTopLevelKeySources if present
     let key_sources = if let Some(ast_context_val) = obj.get("astContext") {
         if let Some(ast_context_obj) = ast_context_val.as_object() {
-            if let Some(key_sources_val) = ast_context_obj.get("metaTopLevelKeySources") {
-                Some(key_sources_val)
-            } else {
-                None
-            }
+            ast_context_obj.get("metaTopLevelKeySources")
         } else {
             None
         }

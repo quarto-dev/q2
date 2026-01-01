@@ -122,11 +122,10 @@ impl TemplateBundle {
 
     /// Validate the bundle version.
     fn validate_version(&self) -> Result<(), BundleError> {
-        if let Some(version) = &self.version {
-            if !SUPPORTED_VERSIONS.contains(&version.as_str()) {
+        if let Some(version) = &self.version
+            && !SUPPORTED_VERSIONS.contains(&version.as_str()) {
                 return Err(BundleError::UnsupportedVersion(version.clone()));
             }
-        }
         // No version = best-effort, no error
         Ok(())
     }

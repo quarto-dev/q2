@@ -101,7 +101,7 @@ impl GridTableConverter {
 
         // Step 1: pandoc -f markdown -t json -L filter.lua
         let mut pandoc = Command::new("pandoc")
-            .args(&["-f", "markdown", "-t", "json"])
+            .args(["-f", "markdown", "-t", "json"])
             .arg("-L")
             .arg(&filter_path)
             .stdin(Stdio::piped())
@@ -245,11 +245,10 @@ impl Rule for GridTableConverter {
 
         let new_content = lines.join("\n") + "\n";
 
-        if !check_mode {
-            if in_place {
+        if !check_mode
+            && in_place {
                 write_file(file_path, &new_content)?;
             }
-        }
 
         Ok(ConvertResult {
             rule_name: self.name().to_string(),

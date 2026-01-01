@@ -19,7 +19,7 @@ pub fn process_document(
     context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let mut blocks: Vec<Block> = Vec::new();
-    children.into_iter().for_each(|(_, child)| {
+    for (_, child) in children {
         match child {
             PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
             PandocNativeIntermediate::IntermediateSection(section) => {
@@ -42,7 +42,7 @@ pub fn process_document(
             }
             _ => panic!("Expected Block or Section, got {:?}", child),
         }
-    });
+    }
     PandocNativeIntermediate::IntermediatePandoc(Pandoc {
         // Legitimate default: Initial document creation - metadata populated later from YAML
         meta: ConfigValue::default(),

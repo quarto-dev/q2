@@ -112,7 +112,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     // Render each file
     for doc_info in &project.files {
-        render_document(&doc_info, &project, &format, &binaries, &args, &runtime)?;
+        render_document(doc_info, &project, &format, &binaries, &args, &runtime)?;
     }
 
     Ok(())

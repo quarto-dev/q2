@@ -17,6 +17,7 @@ use std::collections::HashMap;
 
 /// Configuration for JSON output format.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct JsonConfig {
     /// If true, include resolved source locations ('l' field) in each node.
     /// The 'l' field contains an object with:
@@ -26,13 +27,6 @@ pub struct JsonConfig {
     pub include_inline_locations: bool,
 }
 
-impl Default for JsonConfig {
-    fn default() -> Self {
-        Self {
-            include_inline_locations: false,
-        }
-    }
-}
 
 /// Serializable version of SourceInfo that uses ID references instead of Rc pointers.
 ///
@@ -259,11 +253,10 @@ impl<'a> SourceInfoSerializer<'a> {
         let id = self.intern(source_info);
         obj.insert("s".to_string(), json!(id));
 
-        if self.config.include_inline_locations {
-            if let Some(location) = resolve_location(source_info, self.context) {
+        if self.config.include_inline_locations
+            && let Some(location) = resolve_location(source_info, self.context) {
                 obj.insert("l".to_string(), location);
             }
-        }
     }
 }
 
@@ -736,12 +729,10 @@ fn write_blockss(blockss: &[Vec<Block>], ctx: &mut JsonWriterContext) -> Value {
 // Write caption as Pandoc array format: [short, long]
 fn write_caption(caption: &Caption, ctx: &mut JsonWriterContext) -> Value {
     json!([
-        &caption.short.as_ref().map(|s| write_inlines(&s, ctx)),
+        &caption.short.as_ref().map(|s| write_inlines(s, ctx)),
         &caption
             .long
-            .as_ref()
-            .map(|l| write_blocks(&l, ctx))
-            .unwrap_or_else(|| json!([])),
+            .as_ref().map_or_else(|| json!([]), |l| write_blocks(l, ctx)),
     ])
 }
 
@@ -927,7 +918,7 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
                     .content
                     .iter()
                     .map(|(term, definition)| {
-                        json!([write_inlines(term, ctx), write_blockss(&definition, ctx),])
+                        json!([write_inlines(term, ctx), write_blockss(definition, ctx),])
                     })
                     .collect::<Vec<_>>()
             )),

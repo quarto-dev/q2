@@ -150,13 +150,12 @@ impl<'a> RenderContext<'a> {
         let output = self.format.output_path(&self.document.input);
 
         // If project has output_dir, make path relative to that
-        if self.project.output_dir != self.project.dir {
-            if let Ok(relative) = self.document.input.strip_prefix(&self.project.dir) {
+        if self.project.output_dir != self.project.dir
+            && let Ok(relative) = self.document.input.strip_prefix(&self.project.dir) {
                 let mut result = self.project.output_dir.join(relative);
                 result.set_extension(&self.format.output_extension);
                 return result;
             }
-        }
 
         output
     }

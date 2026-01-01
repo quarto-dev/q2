@@ -52,9 +52,7 @@ impl DefinitionListConverter {
                 }
 
                 // The line before the blank lines should be the term
-                if start_idx > 0 {
-                    start_idx -= 1;
-                }
+                start_idx = start_idx.saturating_sub(1);
 
                 // Check if the "term" is actually a table row or grid table border
                 // Table rows contain multiple pipe characters (e.g., | cell | cell |)
@@ -108,7 +106,6 @@ impl DefinitionListConverter {
                                 // Found another term-definition pair
                                 end_idx = j;
                                 i = j + 1;
-                                continue;
                             } else {
                                 // No more definition items
                                 break;
@@ -117,7 +114,6 @@ impl DefinitionListConverter {
                             // This IS a definition line (continuation of same term)
                             end_idx = i;
                             i += 1;
-                            continue;
                         }
                     } else {
                         break;
@@ -154,7 +150,7 @@ impl DefinitionListConverter {
 
         // Step 1: pandoc -f markdown -t json -L filter.lua
         let mut pandoc = Command::new("pandoc")
-            .args(&["-f", "markdown", "-t", "json"])
+            .args(["-f", "markdown", "-t", "json"])
             .arg("-L")
             .arg(&filter_path)
             .stdin(Stdio::piped())
@@ -298,11 +294,10 @@ impl Rule for DefinitionListConverter {
 
         let new_content = lines.join("\n") + "\n";
 
-        if !check_mode {
-            if in_place {
+        if !check_mode
+            && in_place {
                 write_file(file_path, &new_content)?;
             }
-        }
 
         Ok(ConvertResult {
             rule_name: self.name().to_string(),

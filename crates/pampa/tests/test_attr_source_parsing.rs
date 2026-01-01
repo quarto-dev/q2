@@ -765,7 +765,7 @@ fn test_json_serialization_header_with_attr_source() {
         "Header attrS.id should not be null"
     );
     assert!(
-        attr_s["classes"].as_array().unwrap().len() > 0,
+        !attr_s["classes"].as_array().unwrap().is_empty(),
         "Header attrS.classes should not be empty"
     );
 }

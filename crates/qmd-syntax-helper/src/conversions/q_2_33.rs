@@ -111,8 +111,7 @@ impl Q233Converter {
             // Find the closing ')' after the error
             let target_end = result[violation.start_offset..]
                 .find(')')
-                .map(|pos| violation.start_offset + pos)
-                .unwrap_or(violation.end_offset);
+                .map_or(violation.end_offset, |pos| violation.start_offset + pos);
 
             // Extract the link target
             let link_target = &result[target_start + 1..target_end];
@@ -136,8 +135,7 @@ impl Q233Converter {
     fn offset_to_column(&self, content: &str, offset: usize) -> usize {
         let line_start = content[..offset]
             .rfind('\n')
-            .map(|pos| pos + 1)
-            .unwrap_or(0);
+            .map_or(0, |pos| pos + 1);
         offset - line_start
     }
 }

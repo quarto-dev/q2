@@ -386,7 +386,7 @@ impl LuaInline {
             }
 
             // Read-only fields
-            (_, "tag") | (_, "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
 
             // Unknown field
             _ => Err(Error::runtime(format!("cannot set field '{}'", key))),
@@ -815,7 +815,7 @@ impl LuaBlock {
             }
 
             // Read-only fields
-            (_, "tag") | (_, "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
+            (_, "tag" | "t") => Err(Error::runtime("cannot set read-only field 'tag'")),
 
             // Unknown field
             _ => Err(Error::runtime(format!("cannot set field '{}'", key))),
@@ -1273,15 +1273,14 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
             let line = debug.curr_line();
 
             // Check if this is a Lua source (not a C function)
-            if source.what != "C" {
-                if let Some(src) = source.source {
+            if source.what != "C"
+                && let Some(src) = source.source {
                     // The source often starts with "@" for file paths
                     let path = src.strip_prefix("@").unwrap_or(&src);
                     // Convert line number from i32, negative means unknown
                     let line_num = if line >= 0 { line as usize } else { 0 };
                     return SourceInfo::filter_provenance(path.to_string(), line_num);
                 }
-            }
         }
     }
 

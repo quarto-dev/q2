@@ -758,7 +758,7 @@ fn register_block_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
 /// Parse optional attr argument into Attr tuple
 fn parse_attr(_lua: &Lua, attr: Option<Value>) -> Result<crate::pandoc::Attr> {
     match attr {
-        None => Ok(("".to_string(), vec![], LinkedHashMap::new())),
+        None => Ok((String::new(), vec![], LinkedHashMap::new())),
         Some(Value::UserData(ud)) => {
             // Support LuaAttr userdata
             let lua_attr = ud.borrow::<LuaAttr>()?;
@@ -1017,7 +1017,7 @@ fn parse_table_head(lua: &Lua, val: Value) -> Result<TableHead> {
             let rows = parse_rows(lua, rows_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => ("".to_string(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()),
             };
             Ok(TableHead {
                 rows,
@@ -1047,7 +1047,7 @@ fn parse_table_foot(lua: &Lua, val: Value) -> Result<TableFoot> {
             let rows = parse_rows(lua, rows_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => ("".to_string(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()),
             };
             Ok(TableFoot {
                 rows,
@@ -1099,7 +1099,7 @@ fn parse_single_table_body(lua: &Lua, val: Value) -> Result<TableBody> {
             let rowhead_columns: i64 = table.get("row_head_columns").unwrap_or(0);
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => ("".to_string(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()),
             };
             Ok(TableBody {
                 body,
@@ -1148,7 +1148,7 @@ fn parse_single_row(lua: &Lua, val: Value) -> Result<Row> {
             let cells = parse_cells(lua, cells_val)?;
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => ("".to_string(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()),
             };
             Ok(Row {
                 cells,
@@ -1200,7 +1200,7 @@ fn parse_single_cell(lua: &Lua, val: Value) -> Result<Cell> {
             let col_span: i64 = table.get("col_span").unwrap_or(1);
             let attr = match table.get::<Option<Value>>("attr")? {
                 Some(v) => parse_attr(lua, Some(v))?,
-                None => ("".to_string(), vec![], LinkedHashMap::new()),
+                None => (String::new(), vec![], LinkedHashMap::new()),
             };
             Ok(Cell {
                 content,

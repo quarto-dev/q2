@@ -231,7 +231,7 @@ pub(in crate::schema) fn parse_object_schema(yaml: &YamlWithSourceInfo) -> Schem
     let base_schema = if let Some(super_yaml) = yaml.get_hash_value("super") {
         if let Some(arr) = super_yaml.as_array() {
             // Array form: super: [schema1, schema2]
-            let schemas: SchemaResult<Vec<_>> = arr.iter().map(|item| from_yaml(item)).collect();
+            let schemas: SchemaResult<Vec<_>> = arr.iter().map(from_yaml).collect();
             Some(schemas?)
         } else {
             // Single schema form: super: { resolveRef: ... }

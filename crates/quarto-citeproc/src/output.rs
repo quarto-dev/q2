@@ -674,7 +674,7 @@ impl Output {
             } => {
                 let new_children: Vec<_> = children
                     .iter()
-                    .map(|c| Self::remove_name_nodes(c))
+                    .map(Self::remove_name_nodes)
                     .filter(|c| !c.is_null())
                     .collect();
                 // Prepend substitute to the remaining content
@@ -710,7 +710,7 @@ impl Output {
             } => {
                 let new_children: Vec<_> = children
                     .iter()
-                    .map(|c| Self::remove_name_nodes(c))
+                    .map(Self::remove_name_nodes)
                     .filter(|c| !c.is_null())
                     .collect();
                 if new_children.is_empty() {
@@ -725,7 +725,7 @@ impl Output {
             Output::Linked { url, children } => {
                 let new_children: Vec<_> = children
                     .iter()
-                    .map(|c| Self::remove_name_nodes(c))
+                    .map(Self::remove_name_nodes)
                     .filter(|c| !c.is_null())
                     .collect();
                 if new_children.is_empty() {
@@ -1402,7 +1402,7 @@ fn to_inlines_inner(output: &Output) -> quarto_pandoc_types::Inlines {
                         // Smart delimiter: skip if next element starts with punctuation
                         // (This is Pandoc's addDelimiters behavior)
                         let first_char = get_leading_char(&child_inlines);
-                        if !matches!(first_char, Some(',') | Some(';') | Some('.')) {
+                        if !matches!(first_char, Some(',' | ';' | '.')) {
                             result.push(vec![Inline::Str(Str {
                                 text: delim.clone(),
                                 source_info: empty_source_info(),
@@ -2708,7 +2708,7 @@ fn get_trailing_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
                     return Some(c);
                 }
             }
-            _ => continue,
+            _ => {}
         }
     }
     None
@@ -2752,7 +2752,7 @@ fn get_leading_char(inlines: &[quarto_pandoc_types::Inline]) -> Option<char> {
                     return Some(c);
                 }
             }
-            _ => continue,
+            _ => {}
         }
     }
     None
@@ -2812,7 +2812,7 @@ fn trim_trailing_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
                 }
                 return;
             }
-            _ => continue,
+            _ => {}
         }
     }
 }
@@ -2871,7 +2871,7 @@ fn trim_leading_char(inlines: &mut Vec<quarto_pandoc_types::Inline>) {
                 }
                 return;
             }
-            _ => continue,
+            _ => {}
         }
     }
 }
@@ -2888,8 +2888,8 @@ fn apply_affixes(
     use quarto_pandoc_types::{Inline, Str};
 
     // Apply prefix with punctuation collision handling
-    if let Some(prefix) = prefix {
-        if !prefix.is_empty() {
+    if let Some(prefix) = prefix
+        && !prefix.is_empty() {
             let prefix_end = prefix.chars().last();
             let content_start = get_leading_char(inner);
             if let (Some(x_end), Some(y_start)) = (prefix_end, content_start) {
@@ -2924,11 +2924,10 @@ fn apply_affixes(
                 *inner = result;
             }
         }
-    }
 
     // Apply suffix with punctuation collision handling
-    if let Some(suffix) = suffix {
-        if !suffix.is_empty() {
+    if let Some(suffix) = suffix
+        && !suffix.is_empty() {
             let content_end = get_trailing_char(inner);
             let suffix_start = suffix.chars().next();
             if let (Some(x_end), Some(y_start)) = (content_end, suffix_start) {
@@ -2958,7 +2957,6 @@ fn apply_affixes(
                 }));
             }
         }
-    }
 }
 
 /// Move periods and commas from after closing quotes to inside them.
@@ -2993,8 +2991,8 @@ fn move_punct_in_children(children: Vec<Output>) -> Vec<Output> {
         // Check if current ends with a quoted node (direct or nested)
         if let Some(quoted_path) = find_trailing_quoted(&current) {
             // Look ahead to see if next sibling starts with punctuation
-            if let Some(next) = iter.peek() {
-                if let Some((punct, rest)) = extract_leading_punct(next) {
+            if let Some(next) = iter.peek()
+                && let Some((punct, rest)) = extract_leading_punct(next) {
                     // Check that quoted content doesn't already end with this punctuation
                     if !ends_with_punct_in_path(&current, &quoted_path, punct) {
                         // Move punctuation inside the quoted node
@@ -3010,7 +3008,6 @@ fn move_punct_in_children(children: Vec<Output>) -> Vec<Output> {
                         continue;
                     }
                 }
-            }
         }
 
         // Recursively process the current node
@@ -3072,11 +3069,10 @@ fn ends_with_punct_in_path(output: &Output, path: &[usize], punct: char) -> bool
 
     match output {
         Output::Formatted { children, .. } => {
-            if let Some(&idx) = path.first() {
-                if let Some(child) = children.get(idx) {
+            if let Some(&idx) = path.first()
+                && let Some(child) = children.get(idx) {
                     return ends_with_punct_in_path(child, &path[1..], punct);
                 }
-            }
             false
         }
         Output::Tagged { child, .. } => {
@@ -3218,7 +3214,7 @@ fn move_delimiter_punct_into_quotes(
     };
 
     let first_char = delim.chars().next();
-    if !matches!(first_char, Some('.') | Some(',')) {
+    if !matches!(first_char, Some('.' | ',')) {
         return (children, formatting);
     }
 
@@ -3263,7 +3259,7 @@ fn move_suffix_punct_into_quoted_content(
     };
 
     let first_char = suffix.chars().next();
-    if !matches!(first_char, Some('.') | Some(',')) {
+    if !matches!(first_char, Some('.' | ',')) {
         return children;
     }
 
@@ -3330,8 +3326,8 @@ fn insert_punct_before_trailing_quote(children: &mut Vec<Output>, punct: char) -
 fn insert_punct_before_trailing_quote_in_node(output: &mut Output, punct: char) -> bool {
     match output {
         Output::Literal(s) => {
-            if let Some(last_char) = s.chars().last() {
-                if is_quote_char(last_char) {
+            if let Some(last_char) = s.chars().last()
+                && is_quote_char(last_char) {
                     // Insert punctuation before the trailing quote
                     let mut chars: Vec<char> = s.chars().collect();
                     let insert_pos = chars.len() - 1;
@@ -3339,7 +3335,6 @@ fn insert_punct_before_trailing_quote_in_node(output: &mut Output, punct: char) 
                     *s = chars.into_iter().collect();
                     return true;
                 }
-            }
             false
         }
         Output::Tagged { child, .. } => {
@@ -3400,7 +3395,7 @@ fn move_suffix_punct_into_quoted_child(
     };
 
     let first_char = suffix.chars().next();
-    if !matches!(first_char, Some('.') | Some(',')) {
+    if !matches!(first_char, Some('.' | ',')) {
         return children;
     }
 
@@ -3569,11 +3564,10 @@ fn output_ends_with_char(output: &Output, c: char) -> bool {
             children,
         } => {
             // If there's a suffix, check the suffix for the ending character
-            if let Some(ref suffix) = formatting.suffix {
-                if !suffix.is_empty() {
+            if let Some(ref suffix) = formatting.suffix
+                && !suffix.is_empty() {
                     return suffix.ends_with(c);
                 }
-            }
             // Otherwise check children
             ends_with_punct(children, c)
         }
@@ -3681,8 +3675,8 @@ impl<'a> RichTextParser<'a> {
 
         while self.pos < self.input.len() {
             // Check for end tag
-            if let Some(tag) = end_tag {
-                if self.remaining().starts_with(tag) {
+            if let Some(tag) = end_tag
+                && self.remaining().starts_with(tag) {
                     // Flush accumulated text
                     if self.pos > text_start {
                         children.push(Output::Literal(
@@ -3692,7 +3686,6 @@ impl<'a> RichTextParser<'a> {
                     self.pos += tag.len();
                     return children;
                 }
-            }
 
             // Check for start of a tag
             if self.remaining().starts_with('<') {
@@ -3733,9 +3726,9 @@ impl<'a> RichTextParser<'a> {
                     None
                 };
                 let is_followed_by_non_space =
-                    next_char.map(|c| !c.is_whitespace()).unwrap_or(false);
+                    next_char.is_some_and(|c| !c.is_whitespace());
                 let is_preceded_by_alphanumeric =
-                    prev_char.map(|c| c.is_alphanumeric()).unwrap_or(false);
+                    prev_char.is_some_and(|c| c.is_alphanumeric());
 
                 if is_followed_by_non_space && !is_preceded_by_alphanumeric {
                     // Flush accumulated text
@@ -3763,8 +3756,7 @@ impl<'a> RichTextParser<'a> {
                     .remaining()
                     .chars()
                     .next()
-                    .map(|c| c.len_utf8())
-                    .unwrap_or(1);
+                    .map_or(1, |c| c.len_utf8());
             }
         }
 
@@ -3785,32 +3777,40 @@ impl<'a> RichTextParser<'a> {
         if remaining.starts_with("<i>") {
             self.pos += 3;
             let inner = self.parse_children(Some("</i>"));
-            let mut fmt = Formatting::default();
-            fmt.font_style = Some(quarto_csl::FontStyle::Italic);
+            let fmt = Formatting {
+                font_style: Some(quarto_csl::FontStyle::Italic),
+                ..Default::default()
+            };
             return Some(Output::formatted(fmt, inner));
         }
 
         if remaining.starts_with("<b>") {
             self.pos += 3;
             let inner = self.parse_children(Some("</b>"));
-            let mut fmt = Formatting::default();
-            fmt.font_weight = Some(quarto_csl::FontWeight::Bold);
+            let fmt = Formatting {
+                font_weight: Some(quarto_csl::FontWeight::Bold),
+                ..Default::default()
+            };
             return Some(Output::formatted(fmt, inner));
         }
 
         if remaining.starts_with("<sup>") {
             self.pos += 5;
             let inner = self.parse_children(Some("</sup>"));
-            let mut fmt = Formatting::default();
-            fmt.vertical_align = Some(quarto_csl::VerticalAlign::Sup);
+            let fmt = Formatting {
+                vertical_align: Some(quarto_csl::VerticalAlign::Sup),
+                ..Default::default()
+            };
             return Some(Output::formatted(fmt, inner));
         }
 
         if remaining.starts_with("<sub>") {
             self.pos += 5;
             let inner = self.parse_children(Some("</sub>"));
-            let mut fmt = Formatting::default();
-            fmt.vertical_align = Some(quarto_csl::VerticalAlign::Sub);
+            let fmt = Formatting {
+                vertical_align: Some(quarto_csl::VerticalAlign::Sub),
+                ..Default::default()
+            };
             return Some(Output::formatted(fmt, inner));
         }
 
@@ -3818,8 +3818,10 @@ impl<'a> RichTextParser<'a> {
         if remaining.starts_with("<sc>") {
             self.pos += 4;
             let inner = self.parse_children(Some("</sc>"));
-            let mut fmt = Formatting::default();
-            fmt.font_variant = Some(quarto_csl::FontVariant::SmallCaps);
+            let fmt = Formatting {
+                font_variant: Some(quarto_csl::FontVariant::SmallCaps),
+                ..Default::default()
+            };
             return Some(Output::formatted(fmt, inner));
         }
 
@@ -3830,8 +3832,10 @@ impl<'a> RichTextParser<'a> {
             let tag_end = remaining.find('>').unwrap() + 1;
             self.pos += tag_end;
             let inner = self.parse_children(Some("</span>"));
-            let mut fmt = Formatting::default();
-            fmt.font_variant = Some(quarto_csl::FontVariant::SmallCaps);
+            let fmt = Formatting {
+                font_variant: Some(quarto_csl::FontVariant::SmallCaps),
+                ..Default::default()
+            };
             return Some(Output::formatted(fmt, inner));
         }
 
@@ -3913,8 +3917,7 @@ impl<'a> RichTextParser<'a> {
                 // See Pandoc citeproc pCslText: apostrophe handling
                 let next_after_quote = self.remaining().chars().nth(1);
                 let is_valid_closing_quote = next_after_quote
-                    .map(|c| !c.is_alphanumeric())
-                    .unwrap_or(true);
+                    .is_none_or(|c| !c.is_alphanumeric());
 
                 if is_valid_closing_quote {
                     // Found closing quote
@@ -3926,13 +3929,15 @@ impl<'a> RichTextParser<'a> {
                         vec![]
                     } else {
                         let mut inner_parser = RichTextParser::new(content);
-                        let children = inner_parser.parse_children(None);
-                        children
+                        
+                        inner_parser.parse_children(None)
                     };
 
                     // Wrap with quotes formatting
-                    let mut fmt = Formatting::default();
-                    fmt.quotes = true;
+                    let fmt = Formatting {
+                        quotes: true,
+                        ..Default::default()
+                    };
                     return Some(Output::formatted(fmt, inner));
                 }
             }
@@ -4178,7 +4183,7 @@ fn has_internal_uppercase(s: &str) -> bool {
 
 /// Check if a string starts with an alphabetic character.
 fn starts_with_letter(s: &str) -> bool {
-    s.chars().next().map_or(false, |c| c.is_alphabetic())
+    s.chars().next().is_some_and(|c| c.is_alphabetic())
 }
 
 /// Title case a single word (may contain hyphens or slashes).
@@ -4544,11 +4549,7 @@ fn title_case_with_state_and_last(
             }
             result.push(c);
             if let Some(&next_c) = chars.peek() {
-                if next_c.is_alphanumeric() {
-                    force_next = true;
-                } else {
-                    force_next = false;
-                }
+                force_next = next_c.is_alphanumeric();
             } else {
                 force_next = false;
             }
@@ -4871,7 +4872,7 @@ fn render_block_to_csl_html(
             for inner_block in &d.content {
                 render_block_to_csl_html(inner_block, output, ctx, quotes);
             }
-            if classes.first().is_some() {
+            if !classes.is_empty() {
                 output.push_str("</div>");
             }
         }
@@ -4893,14 +4894,13 @@ fn render_inline_to_csl_html_with_ctx(
             // Check if this is a single Unicode superscript character that should
             // be converted to <sup> tags. This matches Pandoc citeproc's behavior.
             let mut chars = s.text.chars();
-            if let (Some(first), None) = (chars.next(), chars.next()) {
-                if let Some(base) = superscript_char_to_base(first) {
+            if let (Some(first), None) = (chars.next(), chars.next())
+                && let Some(base) = superscript_char_to_base(first) {
                     output.push_str("<sup>");
                     output.push_str(&html_escape(base));
                     output.push_str("</sup>");
                     return;
                 }
-            }
 
             // Convert straight apostrophes to curly (typographic) apostrophes
             // and escape HTML special characters
@@ -5267,8 +5267,10 @@ mod tests {
     #[test]
     fn test_output_builder_formatting() {
         let mut builder = OutputBuilder::new();
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
 
         builder.push_formatted("Title", &formatting);
 
@@ -5354,8 +5356,10 @@ mod tests {
 
     #[test]
     fn test_output_formatted_with_italic() {
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         assert_eq!(output.render(), "*Title*");
@@ -5363,9 +5367,11 @@ mod tests {
 
     #[test]
     fn test_output_formatted_with_prefix_suffix() {
-        let mut formatting = Formatting::default();
-        formatting.prefix = Some("(".to_string());
-        formatting.suffix = Some(")".to_string());
+        let formatting = Formatting {
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("2020")]);
         assert_eq!(output.render(), "(2020)");
@@ -5442,12 +5448,16 @@ mod tests {
 
     #[test]
     fn test_output_nested_formatting() {
-        let mut inner_fmt = Formatting::default();
-        inner_fmt.font_style = Some(quarto_csl::FontStyle::Italic);
+        let inner_fmt = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
 
-        let mut outer_fmt = Formatting::default();
-        outer_fmt.prefix = Some("(".to_string());
-        outer_fmt.suffix = Some(")".to_string());
+        let outer_fmt = Formatting {
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
 
         let inner = Output::formatted(inner_fmt, vec![Output::literal("Title")]);
         let outer = Output::formatted(outer_fmt, vec![inner, Output::literal(", 2020")]);
@@ -5469,8 +5479,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_italic() {
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         let inlines = output.to_inlines();
@@ -5480,8 +5492,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_bold() {
-        let mut formatting = Formatting::default();
-        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        let formatting = Formatting {
+            font_weight: Some(quarto_csl::FontWeight::Bold),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Author")]);
         let inlines = output.to_inlines();
@@ -5491,8 +5505,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_superscript() {
-        let mut formatting = Formatting::default();
-        formatting.vertical_align = Some(quarto_csl::VerticalAlign::Sup);
+        let formatting = Formatting {
+            vertical_align: Some(quarto_csl::VerticalAlign::Sup),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("2")]);
         let inlines = output.to_inlines();
@@ -5502,8 +5518,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_subscript() {
-        let mut formatting = Formatting::default();
-        formatting.vertical_align = Some(quarto_csl::VerticalAlign::Sub);
+        let formatting = Formatting {
+            vertical_align: Some(quarto_csl::VerticalAlign::Sub),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("x")]);
         let inlines = output.to_inlines();
@@ -5513,8 +5531,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_small_caps() {
-        let mut formatting = Formatting::default();
-        formatting.font_variant = Some(quarto_csl::FontVariant::SmallCaps);
+        let formatting = Formatting {
+            font_variant: Some(quarto_csl::FontVariant::SmallCaps),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Author")]);
         let inlines = output.to_inlines();
@@ -5527,8 +5547,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_quotes() {
-        let mut formatting = Formatting::default();
-        formatting.quotes = true;
+        let formatting = Formatting {
+            quotes: true,
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         let inlines = output.to_inlines();
@@ -5539,9 +5561,11 @@ mod tests {
 
     #[test]
     fn test_to_inlines_prefix_suffix() {
-        let mut formatting = Formatting::default();
-        formatting.prefix = Some("(".to_string());
-        formatting.suffix = Some(")".to_string());
+        let formatting = Formatting {
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("2020")]);
         let inlines = output.to_inlines();
@@ -5551,12 +5575,16 @@ mod tests {
 
     #[test]
     fn test_to_inlines_nested_formatting() {
-        let mut inner_fmt = Formatting::default();
-        inner_fmt.font_style = Some(quarto_csl::FontStyle::Italic);
+        let inner_fmt = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
 
-        let mut outer_fmt = Formatting::default();
-        outer_fmt.prefix = Some("(".to_string());
-        outer_fmt.suffix = Some(")".to_string());
+        let outer_fmt = Formatting {
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
 
         let inner = Output::formatted(inner_fmt, vec![Output::literal("Title")]);
         let outer = Output::formatted(outer_fmt, vec![inner, Output::literal(", 2020")]);
@@ -5568,8 +5596,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_text_case_uppercase() {
-        let mut formatting = Formatting::default();
-        formatting.text_case = Some(quarto_csl::TextCase::Uppercase);
+        let formatting = Formatting {
+            text_case: Some(quarto_csl::TextCase::Uppercase),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("hello")]);
         let inlines = output.to_inlines();
@@ -5579,8 +5609,10 @@ mod tests {
 
     #[test]
     fn test_to_inlines_strip_periods() {
-        let mut formatting = Formatting::default();
-        formatting.strip_periods = true;
+        let formatting = Formatting {
+            strip_periods: true,
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Ph.D.")]);
         let inlines = output.to_inlines();
@@ -5609,10 +5641,12 @@ mod tests {
     fn test_to_inlines_bold_with_prefix_suffix() {
         // Default Formatting has affixes_inside=false, so affixes go OUTSIDE formatting
         // bold + prefix="(" + suffix=")" + "[1]" → "(<b>[1]</b>)"
-        let mut formatting = Formatting::default();
-        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
-        formatting.prefix = Some("(".to_string());
-        formatting.suffix = Some(")".to_string());
+        let formatting = Formatting {
+            font_weight: Some(quarto_csl::FontWeight::Bold),
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("[1]")]);
         let inlines = output.to_inlines();
@@ -5624,10 +5658,12 @@ mod tests {
     fn test_to_inlines_italic_with_prefix_suffix() {
         // Default Formatting has affixes_inside=false, so affixes go OUTSIDE formatting
         // italic + prefix="[" + suffix="]" + "Title" → "[<i>Title</i>]"
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
-        formatting.prefix = Some("[".to_string());
-        formatting.suffix = Some("]".to_string());
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            prefix: Some("[".to_string()),
+            suffix: Some("]".to_string()),
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         let inlines = output.to_inlines();
@@ -5639,11 +5675,13 @@ mod tests {
     fn test_to_inlines_affixes_inside_true() {
         // For layout elements, affixes_inside=true, so affixes go INSIDE formatting
         // bold + prefix="(" + suffix=")" + "[1]" → "<b>([1])</b>"
-        let mut formatting = Formatting::default();
-        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
-        formatting.prefix = Some("(".to_string());
-        formatting.suffix = Some(")".to_string());
-        formatting.affixes_inside = true;
+        let formatting = Formatting {
+            font_weight: Some(quarto_csl::FontWeight::Bold),
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            affixes_inside: true,
+            ..Default::default()
+        };
 
         let output = Output::formatted(formatting, vec![Output::literal("[1]")]);
         let inlines = output.to_inlines();
@@ -5682,61 +5720,77 @@ mod render_via_inlines_tests {
 
     #[test]
     fn test_render_italic() {
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         assert_eq!(output.render(), "*Title*");
     }
 
     #[test]
     fn test_render_bold() {
-        let mut formatting = Formatting::default();
-        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        let formatting = Formatting {
+            font_weight: Some(quarto_csl::FontWeight::Bold),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("Author")]);
         assert_eq!(output.render(), "**Author**");
     }
 
     #[test]
     fn test_render_superscript() {
-        let mut formatting = Formatting::default();
-        formatting.vertical_align = Some(quarto_csl::VerticalAlign::Sup);
+        let formatting = Formatting {
+            vertical_align: Some(quarto_csl::VerticalAlign::Sup),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("2")]);
         assert_eq!(output.render(), "^2^");
     }
 
     #[test]
     fn test_render_subscript() {
-        let mut formatting = Formatting::default();
-        formatting.vertical_align = Some(quarto_csl::VerticalAlign::Sub);
+        let formatting = Formatting {
+            vertical_align: Some(quarto_csl::VerticalAlign::Sub),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("x")]);
         assert_eq!(output.render(), "~x~");
     }
 
     #[test]
     fn test_render_prefix_suffix() {
-        let mut formatting = Formatting::default();
-        formatting.prefix = Some("(".to_string());
-        formatting.suffix = Some(")".to_string());
+        let formatting = Formatting {
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("2020")]);
         assert_eq!(output.render(), "(2020)");
     }
 
     #[test]
     fn test_render_quotes() {
-        let mut formatting = Formatting::default();
-        formatting.quotes = true;
+        let formatting = Formatting {
+            quotes: true,
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         assert_eq!(output.render(), "\u{201C}Title\u{201D}");
     }
 
     #[test]
     fn test_render_nested_formatting() {
-        let mut inner_fmt = Formatting::default();
-        inner_fmt.font_style = Some(quarto_csl::FontStyle::Italic);
+        let inner_fmt = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
 
-        let mut outer_fmt = Formatting::default();
-        outer_fmt.prefix = Some("(".to_string());
-        outer_fmt.suffix = Some(")".to_string());
+        let outer_fmt = Formatting {
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
 
         let inner = Output::formatted(inner_fmt, vec![Output::literal("Title")]);
         let outer = Output::formatted(outer_fmt, vec![inner, Output::literal(", 2020")]);
@@ -5760,8 +5814,10 @@ mod render_via_inlines_tests {
 
     #[test]
     fn test_render_delimiter() {
-        let mut formatting = Formatting::default();
-        formatting.delimiter = Some(", ".to_string());
+        let formatting = Formatting {
+            delimiter: Some(", ".to_string()),
+            ..Default::default()
+        };
         let output = Output::formatted(
             formatting,
             vec![
@@ -5775,8 +5831,10 @@ mod render_via_inlines_tests {
 
     #[test]
     fn test_render_delimiter_filters_empty() {
-        let mut formatting = Formatting::default();
-        formatting.delimiter = Some(", ".to_string());
+        let formatting = Formatting {
+            delimiter: Some(", ".to_string()),
+            ..Default::default()
+        };
         let output = Output::formatted(
             formatting,
             vec![Output::literal("A"), Output::Null, Output::literal("C")],
@@ -5786,43 +5844,53 @@ mod render_via_inlines_tests {
 
     #[test]
     fn test_render_text_case_uppercase() {
-        let mut formatting = Formatting::default();
-        formatting.text_case = Some(quarto_csl::TextCase::Uppercase);
+        let formatting = Formatting {
+            text_case: Some(quarto_csl::TextCase::Uppercase),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("hello")]);
         assert_eq!(output.render(), "HELLO");
     }
 
     #[test]
     fn test_render_text_case_lowercase() {
-        let mut formatting = Formatting::default();
-        formatting.text_case = Some(quarto_csl::TextCase::Lowercase);
+        let formatting = Formatting {
+            text_case: Some(quarto_csl::TextCase::Lowercase),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("HELLO")]);
         assert_eq!(output.render(), "hello");
     }
 
     #[test]
     fn test_render_strip_periods() {
-        let mut formatting = Formatting::default();
-        formatting.strip_periods = true;
+        let formatting = Formatting {
+            strip_periods: true,
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("Ph.D.")]);
         assert_eq!(output.render(), "PhD");
     }
 
     #[test]
     fn test_render_combined_formatting() {
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
-        formatting.prefix = Some("(".to_string());
-        formatting.suffix = Some(")".to_string());
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            prefix: Some("(".to_string()),
+            suffix: Some(")".to_string()),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("Title")]);
         assert_eq!(output.render(), "(*Title*)");
     }
 
     #[test]
     fn test_render_italic_and_bold() {
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
-        formatting.font_weight = Some(quarto_csl::FontWeight::Bold);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            font_weight: Some(quarto_csl::FontWeight::Bold),
+            ..Default::default()
+        };
         let output = Output::formatted(formatting, vec![Output::literal("Important")]);
         assert_eq!(output.render(), "***Important***");
     }
@@ -5848,8 +5916,10 @@ mod rich_text_tests {
         let output = parse_csl_rich_text(input);
 
         // Apply capitalize-all formatting
-        let mut formatting = Formatting::default();
-        formatting.text_case = Some(quarto_csl::TextCase::CapitalizeAll);
+        let formatting = Formatting {
+            text_case: Some(quarto_csl::TextCase::CapitalizeAll),
+            ..Default::default()
+        };
         let formatted = Output::formatted(formatting, vec![output]);
 
         let inlines = formatted.to_inlines();
@@ -5865,8 +5935,10 @@ mod rich_text_tests {
         let output = parse_csl_rich_text(input);
 
         // Apply italic formatting
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
         let formatted = Output::formatted(formatting, vec![output]);
 
         let inlines = formatted.to_inlines();
@@ -5940,8 +6012,10 @@ mod rich_text_tests {
         let output = parse_csl_rich_text(&title);
 
         // Apply italic formatting
-        let mut formatting = Formatting::default();
-        formatting.font_style = Some(quarto_csl::FontStyle::Italic);
+        let formatting = Formatting {
+            font_style: Some(quarto_csl::FontStyle::Italic),
+            ..Default::default()
+        };
         let formatted = Output::formatted(formatting, vec![output]);
 
         let inlines = formatted.to_inlines();
@@ -6091,8 +6165,10 @@ mod punct_tests {
 
         // Helper to create a quoted output
         fn quoted(text: &str) -> Output {
-            let mut fmt = Formatting::default();
-            fmt.quotes = true;
+            let fmt = Formatting {
+                quotes: true,
+                ..Default::default()
+            };
             Output::Formatted {
                 formatting: fmt,
                 children: vec![Output::Literal(text.to_string())],
@@ -6230,9 +6306,11 @@ mod punct_tests {
         let title_content = Output::tagged(Tag::Title, Output::literal("This is 'The One'"));
 
         // Create the formatted node with quotes=true and suffix="."
-        let mut fmt = Formatting::default();
-        fmt.quotes = true;
-        fmt.suffix = Some(".".to_string());
+        let fmt = Formatting {
+            quotes: true,
+            suffix: Some(".".to_string()),
+            ..Default::default()
+        };
         let input = Output::Formatted {
             formatting: fmt,
             children: vec![title_content],

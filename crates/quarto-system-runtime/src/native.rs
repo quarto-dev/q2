@@ -53,11 +53,10 @@ impl SystemRuntime for NativeRuntime {
 
     fn file_write(&self, path: &Path, contents: &[u8]) -> RuntimeResult<()> {
         // Create parent directories if they don't exist
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
+        if let Some(parent) = path.parent()
+            && !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
-        }
         fs::write(path, contents).map_err(RuntimeError::from)
     }
 
@@ -101,22 +100,20 @@ impl SystemRuntime for NativeRuntime {
 
     fn file_copy(&self, src: &Path, dst: &Path) -> RuntimeResult<()> {
         // Create parent directories if they don't exist
-        if let Some(parent) = dst.parent() {
-            if !parent.exists() {
+        if let Some(parent) = dst.parent()
+            && !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
-        }
         fs::copy(src, dst)?;
         Ok(())
     }
 
     fn path_rename(&self, old: &Path, new: &Path) -> RuntimeResult<()> {
         // Create parent directories if they don't exist
-        if let Some(parent) = new.parent() {
-            if !parent.exists() {
+        if let Some(parent) = new.parent()
+            && !parent.exists() {
                 fs::create_dir_all(parent)?;
             }
-        }
         fs::rename(old, new).map_err(RuntimeError::from)
     }
 
@@ -218,11 +215,10 @@ impl SystemRuntime for NativeRuntime {
             .spawn()?;
 
         // Write stdin if provided
-        if let Some(input) = stdin {
-            if let Some(mut stdin_pipe) = child.stdin.take() {
+        if let Some(input) = stdin
+            && let Some(mut stdin_pipe) = child.stdin.take() {
                 stdin_pipe.write_all(input)?;
             }
-        }
 
         let output = child.wait_with_output()?;
 
@@ -293,43 +289,47 @@ impl SystemRuntime for NativeRuntime {
         let base = match kind {
             XdgDirKind::Config => {
                 // $XDG_CONFIG_HOME or ~/.config
-                std::env::var("XDG_CONFIG_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_CONFIG_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".config")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
             XdgDirKind::Data => {
                 // $XDG_DATA_HOME or ~/.local/share
-                std::env::var("XDG_DATA_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_DATA_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".local/share")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
             XdgDirKind::Cache => {
                 // $XDG_CACHE_HOME or ~/.cache
-                std::env::var("XDG_CACHE_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_CACHE_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".cache")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
             XdgDirKind::State => {
                 // $XDG_STATE_HOME or ~/.local/state
-                std::env::var("XDG_STATE_HOME")
-                    .map(PathBuf::from)
-                    .unwrap_or_else(|_| {
+                std::env::var("XDG_STATE_HOME").map_or_else(
+                    |_| {
                         dirs::home_dir()
                             .unwrap_or_else(|| PathBuf::from("~"))
                             .join(".local/state")
-                    })
+                    },
+                    PathBuf::from,
+                )
             }
         };
 

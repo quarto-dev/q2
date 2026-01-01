@@ -11,7 +11,7 @@ pub fn process_attribute(
     children: Vec<(String, PandocNativeIntermediate)>,
     _context: &ASTContext,
 ) -> PandocNativeIntermediate {
-    for (node, child) in children {
+    if let Some((node, child)) = children.into_iter().next() {
         match child {
             PandocNativeIntermediate::IntermediateAttr(attr, attr_source) => {
                 if node == "commonmark_attribute" {

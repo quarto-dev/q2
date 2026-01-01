@@ -60,7 +60,7 @@ pub fn process_latex_span(
         panic!("Expected BaseText in latex_span, got {:?}", child)
     };
     PandocNativeIntermediate::IntermediateInline(Inline::Math(Math {
-        math_type: math_type,
+        math_type,
         text,
         source_info: node_source_info_with_context(node, context),
     }))

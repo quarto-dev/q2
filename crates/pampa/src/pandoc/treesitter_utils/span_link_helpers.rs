@@ -86,7 +86,7 @@ pub fn process_pandoc_span(
     let mut content_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
     let mut target_source = TargetSourceInfo::empty();
-    let mut attr = ("".to_string(), vec![], hashlink::LinkedHashMap::new());
+    let mut attr = (String::new(), vec![], hashlink::LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {
@@ -175,7 +175,7 @@ pub fn process_pandoc_span(
             // - Backtrack to Span if content isn't citation-worthy
             return PandocNativeIntermediate::IntermediateInline(make_cite_inline(
                 attr,
-                ("".to_string(), "".to_string()), // empty target
+                (String::new(), String::new()), // empty target
                 preprocessed_inlines,
                 node_source_info_with_context(node, context),
                 attr_source,
@@ -241,7 +241,7 @@ pub fn process_pandoc_image(
     let mut alt_inlines: Vec<Inline> = Vec::new();
     let mut target: Option<(String, String)> = None;
     let mut target_source = TargetSourceInfo::empty();
-    let mut attr = ("".to_string(), vec![], hashlink::LinkedHashMap::new());
+    let mut attr = (String::new(), vec![], hashlink::LinkedHashMap::new());
     let mut attr_source = AttrSourceInfo::empty();
 
     for (node_name, child) in children {
@@ -291,7 +291,7 @@ pub fn process_pandoc_image(
     }
 
     // Create Image inline
-    let (url, title) = target.unwrap_or_else(|| ("".to_string(), "".to_string()));
+    let (url, title) = target.unwrap_or_else(|| (String::new(), String::new()));
 
     PandocNativeIntermediate::IntermediateInline(Inline::Image(Image {
         attr,

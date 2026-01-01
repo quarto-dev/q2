@@ -927,7 +927,7 @@ ref: schema/base
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Ref(s) = schema {
             assert_eq!(s.reference, "schema/base");
-            assert_eq!(s.eager, false); // ref is lazy
+            assert!(!s.eager); // ref is lazy
         } else {
             panic!("Expected Ref schema");
         }
@@ -944,7 +944,7 @@ $ref: schema/base
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Ref(s) = schema {
             assert_eq!(s.reference, "schema/base");
-            assert_eq!(s.eager, false); // $ref is also lazy
+            assert!(!s.eager); // $ref is also lazy
         } else {
             panic!("Expected Ref schema");
         }
@@ -961,7 +961,7 @@ resolveRef: schema/base
         let schema = Schema::from_yaml(&yaml).unwrap();
         if let Schema::Ref(s) = schema {
             assert_eq!(s.reference, "schema/base");
-            assert_eq!(s.eager, true); // resolveRef is eager
+            assert!(s.eager); // resolveRef is eager
         } else {
             panic!("Expected Ref schema");
         }
@@ -1428,7 +1428,7 @@ object:
                 match &bases[0] {
                     Schema::Ref(r) => {
                         assert_eq!(r.reference, "base-schema");
-                        assert_eq!(r.eager, true);
+                        assert!(r.eager);
                     }
                     _ => panic!("Expected Ref schema"),
                 }
@@ -1461,14 +1461,14 @@ object:
                 match &bases[0] {
                     Schema::Ref(r) => {
                         assert_eq!(r.reference, "base1");
-                        assert_eq!(r.eager, true);
+                        assert!(r.eager);
                     }
                     _ => panic!("Expected Ref schema for base1"),
                 }
                 match &bases[1] {
                     Schema::Ref(r) => {
                         assert_eq!(r.reference, "base2");
-                        assert_eq!(r.eager, true);
+                        assert!(r.eager);
                     }
                     _ => panic!("Expected Ref schema for base2"),
                 }

@@ -23,7 +23,7 @@ fn test_read_all_json_files_in_tests_readers() {
         println!("Testing JSON reader with: {}", json_file.display());
 
         let mut file = fs::File::open(&json_file)
-            .expect(&format!("Failed to open file: {}", json_file.display()));
+            .unwrap_or_else(|_| panic!("Failed to open file: {}", json_file.display()));
 
         match json::read(&mut file) {
             Ok((pandoc, _context)) => {
@@ -44,14 +44,12 @@ fn test_read_all_json_files_in_tests_readers() {
 
 fn collect_json_files(dir: &PathBuf, files: &mut Vec<PathBuf>) {
     if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                let path = entry.path();
-                if path.is_dir() {
-                    collect_json_files(&path, files);
-                } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
-                    files.push(path);
-                }
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                collect_json_files(&path, files);
+            } else if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                files.push(path);
             }
         }
     }
