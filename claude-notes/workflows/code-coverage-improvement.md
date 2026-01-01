@@ -395,6 +395,66 @@ If you encounter:
 
 Stop and report to the user rather than writing incorrect tests or spending excessive time on low-value targets.
 
+## Dead Code Discovery
+
+When investigating files with 0% coverage, you may discover **dead code** - code that is declared but never used. This is valuable discovery work.
+
+### How to Identify Dead Code
+
+A file is likely dead code if:
+1. It's declared as a module in `mod.rs` but never imported anywhere
+2. A similar `*_helpers.rs` file exists that supersedes it
+3. No other file contains `use <module>::` or `<module>::function()` patterns
+
+### Investigation Steps
+
+1. Search for imports of the module:
+   ```bash
+   grep -r "module_name::" crates/
+   ```
+
+2. Check if there's a replacement file (common pattern: `foo.rs` replaced by `foo_helpers.rs`)
+
+3. Verify the module is declared but unused in `mod.rs`
+
+### Reporting Dead Code
+
+When you find dead code:
+
+1. **Create a beads issue** documenting the finding:
+   ```bash
+   bd create "Remove dead code: <filename>" -t task -p 3 \
+     -d "File is never imported or used. [Reason it's dead, e.g., 'Superseded by foo_helpers.rs']"
+   ```
+
+2. **Write a brief report** explaining:
+   - What file(s) are dead code
+   - Evidence they're unused (no imports found)
+   - What replaced them (if applicable)
+   - Recommendation for removal
+
+3. **Do not remove the code** in the coverage session - that's a separate task
+
+### Example Dead Code Report
+
+```
+## Dead Code Finding: code_span.rs
+
+**File**: `pampa/src/pandoc/treesitter_utils/code_span.rs` (107 lines)
+
+**Evidence**:
+- Module declared in mod.rs (line 13)
+- Zero imports found: `grep -r "code_span::" crates/` returns nothing
+- Superseded by: `code_span_helpers.rs` which IS imported and used
+
+**Recommendation**: Remove `code_span.rs` and its declaration in mod.rs.
+The functionality is fully handled by `code_span_helpers.rs`.
+
+**Issue created**: k-js4l
+```
+
+Dead code artificially inflates the "uncovered lines" count, making coverage percentages appear worse than they are. Identifying and removing dead code is a legitimate form of coverage improvement.
+
 ## Tracking Progress Over Time
 
 The epic `k-uoc5` tracks overall coverage work. Each session should:
