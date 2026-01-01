@@ -561,7 +561,7 @@ mod tests {
     #[test]
     fn test_table_dropped_with_warning() {
         let blocks = vec![Block::Table(Table {
-            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
             caption: crate::pandoc::caption::Caption {
                 short: None,
                 long: None,
@@ -569,14 +569,14 @@ mod tests {
             },
             colspec: vec![],
             head: crate::pandoc::table::TableHead {
-                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
             },
             bodies: vec![],
             foot: crate::pandoc::table::TableFoot {
-                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
                 rows: vec![],
                 source_info: dummy_source_info(),
                 attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
