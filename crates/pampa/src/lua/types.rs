@@ -118,6 +118,14 @@ impl LuaInline {
             // Code
             (Inline::Code(c), "text") => c.text.clone().into_lua(lua),
             (Inline::Code(c), "attr") => attr_to_lua_table(lua, &c.attr),
+            (Inline::Code(c), "identifier") => c.attr.0.clone().into_lua(lua),
+            (Inline::Code(c), "classes") => {
+                let table = lua.create_table()?;
+                for (i, class) in c.attr.1.iter().enumerate() {
+                    table.set(i + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // Math
             (Inline::Math(m), "text") => m.text.clone().into_lua(lua),
@@ -138,38 +146,94 @@ impl LuaInline {
             (Inline::Link(l), "target") => l.target.0.clone().into_lua(lua),
             (Inline::Link(l), "title") => l.target.1.clone().into_lua(lua),
             (Inline::Link(l), "attr") => attr_to_lua_table(lua, &l.attr),
+            (Inline::Link(l), "identifier") => l.attr.0.clone().into_lua(lua),
+            (Inline::Link(l), "classes") => {
+                let table = lua.create_table()?;
+                for (i, class) in l.attr.1.iter().enumerate() {
+                    table.set(i + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // Image
             (Inline::Image(i), "content") => inlines_to_lua_table(lua, &i.content),
             (Inline::Image(i), "src") => i.target.0.clone().into_lua(lua),
             (Inline::Image(i), "title") => i.target.1.clone().into_lua(lua),
             (Inline::Image(i), "attr") => attr_to_lua_table(lua, &i.attr),
+            (Inline::Image(img), "identifier") => img.attr.0.clone().into_lua(lua),
+            (Inline::Image(img), "classes") => {
+                let table = lua.create_table()?;
+                for (j, class) in img.attr.1.iter().enumerate() {
+                    table.set(j + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // Note
             (Inline::Note(n), "content") => blocks_to_lua_table(lua, &n.content),
 
             // Span (attr already covered above for other elements with attr)
             (Inline::Span(s), "attr") => attr_to_lua_table(lua, &s.attr),
+            (Inline::Span(s), "identifier") => s.attr.0.clone().into_lua(lua),
+            (Inline::Span(s), "classes") => {
+                let table = lua.create_table()?;
+                for (i, class) in s.attr.1.iter().enumerate() {
+                    table.set(i + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // Cite
             (Inline::Cite(c), "content") => inlines_to_lua_table(lua, &c.content),
             (Inline::Cite(c), "citations") => citations_to_lua_table(lua, &c.citations),
 
             // Insert (CriticMarkup-like)
-            (Inline::Insert(i), "content") => inlines_to_lua_table(lua, &i.content),
-            (Inline::Insert(i), "attr") => attr_to_lua_table(lua, &i.attr),
+            (Inline::Insert(ins), "content") => inlines_to_lua_table(lua, &ins.content),
+            (Inline::Insert(ins), "attr") => attr_to_lua_table(lua, &ins.attr),
+            (Inline::Insert(ins), "identifier") => ins.attr.0.clone().into_lua(lua),
+            (Inline::Insert(ins), "classes") => {
+                let table = lua.create_table()?;
+                for (j, class) in ins.attr.1.iter().enumerate() {
+                    table.set(j + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // Delete (CriticMarkup-like)
             (Inline::Delete(d), "content") => inlines_to_lua_table(lua, &d.content),
             (Inline::Delete(d), "attr") => attr_to_lua_table(lua, &d.attr),
+            (Inline::Delete(d), "identifier") => d.attr.0.clone().into_lua(lua),
+            (Inline::Delete(d), "classes") => {
+                let table = lua.create_table()?;
+                for (j, class) in d.attr.1.iter().enumerate() {
+                    table.set(j + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // Highlight (CriticMarkup-like)
             (Inline::Highlight(h), "content") => inlines_to_lua_table(lua, &h.content),
             (Inline::Highlight(h), "attr") => attr_to_lua_table(lua, &h.attr),
+            (Inline::Highlight(h), "identifier") => h.attr.0.clone().into_lua(lua),
+            (Inline::Highlight(h), "classes") => {
+                let table = lua.create_table()?;
+                for (j, class) in h.attr.1.iter().enumerate() {
+                    table.set(j + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // EditComment (CriticMarkup-like)
             (Inline::EditComment(ec), "content") => inlines_to_lua_table(lua, &ec.content),
             (Inline::EditComment(ec), "attr") => attr_to_lua_table(lua, &ec.attr),
+            (Inline::EditComment(ec), "identifier") => ec.attr.0.clone().into_lua(lua),
+            (Inline::EditComment(ec), "classes") => {
+                let table = lua.create_table()?;
+                for (j, class) in ec.attr.1.iter().enumerate() {
+                    table.set(j + 1, class.clone())?;
+                }
+                Ok(Value::Table(table))
+            }
 
             // NoteReference
             (Inline::NoteReference(nr), "id") => nr.id.clone().into_lua(lua),
@@ -305,27 +369,59 @@ impl LuaInline {
                 Ok(())
             }
 
-            // Span attr
+            // Span attr and convenience accessors
             (Inline::Span(s), "attr") => {
                 s.attr = lua_value_to_attr(val, lua)?;
                 Ok(())
             }
+            (Inline::Span(s), "identifier") => {
+                s.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Span(s), "classes") => {
+                s.attr.1 = lua_table_to_strings(lua, val)?;
+                Ok(())
+            }
 
-            // Code attr
+            // Code attr and convenience accessors
             (Inline::Code(c), "attr") => {
                 c.attr = lua_value_to_attr(val, lua)?;
                 Ok(())
             }
+            (Inline::Code(c), "identifier") => {
+                c.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Code(c), "classes") => {
+                c.attr.1 = lua_table_to_strings(lua, val)?;
+                Ok(())
+            }
 
-            // Link attr
+            // Link attr and convenience accessors
             (Inline::Link(l), "attr") => {
                 l.attr = lua_value_to_attr(val, lua)?;
                 Ok(())
             }
+            (Inline::Link(l), "identifier") => {
+                l.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Link(l), "classes") => {
+                l.attr.1 = lua_table_to_strings(lua, val)?;
+                Ok(())
+            }
 
-            // Image attr
+            // Image attr and convenience accessors
             (Inline::Image(i), "attr") => {
                 i.attr = lua_value_to_attr(val, lua)?;
+                Ok(())
+            }
+            (Inline::Image(i), "identifier") => {
+                i.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Image(i), "classes") => {
+                i.attr.1 = lua_table_to_strings(lua, val)?;
                 Ok(())
             }
 
@@ -340,12 +436,20 @@ impl LuaInline {
             }
 
             // Insert
-            (Inline::Insert(i), "content") => {
-                i.content = lua_table_to_inlines(lua, val)?;
+            (Inline::Insert(ins), "content") => {
+                ins.content = lua_table_to_inlines(lua, val)?;
                 Ok(())
             }
-            (Inline::Insert(i), "attr") => {
-                i.attr = lua_value_to_attr(val, lua)?;
+            (Inline::Insert(ins), "attr") => {
+                ins.attr = lua_value_to_attr(val, lua)?;
+                Ok(())
+            }
+            (Inline::Insert(ins), "identifier") => {
+                ins.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Insert(ins), "classes") => {
+                ins.attr.1 = lua_table_to_strings(lua, val)?;
                 Ok(())
             }
 
@@ -358,6 +462,14 @@ impl LuaInline {
                 d.attr = lua_value_to_attr(val, lua)?;
                 Ok(())
             }
+            (Inline::Delete(d), "identifier") => {
+                d.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Delete(d), "classes") => {
+                d.attr.1 = lua_table_to_strings(lua, val)?;
+                Ok(())
+            }
 
             // Highlight
             (Inline::Highlight(h), "content") => {
@@ -368,6 +480,14 @@ impl LuaInline {
                 h.attr = lua_value_to_attr(val, lua)?;
                 Ok(())
             }
+            (Inline::Highlight(h), "identifier") => {
+                h.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::Highlight(h), "classes") => {
+                h.attr.1 = lua_table_to_strings(lua, val)?;
+                Ok(())
+            }
 
             // EditComment
             (Inline::EditComment(ec), "content") => {
@@ -376,6 +496,14 @@ impl LuaInline {
             }
             (Inline::EditComment(ec), "attr") => {
                 ec.attr = lua_value_to_attr(val, lua)?;
+                Ok(())
+            }
+            (Inline::EditComment(ec), "identifier") => {
+                ec.attr.0 = String::from_lua(val, lua)?;
+                Ok(())
+            }
+            (Inline::EditComment(ec), "classes") => {
+                ec.attr.1 = lua_table_to_strings(lua, val)?;
                 Ok(())
             }
 
@@ -1569,5 +1697,954 @@ pub fn walk_blocks_with_filter(lua: &Lua, blocks: &[Block], filter: &Table) -> R
     match get_walking_order(filter)? {
         WalkingOrder::Typewise => apply_typewise_filter(lua, filter, blocks),
         WalkingOrder::Topdown => walk_blocks_topdown(lua, filter, blocks),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pandoc::Block;
+    use crate::pandoc::Inline;
+    use crate::pandoc::{
+        AttrSourceInfo, BlockQuote, BulletList, Caption, CaptionBlock, Cite, Code, CodeBlock,
+        DefinitionList, Delete, Div, EditComment, Emph, Figure, Header, Highlight, HorizontalRule,
+        Image, Insert, LineBlock, LineBreak, Link, ListNumberDelim, ListNumberStyle, Math,
+        MathType, MetaBlock, Note, NoteDefinitionFencedBlock, NoteDefinitionPara, NoteReference,
+        OrderedList, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, Shortcode,
+        SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript, Superscript,
+        TableFoot, TableHead, TargetSourceInfo, Underline,
+    };
+    // Rename pandoc Table to avoid conflict with mlua Table
+    use crate::pandoc::Table as PandocTable;
+    use std::collections::HashMap;
+
+    // Helper to create default SourceInfo
+    fn si() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::default()
+    }
+
+    // Helper to create empty attr source info
+    fn attr_si() -> AttrSourceInfo {
+        AttrSourceInfo::empty()
+    }
+
+    // Helper to create empty target source info
+    fn target_si() -> TargetSourceInfo {
+        TargetSourceInfo::empty()
+    }
+
+    // Helper to create empty Caption
+    fn empty_caption() -> Caption {
+        Caption {
+            short: None,
+            long: None,
+            source_info: si(),
+        }
+    }
+
+    // Helper to create empty TableHead
+    fn empty_table_head() -> TableHead {
+        TableHead {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            rows: vec![],
+            source_info: si(),
+        }
+    }
+
+    // Helper to create empty TableFoot
+    fn empty_table_foot() -> TableFoot {
+        TableFoot {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            rows: vec![],
+            source_info: si(),
+        }
+    }
+
+    // ========== LuaInline::tag_name tests ==========
+
+    #[test]
+    fn test_lua_inline_tag_name_str() {
+        let inline = Inline::Str(Str {
+            text: "hello".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Str");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_emph() {
+        let inline = Inline::Emph(Emph {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Emph");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_underline() {
+        let inline = Inline::Underline(Underline {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Underline");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_strong() {
+        let inline = Inline::Strong(Strong {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Strong");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_strikeout() {
+        let inline = Inline::Strikeout(Strikeout {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Strikeout");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_superscript() {
+        let inline = Inline::Superscript(Superscript {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Superscript");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_subscript() {
+        let inline = Inline::Subscript(Subscript {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Subscript");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_smallcaps() {
+        let inline = Inline::SmallCaps(SmallCaps {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "SmallCaps");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_quoted() {
+        let inline = Inline::Quoted(Quoted {
+            quote_type: QuoteType::SingleQuote,
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Quoted");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_cite() {
+        let inline = Inline::Cite(Cite {
+            citations: vec![],
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Cite");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_code() {
+        let inline = Inline::Code(Code {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            text: "code".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Code");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_space() {
+        let inline = Inline::Space(Space { source_info: si() });
+        assert_eq!(LuaInline(inline).tag_name(), "Space");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_soft_break() {
+        let inline = Inline::SoftBreak(SoftBreak { source_info: si() });
+        assert_eq!(LuaInline(inline).tag_name(), "SoftBreak");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_line_break() {
+        let inline = Inline::LineBreak(LineBreak { source_info: si() });
+        assert_eq!(LuaInline(inline).tag_name(), "LineBreak");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_math() {
+        let inline = Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x^2".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Math");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_raw_inline() {
+        let inline = Inline::RawInline(RawInline {
+            format: "html".into(),
+            text: "<b>".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "RawInline");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_link() {
+        let inline = Inline::Link(Link {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            target: ("url".into(), "title".into()),
+            target_source: target_si(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Link");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_image() {
+        let inline = Inline::Image(Image {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            target: ("src".into(), "alt".into()),
+            target_source: target_si(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Image");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_note() {
+        let inline = Inline::Note(Note {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Note");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_span() {
+        let inline = Inline::Span(Span {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Span");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_shortcode() {
+        let inline = Inline::Shortcode(Shortcode {
+            is_escaped: false,
+            name: "test".into(),
+            positional_args: vec![],
+            keyword_args: HashMap::new(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Shortcode");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_note_reference() {
+        let inline = Inline::NoteReference(NoteReference {
+            id: "1".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "NoteReference");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_attr() {
+        let inline = Inline::Attr(
+            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_si(),
+        );
+        assert_eq!(LuaInline(inline).tag_name(), "Attr");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_insert() {
+        let inline = Inline::Insert(Insert {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Insert");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_delete() {
+        let inline = Inline::Delete(Delete {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Delete");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_highlight() {
+        let inline = Inline::Highlight(Highlight {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "Highlight");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_edit_comment() {
+        let inline = Inline::EditComment(EditComment {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaInline(inline).tag_name(), "EditComment");
+    }
+
+    #[test]
+    fn test_lua_inline_tag_name_custom() {
+        let inline = Inline::Custom(crate::pandoc::custom::CustomNode::new(
+            "test-type",
+            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            si(),
+        ));
+        assert_eq!(LuaInline(inline).tag_name(), "Custom");
+    }
+
+    // ========== LuaInline::field_names tests ==========
+
+    #[test]
+    fn test_lua_inline_field_names_str() {
+        let inline = Inline::Str(Str {
+            text: "hello".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "text", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_emph() {
+        let inline = Inline::Emph(Emph {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_quoted() {
+        let inline = Inline::Quoted(Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "quotetype", "content", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_cite() {
+        let inline = Inline::Cite(Cite {
+            citations: vec![],
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "citations", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_code() {
+        let inline = Inline::Code(Code {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            text: "code".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "text", "attr", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_space() {
+        let inline = Inline::Space(Space { source_info: si() });
+        assert_eq!(LuaInline(inline).field_names(), &["tag", "clone", "walk"]);
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_math() {
+        let inline = Inline::Math(Math {
+            math_type: MathType::DisplayMath,
+            text: "E=mc^2".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "mathtype", "text", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_raw_inline() {
+        let inline = Inline::RawInline(RawInline {
+            format: "latex".into(),
+            text: "\\alpha".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "format", "text", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_link() {
+        let inline = Inline::Link(Link {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            target: ("url".into(), "title".into()),
+            target_source: target_si(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "target", "title", "attr", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_image() {
+        let inline = Inline::Image(Image {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            target: ("src".into(), "alt".into()),
+            target_source: target_si(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "src", "title", "attr", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_note() {
+        let inline = Inline::Note(Note {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_span() {
+        let inline = Inline::Span(Span {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "attr", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_note_reference() {
+        let inline = Inline::NoteReference(NoteReference {
+            id: "1".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "id", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_insert() {
+        let inline = Inline::Insert(Insert {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaInline(inline).field_names(),
+            &["tag", "content", "attr", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_inline_field_names_custom() {
+        let inline = Inline::Custom(crate::pandoc::custom::CustomNode::new(
+            "test-type",
+            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            si(),
+        ));
+        assert_eq!(LuaInline(inline).field_names(), &["tag", "clone"]);
+    }
+
+    // ========== LuaBlock::tag_name tests ==========
+
+    #[test]
+    fn test_lua_block_tag_name_plain() {
+        let block = Block::Plain(Plain {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "Plain");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_paragraph() {
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "Para");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_line_block() {
+        let block = Block::LineBlock(LineBlock {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "LineBlock");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_code_block() {
+        let block = Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            text: "code".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "CodeBlock");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_raw_block() {
+        let block = Block::RawBlock(RawBlock {
+            format: "html".into(),
+            text: "<div>".into(),
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "RawBlock");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_block_quote() {
+        let block = Block::BlockQuote(BlockQuote {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "BlockQuote");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_ordered_list() {
+        let block = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "OrderedList");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_bullet_list() {
+        let block = Block::BulletList(BulletList {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "BulletList");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_definition_list() {
+        let block = Block::DefinitionList(DefinitionList {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "DefinitionList");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_header() {
+        let block = Block::Header(Header {
+            level: 1,
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "Header");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_horizontal_rule() {
+        let block = Block::HorizontalRule(HorizontalRule { source_info: si() });
+        assert_eq!(LuaBlock(block).tag_name(), "HorizontalRule");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_table() {
+        let block = Block::Table(PandocTable {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            caption: empty_caption(),
+            colspec: vec![],
+            head: empty_table_head(),
+            bodies: vec![],
+            foot: empty_table_foot(),
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "Table");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_figure() {
+        let block = Block::Figure(Figure {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            caption: empty_caption(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "Figure");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_div() {
+        let block = Block::Div(Div {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "Div");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_block_metadata() {
+        let block = Block::BlockMetadata(MetaBlock {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "BlockMetadata");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_note_definition_para() {
+        let block = Block::NoteDefinitionPara(NoteDefinitionPara {
+            id: "1".into(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "NoteDefinitionPara");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_note_definition_fenced_block() {
+        let block = Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
+            id: "1".into(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "NoteDefinitionFencedBlock");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_caption_block() {
+        let block = Block::CaptionBlock(CaptionBlock {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(LuaBlock(block).tag_name(), "CaptionBlock");
+    }
+
+    #[test]
+    fn test_lua_block_tag_name_custom() {
+        let block = Block::Custom(crate::pandoc::custom::CustomNode::new(
+            "test-type",
+            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            si(),
+        ));
+        assert_eq!(LuaBlock(block).tag_name(), "Custom");
+    }
+
+    // ========== LuaBlock::field_names tests ==========
+
+    #[test]
+    fn test_lua_block_field_names_plain() {
+        let block = Block::Plain(Plain {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &["tag", "content", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_paragraph() {
+        let block = Block::Paragraph(Paragraph {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &["tag", "content", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_code_block() {
+        let block = Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            text: "code".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &[
+                "tag",
+                "text",
+                "attr",
+                "identifier",
+                "classes",
+                "clone",
+                "walk"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_raw_block() {
+        let block = Block::RawBlock(RawBlock {
+            format: "html".into(),
+            text: "<div>".into(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &["tag", "format", "text", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_header() {
+        let block = Block::Header(Header {
+            level: 1,
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &[
+                "tag",
+                "level",
+                "content",
+                "attr",
+                "identifier",
+                "classes",
+                "clone",
+                "walk"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_ordered_list() {
+        let block = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &["tag", "content", "start", "style", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_bullet_list() {
+        let block = Block::BulletList(BulletList {
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &["tag", "content", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_table() {
+        let block = Block::Table(PandocTable {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            caption: empty_caption(),
+            colspec: vec![],
+            head: empty_table_head(),
+            bodies: vec![],
+            foot: empty_table_foot(),
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &["tag", "attr", "caption", "identifier", "clone", "walk"]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_figure() {
+        let block = Block::Figure(Figure {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            caption: empty_caption(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &[
+                "tag",
+                "content",
+                "attr",
+                "caption",
+                "identifier",
+                "clone",
+                "walk"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_div() {
+        let block = Block::Div(Div {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: attr_si(),
+            content: vec![],
+            source_info: si(),
+        });
+        assert_eq!(
+            LuaBlock(block).field_names(),
+            &[
+                "tag",
+                "content",
+                "attr",
+                "identifier",
+                "classes",
+                "clone",
+                "walk"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_lua_block_field_names_horizontal_rule() {
+        let block = Block::HorizontalRule(HorizontalRule { source_info: si() });
+        assert_eq!(LuaBlock(block).field_names(), &["tag", "clone", "walk"]);
+    }
+
+    #[test]
+    fn test_lua_block_field_names_custom() {
+        let block = Block::Custom(crate::pandoc::custom::CustomNode::new(
+            "test-type",
+            (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            si(),
+        ));
+        assert_eq!(LuaBlock(block).field_names(), &["tag", "clone"]);
+    }
+
+    // ========== LuaAttr tests ==========
+
+    #[test]
+    fn test_lua_attr_new() {
+        let attr = (
+            "id".into(),
+            vec!["class1".into()],
+            hashlink::LinkedHashMap::new(),
+        );
+        let lua_attr = LuaAttr::new(attr);
+        assert_eq!(lua_attr.identifier(), "id");
+        assert_eq!(lua_attr.classes(), &["class1".to_string()]);
+        assert!(lua_attr.attributes().is_empty());
+    }
+
+    #[test]
+    fn test_lua_attr_identifier() {
+        let attr = ("my-id".into(), vec![], hashlink::LinkedHashMap::new());
+        let lua_attr = LuaAttr(attr);
+        assert_eq!(lua_attr.identifier(), "my-id");
+    }
+
+    #[test]
+    fn test_lua_attr_classes() {
+        let attr = (
+            String::new(),
+            vec!["a".into(), "b".into()],
+            hashlink::LinkedHashMap::new(),
+        );
+        let lua_attr = LuaAttr(attr);
+        assert_eq!(lua_attr.classes(), &["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn test_lua_attr_attributes() {
+        let mut attrs = hashlink::LinkedHashMap::new();
+        attrs.insert("key".into(), "value".into());
+        let attr = (String::new(), vec![], attrs);
+        let lua_attr = LuaAttr(attr);
+        assert_eq!(lua_attr.attributes().get("key"), Some(&"value".to_string()));
     }
 }
