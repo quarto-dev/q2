@@ -97,6 +97,11 @@ jobs:
             cd crates/tree-sitter-qmd/tree-sitter-markdown
             tree-sitter test
         
+      # Diagnostic step for yaml-tags nondeterminism investigation
+      - name: Diagnostic - yaml-tags sourceInfoPool
+        run: cargo test -p pampa diagnostic_yaml_tags -- --nocapture
+        shell: bash
+
       - name: Test Rust code
         run: cargo nextest run
         shell: bash
