@@ -358,6 +358,8 @@ impl ProjectContext {
 mod tests {
     use super::*;
 
+    // === ProjectType tests ===
+
     #[test]
     fn test_project_type_from_string() {
         assert_eq!(
@@ -373,11 +375,281 @@ mod tests {
     }
 
     #[test]
+    fn test_project_type_from_string_manuscript() {
+        assert_eq!(
+            ProjectType::try_from("manuscript").unwrap(),
+            ProjectType::Manuscript
+        );
+    }
+
+    #[test]
+    fn test_project_type_from_string_case_insensitive() {
+        // Test uppercase
+        assert_eq!(
+            ProjectType::try_from("WEBSITE").unwrap(),
+            ProjectType::Website
+        );
+        assert_eq!(ProjectType::try_from("BOOK").unwrap(), ProjectType::Book);
+        assert_eq!(
+            ProjectType::try_from("DEFAULT").unwrap(),
+            ProjectType::Default
+        );
+        assert_eq!(
+            ProjectType::try_from("MANUSCRIPT").unwrap(),
+            ProjectType::Manuscript
+        );
+
+        // Test mixed case
+        assert_eq!(
+            ProjectType::try_from("WebSite").unwrap(),
+            ProjectType::Website
+        );
+        assert_eq!(ProjectType::try_from("Book").unwrap(), ProjectType::Book);
+    }
+
+    #[test]
+    fn test_project_type_from_string_error_message() {
+        let result = ProjectType::try_from("invalid");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Unknown project type"));
+        assert!(err.contains("invalid"));
+    }
+
+    #[test]
+    fn test_project_type_as_str() {
+        assert_eq!(ProjectType::Default.as_str(), "default");
+        assert_eq!(ProjectType::Website.as_str(), "website");
+        assert_eq!(ProjectType::Book.as_str(), "book");
+        assert_eq!(ProjectType::Manuscript.as_str(), "manuscript");
+    }
+
+    #[test]
+    fn test_project_type_default() {
+        let default_type: ProjectType = Default::default();
+        assert_eq!(default_type, ProjectType::Default);
+    }
+
+    #[test]
+    fn test_project_type_clone_and_copy() {
+        let original = ProjectType::Website;
+        let cloned = original.clone();
+        let copied = original; // Copy trait
+        assert_eq!(original, cloned);
+        assert_eq!(original, copied);
+    }
+
+    #[test]
+    fn test_project_type_eq() {
+        assert_eq!(ProjectType::Website, ProjectType::Website);
+        assert_ne!(ProjectType::Website, ProjectType::Book);
+    }
+
+    // === ProjectConfig tests ===
+
+    #[test]
+    fn test_project_config_default() {
+        let config = ProjectConfig::default();
+        assert_eq!(config.project_type, ProjectType::Default);
+        assert!(config.output_dir.is_none());
+        assert!(config.render_patterns.is_empty());
+        assert!(config.format_config.is_none());
+    }
+
+    #[test]
+    fn test_project_config_with_format_config() {
+        use quarto_pandoc_types::ConfigValue;
+        use quarto_source_map::SourceInfo;
+
+        let format_config = ConfigValue::new_string("test", SourceInfo::default());
+        let config = ProjectConfig::with_format_config(format_config.clone());
+
+        assert_eq!(config.project_type, ProjectType::Default);
+        assert!(config.output_dir.is_none());
+        assert!(config.render_patterns.is_empty());
+        assert!(config.format_config.is_some());
+    }
+
+    // === DocumentInfo tests ===
+
+    #[test]
     fn test_document_info() {
         let doc = DocumentInfo::from_path("/path/to/doc.qmd").with_output("/path/to/doc.html");
 
         assert_eq!(doc.input, PathBuf::from("/path/to/doc.qmd"));
         assert_eq!(doc.output, Some(PathBuf::from("/path/to/doc.html")));
         assert_eq!(doc.stem(), Some("doc"));
+    }
+
+    #[test]
+    fn test_document_info_from_path_only() {
+        let doc = DocumentInfo::from_path("/path/to/file.qmd");
+
+        assert_eq!(doc.input, PathBuf::from("/path/to/file.qmd"));
+        assert!(doc.output.is_none());
+        assert!(doc.title.is_none());
+        assert!(doc.id.is_none());
+    }
+
+    #[test]
+    fn test_document_info_stem_no_extension() {
+        let doc = DocumentInfo::from_path("/path/to/README");
+        assert_eq!(doc.stem(), Some("README"));
+    }
+
+    #[test]
+    fn test_document_info_stem_hidden_file() {
+        let doc = DocumentInfo::from_path("/path/to/.gitignore");
+        assert_eq!(doc.stem(), Some(".gitignore"));
+    }
+
+    #[test]
+    fn test_document_info_stem_multiple_dots() {
+        let doc = DocumentInfo::from_path("/path/to/file.test.qmd");
+        assert_eq!(doc.stem(), Some("file.test"));
+    }
+
+    #[test]
+    fn test_document_info_with_output_chaining() {
+        let doc = DocumentInfo::from_path("/input.qmd").with_output("/output.html");
+
+        assert_eq!(doc.input, PathBuf::from("/input.qmd"));
+        assert_eq!(doc.output, Some(PathBuf::from("/output.html")));
+    }
+
+    #[test]
+    fn test_document_info_clone() {
+        let doc = DocumentInfo::from_path("/path/to/doc.qmd").with_output("/path/to/doc.html");
+        let cloned = doc.clone();
+
+        assert_eq!(doc.input, cloned.input);
+        assert_eq!(doc.output, cloned.output);
+    }
+
+    // === ProjectContext tests (unit tests for methods that don't need runtime) ===
+
+    #[test]
+    fn test_project_context_project_type_with_config() {
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig {
+                project_type: ProjectType::Website,
+                ..Default::default()
+            }),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project/_site"),
+        };
+
+        assert_eq!(context.project_type(), ProjectType::Website);
+    }
+
+    #[test]
+    fn test_project_context_project_type_without_config() {
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: None,
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+
+        assert_eq!(context.project_type(), ProjectType::Default);
+    }
+
+    #[test]
+    fn test_project_context_is_multi_document_website() {
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig {
+                project_type: ProjectType::Website,
+                ..Default::default()
+            }),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project/_site"),
+        };
+
+        assert!(context.is_multi_document());
+    }
+
+    #[test]
+    fn test_project_context_is_multi_document_book() {
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig {
+                project_type: ProjectType::Book,
+                ..Default::default()
+            }),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project/_book"),
+        };
+
+        assert!(context.is_multi_document());
+    }
+
+    #[test]
+    fn test_project_context_is_multi_document_manuscript() {
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig {
+                project_type: ProjectType::Manuscript,
+                ..Default::default()
+            }),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project/_manuscript"),
+        };
+
+        assert!(context.is_multi_document());
+    }
+
+    #[test]
+    fn test_project_context_is_multi_document_default_type() {
+        // Default project type is NOT multi-document
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig {
+                project_type: ProjectType::Default,
+                ..Default::default()
+            }),
+            is_single_file: false,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+
+        assert!(!context.is_multi_document());
+    }
+
+    #[test]
+    fn test_project_context_is_multi_document_single_file() {
+        // Single file projects are never multi-document, even if type is Website
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: Some(ProjectConfig {
+                project_type: ProjectType::Website,
+                ..Default::default()
+            }),
+            is_single_file: true,
+            files: vec![DocumentInfo::from_path("/project/index.qmd")],
+            output_dir: PathBuf::from("/project"),
+        };
+
+        assert!(!context.is_multi_document());
+    }
+
+    #[test]
+    fn test_project_context_is_multi_document_no_config() {
+        // No config means single-file pseudo-project, not multi-document
+        let context = ProjectContext {
+            dir: PathBuf::from("/project"),
+            config: None,
+            is_single_file: true,
+            files: vec![],
+            output_dir: PathBuf::from("/project"),
+        };
+
+        assert!(!context.is_multi_document());
     }
 }

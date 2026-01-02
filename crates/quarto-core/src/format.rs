@@ -175,6 +175,9 @@ impl Default for Format {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
+
+    // === FormatIdentifier tests ===
 
     #[test]
     fn test_format_identifier_from_string() {
@@ -194,6 +197,92 @@ mod tests {
     }
 
     #[test]
+    fn test_format_identifier_from_string_all_formats() {
+        assert_eq!(
+            FormatIdentifier::try_from("html").unwrap(),
+            FormatIdentifier::Html
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("pdf").unwrap(),
+            FormatIdentifier::Pdf
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("docx").unwrap(),
+            FormatIdentifier::Docx
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("epub").unwrap(),
+            FormatIdentifier::Epub
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("typst").unwrap(),
+            FormatIdentifier::Typst
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("revealjs").unwrap(),
+            FormatIdentifier::Revealjs
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("gfm").unwrap(),
+            FormatIdentifier::Gfm
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("commonmark").unwrap(),
+            FormatIdentifier::CommonMark
+        );
+    }
+
+    #[test]
+    fn test_format_identifier_from_string_case_insensitive() {
+        assert_eq!(
+            FormatIdentifier::try_from("DOCX").unwrap(),
+            FormatIdentifier::Docx
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("Epub").unwrap(),
+            FormatIdentifier::Epub
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("TYPST").unwrap(),
+            FormatIdentifier::Typst
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("RevealJS").unwrap(),
+            FormatIdentifier::Revealjs
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("GFM").unwrap(),
+            FormatIdentifier::Gfm
+        );
+        assert_eq!(
+            FormatIdentifier::try_from("CommonMark").unwrap(),
+            FormatIdentifier::CommonMark
+        );
+    }
+
+    #[test]
+    fn test_format_identifier_from_string_error() {
+        let result = FormatIdentifier::try_from("invalid_format");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Unknown format"));
+        assert!(err.contains("invalid_format"));
+    }
+
+    #[test]
+    fn test_format_identifier_as_str() {
+        assert_eq!(FormatIdentifier::Html.as_str(), "html");
+        assert_eq!(FormatIdentifier::Pdf.as_str(), "pdf");
+        assert_eq!(FormatIdentifier::Docx.as_str(), "docx");
+        assert_eq!(FormatIdentifier::Epub.as_str(), "epub");
+        assert_eq!(FormatIdentifier::Typst.as_str(), "typst");
+        assert_eq!(FormatIdentifier::Revealjs.as_str(), "revealjs");
+        assert_eq!(FormatIdentifier::Gfm.as_str(), "gfm");
+        assert_eq!(FormatIdentifier::CommonMark.as_str(), "commonmark");
+        assert_eq!(FormatIdentifier::Custom(42).as_str(), "custom");
+    }
+
+    #[test]
     fn test_format_identifier_properties() {
         assert!(FormatIdentifier::Html.is_native());
         assert!(!FormatIdentifier::Pdf.is_native());
@@ -204,10 +293,201 @@ mod tests {
     }
 
     #[test]
+    fn test_format_identifier_is_native_all() {
+        // Native formats
+        assert!(FormatIdentifier::Html.is_native());
+        assert!(FormatIdentifier::Revealjs.is_native());
+
+        // Non-native formats
+        assert!(!FormatIdentifier::Pdf.is_native());
+        assert!(!FormatIdentifier::Docx.is_native());
+        assert!(!FormatIdentifier::Epub.is_native());
+        assert!(!FormatIdentifier::Typst.is_native());
+        assert!(!FormatIdentifier::Gfm.is_native());
+        assert!(!FormatIdentifier::CommonMark.is_native());
+        assert!(!FormatIdentifier::Custom(0).is_native());
+    }
+
+    #[test]
+    fn test_format_identifier_is_html_based_all() {
+        // HTML-based formats
+        assert!(FormatIdentifier::Html.is_html_based());
+        assert!(FormatIdentifier::Revealjs.is_html_based());
+
+        // Non-HTML formats
+        assert!(!FormatIdentifier::Pdf.is_html_based());
+        assert!(!FormatIdentifier::Docx.is_html_based());
+        assert!(!FormatIdentifier::Epub.is_html_based());
+        assert!(!FormatIdentifier::Typst.is_html_based());
+        assert!(!FormatIdentifier::Gfm.is_html_based());
+        assert!(!FormatIdentifier::CommonMark.is_html_based());
+        assert!(!FormatIdentifier::Custom(0).is_html_based());
+    }
+
+    #[test]
+    fn test_format_identifier_is_multi_file() {
+        // Multi-file formats
+        assert!(FormatIdentifier::Html.is_multi_file());
+        assert!(FormatIdentifier::Revealjs.is_multi_file());
+
+        // Single-file formats
+        assert!(!FormatIdentifier::Pdf.is_multi_file());
+        assert!(!FormatIdentifier::Docx.is_multi_file());
+        assert!(!FormatIdentifier::Epub.is_multi_file());
+        assert!(!FormatIdentifier::Typst.is_multi_file());
+        assert!(!FormatIdentifier::Gfm.is_multi_file());
+        assert!(!FormatIdentifier::CommonMark.is_multi_file());
+        assert!(!FormatIdentifier::Custom(0).is_multi_file());
+    }
+
+    #[test]
+    fn test_format_identifier_display() {
+        assert_eq!(format!("{}", FormatIdentifier::Html), "html");
+        assert_eq!(format!("{}", FormatIdentifier::Pdf), "pdf");
+        assert_eq!(format!("{}", FormatIdentifier::Custom(123)), "custom");
+    }
+
+    #[test]
+    fn test_format_identifier_custom() {
+        let custom1 = FormatIdentifier::Custom(1);
+        let custom2 = FormatIdentifier::Custom(2);
+        let custom1_copy = FormatIdentifier::Custom(1);
+
+        assert_ne!(custom1, custom2);
+        assert_eq!(custom1, custom1_copy);
+        assert_eq!(custom1.as_str(), "custom");
+    }
+
+    #[test]
+    fn test_format_identifier_clone_copy() {
+        let original = FormatIdentifier::Html;
+        let cloned = original.clone();
+        let copied = original; // Copy trait
+
+        assert_eq!(original, cloned);
+        assert_eq!(original, copied);
+    }
+
+    #[test]
+    fn test_format_identifier_hash() {
+        let mut set = HashSet::new();
+        set.insert(FormatIdentifier::Html);
+        set.insert(FormatIdentifier::Pdf);
+        set.insert(FormatIdentifier::Html); // Duplicate
+
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&FormatIdentifier::Html));
+        assert!(set.contains(&FormatIdentifier::Pdf));
+    }
+
+    // === Format tests ===
+
+    #[test]
+    fn test_format_html() {
+        let format = Format::html();
+
+        assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.output_extension, "html");
+        assert!(format.native_pipeline);
+        assert_eq!(format.metadata, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_format_pdf() {
+        let format = Format::pdf();
+
+        assert_eq!(format.identifier, FormatIdentifier::Pdf);
+        assert_eq!(format.output_extension, "pdf");
+        assert!(!format.native_pipeline);
+        assert_eq!(format.metadata, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_format_docx() {
+        let format = Format::docx();
+
+        assert_eq!(format.identifier, FormatIdentifier::Docx);
+        assert_eq!(format.output_extension, "docx");
+        assert!(!format.native_pipeline);
+        assert_eq!(format.metadata, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_format_with_metadata() {
+        let metadata = serde_json::json!({
+            "toc": true,
+            "number-sections": true
+        });
+
+        let format = Format::html().with_metadata(metadata.clone());
+
+        assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.metadata, metadata);
+    }
+
+    #[test]
+    fn test_format_is_html() {
+        assert!(Format::html().is_html());
+        assert!(!Format::pdf().is_html());
+        assert!(!Format::docx().is_html());
+    }
+
+    #[test]
+    fn test_format_is_multi_file() {
+        assert!(Format::html().is_multi_file());
+        assert!(!Format::pdf().is_multi_file());
+        assert!(!Format::docx().is_multi_file());
+    }
+
+    #[test]
     fn test_format_output_path() {
         let format = Format::html();
         let input = std::path::Path::new("/path/to/document.qmd");
         let output = format.output_path(input);
         assert_eq!(output, std::path::PathBuf::from("/path/to/document.html"));
+    }
+
+    #[test]
+    fn test_format_output_path_pdf() {
+        let format = Format::pdf();
+        let input = std::path::Path::new("/path/to/document.qmd");
+        let output = format.output_path(input);
+        assert_eq!(output, std::path::PathBuf::from("/path/to/document.pdf"));
+    }
+
+    #[test]
+    fn test_format_output_path_docx() {
+        let format = Format::docx();
+        let input = std::path::Path::new("/path/to/report.qmd");
+        let output = format.output_path(input);
+        assert_eq!(output, std::path::PathBuf::from("/path/to/report.docx"));
+    }
+
+    #[test]
+    fn test_format_output_path_no_extension() {
+        let format = Format::html();
+        let input = std::path::Path::new("/path/to/README");
+        let output = format.output_path(input);
+        assert_eq!(output, std::path::PathBuf::from("/path/to/README.html"));
+    }
+
+    #[test]
+    fn test_format_default() {
+        let format = Format::default();
+
+        assert_eq!(format.identifier, FormatIdentifier::Html);
+        assert_eq!(format.output_extension, "html");
+        assert!(format.native_pipeline);
+    }
+
+    #[test]
+    fn test_format_clone() {
+        let original = Format::html().with_metadata(serde_json::json!({"key": "value"}));
+        let cloned = original.clone();
+
+        assert_eq!(original.identifier, cloned.identifier);
+        assert_eq!(original.output_extension, cloned.output_extension);
+        assert_eq!(original.native_pipeline, cloned.native_pipeline);
+        assert_eq!(original.metadata, cloned.metadata);
     }
 }

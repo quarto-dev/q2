@@ -92,3 +92,252 @@ pub fn lookup_error_entry<'a>(
         .filter(|entry| entry.state == process_message.state && entry.sym == process_message.sym)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_entry(state: usize, sym: &'static str, message: &'static str) -> ErrorTableEntry {
+        ErrorTableEntry {
+            state,
+            sym,
+            row: 0,
+            column: 0,
+            error_info: ErrorInfo {
+                code: Some("TEST-1"),
+                title: "Test Error",
+                message,
+                captures: &[],
+                notes: &[],
+                hints: &[],
+            },
+            name: "test_case",
+        }
+    }
+
+    fn make_process_message(state: usize, sym: &str) -> ProcessMessage {
+        ProcessMessage {
+            version: 1,
+            state,
+            row: 0,
+            column: 0,
+            sym: sym.to_string(),
+            size: 1,
+        }
+    }
+
+    // === ErrorCapture tests ===
+
+    #[test]
+    fn test_error_capture_debug() {
+        let capture = ErrorCapture {
+            column: 5,
+            lr_state: 42,
+            row: 1,
+            size: 3,
+            sym: "IDENTIFIER",
+            label: "var_name",
+        };
+        let debug = format!("{:?}", capture);
+        assert!(debug.contains("ErrorCapture"));
+        assert!(debug.contains("IDENTIFIER"));
+        assert!(debug.contains("var_name"));
+    }
+
+    // === ErrorNote tests ===
+
+    #[test]
+    fn test_error_note_debug() {
+        let note = ErrorNote {
+            message: "Did you mean to use a different keyword?",
+            label: Some("keyword"),
+            note_type: "simple",
+            label_begin: None,
+            label_end: None,
+            trim_leading_space: None,
+            trim_trailing_space: None,
+        };
+        let debug = format!("{:?}", note);
+        assert!(debug.contains("ErrorNote"));
+        assert!(debug.contains("Did you mean"));
+    }
+
+    #[test]
+    fn test_error_note_with_range() {
+        let note = ErrorNote {
+            message: "This range is problematic",
+            label: None,
+            note_type: "label-range",
+            label_begin: Some("start"),
+            label_end: Some("end"),
+            trim_leading_space: Some(true),
+            trim_trailing_space: Some(false),
+        };
+        assert_eq!(note.label_begin, Some("start"));
+        assert_eq!(note.label_end, Some("end"));
+        assert_eq!(note.trim_leading_space, Some(true));
+    }
+
+    // === ErrorInfo tests ===
+
+    #[test]
+    fn test_error_info_debug() {
+        let info = ErrorInfo {
+            code: Some("Q-1-1"),
+            title: "Syntax Error",
+            message: "Unexpected token",
+            captures: &[],
+            notes: &[],
+            hints: &["Try removing the extra character"],
+        };
+        let debug = format!("{:?}", info);
+        assert!(debug.contains("ErrorInfo"));
+        assert!(debug.contains("Q-1-1"));
+        assert!(debug.contains("Syntax Error"));
+    }
+
+    #[test]
+    fn test_error_info_with_captures() {
+        static CAPTURES: [ErrorCapture; 1] = [ErrorCapture {
+            column: 0,
+            lr_state: 1,
+            row: 0,
+            size: 5,
+            sym: "TOKEN",
+            label: "tok",
+        }];
+
+        let info = ErrorInfo {
+            code: None,
+            title: "Error",
+            message: "Error message",
+            captures: &CAPTURES,
+            notes: &[],
+            hints: &[],
+        };
+        assert_eq!(info.captures.len(), 1);
+        assert_eq!(info.captures[0].label, "tok");
+    }
+
+    // === ErrorTableEntry tests ===
+
+    #[test]
+    fn test_error_table_entry_debug() {
+        let entry = make_test_entry(42, "EOF", "Unexpected end of file");
+        let debug = format!("{:?}", entry);
+        assert!(debug.contains("ErrorTableEntry"));
+        assert!(debug.contains("42"));
+        assert!(debug.contains("EOF"));
+    }
+
+    // === lookup_error_message tests ===
+
+    #[test]
+    fn test_lookup_error_message_found() {
+        let table = [
+            make_test_entry(1, "NEWLINE", "Unexpected newline"),
+            make_test_entry(2, "EOF", "Unexpected end of file"),
+            make_test_entry(3, "IDENTIFIER", "Expected identifier"),
+        ];
+
+        let msg = make_process_message(2, "EOF");
+        let result = lookup_error_message(&table, &msg);
+
+        assert_eq!(result, Some("Unexpected end of file"));
+    }
+
+    #[test]
+    fn test_lookup_error_message_not_found() {
+        let table = [
+            make_test_entry(1, "NEWLINE", "Unexpected newline"),
+            make_test_entry(2, "EOF", "Unexpected end of file"),
+        ];
+
+        let msg = make_process_message(99, "UNKNOWN");
+        let result = lookup_error_message(&table, &msg);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_lookup_error_message_empty_table() {
+        let table: [ErrorTableEntry; 0] = [];
+        let msg = make_process_message(1, "EOF");
+        let result = lookup_error_message(&table, &msg);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_lookup_error_message_state_mismatch() {
+        let table = [make_test_entry(1, "EOF", "Error 1")];
+
+        // Same symbol, different state
+        let msg = make_process_message(2, "EOF");
+        let result = lookup_error_message(&table, &msg);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_lookup_error_message_sym_mismatch() {
+        let table = [make_test_entry(1, "EOF", "Error 1")];
+
+        // Same state, different symbol
+        let msg = make_process_message(1, "NEWLINE");
+        let result = lookup_error_message(&table, &msg);
+
+        assert_eq!(result, None);
+    }
+
+    // === lookup_error_entry tests ===
+
+    #[test]
+    fn test_lookup_error_entry_found() {
+        let table = [
+            make_test_entry(1, "NEWLINE", "Error 1"),
+            make_test_entry(2, "EOF", "Error 2"),
+        ];
+
+        let msg = make_process_message(1, "NEWLINE");
+        let result = lookup_error_entry(&table, &msg);
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].error_info.message, "Error 1");
+    }
+
+    #[test]
+    fn test_lookup_error_entry_multiple_matches() {
+        let table = [
+            make_test_entry(1, "EOF", "First EOF error"),
+            make_test_entry(1, "EOF", "Second EOF error"),
+            make_test_entry(2, "EOF", "Different state"),
+        ];
+
+        let msg = make_process_message(1, "EOF");
+        let result = lookup_error_entry(&table, &msg);
+
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].error_info.message, "First EOF error");
+        assert_eq!(result[1].error_info.message, "Second EOF error");
+    }
+
+    #[test]
+    fn test_lookup_error_entry_not_found() {
+        let table = [make_test_entry(1, "EOF", "Error 1")];
+
+        let msg = make_process_message(99, "UNKNOWN");
+        let result = lookup_error_entry(&table, &msg);
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_lookup_error_entry_empty_table() {
+        let table: [ErrorTableEntry; 0] = [];
+        let msg = make_process_message(1, "EOF");
+        let result = lookup_error_entry(&table, &msg);
+
+        assert!(result.is_empty());
+    }
+}

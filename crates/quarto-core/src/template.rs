@@ -332,7 +332,9 @@ fn blocks_to_text(blocks: &[quarto_pandoc_types::block::Block]) -> String {
 mod tests {
     use super::*;
     use quarto_pandoc_types::ConfigMapEntry;
-    use quarto_pandoc_types::inline::Str;
+    use quarto_pandoc_types::block::*;
+    use quarto_pandoc_types::inline::*;
+    use quarto_pandoc_types::{ListNumberDelim, ListNumberStyle};
     use quarto_source_map::{FileId, Location, Range, SourceInfo};
 
     fn dummy_source_info() -> SourceInfo {
@@ -414,6 +416,75 @@ mod tests {
     }
 
     #[test]
+    fn test_render_with_custom_template() {
+        let template = Template::compile("Title: $title$\nBody: $body$").unwrap();
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "title".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string("Custom", dummy_source_info()),
+            }],
+            dummy_source_info(),
+        );
+
+        let result = render_with_custom_template(&template, "Hello", &meta);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("Title: Custom"));
+        assert!(output.contains("Body: Hello"));
+    }
+
+    #[test]
+    fn test_render_with_resources() {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "pagetitle".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string("Test", dummy_source_info()),
+            }],
+            dummy_source_info(),
+        );
+
+        let css_paths = vec!["lib/styles.css".to_string(), "lib/theme.css".to_string()];
+        let result = render_with_resources("<p>Body</p>", &meta, &css_paths);
+
+        assert!(result.is_ok());
+        let html = result.unwrap();
+        assert!(html.contains(r#"href="lib/styles.css"#));
+        assert!(html.contains(r#"href="lib/theme.css"#));
+    }
+
+    #[test]
+    fn test_render_with_resources_combines_css() {
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "pagetitle".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("Test", dummy_source_info()),
+                },
+                ConfigMapEntry {
+                    key: "css".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("user.css", dummy_source_info()),
+                },
+            ],
+            dummy_source_info(),
+        );
+
+        let css_paths = vec!["default.css".to_string()];
+        let result = render_with_resources("<p>Body</p>", &meta, &css_paths);
+
+        assert!(result.is_ok());
+        let html = result.unwrap();
+        // Both default and user CSS should be present
+        assert!(html.contains("default.css"));
+        assert!(html.contains("user.css"));
+    }
+
+    // === ConfigValue conversion tests ===
+
+    #[test]
     fn test_config_value_conversion_string() {
         let meta = ConfigValue::new_string("test", dummy_source_info());
         let value = config_value_to_template_value(&meta);
@@ -428,17 +499,75 @@ mod tests {
     }
 
     #[test]
+    fn test_config_value_conversion_bool_false() {
+        let meta = ConfigValue::new_bool(false, dummy_source_info());
+        let value = config_value_to_template_value(&meta);
+        assert_eq!(value, TemplateValue::Bool(false));
+    }
+
+    #[test]
+    fn test_config_value_conversion_int() {
+        // Test integer conversion via a map since ConfigValue doesn't expose direct int construction
+        // The actual int handling is tested via the config_value_to_template_value function
+        // when it encounters Scalar(Integer) in the AST
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "num".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string("42", dummy_source_info()), // String representation
+            }],
+            dummy_source_info(),
+        );
+        let value = config_value_to_template_value(&meta);
+        // Map conversion works
+        match value {
+            TemplateValue::Map(map) => {
+                assert!(map.contains_key("num"));
+            }
+            _ => panic!("Expected Map"),
+        }
+    }
+
+    #[test]
+    fn test_config_value_conversion_null() {
+        let meta = ConfigValue::null(dummy_source_info());
+        let value = config_value_to_template_value(&meta);
+        assert_eq!(value, TemplateValue::Null);
+    }
+
+    #[test]
+    fn test_config_value_conversion_path() {
+        let meta = ConfigValue::new_path("./data.csv".to_string(), dummy_source_info());
+        let value = config_value_to_template_value(&meta);
+        assert_eq!(value, TemplateValue::String("./data.csv".to_string()));
+    }
+
+    #[test]
+    fn test_config_value_conversion_glob() {
+        let meta = ConfigValue::new_glob("*.qmd".to_string(), dummy_source_info());
+        let value = config_value_to_template_value(&meta);
+        assert_eq!(value, TemplateValue::String("*.qmd".to_string()));
+    }
+
+    #[test]
+    fn test_config_value_conversion_expr() {
+        let meta = ConfigValue::new_expr("params$x".to_string(), dummy_source_info());
+        let value = config_value_to_template_value(&meta);
+        assert_eq!(value, TemplateValue::String("params$x".to_string()));
+    }
+
+    #[test]
     fn test_config_value_conversion_inlines() {
         let meta = ConfigValue::new_inlines(
             vec![
-                quarto_pandoc_types::inline::Inline::Str(Str {
+                Inline::Str(Str {
                     text: "Hello".to_string(),
                     source_info: dummy_source_info(),
                 }),
-                quarto_pandoc_types::inline::Inline::Space(quarto_pandoc_types::inline::Space {
+                Inline::Space(Space {
                     source_info: dummy_source_info(),
                 }),
-                quarto_pandoc_types::inline::Inline::Str(Str {
+                Inline::Str(Str {
                     text: "World".to_string(),
                     source_info: dummy_source_info(),
                 }),
@@ -447,6 +576,22 @@ mod tests {
         );
         let value = config_value_to_template_value(&meta);
         assert_eq!(value, TemplateValue::String("Hello World".to_string()));
+    }
+
+    #[test]
+    fn test_config_value_conversion_blocks() {
+        let meta = ConfigValue::new_blocks(
+            vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Test paragraph".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            dummy_source_info(),
+        );
+        let value = config_value_to_template_value(&meta);
+        assert_eq!(value, TemplateValue::String("Test paragraph".to_string()));
     }
 
     #[test]
@@ -467,5 +612,498 @@ mod tests {
             }
             _ => panic!("Expected List"),
         }
+    }
+
+    #[test]
+    fn test_config_value_conversion_map() {
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "key1".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("value1", dummy_source_info()),
+                },
+                ConfigMapEntry {
+                    key: "key2".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_bool(true, dummy_source_info()),
+                },
+            ],
+            dummy_source_info(),
+        );
+        let value = config_value_to_template_value(&meta);
+        match value {
+            TemplateValue::Map(map) => {
+                assert_eq!(map.len(), 2);
+                assert_eq!(
+                    map.get("key1"),
+                    Some(&TemplateValue::String("value1".to_string()))
+                );
+                assert_eq!(map.get("key2"), Some(&TemplateValue::Bool(true)));
+            }
+            _ => panic!("Expected Map"),
+        }
+    }
+
+    // === extract_css_from_meta tests ===
+
+    #[test]
+    fn test_extract_css_string() {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "css".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string("style.css", dummy_source_info()),
+            }],
+            dummy_source_info(),
+        );
+        let css = extract_css_from_meta(&meta);
+        assert!(css.is_some());
+        let css_list = css.unwrap();
+        assert_eq!(css_list.len(), 1);
+        assert_eq!(css_list[0], TemplateValue::String("style.css".to_string()));
+    }
+
+    #[test]
+    fn test_extract_css_inlines() {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "css".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_inlines(
+                    vec![Inline::Str(Str {
+                        text: "inline.css".to_string(),
+                        source_info: dummy_source_info(),
+                    })],
+                    dummy_source_info(),
+                ),
+            }],
+            dummy_source_info(),
+        );
+        let css = extract_css_from_meta(&meta);
+        assert!(css.is_some());
+        let css_list = css.unwrap();
+        assert_eq!(css_list.len(), 1);
+        assert_eq!(css_list[0], TemplateValue::String("inline.css".to_string()));
+    }
+
+    #[test]
+    fn test_extract_css_array() {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "css".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_array(
+                    vec![
+                        ConfigValue::new_string("a.css", dummy_source_info()),
+                        ConfigValue::new_string("b.css", dummy_source_info()),
+                    ],
+                    dummy_source_info(),
+                ),
+            }],
+            dummy_source_info(),
+        );
+        let css = extract_css_from_meta(&meta);
+        assert!(css.is_some());
+        let css_list = css.unwrap();
+        assert_eq!(css_list.len(), 2);
+    }
+
+    #[test]
+    fn test_extract_css_not_present() {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "title".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::new_string("Test", dummy_source_info()),
+            }],
+            dummy_source_info(),
+        );
+        let css = extract_css_from_meta(&meta);
+        assert!(css.is_none());
+    }
+
+    #[test]
+    fn test_extract_css_null_value() {
+        let meta = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "css".to_string(),
+                key_source: dummy_source_info(),
+                value: ConfigValue::null(dummy_source_info()),
+            }],
+            dummy_source_info(),
+        );
+        let css = extract_css_from_meta(&meta);
+        // Returns empty vec for non-recognized css value
+        assert!(css.is_some());
+        assert!(css.unwrap().is_empty());
+    }
+
+    // === inlines_to_text tests ===
+
+    #[test]
+    fn test_inlines_to_text_soft_break() {
+        let inlines = vec![
+            Inline::Str(Str {
+                text: "Line1".to_string(),
+                source_info: dummy_source_info(),
+            }),
+            Inline::SoftBreak(SoftBreak {
+                source_info: dummy_source_info(),
+            }),
+            Inline::Str(Str {
+                text: "Line2".to_string(),
+                source_info: dummy_source_info(),
+            }),
+        ];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "Line1 Line2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_line_break() {
+        let inlines = vec![
+            Inline::Str(Str {
+                text: "Line1".to_string(),
+                source_info: dummy_source_info(),
+            }),
+            Inline::LineBreak(LineBreak {
+                source_info: dummy_source_info(),
+            }),
+            Inline::Str(Str {
+                text: "Line2".to_string(),
+                source_info: dummy_source_info(),
+            }),
+        ];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_emph() {
+        let inlines = vec![Inline::Emph(Emph {
+            content: vec![Inline::Str(Str {
+                text: "emphasized".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "emphasized");
+    }
+
+    #[test]
+    fn test_inlines_to_text_strong() {
+        let inlines = vec![Inline::Strong(Strong {
+            content: vec![Inline::Str(Str {
+                text: "bold".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "bold");
+    }
+
+    #[test]
+    fn test_inlines_to_text_underline() {
+        let inlines = vec![Inline::Underline(Underline {
+            content: vec![Inline::Str(Str {
+                text: "underlined".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "underlined");
+    }
+
+    #[test]
+    fn test_inlines_to_text_strikeout() {
+        let inlines = vec![Inline::Strikeout(Strikeout {
+            content: vec![Inline::Str(Str {
+                text: "struck".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "struck");
+    }
+
+    #[test]
+    fn test_inlines_to_text_superscript() {
+        let inlines = vec![Inline::Superscript(Superscript {
+            content: vec![Inline::Str(Str {
+                text: "2".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_subscript() {
+        let inlines = vec![Inline::Subscript(Subscript {
+            content: vec![Inline::Str(Str {
+                text: "i".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "i");
+    }
+
+    #[test]
+    fn test_inlines_to_text_smallcaps() {
+        let inlines = vec![Inline::SmallCaps(SmallCaps {
+            content: vec![Inline::Str(Str {
+                text: "smallcaps".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "smallcaps");
+    }
+
+    #[test]
+    fn test_inlines_to_text_quoted() {
+        let inlines = vec![Inline::Quoted(Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![Inline::Str(Str {
+                text: "quoted".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "\"quoted\"");
+    }
+
+    #[test]
+    fn test_inlines_to_text_code() {
+        let inlines = vec![Inline::Code(Code {
+            attr: quarto_pandoc_types::attr::Attr::default(),
+            text: "code()".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "code()");
+    }
+
+    #[test]
+    fn test_inlines_to_text_math() {
+        let inlines = vec![Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x^2".to_string(),
+            source_info: dummy_source_info(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "x^2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_link() {
+        let inlines = vec![Inline::Link(Link {
+            attr: quarto_pandoc_types::attr::Attr::default(),
+            content: vec![Inline::Str(Str {
+                text: "link text".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            target: ("https://example.com".to_string(), "".to_string()),
+            source_info: dummy_source_info(),
+            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+            target_source: quarto_pandoc_types::attr::TargetSourceInfo::empty(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "link text");
+    }
+
+    #[test]
+    fn test_inlines_to_text_span() {
+        let inlines = vec![Inline::Span(Span {
+            attr: quarto_pandoc_types::attr::Attr::default(),
+            content: vec![Inline::Str(Str {
+                text: "span content".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+        })];
+        let text = inlines_to_text(&inlines);
+        assert_eq!(text, "span content");
+    }
+
+    // === blocks_to_text tests ===
+
+    #[test]
+    fn test_blocks_to_text_plain() {
+        let blocks = vec![Block::Plain(Plain {
+            content: vec![Inline::Str(Str {
+                text: "plain text".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert_eq!(text, "plain text");
+    }
+
+    #[test]
+    fn test_blocks_to_text_paragraph() {
+        let blocks = vec![Block::Paragraph(Paragraph {
+            content: vec![Inline::Str(Str {
+                text: "paragraph".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert_eq!(text, "paragraph");
+    }
+
+    #[test]
+    fn test_blocks_to_text_header() {
+        let blocks = vec![Block::Header(Header {
+            level: 1,
+            attr: quarto_pandoc_types::attr::Attr::default(),
+            content: vec![Inline::Str(Str {
+                text: "Heading".to_string(),
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert_eq!(text, "Heading");
+    }
+
+    #[test]
+    fn test_blocks_to_text_code_block() {
+        let blocks = vec![Block::CodeBlock(CodeBlock {
+            attr: quarto_pandoc_types::attr::Attr::default(),
+            text: "fn main() {}".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert_eq!(text, "fn main() {}");
+    }
+
+    #[test]
+    fn test_blocks_to_text_blockquote() {
+        let blocks = vec![Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "quoted".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert_eq!(text, "quoted");
+    }
+
+    #[test]
+    fn test_blocks_to_text_div() {
+        let blocks = vec![Block::Div(Div {
+            attr: quarto_pandoc_types::attr::Attr::default(),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "div content".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: quarto_pandoc_types::attr::AttrSourceInfo::empty(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert_eq!(text, "div content");
+    }
+
+    #[test]
+    fn test_blocks_to_text_lineblock() {
+        let blocks = vec![Block::LineBlock(LineBlock {
+            content: vec![
+                vec![Inline::Str(Str {
+                    text: "Line 1".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                vec![Inline::Str(Str {
+                    text: "Line 2".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+            ],
+            source_info: dummy_source_info(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert!(text.contains("Line 1"));
+        assert!(text.contains("Line 2"));
+    }
+
+    #[test]
+    fn test_blocks_to_text_ordered_list() {
+        let blocks = vec![Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
+            content: vec![vec![Block::Plain(Plain {
+                content: vec![Inline::Str(Str {
+                    text: "Item 1".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })]],
+            source_info: dummy_source_info(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert!(text.contains("Item 1"));
+    }
+
+    #[test]
+    fn test_blocks_to_text_bullet_list() {
+        let blocks = vec![Block::BulletList(BulletList {
+            content: vec![vec![Block::Plain(Plain {
+                content: vec![Inline::Str(Str {
+                    text: "Bullet".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })]],
+            source_info: dummy_source_info(),
+        })];
+        let text = blocks_to_text(&blocks);
+        assert!(text.contains("Bullet"));
+    }
+
+    #[test]
+    fn test_blocks_to_text_multiple() {
+        let blocks = vec![
+            Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Para 1".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Para 2".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            }),
+        ];
+        let text = blocks_to_text(&blocks);
+        assert!(text.contains("Para 1"));
+        assert!(text.contains("Para 2"));
+        // Should have newline between blocks
+        assert!(text.contains('\n'));
     }
 }

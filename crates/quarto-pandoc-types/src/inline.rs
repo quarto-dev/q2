@@ -661,4 +661,662 @@ mod tests {
             _ => panic!("Expected Cite inline"),
         }
     }
+
+    // === is_empty_target tests ===
+
+    #[test]
+    fn test_is_empty_target_both_empty() {
+        let target = (String::new(), String::new());
+        assert!(is_empty_target(&target));
+    }
+
+    #[test]
+    fn test_is_empty_target_url_only() {
+        let target = ("https://example.com".to_string(), String::new());
+        assert!(!is_empty_target(&target));
+    }
+
+    #[test]
+    fn test_is_empty_target_title_only() {
+        let target = (String::new(), "A title".to_string());
+        assert!(!is_empty_target(&target));
+    }
+
+    #[test]
+    fn test_is_empty_target_both_present() {
+        let target = ("https://example.com".to_string(), "A title".to_string());
+        assert!(!is_empty_target(&target));
+    }
+
+    // === make_span_inline tests ===
+
+    #[test]
+    fn test_make_span_inline_with_link_target() {
+        let attr = (String::new(), vec![], LinkedHashMap::new());
+        let target = ("https://example.com".to_string(), "Title".to_string());
+        let content = vec![make_str("click here")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Link(link) => {
+                assert_eq!(link.target.0, "https://example.com");
+                assert_eq!(link.target.1, "Title");
+                assert_eq!(link.content.len(), 1);
+            }
+            _ => panic!("Expected Link inline"),
+        }
+    }
+
+    #[test]
+    fn test_make_span_inline_smallcaps_empty_attr() {
+        let attr = (
+            String::new(),
+            vec!["smallcaps".to_string()],
+            LinkedHashMap::new(),
+        );
+        let target = (String::new(), String::new());
+        let content = vec![make_str("text")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::SmallCaps(sc) => {
+                assert_eq!(sc.content.len(), 1);
+                match &sc.content[0] {
+                    Inline::Str(s) => assert_eq!(s.text, "text"),
+                    _ => panic!("Expected Str"),
+                }
+            }
+            _ => panic!("Expected SmallCaps inline, got {:?}", result),
+        }
+    }
+
+    #[test]
+    fn test_make_span_inline_smallcaps_with_remaining_attr() {
+        let attr = (
+            "myid".to_string(),
+            vec!["smallcaps".to_string()],
+            LinkedHashMap::new(),
+        );
+        let target = (String::new(), String::new());
+        let content = vec![make_str("text")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::SmallCaps(sc) => {
+                // SmallCaps should wrap an inner Span with the remaining attributes
+                assert_eq!(sc.content.len(), 1);
+                match &sc.content[0] {
+                    Inline::Span(span) => {
+                        assert_eq!(span.attr.0, "myid");
+                    }
+                    _ => panic!("Expected inner Span"),
+                }
+            }
+            _ => panic!("Expected SmallCaps inline"),
+        }
+    }
+
+    #[test]
+    fn test_make_span_inline_underline_ul_class() {
+        let attr = (String::new(), vec!["ul".to_string()], LinkedHashMap::new());
+        let target = (String::new(), String::new());
+        let content = vec![make_str("underlined")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Underline(ul) => {
+                assert_eq!(ul.content.len(), 1);
+            }
+            _ => panic!("Expected Underline inline"),
+        }
+    }
+
+    #[test]
+    fn test_make_span_inline_underline_class() {
+        let attr = (
+            String::new(),
+            vec!["underline".to_string()],
+            LinkedHashMap::new(),
+        );
+        let target = (String::new(), String::new());
+        let content = vec![make_str("underlined")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Underline(ul) => {
+                assert_eq!(ul.content.len(), 1);
+            }
+            _ => panic!("Expected Underline inline"),
+        }
+    }
+
+    #[test]
+    fn test_make_span_inline_underline_with_remaining_attr() {
+        let attr = (
+            "myid".to_string(),
+            vec!["ul".to_string()],
+            LinkedHashMap::new(),
+        );
+        let target = (String::new(), String::new());
+        let content = vec![make_str("text")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Underline(ul) => {
+                // Underline should wrap an inner Span with remaining attributes
+                assert_eq!(ul.content.len(), 1);
+                match &ul.content[0] {
+                    Inline::Span(span) => {
+                        assert_eq!(span.attr.0, "myid");
+                    }
+                    _ => panic!("Expected inner Span"),
+                }
+            }
+            _ => panic!("Expected Underline inline"),
+        }
+    }
+
+    #[test]
+    fn test_make_span_inline_plain_span() {
+        let attr = (
+            "id".to_string(),
+            vec!["class1".to_string()],
+            LinkedHashMap::new(),
+        );
+        let target = (String::new(), String::new());
+        let content = vec![make_str("text")];
+
+        let result = make_span_inline(
+            attr,
+            target,
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Span(span) => {
+                assert_eq!(span.attr.0, "id");
+                assert_eq!(span.attr.1, vec!["class1".to_string()]);
+            }
+            _ => panic!("Expected Span inline"),
+        }
+    }
+
+    // === make_cite_inline with non-cite content tests ===
+
+    #[test]
+    fn test_make_cite_inline_fallback_to_span() {
+        // Content that doesn't have a Cite should fall back to make_span_inline
+        let content = vec![make_str("just text")];
+
+        let result = make_cite_inline(
+            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), String::new()),
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Span(_) => {}
+            _ => panic!("Expected Span inline from fallback"),
+        }
+    }
+
+    #[test]
+    fn test_make_cite_inline_with_semicolon_separator() {
+        // Test multiple citations separated by semicolons
+        let cite1 = Inline::Cite(Cite {
+            citations: vec![make_citation("ref1", vec![], vec![])],
+            content: vec![],
+            source_info: dummy_source_info(),
+        });
+        let cite2 = Inline::Cite(Cite {
+            citations: vec![make_citation("ref2", vec![], vec![])],
+            content: vec![],
+            source_info: dummy_source_info(),
+        });
+
+        let content = vec![cite1, make_str(";"), cite2];
+
+        let result = make_cite_inline(
+            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), String::new()),
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Cite(cite) => {
+                assert_eq!(cite.citations.len(), 2);
+                assert_eq!(cite.citations[0].id, "ref1");
+                assert_eq!(cite.citations[1].id, "ref2");
+            }
+            _ => panic!("Expected Cite inline"),
+        }
+    }
+
+    #[test]
+    fn test_make_cite_inline_author_in_text_converted() {
+        // AuthorInText mode should be converted to NormalCitation
+        let citation = Citation {
+            id: "author2020".to_string(),
+            prefix: vec![],
+            suffix: vec![],
+            mode: CitationMode::AuthorInText,
+            note_num: 0,
+            hash: 0,
+            id_source: None,
+        };
+        let cite = Inline::Cite(Cite {
+            citations: vec![citation],
+            content: vec![],
+            source_info: dummy_source_info(),
+        });
+
+        let content = vec![cite];
+
+        let result = make_cite_inline(
+            (String::new(), vec![], LinkedHashMap::new()),
+            (String::new(), String::new()),
+            content,
+            dummy_source_info(),
+            AttrSourceInfo::empty(),
+            TargetSourceInfo::empty(),
+        );
+
+        match result {
+            Inline::Cite(cite) => {
+                assert_eq!(cite.citations.len(), 1);
+                assert_eq!(cite.citations[0].mode, CitationMode::NormalCitation);
+            }
+            _ => panic!("Expected Cite inline"),
+        }
+    }
+
+    // === AsInline trait tests ===
+
+    #[test]
+    fn test_as_inline_str() {
+        let s = Str {
+            text: "hello".to_string(),
+            source_info: dummy_source_info(),
+        };
+        let inline = s.as_inline();
+        match inline {
+            Inline::Str(Str { text, .. }) => assert_eq!(text, "hello"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    #[test]
+    fn test_as_inline_space() {
+        let space = Space {
+            source_info: dummy_source_info(),
+        };
+        let inline = space.as_inline();
+        assert!(matches!(inline, Inline::Space(_)));
+    }
+
+    #[test]
+    fn test_as_inline_linebreak() {
+        let lb = LineBreak {
+            source_info: dummy_source_info(),
+        };
+        let inline = lb.as_inline();
+        assert!(matches!(inline, Inline::LineBreak(_)));
+    }
+
+    #[test]
+    fn test_as_inline_softbreak() {
+        let sb = SoftBreak {
+            source_info: dummy_source_info(),
+        };
+        let inline = sb.as_inline();
+        assert!(matches!(inline, Inline::SoftBreak(_)));
+    }
+
+    #[test]
+    fn test_as_inline_emph() {
+        let emph = Emph {
+            content: vec![],
+            source_info: dummy_source_info(),
+        };
+        let inline = emph.as_inline();
+        assert!(matches!(inline, Inline::Emph(_)));
+    }
+
+    #[test]
+    fn test_as_inline_strong() {
+        let strong = Strong {
+            content: vec![],
+            source_info: dummy_source_info(),
+        };
+        let inline = strong.as_inline();
+        assert!(matches!(inline, Inline::Strong(_)));
+    }
+
+    #[test]
+    fn test_as_inline_identity() {
+        // Inline already IS an inline, so as_inline should return self
+        let original = make_str("test");
+        let result = original.clone().as_inline();
+        assert_eq!(original, result);
+    }
+
+    // === QuoteType tests ===
+
+    #[test]
+    fn test_quote_type_eq() {
+        assert_eq!(QuoteType::SingleQuote, QuoteType::SingleQuote);
+        assert_eq!(QuoteType::DoubleQuote, QuoteType::DoubleQuote);
+        assert_ne!(QuoteType::SingleQuote, QuoteType::DoubleQuote);
+    }
+
+    #[test]
+    fn test_quote_type_ord() {
+        // Test ordering (SingleQuote < DoubleQuote based on enum order)
+        assert!(QuoteType::SingleQuote < QuoteType::DoubleQuote);
+    }
+
+    #[test]
+    fn test_quote_type_clone() {
+        let qt = QuoteType::SingleQuote;
+        let cloned = qt.clone();
+        assert_eq!(qt, cloned);
+    }
+
+    // === MathType tests ===
+
+    #[test]
+    fn test_math_type_eq() {
+        assert_eq!(MathType::InlineMath, MathType::InlineMath);
+        assert_eq!(MathType::DisplayMath, MathType::DisplayMath);
+        assert_ne!(MathType::InlineMath, MathType::DisplayMath);
+    }
+
+    #[test]
+    fn test_math_type_ord() {
+        assert!(MathType::InlineMath < MathType::DisplayMath);
+    }
+
+    #[test]
+    fn test_math_type_clone() {
+        let mt = MathType::DisplayMath;
+        let cloned = mt.clone();
+        assert_eq!(mt, cloned);
+    }
+
+    // === CitationMode tests ===
+
+    #[test]
+    fn test_citation_mode_eq() {
+        assert_eq!(CitationMode::AuthorInText, CitationMode::AuthorInText);
+        assert_eq!(CitationMode::SuppressAuthor, CitationMode::SuppressAuthor);
+        assert_eq!(CitationMode::NormalCitation, CitationMode::NormalCitation);
+        assert_ne!(CitationMode::AuthorInText, CitationMode::NormalCitation);
+    }
+
+    #[test]
+    fn test_citation_mode_copy() {
+        let mode = CitationMode::AuthorInText;
+        let copied = mode; // Copy trait
+        assert_eq!(mode, copied);
+    }
+
+    // === Struct construction and derive tests ===
+
+    #[test]
+    fn test_code_construction() {
+        let code = Code {
+            attr: (
+                "id".to_string(),
+                vec!["rust".to_string()],
+                LinkedHashMap::new(),
+            ),
+            text: "fn main() {}".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        assert_eq!(code.text, "fn main() {}");
+        assert_eq!(code.attr.0, "id");
+    }
+
+    #[test]
+    fn test_math_construction() {
+        let math = Math {
+            math_type: MathType::DisplayMath,
+            text: "E = mc^2".to_string(),
+            source_info: dummy_source_info(),
+        };
+        assert_eq!(math.text, "E = mc^2");
+        assert_eq!(math.math_type, MathType::DisplayMath);
+    }
+
+    #[test]
+    fn test_raw_inline_construction() {
+        let raw = RawInline {
+            format: "html".to_string(),
+            text: "<span>test</span>".to_string(),
+            source_info: dummy_source_info(),
+        };
+        assert_eq!(raw.format, "html");
+        assert_eq!(raw.text, "<span>test</span>");
+    }
+
+    #[test]
+    fn test_quoted_construction() {
+        let quoted = Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![make_str("hello")],
+            source_info: dummy_source_info(),
+        };
+        assert_eq!(quoted.quote_type, QuoteType::DoubleQuote);
+        assert_eq!(quoted.content.len(), 1);
+    }
+
+    #[test]
+    fn test_note_reference_construction() {
+        let note_ref = NoteReference {
+            id: "fn1".to_string(),
+            source_info: dummy_source_info(),
+        };
+        assert_eq!(note_ref.id, "fn1");
+    }
+
+    #[test]
+    fn test_image_construction() {
+        let img = Image {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![make_str("alt text")],
+            target: ("image.png".to_string(), "Image title".to_string()),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        };
+        assert_eq!(img.target.0, "image.png");
+        assert_eq!(img.content.len(), 1);
+    }
+
+    #[test]
+    fn test_insert_construction() {
+        let insert = Insert {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![make_str("added")],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        assert_eq!(insert.content.len(), 1);
+    }
+
+    #[test]
+    fn test_delete_construction() {
+        let delete = Delete {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![make_str("removed")],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        assert_eq!(delete.content.len(), 1);
+    }
+
+    #[test]
+    fn test_highlight_construction() {
+        let highlight = Highlight {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![make_str("highlighted")],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        assert_eq!(highlight.content.len(), 1);
+    }
+
+    #[test]
+    fn test_edit_comment_construction() {
+        let comment = EditComment {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![make_str("comment")],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        assert_eq!(comment.content.len(), 1);
+    }
+
+    #[test]
+    fn test_citation_construction() {
+        let citation = Citation {
+            id: "author2020".to_string(),
+            prefix: vec![make_str("see")],
+            suffix: vec![make_str("p. 1")],
+            mode: CitationMode::SuppressAuthor,
+            note_num: 5,
+            hash: 12345,
+            id_source: Some(dummy_source_info()),
+        };
+        assert_eq!(citation.id, "author2020");
+        assert_eq!(citation.mode, CitationMode::SuppressAuthor);
+        assert_eq!(citation.note_num, 5);
+        assert!(citation.id_source.is_some());
+    }
+
+    // === Serialization tests ===
+
+    #[test]
+    fn test_inline_str_serialize() {
+        let s = Str {
+            text: "hello".to_string(),
+            source_info: dummy_source_info(),
+        };
+        let inline = Inline::Str(s);
+        let json = serde_json::to_string(&inline).unwrap();
+        assert!(json.contains("hello"));
+    }
+
+    #[test]
+    fn test_inline_roundtrip() {
+        // Test serialize then deserialize
+        let s = Str {
+            text: "world".to_string(),
+            source_info: dummy_source_info(),
+        };
+        let inline = Inline::Str(s);
+        let json = serde_json::to_string(&inline).unwrap();
+        let deserialized: Inline = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            Inline::Str(s) => assert_eq!(s.text, "world"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    // === Clone and Debug tests ===
+
+    #[test]
+    fn test_link_clone() {
+        let link = Link {
+            attr: ("id".to_string(), vec![], LinkedHashMap::new()),
+            content: vec![make_str("link text")],
+            target: ("url".to_string(), "title".to_string()),
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        };
+        let cloned = link.clone();
+        assert_eq!(link.attr.0, cloned.attr.0);
+        assert_eq!(link.target.0, cloned.target.0);
+    }
+
+    #[test]
+    fn test_inline_debug() {
+        let inline = make_str("test");
+        let debug = format!("{:?}", inline);
+        assert!(debug.contains("Str"));
+        assert!(debug.contains("test"));
+    }
+
+    #[test]
+    fn test_note_construction() {
+        use crate::block::Plain;
+
+        let note = Note {
+            content: vec![crate::Block::Plain(Plain {
+                content: vec![make_str("note content")],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        };
+        assert_eq!(note.content.len(), 1);
+    }
 }

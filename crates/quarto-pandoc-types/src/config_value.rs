@@ -775,4 +775,562 @@ mod tests {
         let path = ConfigValue::new_path("./file.txt".to_string(), SourceInfo::default());
         assert!(path.is_string_value("./file.txt"));
     }
+
+    // === Tests for constructor methods ===
+
+    #[test]
+    fn test_new_string() {
+        let value = ConfigValue::new_string("hello", SourceInfo::default());
+        assert!(value.is_scalar());
+        assert_eq!(value.as_str(), Some("hello"));
+        assert_eq!(value.merge_op, MergeOp::Concat);
+    }
+
+    #[test]
+    fn test_new_bool() {
+        let value_true = ConfigValue::new_bool(true, SourceInfo::default());
+        assert!(value_true.is_scalar());
+        assert_eq!(value_true.as_bool(), Some(true));
+
+        let value_false = ConfigValue::new_bool(false, SourceInfo::default());
+        assert_eq!(value_false.as_bool(), Some(false));
+    }
+
+    #[test]
+    fn test_null() {
+        let value = ConfigValue::null(SourceInfo::default());
+        assert!(value.is_scalar());
+        assert!(value.is_null());
+        assert_eq!(value.merge_op, MergeOp::Concat);
+    }
+
+    #[test]
+    fn test_default() {
+        let value = ConfigValue::default();
+        assert!(value.is_map());
+        assert!(value.is_empty());
+        assert_eq!(value.merge_op, MergeOp::Concat);
+    }
+
+    // === Tests for accessor methods ===
+
+    #[test]
+    fn test_as_bool_non_bool() {
+        // Test that as_bool returns None for non-boolean values
+        let string_val = ConfigValue::new_string("true", SourceInfo::default());
+        assert_eq!(string_val.as_bool(), None);
+
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(1), SourceInfo::default());
+        assert_eq!(int_val.as_bool(), None);
+    }
+
+    #[test]
+    fn test_as_int() {
+        let value = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default());
+        assert_eq!(value.as_int(), Some(42));
+
+        let value_neg = ConfigValue::new_scalar(Yaml::Integer(-100), SourceInfo::default());
+        assert_eq!(value_neg.as_int(), Some(-100));
+    }
+
+    #[test]
+    fn test_as_int_non_int() {
+        // Test that as_int returns None for non-integer values
+        let string_val = ConfigValue::new_string("42", SourceInfo::default());
+        assert_eq!(string_val.as_int(), None);
+
+        let bool_val = ConfigValue::new_bool(true, SourceInfo::default());
+        assert_eq!(bool_val.as_int(), None);
+    }
+
+    #[test]
+    fn test_is_null() {
+        let null_val = ConfigValue::null(SourceInfo::default());
+        assert!(null_val.is_null());
+
+        let string_val = ConfigValue::new_string("", SourceInfo::default());
+        assert!(!string_val.is_null());
+
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(0), SourceInfo::default());
+        assert!(!int_val.is_null());
+    }
+
+    #[test]
+    fn test_is_empty() {
+        // Empty map
+        let empty_map = ConfigValue::new_map(vec![], SourceInfo::default());
+        assert!(empty_map.is_empty());
+
+        // Non-empty map
+        let non_empty_map = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "k".to_string(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue::null(SourceInfo::default()),
+            }],
+            SourceInfo::default(),
+        );
+        assert!(!non_empty_map.is_empty());
+
+        // Empty array
+        let empty_arr = ConfigValue::new_array(vec![], SourceInfo::default());
+        assert!(empty_arr.is_empty());
+
+        // Non-empty array
+        let non_empty_arr = ConfigValue::new_array(
+            vec![ConfigValue::null(SourceInfo::default())],
+            SourceInfo::default(),
+        );
+        assert!(!non_empty_arr.is_empty());
+
+        // Scalar is not empty (by definition)
+        let scalar = ConfigValue::new_string("", SourceInfo::default());
+        assert!(!scalar.is_empty());
+    }
+
+    #[test]
+    fn test_as_yaml() {
+        let scalar = ConfigValue::new_scalar(Yaml::Integer(123), SourceInfo::default());
+        let yaml = scalar.as_yaml().unwrap();
+        assert_eq!(yaml.as_i64(), Some(123));
+
+        // Non-scalar returns None
+        let array = ConfigValue::new_array(vec![], SourceInfo::default());
+        assert!(array.as_yaml().is_none());
+    }
+
+    #[test]
+    fn test_as_array_non_array() {
+        let scalar = ConfigValue::new_string("test", SourceInfo::default());
+        assert!(scalar.as_array().is_none());
+
+        let map = ConfigValue::new_map(vec![], SourceInfo::default());
+        assert!(map.as_array().is_none());
+    }
+
+    #[test]
+    fn test_as_map_entries_non_map() {
+        let scalar = ConfigValue::new_string("test", SourceInfo::default());
+        assert!(scalar.as_map_entries().is_none());
+
+        let array = ConfigValue::new_array(vec![], SourceInfo::default());
+        assert!(array.as_map_entries().is_none());
+    }
+
+    #[test]
+    fn test_get_non_map() {
+        let scalar = ConfigValue::new_string("test", SourceInfo::default());
+        assert!(scalar.get("key").is_none());
+    }
+
+    // === Tests for from_path ===
+
+    #[test]
+    fn test_from_path_empty() {
+        // Empty path returns the value directly as a string
+        let value = ConfigValue::from_path(&[], "hello");
+        assert!(value.is_scalar());
+        assert_eq!(value.as_str(), Some("hello"));
+    }
+
+    #[test]
+    fn test_from_path_single_key() {
+        let value = ConfigValue::from_path(&["title"], "My Title");
+        assert!(value.is_map());
+
+        let entries = value.as_map_entries().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].key, "title");
+        assert_eq!(entries[0].value.as_str(), Some("My Title"));
+    }
+
+    #[test]
+    fn test_from_path_nested() {
+        let value = ConfigValue::from_path(&["format", "html", "source-location"], "full");
+        assert!(value.is_map());
+
+        // Navigate to format
+        let format = value.get("format").unwrap();
+        assert!(format.is_map());
+
+        // Navigate to html
+        let html = format.get("html").unwrap();
+        assert!(html.is_map());
+
+        // Navigate to source-location
+        let source_loc = html.get("source-location").unwrap();
+        assert_eq!(source_loc.as_str(), Some("full"));
+    }
+
+    // === Tests for is_string_value edge cases ===
+
+    #[test]
+    fn test_is_string_value_glob() {
+        let glob = ConfigValue::new_glob("*.md".to_string(), SourceInfo::default());
+        assert!(glob.is_string_value("*.md"));
+        assert!(!glob.is_string_value("*.txt"));
+    }
+
+    #[test]
+    fn test_is_string_value_expr() {
+        let expr = ConfigValue::new_expr("params$x".to_string(), SourceInfo::default());
+        assert!(expr.is_string_value("params$x"));
+        assert!(!expr.is_string_value("params$y"));
+    }
+
+    #[test]
+    fn test_is_string_value_pandoc_inlines_single_str() {
+        use crate::inline::{Inline, Str};
+
+        let str_node = Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let value = ConfigValue::new_inlines(vec![str_node], SourceInfo::default());
+
+        assert!(value.is_string_value("hello"));
+        assert!(!value.is_string_value("world"));
+    }
+
+    #[test]
+    fn test_is_string_value_pandoc_inlines_multiple() {
+        use crate::inline::{Inline, Str};
+
+        let str1 = Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let str2 = Inline::Str(Str {
+            text: " world".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let value = ConfigValue::new_inlines(vec![str1, str2], SourceInfo::default());
+
+        // Multiple inlines should not match
+        assert!(!value.is_string_value("hello world"));
+        assert!(!value.is_string_value("hello"));
+    }
+
+    #[test]
+    fn test_is_string_value_pandoc_inlines_non_str() {
+        use crate::inline::{Inline, Space};
+
+        let space = Inline::Space(Space {
+            source_info: SourceInfo::default(),
+        });
+        let value = ConfigValue::new_inlines(vec![space], SourceInfo::default());
+
+        // Non-Str inline should not match
+        assert!(!value.is_string_value(" "));
+        assert!(!value.is_string_value(""));
+    }
+
+    #[test]
+    fn test_is_string_value_non_string_scalar() {
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default());
+        assert!(!int_val.is_string_value("42"));
+
+        let bool_val = ConfigValue::new_bool(true, SourceInfo::default());
+        assert!(!bool_val.is_string_value("true"));
+
+        let null_val = ConfigValue::null(SourceInfo::default());
+        assert!(!null_val.is_string_value(""));
+        assert!(!null_val.is_string_value("null"));
+    }
+
+    // === Tests for serialization/deserialization ===
+
+    #[test]
+    fn test_yaml_to_serde_value_string() {
+        let yaml = Yaml::String("test".to_string());
+        let json = super::yaml_to_serde_value(&yaml);
+        assert_eq!(json, serde_json::Value::String("test".to_string()));
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_integer() {
+        let yaml = Yaml::Integer(42);
+        let json = super::yaml_to_serde_value(&yaml);
+        assert_eq!(json, serde_json::json!(42));
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_real() {
+        let yaml = Yaml::Real("2.5".to_string());
+        let json = super::yaml_to_serde_value(&yaml);
+        assert_eq!(json, serde_json::json!(2.5));
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_real_invalid() {
+        // Invalid real falls back to string
+        let yaml = Yaml::Real("not_a_number".to_string());
+        let json = super::yaml_to_serde_value(&yaml);
+        assert_eq!(json, serde_json::Value::String("not_a_number".to_string()));
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_boolean() {
+        let yaml_true = Yaml::Boolean(true);
+        assert_eq!(
+            super::yaml_to_serde_value(&yaml_true),
+            serde_json::json!(true)
+        );
+
+        let yaml_false = Yaml::Boolean(false);
+        assert_eq!(
+            super::yaml_to_serde_value(&yaml_false),
+            serde_json::json!(false)
+        );
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_null() {
+        let yaml = Yaml::Null;
+        assert_eq!(super::yaml_to_serde_value(&yaml), serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_array() {
+        let yaml = Yaml::Array(vec![Yaml::Integer(1), Yaml::String("two".to_string())]);
+        let json = super::yaml_to_serde_value(&yaml);
+        assert_eq!(json, serde_json::json!([1, "two"]));
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_hash() {
+        let mut hash = yaml_rust2::yaml::Hash::new();
+        hash.insert(Yaml::String("key".to_string()), Yaml::Integer(123));
+        let yaml = Yaml::Hash(hash);
+        let json = super::yaml_to_serde_value(&yaml);
+        assert_eq!(json, serde_json::json!({"key": 123}));
+    }
+
+    #[test]
+    fn test_yaml_to_serde_value_alias_and_bad() {
+        // Alias and BadValue become null
+        let alias = Yaml::Alias(0);
+        assert_eq!(super::yaml_to_serde_value(&alias), serde_json::Value::Null);
+
+        let bad = Yaml::BadValue;
+        assert_eq!(super::yaml_to_serde_value(&bad), serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_string() {
+        let json = serde_json::Value::String("test".to_string());
+        let yaml = super::serde_value_to_yaml(&json);
+        assert_eq!(yaml, Yaml::String("test".to_string()));
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_integer() {
+        let json = serde_json::json!(42);
+        let yaml = super::serde_value_to_yaml(&json);
+        assert_eq!(yaml, Yaml::Integer(42));
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_float() {
+        let json = serde_json::json!(2.5);
+        let yaml = super::serde_value_to_yaml(&json);
+        // Floats become Real
+        if let Yaml::Real(s) = yaml {
+            assert!(s.contains("2.5"));
+        } else {
+            panic!("Expected Yaml::Real");
+        }
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_bool() {
+        let json_true = serde_json::json!(true);
+        assert_eq!(super::serde_value_to_yaml(&json_true), Yaml::Boolean(true));
+
+        let json_false = serde_json::json!(false);
+        assert_eq!(
+            super::serde_value_to_yaml(&json_false),
+            Yaml::Boolean(false)
+        );
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_null() {
+        let json = serde_json::Value::Null;
+        assert_eq!(super::serde_value_to_yaml(&json), Yaml::Null);
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_array() {
+        let json = serde_json::json!([1, "two"]);
+        let yaml = super::serde_value_to_yaml(&json);
+        if let Yaml::Array(arr) = yaml {
+            assert_eq!(arr.len(), 2);
+            assert_eq!(arr[0], Yaml::Integer(1));
+            assert_eq!(arr[1], Yaml::String("two".to_string()));
+        } else {
+            panic!("Expected Yaml::Array");
+        }
+    }
+
+    #[test]
+    fn test_serde_value_to_yaml_object() {
+        let json = serde_json::json!({"key": 123});
+        let yaml = super::serde_value_to_yaml(&json);
+        if let Yaml::Hash(hash) = yaml {
+            assert_eq!(hash.len(), 1);
+            assert_eq!(
+                hash.get(&Yaml::String("key".to_string())),
+                Some(&Yaml::Integer(123))
+            );
+        } else {
+            panic!("Expected Yaml::Hash");
+        }
+    }
+
+    // === Tests for ConfigValueKind serialization round-trip ===
+
+    #[test]
+    fn test_config_value_kind_serialize_scalar_string() {
+        let kind = ConfigValueKind::Scalar(Yaml::String("hello".to_string()));
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_scalar_int() {
+        let kind = ConfigValueKind::Scalar(Yaml::Integer(42));
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_path() {
+        let kind = ConfigValueKind::Path("./data.csv".to_string());
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_glob() {
+        let kind = ConfigValueKind::Glob("*.qmd".to_string());
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_expr() {
+        let kind = ConfigValueKind::Expr("params$x".to_string());
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_array() {
+        let kind = ConfigValueKind::Array(vec![
+            ConfigValue::new_string("a", SourceInfo::default()),
+            ConfigValue::new_string("b", SourceInfo::default()),
+        ]);
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_serialize_map() {
+        let kind = ConfigValueKind::Map(vec![ConfigMapEntry {
+            key: "key".to_string(),
+            key_source: SourceInfo::default(),
+            value: ConfigValue::new_string("value", SourceInfo::default()),
+        }]);
+        let json = serde_json::to_string(&kind).unwrap();
+        let deserialized: ConfigValueKind = serde_json::from_str(&json).unwrap();
+        assert_eq!(kind, deserialized);
+    }
+
+    #[test]
+    fn test_config_value_kind_deserialize_unknown_variant() {
+        let json = r#"{"UnknownVariant": "value"}"#;
+        let result: Result<ConfigValueKind, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_config_value_kind_deserialize_empty_map() {
+        let json = r#"{}"#;
+        let result: Result<ConfigValueKind, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    // === Full ConfigValue serialization ===
+
+    #[test]
+    fn test_config_value_serialize_roundtrip() {
+        let value =
+            ConfigValue::new_string("test", SourceInfo::default()).with_merge_op(MergeOp::Prefer);
+
+        let json = serde_json::to_string(&value).unwrap();
+        let deserialized: ConfigValue = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(value.merge_op, deserialized.merge_op);
+        assert_eq!(value.as_str(), deserialized.as_str());
+    }
+
+    #[test]
+    fn test_config_map_entry_serialize_roundtrip() {
+        let entry = ConfigMapEntry {
+            key: "test_key".to_string(),
+            key_source: SourceInfo::default(),
+            value: ConfigValue::new_bool(true, SourceInfo::default()),
+        };
+
+        let json = serde_json::to_string(&entry).unwrap();
+        let deserialized: ConfigMapEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(entry.key, deserialized.key);
+        assert_eq!(entry.value.as_bool(), deserialized.value.as_bool());
+    }
+
+    // === Additional edge cases ===
+
+    #[test]
+    fn test_as_str_returns_none_for_non_strings() {
+        let int_val = ConfigValue::new_scalar(Yaml::Integer(42), SourceInfo::default());
+        assert!(int_val.as_str().is_none());
+
+        let bool_val = ConfigValue::new_bool(true, SourceInfo::default());
+        assert!(bool_val.as_str().is_none());
+
+        let null_val = ConfigValue::null(SourceInfo::default());
+        assert!(null_val.as_str().is_none());
+
+        let array_val = ConfigValue::new_array(vec![], SourceInfo::default());
+        assert!(array_val.as_str().is_none());
+
+        let map_val = ConfigValue::new_map(vec![], SourceInfo::default());
+        assert!(map_val.as_str().is_none());
+    }
+
+    #[test]
+    fn test_is_scalar_for_all_scalar_types() {
+        // All these should be considered scalar
+        assert!(ConfigValue::new_string("s", SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_bool(true, SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_scalar(Yaml::Integer(1), SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::null(SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_path("p".to_string(), SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_glob("g".to_string(), SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_expr("e".to_string(), SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_inlines(vec![], SourceInfo::default()).is_scalar());
+        assert!(ConfigValue::new_blocks(vec![], SourceInfo::default()).is_scalar());
+
+        // These should not be scalar
+        assert!(!ConfigValue::new_array(vec![], SourceInfo::default()).is_scalar());
+        assert!(!ConfigValue::new_map(vec![], SourceInfo::default()).is_scalar());
+    }
 }
