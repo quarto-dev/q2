@@ -3,9 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
-pub mod attribute;
 pub mod atx_heading;
-pub mod backslash_escape;
 pub mod block_quote;
 pub mod caption;
 pub mod citation;
@@ -16,15 +14,11 @@ pub mod document;
 pub mod editorial_marks;
 pub mod fenced_code_block;
 pub mod fenced_div_block;
-pub mod html_comment;
 pub mod info_string;
-pub mod key_value_specifier;
 pub mod language_attribute;
-pub mod link_title;
 pub mod list_marker;
 pub mod note_definition_fenced_block;
 pub mod note_definition_para;
-pub mod note_reference;
 pub mod numeric_character_reference;
 pub mod pandocnativeintermediate;
 pub mod paragraph;
