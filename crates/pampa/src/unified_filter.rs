@@ -301,4 +301,150 @@ mod tests {
             "my.py"
         );
     }
+
+    // Tests for CiteprocFilterError Display implementations
+    #[test]
+    fn test_citeproc_error_bibliography_not_found() {
+        let err = CiteprocFilterError::BibliographyNotFound(
+            PathBuf::from("/path/to/refs.bib"),
+            std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+        );
+        let msg = format!("{}", err);
+        assert!(msg.contains("Bibliography file"));
+        assert!(msg.contains("/path/to/refs.bib"));
+        assert!(msg.contains("not found"));
+    }
+
+    #[test]
+    fn test_citeproc_error_bibliography_parse_error() {
+        let err = CiteprocFilterError::BibliographyParseError(
+            PathBuf::from("/path/to/bad.bib"),
+            "invalid entry at line 42".to_string(),
+        );
+        let msg = format!("{}", err);
+        assert!(msg.contains("Failed to parse bibliography"));
+        assert!(msg.contains("/path/to/bad.bib"));
+        assert!(msg.contains("invalid entry at line 42"));
+    }
+
+    #[test]
+    fn test_citeproc_error_style_not_found() {
+        let err = CiteprocFilterError::StyleNotFound(
+            PathBuf::from("/path/to/style.csl"),
+            std::io::Error::new(std::io::ErrorKind::NotFound, "file not found"),
+        );
+        let msg = format!("{}", err);
+        assert!(msg.contains("CSL style file"));
+        assert!(msg.contains("/path/to/style.csl"));
+        assert!(msg.contains("not found"));
+    }
+
+    #[test]
+    fn test_citeproc_error_style_parse_error() {
+        let err = CiteprocFilterError::StyleParseError(
+            PathBuf::from("/path/to/bad.csl"),
+            "invalid XML at line 10".to_string(),
+        );
+        let msg = format!("{}", err);
+        assert!(msg.contains("Failed to parse CSL style"));
+        assert!(msg.contains("/path/to/bad.csl"));
+        assert!(msg.contains("invalid XML at line 10"));
+    }
+
+    #[test]
+    fn test_citeproc_error_processing_error() {
+        let err =
+            CiteprocFilterError::ProcessingError("undefined citation key: smith2020".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("Citation processing error"));
+        assert!(msg.contains("undefined citation key: smith2020"));
+    }
+
+    #[test]
+    fn test_citeproc_error_no_bibliography() {
+        let err = CiteprocFilterError::NoBibliography;
+        let msg = format!("{}", err);
+        assert!(msg.contains("No bibliography specified"));
+    }
+
+    #[test]
+    fn test_citeproc_error_is_std_error() {
+        // Verify CiteprocFilterError implements std::error::Error
+        let err: Box<dyn std::error::Error> = Box::new(CiteprocFilterError::NoBibliography);
+        assert!(err.to_string().contains("No bibliography"));
+    }
+
+    // Tests for FilterError Display implementations
+    #[test]
+    fn test_filter_error_citeproc() {
+        let inner = CiteprocFilterError::NoBibliography;
+        let err = FilterError::CiteprocFilter(inner);
+        let msg = format!("{}", err);
+        assert!(msg.contains("No bibliography"));
+    }
+
+    #[test]
+    fn test_filter_error_not_available() {
+        let err = FilterError::FilterNotAvailable("Lua filter support not enabled".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("Lua filter support not enabled"));
+    }
+
+    #[test]
+    fn test_filter_error_is_std_error() {
+        // Verify FilterError implements std::error::Error
+        let err: Box<dyn std::error::Error> =
+            Box::new(FilterError::FilterNotAvailable("test".to_string()));
+        assert!(err.to_string().contains("test"));
+    }
+
+    #[test]
+    fn test_filter_error_from_citeproc() {
+        // Test From<CiteprocFilterError> for FilterError
+        let citeproc_err = CiteprocFilterError::NoBibliography;
+        let filter_err: FilterError = citeproc_err.into();
+        assert!(matches!(filter_err, FilterError::CiteprocFilter(_)));
+    }
+
+    #[cfg(feature = "json-filter")]
+    #[test]
+    fn test_filter_error_json_filter() {
+        use crate::json_filter::JsonFilterError;
+        // Test with InvalidUtf8Output variant
+        let inner = JsonFilterError::InvalidUtf8Output(PathBuf::from("/path/to/filter"));
+        let err = FilterError::JsonFilter(inner);
+        let msg = format!("{}", err);
+        assert!(msg.contains("/path/to/filter"));
+    }
+
+    #[cfg(feature = "json-filter")]
+    #[test]
+    fn test_filter_error_from_json_filter() {
+        use crate::json_filter::JsonFilterError;
+        // Test From<JsonFilterError> for FilterError
+        let json_err = JsonFilterError::SerializationError("test error".to_string());
+        let filter_err: FilterError = json_err.into();
+        assert!(matches!(filter_err, FilterError::JsonFilter(_)));
+    }
+
+    #[cfg(feature = "lua-filter")]
+    #[test]
+    fn test_filter_error_lua_filter() {
+        use crate::lua::LuaFilterError;
+        // Test with InvalidReturn variant
+        let inner = LuaFilterError::InvalidReturn("expected Pandoc, got nil".to_string());
+        let err = FilterError::LuaFilter(inner);
+        let msg = format!("{}", err);
+        assert!(msg.contains("expected Pandoc"));
+    }
+
+    #[cfg(feature = "lua-filter")]
+    #[test]
+    fn test_filter_error_from_lua_filter() {
+        use crate::lua::LuaFilterError;
+        // Test From<LuaFilterError> for FilterError
+        let lua_err = LuaFilterError::InvalidReturn("test".to_string());
+        let filter_err: FilterError = lua_err.into();
+        assert!(matches!(filter_err, FilterError::LuaFilter(_)));
+    }
 }

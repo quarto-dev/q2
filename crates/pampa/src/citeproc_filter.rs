@@ -960,6 +960,23 @@ fn inlines_to_text(inlines: &[crate::pandoc::Inline]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pandoc::{
+        Code, Emph, LineBreak, Math, MathType, QuoteType, Quoted, RawInline, SmallCaps, SoftBreak,
+        Space, Strikeout, Strong, Subscript, Superscript, Underline,
+    };
+
+    // Helper to create a default SourceInfo for tests
+    fn si() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::default()
+    }
+
+    // Helper to create a Str inline
+    fn str_inline(text: &str) -> Inline {
+        Inline::Str(crate::pandoc::Str {
+            text: text.to_string(),
+            source_info: si(),
+        })
+    }
 
     #[test]
     fn test_default_config() {
@@ -980,5 +997,839 @@ mod tests {
             "Failed to parse default CSL style: {:?}",
             style.err()
         );
+    }
+
+    // Tests for inlines_to_text function
+    #[test]
+    fn test_inlines_to_text_str() {
+        let inlines = vec![str_inline("Hello World")];
+        assert_eq!(inlines_to_text(&inlines), "Hello World");
+    }
+
+    #[test]
+    fn test_inlines_to_text_space() {
+        let inlines = vec![
+            str_inline("Hello"),
+            Inline::Space(Space { source_info: si() }),
+            str_inline("World"),
+        ];
+        assert_eq!(inlines_to_text(&inlines), "Hello World");
+    }
+
+    #[test]
+    fn test_inlines_to_text_soft_break() {
+        let inlines = vec![
+            str_inline("Line1"),
+            Inline::SoftBreak(SoftBreak { source_info: si() }),
+            str_inline("Line2"),
+        ];
+        assert_eq!(inlines_to_text(&inlines), "Line1 Line2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_line_break() {
+        let inlines = vec![
+            str_inline("Line1"),
+            Inline::LineBreak(LineBreak { source_info: si() }),
+            str_inline("Line2"),
+        ];
+        assert_eq!(inlines_to_text(&inlines), "Line1\nLine2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_emph() {
+        let inlines = vec![Inline::Emph(Emph {
+            content: vec![str_inline("emphasized")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "emphasized");
+    }
+
+    #[test]
+    fn test_inlines_to_text_strong() {
+        let inlines = vec![Inline::Strong(Strong {
+            content: vec![str_inline("bold")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "bold");
+    }
+
+    #[test]
+    fn test_inlines_to_text_underline() {
+        let inlines = vec![Inline::Underline(Underline {
+            content: vec![str_inline("underlined")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "underlined");
+    }
+
+    #[test]
+    fn test_inlines_to_text_strikeout() {
+        let inlines = vec![Inline::Strikeout(Strikeout {
+            content: vec![str_inline("struck")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "struck");
+    }
+
+    #[test]
+    fn test_inlines_to_text_superscript() {
+        let inlines = vec![Inline::Superscript(Superscript {
+            content: vec![str_inline("2")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_subscript() {
+        let inlines = vec![Inline::Subscript(Subscript {
+            content: vec![str_inline("i")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "i");
+    }
+
+    #[test]
+    fn test_inlines_to_text_smallcaps() {
+        let inlines = vec![Inline::SmallCaps(SmallCaps {
+            content: vec![str_inline("text")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "text");
+    }
+
+    #[test]
+    fn test_inlines_to_text_quoted() {
+        let inlines = vec![Inline::Quoted(Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![str_inline("quoted")],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "quoted");
+    }
+
+    #[test]
+    fn test_inlines_to_text_code() {
+        let inlines = vec![Inline::Code(Code {
+            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            text: "println!".to_string(),
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "println!");
+    }
+
+    #[test]
+    fn test_inlines_to_text_math() {
+        let inlines = vec![Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x^2".to_string(),
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "x^2");
+    }
+
+    #[test]
+    fn test_inlines_to_text_raw_inline() {
+        let inlines = vec![Inline::RawInline(RawInline {
+            format: "html".to_string(),
+            text: "<b>raw</b>".to_string(),
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "<b>raw</b>");
+    }
+
+    #[test]
+    fn test_inlines_to_text_link() {
+        let inlines = vec![Inline::Link(crate::pandoc::Link {
+            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![str_inline("link text")],
+            target: ("https://example.com".to_string(), "".to_string()),
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            target_source: crate::pandoc::TargetSourceInfo::empty(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "link text");
+    }
+
+    #[test]
+    fn test_inlines_to_text_span() {
+        let inlines = vec![Inline::Span(crate::pandoc::Span {
+            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![str_inline("span content")],
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "span content");
+    }
+
+    #[test]
+    fn test_inlines_to_text_nested() {
+        // Test nested formatting: Strong inside Emph
+        let inlines = vec![Inline::Emph(Emph {
+            content: vec![
+                str_inline("italic "),
+                Inline::Strong(Strong {
+                    content: vec![str_inline("and bold")],
+                    source_info: si(),
+                }),
+            ],
+            source_info: si(),
+        })];
+        assert_eq!(inlines_to_text(&inlines), "italic and bold");
+    }
+
+    #[test]
+    fn test_inlines_to_text_complex() {
+        // Complex example with multiple inline types
+        let inlines = vec![
+            str_inline("Hello"),
+            Inline::Space(Space { source_info: si() }),
+            Inline::Emph(Emph {
+                content: vec![str_inline("world")],
+                source_info: si(),
+            }),
+            str_inline("!"),
+            Inline::Space(Space { source_info: si() }),
+            Inline::Code(Code {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                text: "code".to_string(),
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            }),
+        ];
+        assert_eq!(inlines_to_text(&inlines), "Hello world! code");
+    }
+
+    #[test]
+    fn test_inlines_to_text_empty() {
+        let inlines: Vec<Inline> = vec![];
+        assert_eq!(inlines_to_text(&inlines), "");
+    }
+
+    // Helper to create a ConfigValue with a Map containing entries
+    fn meta_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Map(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| ConfigMapEntry {
+                        key: key.to_string(),
+                        key_source: quarto_source_map::SourceInfo::default(),
+                        value,
+                    })
+                    .collect(),
+            ),
+            source_info: quarto_source_map::SourceInfo::default(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create a string ConfigValue
+    fn meta_string(s: &str) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String(s.to_string())),
+            source_info: quarto_source_map::SourceInfo::default(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create a boolean ConfigValue
+    fn meta_bool(b: bool) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(b)),
+            source_info: quarto_source_map::SourceInfo::default(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create an array ConfigValue
+    fn meta_array(items: Vec<ConfigValue>) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Array(items),
+            source_info: quarto_source_map::SourceInfo::default(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create a Pandoc document with metadata
+    fn pandoc_with_meta(meta: ConfigValue) -> Pandoc {
+        Pandoc {
+            meta,
+            blocks: vec![],
+        }
+    }
+
+    // Tests for extract_config function
+    #[test]
+    fn test_extract_config_empty() {
+        let pandoc = pandoc_with_meta(meta_map(vec![]));
+        let config = extract_config(&pandoc);
+        assert!(config.csl.is_none());
+        assert!(config.bibliography.is_empty());
+        assert!(config.lang.is_none());
+        assert!(!config.link_citations);
+        assert!(config.link_bibliography);
+        assert!(!config.suppress_bibliography);
+    }
+
+    #[test]
+    fn test_extract_config_csl() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("csl", meta_string("my-style.csl"))]));
+        let config = extract_config(&pandoc);
+        assert_eq!(config.csl, Some("my-style.csl".to_string()));
+    }
+
+    #[test]
+    fn test_extract_config_bibliography_single() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("bibliography", meta_string("refs.bib"))]));
+        let config = extract_config(&pandoc);
+        assert_eq!(config.bibliography, vec!["refs.bib".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_config_bibliography_array() {
+        let pandoc = pandoc_with_meta(meta_map(vec![(
+            "bibliography",
+            meta_array(vec![meta_string("refs1.bib"), meta_string("refs2.bib")]),
+        )]));
+        let config = extract_config(&pandoc);
+        assert_eq!(
+            config.bibliography,
+            vec!["refs1.bib".to_string(), "refs2.bib".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_extract_config_lang() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("lang", meta_string("en-US"))]));
+        let config = extract_config(&pandoc);
+        assert_eq!(config.lang, Some("en-US".to_string()));
+    }
+
+    #[test]
+    fn test_extract_config_link_citations_true() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("link-citations", meta_bool(true))]));
+        let config = extract_config(&pandoc);
+        assert!(config.link_citations);
+    }
+
+    #[test]
+    fn test_extract_config_link_citations_false() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("link-citations", meta_bool(false))]));
+        let config = extract_config(&pandoc);
+        assert!(!config.link_citations);
+    }
+
+    #[test]
+    fn test_extract_config_link_bibliography_false() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("link-bibliography", meta_bool(false))]));
+        let config = extract_config(&pandoc);
+        assert!(!config.link_bibliography);
+    }
+
+    #[test]
+    fn test_extract_config_suppress_bibliography() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("suppress-bibliography", meta_bool(true))]));
+        let config = extract_config(&pandoc);
+        assert!(config.suppress_bibliography);
+    }
+
+    #[test]
+    fn test_extract_config_nocite_single() {
+        let pandoc = pandoc_with_meta(meta_map(vec![("nocite", meta_string("@*"))]));
+        let config = extract_config(&pandoc);
+        assert_eq!(config.nocite, vec!["@*".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_config_nocite_array() {
+        let pandoc = pandoc_with_meta(meta_map(vec![(
+            "nocite",
+            meta_array(vec![meta_string("@smith2020"), meta_string("@jones2021")]),
+        )]));
+        let config = extract_config(&pandoc);
+        assert_eq!(
+            config.nocite,
+            vec!["@smith2020".to_string(), "@jones2021".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_extract_config_complete() {
+        let pandoc = pandoc_with_meta(meta_map(vec![
+            ("csl", meta_string("apa.csl")),
+            (
+                "bibliography",
+                meta_array(vec![meta_string("main.bib"), meta_string("extra.bib")]),
+            ),
+            ("lang", meta_string("de-DE")),
+            ("link-citations", meta_bool(true)),
+            ("link-bibliography", meta_bool(false)),
+            ("suppress-bibliography", meta_bool(false)),
+            ("nocite", meta_string("@*")),
+        ]));
+        let config = extract_config(&pandoc);
+        assert_eq!(config.csl, Some("apa.csl".to_string()));
+        assert_eq!(
+            config.bibliography,
+            vec!["main.bib".to_string(), "extra.bib".to_string()]
+        );
+        assert_eq!(config.lang, Some("de-DE".to_string()));
+        assert!(config.link_citations);
+        assert!(!config.link_bibliography);
+        assert!(!config.suppress_bibliography);
+        assert_eq!(config.nocite, vec!["@*".to_string()]);
+    }
+
+    // Helper to create an integer ConfigValue
+    fn meta_int(i: i64) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(i)),
+            source_info: quarto_source_map::SourceInfo::default(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Tests for extract_references
+    #[test]
+    fn test_extract_references_empty_meta() {
+        let meta = meta_map(vec![]);
+        let refs = extract_references(&meta);
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    fn test_extract_references_no_references_field() {
+        let meta = meta_map(vec![("title", meta_string("My Document"))]);
+        let refs = extract_references(&meta);
+        assert!(refs.is_empty());
+    }
+
+    #[test]
+    fn test_extract_references_with_one_reference() {
+        let reference = meta_map(vec![
+            ("id", meta_string("smith2020")),
+            ("type", meta_string("article-journal")),
+            ("title", meta_string("A Great Paper")),
+        ]);
+        let meta = meta_map(vec![("references", meta_array(vec![reference]))]);
+        let refs = extract_references(&meta);
+        assert_eq!(refs.len(), 1);
+        assert_eq!(refs[0].id, "smith2020");
+        assert_eq!(refs[0].ref_type, "article-journal");
+        assert_eq!(refs[0].title, Some("A Great Paper".to_string()));
+    }
+
+    #[test]
+    fn test_extract_references_with_multiple_references() {
+        let ref1 = meta_map(vec![
+            ("id", meta_string("smith2020")),
+            ("title", meta_string("First Paper")),
+        ]);
+        let ref2 = meta_map(vec![
+            ("id", meta_string("jones2021")),
+            ("title", meta_string("Second Paper")),
+        ]);
+        let meta = meta_map(vec![("references", meta_array(vec![ref1, ref2]))]);
+        let refs = extract_references(&meta);
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].id, "smith2020");
+        assert_eq!(refs[1].id, "jones2021");
+    }
+
+    // Tests for meta_to_reference
+    #[test]
+    fn test_meta_to_reference_missing_id() {
+        let meta = meta_map(vec![("title", meta_string("No ID Paper"))]);
+        let reference = meta_to_reference(&meta);
+        assert!(reference.is_none());
+    }
+
+    #[test]
+    fn test_meta_to_reference_minimal() {
+        let meta = meta_map(vec![("id", meta_string("test2020"))]);
+        let reference = meta_to_reference(&meta).unwrap();
+        assert_eq!(reference.id, "test2020");
+        assert_eq!(reference.ref_type, "article"); // default type
+        assert!(reference.title.is_none());
+    }
+
+    #[test]
+    fn test_meta_to_reference_with_all_string_fields() {
+        let meta = meta_map(vec![
+            ("id", meta_string("complete2020")),
+            ("type", meta_string("book")),
+            ("title", meta_string("Complete Book")),
+            ("title-short", meta_string("CB")),
+            ("container-title", meta_string("Book Series")),
+            ("publisher", meta_string("Academic Press")),
+            ("publisher-place", meta_string("New York")),
+            ("edition", meta_string("2nd")),
+            ("volume", meta_string("3")),
+            ("issue", meta_string("4")),
+            ("page", meta_string("100-200")),
+            ("DOI", meta_string("10.1234/test")),
+            ("ISBN", meta_string("978-3-16-148410-0")),
+            ("URL", meta_string("https://example.com")),
+            ("note", meta_string("A note")),
+            ("language", meta_string("en")),
+        ]);
+        let reference = meta_to_reference(&meta).unwrap();
+        assert_eq!(reference.id, "complete2020");
+        assert_eq!(reference.ref_type, "book");
+        assert_eq!(reference.title, Some("Complete Book".to_string()));
+        assert_eq!(reference.title_short, Some("CB".to_string()));
+        assert_eq!(reference.publisher, Some("Academic Press".to_string()));
+        assert_eq!(reference.doi, Some("10.1234/test".to_string()));
+        assert_eq!(reference.isbn, Some("978-3-16-148410-0".to_string()));
+        assert_eq!(reference.url, Some("https://example.com".to_string()));
+    }
+
+    // Tests for extract_names
+    #[test]
+    fn test_extract_names_no_author_field() {
+        let entries: Vec<ConfigMapEntry> = vec![];
+        let names = extract_names(&entries, "author");
+        assert!(names.is_none());
+    }
+
+    #[test]
+    fn test_extract_names_with_single_author() {
+        let author = meta_map(vec![
+            ("family", meta_string("Smith")),
+            ("given", meta_string("John")),
+        ]);
+        let entries = vec![ConfigMapEntry {
+            key: "author".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: meta_array(vec![author]),
+        }];
+        let names = extract_names(&entries, "author").unwrap();
+        assert_eq!(names.len(), 1);
+        assert_eq!(names[0].family, Some("Smith".to_string()));
+        assert_eq!(names[0].given, Some("John".to_string()));
+    }
+
+    #[test]
+    fn test_extract_names_with_multiple_authors() {
+        let author1 = meta_map(vec![
+            ("family", meta_string("Smith")),
+            ("given", meta_string("John")),
+        ]);
+        let author2 = meta_map(vec![
+            ("family", meta_string("Jones")),
+            ("given", meta_string("Jane")),
+        ]);
+        let entries = vec![ConfigMapEntry {
+            key: "author".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: meta_array(vec![author1, author2]),
+        }];
+        let names = extract_names(&entries, "author").unwrap();
+        assert_eq!(names.len(), 2);
+        assert_eq!(names[0].family, Some("Smith".to_string()));
+        assert_eq!(names[1].family, Some("Jones".to_string()));
+    }
+
+    #[test]
+    fn test_extract_names_with_literal_name() {
+        let author = meta_map(vec![("literal", meta_string("World Health Organization"))]);
+        let entries = vec![ConfigMapEntry {
+            key: "author".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: meta_array(vec![author]),
+        }];
+        let names = extract_names(&entries, "author").unwrap();
+        assert_eq!(names.len(), 1);
+        assert_eq!(
+            names[0].literal,
+            Some("World Health Organization".to_string())
+        );
+        assert!(names[0].family.is_none());
+    }
+
+    #[test]
+    fn test_extract_names_with_particles() {
+        let author = meta_map(vec![
+            ("family", meta_string("Beethoven")),
+            ("given", meta_string("Ludwig")),
+            ("non-dropping-particle", meta_string("van")),
+        ]);
+        let entries = vec![ConfigMapEntry {
+            key: "author".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: meta_array(vec![author]),
+        }];
+        let names = extract_names(&entries, "author").unwrap();
+        assert_eq!(names.len(), 1);
+        assert_eq!(names[0].family, Some("Beethoven".to_string()));
+        assert_eq!(names[0].given, Some("Ludwig".to_string()));
+        assert_eq!(names[0].non_dropping_particle, Some("van".to_string()));
+    }
+
+    #[test]
+    fn test_extract_names_empty_names_returns_none() {
+        // Names with no family, given, or literal should be filtered out
+        let author = meta_map(vec![("suffix", meta_string("Jr."))]); // Only suffix, no name
+        let entries = vec![ConfigMapEntry {
+            key: "author".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: meta_array(vec![author]),
+        }];
+        let names = extract_names(&entries, "author");
+        assert!(names.is_none()); // Empty vec becomes None
+    }
+
+    // Tests for extract_date
+    #[test]
+    fn test_extract_date_no_date_field() {
+        let entries: Vec<ConfigMapEntry> = vec![];
+        let date = extract_date(&entries, "issued");
+        assert!(date.is_none());
+    }
+
+    #[test]
+    fn test_extract_date_with_year_only() {
+        let date_parts = meta_array(vec![meta_array(vec![meta_int(2020)])]);
+        let date_map = meta_map(vec![("date-parts", date_parts)]);
+        let entries = vec![ConfigMapEntry {
+            key: "issued".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: date_map,
+        }];
+        let date = extract_date(&entries, "issued").unwrap();
+        assert!(date.date_parts.is_some());
+        let parts = date.date_parts.unwrap();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0], vec![2020]);
+    }
+
+    #[test]
+    fn test_extract_date_with_year_month_day() {
+        let date_parts = meta_array(vec![meta_array(vec![
+            meta_int(2020),
+            meta_int(6),
+            meta_int(15),
+        ])]);
+        let date_map = meta_map(vec![("date-parts", date_parts)]);
+        let entries = vec![ConfigMapEntry {
+            key: "issued".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: date_map,
+        }];
+        let date = extract_date(&entries, "issued").unwrap();
+        let parts = date.date_parts.unwrap();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0], vec![2020, 6, 15]);
+    }
+
+    #[test]
+    fn test_extract_date_with_date_range() {
+        let date_parts = meta_array(vec![
+            meta_array(vec![meta_int(2020), meta_int(1)]),
+            meta_array(vec![meta_int(2020), meta_int(12)]),
+        ]);
+        let date_map = meta_map(vec![("date-parts", date_parts)]);
+        let entries = vec![ConfigMapEntry {
+            key: "issued".to_string(),
+            key_source: quarto_source_map::SourceInfo::default(),
+            value: date_map,
+        }];
+        let date = extract_date(&entries, "issued").unwrap();
+        let parts = date.date_parts.unwrap();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0], vec![2020, 1]);
+        assert_eq!(parts[1], vec![2020, 12]);
+    }
+
+    // Tests for collect_citations
+    #[test]
+    fn test_collect_citations_empty_document() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![],
+        };
+        let citations = collect_citations(&pandoc);
+        assert!(citations.is_empty());
+    }
+
+    #[test]
+    fn test_collect_citations_no_citations() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![str_inline("Just plain text")],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert!(citations.is_empty());
+    }
+
+    #[test]
+    fn test_collect_citations_single_citation() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "smith2020".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items.len(), 1);
+        assert_eq!(citations[0].items[0].id, "smith2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_emphasis() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "jones2021".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let emph = Inline::Emph(Emph {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![emph],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "jones2021");
+    }
+
+    #[test]
+    fn test_collect_citations_in_block_quote() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "quoted2020".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::BlockQuote(crate::pandoc::BlockQuote {
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![cite],
+                    source_info: si(),
+                })],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "quoted2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_div() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "div2020".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Div(crate::pandoc::Div {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![cite],
+                    source_info: si(),
+                })],
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "div2020");
+    }
+
+    // Tests for insert_bibliography
+    #[test]
+    fn test_insert_bibliography_empty_blocks() {
+        let mut blocks: Vec<Block> = vec![];
+        let bib_blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![str_inline("Bibliography entry")],
+            source_info: si(),
+        })];
+        insert_bibliography(&mut blocks, bib_blocks);
+        // Should add a refs div at the end
+        assert_eq!(blocks.len(), 1);
+        if let Block::Div(d) = &blocks[0] {
+            assert_eq!(d.attr.0, "refs");
+            assert!(d.attr.1.contains(&"references".to_string()));
+            assert!(d.attr.1.contains(&"csl-bib-body".to_string()));
+        } else {
+            panic!("Expected Div block");
+        }
+    }
+
+    #[test]
+    fn test_insert_bibliography_replaces_existing_refs_div() {
+        let mut blocks = vec![Block::Div(crate::pandoc::Div {
+            attr: ("refs".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![], // Empty initially
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+        })];
+        let bib_blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![str_inline("New bibliography")],
+            source_info: si(),
+        })];
+        insert_bibliography(&mut blocks, bib_blocks);
+        // Should replace contents of existing refs div
+        assert_eq!(blocks.len(), 1);
+        if let Block::Div(d) = &blocks[0] {
+            assert_eq!(d.attr.0, "refs");
+            assert_eq!(d.content.len(), 1); // Now has content
+            assert!(d.attr.1.contains(&"references".to_string()));
+        } else {
+            panic!("Expected Div block");
+        }
     }
 }

@@ -342,3 +342,316 @@ pub fn extract_filename_index(info: &quarto_source_map::SourceInfo) -> Option<us
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper to create a Location
+    fn loc(offset: usize, row: usize, column: usize) -> Location {
+        Location {
+            offset,
+            row,
+            column,
+        }
+    }
+
+    // Helper to create a Range
+    fn range(
+        start_offset: usize,
+        start_row: usize,
+        start_col: usize,
+        end_offset: usize,
+        end_row: usize,
+        end_col: usize,
+    ) -> Range {
+        Range {
+            start: loc(start_offset, start_row, start_col),
+            end: loc(end_offset, end_row, end_col),
+        }
+    }
+
+    // Tests for Location
+    #[test]
+    fn test_location_equality() {
+        let loc1 = loc(10, 1, 5);
+        let loc2 = loc(10, 1, 5);
+        let loc3 = loc(20, 2, 0);
+        assert_eq!(loc1, loc2);
+        assert_ne!(loc1, loc3);
+    }
+
+    #[test]
+    fn test_location_ordering() {
+        let loc1 = loc(10, 1, 5);
+        let loc2 = loc(20, 2, 0);
+        let loc3 = loc(10, 1, 6); // Same offset but higher column
+        assert!(loc1 < loc2);
+        assert!(loc1 < loc3); // Ordering is lexicographic: offset, then row, then column
+    }
+
+    // Tests for Range
+    #[test]
+    fn test_range_equality() {
+        let r1 = range(0, 0, 0, 10, 0, 10);
+        let r2 = range(0, 0, 0, 10, 0, 10);
+        let r3 = range(0, 0, 0, 20, 1, 5);
+        assert_eq!(r1, r2);
+        assert_ne!(r1, r3);
+    }
+
+    // Tests for SourceInfo
+    #[test]
+    fn test_source_info_new() {
+        let r = range(0, 0, 0, 10, 0, 10);
+        let si = SourceInfo::new(Some(42), r.clone());
+        assert_eq!(si.filename_index, Some(42));
+        assert_eq!(si.range, r);
+    }
+
+    #[test]
+    fn test_source_info_with_range() {
+        let r = range(5, 1, 0, 15, 1, 10);
+        let si = SourceInfo::with_range(r.clone());
+        assert_eq!(si.filename_index, None);
+        assert_eq!(si.range, r);
+    }
+
+    #[test]
+    fn test_source_info_start_offset() {
+        let r = range(100, 5, 0, 200, 10, 0);
+        let si = SourceInfo::with_range(r);
+        assert_eq!(si.start_offset(), 100);
+    }
+
+    #[test]
+    fn test_source_info_end_offset() {
+        let r = range(100, 5, 0, 200, 10, 0);
+        let si = SourceInfo::with_range(r);
+        assert_eq!(si.end_offset(), 200);
+    }
+
+    #[test]
+    fn test_source_info_combine_takes_min_start() {
+        let si1 = SourceInfo::with_range(range(10, 1, 0, 20, 1, 10));
+        let si2 = SourceInfo::with_range(range(5, 0, 5, 15, 1, 5));
+        let combined = si1.combine(&si2);
+        // Should take si2's start (5, 0, 5) because it's smaller
+        assert_eq!(combined.range.start.offset, 5);
+        assert_eq!(combined.range.start.row, 0);
+        assert_eq!(combined.range.start.column, 5);
+    }
+
+    #[test]
+    fn test_source_info_combine_takes_max_end() {
+        let si1 = SourceInfo::with_range(range(10, 1, 0, 20, 1, 10));
+        let si2 = SourceInfo::with_range(range(5, 0, 5, 15, 1, 5));
+        let combined = si1.combine(&si2);
+        // Should take si1's end (20, 1, 10) because it's larger
+        assert_eq!(combined.range.end.offset, 20);
+        assert_eq!(combined.range.end.row, 1);
+        assert_eq!(combined.range.end.column, 10);
+    }
+
+    #[test]
+    fn test_source_info_combine_preserves_filename_index_from_first() {
+        let si1 = SourceInfo::new(Some(1), range(10, 1, 0, 20, 1, 10));
+        let si2 = SourceInfo::new(Some(2), range(5, 0, 5, 15, 1, 5));
+        let combined = si1.combine(&si2);
+        // Should take si1's filename_index because it's not None
+        assert_eq!(combined.filename_index, Some(1));
+    }
+
+    #[test]
+    fn test_source_info_combine_uses_second_filename_if_first_is_none() {
+        let si1 = SourceInfo::with_range(range(10, 1, 0, 20, 1, 10)); // filename_index is None
+        let si2 = SourceInfo::new(Some(42), range(5, 0, 5, 15, 1, 5));
+        let combined = si1.combine(&si2);
+        // Should fall back to si2's filename_index
+        assert_eq!(combined.filename_index, Some(42));
+    }
+
+    #[test]
+    fn test_source_info_to_source_map_info() {
+        let r = range(100, 5, 10, 200, 10, 20);
+        let si = SourceInfo::with_range(r);
+        let qsm_info = si.to_source_map_info();
+        // Verify it creates an Original mapping with correct offsets
+        match &qsm_info {
+            quarto_source_map::SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } => {
+                assert_eq!(file_id.0, 0); // Dummy FileId
+                assert_eq!(*start_offset, 100);
+                assert_eq!(*end_offset, 200);
+            }
+            _ => panic!("Expected Original variant"),
+        }
+    }
+
+    #[test]
+    fn test_source_info_to_source_map_info_with_mapping() {
+        let r = range(50, 2, 5, 100, 4, 10);
+        let si = SourceInfo::with_range(r);
+        let file_id = quarto_source_map::FileId(123);
+        let qsm_info = si.to_source_map_info_with_mapping(file_id);
+        // Verify it uses the provided FileId
+        match &qsm_info {
+            quarto_source_map::SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            } => {
+                assert_eq!(file_id.0, 123);
+                assert_eq!(*start_offset, 50);
+                assert_eq!(*end_offset, 100);
+            }
+            _ => panic!("Expected Original variant"),
+        }
+    }
+
+    // Tests for SourceInfoOptions
+    #[test]
+    fn test_source_info_options_none() {
+        let opts = SourceInfoOptions::none();
+        assert!(!opts.trim_leading_whitespace);
+        assert!(!opts.trim_trailing_whitespace);
+    }
+
+    #[test]
+    fn test_source_info_options_trim_all() {
+        let opts = SourceInfoOptions::trim_all();
+        assert!(opts.trim_leading_whitespace);
+        assert!(opts.trim_trailing_whitespace);
+    }
+
+    #[test]
+    fn test_source_info_options_trim_leading() {
+        let opts = SourceInfoOptions::trim_leading();
+        assert!(opts.trim_leading_whitespace);
+        assert!(!opts.trim_trailing_whitespace);
+    }
+
+    #[test]
+    fn test_source_info_options_trim_trailing() {
+        let opts = SourceInfoOptions::trim_trailing();
+        assert!(!opts.trim_leading_whitespace);
+        assert!(opts.trim_trailing_whitespace);
+    }
+
+    #[test]
+    fn test_source_info_options_default() {
+        let opts = SourceInfoOptions::default();
+        assert!(!opts.trim_leading_whitespace);
+        assert!(!opts.trim_trailing_whitespace);
+    }
+
+    // Tests for helper functions
+    #[test]
+    fn test_empty_range() {
+        let r = empty_range();
+        assert_eq!(r.start.offset, 0);
+        assert_eq!(r.start.row, 0);
+        assert_eq!(r.start.column, 0);
+        assert_eq!(r.end.offset, 0);
+        assert_eq!(r.end.row, 0);
+        assert_eq!(r.end.column, 0);
+    }
+
+    #[test]
+    fn test_empty_source_info() {
+        let si = empty_source_info();
+        assert_eq!(si.start_offset(), 0);
+        assert_eq!(si.end_offset(), 0);
+        assert_eq!(si.length(), 0);
+    }
+
+    #[test]
+    fn test_extract_filename_index_original() {
+        let si = quarto_source_map::SourceInfo::from_range(
+            quarto_source_map::FileId(42),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: quarto_source_map::Location {
+                    offset: 10,
+                    row: 0,
+                    column: 10,
+                },
+            },
+        );
+        assert_eq!(extract_filename_index(&si), Some(42));
+    }
+
+    #[test]
+    fn test_extract_filename_index_substring() {
+        let parent = quarto_source_map::SourceInfo::from_range(
+            quarto_source_map::FileId(99),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: quarto_source_map::Location {
+                    offset: 100,
+                    row: 5,
+                    column: 0,
+                },
+            },
+        );
+        let substring = quarto_source_map::SourceInfo::substring(parent, 10, 50);
+        assert_eq!(extract_filename_index(&substring), Some(99));
+    }
+
+    #[test]
+    fn test_extract_filename_index_concat() {
+        let piece1 = quarto_source_map::SourceInfo::from_range(
+            quarto_source_map::FileId(7),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: quarto_source_map::Location {
+                    offset: 10,
+                    row: 0,
+                    column: 10,
+                },
+            },
+        );
+        let piece2 = quarto_source_map::SourceInfo::from_range(
+            quarto_source_map::FileId(8),
+            quarto_source_map::Range {
+                start: quarto_source_map::Location {
+                    offset: 0,
+                    row: 0,
+                    column: 0,
+                },
+                end: quarto_source_map::Location {
+                    offset: 20,
+                    row: 1,
+                    column: 0,
+                },
+            },
+        );
+        // concat takes Vec<(SourceInfo, usize)> - pairs of source info and length
+        let concat = quarto_source_map::SourceInfo::concat(vec![(piece1, 10), (piece2, 20)]);
+        // Should return the first piece's file_id
+        assert_eq!(extract_filename_index(&concat), Some(7));
+    }
+
+    #[test]
+    fn test_extract_filename_index_filter_provenance() {
+        // filter_provenance takes filter_path and line number
+        let filter_prov = quarto_source_map::SourceInfo::filter_provenance("test-filter.lua", 42);
+        // FilterProvenance doesn't have a filename index
+        assert_eq!(extract_filename_index(&filter_prov), None);
+    }
+}
