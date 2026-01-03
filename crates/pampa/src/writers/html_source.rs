@@ -439,6 +439,466 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    // Integration test helpers for testing build_source_map through the full pipeline
+    fn parse_qmd_with_context(input: &str) -> (Pandoc, crate::pandoc::ast_context::ASTContext) {
+        let result = crate::readers::qmd::read(
+            input.as_bytes(),
+            false,
+            "test.qmd",
+            &mut std::io::sink(),
+            true,
+            None,
+        );
+        let (pandoc, context, _warnings) = result.expect("Failed to parse QMD");
+        (pandoc, context)
+    }
+
+    fn build_json_with_source_info(
+        pandoc: &Pandoc,
+        context: &crate::pandoc::ast_context::ASTContext,
+    ) -> serde_json::Value {
+        let config = crate::writers::json::JsonConfig {
+            include_inline_locations: true,
+        };
+        crate::writers::json::write_pandoc(pandoc, context, &config)
+            .expect("Failed to generate JSON")
+    }
+
+    // ============================================================================
+    // Integration tests for build_source_map with various block types
+    // ============================================================================
+
+    #[test]
+    fn test_build_source_map_paragraph() {
+        let (pandoc, context) = parse_qmd_with_context("Hello world");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have at least one entry for the paragraph
+        assert!(!map.is_empty(), "Source map should not be empty");
+    }
+
+    #[test]
+    fn test_build_source_map_header() {
+        let (pandoc, context) = parse_qmd_with_context("# Heading\n\nContent");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for header and paragraph
+        assert!(
+            map.len() >= 2,
+            "Source map should have entries for header and paragraph"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_code_block() {
+        let (pandoc, context) = parse_qmd_with_context("```python\nprint('hello')\n```");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entry for code block"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_blockquote() {
+        let (pandoc, context) = parse_qmd_with_context("> Quoted text");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for blockquote and its nested paragraph
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for blockquote"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_bullet_list() {
+        let (pandoc, context) = parse_qmd_with_context("- Item 1\n- Item 2");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for bullet list"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_ordered_list() {
+        let (pandoc, context) = parse_qmd_with_context("1. First\n2. Second");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for ordered list"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_definition_list() {
+        let (pandoc, context) = parse_qmd_with_context("Term\n:   Definition");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for definition list"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_horizontal_rule() {
+        let (pandoc, context) = parse_qmd_with_context("Above\n\n---\n\nBelow");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for paragraphs and horizontal rule
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including horizontal rule"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_div() {
+        let (pandoc, context) = parse_qmd_with_context("::: {.note}\nContent\n:::");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Source map should have entries for div");
+    }
+
+    #[test]
+    fn test_build_source_map_line_block() {
+        let (pandoc, context) = parse_qmd_with_context("| Line 1\n| Line 2\n| Line 3");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for line block"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_raw_block() {
+        let (pandoc, context) = parse_qmd_with_context("```{=html}\n<div>raw</div>\n```");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for raw block"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_table() {
+        let input = "| Col1 | Col2 |\n|------|------|\n| A    | B    |";
+        let (pandoc, context) = parse_qmd_with_context(input);
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Source map should have entries for table");
+    }
+
+    // ============================================================================
+    // Integration tests for walk_inline with various inline types
+    // ============================================================================
+
+    #[test]
+    fn test_build_source_map_emphasis() {
+        let (pandoc, context) = parse_qmd_with_context("Some *emphasized* text");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including emphasis"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_strong() {
+        let (pandoc, context) = parse_qmd_with_context("Some **strong** text");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including strong"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_strikeout() {
+        let (pandoc, context) = parse_qmd_with_context("Some ~~strikeout~~ text");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including strikeout"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_superscript() {
+        let (pandoc, context) = parse_qmd_with_context("E=mc^2^");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including superscript"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_subscript() {
+        let (pandoc, context) = parse_qmd_with_context("H~2~O");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including subscript"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_code_inline() {
+        let (pandoc, context) = parse_qmd_with_context("Use `code` here");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including inline code"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_link() {
+        let (pandoc, context) = parse_qmd_with_context("Click [here](https://example.com)");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including link"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_image() {
+        let (pandoc, context) = parse_qmd_with_context("![Alt text](image.png)");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including image"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_span() {
+        let (pandoc, context) = parse_qmd_with_context("[text]{.class}");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including span"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_quoted() {
+        // Double quoted text creates Quoted inline
+        let (pandoc, context) = parse_qmd_with_context("He said \"hello\"");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Source map should have entries");
+    }
+
+    #[test]
+    fn test_build_source_map_math_inline() {
+        let (pandoc, context) = parse_qmd_with_context("The equation $E=mc^2$ is famous");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including math"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_footnote() {
+        let (pandoc, context) = parse_qmd_with_context("Text with footnote^[This is the note]");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including footnote"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_nested_formatting() {
+        // Use *__ instead of *** for nested bold/italic (Quarto syntax)
+        let (pandoc, context) = parse_qmd_with_context("*__Bold and italic__* together");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for nested emphasis/strong
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for nested formatting"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_complex_document() {
+        let input = r#"# Heading
+
+This is a *paragraph* with **formatting**.
+
+- Item 1
+- Item 2
+
+> A quote
+
+```python
+print("hello")
+```
+
+| Col1 | Col2 |
+|------|------|
+| A    | B    |
+"#;
+        let (pandoc, context) = parse_qmd_with_context(input);
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Complex document should have many entries
+        assert!(
+            map.len() >= 5,
+            "Complex document should have many source map entries"
+        );
+    }
+
+    // ============================================================================
+    // Additional inline type tests
+    // ============================================================================
+
+    #[test]
+    fn test_build_source_map_underline() {
+        // Underline syntax is [underlined text]{.underline}
+        let (pandoc, context) = parse_qmd_with_context("[underlined text]{.underline}");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Source map should have entries");
+    }
+
+    #[test]
+    fn test_build_source_map_smallcaps() {
+        // SmallCaps syntax is [text]{.smallcaps}
+        let (pandoc, context) = parse_qmd_with_context("[small caps text]{.smallcaps}");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Source map should have entries");
+    }
+
+    #[test]
+    fn test_build_source_map_highlight() {
+        // Highlight/mark syntax is ==highlighted==
+        let (pandoc, context) = parse_qmd_with_context("Some ==highlighted text== here");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries including highlight"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_figure() {
+        // Figure with caption
+        let input = r#"
+![Figure caption](image.png)
+"#;
+        let (pandoc, context) = parse_qmd_with_context(input);
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Source map should have entries for figure");
+    }
+
+    #[test]
+    fn test_build_source_map_link_with_nested_formatting() {
+        let (pandoc, context) = parse_qmd_with_context("[**bold link**](https://example.com)");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for link and nested strong
+        assert!(
+            !map.is_empty(),
+            "Source map should have entries for link with nested formatting"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_nested_blockquote() {
+        let (pandoc, context) = parse_qmd_with_context("> Quote with *emphasis* inside");
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for blockquote, paragraph, and emphasis
+        assert!(
+            map.len() >= 3,
+            "Nested blockquote should have multiple entries"
+        );
+    }
+
+    #[test]
+    fn test_build_source_map_list_with_formatting() {
+        let input = "- Item with **bold**\n- Item with *italic*";
+        let (pandoc, context) = parse_qmd_with_context(input);
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        // Should have entries for list, items, and nested formatting
+        assert!(!map.is_empty(), "List with formatting should have entries");
+    }
+
+    #[test]
+    fn test_build_source_map_table_with_formatting() {
+        let input = "| **Bold** | *Italic* |\n|----------|----------|\n| A        | B        |";
+        let (pandoc, context) = parse_qmd_with_context(input);
+        let json = build_json_with_source_info(&pandoc, &context);
+        let map = build_source_map(&pandoc, &json);
+
+        assert!(!map.is_empty(), "Table with formatting should have entries");
+    }
+
+    // ============================================================================
+    // Original tests for extract_source_node_info
+    // ============================================================================
+
     #[test]
     fn test_extract_source_node_info_with_location() {
         let json = json!({
