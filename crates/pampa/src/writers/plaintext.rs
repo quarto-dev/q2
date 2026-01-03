@@ -412,7 +412,15 @@ pub fn blocks_to_string(blocks: &[Block]) -> (String, Vec<DiagnosticMessage>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pandoc::inline::{Space, Str};
+    use crate::pandoc::block::{
+        BlockQuote, CaptionBlock, DefinitionList, Div, Figure, Header, HorizontalRule, LineBlock,
+        MetaBlock, NoteDefinitionFencedBlock, NoteDefinitionPara, OrderedList, Plain, RawBlock,
+    };
+    use crate::pandoc::inline::{
+        Cite, Delete, EditComment, Highlight, Image, Insert, LineBreak, Link, Math, MathType, Note,
+        NoteReference, SmallCaps, SoftBreak, Space, Span, Str, Strikeout, Strong, Subscript,
+        Superscript, Underline,
+    };
 
     fn dummy_source_info() -> SourceInfo {
         SourceInfo::from_range(
@@ -588,5 +596,725 @@ mod tests {
         assert_eq!(result, "");
         assert_eq!(diags.len(), 1);
         assert!(diags[0].title.contains("Table"));
+    }
+
+    // ============================================================================
+    // Additional inline tests for coverage
+    // ============================================================================
+
+    #[test]
+    fn test_soft_break() {
+        let inlines = vec![
+            make_str("first"),
+            Inline::SoftBreak(SoftBreak {
+                source_info: dummy_source_info(),
+            }),
+            make_str("second"),
+        ];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "first second");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_line_break() {
+        let inlines = vec![
+            make_str("first"),
+            Inline::LineBreak(LineBreak {
+                source_info: dummy_source_info(),
+            }),
+            make_str("second"),
+        ];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "first\nsecond");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_strong_stripped() {
+        let inlines = vec![Inline::Strong(Strong {
+            content: vec![make_str("bold")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "bold");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_underline_stripped() {
+        let inlines = vec![Inline::Underline(Underline {
+            content: vec![make_str("underlined")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "underlined");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_strikeout_stripped() {
+        let inlines = vec![Inline::Strikeout(Strikeout {
+            content: vec![make_str("struck")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "struck");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_superscript_stripped() {
+        let inlines = vec![Inline::Superscript(Superscript {
+            content: vec![make_str("sup")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "sup");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_subscript_stripped() {
+        let inlines = vec![Inline::Subscript(Subscript {
+            content: vec![make_str("sub")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "sub");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_smallcaps_stripped() {
+        let inlines = vec![Inline::SmallCaps(SmallCaps {
+            content: vec![make_str("smallcaps")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "smallcaps");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_span_stripped() {
+        let inlines = vec![Inline::Span(Span {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("span content")],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "span content");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_quoted_single_quotes() {
+        let inlines = vec![Inline::Quoted(Quoted {
+            quote_type: QuoteType::SingleQuote,
+            content: vec![make_str("quoted")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        // Single quotes: ' (U+2018) and ' (U+2019)
+        assert_eq!(result, "\u{2018}quoted\u{2019}");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_math_inline() {
+        let inlines = vec![Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "E = mc^2".to_string(),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "E = mc^2");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_link_content_only() {
+        let inlines = vec![Inline::Link(Link {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("link text")],
+            target: ("https://example.com".to_string(), "".to_string()),
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+            target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "link text");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_image_content_only() {
+        let inlines = vec![Inline::Image(Image {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("alt text")],
+            target: ("image.png".to_string(), "".to_string()),
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+            target_source: crate::pandoc::attr::TargetSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "alt text");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_cite_content() {
+        let inlines = vec![Inline::Cite(Cite {
+            citations: vec![],
+            content: vec![make_str("citation content")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "citation content");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_note_silently_dropped() {
+        let inlines = vec![
+            make_str("text"),
+            Inline::Note(Note {
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("note content")],
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            }),
+            make_str(" more"),
+        ];
+        let (result, diags) = inlines_to_string(&inlines);
+        // Note is dropped silently (expected behavior)
+        assert_eq!(result, "text more");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_insert_stripped() {
+        let inlines = vec![Inline::Insert(Insert {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("inserted")],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "inserted");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_delete_stripped() {
+        let inlines = vec![Inline::Delete(Delete {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("deleted")],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "deleted");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_highlight_stripped() {
+        let inlines = vec![Inline::Highlight(Highlight {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("highlighted")],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "highlighted");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_edit_comment_stripped() {
+        let inlines = vec![Inline::EditComment(EditComment {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("comment")],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "comment");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_shortcode_silently_dropped() {
+        use quarto_pandoc_types::Shortcode;
+        use std::collections::HashMap;
+
+        let inlines = vec![
+            make_str("before"),
+            Inline::Shortcode(Shortcode {
+                is_escaped: false,
+                name: "include".to_string(),
+                positional_args: vec![],
+                keyword_args: HashMap::new(),
+            }),
+            make_str("after"),
+        ];
+        let (result, diags) = inlines_to_string(&inlines);
+        // Shortcode is dropped silently (no source_info)
+        assert_eq!(result, "beforeafter");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_note_reference_with_warning() {
+        let inlines = vec![Inline::NoteReference(NoteReference {
+            id: "fn1".to_string(),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("NoteReference"));
+    }
+
+    #[test]
+    fn test_attr_inline_silently_dropped() {
+        let inlines = vec![
+            make_str("text"),
+            Inline::Attr(
+                (
+                    "id".to_string(),
+                    vec!["class".to_string()],
+                    hashlink::LinkedHashMap::new(),
+                ),
+                crate::pandoc::attr::AttrSourceInfo::empty(),
+            ),
+        ];
+        let (result, diags) = inlines_to_string(&inlines);
+        // Attr is dropped silently (uses AttrSourceInfo, not SourceInfo)
+        assert_eq!(result, "text");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_custom_inline_with_warning() {
+        use crate::pandoc::custom::CustomNode;
+
+        let inlines = vec![Inline::Custom(CustomNode {
+            type_name: "TestCustom".to_string(),
+            slots: hashlink::LinkedHashMap::new(),
+            plain_data: serde_json::Value::Null,
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("Custom inline"));
+        assert!(diags[0].title.contains("TestCustom"));
+    }
+
+    // ============================================================================
+    // Additional block tests for coverage
+    // ============================================================================
+
+    #[test]
+    fn test_plain_block() {
+        let blocks = vec![Block::Plain(Plain {
+            content: vec![make_str("Plain text.")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "Plain text.");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_header_block() {
+        let blocks = vec![Block::Header(Header {
+            level: 2,
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![make_str("Heading")],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        // No # prefix in plain text
+        assert_eq!(result, "Heading");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_blockquote() {
+        let blocks = vec![Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("Quoted text")],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "> Quoted text");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_blockquote_multiline() {
+        let blocks = vec![Block::BlockQuote(BlockQuote {
+            content: vec![
+                Block::Paragraph(Paragraph {
+                    content: vec![make_str("First para")],
+                    source_info: dummy_source_info(),
+                }),
+                Block::Paragraph(Paragraph {
+                    content: vec![make_str("Second para")],
+                    source_info: dummy_source_info(),
+                }),
+            ],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        // The newline between paragraphs is prefixed with ">"
+        assert_eq!(result, "> First para\n> Second para");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_line_block() {
+        let blocks = vec![Block::LineBlock(LineBlock {
+            content: vec![
+                vec![make_str("Line one")],
+                vec![make_str("Line two")],
+                vec![make_str("Line three")],
+            ],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "| Line one\n| Line two\n| Line three");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_ordered_list() {
+        use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
+
+        let blocks = vec![Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![
+                vec![Block::Plain(Plain {
+                    content: vec![make_str("First")],
+                    source_info: dummy_source_info(),
+                })],
+                vec![Block::Plain(Plain {
+                    content: vec![make_str("Second")],
+                    source_info: dummy_source_info(),
+                })],
+            ],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "1. First\n2. Second");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_ordered_list_start_number() {
+        use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
+
+        let blocks = vec![Block::OrderedList(OrderedList {
+            attr: (5, ListNumberStyle::Decimal, ListNumberDelim::Period),
+            content: vec![
+                vec![Block::Plain(Plain {
+                    content: vec![make_str("Fifth")],
+                    source_info: dummy_source_info(),
+                })],
+                vec![Block::Plain(Plain {
+                    content: vec![make_str("Sixth")],
+                    source_info: dummy_source_info(),
+                })],
+            ],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "5. Fifth\n6. Sixth");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_horizontal_rule() {
+        let blocks = vec![Block::HorizontalRule(HorizontalRule {
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "---");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_div_contents_only() {
+        let blocks = vec![Block::Div(Div {
+            attr: (
+                "myid".to_string(),
+                vec!["myclass".to_string()],
+                hashlink::LinkedHashMap::new(),
+            ),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("Div content")],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        // No ::: scaffold
+        assert_eq!(result, "Div content");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_figure_contents_only() {
+        let blocks = vec![Block::Figure(Figure {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            caption: crate::pandoc::caption::Caption {
+                short: None,
+                long: None,
+                source_info: dummy_source_info(),
+            },
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![make_str("Figure content")],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "Figure content");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_raw_block_plaintext() {
+        let blocks = vec![Block::RawBlock(RawBlock {
+            format: "plaintext".to_string(),
+            text: "Raw plaintext content".to_string(),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "Raw plaintext content");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_raw_block_html_dropped_with_warning() {
+        let blocks = vec![Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div>HTML content</div>".to_string(),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("RawBlock"));
+        assert!(diags[0].title.contains("html"));
+    }
+
+    #[test]
+    fn test_definition_list_dropped_with_warning() {
+        let blocks = vec![Block::DefinitionList(DefinitionList {
+            content: vec![(
+                vec![make_str("Term")],
+                vec![vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("Definition")],
+                    source_info: dummy_source_info(),
+                })]],
+            )],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("DefinitionList"));
+    }
+
+    #[test]
+    fn test_block_metadata_dropped_with_warning() {
+        use quarto_pandoc_types::config_value::ConfigValue;
+
+        let blocks = vec![Block::BlockMetadata(MetaBlock {
+            meta: ConfigValue::null(dummy_source_info()),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("BlockMetadata"));
+    }
+
+    #[test]
+    fn test_note_definition_para_dropped_with_warning() {
+        let blocks = vec![Block::NoteDefinitionPara(NoteDefinitionPara {
+            id: "fn1".to_string(),
+            content: vec![make_str("Note content")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("NoteDefinitionPara"));
+    }
+
+    #[test]
+    fn test_note_definition_fenced_block_dropped_with_warning() {
+        let blocks = vec![Block::NoteDefinitionFencedBlock(
+            NoteDefinitionFencedBlock {
+                id: "fn2".to_string(),
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![make_str("Fenced note content")],
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            },
+        )];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("NoteDefinitionFencedBlock"));
+    }
+
+    #[test]
+    fn test_caption_block_dropped_with_warning() {
+        let blocks = vec![Block::CaptionBlock(CaptionBlock {
+            content: vec![make_str("Caption text")],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("CaptionBlock"));
+    }
+
+    #[test]
+    fn test_custom_block_with_warning() {
+        use crate::pandoc::custom::CustomNode;
+
+        let blocks = vec![Block::Custom(CustomNode {
+            type_name: "TestCallout".to_string(),
+            slots: hashlink::LinkedHashMap::new(),
+            plain_data: serde_json::Value::Null,
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].title.contains("Custom block"));
+        assert!(diags[0].title.contains("TestCallout"));
+    }
+
+    // ============================================================================
+    // Multiple blocks and edge cases
+    // ============================================================================
+
+    #[test]
+    fn test_multiple_blocks_separated_by_newlines() {
+        let blocks = vec![
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("First paragraph.")],
+                source_info: dummy_source_info(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("Second paragraph.")],
+                source_info: dummy_source_info(),
+            }),
+            Block::Paragraph(Paragraph {
+                content: vec![make_str("Third paragraph.")],
+                source_info: dummy_source_info(),
+            }),
+        ];
+        let (result, diags) = blocks_to_string(&blocks);
+        // Single newline between blocks (not blank line)
+        assert_eq!(
+            result,
+            "First paragraph.\nSecond paragraph.\nThird paragraph."
+        );
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_code_block_with_trailing_newline() {
+        let blocks = vec![Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            text: "let x = 1;\n".to_string(),
+            source_info: dummy_source_info(),
+            attr_source: crate::pandoc::attr::AttrSourceInfo::empty(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        // Text already has trailing newline, so no extra added
+        assert_eq!(result, "```\nlet x = 1;\n```");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_list_item_multiline() {
+        let blocks = vec![Block::BulletList(BulletList {
+            content: vec![vec![
+                Block::Paragraph(Paragraph {
+                    content: vec![make_str("First line")],
+                    source_info: dummy_source_info(),
+                }),
+                Block::Paragraph(Paragraph {
+                    content: vec![make_str("Second line")],
+                    source_info: dummy_source_info(),
+                }),
+            ]],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = blocks_to_string(&blocks);
+        // Continuation lines use spaces (same width as "- ") instead of bullet
+        assert_eq!(result, "- First line\n  Second line");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_diagnostics_accessor() {
+        let ctx = PlainTextWriterContext::new();
+        assert!(ctx.diagnostics().is_empty());
+    }
+
+    #[test]
+    fn test_nested_formatting() {
+        // Test deeply nested inline formatting
+        let inlines = vec![Inline::Strong(Strong {
+            content: vec![Inline::Emph(Emph {
+                content: vec![Inline::Underline(Underline {
+                    content: vec![make_str("nested")],
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+        })];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "nested");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_empty_inlines() {
+        let inlines: Vec<Inline> = vec![];
+        let (result, diags) = inlines_to_string(&inlines);
+        assert_eq!(result, "");
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn test_empty_blocks() {
+        let blocks: Vec<Block> = vec![];
+        let (result, diags) = blocks_to_string(&blocks);
+        assert_eq!(result, "");
+        assert!(diags.is_empty());
     }
 }
