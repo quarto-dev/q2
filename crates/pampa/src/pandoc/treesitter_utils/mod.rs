@@ -25,7 +25,6 @@ pub mod paragraph;
 pub mod pipe_table;
 pub mod postprocess;
 pub mod quote_helpers;
-pub mod raw_attribute;
 pub mod section;
 pub mod shortcode;
 pub mod span_link_helpers;

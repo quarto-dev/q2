@@ -30,7 +30,6 @@ use crate::pandoc::treesitter_utils::pipe_table::{
 };
 use crate::pandoc::treesitter_utils::postprocess::{merge_strs, postprocess};
 use crate::pandoc::treesitter_utils::quote_helpers::process_quoted;
-use crate::pandoc::treesitter_utils::raw_attribute::process_raw_attribute;
 use crate::pandoc::treesitter_utils::section::process_section;
 use crate::pandoc::treesitter_utils::shortcode::{
     process_shortcode, process_shortcode_boolean, process_shortcode_keyword_param,
@@ -1038,7 +1037,6 @@ fn native_visitor<T: Write>(
         "info_string" => process_info_string(node, input_bytes, context),
         "language_attribute" => process_language_attribute(children, context),
         "language_specifier" => create_base_text_from_node_text(node, input_bytes),
-        "raw_attribute" => process_raw_attribute(node, children, context),
         "raw_specifier" => {
             // Extract raw format from raw_specifier node (e.g., "=html")
             let text = std::str::from_utf8(&input_bytes[node.byte_range()])
