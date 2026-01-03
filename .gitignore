@@ -27,3 +27,8 @@ coverage/
 lcov.info
 *.profraw
 *.profdata
+
+# Test/validation artifacts
+.corpus-validation/
+external-sites.tar.gz
+resources/basic-quarto-website-compiled/
