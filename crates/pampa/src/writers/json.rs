@@ -267,6 +267,13 @@ impl<'a> SourceInfoSerializer<'a> {
 struct JsonWriterContext<'a> {
     serializer: SourceInfoSerializer<'a>,
     errors: Vec<DiagnosticMessage>,
+    /// Pre-serialized JSON for ConfigValue Path/Glob/Expr variants.
+    /// Keys are pointers to original ConfigValues in the AST; values are already-serialized JSON.
+    /// This prevents memory reuse bugs where temporary Inlines created during serialization
+    /// get dropped and their memory addresses get reused by subsequent allocations.
+    /// By pre-serializing during the precomputation phase, we ensure all SourceInfos from
+    /// these variants are interned first, and we store the resulting JSON for later retrieval.
+    precomputed_json: HashMap<*const ConfigValue, Value>,
 }
 
 impl<'a> JsonWriterContext<'a> {
@@ -274,6 +281,7 @@ impl<'a> JsonWriterContext<'a> {
         JsonWriterContext {
             serializer: SourceInfoSerializer::new(ast_context, config),
             errors: Vec::new(),
+            precomputed_json: HashMap::new(),
         }
     }
 }
@@ -309,6 +317,232 @@ fn resolve_location(source_info: &SourceInfo, context: &ASTContext) -> Option<Va
             "c": end_mapped.location.column + 1
         }
     }))
+}
+
+/// Build Inlines for a Path ConfigValue variant.
+///
+/// Path values are serialized as a simple Str inline containing the path string.
+fn build_path_inlines(path: &str, source_info: &SourceInfo) -> Inlines {
+    vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+        text: path.to_string(),
+        source_info: source_info.clone(),
+    })]
+}
+
+/// Build Inlines for a Glob ConfigValue variant.
+///
+/// Glob values are serialized as a Span with class="yaml-tagged-string" and tag="glob".
+fn build_glob_inlines(glob: &str, source_info: &SourceInfo) -> Inlines {
+    let mut attributes = LinkedHashMap::new();
+    attributes.insert("tag".to_string(), "glob".to_string());
+    vec![crate::pandoc::Inline::Span(crate::pandoc::Span {
+        attr: (
+            String::new(),
+            vec!["yaml-tagged-string".to_string()],
+            attributes,
+        ),
+        content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+            text: glob.to_string(),
+            source_info: source_info.clone(),
+        })],
+        source_info: SourceInfo::default(),
+        attr_source: AttrSourceInfo::empty(),
+    })]
+}
+
+/// Build Inlines for an Expr ConfigValue variant.
+///
+/// Expr values are serialized as a Span with class="yaml-tagged-string" and tag="expr".
+fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
+    let mut attributes = LinkedHashMap::new();
+    attributes.insert("tag".to_string(), "expr".to_string());
+    vec![crate::pandoc::Inline::Span(crate::pandoc::Span {
+        attr: (
+            String::new(),
+            vec!["yaml-tagged-string".to_string()],
+            attributes,
+        ),
+        content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+            text: expr.to_string(),
+            source_info: source_info.clone(),
+        })],
+        source_info: SourceInfo::default(),
+        attr_source: AttrSourceInfo::empty(),
+    })]
+}
+
+/// Walk a ConfigValue and pre-serialize Inlines for Path/Glob/Expr variants.
+///
+/// This function is called at the start of serialization to build all Inlines
+/// upfront, serialize them to JSON (which interns their SourceInfos into the pool),
+/// and store the resulting JSON for later retrieval. This ensures all SourceInfos
+/// from these variants are interned before any temporary Inlines could be created
+/// and cause memory reuse issues with the pointer cache.
+fn precompute_config_value_json(config_value: &ConfigValue, ctx: &mut JsonWriterContext) {
+    match &config_value.value {
+        ConfigValueKind::Path(s) => {
+            let inlines = build_path_inlines(s, &config_value.source_info);
+            let json = write_inlines(&inlines, ctx);
+            ctx.precomputed_json
+                .insert(config_value as *const ConfigValue, json);
+        }
+        ConfigValueKind::Glob(s) => {
+            let inlines = build_glob_inlines(s, &config_value.source_info);
+            let json = write_inlines(&inlines, ctx);
+            ctx.precomputed_json
+                .insert(config_value as *const ConfigValue, json);
+        }
+        ConfigValueKind::Expr(s) => {
+            let inlines = build_expr_inlines(s, &config_value.source_info);
+            let json = write_inlines(&inlines, ctx);
+            ctx.precomputed_json
+                .insert(config_value as *const ConfigValue, json);
+        }
+        ConfigValueKind::Map(entries) => {
+            for entry in entries {
+                precompute_config_value_json(&entry.value, ctx);
+            }
+        }
+        ConfigValueKind::Array(items) => {
+            for item in items {
+                precompute_config_value_json(item, ctx);
+            }
+        }
+        // Other variants don't need pre-computation
+        _ => {}
+    }
+}
+
+/// Walk a Block and pre-serialize JSON for any ConfigValue Path/Glob/Expr variants.
+fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
+    match block {
+        Block::BlockMetadata(meta) => {
+            precompute_config_value_json(&meta.meta, ctx);
+        }
+        // Recursively walk blocks that contain other blocks
+        Block::BlockQuote(bq) => {
+            for b in &bq.content {
+                precompute_block_json(b, ctx);
+            }
+        }
+        Block::OrderedList(ol) => {
+            for item in &ol.content {
+                for b in item {
+                    precompute_block_json(b, ctx);
+                }
+            }
+        }
+        Block::BulletList(bl) => {
+            for item in &bl.content {
+                for b in item {
+                    precompute_block_json(b, ctx);
+                }
+            }
+        }
+        Block::DefinitionList(dl) => {
+            for (_, blocks_list) in &dl.content {
+                for blocks in blocks_list {
+                    for b in blocks {
+                        precompute_block_json(b, ctx);
+                    }
+                }
+            }
+        }
+        Block::Div(div) => {
+            for b in &div.content {
+                precompute_block_json(b, ctx);
+            }
+        }
+        Block::Figure(fig) => {
+            for b in &fig.content {
+                precompute_block_json(b, ctx);
+            }
+        }
+        Block::Table(table) => {
+            // Walk table bodies (head and body rows of each TableBody)
+            for table_body in &table.bodies {
+                for row in &table_body.head {
+                    for cell in &row.cells {
+                        for b in &cell.content {
+                            precompute_block_json(b, ctx);
+                        }
+                    }
+                }
+                for row in &table_body.body {
+                    for cell in &row.cells {
+                        for b in &cell.content {
+                            precompute_block_json(b, ctx);
+                        }
+                    }
+                }
+            }
+            // Walk table head
+            for row in &table.head.rows {
+                for cell in &row.cells {
+                    for b in &cell.content {
+                        precompute_block_json(b, ctx);
+                    }
+                }
+            }
+            // Walk table foot
+            for row in &table.foot.rows {
+                for cell in &row.cells {
+                    for b in &cell.content {
+                        precompute_block_json(b, ctx);
+                    }
+                }
+            }
+        }
+        Block::Custom(custom) => {
+            // Walk custom node slots for blocks
+            for slot in custom.slots.values() {
+                match slot {
+                    crate::pandoc::Slot::Block(b) => {
+                        precompute_block_json(b, ctx);
+                    }
+                    crate::pandoc::Slot::Blocks(blocks) => {
+                        for b in blocks {
+                            precompute_block_json(b, ctx);
+                        }
+                    }
+                    // Inlines don't contain blocks
+                    crate::pandoc::Slot::Inline(_) | crate::pandoc::Slot::Inlines(_) => {}
+                }
+            }
+        }
+        Block::NoteDefinitionFencedBlock(note) => {
+            for b in &note.content {
+                precompute_block_json(b, ctx);
+            }
+        }
+        // Leaf blocks that don't contain other blocks
+        Block::Plain(_)
+        | Block::Paragraph(_)
+        | Block::LineBlock(_)
+        | Block::CodeBlock(_)
+        | Block::RawBlock(_)
+        | Block::Header(_)
+        | Block::HorizontalRule(_)
+        | Block::NoteDefinitionPara(_)
+        | Block::CaptionBlock(_) => {}
+    }
+}
+
+/// Pre-serialize all Path/Glob/Expr ConfigValues in the entire Pandoc structure.
+///
+/// This must be called at the start of serialization. It builds temporary Inlines
+/// for Path/Glob/Expr variants, serializes them to JSON (which interns their
+/// SourceInfos into the pool), and stores the resulting JSON for later retrieval.
+/// This ensures deterministic pool IDs by interning these SourceInfos before the
+/// main serialization pass, preventing memory reuse bugs with the pointer cache.
+fn precompute_all_json(pandoc: &Pandoc, ctx: &mut JsonWriterContext) {
+    // Walk top-level metadata
+    precompute_config_value_json(&pandoc.meta, ctx);
+
+    // Walk all blocks for BlockMetadata nodes
+    for block in &pandoc.blocks {
+        precompute_block_json(block, ctx);
+    }
 }
 
 /// Helper to build a node JSON object with type, optional content, and source info.
@@ -1352,62 +1586,19 @@ fn write_config_value(value: &ConfigValue, ctx: &mut JsonWriterContext) -> Value
             "c": write_blocks(blocks, ctx),
             "s": ctx.serializer.to_json_ref(&value.source_info)
         }),
-        // Path: serialize as MetaInlines with a single Str (preserving the path string)
-        ConfigValueKind::Path(s) => {
-            let inlines = vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                text: s.clone(),
-                source_info: value.source_info.clone(),
-            })];
+        // Path/Glob/Expr: retrieve pre-serialized JSON from the precomputation phase.
+        // The Inlines for these variants were built and serialized during precompute_all_json(),
+        // which ensures their SourceInfos are interned before any memory reuse can occur.
+        ConfigValueKind::Path(_) | ConfigValueKind::Glob(_) | ConfigValueKind::Expr(_) => {
+            let ptr = value as *const ConfigValue;
+            let precomputed_content = ctx
+                .precomputed_json
+                .get(&ptr)
+                .expect("Path/Glob/Expr ConfigValue should have precomputed JSON")
+                .clone();
             json!({
                 "t": "MetaInlines",
-                "c": write_inlines(&inlines, ctx),
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            })
-        }
-        // Glob, Expr: serialize as MetaInlines with tagged Span wrapper
-        ConfigValueKind::Glob(s) => {
-            let mut attributes = LinkedHashMap::new();
-            attributes.insert("tag".to_string(), "glob".to_string());
-            let span = crate::pandoc::Span {
-                attr: (
-                    String::new(),
-                    vec!["yaml-tagged-string".to_string()],
-                    attributes,
-                ),
-                content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                    text: s.clone(),
-                    source_info: value.source_info.clone(),
-                })],
-                source_info: SourceInfo::default(),
-                attr_source: AttrSourceInfo::empty(),
-            };
-            let inlines = vec![crate::pandoc::Inline::Span(span)];
-            json!({
-                "t": "MetaInlines",
-                "c": write_inlines(&inlines, ctx),
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            })
-        }
-        ConfigValueKind::Expr(s) => {
-            let mut attributes = LinkedHashMap::new();
-            attributes.insert("tag".to_string(), "expr".to_string());
-            let span = crate::pandoc::Span {
-                attr: (
-                    String::new(),
-                    vec!["yaml-tagged-string".to_string()],
-                    attributes,
-                ),
-                content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
-                    text: s.clone(),
-                    source_info: value.source_info.clone(),
-                })],
-                source_info: SourceInfo::default(),
-                attr_source: AttrSourceInfo::empty(),
-            };
-            let inlines = vec![crate::pandoc::Inline::Span(span)];
-            json!({
-                "t": "MetaInlines",
-                "c": write_inlines(&inlines, ctx),
+                "c": precomputed_content,
                 "s": ctx.serializer.to_json_ref(&value.source_info)
             })
         }
@@ -1471,6 +1662,15 @@ pub(crate) fn write_pandoc(
 ) -> Result<Value, Vec<DiagnosticMessage>> {
     // Create the JSON writer context
     let mut ctx = JsonWriterContext::new(ast_context, config);
+
+    // Pre-serialize all Path/Glob/Expr ConfigValue variants.
+    // This builds temporary Inlines, serializes them to JSON (interning their
+    // SourceInfos into the pool), and stores the resulting JSON for later retrieval.
+    // This prevents memory reuse bugs where temporary Inlines created during
+    // the main serialization pass could have their memory addresses reused by
+    // subsequent allocations, causing the SourceInfoSerializer's pointer cache
+    // to return incorrect IDs.
+    precompute_all_json(pandoc, &mut ctx);
 
     // Phase 5: Write ConfigValue directly without MetaValueWithSourceInfo conversion
     // Serialize AST, which will build the pool

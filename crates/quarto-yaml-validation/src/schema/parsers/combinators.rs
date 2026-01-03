@@ -59,8 +59,8 @@ pub(in crate::schema) fn parse_anyof_schema(yaml: &YamlWithSourceInfo) -> Schema
 mod tests {
     use super::*;
     use quarto_yaml::YamlWithSourceInfo;
-    use yaml_rust2::yaml::Hash;
     use yaml_rust2::Yaml;
+    use yaml_rust2::yaml::Hash;
 
     fn source_info() -> quarto_yaml::SourceInfo {
         quarto_yaml::SourceInfo::default()
@@ -152,14 +152,10 @@ anyOf:
             Yaml::String("not an array".to_string()),
         );
 
-        let key_node = YamlWithSourceInfo::new_scalar(
-            Yaml::String("anyOf".to_string()),
-            source_info(),
-        );
-        let value_node = YamlWithSourceInfo::new_scalar(
-            Yaml::String("not an array".to_string()),
-            source_info(),
-        );
+        let key_node =
+            YamlWithSourceInfo::new_scalar(Yaml::String("anyOf".to_string()), source_info());
+        let value_node =
+            YamlWithSourceInfo::new_scalar(Yaml::String("not an array".to_string()), source_info());
 
         let entry = quarto_yaml::YamlHashEntry::new(
             key_node,
@@ -269,14 +265,10 @@ allOf:
             Yaml::String("not an array".to_string()),
         );
 
-        let key_node = YamlWithSourceInfo::new_scalar(
-            Yaml::String("allOf".to_string()),
-            source_info(),
-        );
-        let value_node = YamlWithSourceInfo::new_scalar(
-            Yaml::String("not an array".to_string()),
-            source_info(),
-        );
+        let key_node =
+            YamlWithSourceInfo::new_scalar(Yaml::String("allOf".to_string()), source_info());
+        let value_node =
+            YamlWithSourceInfo::new_scalar(Yaml::String("not an array".to_string()), source_info());
 
         let entry = quarto_yaml::YamlHashEntry::new(
             key_node,
@@ -334,7 +326,10 @@ allOf:
             assert!(s.annotations.tags.is_some());
             let tags = s.annotations.tags.as_ref().unwrap();
             assert!(tags.contains_key("complete-from"));
-            assert_eq!(tags.get("complete-from"), Some(&serde_json::json!(["anyOf", 0])));
+            assert_eq!(
+                tags.get("complete-from"),
+                Some(&serde_json::json!(["anyOf", 0]))
+            );
         } else {
             panic!("Expected AnyOf schema");
         }

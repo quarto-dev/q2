@@ -248,11 +248,8 @@ mod tests {
 
         let outer_key_node =
             YamlWithSourceInfo::new_scalar(Yaml::String(outer_key.to_string()), source_info());
-        let inner_hash_node = YamlWithSourceInfo::new_hash(
-            Yaml::Hash(inner_hash),
-            source_info(),
-            inner_hash_entries,
-        );
+        let inner_hash_node =
+            YamlWithSourceInfo::new_hash(Yaml::Hash(inner_hash), source_info(), inner_hash_entries);
 
         let entry = YamlHashEntry::new(
             outer_key_node,
@@ -448,10 +445,7 @@ mod tests {
     fn test_get_hash_string_array_valid() {
         let yaml = make_hash_with_array(
             "items",
-            vec![
-                Yaml::String("a".to_string()),
-                Yaml::String("b".to_string()),
-            ],
+            vec![Yaml::String("a".to_string()), Yaml::String("b".to_string())],
         );
         let result = get_hash_string_array(&yaml, "items").unwrap();
         assert_eq!(result, Some(vec!["a".to_string(), "b".to_string()]));
@@ -585,7 +579,8 @@ mod tests {
             source_info(),
         );
 
-        let yaml = YamlWithSourceInfo::new_hash(Yaml::Hash(outer_hash), source_info(), vec![outer_entry]);
+        let yaml =
+            YamlWithSourceInfo::new_hash(Yaml::Hash(outer_hash), source_info(), vec![outer_entry]);
 
         let result = get_hash_tags(&yaml);
         assert!(result.is_err());
