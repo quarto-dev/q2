@@ -53,13 +53,17 @@ fn get_shortcode_name(span: &Span) -> Option<&str> {
 
 /// Get parameter spans (all content spans after the name)
 fn get_param_spans(span: &Span) -> Vec<&Span> {
-    span.content.iter().skip(1).filter_map(|inline| {
-        if let Inline::Span(s) = inline {
-            Some(s)
-        } else {
-            None
-        }
-    }).collect()
+    span.content
+        .iter()
+        .skip(1)
+        .filter_map(|inline| {
+            if let Inline::Span(s) = inline {
+                Some(s)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 /// Check if a param span is a keyword param (has data-key)
@@ -89,7 +93,10 @@ fn test_parse_shortcode_with_positional_arg() {
     assert_eq!(get_shortcode_name(span), Some("video"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("test.mp4"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("test.mp4")
+    );
 }
 
 #[test]
@@ -114,7 +121,10 @@ fn test_parse_boolean_true() {
     assert_eq!(get_shortcode_name(span), Some("toggle"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("true"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("true")
+    );
 }
 
 #[test]
@@ -124,7 +134,10 @@ fn test_parse_boolean_false() {
 
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("false"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("false")
+    );
 }
 
 // ============================================================================
@@ -139,7 +152,10 @@ fn test_parse_number_integer() {
     assert_eq!(get_shortcode_name(span), Some("counter"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("42"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("42")
+    );
 }
 
 #[test]
@@ -149,7 +165,10 @@ fn test_parse_number_float() {
 
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("1.5"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("1.5")
+    );
 }
 
 #[test]
@@ -159,7 +178,10 @@ fn test_parse_number_negative() {
 
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("-10"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("-10")
+    );
 }
 
 // ============================================================================
@@ -175,8 +197,14 @@ fn test_parse_keyword_string() {
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
     assert!(is_keyword_param(params[0]));
-    assert_eq!(params[0].attr.2.get("data-key").map(|s| s.as_str()), Some("file"));
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("test.qmd"));
+    assert_eq!(
+        params[0].attr.2.get("data-key").map(|s| s.as_str()),
+        Some("file")
+    );
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("test.qmd")
+    );
 }
 
 #[test]
@@ -187,8 +215,14 @@ fn test_parse_keyword_number() {
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
     assert!(is_keyword_param(params[0]));
-    assert_eq!(params[0].attr.2.get("data-key").map(|s| s.as_str()), Some("width"));
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("800"));
+    assert_eq!(
+        params[0].attr.2.get("data-key").map(|s| s.as_str()),
+        Some("width")
+    );
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("800")
+    );
 }
 
 #[test]
@@ -199,8 +233,14 @@ fn test_parse_keyword_boolean() {
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
     assert!(is_keyword_param(params[0]));
-    assert_eq!(params[0].attr.2.get("data-key").map(|s| s.as_str()), Some("enabled"));
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("true"));
+    assert_eq!(
+        params[0].attr.2.get("data-key").map(|s| s.as_str()),
+        Some("enabled")
+    );
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("true")
+    );
 }
 
 #[test]
@@ -226,7 +266,10 @@ fn test_parse_mixed_positional_and_keyword() {
     assert_eq!(params.len(), 2);
     // First is positional (no data-key)
     assert!(!is_keyword_param(params[0]));
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("test.mp4"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("test.mp4")
+    );
     // Second is keyword
     assert!(is_keyword_param(params[1]));
 }
@@ -311,7 +354,10 @@ fn test_parse_quoted_string_double() {
     assert_eq!(get_shortcode_name(span), Some("include"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("file with spaces.qmd"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("file with spaces.qmd")
+    );
 }
 
 #[test]
@@ -322,7 +368,10 @@ fn test_parse_quoted_string_single() {
     assert_eq!(get_shortcode_name(span), Some("include"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("file with spaces.qmd"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("file with spaces.qmd")
+    );
 }
 
 #[test]
@@ -334,7 +383,10 @@ fn test_parse_escaped_double_quote() {
     assert_eq!(get_shortcode_name(span), Some("hello"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("foo \" bar"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("foo \" bar")
+    );
 }
 
 #[test]
@@ -346,5 +398,8 @@ fn test_parse_escaped_single_quote() {
     assert_eq!(get_shortcode_name(span), Some("hello"));
     let params = get_param_spans(span);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("foo ' bar"));
+    assert_eq!(
+        params[0].attr.2.get("data-value").map(|s| s.as_str()),
+        Some("foo ' bar")
+    );
 }
