@@ -705,22 +705,27 @@ fn native_visitor<T: Write>(
         "shortcode_name" => process_shortcode_string_arg(node, input_bytes, context),
         "shortcode_naked_string" => process_shortcode_string_arg(node, input_bytes, context),
         "shortcode_string" => {
-            // Extract the quoted text from the child
+            // Extract the quoted text by getting the full node text and stripping quotes
+            // The grammar uses anonymous rules (_commonmark_*_quote_string) so there are
+            // no named children - we must extract and strip quotes ourselves
             let extract_quoted_text = || {
-                if let Some(child) = node.child(0) {
-                    let text = child.utf8_text(input_bytes).unwrap().to_string();
-                    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
-                        &node_source_info_with_context(&child, context),
-                        context,
-                    );
-                    PandocNativeIntermediate::IntermediateBaseText(text, range)
+                let full_text = node.utf8_text(input_bytes).unwrap();
+                // Strip surrounding quotes and unescape internal escaped quotes
+                // The grammar recognizes \" in double-quoted and \' in single-quoted strings
+                let text = if full_text.starts_with('"') && full_text.ends_with('"') {
+                    let inner = &full_text[1..full_text.len() - 1];
+                    inner.replace("\\\"", "\"")
+                } else if full_text.starts_with('\'') && full_text.ends_with('\'') {
+                    let inner = &full_text[1..full_text.len() - 1];
+                    inner.replace("\\'", "'")
                 } else {
-                    let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
-                        &node_source_info_with_context(node, context),
-                        context,
-                    );
-                    PandocNativeIntermediate::IntermediateBaseText(String::new(), range)
-                }
+                    full_text.to_string()
+                };
+                let range = crate::pandoc::location::source_info_to_qsm_range_or_fallback(
+                    &node_source_info_with_context(node, context),
+                    context,
+                );
+                PandocNativeIntermediate::IntermediateBaseText(text, range)
             };
             process_shortcode_string(&extract_quoted_text, node, context)
         }

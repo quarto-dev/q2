@@ -395,6 +395,133 @@ If you encounter:
 
 Stop and report to the user rather than writing incorrect tests or spending excessive time on low-value targets.
 
+## Handling Intentionally Unreachable Code
+
+Some code paths are legitimately unreachable during normal operation - internal consistency checks, panic branches for impossible states, etc. These inflate the "uncovered lines" count but can't be meaningfully tested.
+
+### Identifying Intentionally Unreachable Code
+
+Common patterns:
+- `panic!("Internal error: ...")` in match arms that should never be reached
+- `unreachable!()` macros
+- Error branches that indicate programming errors rather than user errors
+- Defensive checks that guard against impossible states
+
+### Option 1: Exclude from Coverage with `#[coverage(off)]`
+
+Use the `#[coverage(off)]` attribute (nightly only) to exclude specific functions:
+
+```rust
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
+
+#[cfg_attr(coverage_nightly, coverage(off))]
+fn internal_consistency_check() {
+    // This panic indicates a bug in our code, not user error
+    panic!("Internal error: state should never be None here");
+}
+```
+
+**Required Cargo.toml configuration** (to silence `unexpected_cfgs` warnings):
+
+```toml
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage,coverage_nightly)'] }
+```
+
+### Option 2: Refactor to Return Result/Option
+
+If the panic could be replaced with proper error handling:
+
+```rust
+// Before: panic branch that's hard to test
+fn get_value(map: &HashMap<String, Value>, key: &str) -> Value {
+    map.get(key).cloned().expect("key must exist")  // Uncovered panic
+}
+
+// After: caller handles the error case
+fn get_value(map: &HashMap<String, Value>, key: &str) -> Option<Value> {
+    map.get(key).cloned()  // No panic to cover
+}
+```
+
+### When to Use Each Approach
+
+| Situation | Approach |
+|-----------|----------|
+| True internal invariant violation | `#[coverage(off)]` |
+| Could legitimately fail at runtime | Refactor to `Result`/`Option` |
+| Match arm that "can't happen" | Consider if it actually can, then `#[coverage(off)]` |
+| Defensive programming check | `#[coverage(off)]` with comment explaining why |
+
+### Documenting Coverage Exclusions
+
+When using `#[coverage(off)]`, add a comment explaining why:
+
+```rust
+#[cfg_attr(coverage_nightly, coverage(off))]
+// Coverage exclusion: This panic is an internal consistency check.
+// The grammar guarantees this node always has a child, so the else
+// branch is unreachable during normal parsing.
+fn process_node(node: &Node) -> Result {
+    if let Some(child) = node.child(0) {
+        process_child(child)
+    } else {
+        panic!("Grammar guarantees child exists")
+    }
+}
+```
+
+## Investigating Apparent Limitations
+
+When you encounter code that "can't be tested" or a feature that "doesn't work," **investigate thoroughly before concluding it's a fundamental limitation**.
+
+### The Investigation Process
+
+1. **Use verbose/debug output**: Many tools have `-v` flags that show internal state
+2. **Trace the data flow**: Where does the input come from? What transforms it?
+3. **Check the grammar/schema**: Is the structure what you expect?
+4. **Read the processing code**: Does it handle the structure correctly?
+
+### Example: A "Parser Limitation" That Wasn't
+
+During a coverage session, quoted strings in shortcodes appeared to produce empty output:
+
+```
+{{< include "file with spaces.qmd" >}}
+→ data-value: ""  (empty!)
+```
+
+**Initial (wrong) conclusion**: "The parser has a limitation with quoted strings."
+
+**Proper investigation**:
+1. Ran with `-v` flag - saw the grammar correctly produced a `shortcode_string` node
+2. Checked the grammar - it properly defined quoted strings with escape handling
+3. Read the processing code - found it was calling `node.child(0)` expecting a named child
+4. Realized anonymous grammar rules (`_commonmark_*_quote_string`) don't create named children
+5. **Actual bug**: Code assumed child nodes existed when the grammar inlined them
+
+**The fix**: Extract full node text and strip quotes, rather than accessing non-existent children.
+
+### Red Flags That Warrant Investigation
+
+- "The parser doesn't support X" - Did you verify with verbose output?
+- "This can't be tested" - Is it the code or your test approach?
+- "The grammar is wrong" - Did you trace through the processing code?
+- Empty or unexpected output - Where does the data get lost?
+
+### Reporting Findings
+
+When you investigate and find an actual bug:
+
+1. **Document the symptoms**: What behavior did you observe?
+2. **Document the root cause**: What was actually wrong?
+3. **Write a test that fails first**: Confirm the bug exists
+4. **Fix the bug**: Address the root cause
+5. **Verify the test passes**: Confirm the fix works
+6. **Add regression tests**: Prevent future reoccurrence
+
+This turns a "coverage session" into genuine bug discovery - high-value work!
+
 ## Dead Code Discovery
 
 When investigating files with 0% coverage, you may discover **dead code** - code that is declared but never used. This is valuable discovery work.

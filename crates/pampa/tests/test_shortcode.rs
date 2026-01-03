@@ -302,6 +302,49 @@ fn test_multiple_shortcodes_in_paragraph() {
 // ============================================================================
 // Quoted string tests
 // ============================================================================
-// Note: Quoted string parsing in shortcodes currently has limitations.
-// The parser produces empty strings for quoted arguments.
-// TODO: Fix parser to handle quoted strings in shortcodes properly.
+
+#[test]
+fn test_parse_quoted_string_double() {
+    let pandoc = parse_qmd(r#"{{< include "file with spaces.qmd" >}}"#);
+    let span = get_first_shortcode_span(&pandoc);
+
+    assert_eq!(get_shortcode_name(span), Some("include"));
+    let params = get_param_spans(span);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("file with spaces.qmd"));
+}
+
+#[test]
+fn test_parse_quoted_string_single() {
+    let pandoc = parse_qmd("{{< include 'file with spaces.qmd' >}}");
+    let span = get_first_shortcode_span(&pandoc);
+
+    assert_eq!(get_shortcode_name(span), Some("include"));
+    let params = get_param_spans(span);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("file with spaces.qmd"));
+}
+
+#[test]
+fn test_parse_escaped_double_quote() {
+    // Test that \" inside double-quoted strings is unescaped to "
+    let pandoc = parse_qmd(r#"{{< hello "foo \" bar" >}}"#);
+    let span = get_first_shortcode_span(&pandoc);
+
+    assert_eq!(get_shortcode_name(span), Some("hello"));
+    let params = get_param_spans(span);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("foo \" bar"));
+}
+
+#[test]
+fn test_parse_escaped_single_quote() {
+    // Test that \' inside single-quoted strings is unescaped to '
+    let pandoc = parse_qmd(r"{{< hello 'foo \' bar' >}}");
+    let span = get_first_shortcode_span(&pandoc);
+
+    assert_eq!(get_shortcode_name(span), Some("hello"));
+    let params = get_param_spans(span);
+    assert_eq!(params.len(), 1);
+    assert_eq!(params[0].attr.2.get("data-value").map(|s| s.as_str()), Some("foo ' bar"));
+}
