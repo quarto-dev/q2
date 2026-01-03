@@ -52,13 +52,13 @@ jobs:
           cache-on-failure: true
 
       # Cache cargo-nextest and insta separately to avoid reinstalling
-      - name: Install cargo-binstall
-        uses: cargo-bins/cargo-binstall@main
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
 
-      - name: Install nextest and insta
-        shell: bash
-        run: |
-          cargo binstall --no-confirm cargo-nextest cargo-insta
+      - name: Install cargo-insta
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-insta
 
       # Pandoc setup
       - name: Set up Pandoc (Linux)
