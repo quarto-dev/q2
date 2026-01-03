@@ -1,9 +1,6 @@
-# Tests a broad set of Quarto functionality that users are likely to encounter.
-# A failure indicates some signficant portion of functionality is likely to be broken.
 name: Test Suite
 on:
   push:
-    # only trigger on branches, not on tags
     branches:
       - main
       - kyoto
@@ -11,6 +8,7 @@ on:
     branches:
       - main
       - kyoto
+
 jobs:
   test-suite:
     strategy:
@@ -25,27 +23,42 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
 
+      # Fix mtimes IMMEDIATELY after checkout, before anything else
+      - name: Restore file modification times
+        shell: bash
+        run: |
+          git ls-files | while read file; do
+            time=$(git log -1 --format='@%ct' -- "$file" 2>/dev/null || echo '@0')
+            [ "$time" != "@0" ] && touch -d "$time" "$file" 2>/dev/null || true
+          done
+
       - name: Set up Homebrew
         if: runner.os == 'macOS'
         id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@main
 
-      # Rust setup
-      - name: Set up Rust nightly (macOS)
-        if: runner.os == 'macOS'
+      # Consistent Rust setup for both platforms
+      - name: Set up Rust nightly
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Set up Rust nightly (Linux)
-        if: runner.os == 'Linux'
-        run: rustup override set nightly
-        shell: bash
-
       - name: Output rust version
-        run: rustup --version
         shell: bash
+        run: rustup --version
 
+      # Cache Rust AFTER toolchain is set up
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      # Cache cargo-nextest and insta separately to avoid reinstalling
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install nextest and insta
+        shell: bash
+        run: |
+          cargo binstall --no-confirm cargo-nextest cargo-insta
 
       # Pandoc setup
       - name: Set up Pandoc (Linux)
@@ -66,8 +79,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install libc6-dev
-          sudo apt-get install gcc-multilib
+          sudo apt-get install -y libc6-dev gcc-multilib
           curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
           gunzip tree-sitter-linux-x86.gz
           chmod +x tree-sitter-linux-x86
@@ -76,27 +88,18 @@ jobs:
       - name: Set up tree-sitter CLI (macOS)
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
-        shell: bash
 
-      # build and run tests
-      # on windows, insta install will be 
-      # powershell -c "irm https://insta.rs/install.ps1 | iex"
-      # see https://insta.rs/docs/quickstart/
-      - name: Install insta and nextest
-        run: |
-          cargo install cargo-nextest
-          curl -LsSf https://insta.rs/install.sh | sh
-        shell: bash
-
+      # Build and test
       - name: Build
-        run: cargo build
         shell: bash
+        run: cargo build
 
       - name: Test block tree-sitter grammar
-        run: |
-            cd crates/tree-sitter-qmd/tree-sitter-markdown
-            tree-sitter test
-        
-      - name: Test Rust code
-        run: cargo nextest run
         shell: bash
+        run: |
+          cd crates/tree-sitter-qmd/tree-sitter-markdown
+          tree-sitter test
+
+      - name: Test Rust code
+        shell: bash
+        run: cargo nextest run
