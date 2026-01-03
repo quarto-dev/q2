@@ -1058,6 +1058,7 @@ static bool parse_example_list_marker(Scanner *s, TSLexer *lexer,
 
 static bool parse_cite_suppress_author(Scanner *_, TSLexer *lexer,
                                        const bool *valid_symbols) {
+    (void)(_);
     if (lexer->lookahead == '@') {
         lexer->advance(lexer, false);
         if (lexer->lookahead == '{' && valid_symbols[CITE_SUPPRESS_AUTHOR_WITH_OPEN_BRACKET]) {
@@ -2091,6 +2092,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 valid_symbols[RAW_SPECIFIER]) {
                 return parse_open_angle_brace(lexer, valid_symbols);
             }
+            break;
         case '\r':
         case '\n':
             if (valid_symbols[BLANK_LINE_START]) {
@@ -2139,6 +2141,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
                 DEBUG_PRINT("Attempting to lex RAW_SPECIFIER\n");
                 return parse_raw_specifier(lexer, valid_symbols);
             }
+            break;
         case '+':
             // A '+' could be a list marker
             return parse_plus(s, lexer, valid_symbols);
