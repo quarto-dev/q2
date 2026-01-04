@@ -119,4 +119,37 @@ mod tests {
         assert!(ctx.has_errors());
         assert_eq!(ctx.diagnostics().len(), 3);
     }
+
+    #[test]
+    fn test_warn_at() {
+        let mut ctx = FilterContext::new();
+        let source_info = SourceInfo::original(quarto_source_map::FileId(1), 10, 20);
+        ctx.warn_at("Warning with location", source_info);
+        assert!(!ctx.has_errors()); // Warnings don't count as errors
+        assert_eq!(ctx.diagnostics().len(), 1);
+    }
+
+    #[test]
+    fn test_error_at() {
+        let mut ctx = FilterContext::new();
+        let source_info = SourceInfo::original(quarto_source_map::FileId(1), 10, 20);
+        ctx.error_at("Error with location", source_info);
+        assert!(ctx.has_errors());
+        assert_eq!(ctx.diagnostics().len(), 1);
+    }
+
+    #[test]
+    fn test_mixed_diagnostics_with_locations() {
+        let mut ctx = FilterContext::new();
+        let source_info1 = SourceInfo::original(quarto_source_map::FileId(1), 0, 10);
+        let source_info2 = SourceInfo::original(quarto_source_map::FileId(1), 20, 30);
+
+        ctx.warn("Plain warning");
+        ctx.warn_at("Warning at line 1", source_info1);
+        ctx.error("Plain error");
+        ctx.error_at("Error at line 2", source_info2);
+
+        assert!(ctx.has_errors());
+        assert_eq!(ctx.diagnostics().len(), 4);
+    }
 }

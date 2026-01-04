@@ -1658,3 +1658,2415 @@ fn register_list_constructors(lua: &Lua, pandoc: &LuaTable) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pandoc::table::{Alignment, Cell, ColWidth, Row, TableBody, TableFoot, TableHead};
+    use mlua::Lua;
+
+    // Helper to create a Lua environment with the pandoc namespace registered
+    fn create_lua_env() -> Lua {
+        let lua = Lua::new();
+        register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+        lua
+    }
+
+    // Helper to create default source info
+    fn si() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::default()
+    }
+
+    // ========== LuaCaption UserData tests ==========
+
+    #[test]
+    fn test_lua_caption_short_some() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: Some(vec![Inline::Str(Str {
+                text: "short text".into(),
+                source_info: si(),
+            })]),
+            long: None,
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        lua.globals().set("caption", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return caption.short").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_caption_short_none() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: None,
+            long: None,
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        lua.globals().set("caption", ud).unwrap();
+
+        let result: Value = lua.load("return caption.short").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    #[test]
+    fn test_lua_caption_long_some() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: None,
+            long: Some(vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "long text".into(),
+                    source_info: si(),
+                })],
+                source_info: si(),
+            })]),
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        lua.globals().set("caption", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return caption.long").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_caption_long_none() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: None,
+            long: None,
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        lua.globals().set("caption", ud).unwrap();
+
+        let result: Value = lua.load("return caption.long").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    #[test]
+    fn test_lua_caption_tag() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: None,
+            long: None,
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        lua.globals().set("caption", ud).unwrap();
+
+        let result: String = lua.load("return caption.t").eval().unwrap();
+        assert_eq!(result, "Caption");
+
+        let result: String = lua.load("return caption.tag").eval().unwrap();
+        assert_eq!(result, "Caption");
+    }
+
+    #[test]
+    fn test_lua_caption_unknown_field() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: None,
+            long: None,
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        lua.globals().set("caption", ud).unwrap();
+
+        let result: Value = lua.load("return caption.unknown").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== LuaTableHead UserData tests ==========
+
+    #[test]
+    fn test_lua_table_head_rows() {
+        let lua = create_lua_env();
+        let head = TableHead {
+            rows: vec![Row {
+                cells: vec![],
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        lua.globals().set("head", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return head.rows").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_table_head_attr() {
+        let lua = create_lua_env();
+        let head = TableHead {
+            rows: vec![],
+            attr: (
+                "test-id".into(),
+                vec!["class1".into()],
+                LinkedHashMap::new(),
+            ),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        lua.globals().set("head", ud).unwrap();
+
+        let result: Value = lua.load("return head.attr").eval().unwrap();
+        assert!(matches!(result, Value::UserData(_)));
+    }
+
+    #[test]
+    fn test_lua_table_head_tag() {
+        let lua = create_lua_env();
+        let head = TableHead {
+            rows: vec![],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        lua.globals().set("head", ud).unwrap();
+
+        let result: String = lua.load("return head.t").eval().unwrap();
+        assert_eq!(result, "TableHead");
+    }
+
+    #[test]
+    fn test_lua_table_head_unknown_field() {
+        let lua = create_lua_env();
+        let head = TableHead {
+            rows: vec![],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        lua.globals().set("head", ud).unwrap();
+
+        let result: Value = lua.load("return head.unknown").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== LuaTableFoot UserData tests ==========
+
+    #[test]
+    fn test_lua_table_foot_rows() {
+        let lua = create_lua_env();
+        let foot = TableFoot {
+            rows: vec![Row {
+                cells: vec![],
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        lua.globals().set("foot", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return foot.rows").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_table_foot_attr() {
+        let lua = create_lua_env();
+        let foot = TableFoot {
+            rows: vec![],
+            attr: ("foot-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        lua.globals().set("foot", ud).unwrap();
+
+        let result: Value = lua.load("return foot.attr").eval().unwrap();
+        assert!(matches!(result, Value::UserData(_)));
+    }
+
+    #[test]
+    fn test_lua_table_foot_tag() {
+        let lua = create_lua_env();
+        let foot = TableFoot {
+            rows: vec![],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        lua.globals().set("foot", ud).unwrap();
+
+        let result: String = lua.load("return foot.tag").eval().unwrap();
+        assert_eq!(result, "TableFoot");
+    }
+
+    #[test]
+    fn test_lua_table_foot_unknown_field() {
+        let lua = create_lua_env();
+        let foot = TableFoot {
+            rows: vec![],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        lua.globals().set("foot", ud).unwrap();
+
+        let result: Value = lua.load("return foot.unknown").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== LuaTableBody UserData tests ==========
+
+    #[test]
+    fn test_lua_table_body_body() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![Row {
+                cells: vec![],
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            head: vec![],
+            rowhead_columns: 0,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        lua.globals().set("body", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return body.body").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_table_body_head() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![],
+            head: vec![Row {
+                cells: vec![],
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            rowhead_columns: 0,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        lua.globals().set("body", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return body.head").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_table_body_row_head_columns() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![],
+            head: vec![],
+            rowhead_columns: 2,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        lua.globals().set("body", ud).unwrap();
+
+        let result: i64 = lua.load("return body.row_head_columns").eval().unwrap();
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn test_lua_table_body_attr() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![],
+            head: vec![],
+            rowhead_columns: 0,
+            attr: ("body-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        lua.globals().set("body", ud).unwrap();
+
+        let result: Value = lua.load("return body.attr").eval().unwrap();
+        assert!(matches!(result, Value::UserData(_)));
+    }
+
+    #[test]
+    fn test_lua_table_body_tag() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![],
+            head: vec![],
+            rowhead_columns: 0,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        lua.globals().set("body", ud).unwrap();
+
+        let result: String = lua.load("return body.t").eval().unwrap();
+        assert_eq!(result, "TableBody");
+    }
+
+    #[test]
+    fn test_lua_table_body_unknown_field() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![],
+            head: vec![],
+            rowhead_columns: 0,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        lua.globals().set("body", ud).unwrap();
+
+        let result: Value = lua.load("return body.unknown").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== LuaRow UserData tests ==========
+
+    #[test]
+    fn test_lua_row_cells() {
+        let lua = create_lua_env();
+        let row = Row {
+            cells: vec![Cell {
+                content: vec![],
+                alignment: Alignment::Default,
+                row_span: 1,
+                col_span: 1,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        lua.globals().set("row", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return row.cells").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_row_attr() {
+        let lua = create_lua_env();
+        let row = Row {
+            cells: vec![],
+            attr: ("row-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        lua.globals().set("row", ud).unwrap();
+
+        let result: Value = lua.load("return row.attr").eval().unwrap();
+        assert!(matches!(result, Value::UserData(_)));
+    }
+
+    #[test]
+    fn test_lua_row_tag() {
+        let lua = create_lua_env();
+        let row = Row {
+            cells: vec![],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        lua.globals().set("row", ud).unwrap();
+
+        let result: String = lua.load("return row.t").eval().unwrap();
+        assert_eq!(result, "Row");
+    }
+
+    #[test]
+    fn test_lua_row_unknown_field() {
+        let lua = create_lua_env();
+        let row = Row {
+            cells: vec![],
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        lua.globals().set("row", ud).unwrap();
+
+        let result: Value = lua.load("return row.unknown").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== LuaCell UserData tests ==========
+
+    #[test]
+    fn test_lua_cell_content() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![],
+                source_info: si(),
+            })],
+            alignment: Alignment::Default,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: mlua::Table = lua.load("return cell.content").eval().unwrap();
+        assert_eq!(result.raw_len(), 1);
+    }
+
+    #[test]
+    fn test_lua_cell_alignment_default() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Default,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: String = lua.load("return cell.alignment").eval().unwrap();
+        assert_eq!(result, "AlignDefault");
+    }
+
+    #[test]
+    fn test_lua_cell_alignment_left() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Left,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: String = lua.load("return cell.alignment").eval().unwrap();
+        assert_eq!(result, "AlignLeft");
+    }
+
+    #[test]
+    fn test_lua_cell_alignment_center() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Center,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: String = lua.load("return cell.alignment").eval().unwrap();
+        assert_eq!(result, "AlignCenter");
+    }
+
+    #[test]
+    fn test_lua_cell_alignment_right() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Right,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: String = lua.load("return cell.alignment").eval().unwrap();
+        assert_eq!(result, "AlignRight");
+    }
+
+    #[test]
+    fn test_lua_cell_row_span() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Default,
+            row_span: 3,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: i64 = lua.load("return cell.row_span").eval().unwrap();
+        assert_eq!(result, 3);
+    }
+
+    #[test]
+    fn test_lua_cell_col_span() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Default,
+            row_span: 1,
+            col_span: 2,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: i64 = lua.load("return cell.col_span").eval().unwrap();
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn test_lua_cell_attr() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Default,
+            row_span: 1,
+            col_span: 1,
+            attr: ("cell-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: Value = lua.load("return cell.attr").eval().unwrap();
+        assert!(matches!(result, Value::UserData(_)));
+    }
+
+    #[test]
+    fn test_lua_cell_tag() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Default,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: String = lua.load("return cell.t").eval().unwrap();
+        assert_eq!(result, "Cell");
+    }
+
+    #[test]
+    fn test_lua_cell_unknown_field() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Default,
+            row_span: 1,
+            col_span: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        lua.globals().set("cell", ud).unwrap();
+
+        let result: Value = lua.load("return cell.unknown").eval().unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== Inline constructor tests ==========
+
+    #[test]
+    fn test_inline_str() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Str("hello")
+                return s.text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_inline_space() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Space()
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Space");
+    }
+
+    #[test]
+    fn test_inline_soft_break() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.SoftBreak()
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "SoftBreak");
+    }
+
+    #[test]
+    fn test_inline_line_break() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.LineBreak()
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "LineBreak");
+    }
+
+    #[test]
+    fn test_inline_emph() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local e = pandoc.Emph({pandoc.Str("text")})
+                return e.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Emph");
+    }
+
+    #[test]
+    fn test_inline_strong() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Strong({pandoc.Str("text")})
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Strong");
+    }
+
+    #[test]
+    fn test_inline_underline() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local u = pandoc.Underline({pandoc.Str("text")})
+                return u.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Underline");
+    }
+
+    #[test]
+    fn test_inline_strikeout() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Strikeout({pandoc.Str("text")})
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Strikeout");
+    }
+
+    #[test]
+    fn test_inline_superscript() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Superscript({pandoc.Str("2")})
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Superscript");
+    }
+
+    #[test]
+    fn test_inline_subscript() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Subscript({pandoc.Str("2")})
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Subscript");
+    }
+
+    #[test]
+    fn test_inline_smallcaps() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.SmallCaps({pandoc.Str("text")})
+                return s.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "SmallCaps");
+    }
+
+    #[test]
+    fn test_inline_quoted_single() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local q = pandoc.Quoted("SingleQuote", {pandoc.Str("text")})
+                return q.quotetype
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "SingleQuote");
+    }
+
+    #[test]
+    fn test_inline_quoted_double() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local q = pandoc.Quoted("DoubleQuote", {pandoc.Str("text")})
+                return q.quotetype
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "DoubleQuote");
+    }
+
+    #[test]
+    fn test_inline_quoted_invalid() {
+        let lua = create_lua_env();
+        let result: mlua::Result<Value> = lua
+            .load(r#"return pandoc.Quoted("InvalidQuote", {pandoc.Str("text")})"#)
+            .eval();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_inline_code() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local c = pandoc.Code("x = 1")
+                return c.text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "x = 1");
+    }
+
+    #[test]
+    fn test_inline_code_with_attr() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local c = pandoc.Code("x = 1", pandoc.Attr("id", {"class1"}))
+                return c.attr.identifier
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "id");
+    }
+
+    #[test]
+    fn test_inline_math_inline() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local m = pandoc.Math("InlineMath", "x^2")
+                return m.mathtype
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "InlineMath");
+    }
+
+    #[test]
+    fn test_inline_math_display() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local m = pandoc.Math("DisplayMath", "E=mc^2")
+                return m.mathtype
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "DisplayMath");
+    }
+
+    #[test]
+    fn test_inline_math_invalid() {
+        let lua = create_lua_env();
+        let result: mlua::Result<Value> =
+            lua.load(r#"return pandoc.Math("InvalidMath", "x")"#).eval();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_inline_raw_inline() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local r = pandoc.RawInline("html", "<b>bold</b>")
+                return r.format .. "|" .. r.text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "html|<b>bold</b>");
+    }
+
+    #[test]
+    fn test_inline_link() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.Link({pandoc.Str("click")}, "https://example.com", "title")
+                return l.target .. "|" .. l.title
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "https://example.com|title");
+    }
+
+    #[test]
+    fn test_inline_link_minimal() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.Link({pandoc.Str("click")}, "https://example.com")
+                return l.target
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "https://example.com");
+    }
+
+    #[test]
+    fn test_inline_image() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local i = pandoc.Image({pandoc.Str("alt")}, "image.png", "title")
+                return i.src .. "|" .. i.title
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "image.png|title");
+    }
+
+    #[test]
+    fn test_inline_span() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local s = pandoc.Span({pandoc.Str("text")}, pandoc.Attr("id", {"class1"}))
+                return s.attr.identifier
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "id");
+    }
+
+    #[test]
+    fn test_inline_note() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local n = pandoc.Note({pandoc.Para({pandoc.Str("note content")})})
+                return n.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Note");
+    }
+
+    #[test]
+    fn test_inline_cite() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local citation = pandoc.Citation("smith2020", "NormalCitation")
+                local c = pandoc.Cite({citation}, {pandoc.Str("@smith2020")})
+                return c.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Cite");
+    }
+
+    // ========== Block constructor tests ==========
+
+    #[test]
+    fn test_block_para() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local p = pandoc.Para({pandoc.Str("text")})
+                return p.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Para");
+    }
+
+    #[test]
+    fn test_block_plain() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local p = pandoc.Plain({pandoc.Str("text")})
+                return p.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Plain");
+    }
+
+    #[test]
+    fn test_block_header() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local h = pandoc.Header(2, {pandoc.Str("Title")})
+                return h.level
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn test_block_header_with_attr() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local h = pandoc.Header(1, {pandoc.Str("Title")}, pandoc.Attr("heading-id"))
+                return h.attr.identifier
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "heading-id");
+    }
+
+    #[test]
+    fn test_block_code_block() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local c = pandoc.CodeBlock("print('hello')")
+                return c.text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "print('hello')");
+    }
+
+    #[test]
+    fn test_block_code_block_with_attr() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local c = pandoc.CodeBlock("print('hello')", pandoc.Attr("", {"python"}))
+                return c.classes[1]
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "python");
+    }
+
+    #[test]
+    fn test_block_raw_block() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local r = pandoc.RawBlock("html", "<div>content</div>")
+                return r.format .. "|" .. r.text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "html|<div>content</div>");
+    }
+
+    #[test]
+    fn test_block_block_quote() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local b = pandoc.BlockQuote({pandoc.Para({pandoc.Str("quoted")})})
+                return b.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "BlockQuote");
+    }
+
+    #[test]
+    fn test_block_bullet_list() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.BulletList({{pandoc.Plain({pandoc.Str("item")})}})
+                return l.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "BulletList");
+    }
+
+    #[test]
+    fn test_block_ordered_list() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.OrderedList({{pandoc.Plain({pandoc.Str("item")})}})
+                return l.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "OrderedList");
+    }
+
+    #[test]
+    fn test_block_div() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local d = pandoc.Div({pandoc.Para({pandoc.Str("content")})}, pandoc.Attr("div-id"))
+                return d.attr.identifier
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "div-id");
+    }
+
+    #[test]
+    fn test_block_horizontal_rule() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local h = pandoc.HorizontalRule()
+                return h.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "HorizontalRule");
+    }
+
+    #[test]
+    fn test_block_definition_list() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local d = pandoc.DefinitionList({
+                    {{pandoc.Str("term")}, {{pandoc.Plain({pandoc.Str("definition")})}}}
+                })
+                return d.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "DefinitionList");
+    }
+
+    #[test]
+    fn test_block_line_block() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.LineBlock({
+                    {pandoc.Str("line 1")},
+                    {pandoc.Str("line 2")}
+                })
+                return l.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "LineBlock");
+    }
+
+    #[test]
+    fn test_block_figure() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local f = pandoc.Figure({pandoc.Para({pandoc.Str("content")})})
+                return f.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Figure");
+    }
+
+    #[test]
+    fn test_block_figure_with_caption() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local caption = pandoc.Caption({pandoc.Str("short")}, {pandoc.Para({pandoc.Str("long")})})
+                local f = pandoc.Figure({pandoc.Para({pandoc.Str("content")})}, caption)
+                return f.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Figure");
+    }
+
+    #[test]
+    fn test_block_table() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local head = pandoc.TableHead({})
+                local foot = pandoc.TableFoot({})
+                local bodies = {}
+                local t = pandoc.Table({}, {}, head, bodies, foot)
+                return t.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Table");
+    }
+
+    // ========== parse_attr tests ==========
+
+    #[test]
+    fn test_parse_attr_none() {
+        let lua = Lua::new();
+        let result = parse_attr(&lua, None).unwrap();
+        assert_eq!(result.0, "");
+        assert!(result.1.is_empty());
+        assert!(result.2.is_empty());
+    }
+
+    #[test]
+    fn test_parse_attr_string() {
+        let lua = Lua::new();
+        let s = lua.create_string("my-id").unwrap();
+        let result = parse_attr(&lua, Some(Value::String(s))).unwrap();
+        assert_eq!(result.0, "my-id");
+        assert!(result.1.is_empty());
+        assert!(result.2.is_empty());
+    }
+
+    #[test]
+    fn test_parse_attr_table() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.set("identifier", "my-id").unwrap();
+        let classes = lua.create_table().unwrap();
+        classes.raw_set(1, "class1").unwrap();
+        classes.raw_set(2, "class2").unwrap();
+        table.set("classes", classes).unwrap();
+        let attrs = lua.create_table().unwrap();
+        attrs.set("key", "value").unwrap();
+        table.set("attributes", attrs).unwrap();
+
+        let result = parse_attr(&lua, Some(Value::Table(table))).unwrap();
+        assert_eq!(result.0, "my-id");
+        assert_eq!(result.1, vec!["class1", "class2"]);
+        assert_eq!(result.2.get("key"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    fn test_parse_attr_userdata() {
+        let lua = create_lua_env();
+        let attr = LuaAttr::new(("test-id".into(), vec!["cls".into()], LinkedHashMap::new()));
+        let ud = lua.create_userdata(attr).unwrap();
+        let result = parse_attr(&lua, Some(Value::UserData(ud))).unwrap();
+        assert_eq!(result.0, "test-id");
+        assert_eq!(result.1, vec!["cls"]);
+    }
+
+    #[test]
+    fn test_parse_attr_invalid() {
+        let lua = Lua::new();
+        let result = parse_attr(&lua, Some(Value::Integer(42)));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_list_items tests ==========
+
+    #[test]
+    fn test_parse_list_items_valid() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local list = pandoc.BulletList({
+                    {pandoc.Para({pandoc.Str("item1")})},
+                    {pandoc.Para({pandoc.Str("item2")})}
+                })
+                return tostring(#list.content)
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "2");
+    }
+
+    #[test]
+    fn test_parse_list_items_invalid() {
+        let lua = Lua::new();
+        let result = parse_list_items(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_citations tests ==========
+
+    #[test]
+    fn test_parse_citations_valid() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local citation = pandoc.Citation("smith2020", "AuthorInText")
+                local citations = {citation}
+                local cite = pandoc.Cite(citations, {pandoc.Str("@smith2020")})
+                return cite.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Cite");
+    }
+
+    #[test]
+    fn test_parse_citations_invalid() {
+        let lua = Lua::new();
+        let result = parse_citations(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_single_citation tests ==========
+
+    #[test]
+    fn test_parse_single_citation_author_in_text() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local citation = pandoc.Citation("smith2020", "AuthorInText")
+                return citation.mode
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "AuthorInText");
+    }
+
+    #[test]
+    fn test_parse_single_citation_suppress_author() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local citation = pandoc.Citation("smith2020", "SuppressAuthor")
+                return citation.mode
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "SuppressAuthor");
+    }
+
+    #[test]
+    fn test_parse_single_citation_normal() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local citation = pandoc.Citation("smith2020", "NormalCitation")
+                return citation.mode
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "NormalCitation");
+    }
+
+    #[test]
+    fn test_parse_single_citation_invalid() {
+        let lua = Lua::new();
+        let result = parse_single_citation(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_definition_list_items tests ==========
+
+    #[test]
+    fn test_parse_definition_list_items_invalid_outer() {
+        let lua = Lua::new();
+        let result = parse_definition_list_items(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_definition_list_items_invalid_inner() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set(1, 42).unwrap(); // Not a table
+        let result = parse_definition_list_items(&lua, Value::Table(table));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_line_block_content tests ==========
+
+    #[test]
+    fn test_parse_line_block_content_invalid() {
+        let lua = Lua::new();
+        let result = parse_line_block_content(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_caption tests ==========
+
+    #[test]
+    fn test_parse_caption_none() {
+        let lua = Lua::new();
+        let result = parse_caption(&lua, None).unwrap();
+        assert!(result.short.is_none());
+        assert!(result.long.is_none());
+    }
+
+    #[test]
+    fn test_parse_caption_nil() {
+        let lua = Lua::new();
+        let result = parse_caption(&lua, Some(Value::Nil)).unwrap();
+        assert!(result.short.is_none());
+        assert!(result.long.is_none());
+    }
+
+    #[test]
+    fn test_parse_caption_invalid() {
+        let lua = Lua::new();
+        let result = parse_caption(&lua, Some(Value::Integer(42)));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_caption_userdata() {
+        let lua = create_lua_env();
+        let caption = Caption {
+            short: Some(vec![Inline::Str(Str {
+                text: "short".into(),
+                source_info: si(),
+            })]),
+            long: None,
+            source_info: si(),
+        };
+        let ud = lua.create_userdata(LuaCaption(caption)).unwrap();
+        let result = parse_caption(&lua, Some(Value::UserData(ud))).unwrap();
+        assert!(result.short.is_some());
+    }
+
+    #[test]
+    fn test_parse_caption_userdata_invalid() {
+        let lua = create_lua_env();
+        // Create a different userdata type
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_caption(&lua, Some(Value::UserData(ud)));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_colspecs tests ==========
+
+    #[test]
+    fn test_parse_colspecs_invalid() {
+        let lua = Lua::new();
+        let result = parse_colspecs(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_colspecs_invalid_inner() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set(1, 42).unwrap(); // Not a table
+        let result = parse_colspecs(&lua, Value::Table(table));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_alignment tests ==========
+
+    #[test]
+    fn test_parse_alignment_string_left() {
+        let lua = Lua::new();
+        let s = lua.create_string("AlignLeft").unwrap();
+        let result = parse_alignment(Value::String(s)).unwrap();
+        assert!(matches!(result, Alignment::Left));
+    }
+
+    #[test]
+    fn test_parse_alignment_string_center() {
+        let lua = Lua::new();
+        let s = lua.create_string("AlignCenter").unwrap();
+        let result = parse_alignment(Value::String(s)).unwrap();
+        assert!(matches!(result, Alignment::Center));
+    }
+
+    #[test]
+    fn test_parse_alignment_string_right() {
+        let lua = Lua::new();
+        let s = lua.create_string("AlignRight").unwrap();
+        let result = parse_alignment(Value::String(s)).unwrap();
+        assert!(matches!(result, Alignment::Right));
+    }
+
+    #[test]
+    fn test_parse_alignment_string_default() {
+        let lua = Lua::new();
+        let s = lua.create_string("AlignDefault").unwrap();
+        let result = parse_alignment(Value::String(s)).unwrap();
+        assert!(matches!(result, Alignment::Default));
+    }
+
+    #[test]
+    fn test_parse_alignment_userdata() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Center))
+            .unwrap();
+        let result = parse_alignment(Value::UserData(ud)).unwrap();
+        assert!(matches!(result, Alignment::Center));
+    }
+
+    #[test]
+    fn test_parse_alignment_userdata_invalid() {
+        let lua = create_lua_env();
+        // Use a different userdata type
+        let ud = lua.create_userdata(LuaColWidth(ColWidth::Default)).unwrap();
+        let result = parse_alignment(Value::UserData(ud)).unwrap();
+        // Falls back to Default when userdata is wrong type
+        assert!(matches!(result, Alignment::Default));
+    }
+
+    #[test]
+    fn test_parse_alignment_other() {
+        let result = parse_alignment(Value::Nil).unwrap();
+        assert!(matches!(result, Alignment::Default));
+    }
+
+    // ========== parse_col_width tests ==========
+
+    #[test]
+    fn test_parse_col_width_number() {
+        let result = parse_col_width(Value::Number(0.5)).unwrap();
+        assert!(matches!(result, ColWidth::Percentage(n) if (n - 0.5).abs() < 0.001));
+    }
+
+    #[test]
+    fn test_parse_col_width_integer() {
+        let result = parse_col_width(Value::Integer(50)).unwrap();
+        assert!(matches!(result, ColWidth::Percentage(n) if (n - 50.0).abs() < 0.001));
+    }
+
+    #[test]
+    fn test_parse_col_width_userdata() {
+        let lua = create_lua_env();
+        let ud = lua.create_userdata(LuaColWidth(ColWidth::Default)).unwrap();
+        let result = parse_col_width(Value::UserData(ud)).unwrap();
+        assert!(matches!(result, ColWidth::Default));
+    }
+
+    #[test]
+    fn test_parse_col_width_userdata_invalid() {
+        let lua = create_lua_env();
+        // Use a different userdata type
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_col_width(Value::UserData(ud)).unwrap();
+        // Falls back to Default when userdata is wrong type
+        assert!(matches!(result, ColWidth::Default));
+    }
+
+    #[test]
+    fn test_parse_col_width_other() {
+        let result = parse_col_width(Value::Nil).unwrap();
+        assert!(matches!(result, ColWidth::Default));
+    }
+
+    // ========== parse_table_head tests ==========
+
+    #[test]
+    fn test_parse_table_head_userdata() {
+        let lua = create_lua_env();
+        let head = TableHead {
+            rows: vec![],
+            attr: ("head-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableHead(head)).unwrap();
+        let result = parse_table_head(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(result.attr.0, "head-id");
+    }
+
+    #[test]
+    fn test_parse_table_head_userdata_invalid() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_table_head(&lua, Value::UserData(ud));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_table_head_invalid() {
+        let lua = Lua::new();
+        let result = parse_table_head(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_table_foot tests ==========
+
+    #[test]
+    fn test_parse_table_foot_userdata() {
+        let lua = create_lua_env();
+        let foot = TableFoot {
+            rows: vec![],
+            attr: ("foot-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableFoot(foot)).unwrap();
+        let result = parse_table_foot(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(result.attr.0, "foot-id");
+    }
+
+    #[test]
+    fn test_parse_table_foot_userdata_invalid() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_table_foot(&lua, Value::UserData(ud));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_table_foot_invalid() {
+        let lua = Lua::new();
+        let result = parse_table_foot(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_table_bodies tests ==========
+
+    #[test]
+    fn test_parse_table_bodies_invalid() {
+        let lua = Lua::new();
+        let result = parse_table_bodies(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_single_table_body tests ==========
+
+    #[test]
+    fn test_parse_single_table_body_userdata() {
+        let lua = create_lua_env();
+        let body = TableBody {
+            body: vec![],
+            head: vec![],
+            rowhead_columns: 1,
+            attr: ("body-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaTableBody(body)).unwrap();
+        let result = parse_single_table_body(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(result.attr.0, "body-id");
+        assert_eq!(result.rowhead_columns, 1);
+    }
+
+    #[test]
+    fn test_parse_single_table_body_userdata_invalid() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_single_table_body(&lua, Value::UserData(ud));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_single_table_body_invalid() {
+        let lua = Lua::new();
+        let result = parse_single_table_body(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_rows tests ==========
+
+    #[test]
+    fn test_parse_rows_non_table() {
+        let lua = Lua::new();
+        let result = parse_rows(&lua, Value::Integer(42)).unwrap();
+        assert!(result.is_empty());
+    }
+
+    // ========== parse_single_row tests ==========
+
+    #[test]
+    fn test_parse_single_row_userdata() {
+        let lua = create_lua_env();
+        let row = Row {
+            cells: vec![],
+            attr: ("row-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaRow(row)).unwrap();
+        let result = parse_single_row(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(result.attr.0, "row-id");
+    }
+
+    #[test]
+    fn test_parse_single_row_userdata_invalid() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_single_row(&lua, Value::UserData(ud));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_single_row_invalid() {
+        let lua = Lua::new();
+        let result = parse_single_row(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_cells tests ==========
+
+    #[test]
+    fn test_parse_cells_non_table() {
+        let lua = Lua::new();
+        let result = parse_cells(&lua, Value::Integer(42)).unwrap();
+        assert!(result.is_empty());
+    }
+
+    // ========== parse_single_cell tests ==========
+
+    #[test]
+    fn test_parse_single_cell_userdata() {
+        let lua = create_lua_env();
+        let cell = Cell {
+            content: vec![],
+            alignment: Alignment::Center,
+            row_span: 2,
+            col_span: 3,
+            attr: ("cell-id".into(), vec![], LinkedHashMap::new()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let ud = lua.create_userdata(LuaCell(cell)).unwrap();
+        let result = parse_single_cell(&lua, Value::UserData(ud)).unwrap();
+        assert_eq!(result.attr.0, "cell-id");
+        assert_eq!(result.row_span, 2);
+        assert_eq!(result.col_span, 3);
+    }
+
+    #[test]
+    fn test_parse_single_cell_userdata_invalid() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_single_cell(&lua, Value::UserData(ud));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_single_cell_invalid() {
+        let lua = Lua::new();
+        let result = parse_single_cell(&lua, Value::Integer(42));
+        assert!(result.is_err());
+    }
+
+    // ========== parse_list_attributes tests ==========
+
+    #[test]
+    fn test_parse_list_attributes_table() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.raw_set(1, 5).unwrap();
+        table.raw_set(2, "Decimal").unwrap();
+        table.raw_set(3, "Period").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert_eq!(result.0, 5);
+        assert!(matches!(result.1, ListNumberStyle::Decimal));
+        assert!(matches!(result.2, ListNumberDelim::Period));
+    }
+
+    #[test]
+    fn test_parse_list_attributes_table_styles() {
+        let lua = Lua::new();
+
+        // Test LowerAlpha
+        let table = lua.create_table().unwrap();
+        table.raw_set(1, 1).unwrap();
+        table.raw_set(2, "LowerAlpha").unwrap();
+        table.raw_set(3, "OneParen").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert!(matches!(result.1, ListNumberStyle::LowerAlpha));
+        assert!(matches!(result.2, ListNumberDelim::OneParen));
+
+        // Test UpperAlpha
+        let table = lua.create_table().unwrap();
+        table.raw_set(2, "UpperAlpha").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert!(matches!(result.1, ListNumberStyle::UpperAlpha));
+
+        // Test LowerRoman
+        let table = lua.create_table().unwrap();
+        table.raw_set(2, "LowerRoman").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert!(matches!(result.1, ListNumberStyle::LowerRoman));
+
+        // Test UpperRoman
+        let table = lua.create_table().unwrap();
+        table.raw_set(2, "UpperRoman").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert!(matches!(result.1, ListNumberStyle::UpperRoman));
+
+        // Test Example
+        let table = lua.create_table().unwrap();
+        table.raw_set(2, "Example").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert!(matches!(result.1, ListNumberStyle::Example));
+
+        // Test TwoParens
+        let table = lua.create_table().unwrap();
+        table.raw_set(3, "TwoParens").unwrap();
+        let result = parse_list_attributes(Value::Table(table)).unwrap();
+        assert!(matches!(result.2, ListNumberDelim::TwoParens));
+    }
+
+    #[test]
+    fn test_parse_list_attributes_userdata() {
+        let lua = create_lua_env();
+        let attrs = (2usize, ListNumberStyle::Decimal, ListNumberDelim::Period);
+        let ud = lua.create_userdata(LuaListAttributes(attrs)).unwrap();
+        let result = parse_list_attributes(Value::UserData(ud)).unwrap();
+        assert_eq!(result.0, 2);
+    }
+
+    #[test]
+    fn test_parse_list_attributes_userdata_invalid() {
+        let lua = create_lua_env();
+        let ud = lua
+            .create_userdata(LuaAlignment(Alignment::Default))
+            .unwrap();
+        let result = parse_list_attributes(Value::UserData(ud));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_list_attributes_other() {
+        let result = parse_list_attributes(Value::Nil).unwrap();
+        assert_eq!(result.0, 1);
+        assert!(matches!(result.1, ListNumberStyle::Default));
+        assert!(matches!(result.2, ListNumberDelim::Default));
+    }
+
+    // ========== Attr constructor tests ==========
+
+    #[test]
+    fn test_attr_constructor() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local a = pandoc.Attr("my-id", {"class1", "class2"}, {key = "value"})
+                return a.identifier
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "my-id");
+    }
+
+    #[test]
+    fn test_attr_constructor_minimal() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local a = pandoc.Attr()
+                return a.identifier
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_attr_constructor_classes_invalid() {
+        let lua = create_lua_env();
+        let result: mlua::Result<Value> = lua
+            .load(r#"return pandoc.Attr("id", "not a table")"#)
+            .eval();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_attr_constructor_attributes_invalid() {
+        let lua = create_lua_env();
+        let result: mlua::Result<Value> = lua
+            .load(r#"return pandoc.Attr("id", {}, "not a table")"#)
+            .eval();
+        assert!(result.is_err());
+    }
+
+    // ========== Citation constructor tests ==========
+
+    #[test]
+    fn test_citation_constructor() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local c = pandoc.Citation("smith2020", "AuthorInText")
+                return c.id
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "smith2020");
+    }
+
+    #[test]
+    fn test_citation_constructor_with_prefix_suffix() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local c = pandoc.Citation("smith2020", "NormalCitation",
+                    {pandoc.Str("see ")}, {pandoc.Str(" p. 42")}, 1, 123)
+                return c.note_num
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    // ========== Caption constructor tests ==========
+
+    #[test]
+    fn test_caption_constructor() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local c = pandoc.Caption({pandoc.Str("short")}, {pandoc.Para({pandoc.Str("long")})})
+                return c.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Caption");
+    }
+
+    #[test]
+    fn test_caption_constructor_nil() {
+        let lua = create_lua_env();
+        let result: Value = lua
+            .load(
+                r#"
+                local c = pandoc.Caption()
+                return c.short
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert!(matches!(result, Value::Nil));
+    }
+
+    // ========== ListAttributes constructor tests ==========
+
+    #[test]
+    fn test_list_attributes_constructor() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local l = pandoc.ListAttributes(5, "Decimal", "Period")
+                return l[1]
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 5);
+    }
+
+    #[test]
+    fn test_list_attributes_constructor_styles() {
+        let lua = create_lua_env();
+
+        // Test all styles
+        for (style, expected) in [
+            ("Decimal", "Decimal"),
+            ("LowerAlpha", "LowerAlpha"),
+            ("UpperAlpha", "UpperAlpha"),
+            ("LowerRoman", "LowerRoman"),
+            ("UpperRoman", "UpperRoman"),
+            ("Example", "Example"),
+        ] {
+            let result: String = lua
+                .load(format!(
+                    r#"local l = pandoc.ListAttributes(1, "{}", "Period"); return l[2]"#,
+                    style
+                ))
+                .eval()
+                .unwrap();
+            assert_eq!(
+                result, expected,
+                "Style {} should map to {}",
+                style, expected
+            );
+        }
+
+        // Test all delimiters
+        for (delim, expected) in [
+            ("Period", "Period"),
+            ("OneParen", "OneParen"),
+            ("TwoParens", "TwoParens"),
+        ] {
+            let result: String = lua
+                .load(format!(
+                    r#"local l = pandoc.ListAttributes(1, "Decimal", "{}"); return l[3]"#,
+                    delim
+                ))
+                .eval()
+                .unwrap();
+            assert_eq!(
+                result, expected,
+                "Delim {} should map to {}",
+                delim, expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_list_attributes_constructor_defaults() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local l = pandoc.ListAttributes()
+                return l[2]
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "DefaultStyle");
+    }
+
+    // ========== Alignment sentinel tests ==========
+
+    #[test]
+    fn test_alignment_sentinels() {
+        let lua = create_lua_env();
+
+        // Test that alignment sentinels exist and can be used
+        lua.load("local a = pandoc.AlignDefault")
+            .exec()
+            .expect("AlignDefault should exist");
+        lua.load("local a = pandoc.AlignLeft")
+            .exec()
+            .expect("AlignLeft should exist");
+        lua.load("local a = pandoc.AlignCenter")
+            .exec()
+            .expect("AlignCenter should exist");
+        lua.load("local a = pandoc.AlignRight")
+            .exec()
+            .expect("AlignRight should exist");
+    }
+
+    #[test]
+    fn test_col_width_default_sentinel() {
+        let lua = create_lua_env();
+        lua.load("local w = pandoc.ColWidthDefault")
+            .exec()
+            .expect("ColWidthDefault should exist");
+    }
+
+    // ========== Cell constructor tests ==========
+
+    #[test]
+    fn test_cell_constructor() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local c = pandoc.Cell({pandoc.Para({pandoc.Str("content")})}, pandoc.AlignCenter, 2, 3)
+                return c.row_span
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 2);
+    }
+
+    // ========== Row constructor tests ==========
+
+    #[test]
+    fn test_row_constructor() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local r = pandoc.Row({pandoc.Cell({pandoc.Para({pandoc.Str("cell")})})})
+                return r.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "Row");
+    }
+
+    // ========== TableHead constructor tests ==========
+
+    #[test]
+    fn test_table_head_constructor() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local h = pandoc.TableHead({})
+                return h.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "TableHead");
+    }
+
+    // ========== TableFoot constructor tests ==========
+
+    #[test]
+    fn test_table_foot_constructor() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local f = pandoc.TableFoot({})
+                return f.t
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "TableFoot");
+    }
+
+    // ========== TableBody constructor tests ==========
+
+    #[test]
+    fn test_table_body_constructor() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local b = pandoc.TableBody({}, nil, 2)
+                return b.row_head_columns
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 2);
+    }
+
+    // ========== List constructors tests ==========
+
+    #[test]
+    fn test_inlines_constructor_nil() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local i = pandoc.Inlines()
+                return #i
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_inlines_constructor_table() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local i = pandoc.Inlines({pandoc.Str("a"), pandoc.Str("b")})
+                return #i
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 2);
+    }
+
+    #[test]
+    fn test_inlines_constructor_table_with_strings() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local i = pandoc.Inlines({"hello", "world"})
+                return i[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_inlines_constructor_string() {
+        let lua = create_lua_env();
+        let result: String = lua
+            .load(
+                r#"
+                local i = pandoc.Inlines("hello")
+                return i[1].text
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_inlines_constructor_userdata() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local i = pandoc.Inlines(pandoc.Str("single"))
+                return #i
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_inlines_constructor_invalid() {
+        let lua = create_lua_env();
+        let result: mlua::Result<Value> = lua.load(r#"return pandoc.Inlines(123)"#).eval();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_blocks_constructor_nil() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local b = pandoc.Blocks()
+                return #b
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_blocks_constructor_table() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local b = pandoc.Blocks({pandoc.Para({pandoc.Str("a")})})
+                return #b
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_blocks_constructor_userdata() {
+        let lua = create_lua_env();
+        let result: i64 = lua
+            .load(
+                r#"
+                local b = pandoc.Blocks(pandoc.Para({pandoc.Str("single")}))
+                return #b
+            "#,
+            )
+            .eval()
+            .unwrap();
+        assert_eq!(result, 1);
+    }
+
+    #[test]
+    fn test_blocks_constructor_invalid() {
+        let lua = create_lua_env();
+        let result: mlua::Result<Value> = lua.load(r#"return pandoc.Blocks(123)"#).eval();
+        assert!(result.is_err());
+    }
+
+    // ========== List metatable tests ==========
+
+    #[test]
+    fn test_list_constructor() {
+        let lua = create_lua_env();
+        // pandoc.List is a metatable, test that it exists
+        lua.load("local l = pandoc.List")
+            .exec()
+            .expect("pandoc.List should exist");
+    }
+}

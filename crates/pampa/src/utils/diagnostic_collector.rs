@@ -210,4 +210,79 @@ mod tests {
 
         assert!(collector.has_errors());
     }
+
+    #[test]
+    fn test_default() {
+        let collector: DiagnosticCollector = Default::default();
+        assert!(collector.diagnostics.is_empty());
+        assert!(!collector.has_errors());
+    }
+
+    #[test]
+    fn test_error_at() {
+        let mut collector = DiagnosticCollector::new();
+        let location =
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(1), 10, 20);
+        collector.error_at("Error with location", location);
+
+        assert_eq!(collector.diagnostics.len(), 1);
+        assert!(collector.has_errors());
+        assert!(collector.diagnostics[0].location.is_some());
+    }
+
+    #[test]
+    fn test_warn_at() {
+        let mut collector = DiagnosticCollector::new();
+        let location =
+            quarto_source_map::SourceInfo::original(quarto_source_map::FileId(1), 10, 20);
+        collector.warn_at("Warning with location", location);
+
+        assert_eq!(collector.diagnostics.len(), 1);
+        assert!(!collector.has_errors()); // Warnings don't count as errors
+        assert!(collector.diagnostics[0].location.is_some());
+    }
+
+    #[test]
+    fn test_diagnostics_getter() {
+        let mut collector = DiagnosticCollector::new();
+        collector.error("Error 1");
+        collector.error("Error 2");
+
+        let diagnostics = collector.diagnostics();
+        assert_eq!(diagnostics.len(), 2);
+    }
+
+    #[test]
+    fn test_into_diagnostics_sorts_by_position() {
+        let mut collector = DiagnosticCollector::new();
+
+        // Add diagnostics with different locations (out of order)
+        let loc2 = quarto_source_map::SourceInfo::original(quarto_source_map::FileId(1), 100, 110);
+        let loc1 = quarto_source_map::SourceInfo::original(quarto_source_map::FileId(1), 50, 60);
+
+        collector.error_at("Second", loc2);
+        collector.error_at("First", loc1);
+
+        let diagnostics = collector.into_diagnostics();
+
+        // Should be sorted by start offset
+        assert_eq!(diagnostics.len(), 2);
+        assert!(diagnostics[0].title.contains("First"));
+        assert!(diagnostics[1].title.contains("Second"));
+    }
+
+    #[test]
+    fn test_into_diagnostics_handles_no_location() {
+        let mut collector = DiagnosticCollector::new();
+
+        // Diagnostics without locations should sort to the start
+        collector.error("No location");
+        let loc = quarto_source_map::SourceInfo::original(quarto_source_map::FileId(1), 100, 110);
+        collector.error_at("Has location", loc);
+
+        let diagnostics = collector.into_diagnostics();
+        assert_eq!(diagnostics.len(), 2);
+        // The one without location (offset 0) should come first
+        assert!(diagnostics[0].title.contains("No location"));
+    }
 }

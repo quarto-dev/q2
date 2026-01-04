@@ -178,3 +178,330 @@ fn lua_to_json(lua: &Lua, value: &Value) -> Result<serde_json::Value> {
         _ => Ok(serde_json::Value::Null),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // is_json_null tests
+    // =========================================================================
+
+    #[test]
+    fn test_is_json_null_with_null_sentinel() {
+        let null_ptr = ptr::addr_of!(JSON_NULL) as *mut _;
+        let value = Value::LightUserData(LightUserData(null_ptr));
+        assert!(is_json_null(&value));
+    }
+
+    #[test]
+    fn test_is_json_null_with_other_lightuserdata() {
+        static OTHER: () = ();
+        let other_ptr = ptr::addr_of!(OTHER) as *mut _;
+        let value = Value::LightUserData(LightUserData(other_ptr));
+        assert!(!is_json_null(&value));
+    }
+
+    #[test]
+    fn test_is_json_null_with_non_lightuserdata() {
+        assert!(!is_json_null(&Value::Nil));
+        assert!(!is_json_null(&Value::Boolean(true)));
+        assert!(!is_json_null(&Value::Integer(42)));
+    }
+
+    // =========================================================================
+    // register_pandoc_json tests
+    // =========================================================================
+
+    #[test]
+    fn test_register_pandoc_json() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        // Check that json table exists
+        let json: Table = pandoc.get("json").unwrap();
+
+        // Check that null exists
+        let null: Value = json.get("null").unwrap();
+        assert!(is_json_null(&null));
+
+        // Check that decode exists
+        let decode: Function = json.get("decode").unwrap();
+        let result: Value = decode.call(r#"{"a": 1}"#.to_string()).unwrap();
+        assert!(matches!(result, Value::Table(_)));
+
+        // Check that encode exists
+        let encode: Function = json.get("encode").unwrap();
+        let table = lua.create_table().unwrap();
+        table.set("a", 1).unwrap();
+        let result: String = encode.call(table).unwrap();
+        assert!(result.contains("\"a\""));
+        assert!(result.contains("1"));
+    }
+
+    // =========================================================================
+    // decode tests
+    // =========================================================================
+
+    #[test]
+    fn test_decode_null() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let decode: Function = json.get("decode").unwrap();
+
+        let result: Value = decode.call("null".to_string()).unwrap();
+        assert!(is_json_null(&result));
+    }
+
+    #[test]
+    fn test_decode_number_float() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let decode: Function = json.get("decode").unwrap();
+
+        // Float number
+        let result: f64 = decode.call("3.14".to_string()).unwrap();
+        assert!((result - 3.14).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_decode_array() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let decode: Function = json.get("decode").unwrap();
+
+        let result: Table = decode.call("[1, 2, 3]".to_string()).unwrap();
+        assert_eq!(result.get::<i64>(1).unwrap(), 1);
+        assert_eq!(result.get::<i64>(2).unwrap(), 2);
+        assert_eq!(result.get::<i64>(3).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_decode_object() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let decode: Function = json.get("decode").unwrap();
+
+        let result: Table = decode.call(r#"{"name": "test", "value": 42}"#.to_string()).unwrap();
+        assert_eq!(result.get::<String>("name").unwrap(), "test");
+        assert_eq!(result.get::<i64>("value").unwrap(), 42);
+    }
+
+    #[test]
+    fn test_decode_invalid_json() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let decode: Function = json.get("decode").unwrap();
+
+        let result: Result<Value> = decode.call("{invalid".to_string());
+        assert!(result.is_err());
+    }
+
+    // =========================================================================
+    // encode tests
+    // =========================================================================
+
+    #[test]
+    fn test_encode_nil() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        let result: String = encode.call(Value::Nil).unwrap();
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_encode_nan() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // NaN should be encoded as null
+        let result: String = encode.call(f64::NAN).unwrap();
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_encode_infinity() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Infinity should be encoded as null
+        let result: String = encode.call(f64::INFINITY).unwrap();
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_encode_array() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        let table = lua.create_table().unwrap();
+        table.set(1, "a").unwrap();
+        table.set(2, "b").unwrap();
+        table.set(3, "c").unwrap();
+
+        let result: String = encode.call(table).unwrap();
+        assert_eq!(result, r#"["a","b","c"]"#);
+    }
+
+    #[test]
+    fn test_encode_sparse_table() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Create a truly sparse table - set a high index to create a gap
+        // First fill some indices, then explicitly set nil at one position
+        let table = lua.create_table().unwrap();
+        table.set(1, "a").unwrap();
+        table.set(2, "b").unwrap();
+        table.set(3, Value::Nil).unwrap(); // Set nil explicitly
+
+        let result: String = encode.call(table).unwrap();
+        // Should encode what exists - actual behavior depends on how Lua handles the nil
+        // With explicit nil at index 3, raw_len should be 2
+        assert!(result.contains("\"a\""));
+        assert!(result.contains("\"b\""));
+    }
+
+    #[test]
+    fn test_encode_object_with_integer_keys() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Create an empty table (len = 0), then add integer key
+        // This forces the object path with integer key conversion
+        let table = lua.create_table().unwrap();
+        table.set(100, "value").unwrap();
+
+        let result: String = encode.call(table).unwrap();
+        assert!(result.contains("\"100\""));
+        assert!(result.contains("\"value\""));
+    }
+
+    #[test]
+    fn test_encode_json_null() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+        let null: Value = json.get("null").unwrap();
+
+        let result: String = encode.call(null).unwrap();
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_encode_other_lightuserdata() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Create a different LightUserData (not the null sentinel)
+        static OTHER: () = ();
+        let other = Value::LightUserData(LightUserData(ptr::addr_of!(OTHER) as *mut _));
+
+        let result: String = encode.call(other).unwrap();
+        assert_eq!(result, "null"); // Any other LightUserData becomes null
+    }
+
+    #[test]
+    fn test_encode_function() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Functions should be encoded as null
+        let func = lua.create_function(|_, ()| Ok(())).unwrap();
+        let result: String = encode.call(Value::Function(func)).unwrap();
+        assert_eq!(result, "null");
+    }
+
+    #[test]
+    fn test_encode_with_tojson_metamethod() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Create a table with __tojson metamethod
+        let table = lua.create_table().unwrap();
+        table.set("value", 42).unwrap();
+
+        let metatable = lua.create_table().unwrap();
+        let tojson_fn = lua.create_function(|_, _: Value| Ok(r#"{"custom": true}"#.to_string())).unwrap();
+        metatable.set("__tojson", tojson_fn).unwrap();
+        table.set_metatable(Some(metatable));
+
+        let result: String = encode.call(table).unwrap();
+        assert_eq!(result, r#"{"custom": true}"#);
+    }
+
+    #[test]
+    fn test_encode_table_with_boolean_key() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_json(&lua, &pandoc).unwrap();
+
+        let json: Table = pandoc.get("json").unwrap();
+        let encode: Function = json.get("encode").unwrap();
+
+        // Create a table with boolean key (should be skipped)
+        let table = lua.create_table().unwrap();
+        table.set("valid", 1).unwrap();
+        table.set(Value::Boolean(true), 2).unwrap(); // This key should be skipped
+
+        let result: String = encode.call(table).unwrap();
+        assert!(result.contains("\"valid\""));
+        assert!(!result.contains("\"true\"")); // Boolean key should be skipped
+    }
+}

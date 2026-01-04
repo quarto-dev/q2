@@ -399,4 +399,160 @@ sys.exit(1)
             err => panic!("Expected SpawnFailed error, got: {:?}", err),
         }
     }
+
+    // Tests for error Display implementations
+    #[test]
+    fn test_spawn_failed_error_display() {
+        let path = std::path::PathBuf::from("/test/filter.py");
+        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "not found");
+        let err = JsonFilterError::SpawnFailed(path.clone(), io_error);
+        let msg = format!("{}", err);
+        assert!(msg.contains("Failed to spawn filter"));
+        assert!(msg.contains("/test/filter.py"));
+    }
+
+    #[test]
+    fn test_non_zero_exit_error_display() {
+        let path = std::path::PathBuf::from("/test/filter.py");
+        let err = JsonFilterError::NonZeroExit(path.clone(), 42);
+        let msg = format!("{}", err);
+        assert!(msg.contains("exited with status 42"));
+        assert!(msg.contains("/test/filter.py"));
+    }
+
+    #[test]
+    fn test_invalid_utf8_output_error_display() {
+        let path = std::path::PathBuf::from("/test/filter.py");
+        let err = JsonFilterError::InvalidUtf8Output(path.clone());
+        let msg = format!("{}", err);
+        assert!(msg.contains("invalid UTF-8 output"));
+        assert!(msg.contains("/test/filter.py"));
+    }
+
+    #[test]
+    fn test_json_parse_error_display() {
+        let path = std::path::PathBuf::from("/test/filter.py");
+        let err = JsonFilterError::JsonParseError(path.clone(), "unexpected token".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("Failed to parse JSON"));
+        assert!(msg.contains("unexpected token"));
+        assert!(msg.contains("/test/filter.py"));
+    }
+
+    #[test]
+    fn test_serialization_error_display() {
+        let err = JsonFilterError::SerializationError("serialization failed".to_string());
+        let msg = format!("{}", err);
+        assert!(msg.contains("Failed to serialize"));
+        assert!(msg.contains("serialization failed"));
+    }
+
+    #[test]
+    fn test_stdin_write_error_display() {
+        let path = std::path::PathBuf::from("/test/filter.py");
+        let io_error = std::io::Error::new(std::io::ErrorKind::BrokenPipe, "broken pipe");
+        let err = JsonFilterError::StdinWriteError(path.clone(), io_error);
+        let msg = format!("{}", err);
+        assert!(msg.contains("Failed to write"));
+        assert!(msg.contains("stdin"));
+        assert!(msg.contains("/test/filter.py"));
+    }
+
+    #[test]
+    fn test_json_filter_error_is_error_trait() {
+        // Verify JsonFilterError implements std::error::Error
+        let err = JsonFilterError::SerializationError("test".to_string());
+        let _: &dyn std::error::Error = &err;
+    }
+
+    #[test]
+    fn test_invalid_json_output_filter() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("invalid_json.py");
+        fs::write(
+            &filter_path,
+            r#"#!/usr/bin/env python3
+import sys
+sys.stdin.read()  # Consume input
+print("not valid json")
+"#,
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&filter_path, perms).unwrap();
+
+        let pandoc = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![],
+        };
+        let context = ASTContext::new();
+
+        let result = apply_json_filter(&pandoc, &context, &filter_path, "html");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            JsonFilterError::JsonParseError(_, _) => {}
+            err => panic!("Expected JsonParseError, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_invalid_utf8_filter() {
+        let dir = TempDir::new().unwrap();
+        let filter_path = dir.path().join("invalid_utf8.sh");
+        // Create a shell script that outputs invalid UTF-8
+        fs::write(
+            &filter_path,
+            r#"#!/bin/bash
+cat > /dev/null  # Consume stdin
+printf '\xff\xfe'  # Invalid UTF-8 bytes
+"#,
+        )
+        .unwrap();
+        let mut perms = fs::metadata(&filter_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&filter_path, perms).unwrap();
+
+        let pandoc = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![],
+        };
+        let context = ASTContext::new();
+
+        let result = apply_json_filter(&pandoc, &context, &filter_path, "html");
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            JsonFilterError::InvalidUtf8Output(_) => {}
+            err => panic!("Expected InvalidUtf8Output, got: {:?}", err),
+        }
+    }
+
+    #[test]
+    fn test_empty_filter_list() {
+        let pandoc = Pandoc {
+            meta: quarto_pandoc_types::ConfigValue::default(),
+            blocks: vec![crate::pandoc::Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![crate::pandoc::Inline::Str(crate::pandoc::Str {
+                    text: "test".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let (filtered, _, diagnostics) = apply_json_filters(pandoc, context, &[], "html").unwrap();
+
+        // With no filters, document should be unchanged
+        assert!(diagnostics.is_empty());
+        match &filtered.blocks[0] {
+            crate::pandoc::Block::Paragraph(p) => match &p.content[0] {
+                crate::pandoc::Inline::Str(s) => assert_eq!(s.text, "test"),
+                _ => panic!("Expected Str"),
+            },
+            _ => panic!("Expected Paragraph"),
+        }
+    }
 }

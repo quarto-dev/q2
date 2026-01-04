@@ -374,3 +374,194 @@ pub fn rawblock_to_config_value(
 
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quarto_yaml::YamlWithSourceInfo;
+
+    fn si() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::default()
+    }
+
+    #[test]
+    fn test_extract_between_delimiters_valid() {
+        let input = "---\ntitle: Test\n---";
+        let result = extract_between_delimiters(input);
+        assert_eq!(result, Some("title: Test"));
+    }
+
+    #[test]
+    fn test_extract_between_delimiters_with_extra_content() {
+        let input = "---\ntitle: Test\n---\nBody text";
+        let result = extract_between_delimiters(input);
+        assert_eq!(result, Some("title: Test"));
+    }
+
+    #[test]
+    fn test_extract_between_delimiters_missing_delimiters() {
+        // Only one delimiter
+        let input = "---\ntitle: Test";
+        let result = extract_between_delimiters(input);
+        assert_eq!(result, None);
+
+        // No delimiters
+        let input = "title: Test";
+        let result = extract_between_delimiters(input);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_string_document_metadata() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("test *bold*".to_string()), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result = yaml_to_config_value(
+            yaml,
+            InterpretationContext::DocumentMetadata,
+            &mut diagnostics,
+        );
+        // In document metadata context, strings are parsed as markdown
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::PandocInlines(_) | ConfigValueKind::PandocBlocks(_)
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_string_project_config() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::String("test string".to_string()), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        // In project config context, strings stay as literals
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(Yaml::String(_))
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_boolean() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Boolean(true), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(Yaml::Boolean(true))
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_integer() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Integer(42), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(Yaml::Integer(42))
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_real() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Real("3.14".to_string()), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(Yaml::Real(_))
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_null() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Null, si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(result.value, ConfigValueKind::Scalar(Yaml::Null)));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_bad_value() {
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::BadValue, si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        // BadValue becomes Null
+        assert!(matches!(result.value, ConfigValueKind::Scalar(Yaml::Null)));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_alias() {
+        // Aliases should be resolved by yaml-rust2, but if they somehow appear,
+        // we treat them as Null
+        let yaml = YamlWithSourceInfo::new_scalar(Yaml::Alias(1), si());
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(result.value, ConfigValueKind::Scalar(Yaml::Null)));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_with_str_tag() {
+        let yaml = YamlWithSourceInfo::new_scalar_with_tag(
+            Yaml::String("plain text".to_string()),
+            si(),
+            Some(("str".to_string(), si())),
+        );
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result = yaml_to_config_value(
+            yaml,
+            InterpretationContext::DocumentMetadata,
+            &mut diagnostics,
+        );
+        // !str tag keeps string literal even in document metadata context
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(Yaml::String(_))
+        ));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_with_path_tag() {
+        let yaml = YamlWithSourceInfo::new_scalar_with_tag(
+            Yaml::String("/path/to/file".to_string()),
+            si(),
+            Some(("path".to_string(), si())),
+        );
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(result.value, ConfigValueKind::Path(_)));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_with_glob_tag() {
+        let yaml = YamlWithSourceInfo::new_scalar_with_tag(
+            Yaml::String("*.qmd".to_string()),
+            si(),
+            Some(("glob".to_string(), si())),
+        );
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(result.value, ConfigValueKind::Glob(_)));
+    }
+
+    #[test]
+    fn test_yaml_to_config_value_with_expr_tag() {
+        let yaml = YamlWithSourceInfo::new_scalar_with_tag(
+            Yaml::String("1 + 2".to_string()),
+            si(),
+            Some(("expr".to_string(), si())),
+        );
+        let mut diagnostics = crate::utils::diagnostic_collector::DiagnosticCollector::new();
+        let result =
+            yaml_to_config_value(yaml, InterpretationContext::ProjectConfig, &mut diagnostics);
+        assert!(matches!(result.value, ConfigValueKind::Expr(_)));
+    }
+}

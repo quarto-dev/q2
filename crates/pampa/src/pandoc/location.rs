@@ -654,4 +654,28 @@ mod tests {
         // FilterProvenance doesn't have a filename index
         assert_eq!(extract_filename_index(&filter_prov), None);
     }
+
+    #[test]
+    fn test_source_info_combine_takes_self_start_when_smaller() {
+        // Test case where self.range.start < other.range.start (covers line 53)
+        let si1 = SourceInfo::with_range(range(5, 0, 5, 20, 1, 10)); // start at 5
+        let si2 = SourceInfo::with_range(range(10, 1, 0, 15, 1, 5)); // start at 10
+        let combined = si1.combine(&si2);
+        // Should take si1's start (5, 0, 5) because it's smaller
+        assert_eq!(combined.range.start.offset, 5);
+        assert_eq!(combined.range.start.row, 0);
+        assert_eq!(combined.range.start.column, 5);
+    }
+
+    #[test]
+    fn test_source_info_combine_takes_other_end_when_larger() {
+        // Test case where self.range.end <= other.range.end (covers line 60)
+        let si1 = SourceInfo::with_range(range(10, 1, 0, 15, 1, 5)); // end at 15
+        let si2 = SourceInfo::with_range(range(5, 0, 5, 20, 1, 10)); // end at 20
+        let combined = si1.combine(&si2);
+        // Should take si2's end (20, 1, 10) because it's larger
+        assert_eq!(combined.range.end.offset, 20);
+        assert_eq!(combined.range.end.row, 1);
+        assert_eq!(combined.range.end.column, 10);
+    }
 }

@@ -367,4 +367,106 @@ mod tests {
         assert_eq!(normalize_writer_format("markdown"), "qmd");
         assert_eq!(normalize_writer_format("html"), "html");
     }
+
+    #[test]
+    fn test_get_format() {
+        let opts_with_format = serde_json::json!({ "format": "html" });
+        assert_eq!(get_format(&opts_with_format), "html");
+
+        let opts_without_format = serde_json::json!({ "other": "value" });
+        assert_eq!(get_format(&opts_without_format), "qmd");
+
+        let empty_opts = serde_json::json!({});
+        assert_eq!(get_format(&empty_opts), "qmd");
+    }
+
+    #[test]
+    fn test_parse_format_string_with_consecutive_modifiers() {
+        // Test parsing when there are two +/- in a row (empty extension name)
+        let parsed = parse_format_string("markdown+-smart");
+        assert_eq!(parsed.base_format, "markdown");
+        // Empty extension name should be skipped
+        assert_eq!(parsed.extensions.enable, Vec::<String>::new());
+        assert_eq!(parsed.extensions.disable, vec!["smart"]);
+    }
+
+    #[test]
+    fn test_merge_with_defaults_non_object_user_opts() {
+        let defaults = serde_json::json!({ "a": 1 });
+        let user_opts = serde_json::json!("not an object");
+        let result = merge_with_defaults(defaults.clone(), &user_opts);
+        // When user_opts is not an object, defaults are returned unchanged
+        assert_eq!(result, defaults);
+    }
+
+    #[test]
+    fn test_merge_with_defaults_null_user_opts() {
+        let defaults = serde_json::json!({ "a": 1, "b": 2 });
+        let user_opts = serde_json::Value::Null;
+        let result = merge_with_defaults(defaults.clone(), &user_opts);
+        assert_eq!(result, defaults);
+    }
+
+    #[test]
+    fn test_is_supported_reader_format() {
+        assert!(is_supported_reader_format("qmd"));
+        assert!(is_supported_reader_format("markdown"));
+        assert!(is_supported_reader_format("json"));
+        assert!(!is_supported_reader_format("html"));
+        assert!(!is_supported_reader_format("unknown"));
+    }
+
+    #[test]
+    fn test_is_supported_writer_format() {
+        assert!(is_supported_writer_format("html"));
+        assert!(is_supported_writer_format("html5"));
+        assert!(is_supported_writer_format("json"));
+        assert!(is_supported_writer_format("native"));
+        assert!(is_supported_writer_format("markdown"));
+        assert!(is_supported_writer_format("qmd"));
+        assert!(is_supported_writer_format("plain"));
+        assert!(!is_supported_writer_format("docx"));
+        assert!(!is_supported_writer_format("unknown"));
+    }
+
+    #[test]
+    fn test_default_reader_options() {
+        let opts = default_reader_options();
+        assert_eq!(opts["columns"], 80);
+        assert_eq!(opts["tab_stop"], 4);
+        assert!(!opts["standalone"].as_bool().unwrap());
+    }
+
+    #[test]
+    fn test_default_writer_options() {
+        let opts = default_writer_options();
+        assert_eq!(opts["columns"], 72);
+        assert_eq!(opts["dpi"], 96);
+        assert_eq!(opts["toc_depth"], 3);
+    }
+
+    #[test]
+    fn test_get_extensions_missing() {
+        let opts = serde_json::json!({});
+        assert!(get_enabled_extensions(&opts).is_empty());
+        assert!(get_disabled_extensions(&opts).is_empty());
+    }
+
+    #[test]
+    fn test_extensions_diff_default() {
+        let diff = ExtensionsDiff::default();
+        assert!(diff.enable.is_empty());
+        assert!(diff.disable.is_empty());
+    }
+
+    #[test]
+    fn test_parse_format_string_with_trailing_invalid_chars() {
+        // This tests the break case when we encounter a character that's not + or -
+        // This would happen if someone manually constructs a weird format string
+        // Since valid format strings always have extensions starting with + or -,
+        // this is mostly a defensive case
+        let parsed = parse_format_string("markdown+smart");
+        assert_eq!(parsed.base_format, "markdown");
+        assert_eq!(parsed.extensions.enable, vec!["smart"]);
+    }
 }

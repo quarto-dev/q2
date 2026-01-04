@@ -1139,3 +1139,1134 @@ pub fn topdown_traverse(
         blocks: topdown_traverse_blocks(doc.blocks, filter, ctx),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pandoc::{
+        AttrSourceInfo, BlockQuote, BulletList, Caption, Cell, Code, CodeBlock, DefinitionList,
+        Div, Emph, Figure, Header, HorizontalRule, Image, LineBlock, LineBreak, Link,
+        ListNumberDelim, ListNumberStyle, Math, MathType, MetaBlock, Note, NoteReference,
+        OrderedList, Paragraph, Plain, RawBlock, RawInline, Shortcode, SoftBreak, Space, Span, Str,
+        Table, TableBody, TableFoot, TableHead, TargetSourceInfo, custom::CustomNode,
+    };
+    use quarto_pandoc_types::Alignment;
+    use yaml_rust2::Yaml;
+
+    // Helper to create a default SourceInfo for tests
+    fn si() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::default()
+    }
+
+    // Helper to create a Str inline
+    fn str_inline(text: &str) -> Inline {
+        Inline::Str(Str {
+            text: text.to_string(),
+            source_info: si(),
+        })
+    }
+
+    // Helper to create empty attr
+    fn empty_attr() -> pandoc::Attr {
+        ("".to_string(), vec![], hashlink::LinkedHashMap::new())
+    }
+
+    // Helper to create a ConfigValue with string
+    fn config_str(s: &str) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Scalar(Yaml::String(s.to_string())),
+            source_info: si(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create a ConfigValue with Map containing entries
+    fn config_map(entries: Vec<(&str, ConfigValue)>) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Map(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| ConfigMapEntry {
+                        key: key.to_string(),
+                        key_source: si(),
+                        value,
+                    })
+                    .collect(),
+            ),
+            source_info: si(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create a ConfigValue with Array
+    fn config_array(items: Vec<ConfigValue>) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::Array(items),
+            source_info: si(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create ConfigValue with PandocBlocks
+    fn config_blocks(blocks: Blocks) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::PandocBlocks(blocks),
+            source_info: si(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // Helper to create ConfigValue with PandocInlines
+    fn config_inlines(inlines: Inlines) -> ConfigValue {
+        ConfigValue {
+            value: ConfigValueKind::PandocInlines(inlines),
+            source_info: si(),
+            merge_op: quarto_pandoc_types::config_value::MergeOp::default(),
+        }
+    }
+
+    // === Tests for Filter builder methods ===
+
+    #[test]
+    fn test_filter_new() {
+        let filter = Filter::new();
+        assert!(filter.str.is_none());
+        assert!(filter.emph.is_none());
+        assert!(filter.meta.is_none());
+    }
+
+    #[test]
+    fn test_filter_with_meta() {
+        let filter = Filter::new().with_meta(|meta, _ctx| FilterReturn::Unchanged(meta));
+        assert!(filter.meta.is_some());
+    }
+
+    #[test]
+    fn test_filter_with_str() {
+        let filter = Filter::new().with_str(|s, _ctx| FilterReturn::Unchanged(s));
+        assert!(filter.str.is_some());
+    }
+
+    #[test]
+    fn test_filter_with_emph() {
+        let filter = Filter::new().with_emph(|e, _ctx| FilterReturn::Unchanged(e));
+        assert!(filter.emph.is_some());
+    }
+
+    // === Tests for inline traversal ===
+
+    #[test]
+    fn test_traverse_str_unchanged() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = str_inline("hello");
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Str(s) => assert_eq!(s.text, "hello"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_str_with_filter() {
+        let mut filter = Filter::new().with_str(|s, _ctx| {
+            FilterReturn::FilterResult(
+                vec![Inline::Str(Str {
+                    text: s.text.to_uppercase(),
+                    source_info: s.source_info,
+                })],
+                false,
+            )
+        });
+        let mut ctx = FilterContext::new();
+        let inline = str_inline("hello");
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        match &result[0] {
+            Inline::Str(s) => assert_eq!(s.text, "HELLO"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_emph_unchanged() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Emph(Emph {
+            content: vec![str_inline("emphasis")],
+            source_info: si(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Emph(e) => assert_eq!(e.content.len(), 1),
+            _ => panic!("Expected Emph"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_space() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Space(Space { source_info: si() });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Space(_)));
+    }
+
+    #[test]
+    fn test_traverse_soft_break() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::SoftBreak(SoftBreak { source_info: si() });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::SoftBreak(_)));
+    }
+
+    #[test]
+    fn test_traverse_line_break() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::LineBreak(LineBreak { source_info: si() });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::LineBreak(_)));
+    }
+
+    #[test]
+    fn test_traverse_code() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Code(Code {
+            attr: empty_attr(),
+            text: "code".to_string(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Code(c) => assert_eq!(c.text, "code"),
+            _ => panic!("Expected Code"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_math() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x^2".to_string(),
+            source_info: si(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Math(m) => assert_eq!(m.text, "x^2"),
+            _ => panic!("Expected Math"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_raw_inline() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::RawInline(RawInline {
+            format: "html".to_string(),
+            text: "<b>bold</b>".to_string(),
+            source_info: si(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::RawInline(r) => assert_eq!(r.text, "<b>bold</b>"),
+            _ => panic!("Expected RawInline"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_shortcode() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Shortcode(Shortcode {
+            is_escaped: false,
+            name: "test".to_string(),
+            positional_args: vec![],
+            keyword_args: std::collections::HashMap::new(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Shortcode(_)));
+    }
+
+    #[test]
+    fn test_traverse_note_reference() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::NoteReference(NoteReference {
+            id: "note1".to_string(),
+            source_info: si(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::NoteReference(_)));
+    }
+
+    #[test]
+    fn test_traverse_note() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Note(Note {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![str_inline("note content")],
+                source_info: si(),
+            })],
+            source_info: si(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Note(n) => assert_eq!(n.content.len(), 1),
+            _ => panic!("Expected Note"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_link() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Link(Link {
+            attr: empty_attr(),
+            content: vec![str_inline("link text")],
+            target: ("https://example.com".to_string(), "".to_string()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Link(l) => assert_eq!(l.target.0, "https://example.com"),
+            _ => panic!("Expected Link"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_image() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Image(Image {
+            attr: empty_attr(),
+            content: vec![str_inline("alt")],
+            target: ("image.png".to_string(), "".to_string()),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Image(_)));
+    }
+
+    #[test]
+    fn test_traverse_span() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Span(Span {
+            attr: empty_attr(),
+            content: vec![str_inline("span")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Span(_)));
+    }
+
+    #[test]
+    fn test_traverse_custom_inline() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Custom(CustomNode::new("test", empty_attr(), si()));
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Custom(_)));
+    }
+
+    #[test]
+    fn test_traverse_attr_with_inlines_filter() {
+        // Note: there's no with_inline method, filters work at the inlines level
+        let mut filter =
+            Filter::new().with_inlines(|inlines, _ctx| FilterReturn::Unchanged(inlines));
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Attr(empty_attr(), AttrSourceInfo::empty());
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Attr(_, _)));
+    }
+
+    #[test]
+    fn test_traverse_attr_without_filter() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = Inline::Attr(empty_attr(), AttrSourceInfo::empty());
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Inline::Attr(_, _)));
+    }
+
+    // === Tests for block traversal ===
+
+    #[test]
+    fn test_traverse_paragraph() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Paragraph(Paragraph {
+            content: vec![str_inline("paragraph")],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Paragraph(_)));
+    }
+
+    #[test]
+    fn test_traverse_plain() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Plain(Plain {
+            content: vec![str_inline("plain")],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Plain(_)));
+    }
+
+    #[test]
+    fn test_traverse_code_block() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::CodeBlock(CodeBlock {
+            attr: empty_attr(),
+            text: "code".to_string(),
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::CodeBlock(_)));
+    }
+
+    #[test]
+    fn test_traverse_raw_block() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div></div>".to_string(),
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::RawBlock(_)));
+    }
+
+    #[test]
+    fn test_traverse_horizontal_rule() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::HorizontalRule(HorizontalRule { source_info: si() });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::HorizontalRule(_)));
+    }
+
+    #[test]
+    fn test_traverse_line_block() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::LineBlock(LineBlock {
+            content: vec![vec![str_inline("line 1")], vec![str_inline("line 2")]],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::LineBlock(lb) => assert_eq!(lb.content.len(), 2),
+            _ => panic!("Expected LineBlock"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_ordered_list() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
+            content: vec![vec![Block::Plain(Plain {
+                content: vec![str_inline("item 1")],
+                source_info: si(),
+            })]],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::OrderedList(ol) => assert_eq!(ol.content.len(), 1),
+            _ => panic!("Expected OrderedList"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_bullet_list() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::BulletList(BulletList {
+            content: vec![vec![Block::Plain(Plain {
+                content: vec![str_inline("item")],
+                source_info: si(),
+            })]],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::BulletList(bl) => assert_eq!(bl.content.len(), 1),
+            _ => panic!("Expected BulletList"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_definition_list() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::DefinitionList(DefinitionList {
+            content: vec![(
+                vec![str_inline("term")],
+                vec![vec![Block::Plain(Plain {
+                    content: vec![str_inline("definition")],
+                    source_info: si(),
+                })]],
+            )],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::DefinitionList(dl) => assert_eq!(dl.content.len(), 1),
+            _ => panic!("Expected DefinitionList"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_block_quote() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::BlockQuote(BlockQuote {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![str_inline("quote")],
+                source_info: si(),
+            })],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::BlockQuote(_)));
+    }
+
+    #[test]
+    fn test_traverse_div() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Div(Div {
+            attr: empty_attr(),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![str_inline("div content")],
+                source_info: si(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Div(_)));
+    }
+
+    #[test]
+    fn test_traverse_header() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Header(Header {
+            level: 1,
+            attr: empty_attr(),
+            content: vec![str_inline("heading")],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::Header(h) => assert_eq!(h.level, 1),
+            _ => panic!("Expected Header"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_figure() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Figure(Figure {
+            attr: empty_attr(),
+            caption: Caption {
+                short: None,
+                long: Some(vec![Block::Plain(Plain {
+                    content: vec![str_inline("caption")],
+                    source_info: si(),
+                })]),
+                source_info: si(),
+            },
+            content: vec![Block::Plain(Plain {
+                content: vec![str_inline("figure content")],
+                source_info: si(),
+            })],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Figure(_)));
+    }
+
+    #[test]
+    fn test_traverse_table() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Table(Table {
+            attr: empty_attr(),
+            caption: Caption {
+                short: None,
+                long: None,
+                source_info: si(),
+            },
+            colspec: vec![(Alignment::Default, pandoc::ColWidth::Default)],
+            head: TableHead {
+                attr: empty_attr(),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![TableBody {
+                attr: empty_attr(),
+                rowhead_columns: 0,
+                head: vec![],
+                body: vec![pandoc::Row {
+                    attr: empty_attr(),
+                    cells: vec![Cell {
+                        attr: empty_attr(),
+                        alignment: Alignment::Default,
+                        row_span: 1,
+                        col_span: 1,
+                        content: vec![Block::Plain(Plain {
+                            content: vec![str_inline("cell")],
+                            source_info: si(),
+                        })],
+                        source_info: si(),
+                        attr_source: AttrSourceInfo::empty(),
+                    }],
+                    source_info: si(),
+                    attr_source: AttrSourceInfo::empty(),
+                }],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            }],
+            foot: TableFoot {
+                attr: empty_attr(),
+                rows: vec![],
+                source_info: si(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Table(_)));
+    }
+
+    #[test]
+    fn test_traverse_block_metadata() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::BlockMetadata(MetaBlock {
+            meta: config_str("value"),
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::BlockMetadata(_)));
+    }
+
+    #[test]
+    fn test_traverse_block_metadata_with_meta_filter() {
+        let mut filter = Filter::new().with_meta(|meta, _ctx| FilterReturn::Unchanged(meta));
+        let mut ctx = FilterContext::new();
+        let block = Block::BlockMetadata(MetaBlock {
+            meta: config_str("value"),
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::BlockMetadata(_)));
+    }
+
+    #[test]
+    fn test_traverse_block_metadata_with_meta_filter_transform() {
+        let mut filter = Filter::new()
+            .with_meta(|_meta, _ctx| FilterReturn::FilterResult(config_str("transformed"), false));
+        let mut ctx = FilterContext::new();
+        let block = Block::BlockMetadata(MetaBlock {
+            meta: config_str("value"),
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Block::BlockMetadata(m) => match &m.meta.value {
+                ConfigValueKind::Scalar(Yaml::String(s)) => assert_eq!(s, "transformed"),
+                _ => panic!("Expected String scalar"),
+            },
+            _ => panic!("Expected BlockMetadata"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_block_metadata_with_meta_filter_recurse() {
+        let mut filter =
+            Filter::new().with_meta(|meta, _ctx| FilterReturn::FilterResult(meta, true));
+        let mut ctx = FilterContext::new();
+        let block = Block::BlockMetadata(MetaBlock {
+            meta: config_map(vec![("key", config_str("value"))]),
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::BlockMetadata(_)));
+    }
+
+    #[test]
+    fn test_traverse_custom_block() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Custom(CustomNode::new("test", empty_attr(), si()));
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Custom(_)));
+    }
+
+    // === Tests for inlines filter ===
+
+    #[test]
+    fn test_traverse_inlines_unchanged() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inlines = vec![str_inline("hello"), str_inline("world")];
+        let result = topdown_traverse_inlines(inlines, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_traverse_inlines_with_filter() {
+        let mut filter =
+            Filter::new().with_inlines(|inlines, _ctx| FilterReturn::Unchanged(inlines));
+        let mut ctx = FilterContext::new();
+        let inlines = vec![str_inline("hello")];
+        let result = topdown_traverse_inlines(inlines, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_traverse_inlines_filter_no_recurse() {
+        let mut filter = Filter::new().with_inlines(|_inlines, _ctx| {
+            FilterReturn::FilterResult(vec![str_inline("replaced")], false)
+        });
+        let mut ctx = FilterContext::new();
+        let inlines = vec![str_inline("hello")];
+        let result = topdown_traverse_inlines(inlines, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Str(s) => assert_eq!(s.text, "replaced"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    // === Tests for blocks filter ===
+
+    #[test]
+    fn test_traverse_blocks_unchanged() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let blocks = vec![Block::Paragraph(Paragraph {
+            content: vec![str_inline("hello")],
+            source_info: si(),
+        })];
+        let result = topdown_traverse_blocks(blocks, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_traverse_blocks_with_filter() {
+        let mut filter = Filter::new().with_blocks(|blocks, _ctx| FilterReturn::Unchanged(blocks));
+        let mut ctx = FilterContext::new();
+        let blocks = vec![Block::Paragraph(Paragraph {
+            content: vec![str_inline("hello")],
+            source_info: si(),
+        })];
+        let result = topdown_traverse_blocks(blocks, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_traverse_blocks_filter_no_recurse() {
+        let mut filter = Filter::new().with_blocks(|_blocks, _ctx| {
+            FilterReturn::FilterResult(
+                vec![Block::Plain(Plain {
+                    content: vec![str_inline("replaced")],
+                    source_info: si(),
+                })],
+                false,
+            )
+        });
+        let mut ctx = FilterContext::new();
+        let blocks = vec![Block::Paragraph(Paragraph {
+            content: vec![str_inline("hello")],
+            source_info: si(),
+        })];
+        let result = topdown_traverse_blocks(blocks, &mut filter, &mut ctx);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(result[0], Block::Plain(_)));
+    }
+
+    // === Tests for config value traversal ===
+
+    #[test]
+    fn test_traverse_config_value_string() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let value = config_str("test");
+        let result = topdown_traverse_config_value(value, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::Scalar(Yaml::String(s)) => assert_eq!(s, "test"),
+            _ => panic!("Expected String scalar"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_config_value_map() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let value = config_map(vec![("key", config_str("value"))]);
+        let result = topdown_traverse_config_value(value, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::Map(entries) => {
+                assert_eq!(entries.len(), 1);
+                assert_eq!(entries[0].key, "key");
+            }
+            _ => panic!("Expected Map"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_config_value_array() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let value = config_array(vec![config_str("a"), config_str("b")]);
+        let result = topdown_traverse_config_value(value, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::Array(items) => assert_eq!(items.len(), 2),
+            _ => panic!("Expected Array"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_config_value_pandoc_blocks() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let value = config_blocks(vec![Block::Paragraph(Paragraph {
+            content: vec![str_inline("test")],
+            source_info: si(),
+        })]);
+        let result = topdown_traverse_config_value(value, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::PandocBlocks(blocks) => assert_eq!(blocks.len(), 1),
+            _ => panic!("Expected PandocBlocks"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_config_value_pandoc_inlines() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let value = config_inlines(vec![str_inline("test")]);
+        let result = topdown_traverse_config_value(value, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::PandocInlines(inlines) => assert_eq!(inlines.len(), 1),
+            _ => panic!("Expected PandocInlines"),
+        }
+    }
+
+    // === Tests for meta traversal ===
+
+    #[test]
+    fn test_traverse_meta_without_filter() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let meta = config_map(vec![("key", config_str("value"))]);
+        let result = topdown_traverse_meta(meta, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::Map(entries) => assert_eq!(entries.len(), 1),
+            _ => panic!("Expected Map"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_meta_with_filter_unchanged() {
+        let mut filter = Filter::new().with_meta(|meta, _ctx| FilterReturn::Unchanged(meta));
+        let mut ctx = FilterContext::new();
+        let meta = config_map(vec![("key", config_str("value"))]);
+        let result = topdown_traverse_meta(meta, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::Map(entries) => assert_eq!(entries.len(), 1),
+            _ => panic!("Expected Map"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_meta_with_filter_transform_no_recurse() {
+        let mut filter = Filter::new()
+            .with_meta(|_meta, _ctx| FilterReturn::FilterResult(config_str("transformed"), false));
+        let mut ctx = FilterContext::new();
+        let meta = config_map(vec![("key", config_str("value"))]);
+        let result = topdown_traverse_meta(meta, &mut filter, &mut ctx);
+        match &result.value {
+            ConfigValueKind::Scalar(Yaml::String(s)) => assert_eq!(s, "transformed"),
+            _ => panic!("Expected String scalar"),
+        }
+    }
+
+    #[test]
+    fn test_traverse_meta_with_filter_recurse() {
+        let filter_count = std::cell::RefCell::new(0);
+        let mut filter = Filter::new().with_meta(|meta, _ctx| {
+            let mut count = filter_count.borrow_mut();
+            *count += 1;
+            if *count == 1 {
+                FilterReturn::FilterResult(meta, true)
+            } else {
+                FilterReturn::Unchanged(meta)
+            }
+        });
+        let mut ctx = FilterContext::new();
+        let meta = config_map(vec![("key", config_str("value"))]);
+        let _ = topdown_traverse_meta(meta, &mut filter, &mut ctx);
+        assert_eq!(*filter_count.borrow(), 2);
+    }
+
+    // === Tests for full document traversal ===
+
+    #[test]
+    fn test_traverse_document() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let doc = pandoc::Pandoc {
+            meta: config_map(vec![("title", config_str("Test Document"))]),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![str_inline("content")],
+                source_info: si(),
+            })],
+        };
+        let result = topdown_traverse(doc, &mut filter, &mut ctx);
+        assert_eq!(result.blocks.len(), 1);
+    }
+
+    // === Tests for InlineFilterableStructure implementations ===
+
+    #[test]
+    fn test_inline_filterable_structure_note() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let note = Note {
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![str_inline("note")],
+                source_info: si(),
+            })],
+            source_info: si(),
+        };
+        let result = note.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Inline::Note(_)));
+    }
+
+    #[test]
+    fn test_inline_filterable_structure_inline() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let inline = str_inline("test");
+        let result = inline.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Inline::Str(_)));
+    }
+
+    #[test]
+    fn test_inline_filterable_structure_attr() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let attr_tuple = (empty_attr(), AttrSourceInfo::empty());
+        let result = attr_tuple.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Inline::Attr(_, _)));
+    }
+
+    // === Tests for BlockFilterableStructure implementations ===
+
+    #[test]
+    fn test_block_filterable_structure_line_block() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let line_block = LineBlock {
+            content: vec![vec![str_inline("line")]],
+            source_info: si(),
+        };
+        let result = line_block.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Block::LineBlock(_)));
+    }
+
+    #[test]
+    fn test_block_filterable_structure_ordered_list() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let ordered_list = OrderedList {
+            attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
+            content: vec![vec![Block::Plain(Plain {
+                content: vec![str_inline("item")],
+                source_info: si(),
+            })]],
+            source_info: si(),
+        };
+        let result = ordered_list.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Block::OrderedList(_)));
+    }
+
+    #[test]
+    fn test_block_filterable_structure_definition_list() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let def_list = DefinitionList {
+            content: vec![(vec![str_inline("term")], vec![vec![]])],
+            source_info: si(),
+        };
+        let result = def_list.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Block::DefinitionList(_)));
+    }
+
+    #[test]
+    fn test_block_filterable_structure_figure() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let figure = Figure {
+            attr: empty_attr(),
+            caption: Caption {
+                short: None,
+                long: None,
+                source_info: si(),
+            },
+            content: vec![],
+            source_info: si(),
+            attr_source: AttrSourceInfo::empty(),
+        };
+        let result = figure.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Block::Figure(_)));
+    }
+
+    #[test]
+    fn test_block_filterable_structure_block() {
+        let mut filter = Filter::new();
+        let mut ctx = FilterContext::new();
+        let block = Block::Paragraph(Paragraph {
+            content: vec![str_inline("test")],
+            source_info: si(),
+        });
+        let result = block.filter_structure(&mut filter, &mut ctx);
+        assert!(matches!(result, Block::Paragraph(_)));
+    }
+
+    // === Tests for inline filter with type-specific handler ===
+
+    #[test]
+    fn test_inline_filter_with_specific_handler() {
+        // When a specific handler (like with_str) is set, it takes precedence
+        let mut filter = Filter::new().with_str(|s, _ctx| {
+            FilterReturn::FilterResult(
+                vec![Inline::Str(Str {
+                    text: format!("modified: {}", s.text),
+                    source_info: s.source_info,
+                })],
+                false,
+            )
+        });
+        let mut ctx = FilterContext::new();
+        let inline = str_inline("hello");
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        match &result[0] {
+            Inline::Str(s) => assert_eq!(s.text, "modified: hello"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    // === Tests for block filter with type-specific handler ===
+
+    #[test]
+    fn test_block_filter_with_specific_handler() {
+        let mut filter = Filter::new().with_paragraph(|para, _ctx| {
+            FilterReturn::FilterResult(
+                vec![Block::Plain(Plain {
+                    content: para.content,
+                    source_info: para.source_info,
+                })],
+                false,
+            )
+        });
+        let mut ctx = FilterContext::new();
+        let block = Block::Paragraph(Paragraph {
+            content: vec![str_inline("test")],
+            source_info: si(),
+        });
+        let result = topdown_traverse_block(block, &mut filter, &mut ctx);
+        assert!(matches!(result[0], Block::Plain(_)));
+    }
+
+    // === Tests for filter with recursion ===
+
+    #[test]
+    fn test_filter_with_recursion() {
+        let mut filter = Filter::new().with_str(|s, _ctx| {
+            if s.text == "original" {
+                FilterReturn::FilterResult(
+                    vec![Inline::Emph(Emph {
+                        content: vec![Inline::Str(Str {
+                            text: "nested".to_string(),
+                            source_info: si(),
+                        })],
+                        source_info: si(),
+                    })],
+                    true,
+                )
+            } else {
+                FilterReturn::Unchanged(s)
+            }
+        });
+        let mut ctx = FilterContext::new();
+        let inline = str_inline("original");
+        let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
+        assert!(matches!(result[0], Inline::Emph(_)));
+    }
+}

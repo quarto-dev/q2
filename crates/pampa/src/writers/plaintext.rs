@@ -1317,4 +1317,10 @@ mod tests {
         assert_eq!(result, "");
         assert!(diags.is_empty());
     }
+
+    #[test]
+    fn test_plain_text_writer_context_default() {
+        let ctx = PlainTextWriterContext::default();
+        assert!(ctx.diagnostics.is_empty());
+    }
 }

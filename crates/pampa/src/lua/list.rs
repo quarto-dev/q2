@@ -572,3 +572,554 @@ pub fn create_blocks_table(lua: &Lua, blocks: &[crate::pandoc::Block]) -> Result
 
     Ok(Value::Table(table))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =========================================================================
+    // posrelat tests
+    // =========================================================================
+
+    #[test]
+    fn test_posrelat_positive() {
+        assert_eq!(posrelat(1, 5), 1);
+        assert_eq!(posrelat(3, 5), 3);
+        assert_eq!(posrelat(5, 5), 5);
+    }
+
+    #[test]
+    fn test_posrelat_negative() {
+        assert_eq!(posrelat(-1, 5), 5); // -1 is last element
+        assert_eq!(posrelat(-2, 5), 4); // -2 is second to last
+        assert_eq!(posrelat(-5, 5), 1); // -5 is first element
+    }
+
+    #[test]
+    fn test_posrelat_overflow() {
+        assert_eq!(posrelat(-6, 5), 0); // Beyond start
+        assert_eq!(posrelat(-10, 5), 0); // Way beyond start
+    }
+
+    // =========================================================================
+    // get_or_create_* tests
+    // =========================================================================
+
+    #[test]
+    fn test_get_or_create_list_metatable_caching() {
+        let lua = Lua::new();
+
+        // First call creates the metatable
+        let mt1 = get_or_create_list_metatable(&lua).unwrap();
+
+        // Second call should return the cached version
+        let mt2 = get_or_create_list_metatable(&lua).unwrap();
+
+        // Should be the same table
+        lua.globals().set("mt1", mt1).unwrap();
+        lua.globals().set("mt2", mt2).unwrap();
+        let same: bool = lua.load("return rawequal(mt1, mt2)").eval().unwrap();
+        assert!(same);
+    }
+
+    #[test]
+    fn test_get_or_create_inlines_metatable_caching() {
+        let lua = Lua::new();
+
+        let mt1 = get_or_create_inlines_metatable(&lua).unwrap();
+        let mt2 = get_or_create_inlines_metatable(&lua).unwrap();
+
+        lua.globals().set("mt1", mt1).unwrap();
+        lua.globals().set("mt2", mt2).unwrap();
+        let same: bool = lua.load("return rawequal(mt1, mt2)").eval().unwrap();
+        assert!(same);
+    }
+
+    #[test]
+    fn test_get_or_create_blocks_metatable_caching() {
+        let lua = Lua::new();
+
+        let mt1 = get_or_create_blocks_metatable(&lua).unwrap();
+        let mt2 = get_or_create_blocks_metatable(&lua).unwrap();
+
+        lua.globals().set("mt1", mt1).unwrap();
+        lua.globals().set("mt2", mt2).unwrap();
+        let same: bool = lua.load("return rawequal(mt1, mt2)").eval().unwrap();
+        assert!(same);
+    }
+
+    // =========================================================================
+    // List method tests
+    // =========================================================================
+
+    #[test]
+    fn test_concat() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+
+        let list1 = lua.create_table().unwrap();
+        list1.set_metatable(Some(mt.clone()));
+        list1.set(1, "a").unwrap();
+        list1.set(2, "b").unwrap();
+
+        let list2 = lua.create_table().unwrap();
+        list2.set_metatable(Some(mt.clone()));
+        list2.set(1, "c").unwrap();
+        list2.set(2, "d").unwrap();
+
+        lua.globals().set("list1", list1).unwrap();
+        lua.globals().set("list2", list2).unwrap();
+
+        let result: Table = lua.load("return list1 .. list2").eval().unwrap();
+        assert_eq!(result.get::<String>(1).unwrap(), "a");
+        assert_eq!(result.get::<String>(2).unwrap(), "b");
+        assert_eq!(result.get::<String>(3).unwrap(), "c");
+        assert_eq!(result.get::<String>(4).unwrap(), "d");
+        assert_eq!(result.raw_len(), 4);
+    }
+
+    #[test]
+    fn test_eq_same_lists() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+
+        let list1 = lua.create_table().unwrap();
+        list1.set_metatable(Some(mt.clone()));
+        list1.set(1, 1).unwrap();
+        list1.set(2, 2).unwrap();
+
+        let list2 = lua.create_table().unwrap();
+        list2.set_metatable(Some(mt.clone()));
+        list2.set(1, 1).unwrap();
+        list2.set(2, 2).unwrap();
+
+        lua.globals().set("list1", list1).unwrap();
+        lua.globals().set("list2", list2).unwrap();
+
+        let result: bool = lua.load("return list1 == list2").eval().unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_eq_different_elements() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+
+        let list1 = lua.create_table().unwrap();
+        list1.set_metatable(Some(mt.clone()));
+        list1.set(1, 1).unwrap();
+
+        let list2 = lua.create_table().unwrap();
+        list2.set_metatable(Some(mt.clone()));
+        list2.set(1, 2).unwrap();
+
+        lua.globals().set("list1", list1).unwrap();
+        lua.globals().set("list2", list2).unwrap();
+
+        let result: bool = lua.load("return list1 == list2").eval().unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_eq_different_lengths() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+
+        let list1 = lua.create_table().unwrap();
+        list1.set_metatable(Some(mt.clone()));
+        list1.set(1, 1).unwrap();
+        list1.set(2, 2).unwrap();
+
+        let list2 = lua.create_table().unwrap();
+        list2.set_metatable(Some(mt.clone()));
+        list2.set(1, 1).unwrap();
+
+        lua.globals().set("list1", list1).unwrap();
+        lua.globals().set("list2", list2).unwrap();
+
+        let result: bool = lua.load("return list1 == list2").eval().unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_eq_different_metatables() {
+        let lua = Lua::new();
+        let mt1 = get_or_create_list_metatable(&lua).unwrap();
+        let mt2 = get_or_create_inlines_metatable(&lua).unwrap();
+
+        let list1 = lua.create_table().unwrap();
+        list1.set_metatable(Some(mt1));
+        list1.set(1, 1).unwrap();
+
+        let list2 = lua.create_table().unwrap();
+        list2.set_metatable(Some(mt2));
+        list2.set(1, 1).unwrap();
+
+        lua.globals().set("list1", list1).unwrap();
+        lua.globals().set("list2", list2).unwrap();
+
+        let result: bool = lua.load("return list1 == list2").eval().unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_eq_non_table() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let eq_fn: Function = mt.get("__eq").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, 1).unwrap();
+
+        // Compare table with non-table
+        let result: bool = eq_fn.call((list, 42)).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_eq_no_metatable() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let eq_fn: Function = mt.get("__eq").unwrap();
+
+        let list1 = lua.create_table().unwrap();
+        // list1 has no metatable
+
+        let list2 = lua.create_table().unwrap();
+        list2.set_metatable(Some(mt)); // list2 has metatable
+
+        // One has metatable, one doesn't
+        let result: bool = eq_fn.call((list1, list2)).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_tostring() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set_metatable(Some(mt));
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+        list.set(3, "c").unwrap();
+
+        lua.globals().set("list", list).unwrap();
+
+        let result: String = lua.load("return tostring(list)").eval().unwrap();
+        assert_eq!(result, "List {a, b, c}");
+    }
+
+    #[test]
+    fn test_at_positive_index() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let at_fn: Function = mt.get("at").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+        list.set(3, "c").unwrap();
+
+        let result: String = at_fn.call((list.clone(), 2, Value::Nil)).unwrap();
+        assert_eq!(result, "b");
+    }
+
+    #[test]
+    fn test_at_negative_index() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let at_fn: Function = mt.get("at").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+        list.set(3, "c").unwrap();
+
+        // -1 is last element
+        let result: String = at_fn.call((list.clone(), -1, Value::Nil)).unwrap();
+        assert_eq!(result, "c");
+
+        // -2 is second to last
+        let result2: String = at_fn.call((list, -2, Value::Nil)).unwrap();
+        assert_eq!(result2, "b");
+    }
+
+    #[test]
+    fn test_at_out_of_bounds() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let at_fn: Function = mt.get("at").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+
+        // Out of bounds with default
+        let result: String = at_fn.call((list.clone(), 10, "default")).unwrap();
+        assert_eq!(result, "default");
+
+        // Negative out of bounds
+        let result2: String = at_fn.call((list, -10, "default")).unwrap();
+        assert_eq!(result2, "default");
+    }
+
+    #[test]
+    fn test_at_nil_value() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let at_fn: Function = mt.get("at").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        // Index 2 doesn't exist
+
+        // Non-existent index returns default
+        let result: String = at_fn.call((list, 2, "default")).unwrap();
+        assert_eq!(result, "default");
+    }
+
+    #[test]
+    fn test_filter_with_no_metatable() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let filter_fn: Function = mt.get("filter").unwrap();
+
+        // Create a table WITHOUT metatable
+        let list = lua.create_table().unwrap();
+        list.set(1, 1).unwrap();
+        list.set(2, 2).unwrap();
+        list.set(3, 3).unwrap();
+
+        let pred = lua.create_function(|_, (val, _): (i64, i64)| Ok(val > 1)).unwrap();
+
+        let result: Table = filter_fn.call((list, pred)).unwrap();
+        assert_eq!(result.raw_len(), 2);
+        // Result should have List metatable
+        assert!(result.metatable().is_some());
+    }
+
+    #[test]
+    fn test_find_success() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let find_fn: Function = mt.get("find").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+        list.set(3, "c").unwrap();
+
+        let (val, idx): (String, Option<i64>) = find_fn.call((list, "b", Value::Nil)).unwrap();
+        assert_eq!(val, "b");
+        assert_eq!(idx, Some(2));
+    }
+
+    #[test]
+    fn test_find_not_found() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let find_fn: Function = mt.get("find").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+
+        let (val, idx): (Value, Option<i64>) = find_fn.call((list, "z", Value::Nil)).unwrap();
+        assert_eq!(val, Value::Nil);
+        assert_eq!(idx, None);
+    }
+
+    #[test]
+    fn test_find_if_success() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let find_if_fn: Function = mt.get("find_if").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, 10).unwrap();
+        list.set(2, 20).unwrap();
+        list.set(3, 30).unwrap();
+
+        let pred = lua.create_function(|_, (val, _): (i64, i64)| Ok(val > 15)).unwrap();
+
+        let (val, idx): (i64, Option<i64>) = find_if_fn.call((list, pred, Value::Nil)).unwrap();
+        assert_eq!(val, 20);
+        assert_eq!(idx, Some(2));
+    }
+
+    #[test]
+    fn test_find_if_not_found() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let find_if_fn: Function = mt.get("find_if").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, 10).unwrap();
+        list.set(2, 20).unwrap();
+
+        let pred = lua.create_function(|_, (val, _): (i64, i64)| Ok(val > 100)).unwrap();
+
+        let (val, idx): (Value, Option<i64>) = find_if_fn.call((list, pred, Value::Nil)).unwrap();
+        assert_eq!(val, Value::Nil);
+        assert_eq!(idx, None);
+    }
+
+    #[test]
+    fn test_includes_found() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let includes_fn: Function = mt.get("includes").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+        list.set(3, "c").unwrap();
+
+        let result: bool = includes_fn.call((list, "b", Value::Nil)).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_includes_not_found() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let includes_fn: Function = mt.get("includes").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+
+        let result: bool = includes_fn.call((list, "z", Value::Nil)).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_iter_zero_step_error() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let iter_fn: Function = mt.get("iter").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, 1).unwrap();
+
+        let result: Result<Function> = iter_fn.call((list, 0));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_iter_negative_step() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let iter_fn: Function = mt.get("iter").unwrap();
+
+        let list = lua.create_table().unwrap();
+        list.set(1, "a").unwrap();
+        list.set(2, "b").unwrap();
+        list.set(3, "c").unwrap();
+
+        let iterator: Function = iter_fn.call((list, -1)).unwrap();
+
+        // Should iterate backwards from the end
+        let val1: String = iterator.call(()).unwrap();
+        assert_eq!(val1, "c");
+
+        let val2: String = iterator.call(()).unwrap();
+        assert_eq!(val2, "b");
+
+        let val3: String = iterator.call(()).unwrap();
+        assert_eq!(val3, "a");
+
+        let val4: Value = iterator.call(()).unwrap();
+        assert_eq!(val4, Value::Nil);
+    }
+
+    #[test]
+    fn test_new_no_args() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let new_fn: Function = mt.get("new").unwrap();
+
+        let result: Table = new_fn.call((mt.clone(), Value::Nil)).unwrap();
+        assert_eq!(result.raw_len(), 0);
+        assert!(result.metatable().is_some());
+    }
+
+    #[test]
+    fn test_new_with_nil() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let new_fn: Function = mt.get("new").unwrap();
+
+        let result: Table = new_fn.call((mt.clone(), Value::Nil)).unwrap();
+        assert_eq!(result.raw_len(), 0);
+    }
+
+    #[test]
+    fn test_new_with_table() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let new_fn: Function = mt.get("new").unwrap();
+
+        let input = lua.create_table().unwrap();
+        input.set(1, 1).unwrap();
+        input.set(2, 2).unwrap();
+        input.set(3, 3).unwrap();
+
+        let result: Table = new_fn.call((mt.clone(), Value::Table(input))).unwrap();
+        assert_eq!(result.raw_len(), 3);
+        assert!(result.metatable().is_some());
+    }
+
+    #[test]
+    fn test_new_with_iterator() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let new_fn: Function = mt.get("new").unwrap();
+
+        // Create an iterator function that returns 1, 2, 3, then nil
+        let iter_fn = lua.create_function_mut({
+            let mut i = 0;
+            move |_, ()| {
+                i += 1;
+                if i <= 3 {
+                    Ok(Value::Integer(i))
+                } else {
+                    Ok(Value::Nil)
+                }
+            }
+        }).unwrap();
+
+        let result: Table = new_fn.call((mt.clone(), Value::Function(iter_fn))).unwrap();
+        assert_eq!(result.raw_len(), 3);
+        assert_eq!(result.get::<i64>(1).unwrap(), 1);
+        assert_eq!(result.get::<i64>(2).unwrap(), 2);
+        assert_eq!(result.get::<i64>(3).unwrap(), 3);
+    }
+
+    #[test]
+    fn test_new_with_invalid_arg() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+        let new_fn: Function = mt.get("new").unwrap();
+
+        let result: Result<Table> = new_fn.call((mt.clone(), Value::Integer(42)));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_copy_table_module_functions() {
+        let lua = Lua::new();
+        let mt = get_or_create_list_metatable(&lua).unwrap();
+
+        // Check that table.insert, table.remove, table.sort are available
+        let insert: Result<Function> = mt.get("insert");
+        let remove: Result<Function> = mt.get("remove");
+        let sort: Result<Function> = mt.get("sort");
+
+        // These should be available if Lua's table module exists
+        assert!(insert.is_ok());
+        assert!(remove.is_ok());
+        assert!(sort.is_ok());
+    }
+}

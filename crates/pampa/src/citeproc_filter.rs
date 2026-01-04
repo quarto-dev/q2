@@ -1832,4 +1832,1342 @@ mod tests {
             panic!("Expected Div block");
         }
     }
+
+    // Helper to create a citation inline
+    fn make_cite(id: &str) -> Inline {
+        Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: id.to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        })
+    }
+
+    // Tests for collect_citations in various block types
+    #[test]
+    fn test_collect_citations_in_plain_block() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Plain(crate::pandoc::Plain {
+                content: vec![make_cite("plain2020")],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "plain2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_header_block() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Header(crate::pandoc::Header {
+                level: 1,
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![str_inline("Title "), make_cite("header2020")],
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "header2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_ordered_list() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::OrderedList(crate::pandoc::OrderedList {
+                attr: (
+                    1,
+                    crate::pandoc::ListNumberStyle::Decimal,
+                    crate::pandoc::ListNumberDelim::Period,
+                ),
+                content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("orderedlist2020")],
+                    source_info: si(),
+                })]],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "orderedlist2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_bullet_list() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::BulletList(crate::pandoc::BulletList {
+                content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("bulletlist2020")],
+                    source_info: si(),
+                })]],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "bulletlist2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_definition_list() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::DefinitionList(crate::pandoc::DefinitionList {
+                content: vec![(
+                    vec![str_inline("Term "), make_cite("defterm2020")],
+                    vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
+                        content: vec![make_cite("defbody2020")],
+                        source_info: si(),
+                    })]],
+                )],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 2);
+        assert_eq!(citations[0].items[0].id, "defterm2020");
+        assert_eq!(citations[1].items[0].id, "defbody2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_figure() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Figure(crate::pandoc::Figure {
+                attr: ("fig1".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                caption: crate::pandoc::Caption {
+                    short: Some(vec![make_cite("figshort2020")]),
+                    long: Some(vec![Block::Paragraph(crate::pandoc::Paragraph {
+                        content: vec![make_cite("figlong2020")],
+                        source_info: si(),
+                    })]),
+                    source_info: si(),
+                },
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("figcontent2020")],
+                    source_info: si(),
+                })],
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 3);
+        assert_eq!(citations[0].items[0].id, "figshort2020");
+        assert_eq!(citations[1].items[0].id, "figlong2020");
+        assert_eq!(citations[2].items[0].id, "figcontent2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_table() {
+        use crate::pandoc::{
+            Alignment, Caption, Cell, Row, Table, TableBody, TableFoot, TableHead,
+        };
+
+        // Create a table with citations in caption and cells
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Table(Table {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                caption: Caption {
+                    short: Some(vec![make_cite("tableshort2020")]),
+                    long: Some(vec![Block::Paragraph(crate::pandoc::Paragraph {
+                        content: vec![make_cite("tablelong2020")],
+                        source_info: si(),
+                    })]),
+                    source_info: si(),
+                },
+                colspec: vec![(Alignment::Default, crate::pandoc::ColWidth::Default)],
+                head: TableHead {
+                    attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                    rows: vec![Row {
+                        attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                        cells: vec![Cell {
+                            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                            alignment: Alignment::Default,
+                            row_span: 1,
+                            col_span: 1,
+                            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                                content: vec![make_cite("tablehead2020")],
+                                source_info: si(),
+                            })],
+                            source_info: si(),
+                            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                        }],
+                        source_info: si(),
+                        attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                    }],
+                    source_info: si(),
+                    attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                },
+                bodies: vec![TableBody {
+                    attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                    rowhead_columns: 0,
+                    head: vec![],
+                    body: vec![Row {
+                        attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                        cells: vec![Cell {
+                            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                            alignment: Alignment::Default,
+                            row_span: 1,
+                            col_span: 1,
+                            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                                content: vec![make_cite("tablebody2020")],
+                                source_info: si(),
+                            })],
+                            source_info: si(),
+                            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                        }],
+                        source_info: si(),
+                        attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                    }],
+                    source_info: si(),
+                    attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                }],
+                foot: TableFoot {
+                    attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                    rows: vec![Row {
+                        attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                        cells: vec![Cell {
+                            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                            alignment: Alignment::Default,
+                            row_span: 1,
+                            col_span: 1,
+                            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                                content: vec![make_cite("tablefoot2020")],
+                                source_info: si(),
+                            })],
+                            source_info: si(),
+                            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                        }],
+                        source_info: si(),
+                        attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                    }],
+                    source_info: si(),
+                    attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                },
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 5);
+        assert_eq!(citations[0].items[0].id, "tableshort2020");
+        assert_eq!(citations[1].items[0].id, "tablelong2020");
+        assert_eq!(citations[2].items[0].id, "tablehead2020");
+        assert_eq!(citations[3].items[0].id, "tablebody2020");
+        assert_eq!(citations[4].items[0].id, "tablefoot2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_line_block() {
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::LineBlock(crate::pandoc::LineBlock {
+                content: vec![vec![str_inline("Line 1 "), make_cite("lineblock2020")]],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "lineblock2020");
+    }
+
+    // Tests for collect_citations in various inline types
+    #[test]
+    fn test_collect_citations_in_strong() {
+        let cite = make_cite("strong2020");
+        let strong = Inline::Strong(Strong {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![strong],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "strong2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_underline() {
+        let cite = make_cite("underline2020");
+        let underline = Inline::Underline(Underline {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![underline],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "underline2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_strikeout() {
+        let cite = make_cite("strikeout2020");
+        let strikeout = Inline::Strikeout(Strikeout {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![strikeout],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "strikeout2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_superscript() {
+        let cite = make_cite("superscript2020");
+        let superscript = Inline::Superscript(Superscript {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![superscript],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "superscript2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_subscript() {
+        let cite = make_cite("subscript2020");
+        let subscript = Inline::Subscript(Subscript {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![subscript],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "subscript2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_smallcaps() {
+        let cite = make_cite("smallcaps2020");
+        let smallcaps = Inline::SmallCaps(SmallCaps {
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![smallcaps],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "smallcaps2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_quoted() {
+        let cite = make_cite("quoted2020");
+        let quoted = Inline::Quoted(Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![cite],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![quoted],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "quoted2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_link() {
+        let cite = make_cite("link2020");
+        let link = Inline::Link(crate::pandoc::Link {
+            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![cite],
+            target: ("https://example.com".to_string(), "".to_string()),
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            target_source: crate::pandoc::TargetSourceInfo::empty(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![link],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "link2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_span() {
+        let cite = make_cite("span2020");
+        let span = Inline::Span(crate::pandoc::Span {
+            attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+            content: vec![cite],
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![span],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "span2020");
+    }
+
+    #[test]
+    fn test_collect_citations_in_note() {
+        let cite = make_cite("note2020");
+        let note = Inline::Note(crate::pandoc::Note {
+            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![note],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].id, "note2020");
+    }
+
+    // Test citation with prefix and suffix
+    #[test]
+    fn test_collect_citations_with_prefix_suffix() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "prefixsuffix2020".to_string(),
+                prefix: vec![str_inline("see ")],
+                suffix: vec![str_inline(", p. 42")],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].prefix, Some("see ".to_string()));
+        assert_eq!(citations[0].items[0].suffix, Some(", p. 42".to_string()));
+    }
+
+    // Test citation modes
+    #[test]
+    fn test_collect_citations_suppress_author_mode() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "suppress2020".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::SuppressAuthor,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].suppress_author, Some(true));
+        assert_eq!(citations[0].items[0].author_only, Some(false));
+    }
+
+    #[test]
+    fn test_collect_citations_author_in_text_mode() {
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "authoronly2020".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::AuthorInText,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+        };
+        let citations = collect_citations(&pandoc);
+        assert_eq!(citations.len(), 1);
+        assert_eq!(citations[0].items[0].suppress_author, Some(false));
+        assert_eq!(citations[0].items[0].author_only, Some(true));
+    }
+
+    // Tests for transform functions
+    #[test]
+    fn test_transform_blocks_basic() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let cite = make_cite("smith2020");
+        let mut blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![cite],
+            source_info: si(),
+        })];
+
+        // Create a mock citation output
+        let citations = vec![CpCitation {
+            id: None,
+            note_number: Some(1),
+            items: vec![quarto_citeproc::CitationItem {
+                id: "smith2020".to_string(),
+                locator: None,
+                label: None,
+                prefix: None,
+                suffix: None,
+                suppress_author: Some(false),
+                author_only: Some(false),
+                position: None,
+            }],
+        }];
+        let rendered = vec!["(Smith 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        // Create a minimal processor
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_blocks(
+            &mut blocks,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // After transformation, the cite should be replaced with a Str
+        assert_eq!(blocks.len(), 1);
+        if let Block::Paragraph(p) = &blocks[0] {
+            assert_eq!(p.content.len(), 1);
+            if let Inline::Str(s) = &p.content[0] {
+                assert_eq!(s.text, "(Smith 2020)");
+            } else {
+                panic!("Expected Str inline");
+            }
+        } else {
+            panic!("Expected Paragraph block");
+        }
+    }
+
+    #[test]
+    fn test_transform_inlines_with_nested_cite() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let cite = make_cite("nested2020");
+        let mut inlines = vec![Inline::Emph(Emph {
+            content: vec![cite],
+            source_info: si(),
+        })];
+
+        let citations = vec![CpCitation {
+            id: None,
+            note_number: Some(1),
+            items: vec![quarto_citeproc::CitationItem {
+                id: "nested2020".to_string(),
+                locator: None,
+                label: None,
+                prefix: None,
+                suffix: None,
+                suppress_author: Some(false),
+                author_only: Some(false),
+                position: None,
+            }],
+        }];
+        let rendered = vec!["(Nested 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_inlines(
+            &mut inlines,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // The Emph should now contain a Str instead of Cite
+        if let Inline::Emph(e) = &inlines[0] {
+            if let Inline::Str(s) = &e.content[0] {
+                assert_eq!(s.text, "(Nested 2020)");
+            } else {
+                panic!("Expected Str inside Emph");
+            }
+        } else {
+            panic!("Expected Emph");
+        }
+    }
+
+    #[test]
+    fn test_transform_blocks_in_various_containers() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let cite = make_cite("container2020");
+        let mut blocks = vec![
+            // Test in BlockQuote
+            Block::BlockQuote(crate::pandoc::BlockQuote {
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![cite.clone()],
+                    source_info: si(),
+                })],
+                source_info: si(),
+            }),
+            // Test in Div
+            Block::Div(crate::pandoc::Div {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("div2020")],
+                    source_info: si(),
+                })],
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            }),
+        ];
+
+        let citations = vec![
+            CpCitation {
+                id: None,
+                note_number: Some(1),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "container2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+            CpCitation {
+                id: None,
+                note_number: Some(2),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "div2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+        ];
+        let rendered = vec!["(Container 2020)".to_string(), "(Div 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_blocks(
+            &mut blocks,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check BlockQuote
+        if let Block::BlockQuote(bq) = &blocks[0] {
+            if let Block::Paragraph(p) = &bq.content[0] {
+                if let Inline::Str(s) = &p.content[0] {
+                    assert_eq!(s.text, "(Container 2020)");
+                }
+            }
+        }
+
+        // Check Div
+        if let Block::Div(d) = &blocks[1] {
+            if let Block::Paragraph(p) = &d.content[0] {
+                if let Inline::Str(s) = &p.content[0] {
+                    assert_eq!(s.text, "(Div 2020)");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_blocks_in_lists() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let mut blocks = vec![
+            // Test in OrderedList
+            Block::OrderedList(crate::pandoc::OrderedList {
+                attr: (
+                    1,
+                    crate::pandoc::ListNumberStyle::Decimal,
+                    crate::pandoc::ListNumberDelim::Period,
+                ),
+                content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("ordered2020")],
+                    source_info: si(),
+                })]],
+                source_info: si(),
+            }),
+            // Test in BulletList
+            Block::BulletList(crate::pandoc::BulletList {
+                content: vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("bullet2020")],
+                    source_info: si(),
+                })]],
+                source_info: si(),
+            }),
+        ];
+
+        let citations = vec![
+            CpCitation {
+                id: None,
+                note_number: Some(1),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "ordered2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+            CpCitation {
+                id: None,
+                note_number: Some(2),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "bullet2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+        ];
+        let rendered = vec!["(Ordered 2020)".to_string(), "(Bullet 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_blocks(
+            &mut blocks,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check OrderedList
+        if let Block::OrderedList(ol) = &blocks[0] {
+            if let Block::Paragraph(p) = &ol.content[0][0] {
+                if let Inline::Str(s) = &p.content[0] {
+                    assert_eq!(s.text, "(Ordered 2020)");
+                }
+            }
+        }
+
+        // Check BulletList
+        if let Block::BulletList(bl) = &blocks[1] {
+            if let Block::Paragraph(p) = &bl.content[0][0] {
+                if let Inline::Str(s) = &p.content[0] {
+                    assert_eq!(s.text, "(Bullet 2020)");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_inlines_various_types() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let mut inlines = vec![
+            // Strong
+            Inline::Strong(Strong {
+                content: vec![make_cite("strong2020")],
+                source_info: si(),
+            }),
+            // Underline
+            Inline::Underline(Underline {
+                content: vec![make_cite("underline2020")],
+                source_info: si(),
+            }),
+            // Strikeout
+            Inline::Strikeout(Strikeout {
+                content: vec![make_cite("strikeout2020")],
+                source_info: si(),
+            }),
+            // Superscript
+            Inline::Superscript(Superscript {
+                content: vec![make_cite("super2020")],
+                source_info: si(),
+            }),
+            // Subscript
+            Inline::Subscript(Subscript {
+                content: vec![make_cite("sub2020")],
+                source_info: si(),
+            }),
+            // SmallCaps
+            Inline::SmallCaps(SmallCaps {
+                content: vec![make_cite("small2020")],
+                source_info: si(),
+            }),
+            // Quoted
+            Inline::Quoted(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content: vec![make_cite("quoted2020")],
+                source_info: si(),
+            }),
+            // Link
+            Inline::Link(crate::pandoc::Link {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![make_cite("link2020")],
+                target: ("https://example.com".to_string(), "".to_string()),
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+                target_source: crate::pandoc::TargetSourceInfo::empty(),
+            }),
+            // Span
+            Inline::Span(crate::pandoc::Span {
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![make_cite("span2020")],
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            }),
+        ];
+
+        let ids = [
+            "strong2020",
+            "underline2020",
+            "strikeout2020",
+            "super2020",
+            "sub2020",
+            "small2020",
+            "quoted2020",
+            "link2020",
+            "span2020",
+        ];
+        let citations: Vec<_> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| CpCitation {
+                id: None,
+                note_number: Some(i as i32 + 1),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: id.to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            })
+            .collect();
+        let rendered: Vec<_> = ids.iter().map(|id| format!("({})", id)).collect();
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_inlines(
+            &mut inlines,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check that all citations were transformed
+        assert_eq!(citation_index, 9);
+
+        // Verify Strong transformation
+        if let Inline::Strong(s) = &inlines[0] {
+            if let Inline::Str(str) = &s.content[0] {
+                assert_eq!(str.text, "(strong2020)");
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_blocks_in_note() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let mut inlines = vec![Inline::Note(crate::pandoc::Note {
+            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![make_cite("note2020")],
+                source_info: si(),
+            })],
+            source_info: si(),
+        })];
+
+        let citations = vec![CpCitation {
+            id: None,
+            note_number: Some(1),
+            items: vec![quarto_citeproc::CitationItem {
+                id: "note2020".to_string(),
+                locator: None,
+                label: None,
+                prefix: None,
+                suffix: None,
+                suppress_author: Some(false),
+                author_only: Some(false),
+                position: None,
+            }],
+        }];
+        let rendered = vec!["(Note 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_inlines(
+            &mut inlines,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check Note transformation
+        if let Inline::Note(n) = &inlines[0] {
+            if let Block::Paragraph(p) = &n.content[0] {
+                if let Inline::Str(s) = &p.content[0] {
+                    assert_eq!(s.text, "(Note 2020)");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_blocks_plain_and_header() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let mut blocks = vec![
+            Block::Plain(crate::pandoc::Plain {
+                content: vec![make_cite("plain2020")],
+                source_info: si(),
+            }),
+            Block::Header(crate::pandoc::Header {
+                level: 1,
+                attr: ("".to_string(), vec![], hashlink::LinkedHashMap::new()),
+                content: vec![make_cite("header2020")],
+                source_info: si(),
+                attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            }),
+        ];
+
+        let citations = vec![
+            CpCitation {
+                id: None,
+                note_number: Some(1),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "plain2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+            CpCitation {
+                id: None,
+                note_number: Some(2),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "header2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+        ];
+        let rendered = vec!["(Plain 2020)".to_string(), "(Header 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_blocks(
+            &mut blocks,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check Plain
+        if let Block::Plain(p) = &blocks[0] {
+            if let Inline::Str(s) = &p.content[0] {
+                assert_eq!(s.text, "(Plain 2020)");
+            }
+        }
+
+        // Check Header
+        if let Block::Header(h) = &blocks[1] {
+            if let Inline::Str(s) = &h.content[0] {
+                assert_eq!(s.text, "(Header 2020)");
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_blocks_definition_list() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let mut blocks = vec![Block::DefinitionList(crate::pandoc::DefinitionList {
+            content: vec![(
+                vec![make_cite("term2020")],
+                vec![vec![Block::Paragraph(crate::pandoc::Paragraph {
+                    content: vec![make_cite("def2020")],
+                    source_info: si(),
+                })]],
+            )],
+            source_info: si(),
+        })];
+
+        let citations = vec![
+            CpCitation {
+                id: None,
+                note_number: Some(1),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "term2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+            CpCitation {
+                id: None,
+                note_number: Some(2),
+                items: vec![quarto_citeproc::CitationItem {
+                    id: "def2020".to_string(),
+                    locator: None,
+                    label: None,
+                    prefix: None,
+                    suffix: None,
+                    suppress_author: Some(false),
+                    author_only: Some(false),
+                    position: None,
+                }],
+            },
+        ];
+        let rendered = vec!["(Term 2020)".to_string(), "(Def 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_blocks(
+            &mut blocks,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check DefinitionList
+        if let Block::DefinitionList(dl) = &blocks[0] {
+            let (term, defs) = &dl.content[0];
+            if let Inline::Str(s) = &term[0] {
+                assert_eq!(s.text, "(Term 2020)");
+            }
+            if let Block::Paragraph(p) = &defs[0][0] {
+                if let Inline::Str(s) = &p.content[0] {
+                    assert_eq!(s.text, "(Def 2020)");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_transform_blocks_line_block() {
+        use quarto_citeproc::Citation as CpCitation;
+
+        let mut blocks = vec![Block::LineBlock(crate::pandoc::LineBlock {
+            content: vec![vec![make_cite("line2020")]],
+            source_info: si(),
+        })];
+
+        let citations = vec![CpCitation {
+            id: None,
+            note_number: Some(1),
+            items: vec![quarto_citeproc::CitationItem {
+                id: "line2020".to_string(),
+                locator: None,
+                label: None,
+                prefix: None,
+                suffix: None,
+                suppress_author: Some(false),
+                author_only: Some(false),
+                position: None,
+            }],
+        }];
+        let rendered = vec!["(Line 2020)".to_string()];
+        let citation_outputs: Vec<_> = citations.iter().zip(rendered.iter()).collect();
+
+        let style = quarto_csl::parse_csl(DEFAULT_CSL_STYLE).unwrap();
+        let processor = quarto_citeproc::Processor::new(style);
+
+        let mut citation_index = 0;
+        transform_blocks(
+            &mut blocks,
+            &citation_outputs,
+            &mut citation_index,
+            &processor,
+        );
+
+        // Check LineBlock
+        if let Block::LineBlock(lb) = &blocks[0] {
+            if let Inline::Str(s) = &lb.content[0][0] {
+                assert_eq!(s.text, "(Line 2020)");
+            }
+        }
+    }
+
+    // Test apply_citeproc_filter with inline references
+    #[test]
+    fn test_apply_citeproc_filter_no_bibliography() {
+        use crate::pandoc::ast_context::ASTContext;
+
+        let pandoc = Pandoc {
+            meta: meta_map(vec![]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![str_inline("No citations here")],
+                source_info: si(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let result = apply_citeproc_filter(pandoc.clone(), context, "html");
+        assert!(result.is_ok());
+        let (result_pandoc, _, _) = result.unwrap();
+        // Should pass through unchanged since no bibliography
+        assert_eq!(result_pandoc.blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_apply_citeproc_filter_with_inline_references() {
+        use crate::pandoc::ast_context::ASTContext;
+
+        // Create a reference in metadata
+        let reference = meta_map(vec![
+            ("id", meta_string("test2020")),
+            ("type", meta_string("book")),
+            ("title", meta_string("Test Book")),
+        ]);
+        let author = meta_map(vec![
+            ("family", meta_string("Author")),
+            ("given", meta_string("Test")),
+        ]);
+        let date_parts = meta_array(vec![meta_array(vec![meta_int(2020)])]);
+        let date_map = meta_map(vec![("date-parts", date_parts)]);
+        let full_ref = meta_map(vec![
+            ("id", meta_string("test2020")),
+            ("type", meta_string("book")),
+            ("title", meta_string("Test Book")),
+            (
+                "author",
+                meta_array(vec![meta_map(vec![
+                    ("family", meta_string("Author")),
+                    ("given", meta_string("Test")),
+                ])]),
+            ),
+            ("issued", date_map),
+        ]);
+
+        // Create a citation
+        let cite = Inline::Cite(crate::pandoc::Cite {
+            citations: vec![crate::pandoc::Citation {
+                id: "test2020".to_string(),
+                prefix: vec![],
+                suffix: vec![],
+                mode: crate::pandoc::CitationMode::NormalCitation,
+                note_num: 0,
+                hash: 0,
+                id_source: None,
+            }],
+            content: vec![],
+            source_info: si(),
+        });
+
+        let pandoc = Pandoc {
+            meta: meta_map(vec![("references", meta_array(vec![full_ref]))]),
+            blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![cite],
+                source_info: si(),
+            })],
+        };
+        let context = ASTContext::new();
+
+        let result = apply_citeproc_filter(pandoc, context, "html");
+        assert!(result.is_ok());
+        let (result_pandoc, _, _) = result.unwrap();
+
+        // Should have bibliography at the end (refs div)
+        assert!(result_pandoc.blocks.len() >= 1);
+        // The citation should be replaced
+        if let Block::Paragraph(p) = &result_pandoc.blocks[0] {
+            // Citation should be replaced with rendered text
+            assert!(!p.content.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_load_csl_style_default() {
+        let config = CiteprocConfig::default();
+        let result = load_csl_style(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_load_csl_style_invalid_path() {
+        let config = CiteprocConfig {
+            csl: Some("/nonexistent/path/style.csl".to_string()),
+            ..Default::default()
+        };
+        let result = load_csl_style(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_insert_bibliography_appends_when_no_refs_div() {
+        let mut blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![str_inline("Content")],
+            source_info: si(),
+        })];
+        let bib_blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![str_inline("Ref 1")],
+            source_info: si(),
+        })];
+
+        insert_bibliography(&mut blocks, bib_blocks);
+
+        assert_eq!(blocks.len(), 2);
+        if let Block::Div(d) = &blocks[1] {
+            assert_eq!(d.attr.0, "refs");
+            assert!(d.attr.1.contains(&"references".to_string()));
+            assert!(d.attr.1.contains(&"csl-bib-body".to_string()));
+        } else {
+            panic!("Expected Div at end");
+        }
+    }
+
+    #[test]
+    fn test_insert_bibliography_adds_classes_to_existing_refs_div() {
+        let mut blocks = vec![Block::Div(crate::pandoc::Div {
+            attr: (
+                "refs".to_string(),
+                vec![], // No classes initially
+                hashlink::LinkedHashMap::new(),
+            ),
+            content: vec![],
+            source_info: si(),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+        })];
+        let bib_blocks = vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![str_inline("Ref 1")],
+            source_info: si(),
+        })];
+
+        insert_bibliography(&mut blocks, bib_blocks);
+
+        assert_eq!(blocks.len(), 1);
+        if let Block::Div(d) = &blocks[0] {
+            // Should have added the classes
+            assert!(d.attr.1.contains(&"references".to_string()));
+            assert!(d.attr.1.contains(&"csl-bib-body".to_string()));
+        }
+    }
 }

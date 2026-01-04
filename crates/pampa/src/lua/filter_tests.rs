@@ -4851,3 +4851,613 @@ end
         _ => panic!("Expected Paragraph"),
     }
 }
+
+// ============================================================================
+// walk_block_inlines_straight coverage tests
+// These tests ensure the Inlines filter is applied to content inside various
+// block types during typewise traversal
+// ============================================================================
+
+/// Test Inlines filter on Plain block content
+#[test]
+fn test_inlines_filter_on_plain_block() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_plain.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    -- Uppercase all Str content
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Plain(crate::pandoc::Plain {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "hello".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::Plain(p) => match &p.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "HELLO"),
+            _ => panic!("Expected Str"),
+        },
+        _ => panic!("Expected Plain"),
+    }
+}
+
+/// Test Inlines filter on Header block content
+#[test]
+fn test_inlines_filter_on_header_block() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_header.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Header(crate::pandoc::Header {
+            level: 1,
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "title".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::Header(h) => match &h.content[0] {
+            Inline::Str(s) => assert_eq!(s.text, "TITLE"),
+            _ => panic!("Expected Str"),
+        },
+        _ => panic!("Expected Header"),
+    }
+}
+
+/// Test Inlines filter on BlockQuote content (nested blocks with inlines)
+#[test]
+fn test_inlines_filter_on_blockquote() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_blockquote.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::BlockQuote(crate::pandoc::BlockQuote {
+            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "quoted".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::BlockQuote(bq) => match &bq.content[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "QUOTED"),
+                _ => panic!("Expected Str"),
+            },
+            _ => panic!("Expected Paragraph"),
+        },
+        _ => panic!("Expected BlockQuote"),
+    }
+}
+
+/// Test Inlines filter on BulletList items
+#[test]
+fn test_inlines_filter_on_bulletlist() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_bulletlist.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::BulletList(crate::pandoc::BulletList {
+            content: vec![vec![Block::Plain(crate::pandoc::Plain {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "item".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })]],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::BulletList(bl) => match &bl.content[0][0] {
+            Block::Plain(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "ITEM"),
+                _ => panic!("Expected Str"),
+            },
+            _ => panic!("Expected Plain"),
+        },
+        _ => panic!("Expected BulletList"),
+    }
+}
+
+/// Test Inlines filter on OrderedList items
+#[test]
+fn test_inlines_filter_on_orderedlist() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_orderedlist.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::OrderedList(crate::pandoc::OrderedList {
+            attr: (1, quarto_pandoc_types::ListNumberStyle::Default, quarto_pandoc_types::ListNumberDelim::Default),
+            content: vec![vec![Block::Plain(crate::pandoc::Plain {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "numbered".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })]],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::OrderedList(ol) => match &ol.content[0][0] {
+            Block::Plain(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "NUMBERED"),
+                _ => panic!("Expected Str"),
+            },
+            _ => panic!("Expected Plain"),
+        },
+        _ => panic!("Expected OrderedList"),
+    }
+}
+
+/// Test Inlines filter on Figure content
+#[test]
+fn test_inlines_filter_on_figure() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_figure.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Figure(crate::pandoc::Figure {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            caption: crate::pandoc::Caption {
+                short: None,
+                long: Some(vec![Block::Plain(crate::pandoc::Plain {
+                    content: vec![Inline::Str(crate::pandoc::Str {
+                        text: "caption".to_string(),
+                        source_info: quarto_source_map::SourceInfo::default(),
+                    })],
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })]),
+                source_info: quarto_source_map::SourceInfo::default(),
+            },
+            content: vec![Block::Plain(crate::pandoc::Plain {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "figure".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::Figure(f) => match &f.content[0] {
+            Block::Plain(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "FIGURE"),
+                _ => panic!("Expected Str"),
+            },
+            _ => panic!("Expected Plain"),
+        },
+        _ => panic!("Expected Figure"),
+    }
+}
+
+/// Test Inlines filter on LineBlock content
+#[test]
+fn test_inlines_filter_on_lineblock() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_lineblock.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::LineBlock(crate::pandoc::LineBlock {
+            content: vec![vec![Inline::Str(crate::pandoc::Str {
+                text: "line".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })]],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::LineBlock(lb) => match &lb.content[0][0] {
+            Inline::Str(s) => assert_eq!(s.text, "LINE"),
+            _ => panic!("Expected Str"),
+        },
+        _ => panic!("Expected LineBlock"),
+    }
+}
+
+/// Test Inlines filter on Div content
+#[test]
+fn test_inlines_filter_on_div() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("inlines_div.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Inlines(inlines)
+    local result = {}
+    for _, el in ipairs(inlines) do
+        if el.t == "Str" then
+            table.insert(result, pandoc.Str(el.text:upper()))
+        else
+            table.insert(result, el)
+        end
+    end
+    return result
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Div(crate::pandoc::Div {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "inside".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::Div(d) => match &d.content[0] {
+            Block::Paragraph(p) => match &p.content[0] {
+                Inline::Str(s) => assert_eq!(s.text, "INSIDE"),
+                _ => panic!("Expected Str"),
+            },
+            _ => panic!("Expected Paragraph"),
+        },
+        _ => panic!("Expected Div"),
+    }
+}
+
+// ============================================================================
+// UserData table return coverage tests
+// These tests cover the code paths where filters return tables of UserData
+// ============================================================================
+
+/// Test inline filter returning a table of inlines
+#[test]
+fn test_inline_filter_returns_table_of_inlines() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("return_inline_table.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Str(elem)
+    -- Return a table of inlines to replace a single Str
+    return {pandoc.Str("a"), pandoc.Str("b"), pandoc.Str("c")}
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "x".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => {
+            assert_eq!(p.content.len(), 3);
+            if let (Inline::Str(a), Inline::Str(b), Inline::Str(c)) =
+                (&p.content[0], &p.content[1], &p.content[2])
+            {
+                assert_eq!(a.text, "a");
+                assert_eq!(b.text, "b");
+                assert_eq!(c.text, "c");
+            } else {
+                panic!("Expected three Str inlines");
+            }
+        }
+        _ => panic!("Expected Paragraph"),
+    }
+}
+
+/// Test block filter returning a table of blocks
+#[test]
+fn test_block_filter_returns_table_of_blocks() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("return_block_table.lua");
+    fs::write(
+        &filter_path,
+        r#"
+function Para(elem)
+    -- Return a table of blocks to replace a single Para
+    return {
+        pandoc.Para({pandoc.Str("first")}),
+        pandoc.Para({pandoc.Str("second")})
+    }
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Str(crate::pandoc::Str {
+                text: "original".to_string(),
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    assert_eq!(filtered.blocks.len(), 2);
+    match (&filtered.blocks[0], &filtered.blocks[1]) {
+        (Block::Paragraph(p1), Block::Paragraph(p2)) => {
+            match (&p1.content[0], &p2.content[0]) {
+                (Inline::Str(s1), Inline::Str(s2)) => {
+                    assert_eq!(s1.text, "first");
+                    assert_eq!(s2.text, "second");
+                }
+                _ => panic!("Expected Str inlines"),
+            }
+        }
+        _ => panic!("Expected two Paragraphs"),
+    }
+}
+
+/// Test topdown inline filter returning a table with control signal
+#[test]
+fn test_topdown_inline_returns_table_with_stop() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("topdown_table_stop.lua");
+    fs::write(
+        &filter_path,
+        r#"
+-- Use global traverse variable for topdown mode
+traverse = "topdown"
+
+function Emph(elem)
+    -- Return table of inlines and stop signal
+    return {pandoc.Str("["), pandoc.Str("X"), pandoc.Str("]")}, false
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Paragraph(crate::pandoc::Paragraph {
+            content: vec![Inline::Emph(crate::pandoc::Emph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "test".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    match &filtered.blocks[0] {
+        Block::Paragraph(p) => {
+            // Should have replaced Emph with [X]
+            assert_eq!(p.content.len(), 3);
+            if let (Inline::Str(a), Inline::Str(b), Inline::Str(c)) =
+                (&p.content[0], &p.content[1], &p.content[2])
+            {
+                assert_eq!(a.text, "[");
+                assert_eq!(b.text, "X");
+                assert_eq!(c.text, "]");
+            } else {
+                panic!("Expected three Str inlines");
+            }
+        }
+        _ => panic!("Expected Paragraph"),
+    }
+}
+
+/// Test topdown block filter returning a table with control signal
+#[test]
+fn test_topdown_block_returns_table_with_stop() {
+    let dir = TempDir::new().unwrap();
+    let filter_path = dir.path().join("topdown_block_table_stop.lua");
+    fs::write(
+        &filter_path,
+        r#"
+-- Use global traverse variable for topdown mode
+traverse = "topdown"
+
+function Div(elem)
+    -- Return table of blocks and stop signal
+    return {
+        pandoc.Para({pandoc.Str("replaced1")}),
+        pandoc.Para({pandoc.Str("replaced2")})
+    }, false
+end
+"#,
+    )
+    .unwrap();
+
+    let pandoc = Pandoc {
+        meta: quarto_pandoc_types::ConfigValue::default(),
+        blocks: vec![Block::Div(crate::pandoc::Div {
+            attr: (String::new(), vec![], hashlink::LinkedHashMap::new()),
+            attr_source: crate::pandoc::AttrSourceInfo::empty(),
+            content: vec![Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![Inline::Str(crate::pandoc::Str {
+                    text: "inner".to_string(),
+                    source_info: quarto_source_map::SourceInfo::default(),
+                })],
+                source_info: quarto_source_map::SourceInfo::default(),
+            })],
+            source_info: quarto_source_map::SourceInfo::default(),
+        })],
+    };
+    let context = ASTContext::new();
+    let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
+    assert_eq!(filtered.blocks.len(), 2);
+    match (&filtered.blocks[0], &filtered.blocks[1]) {
+        (Block::Paragraph(p1), Block::Paragraph(p2)) => {
+            match (&p1.content[0], &p2.content[0]) {
+                (Inline::Str(s1), Inline::Str(s2)) => {
+                    assert_eq!(s1.text, "replaced1");
+                    assert_eq!(s2.text, "replaced2");
+                }
+                _ => panic!("Expected Str inlines"),
+            }
+        }
+        _ => panic!("Expected two Paragraphs"),
+    }
+}

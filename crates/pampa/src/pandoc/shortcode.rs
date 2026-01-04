@@ -150,7 +150,12 @@ pub fn shortcode_to_span(shortcode: Shortcode) -> Span {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quarto_pandoc_types::{Space, Str};
     use std::collections::HashMap;
+
+    fn si() -> quarto_source_map::SourceInfo {
+        quarto_source_map::SourceInfo::default()
+    }
 
     /// Helper to extract the data-value attribute from a Span inline
     fn get_span_data_value(inline: &Inline) -> Option<&str> {
@@ -497,5 +502,31 @@ mod tests {
         // Basic structure should still work
         assert!(span.attr.1.contains(&"quarto-shortcode__".to_string()));
         assert_eq!(span.content.len(), 1);
+    }
+
+    #[test]
+    fn test_get_span_data_value_with_non_span() {
+        // Test that get_span_data_value returns None for non-Span inlines
+        let str_inline = Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: si(),
+        });
+        assert_eq!(get_span_data_value(&str_inline), None);
+
+        let space_inline = Inline::Space(Space { source_info: si() });
+        assert_eq!(get_span_data_value(&space_inline), None);
+    }
+
+    #[test]
+    fn test_get_span_data_key_with_non_span() {
+        // Test that get_span_data_key returns None for non-Span inlines
+        let str_inline = Inline::Str(Str {
+            text: "world".to_string(),
+            source_info: si(),
+        });
+        assert_eq!(get_span_data_key(&str_inline), None);
+
+        let space_inline = Inline::Space(Space { source_info: si() });
+        assert_eq!(get_span_data_key(&space_inline), None);
     }
 }

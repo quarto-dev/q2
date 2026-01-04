@@ -1590,4 +1590,850 @@ pub fn apply_typewise_inlines(
 
 #[cfg(test)]
 #[path = "filter_tests.rs"]
-mod tests;
+mod integration_tests;
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    // =========================================================================
+    // LuaFilterError tests
+    // =========================================================================
+
+    #[test]
+    fn test_lua_filter_error_file_read_display() {
+        let path = std::path::PathBuf::from("/path/to/filter.lua");
+        let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
+        let err = LuaFilterError::FileReadError(path, io_err);
+        let display = format!("{}", err);
+        assert!(display.contains("Failed to read filter"));
+        assert!(display.contains("/path/to/filter.lua"));
+        assert!(display.contains("file not found"));
+    }
+
+    #[test]
+    fn test_lua_filter_error_lua_error_display() {
+        let lua_err = mlua::Error::RuntimeError("test error".to_string());
+        let err = LuaFilterError::LuaError(lua_err);
+        let display = format!("{}", err);
+        assert!(display.contains("Lua filter error"));
+        assert!(display.contains("test error"));
+    }
+
+    #[test]
+    fn test_lua_filter_error_invalid_return_display() {
+        let err = LuaFilterError::InvalidReturn("unexpected value".to_string());
+        let display = format!("{}", err);
+        assert!(display.contains("Invalid filter return"));
+        assert!(display.contains("unexpected value"));
+    }
+
+    #[test]
+    fn test_lua_filter_error_from_mlua_error() {
+        let lua_err = mlua::Error::RuntimeError("conversion test".to_string());
+        let filter_err: LuaFilterError = lua_err.into();
+        match filter_err {
+            LuaFilterError::LuaError(e) => {
+                assert!(e.to_string().contains("conversion test"));
+            }
+            _ => panic!("Expected LuaError variant"),
+        }
+    }
+
+    #[test]
+    fn test_lua_filter_error_is_std_error() {
+        let err = LuaFilterError::InvalidReturn("test".to_string());
+        // Verify it implements std::error::Error (compile-time check)
+        let _: &dyn std::error::Error = &err;
+    }
+
+    // =========================================================================
+    // WalkingOrder and get_walking_order tests
+    // =========================================================================
+
+    #[test]
+    fn test_walking_order_debug() {
+        assert_eq!(format!("{:?}", WalkingOrder::Typewise), "Typewise");
+        assert_eq!(format!("{:?}", WalkingOrder::Topdown), "Topdown");
+    }
+
+    #[test]
+    fn test_get_walking_order_default() {
+        let lua = Lua::new();
+        let filter_table = lua.create_table().unwrap();
+        let order = get_walking_order(&filter_table).unwrap();
+        assert_eq!(order, WalkingOrder::Typewise);
+    }
+
+    #[test]
+    fn test_get_walking_order_typewise_explicit() {
+        let lua = Lua::new();
+        let filter_table = lua.create_table().unwrap();
+        filter_table.set("traverse", "typewise").unwrap();
+        let order = get_walking_order(&filter_table).unwrap();
+        assert_eq!(order, WalkingOrder::Typewise);
+    }
+
+    #[test]
+    fn test_get_walking_order_topdown() {
+        let lua = Lua::new();
+        let filter_table = lua.create_table().unwrap();
+        filter_table.set("traverse", "topdown").unwrap();
+        let order = get_walking_order(&filter_table).unwrap();
+        assert_eq!(order, WalkingOrder::Topdown);
+    }
+
+    // =========================================================================
+    // block_tag tests
+    // =========================================================================
+
+    #[test]
+    fn test_block_tag_all_variants() {
+        use crate::pandoc::block::*;
+        use crate::pandoc::caption::Caption;
+        use crate::pandoc::custom::CustomNode;
+        use crate::pandoc::table::{Table, TableFoot, TableHead};
+        use crate::pandoc::{AttrSourceInfo, Block};
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::SourceInfo;
+
+        let source_info = SourceInfo::default();
+
+        assert_eq!(
+            block_tag(&Block::Plain(Plain {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Plain"
+        );
+        assert_eq!(
+            block_tag(&Block::Paragraph(crate::pandoc::Paragraph {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Para"
+        );
+        assert_eq!(
+            block_tag(&Block::LineBlock(LineBlock {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "LineBlock"
+        );
+        assert_eq!(
+            block_tag(&Block::CodeBlock(CodeBlock {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                text: String::new(),
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "CodeBlock"
+        );
+        assert_eq!(
+            block_tag(&Block::RawBlock(RawBlock {
+                format: String::new(),
+                text: String::new(),
+                source_info: source_info.clone()
+            })),
+            "RawBlock"
+        );
+        assert_eq!(
+            block_tag(&Block::BlockQuote(BlockQuote {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "BlockQuote"
+        );
+        assert_eq!(
+            block_tag(&Block::OrderedList(OrderedList {
+                attr: (1, crate::pandoc::list::ListNumberStyle::Default, crate::pandoc::list::ListNumberDelim::Default),
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "OrderedList"
+        );
+        assert_eq!(
+            block_tag(&Block::BulletList(BulletList {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "BulletList"
+        );
+        assert_eq!(
+            block_tag(&Block::DefinitionList(DefinitionList {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "DefinitionList"
+        );
+        assert_eq!(
+            block_tag(&Block::Header(Header {
+                level: 1,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Header"
+        );
+        assert_eq!(
+            block_tag(&Block::HorizontalRule(HorizontalRule {
+                source_info: source_info.clone()
+            })),
+            "HorizontalRule"
+        );
+        assert_eq!(
+            block_tag(&Block::Table(Table {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                caption: Caption {
+                    short: None,
+                    long: None,
+                    source_info: source_info.clone()
+                },
+                colspec: vec![],
+                head: TableHead {
+                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    rows: vec![],
+                    source_info: source_info.clone(),
+                    attr_source: AttrSourceInfo::empty()
+                },
+                bodies: vec![],
+                foot: TableFoot {
+                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    rows: vec![],
+                    source_info: source_info.clone(),
+                    attr_source: AttrSourceInfo::empty()
+                },
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Table"
+        );
+        assert_eq!(
+            block_tag(&Block::Figure(Figure {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                caption: Caption {
+                    short: None,
+                    long: None,
+                    source_info: source_info.clone()
+                },
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Figure"
+        );
+        assert_eq!(
+            block_tag(&Block::Div(Div {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Div"
+        );
+        assert_eq!(
+            block_tag(&Block::BlockMetadata(MetaBlock {
+                meta: crate::pandoc::config_value::ConfigValue::null(source_info.clone()),
+                source_info: source_info.clone()
+            })),
+            "BlockMetadata"
+        );
+        assert_eq!(
+            block_tag(&Block::NoteDefinitionPara(NoteDefinitionPara {
+                id: String::new(),
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "NoteDefinitionPara"
+        );
+        assert_eq!(
+            block_tag(&Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
+                id: String::new(),
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "NoteDefinitionFencedBlock"
+        );
+        assert_eq!(
+            block_tag(&Block::CaptionBlock(CaptionBlock {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "CaptionBlock"
+        );
+        assert_eq!(
+            block_tag(&Block::Custom(CustomNode {
+                type_name: String::new(),
+                slots: LinkedHashMap::new(),
+                plain_data: serde_json::Value::Null,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: source_info.clone()
+            })),
+            "Custom"
+        );
+    }
+
+    // =========================================================================
+    // inline_tag tests
+    // =========================================================================
+
+    #[test]
+    fn test_inline_tag_all_variants() {
+        use crate::pandoc::custom::CustomNode;
+        use crate::pandoc::inline::*;
+        use crate::pandoc::{AttrSourceInfo, Inline, TargetSourceInfo};
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::SourceInfo;
+        use std::collections::HashMap;
+
+        let source_info = SourceInfo::default();
+
+        assert_eq!(
+            inline_tag(&Inline::Str(Str {
+                text: String::new(),
+                source_info: source_info.clone()
+            })),
+            "Str"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Emph(Emph {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Emph"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Underline(Underline {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Underline"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Strong(Strong {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Strong"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Strikeout(Strikeout {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Strikeout"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Superscript(Superscript {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Superscript"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Subscript(Subscript {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Subscript"
+        );
+        assert_eq!(
+            inline_tag(&Inline::SmallCaps(SmallCaps {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "SmallCaps"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Quoted(Quoted {
+                quote_type: QuoteType::DoubleQuote,
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Quoted"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Cite(Cite {
+                citations: vec![],
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Cite"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Code(Code {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                text: String::new(),
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Code"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Space(Space {
+                source_info: source_info.clone()
+            })),
+            "Space"
+        );
+        assert_eq!(
+            inline_tag(&Inline::SoftBreak(SoftBreak {
+                source_info: source_info.clone()
+            })),
+            "SoftBreak"
+        );
+        assert_eq!(
+            inline_tag(&Inline::LineBreak(LineBreak {
+                source_info: source_info.clone()
+            })),
+            "LineBreak"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Math(Math {
+                math_type: MathType::InlineMath,
+                text: String::new(),
+                source_info: source_info.clone()
+            })),
+            "Math"
+        );
+        assert_eq!(
+            inline_tag(&Inline::RawInline(RawInline {
+                format: String::new(),
+                text: String::new(),
+                source_info: source_info.clone()
+            })),
+            "RawInline"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Link(Link {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                target: (String::new(), String::new()),
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty()
+            })),
+            "Link"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Image(Image {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                target: (String::new(), String::new()),
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty()
+            })),
+            "Image"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Note(Note {
+                content: vec![],
+                source_info: source_info.clone()
+            })),
+            "Note"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Span(Span {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Span"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Shortcode(quarto_pandoc_types::shortcode::Shortcode {
+                is_escaped: false,
+                name: String::new(),
+                positional_args: vec![],
+                keyword_args: HashMap::new()
+            })),
+            "Shortcode"
+        );
+        assert_eq!(
+            inline_tag(&Inline::NoteReference(NoteReference {
+                id: String::new(),
+                source_info: source_info.clone()
+            })),
+            "NoteReference"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Attr(
+                (String::new(), vec![], LinkedHashMap::new()),
+                AttrSourceInfo::empty()
+            )),
+            "Attr"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Insert(Insert {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Insert"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Delete(Delete {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Delete"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Highlight(Highlight {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "Highlight"
+        );
+        assert_eq!(
+            inline_tag(&Inline::EditComment(EditComment {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                content: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty()
+            })),
+            "EditComment"
+        );
+        assert_eq!(
+            inline_tag(&Inline::Custom(CustomNode {
+                type_name: String::new(),
+                slots: LinkedHashMap::new(),
+                plain_data: serde_json::Value::Null,
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: source_info.clone()
+            })),
+            "Custom"
+        );
+    }
+
+    // =========================================================================
+    // handle_inline_return tests
+    // =========================================================================
+
+    #[test]
+    fn test_handle_inline_return_nil() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let result = handle_inline_return(Value::Nil, &original).unwrap();
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Str(s) => assert_eq!(s.text, "original"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    #[test]
+    fn test_handle_inline_return_empty_table() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let lua = Lua::new();
+        let empty_table = lua.create_table().unwrap();
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let result = handle_inline_return(Value::Table(empty_table), &original).unwrap();
+        assert_eq!(result.len(), 0); // Empty table means delete
+    }
+
+    #[test]
+    fn test_handle_inline_return_other_value() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        // Non-nil, non-table, non-userdata returns original unchanged
+        let result = handle_inline_return(Value::Integer(42), &original).unwrap();
+        assert_eq!(result.len(), 1);
+        match &result[0] {
+            Inline::Str(s) => assert_eq!(s.text, "original"),
+            _ => panic!("Expected Str"),
+        }
+    }
+
+    // =========================================================================
+    // handle_block_return tests
+    // =========================================================================
+
+    #[test]
+    fn test_handle_block_return_nil() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        });
+        let result = handle_block_return(Value::Nil, &original).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(matches!(&result[0], Block::Plain(_)));
+    }
+
+    #[test]
+    fn test_handle_block_return_empty_table() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let lua = Lua::new();
+        let empty_table = lua.create_table().unwrap();
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        });
+        let result = handle_block_return(Value::Table(empty_table), &original).unwrap();
+        assert_eq!(result.len(), 0); // Empty table means delete
+    }
+
+    #[test]
+    fn test_handle_block_return_other_value() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        });
+        // Non-nil, non-table, non-userdata returns original unchanged
+        let result = handle_block_return(Value::Integer(42), &original).unwrap();
+        assert_eq!(result.len(), 1);
+        assert!(matches!(&result[0], Block::Plain(_)));
+    }
+
+    // =========================================================================
+    // handle_*_return_with_control tests
+    // =========================================================================
+
+    #[test]
+    fn test_handle_inline_return_with_control_nil() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let (elements, control) =
+            handle_inline_return_with_control(MultiValue::new(), &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_inline_return_with_control_stop() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let mut values = MultiValue::new();
+        values.push_front(Value::Nil);
+        values.push_back(Value::Boolean(false));
+        let (elements, control) = handle_inline_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Stop);
+    }
+
+    #[test]
+    fn test_handle_inline_return_with_control_continue_explicit() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        });
+        let mut values = MultiValue::new();
+        values.push_front(Value::Nil);
+        values.push_back(Value::Boolean(true));
+        let (elements, control) = handle_inline_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_block_return_with_control_nil() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        });
+        let (elements, control) =
+            handle_block_return_with_control(MultiValue::new(), &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_block_return_with_control_stop() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        });
+        let mut values = MultiValue::new();
+        values.push_front(Value::Nil);
+        values.push_back(Value::Boolean(false));
+        let (elements, control) = handle_block_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Stop);
+    }
+
+    #[test]
+    fn test_handle_blocks_return_with_control_nil() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        })];
+        let (elements, control) =
+            handle_blocks_return_with_control(MultiValue::new(), &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_blocks_return_with_control_stop() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::Nil);
+        values.push_back(Value::Boolean(false));
+        let (elements, control) = handle_blocks_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Stop);
+    }
+
+    #[test]
+    fn test_handle_inlines_return_with_control_nil() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        })];
+        let (elements, control) =
+            handle_inlines_return_with_control(MultiValue::new(), &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_inlines_return_with_control_stop() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::Nil);
+        values.push_back(Value::Boolean(false));
+        let (elements, control) = handle_inlines_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1);
+        assert_eq!(control, TraversalControl::Stop);
+    }
+
+    #[test]
+    fn test_handle_inlines_return_with_control_other_value() {
+        use crate::pandoc::inline::Str;
+        use crate::pandoc::Inline;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Inline::Str(Str {
+            text: "original".to_string(),
+            source_info: SourceInfo::default(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::Integer(42)); // Not a table or nil
+        let (elements, control) = handle_inlines_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1); // Falls back to original
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    #[test]
+    fn test_handle_blocks_return_with_control_other_value() {
+        use crate::pandoc::block::Plain;
+        use crate::pandoc::Block;
+        use quarto_source_map::SourceInfo;
+
+        let original = vec![Block::Plain(Plain {
+            content: vec![],
+            source_info: SourceInfo::default(),
+        })];
+        let mut values = MultiValue::new();
+        values.push_front(Value::Integer(42)); // Not a table or nil
+        let (elements, control) = handle_blocks_return_with_control(values, &original).unwrap();
+        assert_eq!(elements.len(), 1); // Falls back to original
+        assert_eq!(control, TraversalControl::Continue);
+    }
+
+    // =========================================================================
+    // TraversalControl tests
+    // =========================================================================
+
+    #[test]
+    fn test_traversal_control_debug() {
+        assert_eq!(format!("{:?}", TraversalControl::Continue), "Continue");
+        assert_eq!(format!("{:?}", TraversalControl::Stop), "Stop");
+    }
+
+    #[test]
+    fn test_traversal_control_clone() {
+        let ctrl = TraversalControl::Continue;
+        let cloned = ctrl.clone();
+        assert_eq!(ctrl, cloned);
+    }
+
+    #[test]
+    fn test_traversal_control_copy() {
+        let ctrl = TraversalControl::Stop;
+        let copied: TraversalControl = ctrl;
+        assert_eq!(copied, TraversalControl::Stop);
+    }
+}

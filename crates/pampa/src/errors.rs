@@ -95,3 +95,271 @@ pub fn error_message(error: &mut tree_sitter_qmd::MarkdownCursor, input_bytes: &
     assert!(false, "No error message available for this node");
     String::new() // unreachable
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tree_sitter_qmd::MarkdownParser;
+
+    #[test]
+    fn test_parse_is_good_valid_markdown() {
+        let input = b"# Hello\n\nThis is valid markdown.\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty(), "Valid markdown should have no errors");
+    }
+
+    #[test]
+    fn test_parse_is_good_simple_paragraph() {
+        let input = b"Just some text.\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_node_can_have_empty_text_block_continuation() {
+        // Test that block_continuation nodes are allowed to have empty text
+        let input = b"> Quote\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        // This should not produce errors for empty block_continuation nodes
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_with_code_block() {
+        let input = b"```python\nprint('hello')\n```\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_nested_structure() {
+        let input = b"> Quote with *emphasis*\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_list() {
+        let input = b"- Item 1\n- Item 2\n- Item 3\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_heading_levels() {
+        let input = b"# H1\n## H2\n### H3\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_link_and_image() {
+        let input = b"[link](url) and ![image](img.png)\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_inline_code() {
+        let input = b"Some `inline code` here.\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_emphasis() {
+        let input = b"*italic* and **bold**\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    // Helper to find error nodes and get cursors for them
+    fn find_error_cursor<'a>(
+        tree: &'a MarkdownTree,
+        errors: &[(bool, usize)],
+    ) -> Option<tree_sitter_qmd::MarkdownCursor<'a>> {
+        if errors.is_empty() {
+            return None;
+        }
+        let mut cursor = tree.walk();
+        cursor.goto_id(errors[0]);
+        Some(cursor)
+    }
+
+    #[test]
+    fn test_error_message_unexpected_node() {
+        // This input produces an ERROR node which is an "unexpected" error
+        // Using triple asterisks which the parser doesn't handle well
+        let input = b"***both***\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+
+        // If we got errors, test error_message
+        if !errors.is_empty() {
+            let mut cursor = find_error_cursor(&tree, &errors).unwrap();
+            let msg = error_message(&mut cursor, input);
+            // Should be an "Unexpected" error message
+            assert!(
+                msg.contains("Error:"),
+                "Expected error message to contain 'Error:', got: {}",
+                msg
+            );
+        }
+    }
+
+    #[test]
+    fn test_error_message_formats_correctly() {
+        // Try to produce an error that we can test
+        // Invalid shortcode syntax often produces errors
+        let input = b"{{< broken\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+
+        if !errors.is_empty() {
+            let mut cursor = find_error_cursor(&tree, &errors).unwrap();
+            let msg = error_message(&mut cursor, input);
+            // Verify basic format of error message
+            assert!(
+                msg.starts_with("Error:"),
+                "Message should start with 'Error:'"
+            );
+        }
+    }
+
+    #[test]
+    fn test_error_message_includes_position() {
+        // Another attempt to produce errors with position info
+        let input = b"[unclosed link(\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+
+        if !errors.is_empty() {
+            let mut cursor = find_error_cursor(&tree, &errors).unwrap();
+            let msg = error_message(&mut cursor, input);
+            // Error messages should include position (row:column)
+            assert!(msg.contains(":"), "Error message should include position");
+        }
+    }
+
+    #[test]
+    fn test_parse_is_good_thematic_break() {
+        let input = b"Above\n\n---\n\nBelow\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_ordered_list() {
+        let input = b"1. First\n2. Second\n3. Third\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_blockquote() {
+        let input = b"> This is a quote\n> with multiple lines\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_fenced_div() {
+        let input = b"::: {.note}\nContent here\n:::\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_yaml_front_matter() {
+        let input = b"---\ntitle: Test\n---\n\nContent\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_definition_list() {
+        let input = b"Term\n:   Definition\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_footnote() {
+        let input = b"Text with footnote^[This is the note]\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_span_with_class() {
+        let input = b"[text]{.class}\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_strikeout() {
+        let input = b"~~strikeout~~\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_superscript_subscript() {
+        let input = b"E=mc^2^ and H~2~O\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn test_parse_is_good_math() {
+        let input = b"Inline $x^2$ and display $$y = mx + b$$\n";
+        let mut parser = MarkdownParser::default();
+        let tree = parser.parse(input, None).expect("Failed to parse");
+        let errors = parse_is_good(&tree);
+        assert!(errors.is_empty());
+    }
+}

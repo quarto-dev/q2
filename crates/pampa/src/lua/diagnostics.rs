@@ -816,4 +816,1088 @@ mod tests {
         let roundtrip = source_info_from_lua_table(&table).unwrap();
         assert_eq!(filter_prov, roundtrip);
     }
+
+    // =========================================================================
+    // Tests for get_inline_source_info - covering all Inline variants
+    // =========================================================================
+
+    #[test]
+    fn test_get_inline_source_info_emph() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Emph;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(1),
+            start_offset: 10,
+            end_offset: 20,
+        };
+        let emph = Inline::Emph(Emph {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&emph), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_underline() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Underline;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(2),
+            start_offset: 20,
+            end_offset: 30,
+        };
+        let underline = Inline::Underline(Underline {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&underline), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_strong() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Strong;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(3),
+            start_offset: 30,
+            end_offset: 40,
+        };
+        let strong = Inline::Strong(Strong {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&strong), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_strikeout() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Strikeout;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(4),
+            start_offset: 40,
+            end_offset: 50,
+        };
+        let strikeout = Inline::Strikeout(Strikeout {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&strikeout), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_superscript() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Superscript;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(5),
+            start_offset: 50,
+            end_offset: 60,
+        };
+        let superscript = Inline::Superscript(Superscript {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&superscript), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_subscript() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Subscript;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(6),
+            start_offset: 60,
+            end_offset: 70,
+        };
+        let subscript = Inline::Subscript(Subscript {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&subscript), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_smallcaps() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::SmallCaps;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(7),
+            start_offset: 70,
+            end_offset: 80,
+        };
+        let smallcaps = Inline::SmallCaps(SmallCaps {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&smallcaps), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_quoted() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::{QuoteType, Quoted};
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(8),
+            start_offset: 80,
+            end_offset: 90,
+        };
+        let quoted = Inline::Quoted(Quoted {
+            quote_type: QuoteType::DoubleQuote,
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&quoted), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_cite() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Cite;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(9),
+            start_offset: 90,
+            end_offset: 100,
+        };
+        let cite = Inline::Cite(Cite {
+            citations: vec![],
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&cite), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_code() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::inline::Code;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(10),
+            start_offset: 100,
+            end_offset: 110,
+        };
+        let code = Inline::Code(Code {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            text: "code".to_string(),
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&code), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_space() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Space;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(11),
+            start_offset: 110,
+            end_offset: 111,
+        };
+        let space = Inline::Space(Space {
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&space), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_softbreak() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::SoftBreak;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(12),
+            start_offset: 120,
+            end_offset: 121,
+        };
+        let softbreak = Inline::SoftBreak(SoftBreak {
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&softbreak), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_linebreak() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::LineBreak;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(13),
+            start_offset: 130,
+            end_offset: 131,
+        };
+        let linebreak = Inline::LineBreak(LineBreak {
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&linebreak), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_math() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::{Math, MathType};
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(14),
+            start_offset: 140,
+            end_offset: 150,
+        };
+        let math = Inline::Math(Math {
+            math_type: MathType::InlineMath,
+            text: "x^2".to_string(),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&math), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_rawinline() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::RawInline;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(15),
+            start_offset: 150,
+            end_offset: 160,
+        };
+        let rawinline = Inline::RawInline(RawInline {
+            format: "html".to_string(),
+            text: "<span>".to_string(),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&rawinline), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_link() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
+        use crate::pandoc::inline::Link;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(16),
+            start_offset: 160,
+            end_offset: 170,
+        };
+        let link = Inline::Link(Link {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            target: ("url".to_string(), "title".to_string()),
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&link), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_image() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
+        use crate::pandoc::inline::Image;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(17),
+            start_offset: 170,
+            end_offset: 180,
+        };
+        let image = Inline::Image(Image {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            target: ("image.png".to_string(), String::new()),
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&image), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_note() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Note;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(18),
+            start_offset: 180,
+            end_offset: 190,
+        };
+        let note = Inline::Note(Note {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&note), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_span() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::inline::Span;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(19),
+            start_offset: 190,
+            end_offset: 200,
+        };
+        let span = Inline::Span(Span {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&span), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_insert() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::inline::Insert;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(20),
+            start_offset: 200,
+            end_offset: 210,
+        };
+        let insert = Inline::Insert(Insert {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&insert), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_delete() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::inline::Delete;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(21),
+            start_offset: 210,
+            end_offset: 220,
+        };
+        let delete = Inline::Delete(Delete {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&delete), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_highlight() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::inline::Highlight;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(22),
+            start_offset: 220,
+            end_offset: 230,
+        };
+        let highlight = Inline::Highlight(Highlight {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&highlight), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_editcomment() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::inline::EditComment;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(23),
+            start_offset: 230,
+            end_offset: 240,
+        };
+        let editcomment = Inline::EditComment(EditComment {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_inline_source_info(&editcomment), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_notereference() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::NoteReference;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(24),
+            start_offset: 240,
+            end_offset: 250,
+        };
+        let noteref = Inline::NoteReference(NoteReference {
+            id: "note1".to_string(),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&noteref), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_custom() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::custom::CustomNode;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(25),
+            start_offset: 250,
+            end_offset: 260,
+        };
+        let custom = Inline::Custom(CustomNode {
+            type_name: "test".to_string(),
+            slots: LinkedHashMap::new(),
+            plain_data: serde_json::Value::Null,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_inline_source_info(&custom), Some(source_info));
+    }
+
+    #[test]
+    fn test_get_inline_source_info_shortcode_returns_none() {
+        use crate::pandoc::Inline;
+        use quarto_pandoc_types::shortcode::Shortcode;
+        use std::collections::HashMap;
+
+        let shortcode = Inline::Shortcode(Shortcode {
+            is_escaped: false,
+            name: "test".to_string(),
+            positional_args: vec![],
+            keyword_args: HashMap::new(),
+        });
+        assert_eq!(get_inline_source_info(&shortcode), None);
+    }
+
+    #[test]
+    fn test_get_inline_source_info_attr_returns_none() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use hashlink::LinkedHashMap;
+
+        let attr = Inline::Attr(
+            (String::new(), vec![], LinkedHashMap::new()),
+            AttrSourceInfo::empty(),
+        );
+        assert_eq!(get_inline_source_info(&attr), None);
+    }
+
+    // =========================================================================
+    // Tests for get_block_source_info - covering all Block variants
+    // =========================================================================
+
+    #[test]
+    fn test_get_block_source_info_plain() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(1),
+            start_offset: 0,
+            end_offset: 10,
+        };
+        let plain = Block::Plain(Plain {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&plain), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_lineblock() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::LineBlock;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(2),
+            start_offset: 10,
+            end_offset: 20,
+        };
+        let lineblock = Block::LineBlock(LineBlock {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&lineblock), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_codeblock() {
+        use crate::pandoc::Block;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::block::CodeBlock;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(3),
+            start_offset: 20,
+            end_offset: 30,
+        };
+        let codeblock = Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            text: "code".to_string(),
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_block_source_info(&codeblock), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_rawblock() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::RawBlock;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(4),
+            start_offset: 30,
+            end_offset: 40,
+        };
+        let rawblock = Block::RawBlock(RawBlock {
+            format: "html".to_string(),
+            text: "<div>".to_string(),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&rawblock), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_blockquote() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::BlockQuote;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(5),
+            start_offset: 40,
+            end_offset: 50,
+        };
+        let blockquote = Block::BlockQuote(BlockQuote {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&blockquote), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_orderedlist() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::OrderedList;
+        use crate::pandoc::list::{ListNumberDelim, ListNumberStyle};
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(6),
+            start_offset: 50,
+            end_offset: 60,
+        };
+        let orderedlist = Block::OrderedList(OrderedList {
+            attr: (1, ListNumberStyle::Default, ListNumberDelim::Default),
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&orderedlist), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_bulletlist() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::BulletList;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(7),
+            start_offset: 60,
+            end_offset: 70,
+        };
+        let bulletlist = Block::BulletList(BulletList {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&bulletlist), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_definitionlist() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::DefinitionList;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(8),
+            start_offset: 70,
+            end_offset: 80,
+        };
+        let deflist = Block::DefinitionList(DefinitionList {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&deflist), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_header() {
+        use crate::pandoc::Block;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::block::Header;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(9),
+            start_offset: 80,
+            end_offset: 90,
+        };
+        let header = Block::Header(Header {
+            level: 1,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_block_source_info(&header), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_horizontalrule() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::HorizontalRule;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(10),
+            start_offset: 90,
+            end_offset: 93,
+        };
+        let hrule = Block::HorizontalRule(HorizontalRule {
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&hrule), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_table() {
+        use crate::pandoc::Block;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::caption::Caption;
+        use crate::pandoc::table::{Table, TableFoot, TableHead};
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(11),
+            start_offset: 100,
+            end_offset: 200,
+        };
+        let table = Block::Table(Table {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: None,
+                source_info: source_info.clone(),
+            },
+            colspec: vec![],
+            head: TableHead {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                rows: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            bodies: vec![],
+            foot: TableFoot {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                rows: vec![],
+                source_info: source_info.clone(),
+                attr_source: AttrSourceInfo::empty(),
+            },
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_block_source_info(&table), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_figure() {
+        use crate::pandoc::Block;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::block::Figure;
+        use crate::pandoc::caption::Caption;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(12),
+            start_offset: 200,
+            end_offset: 300,
+        };
+        let figure = Block::Figure(Figure {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            caption: Caption {
+                short: None,
+                long: None,
+                source_info: source_info.clone(),
+            },
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_block_source_info(&figure), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_div() {
+        use crate::pandoc::Block;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::block::Div;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(13),
+            start_offset: 300,
+            end_offset: 400,
+        };
+        let div = Block::Div(Div {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            content: vec![],
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        assert_eq!(get_block_source_info(&div), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_blockmetadata() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::MetaBlock;
+        use crate::pandoc::config_value::ConfigValue;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(14),
+            start_offset: 400,
+            end_offset: 500,
+        };
+        let metablock = Block::BlockMetadata(MetaBlock {
+            meta: ConfigValue::null(source_info.clone()),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&metablock), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_notedefinitionpara() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::NoteDefinitionPara;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(15),
+            start_offset: 500,
+            end_offset: 600,
+        };
+        let notedefpara = Block::NoteDefinitionPara(NoteDefinitionPara {
+            id: "note1".to_string(),
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&notedefpara), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_notedefinitionfencedblock() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::NoteDefinitionFencedBlock;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(16),
+            start_offset: 600,
+            end_offset: 700,
+        };
+        let notedeffenced = Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
+            id: "note2".to_string(),
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&notedeffenced), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_captionblock() {
+        use crate::pandoc::Block;
+        use crate::pandoc::block::CaptionBlock;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(17),
+            start_offset: 700,
+            end_offset: 800,
+        };
+        let captionblock = Block::CaptionBlock(CaptionBlock {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&captionblock), source_info);
+    }
+
+    #[test]
+    fn test_get_block_source_info_custom() {
+        use crate::pandoc::Block;
+        use crate::pandoc::custom::CustomNode;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(18),
+            start_offset: 800,
+            end_offset: 900,
+        };
+        let custom = Block::Custom(CustomNode {
+            type_name: "callout".to_string(),
+            slots: LinkedHashMap::new(),
+            plain_data: serde_json::Value::Null,
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: source_info.clone(),
+        });
+        assert_eq!(get_block_source_info(&custom), source_info);
+    }
+
+    // =========================================================================
+    // Tests for error paths and edge cases
+    // =========================================================================
+
+    #[test]
+    fn test_source_info_from_lua_table_unknown_type_error() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.set("t", "Unknown").unwrap();
+
+        let result = source_info_from_lua_table(&table);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("Unknown SourceInfo type"));
+    }
+
+    #[test]
+    fn test_extract_source_info_non_userdata_returns_none() {
+        let lua = Lua::new();
+        register_quarto_namespace(&lua).unwrap();
+
+        // Pass a non-userdata value (a table) as the element argument
+        lua.load(
+            r#"
+            local t = {}
+            quarto.warn("Test warning", t)
+        "#,
+        )
+        .set_name("@test.lua")
+        .exec()
+        .unwrap();
+
+        // Should still work, falling back to stack location
+        let diagnostics = extract_lua_diagnostics(&lua).unwrap();
+        assert_eq!(diagnostics.len(), 1);
+        // Should have FilterProvenance since the element wasn't recognized
+        match &diagnostics[0].location {
+            Some(SourceInfo::FilterProvenance { .. }) => {}
+            other => panic!(
+                "Expected FilterProvenance for non-userdata element, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn test_quarto_warn_with_shortcode_element_falls_back_to_stack() {
+        use crate::pandoc::Inline;
+        use quarto_pandoc_types::shortcode::Shortcode;
+        use std::collections::HashMap;
+
+        let lua = Lua::new();
+        register_quarto_namespace(&lua).unwrap();
+
+        // Shortcode doesn't have source_info, so it should fall back to stack location
+        let shortcode = Inline::Shortcode(Shortcode {
+            is_escaped: false,
+            name: "test".to_string(),
+            positional_args: vec![],
+            keyword_args: HashMap::new(),
+        });
+        let lua_inline = LuaInline(shortcode);
+        lua.globals()
+            .set("test_shortcode", lua.create_userdata(lua_inline).unwrap())
+            .unwrap();
+
+        lua.load(r#"quarto.warn("Warning about shortcode", test_shortcode)"#)
+            .set_name("@shortcode_filter.lua")
+            .exec()
+            .unwrap();
+
+        let diagnostics = extract_lua_diagnostics(&lua).unwrap();
+        assert_eq!(diagnostics.len(), 1);
+
+        // Should fall back to FilterProvenance since Shortcode returns None for source_info
+        match &diagnostics[0].location {
+            Some(SourceInfo::FilterProvenance { filter_path, .. }) => {
+                assert!(filter_path.contains("shortcode_filter.lua"));
+            }
+            other => panic!(
+                "Expected FilterProvenance for Shortcode element, got {:?}",
+                other
+            ),
+        }
+    }
+
+    #[test]
+    fn test_quarto_warn_with_more_inline_variants_in_lua() {
+        use crate::pandoc::Inline;
+        use crate::pandoc::inline::Emph;
+        use quarto_source_map::FileId;
+
+        let lua = Lua::new();
+        register_quarto_namespace(&lua).unwrap();
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(77),
+            start_offset: 100,
+            end_offset: 150,
+        };
+        let emph = Inline::Emph(Emph {
+            content: vec![],
+            source_info: source_info.clone(),
+        });
+        let lua_inline = LuaInline(emph);
+        lua.globals()
+            .set("test_emph", lua.create_userdata(lua_inline).unwrap())
+            .unwrap();
+
+        lua.load(r#"quarto.warn("Warning about emph", test_emph)"#)
+            .exec()
+            .unwrap();
+
+        let diagnostics = extract_lua_diagnostics(&lua).unwrap();
+        assert_eq!(diagnostics.len(), 1);
+
+        match &diagnostics[0].location {
+            Some(SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            }) => {
+                assert_eq!(file_id.0, 77);
+                assert_eq!(*start_offset, 100);
+                assert_eq!(*end_offset, 150);
+            }
+            other => panic!("Expected Original source info, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_quarto_warn_with_block_codeblock() {
+        use crate::pandoc::Block;
+        use crate::pandoc::attr::AttrSourceInfo;
+        use crate::pandoc::block::CodeBlock;
+        use hashlink::LinkedHashMap;
+        use quarto_source_map::FileId;
+
+        let lua = Lua::new();
+        register_quarto_namespace(&lua).unwrap();
+
+        let source_info = SourceInfo::Original {
+            file_id: FileId(88),
+            start_offset: 200,
+            end_offset: 300,
+        };
+        let codeblock = Block::CodeBlock(CodeBlock {
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            text: "print('hello')".to_string(),
+            source_info: source_info.clone(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let lua_block = LuaBlock(codeblock);
+        lua.globals()
+            .set("test_codeblock", lua.create_userdata(lua_block).unwrap())
+            .unwrap();
+
+        lua.load(r#"quarto.warn("Warning about code block", test_codeblock)"#)
+            .exec()
+            .unwrap();
+
+        let diagnostics = extract_lua_diagnostics(&lua).unwrap();
+        assert_eq!(diagnostics.len(), 1);
+
+        match &diagnostics[0].location {
+            Some(SourceInfo::Original {
+                file_id,
+                start_offset,
+                end_offset,
+            }) => {
+                assert_eq!(file_id.0, 88);
+                assert_eq!(*start_offset, 200);
+                assert_eq!(*end_offset, 300);
+            }
+            other => panic!("Expected Original source info, got {:?}", other),
+        }
+    }
 }

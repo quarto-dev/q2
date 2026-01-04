@@ -126,3 +126,191 @@ fn lua_index_to_rust(lua_idx: i64, len: i64) -> usize {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_lua_index_to_rust_positive() {
+        // lua_idx 1 -> rust 0, lua_idx 2 -> rust 1
+        assert_eq!(lua_index_to_rust(1, 5), 0);
+        assert_eq!(lua_index_to_rust(2, 5), 1);
+        assert_eq!(lua_index_to_rust(5, 5), 4);
+    }
+
+    #[test]
+    fn test_lua_index_to_rust_zero() {
+        // Lua 0 is treated as 1 in string.sub
+        assert_eq!(lua_index_to_rust(0, 5), 0);
+        assert_eq!(lua_index_to_rust(0, 1), 0);
+        assert_eq!(lua_index_to_rust(0, 0), 0);
+    }
+
+    #[test]
+    fn test_lua_index_to_rust_negative() {
+        // -1 -> last char, -2 -> second to last
+        assert_eq!(lua_index_to_rust(-1, 5), 4); // len - 1
+        assert_eq!(lua_index_to_rust(-2, 5), 3); // len - 2
+        assert_eq!(lua_index_to_rust(-5, 5), 0); // len - 5
+    }
+
+    #[test]
+    fn test_lua_index_to_rust_negative_exceeds_length() {
+        // When negative index exceeds string length, return 0
+        assert_eq!(lua_index_to_rust(-6, 5), 0);
+        assert_eq!(lua_index_to_rust(-10, 5), 0);
+        assert_eq!(lua_index_to_rust(-100, 5), 0);
+    }
+
+    #[test]
+    fn test_register_pandoc_text() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        // Verify text module exists
+        let text: Table = pandoc.get("text").unwrap();
+
+        // Verify functions exist
+        assert!(text.contains_key("lower").unwrap());
+        assert!(text.contains_key("upper").unwrap());
+        assert!(text.contains_key("len").unwrap());
+        assert!(text.contains_key("sub").unwrap());
+        assert!(text.contains_key("reverse").unwrap());
+
+        // Verify global text is also set
+        let global_text: Table = lua.globals().get("text").unwrap();
+        assert!(global_text.contains_key("lower").unwrap());
+    }
+
+    #[test]
+    fn test_lower() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let lower: Function = text.get("lower").unwrap();
+
+        let result: String = lower.call("HELLO WORLD").unwrap();
+        assert_eq!(result, "hello world");
+
+        // Unicode uppercase
+        let result: String = lower.call("ÜBER").unwrap();
+        assert_eq!(result, "über");
+    }
+
+    #[test]
+    fn test_upper() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let upper: Function = text.get("upper").unwrap();
+
+        let result: String = upper.call("hello world").unwrap();
+        assert_eq!(result, "HELLO WORLD");
+
+        // Unicode lowercase
+        let result: String = upper.call("über").unwrap();
+        assert_eq!(result, "ÜBER");
+    }
+
+    #[test]
+    fn test_len() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let len: Function = text.get("len").unwrap();
+
+        let result: i64 = len.call("hello").unwrap();
+        assert_eq!(result, 5);
+
+        // Unicode string (counts characters, not bytes)
+        let result: i64 = len.call("über").unwrap();
+        assert_eq!(result, 4);
+
+        // Empty string
+        let result: i64 = len.call("").unwrap();
+        assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_sub_basic() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let sub: Function = text.get("sub").unwrap();
+
+        // sub("hello", 1, 3) -> "hel"
+        let result: String = sub.call(("hello", 1, 3)).unwrap();
+        assert_eq!(result, "hel");
+
+        // sub("hello", 2) -> "ello" (j defaults to -1)
+        let result: String = sub.call(("hello", 2, -1)).unwrap();
+        assert_eq!(result, "ello");
+    }
+
+    #[test]
+    fn test_sub_negative_indices() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let sub: Function = text.get("sub").unwrap();
+
+        // sub("hello", -3, -1) -> "llo"
+        let result: String = sub.call(("hello", -3, -1)).unwrap();
+        assert_eq!(result, "llo");
+
+        // sub("hello", 1, -2) -> "hell"
+        let result: String = sub.call(("hello", 1, -2)).unwrap();
+        assert_eq!(result, "hell");
+    }
+
+    #[test]
+    fn test_sub_empty_result() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let sub: Function = text.get("sub").unwrap();
+
+        // When start > end, return empty string
+        let result: String = sub.call(("hello", 3, 1)).unwrap();
+        assert_eq!(result, "");
+
+        // When start >= len, return empty string
+        let result: String = sub.call(("hello", 10, 15)).unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_reverse() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_text(&lua, &pandoc).unwrap();
+
+        let text: Table = pandoc.get("text").unwrap();
+        let reverse: Function = text.get("reverse").unwrap();
+
+        let result: String = reverse.call("hello").unwrap();
+        assert_eq!(result, "olleh");
+
+        // Unicode
+        let result: String = reverse.call("über").unwrap();
+        assert_eq!(result, "rebü");
+
+        // Empty string
+        let result: String = reverse.call("").unwrap();
+        assert_eq!(result, "");
+    }
+}
