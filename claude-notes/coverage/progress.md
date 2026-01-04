@@ -6,7 +6,7 @@ Last verified against coverage report: 2026-01-04
 
 | File | Status | Coverage | Notes |
 |------|--------|----------|-------|
-| src/block.rs | not_started | 87.97% | |
+| src/block.rs | done | 88.93% | Remaining uncovered: panic paths for GFM extensions (unreachable in CommonMark-only mode) |
 | src/compare.rs | not_started | 83.33% | |
 | src/inline.rs | not_started | 86.52% | |
 | src/lib.rs | not_started | 90.70% | |

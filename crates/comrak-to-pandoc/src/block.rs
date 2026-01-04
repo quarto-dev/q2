@@ -58,6 +58,7 @@ pub fn convert_document_with_source<'a>(
                 blocks,
             }
         }
+        // Comrak always produces Document at root; unreachable via public API
         _ => panic!("Expected Document node at root"),
     }
 }
@@ -116,8 +117,8 @@ fn convert_block<'a>(
             vec![convert_list(node, list, source_ctx)]
         }
 
+        // Items are handled within convert_list; unreachable via normal traversal
         NodeValue::Item(_) => {
-            // Items are handled within convert_list
             panic!("Item should not be converted directly; use convert_list_item")
         }
 
@@ -131,6 +132,7 @@ fn convert_block<'a>(
         }
 
         // Unsupported block types - panic as they're outside CommonMark subset
+        // These require enabling comrak extensions, which we don't support
         NodeValue::HtmlBlock(_) => {
             panic!("HtmlBlock not supported in CommonMark subset")
         }
@@ -171,7 +173,7 @@ fn convert_block<'a>(
             panic!("Subtext not supported in CommonMark subset")
         }
 
-        // Inline nodes shouldn't appear in block context
+        // Inline nodes shouldn't appear in block context; unreachable in valid AST
         _ => {
             panic!(
                 "Unexpected node type in block context: {:?}",
@@ -446,5 +448,77 @@ mod tests {
             }
             _ => panic!("Expected BlockQuote"),
         }
+    }
+
+    #[test]
+    fn test_ordered_list_paren_delimiter() {
+        // Test 1) style delimiter (maps to OneParen)
+        let pandoc = parse("1) one\n2) two\n");
+        assert_eq!(pandoc.blocks.len(), 1);
+        match &pandoc.blocks[0] {
+            Block::OrderedList(ol) => {
+                assert_eq!(ol.content.len(), 2);
+                assert_eq!(ol.attr.0, 1); // Start at 1
+                assert_eq!(ol.attr.2, ListNumberDelim::OneParen);
+            }
+            _ => panic!("Expected OrderedList"),
+        }
+    }
+
+    #[test]
+    fn test_ordered_list_period_delimiter() {
+        // Verify period delimiter is correctly mapped
+        let pandoc = parse("1. one\n2. two\n");
+        match &pandoc.blocks[0] {
+            Block::OrderedList(ol) => {
+                assert_eq!(ol.attr.2, ListNumberDelim::Period);
+            }
+            _ => panic!("Expected OrderedList"),
+        }
+    }
+
+    #[test]
+    fn test_code_block_info_string_with_metadata() {
+        // Info string with extra metadata after language (e.g., "python foo=bar")
+        let pandoc = parse("```python extra metadata\ncode\n```\n");
+        assert_eq!(pandoc.blocks.len(), 1);
+        match &pandoc.blocks[0] {
+            Block::CodeBlock(cb) => {
+                // Should only use first word as language
+                assert_eq!(cb.attr.1, vec!["python".to_string()]);
+            }
+            _ => panic!("Expected CodeBlock"),
+        }
+    }
+
+    #[test]
+    fn test_front_matter_is_skipped() {
+        // Enable front matter parsing in comrak
+        let arena = Arena::new();
+        let mut options = Options::default();
+        options.extension.front_matter_delimiter = Some("---".to_owned());
+        let md = "---\ntitle: test\n---\n\nParagraph.\n";
+        let root = parse_document(&arena, md, &options);
+        let pandoc = convert_document(root);
+
+        // Front matter should be skipped, only paragraph remains
+        assert_eq!(pandoc.blocks.len(), 1);
+        assert!(matches!(pandoc.blocks[0], Block::Paragraph(_)));
+    }
+
+    #[test]
+    #[should_panic(expected = "Setext headings not supported")]
+    fn test_setext_heading_panics() {
+        // Setext-style heading (underlined with === or ---)
+        // This is valid CommonMark but not supported in our subset
+        parse("Heading\n=======\n");
+    }
+
+    #[test]
+    #[should_panic(expected = "Indented code blocks not supported")]
+    fn test_indented_code_block_panics() {
+        // Indented code block (4 spaces)
+        // This is valid CommonMark but not supported in our subset
+        parse("    code\n    more code\n");
     }
 }
