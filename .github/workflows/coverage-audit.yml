@@ -58,12 +58,33 @@ jobs:
       - name: Run coverage WITH exclusions
         id: coverage_with
         run: |
-          OUTPUT=$(cargo llvm-cov nextest --workspace 2>&1 | grep "^TOTAL" || echo "TOTAL 0 0 0%")
+          set -o pipefail
+          # Capture both stdout and stderr, but only process stdout for the TOTAL line
+          if ! cargo llvm-cov nextest --workspace > coverage_with_output.txt 2>&1; then
+            echo "::error::Coverage run with exclusions failed"
+            echo "Build/test output:"
+            cat coverage_with_output.txt
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "output=Build failed - see logs" >> $GITHUB_OUTPUT
+            echo "percent=0" >> $GITHUB_OUTPUT
+            exit 0  # Don't fail the job, continue to report
+          fi
+
+          OUTPUT=$(grep "^TOTAL" coverage_with_output.txt || echo "")
+          if [ -z "$OUTPUT" ]; then
+            echo "::warning::No TOTAL line found in coverage output"
+            cat coverage_with_output.txt
+            OUTPUT="NO COVERAGE DATA"
+            PERCENT="0"
+          else
+            # Extract line coverage percentage (column 10: Lines Cover %)
+            PERCENT=$(echo "$OUTPUT" | awk '{print $10}' | tr -d '%')
+          fi
+
+          echo "success=true" >> $GITHUB_OUTPUT
           echo "output<<EOF" >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          # Extract line coverage percentage
-          PERCENT=$(echo "$OUTPUT" | awk '{print $4}' | tr -d '%')
           echo "percent=$PERCENT" >> $GITHUB_OUTPUT
 
       - name: Clean for rebuild
@@ -72,19 +93,50 @@ jobs:
       - name: Run coverage WITHOUT exclusions
         id: coverage_without
         run: |
-          OUTPUT=$(cargo llvm-cov nextest --workspace --no-cfg-coverage-nightly 2>&1 | grep "^TOTAL" || echo "TOTAL 0 0 0%")
+          set -o pipefail
+          # Capture both stdout and stderr, but only process stdout for the TOTAL line
+          if ! cargo llvm-cov nextest --workspace --no-cfg-coverage-nightly > coverage_without_output.txt 2>&1; then
+            echo "::error::Coverage run without exclusions failed"
+            echo "Build/test output:"
+            cat coverage_without_output.txt
+            echo "success=false" >> $GITHUB_OUTPUT
+            echo "output=Build failed - see logs" >> $GITHUB_OUTPUT
+            echo "percent=0" >> $GITHUB_OUTPUT
+            exit 0  # Don't fail the job, continue to report
+          fi
+
+          OUTPUT=$(grep "^TOTAL" coverage_without_output.txt || echo "")
+          if [ -z "$OUTPUT" ]; then
+            echo "::warning::No TOTAL line found in coverage output"
+            cat coverage_without_output.txt
+            OUTPUT="NO COVERAGE DATA"
+            PERCENT="0"
+          else
+            # Extract line coverage percentage (column 10: Lines Cover %)
+            PERCENT=$(echo "$OUTPUT" | awk '{print $10}' | tr -d '%')
+          fi
+
+          echo "success=true" >> $GITHUB_OUTPUT
           echo "output<<EOF" >> $GITHUB_OUTPUT
           echo "$OUTPUT" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
-          # Extract line coverage percentage
-          PERCENT=$(echo "$OUTPUT" | awk '{print $4}' | tr -d '%')
           echo "percent=$PERCENT" >> $GITHUB_OUTPUT
 
       - name: Count exclusion annotations
         id: exclusions
         run: |
-          COUNT=$(grep -r "coverage(off)" crates/ --include="*.rs" | wc -l || echo "0")
+          # Search for various coverage exclusion patterns:
+          # - #[coverage(off)]
+          # - #[cfg_attr(coverage_nightly, coverage(off))]
+          # - #[cfg(not(coverage_nightly))]
+          COUNT=$(grep -rE "#\[(coverage\(off\)|cfg_attr\(coverage|cfg\(.*coverage)" crates/ --include="*.rs" 2>/dev/null | wc -l || echo "0")
           echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+          # Also get the list of files with exclusions for the report
+          FILES=$(grep -rlE "#\[(coverage\(off\)|cfg_attr\(coverage|cfg\(.*coverage)" crates/ --include="*.rs" 2>/dev/null || echo "")
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Calculate gap and generate report
         id: report
@@ -92,51 +144,86 @@ jobs:
           WITH="${{ steps.coverage_with.outputs.percent }}"
           WITHOUT="${{ steps.coverage_without.outputs.percent }}"
           EXCLUSIONS="${{ steps.exclusions.outputs.count }}"
+          WITH_SUCCESS="${{ steps.coverage_with.outputs.success }}"
+          WITHOUT_SUCCESS="${{ steps.coverage_without.outputs.success }}"
 
           # Calculate gap (with - without, since exclusions inflate "with" percentage)
-          GAP=$(echo "$WITH - $WITHOUT" | bc -l 2>/dev/null || echo "0")
+          if [ "$WITH" != "0" ] && [ "$WITHOUT" != "0" ]; then
+            GAP=$(echo "$WITH - $WITHOUT" | bc -l 2>/dev/null || echo "0")
+          else
+            GAP="N/A"
+          fi
 
           echo "gap=$GAP" >> $GITHUB_OUTPUT
 
-          # Generate report
-          cat << EOF > coverage-report.md
-          ## Weekly Coverage Audit Report
+          # Determine overall status
+          if [ "$WITH_SUCCESS" = "true" ] && [ "$WITHOUT_SUCCESS" = "true" ]; then
+            STATUS="Success"
+          elif [ "$WITH_SUCCESS" = "true" ] || [ "$WITHOUT_SUCCESS" = "true" ]; then
+            STATUS="Partial (one run failed)"
+          else
+            STATUS="Failed (both runs failed)"
+          fi
 
-          **Date:** $(date -u +"%Y-%m-%d")
+          # Get exclusion files
+          EXCLUSION_FILES="${{ steps.exclusions.outputs.files }}"
+          if [ -z "$EXCLUSION_FILES" ]; then
+            EXCLUSION_FILES="No exclusions found"
+          fi
 
-          ### Coverage Summary
-
-          | Metric | Value |
-          |--------|-------|
-          | Coverage (with exclusions) | ${WITH}% |
-          | Coverage (without exclusions) | ${WITHOUT}% |
-          | Gap from exclusions | ${GAP}% |
-          | Number of \`#[coverage(off)]\` annotations | ${EXCLUSIONS} |
-
-          ### Raw Output
-
-          **With exclusions:**
-          \`\`\`
+          # Store GHA outputs in temp files to avoid quoting issues
+          cat > /tmp/with_output.txt << 'GHA_OUTPUT_EOF'
           ${{ steps.coverage_with.outputs.output }}
-          \`\`\`
+          GHA_OUTPUT_EOF
 
-          **Without exclusions:**
-          \`\`\`
+          cat > /tmp/without_output.txt << 'GHA_OUTPUT_EOF'
           ${{ steps.coverage_without.outputs.output }}
-          \`\`\`
+          GHA_OUTPUT_EOF
 
-          ### Exclusion Locations
-
-          \`\`\`
-          $(grep -r "coverage(off)" crates/ --include="*.rs" -l 2>/dev/null || echo "No exclusions found")
-          \`\`\`
-          EOF
+          # Generate report using printf for shell variable expansion
+          {
+            echo "## Weekly Coverage Audit Report"
+            echo ""
+            echo "**Date:** $(date -u +"%Y-%m-%d")"
+            echo "**Status:** ${STATUS}"
+            echo ""
+            echo "### Coverage Summary"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Line Coverage (with exclusions) | ${WITH}% |"
+            echo "| Line Coverage (without exclusions) | ${WITHOUT}% |"
+            echo "| Gap from exclusions | ${GAP}% |"
+            echo "| Coverage exclusion annotations | ${EXCLUSIONS} |"
+            echo ""
+            echo "### Raw Output"
+            echo ""
+            echo "**With exclusions:**"
+            echo "\`\`\`"
+            cat /tmp/with_output.txt
+            echo "\`\`\`"
+            echo ""
+            echo "**Without exclusions:**"
+            echo "\`\`\`"
+            cat /tmp/without_output.txt
+            echo "\`\`\`"
+            echo ""
+            echo "### Exclusion Locations"
+            echo ""
+            echo "\`\`\`"
+            echo "${EXCLUSION_FILES}"
+            echo "\`\`\`"
+          } > coverage-report.md
 
           cat coverage-report.md
 
-          # Check if gap exceeds threshold (5%)
+          # Check if gap exceeds threshold (5%) - only if we have valid data
           THRESHOLD=5
-          EXCEEDS=$(echo "$GAP > $THRESHOLD" | bc -l 2>/dev/null || echo "0")
+          if [ "$GAP" != "N/A" ]; then
+            EXCEEDS=$(echo "$GAP > $THRESHOLD" | bc -l 2>/dev/null || echo "0")
+          else
+            EXCEEDS="0"
+          fi
           echo "exceeds_threshold=$EXCEEDS" >> $GITHUB_OUTPUT
 
       - name: Upload report artifact
