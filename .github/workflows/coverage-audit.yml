@@ -1,0 +1,185 @@
+name: Coverage Audit
+
+on:
+  schedule:
+    # Run every Monday at 6am UTC
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    # Allow manual trigger
+
+jobs:
+  coverage-audit:
+    runs-on: ubuntu-latest
+    name: Audit coverage exclusions
+    if: github.repository == 'quarto-dev/kyoto'
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Restore file modification times
+        shell: bash
+        run: |
+          git ls-files | while read file; do
+            time=$(git log -1 --format='@%ct' -- "$file" 2>/dev/null || echo '@0')
+            [ "$time" != "@0" ] && touch -d "$time" "$file" 2>/dev/null || true
+          done
+
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Set up Pandoc
+        run: |
+          curl -LO https://github.com/jgm/pandoc/releases/download/3.7.0.2/pandoc-3.7.0.2-1-amd64.deb
+          sudo dpkg -i pandoc-3.7.0.2-1-amd64.deb
+
+      - name: Set up tree-sitter CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libc6-dev gcc-multilib
+          curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+          gunzip tree-sitter-linux-x86.gz
+          chmod +x tree-sitter-linux-x86
+          sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
+
+      - name: Run coverage WITH exclusions
+        id: coverage_with
+        run: |
+          OUTPUT=$(cargo llvm-cov nextest --workspace 2>&1 | grep "^TOTAL" || echo "TOTAL 0 0 0%")
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          # Extract line coverage percentage
+          PERCENT=$(echo "$OUTPUT" | awk '{print $4}' | tr -d '%')
+          echo "percent=$PERCENT" >> $GITHUB_OUTPUT
+
+      - name: Clean for rebuild
+        run: cargo llvm-cov clean --workspace
+
+      - name: Run coverage WITHOUT exclusions
+        id: coverage_without
+        run: |
+          OUTPUT=$(cargo llvm-cov nextest --workspace --no-cfg-coverage-nightly 2>&1 | grep "^TOTAL" || echo "TOTAL 0 0 0%")
+          echo "output<<EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          # Extract line coverage percentage
+          PERCENT=$(echo "$OUTPUT" | awk '{print $4}' | tr -d '%')
+          echo "percent=$PERCENT" >> $GITHUB_OUTPUT
+
+      - name: Count exclusion annotations
+        id: exclusions
+        run: |
+          COUNT=$(grep -r "coverage(off)" crates/ --include="*.rs" | wc -l || echo "0")
+          echo "count=$COUNT" >> $GITHUB_OUTPUT
+
+      - name: Calculate gap and generate report
+        id: report
+        run: |
+          WITH="${{ steps.coverage_with.outputs.percent }}"
+          WITHOUT="${{ steps.coverage_without.outputs.percent }}"
+          EXCLUSIONS="${{ steps.exclusions.outputs.count }}"
+
+          # Calculate gap (with - without, since exclusions inflate "with" percentage)
+          GAP=$(echo "$WITH - $WITHOUT" | bc -l 2>/dev/null || echo "0")
+
+          echo "gap=$GAP" >> $GITHUB_OUTPUT
+
+          # Generate report
+          cat << EOF > coverage-report.md
+          ## Weekly Coverage Audit Report
+
+          **Date:** $(date -u +"%Y-%m-%d")
+
+          ### Coverage Summary
+
+          | Metric | Value |
+          |--------|-------|
+          | Coverage (with exclusions) | ${WITH}% |
+          | Coverage (without exclusions) | ${WITHOUT}% |
+          | Gap from exclusions | ${GAP}% |
+          | Number of \`#[coverage(off)]\` annotations | ${EXCLUSIONS} |
+
+          ### Raw Output
+
+          **With exclusions:**
+          \`\`\`
+          ${{ steps.coverage_with.outputs.output }}
+          \`\`\`
+
+          **Without exclusions:**
+          \`\`\`
+          ${{ steps.coverage_without.outputs.output }}
+          \`\`\`
+
+          ### Exclusion Locations
+
+          \`\`\`
+          $(grep -r "coverage(off)" crates/ --include="*.rs" -l 2>/dev/null || echo "No exclusions found")
+          \`\`\`
+          EOF
+
+          cat coverage-report.md
+
+          # Check if gap exceeds threshold (5%)
+          THRESHOLD=5
+          EXCEEDS=$(echo "$GAP > $THRESHOLD" | bc -l 2>/dev/null || echo "0")
+          echo "exceeds_threshold=$EXCEEDS" >> $GITHUB_OUTPUT
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-audit-report
+          path: coverage-report.md
+
+      - name: Create issue if gap exceeds threshold
+        if: steps.report.outputs.exceeds_threshold == '1'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('coverage-report.md', 'utf8');
+
+            // Check for existing open issue
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'coverage-audit'
+            });
+
+            const existingIssue = issues.data.find(i =>
+              i.title.includes('Coverage exclusion gap exceeds threshold')
+            );
+
+            if (existingIssue) {
+              // Update existing issue
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `## Updated Report\n\n${report}`
+              });
+            } else {
+              // Create new issue
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: 'Coverage exclusion gap exceeds threshold',
+                body: report,
+                labels: ['coverage-audit']
+              });
+            }
