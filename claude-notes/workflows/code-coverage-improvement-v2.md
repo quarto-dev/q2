@@ -9,13 +9,19 @@ This document provides instructions for systematically improving code coverage a
 ## Quick Reference
 
 ```bash
-# Run full coverage report
+# IMPORTANT: Always use per-crate coverage during active work (much faster!)
+# Only run full workspace coverage for periodic verification
+
+# Run coverage for a SINGLE CRATE (fast - use this during active work)
+cargo llvm-cov nextest -p <crate-name>
+
+# Run coverage for a single crate and grep for specific file
+cargo llvm-cov nextest -p <crate-name> 2>&1 | grep "path/to/file.rs"
+
+# Run full workspace coverage (slow - only for periodic verification)
 ./scripts/coverage.sh --summary
 
-# Check coverage for a specific file (grep from summary)
-./scripts/coverage.sh --summary 2>&1 | grep "path/to/file.rs"
-
-# Run tests for a specific crate
+# Run tests for a specific crate (no coverage, even faster)
 cargo nextest run -p <crate-name>
 
 # Run a specific test
@@ -30,6 +36,8 @@ grep -r "coverage(off)" crates/ --include="*.rs" | wc -l
 # Run coverage WITHOUT exclusions (see what we're hiding)
 cargo llvm-cov nextest --workspace --no-cfg-coverage-nightly
 ```
+
+**CRITICAL: Use per-crate coverage during active work.** Running `cargo llvm-cov nextest -p <crate-name>` is dramatically faster than running full workspace coverage. Only run full workspace coverage during periodic verification (once per session start).
 
 **Comparing coverage with vs without exclusions:**
 
@@ -72,7 +80,13 @@ Open `claude-notes/coverage/progress.md` and find the first file with status `no
 
 ### 2. Check Current Coverage
 
+Use per-crate coverage for speed:
+
 ```bash
+# Fast: per-crate coverage (use this!)
+cargo llvm-cov nextest -p <crate-name> 2>&1 | grep "path/to/file.rs"
+
+# Slow: only if you need full workspace context
 ./scripts/coverage.sh --summary 2>&1 | grep "path/to/file.rs"
 ```
 
@@ -100,8 +114,8 @@ Navigate to the file and note the red (uncovered) lines.
 
 For each uncovered code path:
 1. Write a test that exercises it
-2. Run the test to verify it passes
-3. Re-check coverage to confirm the lines are now covered
+2. Run the test to verify it passes: `cargo nextest run -p <crate-name> <test-name>`
+3. Re-check coverage using per-crate command: `cargo llvm-cov nextest -p <crate-name>`
 
 See "Writing Tests" section below for patterns.
 
