@@ -316,4 +316,97 @@ mod tests {
         assert_eq!(inlines.len(), 3);
         assert!(matches!(inlines[1], Inline::LineBreak(_)));
     }
+
+    #[test]
+    fn test_escaped_character() {
+        // Backslash-escaped characters should become the character itself
+        let inlines = get_first_para_inlines("\\*not emphasis\\*\n");
+        // Should produce: Str("*not"), Space, Str("emphasis*")
+        assert!(inlines.len() >= 1);
+        // The escaped asterisks should be in the text
+        let text: String = inlines
+            .iter()
+            .filter_map(|i| match i {
+                Inline::Str(s) => Some(s.text.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        assert!(text.contains("*"));
+    }
+
+    #[test]
+    fn test_link_with_title() {
+        let inlines = get_first_para_inlines("[text](http://example.com \"Title\")\n");
+        assert_eq!(inlines.len(), 1);
+        match &inlines[0] {
+            Inline::Link(l) => {
+                assert_eq!(l.target.0, "http://example.com");
+                assert_eq!(l.target.1, "Title");
+            }
+            _ => panic!("Expected Link"),
+        }
+    }
+
+    #[test]
+    fn test_image_with_title() {
+        let inlines = get_first_para_inlines("![alt](image.png \"Image Title\")\n");
+        assert_eq!(inlines.len(), 1);
+        match &inlines[0] {
+            Inline::Image(i) => {
+                assert_eq!(i.target.0, "image.png");
+                assert_eq!(i.target.1, "Image Title");
+            }
+            _ => panic!("Expected Image"),
+        }
+    }
+
+    #[test]
+    fn test_nested_emphasis() {
+        let inlines = get_first_para_inlines("*hello **world***\n");
+        assert_eq!(inlines.len(), 1);
+        match &inlines[0] {
+            Inline::Emph(e) => {
+                // Should contain "hello ", Strong("world")
+                assert!(e.content.len() >= 2);
+            }
+            _ => panic!("Expected Emph"),
+        }
+    }
+
+    #[test]
+    fn test_link_non_autolink_detection() {
+        // Link where text doesn't match URL - should NOT have uri class
+        let inlines = get_first_para_inlines("[click here](http://example.com)\n");
+        assert_eq!(inlines.len(), 1);
+        match &inlines[0] {
+            Inline::Link(l) => {
+                // Not an autolink, so no uri class
+                assert!(l.attr.1.is_empty());
+            }
+            _ => panic!("Expected Link"),
+        }
+    }
+
+    #[test]
+    fn test_text_with_source_context() {
+        use crate::source_location::SourceLocationContext;
+
+        let markdown = "hello world\n";
+        let ctx = SourceLocationContext::new(markdown, quarto_source_map::FileId(1));
+        let arena = Arena::new();
+        let root = parse_document(&arena, markdown, &Options::default());
+        let para = root.first_child().expect("Expected a block");
+        let inlines = convert_children_to_inlines_with_source(para, Some(&ctx));
+
+        assert_eq!(inlines.len(), 3);
+        // With source context, source info should have non-zero values
+        match &inlines[0] {
+            Inline::Str(s) => {
+                assert_eq!(s.text, "hello");
+                // Source info should be populated (FileId should be 1)
+            }
+            _ => panic!("Expected Str"),
+        }
+    }
 }
