@@ -885,3 +885,788 @@ fn stringify_blocks(blocks: &[Block]) -> String {
         .collect::<Vec<_>>()
         .join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lua::constructors::register_pandoc_namespace;
+    use crate::lua::mediabag::create_shared_mediabag;
+    use crate::lua::runtime::NativeRuntime;
+    use std::sync::Arc;
+
+    fn create_test_lua() -> Lua {
+        let lua = Lua::new();
+        let runtime = Arc::new(NativeRuntime::new());
+        register_pandoc_namespace(&lua, runtime, create_shared_mediabag()).unwrap();
+        lua
+    }
+
+    // ========== stringify tests ==========
+
+    #[test]
+    fn test_stringify_str() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Str('hello'))")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "hello");
+    }
+
+    #[test]
+    fn test_stringify_emph() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Emph{pandoc.Str('emphasized')})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "emphasized");
+    }
+
+    #[test]
+    fn test_stringify_strong() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Strong{pandoc.Str('bold')})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "bold");
+    }
+
+    #[test]
+    fn test_stringify_space() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Space())")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, " ");
+    }
+
+    #[test]
+    fn test_stringify_linebreak() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.LineBreak())")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "\n");
+    }
+
+    #[test]
+    fn test_stringify_para() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Para{pandoc.Str('paragraph')})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "paragraph");
+    }
+
+    #[test]
+    fn test_stringify_list_of_inlines() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify({pandoc.Str('hello'), pandoc.Space(), pandoc.Str('world')})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "hello world");
+    }
+
+    #[test]
+    fn test_stringify_plain_string() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify('plain text')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "plain text");
+    }
+
+    #[test]
+    fn test_stringify_quoted() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Quoted('DoubleQuote', {pandoc.Str('quoted')}))")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "\"quoted\"");
+    }
+
+    #[test]
+    fn test_stringify_code() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Code('let x = 1'))")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "let x = 1");
+    }
+
+    // ========== blocks_to_inlines tests ==========
+
+    #[test]
+    fn test_blocks_to_inlines_para() {
+        let lua = create_test_lua();
+
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.Para{pandoc.Str('hello')}})")
+            .eval()
+            .unwrap();
+
+        assert!(result.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_blocks_to_inlines_with_separator() {
+        let lua = create_test_lua();
+
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.Para{pandoc.Str('a')}, pandoc.Para{pandoc.Str('b')}}, {pandoc.Str('-')})")
+            .eval()
+            .unwrap();
+
+        // Should have a, -, b
+        assert!(result.len().unwrap() >= 3);
+    }
+
+    // ========== equals tests ==========
+
+    #[test]
+    fn test_equals_same_var() {
+        let lua = create_test_lua();
+
+        // Same variable should be equal
+        let result: bool = lua
+            .load("local s = pandoc.Str('a'); return pandoc.utils.equals(s, s)")
+            .eval()
+            .unwrap();
+
+        assert!(result);
+    }
+
+    #[test]
+    fn test_equals_different() {
+        let lua = create_test_lua();
+
+        let result: bool = lua
+            .load("return pandoc.utils.equals(pandoc.Str('a'), pandoc.Str('b'))")
+            .eval()
+            .unwrap();
+
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_equals_primitives() {
+        let lua = create_test_lua();
+
+        let result: bool = lua
+            .load("return pandoc.utils.equals(42, 42)")
+            .eval()
+            .unwrap();
+
+        assert!(result);
+    }
+
+    // ========== type tests ==========
+
+    #[test]
+    fn test_type_str() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.type(pandoc.Str('test'))")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "Str");
+    }
+
+    #[test]
+    fn test_type_para() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.type(pandoc.Para{pandoc.Str('test')})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "Para");
+    }
+
+    #[test]
+    fn test_type_table_with_name() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load(
+                r#"
+                local mt = { __name = "MyType" }
+                local t = setmetatable({}, mt)
+                return pandoc.utils.type(t)
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "MyType");
+    }
+
+    #[test]
+    fn test_type_number() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.type(42)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "number");
+    }
+
+    // ========== sha1 tests ==========
+
+    #[test]
+    fn test_sha1_empty() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.sha1('')")
+            .eval()
+            .unwrap();
+
+        // SHA1 of empty string
+        assert_eq!(result, "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+    }
+
+    #[test]
+    fn test_sha1_hello() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.sha1('hello')")
+            .eval()
+            .unwrap();
+
+        // SHA1 of "hello"
+        assert_eq!(result, "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d");
+    }
+
+    // ========== normalize_date tests ==========
+
+    #[test]
+    fn test_normalize_date_iso() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('2024-01-15')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "2024-01-15");
+    }
+
+    #[test]
+    fn test_normalize_date_us_long() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('12/31/2024')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "2024-12-31");
+    }
+
+    #[test]
+    fn test_normalize_date_us_short() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('12/31/24')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "2024-12-31");
+    }
+
+    #[test]
+    fn test_normalize_date_day_abbrev_month() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('09 Nov 1989')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-11-09");
+    }
+
+    #[test]
+    fn test_normalize_date_day_full_month() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('9 November 1989')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-11-09");
+    }
+
+    #[test]
+    fn test_normalize_date_abbrev_month_dot() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('Nov. 9, 1989')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-11-09");
+    }
+
+    #[test]
+    fn test_normalize_date_full_month_day() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('November 9, 1989')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-11-09");
+    }
+
+    #[test]
+    fn test_normalize_date_compact() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('19891109')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-11-09");
+    }
+
+    #[test]
+    fn test_normalize_date_year_month() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('198911')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-11-01");
+    }
+
+    #[test]
+    fn test_normalize_date_year_only() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.normalize_date('1989')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "1989-01-01");
+    }
+
+    #[test]
+    fn test_normalize_date_invalid() {
+        let lua = create_test_lua();
+
+        let result: Value = lua
+            .load("return pandoc.utils.normalize_date('not a date')")
+            .eval()
+            .unwrap();
+
+        assert!(result.is_nil());
+    }
+
+    // ========== to_roman_numeral tests ==========
+
+    #[test]
+    fn test_roman_numeral_1() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.to_roman_numeral(1)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "I");
+    }
+
+    #[test]
+    fn test_roman_numeral_4() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.to_roman_numeral(4)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "IV");
+    }
+
+    #[test]
+    fn test_roman_numeral_9() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.to_roman_numeral(9)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "IX");
+    }
+
+    #[test]
+    fn test_roman_numeral_49() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.to_roman_numeral(49)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "XLIX");
+    }
+
+    #[test]
+    fn test_roman_numeral_1984() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.to_roman_numeral(1984)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "MCMLXXXIV");
+    }
+
+    #[test]
+    fn test_roman_numeral_3999() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.to_roman_numeral(3999)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "MMMCMXCIX");
+    }
+
+    #[test]
+    fn test_roman_numeral_invalid_zero() {
+        let lua = create_test_lua();
+
+        let result: mlua::Result<String> = lua
+            .load("return pandoc.utils.to_roman_numeral(0)")
+            .eval();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_roman_numeral_invalid_negative() {
+        let lua = create_test_lua();
+
+        let result: mlua::Result<String> = lua
+            .load("return pandoc.utils.to_roman_numeral(-1)")
+            .eval();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_roman_numeral_invalid_too_large() {
+        let lua = create_test_lua();
+
+        let result: mlua::Result<String> = lua
+            .load("return pandoc.utils.to_roman_numeral(4000)")
+            .eval();
+
+        assert!(result.is_err());
+    }
+
+    // ========== Helper function unit tests ==========
+
+    #[test]
+    fn test_is_valid_date_normal() {
+        assert!(is_valid_date(2024, 1, 15));
+        assert!(is_valid_date(2024, 12, 31));
+    }
+
+    #[test]
+    fn test_is_valid_date_leap_year() {
+        assert!(is_valid_date(2024, 2, 29)); // 2024 is leap year
+        assert!(!is_valid_date(2023, 2, 29)); // 2023 is not leap year
+    }
+
+    #[test]
+    fn test_is_valid_date_invalid_month() {
+        assert!(!is_valid_date(2024, 0, 15));
+        assert!(!is_valid_date(2024, 13, 15));
+    }
+
+    #[test]
+    fn test_is_valid_date_invalid_day() {
+        assert!(!is_valid_date(2024, 1, 0));
+        assert!(!is_valid_date(2024, 1, 32));
+        assert!(!is_valid_date(2024, 4, 31)); // April has 30 days
+    }
+
+    #[test]
+    fn test_is_valid_date_invalid_year() {
+        assert!(!is_valid_date(1600, 1, 1)); // Too early
+        assert!(!is_valid_date(10000, 1, 1)); // Too late
+    }
+
+    #[test]
+    fn test_is_leap_year() {
+        assert!(is_leap_year(2024)); // Divisible by 4
+        assert!(!is_leap_year(2023)); // Not divisible by 4
+        assert!(!is_leap_year(1900)); // Divisible by 100 but not 400
+        assert!(is_leap_year(2000)); // Divisible by 400
+    }
+
+    #[test]
+    fn test_month_from_abbrev() {
+        assert_eq!(month_from_abbrev("jan"), Some(1));
+        assert_eq!(month_from_abbrev("Jan"), Some(1));
+        assert_eq!(month_from_abbrev("JAN"), Some(1));
+        assert_eq!(month_from_abbrev("dec"), Some(12));
+        assert_eq!(month_from_abbrev("foo"), None);
+    }
+
+    #[test]
+    fn test_month_from_full_name() {
+        assert_eq!(month_from_full_name("january"), Some(1));
+        assert_eq!(month_from_full_name("January"), Some(1));
+        assert_eq!(month_from_full_name("december"), Some(12));
+        assert_eq!(month_from_full_name("foo"), None);
+    }
+
+    // ========== block_to_inlines tests ==========
+
+    #[test]
+    fn test_block_to_inlines_blockquote() {
+        let lua = create_test_lua();
+
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.BlockQuote{pandoc.Para{pandoc.Str('quoted')}}})")
+            .eval()
+            .unwrap();
+
+        assert!(result.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_block_to_inlines_bullet_list() {
+        let lua = create_test_lua();
+
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.BulletList{{pandoc.Plain{pandoc.Str('item')}}}})")
+            .eval()
+            .unwrap();
+
+        assert!(result.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_block_to_inlines_ordered_list() {
+        let lua = create_test_lua();
+
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.OrderedList{{pandoc.Plain{pandoc.Str('item')}}}})")
+            .eval()
+            .unwrap();
+
+        assert!(result.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_block_to_inlines_div() {
+        let lua = create_test_lua();
+
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.Div{pandoc.Para{pandoc.Str('content')}}})")
+            .eval()
+            .unwrap();
+
+        assert!(result.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_block_to_inlines_codeblock() {
+        let lua = create_test_lua();
+
+        // CodeBlock returns empty inlines
+        let result: Table = lua
+            .load("return pandoc.utils.blocks_to_inlines({pandoc.CodeBlock('code')})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result.len().unwrap(), 0);
+    }
+
+    // ========== stringify block types tests ==========
+
+    #[test]
+    fn test_stringify_header() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Header(1, {pandoc.Str('Title')}))")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "Title");
+    }
+
+    #[test]
+    fn test_stringify_codeblock() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.CodeBlock('let x = 1'))")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "let x = 1");
+    }
+
+    #[test]
+    fn test_stringify_blockquote() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.BlockQuote{pandoc.Para{pandoc.Str('quoted')}})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "quoted");
+    }
+
+    #[test]
+    fn test_stringify_bulletlist() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.BulletList{{pandoc.Plain{pandoc.Str('item')}}})")
+            .eval()
+            .unwrap();
+
+        assert!(result.contains("item"));
+    }
+
+    #[test]
+    fn test_stringify_div() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(pandoc.Div{pandoc.Para{pandoc.Str('content')}})")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "content");
+    }
+
+    #[test]
+    fn test_stringify_nil_value() {
+        let lua = create_test_lua();
+
+        let result: String = lua
+            .load("return pandoc.utils.stringify(nil)")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "");
+    }
+
+    // ========== get_inline_type_name tests ==========
+
+    #[test]
+    fn test_get_inline_type_name_all() {
+        use crate::pandoc::*;
+
+        assert_eq!(
+            get_inline_type_name(&Inline::Str(Str {
+                text: "".into(),
+                source_info: SourceInfo::default()
+            })),
+            "Str"
+        );
+        assert_eq!(
+            get_inline_type_name(&Inline::Space(Space {
+                source_info: SourceInfo::default()
+            })),
+            "Space"
+        );
+        assert_eq!(
+            get_inline_type_name(&Inline::SoftBreak(SoftBreak {
+                source_info: SourceInfo::default()
+            })),
+            "SoftBreak"
+        );
+        assert_eq!(
+            get_inline_type_name(&Inline::LineBreak(LineBreak {
+                source_info: SourceInfo::default()
+            })),
+            "LineBreak"
+        );
+    }
+
+    // ========== get_block_type_name tests ==========
+
+    #[test]
+    fn test_get_block_type_name_all() {
+        use crate::pandoc::*;
+
+        assert_eq!(
+            get_block_type_name(&Block::Paragraph(Paragraph {
+                content: vec![],
+                source_info: SourceInfo::default()
+            })),
+            "Para"
+        );
+        assert_eq!(
+            get_block_type_name(&Block::Plain(Plain {
+                content: vec![],
+                source_info: SourceInfo::default()
+            })),
+            "Plain"
+        );
+        assert_eq!(
+            get_block_type_name(&Block::HorizontalRule(HorizontalRule {
+                source_info: SourceInfo::default()
+            })),
+            "HorizontalRule"
+        );
+    }
+}

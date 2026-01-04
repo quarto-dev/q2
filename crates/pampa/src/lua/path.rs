@@ -567,4 +567,281 @@ mod tests {
         let result: bool = lua.load("pandoc.path.exists('.', 'file')").eval().unwrap();
         assert!(!result);
     }
+
+    #[test]
+    fn test_join_empty() {
+        let (lua, _) = create_test_lua();
+
+        let result: String = lua.load("pandoc.path.join({})").eval().unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_join_with_leading_slashes() {
+        let (lua, _) = create_test_lua();
+
+        // Second part has leading slash - should be stripped
+        let result: String = lua
+            .load("pandoc.path.join({'/base', '/subdir', 'file.txt'})")
+            .eval()
+            .unwrap();
+        // Should have base/subdir/file.txt (slash stripped from /subdir)
+        assert!(result.contains("base"));
+        assert!(result.contains("subdir"));
+        assert!(result.contains("file.txt"));
+    }
+
+    #[test]
+    fn test_join_with_empty_part() {
+        let (lua, _) = create_test_lua();
+
+        // Empty part after stripping should be skipped
+        let result: String = lua
+            .load("pandoc.path.join({'base', '/', 'file.txt'})")
+            .eval()
+            .unwrap();
+        assert!(result.contains("base"));
+        assert!(result.contains("file.txt"));
+    }
+
+    #[test]
+    fn test_split_root() {
+        let (lua, _) = create_test_lua();
+
+        let result: Table = lua.load("pandoc.path.split('/')").eval().unwrap();
+        assert!(result.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_split_current_dir() {
+        let (lua, _) = create_test_lua();
+
+        let result: Table = lua.load("pandoc.path.split('./foo/bar')").eval().unwrap();
+        let first: String = result.get(1).unwrap();
+        assert_eq!(first, ".");
+    }
+
+    #[test]
+    fn test_split_parent_dir() {
+        let (lua, _) = create_test_lua();
+
+        let result: Table = lua.load("pandoc.path.split('../foo/bar')").eval().unwrap();
+        let first: String = result.get(1).unwrap();
+        assert_eq!(first, "..");
+    }
+
+    #[test]
+    fn test_split_extension_with_directory() {
+        let (lua, _) = create_test_lua();
+
+        let result: (String, String) = lua
+            .load("pandoc.path.split_extension('/home/user/file.txt')")
+            .eval()
+            .unwrap();
+        assert!(result.0.ends_with("file"));
+        assert!(result.0.contains("home"));
+        assert_eq!(result.1, ".txt");
+    }
+
+    #[test]
+    fn test_split_extension_no_parent() {
+        let (lua, _) = create_test_lua();
+
+        // File with extension but no parent directory
+        let result: (String, String) = lua
+            .load("pandoc.path.split_extension('document.pdf')")
+            .eval()
+            .unwrap();
+        assert_eq!(result.0, "document");
+        assert_eq!(result.1, ".pdf");
+    }
+
+    #[test]
+    fn test_normalize_with_parent_dirs() {
+        let (lua, _) = create_test_lua();
+
+        let result: String = lua
+            .load("pandoc.path.normalize('foo/../bar')")
+            .eval()
+            .unwrap();
+        // Should contain the .. (normalize doesn't resolve parent refs)
+        assert!(result.contains("bar"));
+    }
+
+    #[test]
+    fn test_normalize_multiple_current_dirs() {
+        let (lua, _) = create_test_lua();
+
+        let result: String = lua
+            .load("pandoc.path.normalize('./././foo')")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "foo");
+    }
+
+    #[test]
+    fn test_make_relative_no_common_prefix() {
+        let (lua, _) = create_test_lua();
+
+        // When there's no common prefix, safe mode returns the original path
+        let result: String = lua
+            .load("pandoc.path.make_relative('/other/path', '/home/user')")
+            .eval()
+            .unwrap();
+        assert_eq!(result, "/other/path");
+    }
+
+    #[test]
+    fn test_make_relative_unsafe_mode() {
+        let (lua, _) = create_test_lua();
+
+        // With unsafe mode, should compute relative path with ..
+        let result: String = lua
+            .load("pandoc.path.make_relative('/home/other', '/home/user', true)")
+            .eval()
+            .unwrap();
+        // Should contain .. to go up from user and then to other
+        assert!(result.contains(".."));
+        assert!(result.contains("other"));
+    }
+
+    #[test]
+    fn test_make_relative_same_path_unsafe() {
+        let (lua, _) = create_test_lua();
+
+        // Same path should return .
+        let result: String = lua
+            .load("pandoc.path.make_relative('/home/user', '/home/user', true)")
+            .eval()
+            .unwrap();
+        assert_eq!(result, ".");
+    }
+
+    #[test]
+    fn test_split_search_path_empty_items() {
+        let (lua, _) = create_test_lua();
+
+        // Path with empty items
+        if cfg!(windows) {
+            // On Windows, empty items are ignored
+            let result: Table = lua
+                .load("pandoc.path.split_search_path('C:\\\\bin;;D:\\\\tools')")
+                .eval()
+                .unwrap();
+            assert_eq!(result.len().unwrap(), 2);
+        } else {
+            // On Posix, empty items become current directory
+            let result: Table = lua
+                .load("pandoc.path.split_search_path('/bin::/usr/bin')")
+                .eval()
+                .unwrap();
+            assert_eq!(result.len().unwrap(), 3);
+            let second: String = result.get(2).unwrap();
+            assert_eq!(second, ".");
+        }
+    }
+
+    #[test]
+    fn test_split_search_path_with_spaces() {
+        let (lua, _) = create_test_lua();
+
+        let result: Table = if cfg!(windows) {
+            lua.load("pandoc.path.split_search_path(' C:\\\\bin ; D:\\\\tools ')")
+                .eval()
+                .unwrap()
+        } else {
+            lua.load("pandoc.path.split_search_path(' /bin : /usr/bin ')")
+                .eval()
+                .unwrap()
+        };
+
+        // Should trim whitespace
+        assert_eq!(result.len().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_treat_strings_as_paths() {
+        let (lua, _) = create_test_lua();
+
+        // This is a no-op but shouldn't error
+        lua.load("pandoc.path.treat_strings_as_paths()")
+            .exec()
+            .unwrap();
+    }
+
+    #[test]
+    fn test_exists_with_symlink_type() {
+        let (lua, _) = create_test_lua();
+
+        // Check with symlink type (likely false for most paths)
+        let result: bool = lua
+            .load("pandoc.path.exists('.', 'symlink')")
+            .eval()
+            .unwrap();
+        // Current directory is typically not a symlink
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_exists_with_invalid_type() {
+        let (lua, _) = create_test_lua();
+
+        // Invalid type falls back to checking any existence
+        let result: bool = lua
+            .load("pandoc.path.exists('.', 'invalid_type')")
+            .eval()
+            .unwrap();
+        // Should still check if path exists (without type filter)
+        assert!(result);
+    }
+
+    #[test]
+    fn test_directory_root() {
+        let (lua, _) = create_test_lua();
+
+        // Root directory has no parent
+        let result: String = lua.load("pandoc.path.directory('/')").eval().unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_filename_root() {
+        let (lua, _) = create_test_lua();
+
+        // Root has no filename
+        let result: String = lua.load("pandoc.path.filename('/')").eval().unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_compute_relative_path_function() {
+        // Test the compute_relative_path helper directly
+        let result = compute_relative_path(Path::new("/home/other/file"), Path::new("/home/user"));
+        assert!(result.contains(".."));
+        assert!(result.contains("other"));
+        assert!(result.contains("file"));
+    }
+
+    #[test]
+    fn test_compute_relative_path_same_dir() {
+        let result = compute_relative_path(Path::new("/home/user"), Path::new("/home/user"));
+        assert_eq!(result, ".");
+    }
+
+    #[test]
+    fn test_compute_relative_path_child() {
+        let result = compute_relative_path(Path::new("/home/user/sub/file"), Path::new("/home/user"));
+        assert!(result.contains("sub"));
+        assert!(result.contains("file"));
+        assert!(!result.contains(".."));
+    }
+
+    #[test]
+    fn test_compute_relative_path_deep_nesting() {
+        let result =
+            compute_relative_path(Path::new("/a/b/c/d"), Path::new("/a/x/y/z"));
+        // Should go up 3 levels (from x/y/z) then down to b/c/d
+        let parent_count = result.matches("..").count();
+        assert_eq!(parent_count, 3);
+    }
 }

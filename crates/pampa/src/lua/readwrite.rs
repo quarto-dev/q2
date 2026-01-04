@@ -812,4 +812,586 @@ mod tests {
         let err = result.unwrap_err().to_string();
         assert!(err.contains("Unsupported writer format"));
     }
+
+    #[test]
+    fn test_parse_format_spec_from_lua_table_form() {
+        let lua = Lua::new();
+
+        // Test table form with extensions
+        let format_table = lua.create_table().unwrap();
+        format_table.set("format", "markdown").unwrap();
+
+        let extensions = lua.create_table().unwrap();
+        extensions.set(1, "smart").unwrap();
+        extensions.set(2, "footnotes").unwrap();
+        format_table.set("extensions", extensions).unwrap();
+
+        let parsed = parse_format_spec_from_lua(&lua, Value::Table(format_table)).unwrap();
+        assert_eq!(parsed.base_format, "markdown");
+        assert!(parsed.extensions.enable.contains(&"smart".to_string()));
+    }
+
+    #[test]
+    fn test_parse_format_spec_from_lua_table_key_value_extensions() {
+        let lua = Lua::new();
+
+        // Test table form with key-value extensions
+        let format_table = lua.create_table().unwrap();
+        format_table.set("format", "markdown").unwrap();
+
+        let extensions = lua.create_table().unwrap();
+        extensions.set("smart", true).unwrap();
+        extensions.set("citations", false).unwrap();
+        format_table.set("extensions", extensions).unwrap();
+
+        let parsed = parse_format_spec_from_lua(&lua, Value::Table(format_table)).unwrap();
+        assert!(parsed.extensions.enable.contains(&"smart".to_string()));
+        assert!(parsed.extensions.disable.contains(&"citations".to_string()));
+    }
+
+    #[test]
+    fn test_parse_format_spec_from_lua_table_string_extensions() {
+        let lua = Lua::new();
+
+        // Test table form with string extensions ("enable"/"disable")
+        let format_table = lua.create_table().unwrap();
+        format_table.set("format", "markdown").unwrap();
+
+        let extensions = lua.create_table().unwrap();
+        extensions.set("smart", "enable").unwrap();
+        extensions.set("citations", "disable").unwrap();
+        format_table.set("extensions", extensions).unwrap();
+
+        let parsed = parse_format_spec_from_lua(&lua, Value::Table(format_table)).unwrap();
+        assert!(parsed.extensions.enable.contains(&"smart".to_string()));
+        assert!(parsed.extensions.disable.contains(&"citations".to_string()));
+    }
+
+    #[test]
+    fn test_parse_format_spec_from_lua_nil() {
+        let lua = Lua::new();
+
+        let parsed = parse_format_spec_from_lua(&lua, Value::Nil).unwrap();
+        assert_eq!(parsed.base_format, "markdown");
+        assert!(parsed.extensions.enable.is_empty());
+    }
+
+    #[test]
+    fn test_parse_format_spec_from_lua_invalid() {
+        let lua = Lua::new();
+
+        let result = parse_format_spec_from_lua(&lua, Value::Integer(42));
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("format must be a string or table"));
+    }
+
+    #[test]
+    fn test_writer_options_with_overrides() {
+        let lua = Lua::new();
+        let user_opts = lua.create_table().unwrap();
+        user_opts.set("columns", 100).unwrap();
+        user_opts.set("number_sections", true).unwrap();
+
+        let opts = create_writer_options_table(&lua, Some(user_opts)).unwrap();
+
+        assert_eq!(opts.get::<i64>("columns").unwrap(), 100);
+        assert!(opts.get::<bool>("number_sections").unwrap());
+        // Other defaults should still be present
+        assert_eq!(opts.get::<i64>("dpi").unwrap(), 96);
+    }
+
+    #[test]
+    fn test_pandoc_write_plain() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        let result: String = lua
+            .load(
+                r#"
+                local doc = pandoc.read("Hello *world*", "markdown")
+                return pandoc.write(doc, "plain")
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert!(result.contains("Hello"));
+        assert!(result.contains("world"));
+    }
+
+    #[test]
+    fn test_pandoc_write_qmd() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        let result: String = lua
+            .load(
+                "
+                local doc = pandoc.read('# Title\\n\\nParagraph', 'markdown')
+                return pandoc.write(doc, 'qmd')
+            ",
+            )
+            .eval()
+            .unwrap();
+
+        assert!(result.contains("Title"));
+        assert!(result.contains("Paragraph"));
+    }
+
+    #[test]
+    fn test_pandoc_read_with_reader_options() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_readwrite(&lua, &pandoc).unwrap();
+        lua.globals().set("pandoc", pandoc).unwrap();
+
+        // Read with reader options
+        let result: Value = lua
+            .load(
+                r#"
+                local opts = { columns = 100, standalone = true }
+                return pandoc.read("Hello", "markdown", opts)
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert!(result.as_table().is_some());
+    }
+
+    #[test]
+    fn test_pandoc_write_with_writer_options() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        let result: String = lua
+            .load(
+                r#"
+                local doc = pandoc.read("Test", "markdown")
+                local opts = { columns = 100 }
+                return pandoc.write(doc, "html", opts)
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert!(result.contains("Test"));
+    }
+
+    #[test]
+    fn test_pandoc_read_missing_content() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_readwrite(&lua, &pandoc).unwrap();
+        lua.globals().set("pandoc", pandoc).unwrap();
+
+        let result: Result<Value> = lua.load("return pandoc.read()").eval();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("requires at least one argument"));
+    }
+
+    #[test]
+    fn test_pandoc_read_non_string_content() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_readwrite(&lua, &pandoc).unwrap();
+        lua.globals().set("pandoc", pandoc).unwrap();
+
+        let result: Result<Value> = lua.load("return pandoc.read(123)").eval();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("content must be a string"));
+    }
+
+    #[test]
+    fn test_pandoc_write_missing_doc() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        let result: Result<Value> = lua.load("return pandoc.write()").eval();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("requires at least one argument"));
+    }
+
+    #[test]
+    fn test_pandoc_write_non_table_doc() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        let result: Result<Value> = lua.load("return pandoc.write('not a table')").eval();
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Expected Pandoc document table"));
+    }
+
+    #[test]
+    fn test_pandoc_write_default_format() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        // No format specified, should default to HTML
+        let result: String = lua
+            .load(
+                r#"
+                local doc = pandoc.read("Test", "markdown")
+                return pandoc.write(doc)
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert!(result.contains("<p>"));
+    }
+
+    #[test]
+    fn test_config_value_to_lua_scalar_types() {
+        use quarto_pandoc_types::{ConfigValueKind, MergeOp};
+        use quarto_source_map::SourceInfo;
+
+        let lua = Lua::new();
+
+        // String
+        let config = ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("hello".to_string())),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert_eq!(result.as_str().unwrap(), "hello");
+
+        // Boolean
+        let config = ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true)),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert!(result.as_boolean().unwrap());
+
+        // Integer
+        let config = ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(42)),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert_eq!(result.as_integer().unwrap(), 42);
+
+        // Real
+        let config = ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Real("3.14".to_string())),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert!((result.as_number().unwrap() - 3.14).abs() < 0.01);
+
+        // Null
+        let config = ConfigValue {
+            value: ConfigValueKind::Scalar(yaml_rust2::Yaml::Null),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert!(result.is_nil());
+    }
+
+    #[test]
+    fn test_config_value_to_lua_array() {
+        use quarto_pandoc_types::{ConfigValueKind, MergeOp};
+        use quarto_source_map::SourceInfo;
+
+        let lua = Lua::new();
+
+        let items = vec![
+            ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("a".to_string())),
+                source_info: SourceInfo::default(),
+                merge_op: MergeOp::default(),
+            },
+            ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("b".to_string())),
+                source_info: SourceInfo::default(),
+                merge_op: MergeOp::default(),
+            },
+        ];
+
+        let config = ConfigValue {
+            value: ConfigValueKind::Array(items),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        let table = result.as_table().unwrap();
+        assert_eq!(table.len().unwrap(), 2);
+    }
+
+    #[test]
+    fn test_config_value_to_lua_map() {
+        use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind, MergeOp};
+        use quarto_source_map::SourceInfo;
+
+        let lua = Lua::new();
+
+        let entries = vec![ConfigMapEntry {
+            key: "key1".to_string(),
+            key_source: SourceInfo::default(),
+            value: ConfigValue {
+                value: ConfigValueKind::Scalar(yaml_rust2::Yaml::String("value1".to_string())),
+                source_info: SourceInfo::default(),
+                merge_op: MergeOp::default(),
+            },
+        }];
+
+        let config = ConfigValue {
+            value: ConfigValueKind::Map(entries),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        let table = result.as_table().unwrap();
+        let val: String = table.get("key1").unwrap();
+        assert_eq!(val, "value1");
+    }
+
+    #[test]
+    fn test_config_value_to_lua_path_glob_expr() {
+        use quarto_pandoc_types::{ConfigValueKind, MergeOp};
+        use quarto_source_map::SourceInfo;
+
+        let lua = Lua::new();
+
+        // Path
+        let config = ConfigValue {
+            value: ConfigValueKind::Path("/some/path".to_string()),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert_eq!(result.as_str().unwrap(), "/some/path");
+
+        // Glob
+        let config = ConfigValue {
+            value: ConfigValueKind::Glob("*.md".to_string()),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert_eq!(result.as_str().unwrap(), "*.md");
+
+        // Expr
+        let config = ConfigValue {
+            value: ConfigValueKind::Expr("1 + 2".to_string()),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        };
+        let result = config_value_to_lua(&lua, &config).unwrap();
+        assert_eq!(result.as_str().unwrap(), "1 + 2");
+    }
+
+    #[test]
+    fn test_lua_to_config_value_basic_types() {
+        let lua = Lua::new();
+
+        // Nil
+        let result = lua_to_config_value(&lua, Value::Nil).unwrap();
+        assert!(matches!(result.value, ConfigValueKind::Map(_)));
+
+        // Boolean
+        let result = lua_to_config_value(&lua, Value::Boolean(true)).unwrap();
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(yaml_rust2::Yaml::Boolean(true))
+        ));
+
+        // Integer
+        let result = lua_to_config_value(&lua, Value::Integer(42)).unwrap();
+        assert!(matches!(
+            result.value,
+            ConfigValueKind::Scalar(yaml_rust2::Yaml::Integer(42))
+        ));
+
+        // Number
+        let result = lua_to_config_value(&lua, Value::Number(3.14)).unwrap();
+        if let ConfigValueKind::Scalar(yaml_rust2::Yaml::Real(s)) = result.value {
+            assert!(s.contains("3.14"));
+        } else {
+            panic!("Expected Real");
+        }
+    }
+
+    #[test]
+    fn test_lua_to_config_value_string() {
+        let lua = Lua::new();
+        let s = lua.create_string("hello").unwrap();
+
+        let result = lua_to_config_value(&lua, Value::String(s)).unwrap();
+        if let ConfigValueKind::Scalar(yaml_rust2::Yaml::String(v)) = result.value {
+            assert_eq!(v, "hello");
+        } else {
+            panic!("Expected String");
+        }
+    }
+
+    #[test]
+    fn test_lua_to_config_value_array() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.set(1, "a").unwrap();
+        table.set(2, "b").unwrap();
+
+        let result = lua_to_config_value(&lua, Value::Table(table)).unwrap();
+        if let ConfigValueKind::Array(items) = result.value {
+            assert_eq!(items.len(), 2);
+        } else {
+            panic!("Expected Array");
+        }
+    }
+
+    #[test]
+    fn test_lua_to_config_value_map() {
+        let lua = Lua::new();
+        let table = lua.create_table().unwrap();
+        table.set("key", "value").unwrap();
+
+        let result = lua_to_config_value(&lua, Value::Table(table)).unwrap();
+        if let ConfigValueKind::Map(entries) = result.value {
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].key, "key");
+        } else {
+            panic!("Expected Map");
+        }
+    }
+
+    #[test]
+    fn test_lua_to_config_value_unsupported() {
+        let lua = Lua::new();
+        let func = lua.create_function(|_, ()| Ok(())).unwrap();
+
+        let result = lua_to_config_value(&lua, Value::Function(func));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pandoc_read_json() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_readwrite(&lua, &pandoc).unwrap();
+        lua.globals().set("pandoc", pandoc).unwrap();
+
+        // Valid JSON format (simplified Pandoc JSON)
+        let json_doc = r#"{"blocks":[{"t":"Para","c":[{"t":"Str","c":"Hello"}]}],"pandoc-api-version":[1,23],"meta":{}}"#;
+
+        let code = format!(r#"return pandoc.read('{}', "json")"#, json_doc);
+        let result: Value = lua.load(&code).eval().unwrap();
+
+        assert!(result.as_table().is_some());
+    }
+
+    #[test]
+    fn test_pandoc_write_json() {
+        let lua = Lua::new();
+
+        super::super::constructors::register_pandoc_namespace(
+            &lua,
+            std::sync::Arc::new(super::super::runtime::NativeRuntime::new()),
+            super::super::mediabag::create_shared_mediabag(),
+        )
+        .unwrap();
+
+        let result: String = lua
+            .load(
+                r#"
+                local doc = pandoc.read("Test", "markdown")
+                return pandoc.write(doc, "json")
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        // Should be valid JSON
+        assert!(result.contains("blocks"));
+        assert!(result.contains("meta"));
+    }
+
+    #[test]
+    fn test_option_constructors_via_lua() {
+        let lua = Lua::new();
+        let pandoc = lua.create_table().unwrap();
+        register_pandoc_readwrite(&lua, &pandoc).unwrap();
+        lua.globals().set("pandoc", pandoc).unwrap();
+
+        // Test ReaderOptions constructor
+        let result: Table = lua
+            .load("return pandoc.ReaderOptions({ columns = 100 })")
+            .eval()
+            .unwrap();
+        assert_eq!(result.get::<i64>("columns").unwrap(), 100);
+
+        // Test WriterOptions constructor
+        let result: Table = lua
+            .load("return pandoc.WriterOptions({ dpi = 150 })")
+            .eval()
+            .unwrap();
+        assert_eq!(result.get::<i64>("dpi").unwrap(), 150);
+    }
+
+    #[test]
+    fn test_format_table_without_format_field() {
+        let lua = Lua::new();
+
+        // Table without explicit format should default to markdown
+        let format_table = lua.create_table().unwrap();
+        let extensions = lua.create_table().unwrap();
+        extensions.set("smart", true).unwrap();
+        format_table.set("extensions", extensions).unwrap();
+
+        let parsed = parse_format_spec_from_lua(&lua, Value::Table(format_table)).unwrap();
+        assert_eq!(parsed.base_format, "markdown");
+    }
 }

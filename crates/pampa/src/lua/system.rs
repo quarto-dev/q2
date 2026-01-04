@@ -756,4 +756,312 @@ mod tests {
             .unwrap();
         assert!(config_sub.contains("myapp"));
     }
+
+    #[test]
+    fn test_cputime() {
+        let (lua, _) = create_test_lua();
+
+        // CPU time may not be available on all platforms
+        let result: mlua::Result<i64> = lua.load("pandoc.system.cputime()").eval();
+
+        match result {
+            Ok(time) => {
+                // If it works, CPU time should be positive
+                assert!(time >= 0);
+            }
+            Err(e) => {
+                // It's OK if cputime is not supported on this platform
+                assert!(e.to_string().contains("not available") || e.to_string().contains("not supported"));
+            }
+        }
+    }
+
+    #[test]
+    fn test_times() {
+        let (lua, runtime) = create_test_lua();
+
+        let temp = runtime.temp_dir("system_test").unwrap();
+        let test_file = temp.path().join("times_test.txt");
+        std::fs::write(&test_file, "test").unwrap();
+
+        let file_str = test_file
+            .to_string_lossy()
+            .to_string()
+            .replace('\\', "\\\\");
+
+        // Get file times
+        let (mod_time, acc_time): (Table, Table) = lua
+            .load(format!("return pandoc.system.times('{}')", file_str))
+            .eval()
+            .unwrap();
+
+        // Check modified time has expected fields
+        assert!(mod_time.get::<i64>("year").unwrap() >= 2020);
+        assert!(mod_time.get::<i64>("month").unwrap() >= 1);
+        assert!(mod_time.get::<i64>("day").unwrap() >= 1);
+        assert!(mod_time.get::<i64>("hour").is_ok());
+        assert!(mod_time.get::<i64>("min").is_ok());
+        assert!(mod_time.get::<i64>("sec").is_ok());
+
+        // Check accessed time has expected fields
+        assert!(acc_time.get::<i64>("year").unwrap() >= 2020);
+    }
+
+    #[test]
+    fn test_with_working_directory() {
+        let (lua, runtime) = create_test_lua();
+
+        let temp = runtime.temp_dir("system_test").unwrap();
+        let temp_str = temp
+            .path()
+            .to_string_lossy()
+            .to_string()
+            .replace('\\', "\\\\");
+
+        // Save current directory for comparison
+        let original_cwd = std::env::current_dir().unwrap();
+
+        // with_working_directory should change directory, run callback, then restore
+        let result: String = lua
+            .load(format!(
+                "return pandoc.system.with_working_directory('{}', function() return pandoc.system.get_working_directory() end)",
+                temp_str
+            ))
+            .eval()
+            .unwrap();
+
+        // Result should be the temp directory
+        assert!(result.contains("system_test") || temp.path().to_string_lossy().contains(&result));
+
+        // After the call, we should be back in the original directory
+        assert_eq!(std::env::current_dir().unwrap(), original_cwd);
+    }
+
+    #[test]
+    fn test_with_environment() {
+        let (lua, _) = create_test_lua();
+
+        // Test that with_environment can set and read environment variables
+        let result: String = lua
+            .load(
+                r#"
+                local result
+                pandoc.system.with_environment({MY_TEST_VAR = 'test_value'}, function()
+                    local env = pandoc.system.environment()
+                    result = env.MY_TEST_VAR
+                end)
+                return result
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert_eq!(result, "test_value");
+
+        // After with_environment, the variable should be removed
+        assert!(std::env::var("MY_TEST_VAR").is_err());
+    }
+
+    #[test]
+    fn test_list_directory_default() {
+        let (lua, _) = create_test_lua();
+
+        // Test list_directory with no argument (defaults to current directory)
+        let entries: Table = lua
+            .load("pandoc.system.list_directory()")
+            .eval()
+            .unwrap();
+
+        // Should have entries
+        assert!(entries.len().unwrap() > 0);
+    }
+
+    #[test]
+    fn test_command_with_input() {
+        let (lua, _) = create_test_lua();
+
+        // Test command with stdin input (cat echoes back input)
+        let result: (Value, String, String) = lua
+            .load("pandoc.system.command('cat', {}, 'hello from stdin')")
+            .eval()
+            .unwrap();
+
+        assert_eq!(result.0, Value::Boolean(false));
+        assert!(result.1.contains("hello from stdin"));
+    }
+
+    #[test]
+    fn test_xdg_cache() {
+        let (lua, _) = create_test_lua();
+
+        let cache: String = lua.load("pandoc.system.xdg('cache')").eval().unwrap();
+        assert!(!cache.is_empty());
+    }
+
+    #[test]
+    fn test_xdg_state() {
+        let (lua, _) = create_test_lua();
+
+        let state: String = lua.load("pandoc.system.xdg('state')").eval().unwrap();
+        assert!(!state.is_empty());
+    }
+
+    #[test]
+    fn test_xdg_datadirs() {
+        let (lua, _) = create_test_lua();
+
+        // datadirs returns a table
+        let dirs: Table = lua.load("pandoc.system.xdg('datadirs')").eval().unwrap();
+        assert!(dirs.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_xdg_configdirs() {
+        let (lua, _) = create_test_lua();
+
+        // configdirs returns a table
+        let dirs: Table = lua.load("pandoc.system.xdg('configdirs')").eval().unwrap();
+        assert!(dirs.len().unwrap() >= 1);
+    }
+
+    #[test]
+    fn test_xdg_invalid() {
+        let (lua, _) = create_test_lua();
+
+        let result: mlua::Result<Value> = lua.load("pandoc.system.xdg('invalid')").eval();
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("Invalid XDG directory type"));
+    }
+
+    #[test]
+    fn test_xdg_normalized_names() {
+        let (lua, _) = create_test_lua();
+
+        // Test with XDG_ prefix and underscores
+        let config: String = lua.load("pandoc.system.xdg('XDG_CONFIG')").eval().unwrap();
+        assert!(!config.is_empty());
+
+        // Test uppercase
+        let data: String = lua.load("pandoc.system.xdg('DATA')").eval().unwrap();
+        assert!(!data.is_empty());
+    }
+
+    #[test]
+    fn test_make_directory_recursive() {
+        let (lua, runtime) = create_test_lua();
+
+        let temp = runtime.temp_dir("system_test").unwrap();
+        let nested = temp.path().join("a/b/c");
+        let nested_str = nested.to_string_lossy().to_string().replace('\\', "\\\\");
+
+        // Create nested directories with create_parent=true
+        lua.load(format!(
+            "pandoc.system.make_directory('{}', true)",
+            nested_str
+        ))
+        .exec()
+        .unwrap();
+
+        assert!(nested.exists());
+    }
+
+    #[test]
+    fn test_remove_directory_recursive() {
+        let (lua, runtime) = create_test_lua();
+
+        let temp = runtime.temp_dir("system_test").unwrap();
+        let nested = temp.path().join("to_remove/sub");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("file.txt"), "content").unwrap();
+
+        let parent_str = temp
+            .path()
+            .join("to_remove")
+            .to_string_lossy()
+            .to_string()
+            .replace('\\', "\\\\");
+
+        // Remove recursively
+        lua.load(format!(
+            "pandoc.system.remove_directory('{}', true)",
+            parent_str
+        ))
+        .exec()
+        .unwrap();
+
+        assert!(!temp.path().join("to_remove").exists());
+    }
+
+    #[test]
+    fn test_system_time_to_lua_table_none() {
+        let lua = Lua::new();
+
+        // Test with None - should return Nil
+        let result = system_time_to_lua_table(&lua, None).unwrap();
+        assert!(result.is_nil());
+    }
+
+    #[test]
+    fn test_system_time_to_lua_table_unix_epoch() {
+        let lua = Lua::new();
+
+        // Test with UNIX epoch
+        let result = system_time_to_lua_table(&lua, Some(UNIX_EPOCH)).unwrap();
+        let table = result.as_table().unwrap();
+
+        assert_eq!(table.get::<i64>("year").unwrap(), 1970);
+        assert_eq!(table.get::<i64>("month").unwrap(), 1);
+        assert_eq!(table.get::<i64>("day").unwrap(), 1);
+        assert_eq!(table.get::<i64>("hour").unwrap(), 0);
+        assert_eq!(table.get::<i64>("min").unwrap(), 0);
+        assert_eq!(table.get::<i64>("sec").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_command_error() {
+        let (lua, _) = create_test_lua();
+
+        // Try to run a non-existent command
+        let result: mlua::Result<Value> = lua
+            .load("pandoc.system.command('nonexistent_command_xyz', {})")
+            .eval();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_read_file_error() {
+        let (lua, _) = create_test_lua();
+
+        let result: mlua::Result<String> = lua
+            .load("pandoc.system.read_file('/nonexistent/path/file.txt')")
+            .eval();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_with_temporary_directory_with_parent() {
+        let (lua, runtime) = create_test_lua();
+
+        let parent = runtime.temp_dir("parent").unwrap();
+        let parent_str = parent
+            .path()
+            .to_string_lossy()
+            .to_string()
+            .replace('\\', "\\\\");
+
+        // Note: parent_dir is currently ignored in the implementation
+        let result: String = lua
+            .load(format!(
+                "return pandoc.system.with_temporary_directory('{}', 'child', function(dir) return dir end)",
+                parent_str
+            ))
+            .eval()
+            .unwrap();
+
+        // Should still create a temp directory
+        assert!(result.contains("child"));
+    }
 }

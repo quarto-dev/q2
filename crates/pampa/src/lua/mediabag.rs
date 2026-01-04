@@ -769,4 +769,326 @@ mod tests {
         let entry = entry.lookup("image.png").unwrap();
         assert_eq!(entry.mime_type, "image/png");
     }
+
+    #[test]
+    fn test_items_iterator() {
+        let (lua, _, mediabag) = create_test_lua();
+
+        // Insert entries
+        mediabag.borrow_mut().insert(
+            "file1.txt".to_string(),
+            "text/plain".to_string(),
+            b"content1".to_vec(),
+        );
+        mediabag.borrow_mut().insert(
+            "file2.png".to_string(),
+            "image/png".to_string(),
+            b"content2".to_vec(),
+        );
+
+        // Use items() iterator via Lua
+        let count: i64 = lua
+            .load(
+                r#"
+                local count = 0
+                for idx, fp, mt, contents in pandoc.mediabag.items() do
+                    count = count + 1
+                end
+                return count
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn test_items_iterator_empty() {
+        let (lua, _, _) = create_test_lua();
+
+        // Items on empty mediabag
+        let count: i64 = lua
+            .load(
+                r#"
+                local count = 0
+                for idx, fp, mt, contents in pandoc.mediabag.items() do
+                    count = count + 1
+                end
+                return count
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_items_iterator_values() {
+        let (lua, _, mediabag) = create_test_lua();
+
+        // Insert a single entry
+        mediabag.borrow_mut().insert(
+            "test.txt".to_string(),
+            "text/plain".to_string(),
+            b"hello".to_vec(),
+        );
+
+        // Get the values from the iterator
+        let result: Table = lua
+            .load(
+                r#"
+                local results = {}
+                for idx, fp, mt, contents in pandoc.mediabag.items() do
+                    results.idx = idx
+                    results.fp = fp
+                    results.mt = mt
+                    results.contents = contents
+                end
+                return results
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        assert_eq!(result.get::<i64>("idx").unwrap(), 1);
+        assert_eq!(result.get::<String>("fp").unwrap(), "test.txt");
+        assert_eq!(result.get::<String>("mt").unwrap(), "text/plain");
+        assert_eq!(result.get::<String>("contents").unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_fill_returns_document() {
+        let (lua, _, _) = create_test_lua();
+
+        // fill() should return the document unchanged
+        let result: Value = lua
+            .load(
+                r#"
+                local doc = {type = "Pandoc", blocks = {}}
+                return pandoc.mediabag.fill(doc)
+            "#,
+            )
+            .eval()
+            .unwrap();
+
+        // Result should be a table (the document)
+        assert!(matches!(result, Value::Table(_)));
+    }
+
+    #[test]
+    fn test_fetch_from_mediabag_cache() {
+        let (lua, _, mediabag) = create_test_lua();
+
+        // Pre-populate the mediabag
+        mediabag.borrow_mut().insert(
+            "cached.txt".to_string(),
+            "text/plain".to_string(),
+            b"cached content".to_vec(),
+        );
+
+        // Fetch should return from cache without hitting filesystem
+        let (mime, content): (String, String) = lua
+            .load(r#"return pandoc.mediabag.fetch("cached.txt")"#)
+            .eval()
+            .unwrap();
+
+        assert_eq!(mime, "text/plain");
+        assert_eq!(content, "cached content");
+    }
+
+    #[test]
+    fn test_write_file_not_found_error() {
+        let (lua, runtime, _) = create_test_lua();
+
+        let temp = runtime.temp_dir("mediabag_write_error").unwrap();
+        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+
+        // Try to write a file that doesn't exist in mediabag
+        let result = lua.load(format!(
+            r#"pandoc.mediabag.write("{}", "nonexistent.txt")"#,
+            temp_path
+        ));
+
+        let err = result.exec().unwrap_err();
+        assert!(err.to_string().contains("not found in mediabag"));
+    }
+
+    #[test]
+    fn test_write_with_subdirectory() {
+        let (lua, runtime, mediabag) = create_test_lua();
+
+        let temp = runtime.temp_dir("mediabag_write_subdir").unwrap();
+        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+
+        // Insert a file with subdirectory path
+        mediabag.borrow_mut().insert(
+            "subdir/nested/file.txt".to_string(),
+            "text/plain".to_string(),
+            b"nested content".to_vec(),
+        );
+
+        // Write should create subdirectories
+        lua.load(format!(
+            r#"pandoc.mediabag.write("{}", "subdir/nested/file.txt")"#,
+            temp_path
+        ))
+        .exec()
+        .unwrap();
+
+        let written_path = temp.path().join("subdir/nested/file.txt");
+        assert!(written_path.exists());
+        assert_eq!(
+            std::fs::read_to_string(&written_path).unwrap(),
+            "nested content"
+        );
+    }
+
+    #[test]
+    fn test_write_all_with_subdirectories() {
+        let (lua, runtime, mediabag) = create_test_lua();
+
+        let temp = runtime.temp_dir("mediabag_write_all_subdir").unwrap();
+        let temp_path = temp.path().to_string_lossy().to_string().replace('\\', "/");
+
+        // Insert files with subdirectory paths
+        mediabag.borrow_mut().insert(
+            "dir1/a.txt".to_string(),
+            "text/plain".to_string(),
+            b"A".to_vec(),
+        );
+        mediabag.borrow_mut().insert(
+            "dir2/b.txt".to_string(),
+            "text/plain".to_string(),
+            b"B".to_vec(),
+        );
+
+        // Write all
+        lua.load(format!(r#"pandoc.mediabag.write("{}")"#, temp_path))
+            .exec()
+            .unwrap();
+
+        assert!(temp.path().join("dir1/a.txt").exists());
+        assert!(temp.path().join("dir2/b.txt").exists());
+    }
+
+    #[test]
+    fn test_guess_mime_type_images() {
+        // Test all image types
+        assert_eq!(guess_mime_type("test.gif"), "image/gif");
+        assert_eq!(guess_mime_type("test.svg"), "image/svg+xml");
+        assert_eq!(guess_mime_type("test.webp"), "image/webp");
+        assert_eq!(guess_mime_type("test.bmp"), "image/bmp");
+        assert_eq!(guess_mime_type("test.ico"), "image/x-icon");
+        assert_eq!(guess_mime_type("test.tiff"), "image/tiff");
+        assert_eq!(guess_mime_type("test.tif"), "image/tiff");
+    }
+
+    #[test]
+    fn test_guess_mime_type_documents() {
+        assert_eq!(guess_mime_type("test.html"), "text/html");
+        assert_eq!(guess_mime_type("test.htm"), "text/html");
+        assert_eq!(guess_mime_type("test.css"), "text/css");
+        assert_eq!(guess_mime_type("test.js"), "application/javascript");
+        assert_eq!(guess_mime_type("test.xml"), "application/xml");
+        assert_eq!(guess_mime_type("test.txt"), "text/plain");
+        assert_eq!(guess_mime_type("test.md"), "text/markdown");
+        assert_eq!(guess_mime_type("test.markdown"), "text/markdown");
+        assert_eq!(guess_mime_type("test.tex"), "application/x-tex");
+        assert_eq!(guess_mime_type("test.csv"), "text/csv");
+    }
+
+    #[test]
+    fn test_guess_mime_type_fonts() {
+        assert_eq!(guess_mime_type("test.woff"), "font/woff");
+        assert_eq!(guess_mime_type("test.woff2"), "font/woff2");
+        assert_eq!(guess_mime_type("test.ttf"), "font/ttf");
+        assert_eq!(guess_mime_type("test.otf"), "font/otf");
+        assert_eq!(guess_mime_type("test.eot"), "application/vnd.ms-fontobject");
+    }
+
+    #[test]
+    fn test_guess_mime_type_audio() {
+        assert_eq!(guess_mime_type("test.mp3"), "audio/mpeg");
+        assert_eq!(guess_mime_type("test.wav"), "audio/wav");
+        assert_eq!(guess_mime_type("test.ogg"), "audio/ogg");
+        assert_eq!(guess_mime_type("test.flac"), "audio/flac");
+    }
+
+    #[test]
+    fn test_guess_mime_type_video() {
+        assert_eq!(guess_mime_type("test.mp4"), "video/mp4");
+        assert_eq!(guess_mime_type("test.webm"), "video/webm");
+        assert_eq!(guess_mime_type("test.avi"), "video/x-msvideo");
+        assert_eq!(guess_mime_type("test.mov"), "video/quicktime");
+    }
+
+    #[test]
+    fn test_guess_mime_type_archives() {
+        assert_eq!(guess_mime_type("test.zip"), "application/zip");
+        assert_eq!(guess_mime_type("test.tar"), "application/x-tar");
+        assert_eq!(guess_mime_type("test.gz"), "application/gzip");
+    }
+
+    #[test]
+    fn test_mediabag_iter() {
+        let mut mb = MediaBag::new();
+        mb.insert("a.txt".to_string(), "text/plain".to_string(), vec![1, 2, 3]);
+        mb.insert(
+            "b.png".to_string(),
+            "image/png".to_string(),
+            vec![4, 5, 6, 7],
+        );
+
+        let items: Vec<_> = mb.iter().collect();
+        assert_eq!(items.len(), 2);
+
+        // Check that both entries are present (order not guaranteed)
+        let paths: Vec<_> = items.iter().map(|(p, _)| p.as_str()).collect();
+        assert!(paths.contains(&"a.txt"));
+        assert!(paths.contains(&"b.png"));
+    }
+
+    #[test]
+    fn test_mediabag_list() {
+        let mut mb = MediaBag::new();
+        mb.insert("a.txt".to_string(), "text/plain".to_string(), vec![1, 2, 3]);
+        mb.insert(
+            "b.png".to_string(),
+            "image/png".to_string(),
+            vec![4, 5, 6, 7],
+        );
+
+        let list = mb.list();
+        assert_eq!(list.len(), 2);
+
+        // Find the entries
+        let a_entry = list.iter().find(|(p, _, _)| p == "a.txt");
+        assert!(a_entry.is_some());
+        let (_, mime, len) = a_entry.unwrap();
+        assert_eq!(mime, "text/plain");
+        assert_eq!(*len, 3);
+
+        let b_entry = list.iter().find(|(p, _, _)| p == "b.png");
+        assert!(b_entry.is_some());
+        let (_, mime, len) = b_entry.unwrap();
+        assert_eq!(mime, "image/png");
+        assert_eq!(*len, 4);
+    }
+
+    #[test]
+    fn test_create_shared_mediabag() {
+        let mb = create_shared_mediabag();
+        assert!(mb.borrow().is_empty());
+        assert_eq!(mb.borrow().len(), 0);
+    }
+
+    #[test]
+    fn test_list_empty_mediabag() {
+        let (lua, _, _) = create_test_lua();
+
+        let result: Table = lua.load("return pandoc.mediabag.list()").eval().unwrap();
+        assert_eq!(result.len().unwrap(), 0);
+    }
 }
