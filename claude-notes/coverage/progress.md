@@ -12,7 +12,7 @@ Last verified against coverage report: 2026-01-04
 | src/lib.rs | done | 90.70% | Minimal file - remaining uncovered are test panic paths |
 | src/normalize.rs | done | 97.78% | |
 | src/source_location.rs | done | 100% | |
-| src/text.rs | not_started | 98.57% | |
+| src/text.rs | done | 98.57% | Already has comprehensive tests |
 
 ## Crate: pampa
 
