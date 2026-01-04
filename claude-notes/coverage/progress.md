@@ -9,8 +9,8 @@ Last verified against coverage report: 2026-01-04
 | src/block.rs | done | 88.93% | Remaining uncovered: panic paths for GFM extensions (unreachable in CommonMark-only mode) |
 | src/compare.rs | done | 99.82% | |
 | src/inline.rs | done | 87.87% | Remaining uncovered: panic paths for GFM extensions (unreachable in CommonMark-only mode) |
-| src/lib.rs | not_started | 90.70% | |
-| src/normalize.rs | not_started | 83.66% | |
+| src/lib.rs | done | 90.70% | Minimal file - remaining uncovered are test panic paths |
+| src/normalize.rs | done | 97.78% | |
 | src/source_location.rs | done | 100% | |
 | src/text.rs | not_started | 98.57% | |
 

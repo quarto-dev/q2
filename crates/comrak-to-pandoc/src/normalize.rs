@@ -262,4 +262,449 @@ mod tests {
             _ => panic!("Expected Paragraph"),
         }
     }
+
+    #[test]
+    fn test_normalize_codeblock_strips_trailing_newline() {
+        use quarto_pandoc_types::CodeBlock;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::CodeBlock(CodeBlock {
+                attr: (
+                    "id".to_string(),
+                    vec!["python".to_string(), "extra".to_string()],
+                    LinkedHashMap::new(),
+                ),
+                text: "code\n".to_string(),
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::CodeBlock(cb) => {
+                // ID should be cleared
+                assert_eq!(cb.attr.0, "");
+                // Only first class (language) should remain
+                assert_eq!(cb.attr.1, vec!["python".to_string()]);
+                // Trailing newline should be stripped
+                assert_eq!(cb.text, "code");
+            }
+            _ => panic!("Expected CodeBlock"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_codeblock_empty_classes() {
+        use quarto_pandoc_types::CodeBlock;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::CodeBlock(CodeBlock {
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                text: "code".to_string(),
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::CodeBlock(cb) => {
+                assert!(cb.attr.1.is_empty());
+            }
+            _ => panic!("Expected CodeBlock"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_plain_block() {
+        use quarto_pandoc_types::{Plain, Str};
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Plain(Plain {
+                content: vec![Inline::Str(Str {
+                    text: "hello".to_string(),
+                    source_info: empty_source_info(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::Plain(_)));
+    }
+
+    #[test]
+    fn test_normalize_blockquote() {
+        use quarto_pandoc_types::BlockQuote;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::BlockQuote(BlockQuote {
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![],
+                    source_info: empty_source_info(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::BlockQuote(_)));
+    }
+
+    #[test]
+    fn test_normalize_bulletlist() {
+        use quarto_pandoc_types::BulletList;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::BulletList(BulletList {
+                content: vec![vec![Block::Paragraph(Paragraph {
+                    content: vec![],
+                    source_info: empty_source_info(),
+                })]],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::BulletList(_)));
+    }
+
+    #[test]
+    fn test_normalize_orderedlist() {
+        use quarto_pandoc_types::{ListNumberDelim, ListNumberStyle, OrderedList};
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::OrderedList(OrderedList {
+                attr: (1, ListNumberStyle::Decimal, ListNumberDelim::Period),
+                content: vec![vec![Block::Paragraph(Paragraph {
+                    content: vec![],
+                    source_info: empty_source_info(),
+                })]],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::OrderedList(_)));
+    }
+
+    #[test]
+    fn test_normalize_other_blocks_passthrough() {
+        use quarto_pandoc_types::HorizontalRule;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::HorizontalRule(HorizontalRule {
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::HorizontalRule(_)));
+    }
+
+    #[test]
+    fn test_normalize_emph_inline() {
+        use quarto_pandoc_types::{Emph, Str};
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Emph(Emph {
+                    content: vec![Inline::Str(Str {
+                        text: "hello".to_string(),
+                        source_info: empty_source_info(),
+                    })],
+                    source_info: empty_source_info(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::Paragraph(p) => assert!(matches!(&p.content[0], Inline::Emph(_))),
+            _ => panic!("Expected Paragraph"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_strong_inline() {
+        use quarto_pandoc_types::{Str, Strong};
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Strong(Strong {
+                    content: vec![Inline::Str(Str {
+                        text: "hello".to_string(),
+                        source_info: empty_source_info(),
+                    })],
+                    source_info: empty_source_info(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::Paragraph(p) => assert!(matches!(&p.content[0], Inline::Strong(_))),
+            _ => panic!("Expected Paragraph"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_image_inline() {
+        use quarto_pandoc_types::Image;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Image(Image {
+                    content: vec![],
+                    target: ("img.png".to_string(), String::new()),
+                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    source_info: empty_source_info(),
+                    attr_source: AttrSourceInfo::empty(),
+                    target_source: TargetSourceInfo::empty(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::Paragraph(p) => assert!(matches!(&p.content[0], Inline::Image(_))),
+            _ => panic!("Expected Paragraph"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_span_unwrap() {
+        use quarto_pandoc_types::{Span, Str};
+        // Empty-attr Span should be unwrapped
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Span(Span {
+                    content: vec![Inline::Str(Str {
+                        text: "hello".to_string(),
+                        source_info: empty_source_info(),
+                    })],
+                    attr: (String::new(), vec![], LinkedHashMap::new()),
+                    source_info: empty_source_info(),
+                    attr_source: AttrSourceInfo::empty(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::Paragraph(p) => {
+                // Span should have been unwrapped to just Str
+                assert!(matches!(&p.content[0], Inline::Str(_)));
+            }
+            _ => panic!("Expected Paragraph"),
+        }
+    }
+
+    #[test]
+    fn test_normalize_other_inlines_passthrough() {
+        use quarto_pandoc_types::Space;
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Space(Space {
+                    source_info: empty_source_info(),
+                })],
+                source_info: empty_source_info(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        match &normalized.blocks[0] {
+            Block::Paragraph(p) => assert!(matches!(&p.content[0], Inline::Space(_))),
+            _ => panic!("Expected Paragraph"),
+        }
+    }
+
+    #[test]
+    fn test_strip_leading_trailing_spaces() {
+        use quarto_pandoc_types::{Space, Str};
+        let inlines = vec![
+            Inline::Space(Space {
+                source_info: empty_source_info(),
+            }),
+            Inline::Str(Str {
+                text: "hello".to_string(),
+                source_info: empty_source_info(),
+            }),
+            Inline::Space(Space {
+                source_info: empty_source_info(),
+            }),
+        ];
+
+        let result = strip_leading_trailing_spaces(inlines);
+        assert_eq!(result.len(), 1);
+        assert!(matches!(&result[0], Inline::Str(_)));
+    }
+
+    #[test]
+    fn test_figure_plain_image_normalization() {
+        use quarto_pandoc_types::{Caption, Image, Plain};
+        // Figure containing Plain(Image) should become Paragraph(Image)
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Figure(Figure {
+                content: vec![Block::Plain(Plain {
+                    content: vec![Inline::Image(Image {
+                        content: vec![],
+                        target: ("img.png".to_string(), String::new()),
+                        attr: (String::new(), vec![], LinkedHashMap::new()),
+                        source_info: empty_source_info(),
+                        attr_source: AttrSourceInfo::empty(),
+                        target_source: TargetSourceInfo::empty(),
+                    })],
+                    source_info: empty_source_info(),
+                })],
+                caption: Caption {
+                    short: None,
+                    long: None,
+                    source_info: empty_source_info(),
+                },
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        // Should be converted to Paragraph
+        assert!(matches!(&normalized.blocks[0], Block::Paragraph(_)));
+    }
+
+    #[test]
+    fn test_figure_para_image_normalization() {
+        use quarto_pandoc_types::{Caption, Image};
+        // Figure containing Paragraph(Image) should stay Paragraph(Image)
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Figure(Figure {
+                content: vec![Block::Paragraph(Paragraph {
+                    content: vec![Inline::Image(Image {
+                        content: vec![],
+                        target: ("img.png".to_string(), String::new()),
+                        attr: (String::new(), vec![], LinkedHashMap::new()),
+                        source_info: empty_source_info(),
+                        attr_source: AttrSourceInfo::empty(),
+                        target_source: TargetSourceInfo::empty(),
+                    })],
+                    source_info: empty_source_info(),
+                })],
+                caption: Caption {
+                    short: None,
+                    long: None,
+                    source_info: empty_source_info(),
+                },
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::Paragraph(_)));
+    }
+
+    #[test]
+    fn test_figure_complex_stays_figure() {
+        use quarto_pandoc_types::{Caption, Str};
+        // Figure with multiple blocks should stay as Figure
+        let ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![Block::Figure(Figure {
+                content: vec![
+                    Block::Paragraph(Paragraph {
+                        content: vec![Inline::Str(Str {
+                            text: "hello".to_string(),
+                            source_info: empty_source_info(),
+                        })],
+                        source_info: empty_source_info(),
+                    }),
+                    Block::Paragraph(Paragraph {
+                        content: vec![],
+                        source_info: empty_source_info(),
+                    }),
+                ],
+                caption: Caption {
+                    short: None,
+                    long: None,
+                    source_info: empty_source_info(),
+                },
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+            })],
+        };
+
+        let normalized = normalize(ast);
+        assert!(matches!(&normalized.blocks[0], Block::Figure(_)));
+    }
+
+    #[test]
+    fn test_is_empty_attr() {
+        // Empty attr
+        let empty = (String::new(), vec![], LinkedHashMap::new());
+        assert!(is_empty_attr(&empty));
+
+        // Non-empty id
+        let with_id: quarto_pandoc_types::Attr = ("id".to_string(), vec![], LinkedHashMap::new());
+        assert!(!is_empty_attr(&with_id));
+
+        // Non-empty class
+        let with_class: quarto_pandoc_types::Attr = (
+            String::new(),
+            vec!["class".to_string()],
+            LinkedHashMap::new(),
+        );
+        assert!(!is_empty_attr(&with_class));
+    }
+
+    #[test]
+    fn test_is_single_image() {
+        use quarto_pandoc_types::{Image, Str};
+
+        // Single image
+        let single_image = vec![Inline::Image(Image {
+            content: vec![],
+            target: ("img.png".to_string(), String::new()),
+            attr: (String::new(), vec![], LinkedHashMap::new()),
+            source_info: empty_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+            target_source: TargetSourceInfo::empty(),
+        })];
+        assert!(is_single_image(&single_image));
+
+        // Multiple inlines
+        let multiple = vec![
+            Inline::Str(Str {
+                text: "hello".to_string(),
+                source_info: empty_source_info(),
+            }),
+            Inline::Image(Image {
+                content: vec![],
+                target: ("img.png".to_string(), String::new()),
+                attr: (String::new(), vec![], LinkedHashMap::new()),
+                source_info: empty_source_info(),
+                attr_source: AttrSourceInfo::empty(),
+                target_source: TargetSourceInfo::empty(),
+            }),
+        ];
+        assert!(!is_single_image(&multiple));
+
+        // Not an image
+        let not_image = vec![Inline::Str(Str {
+            text: "hello".to_string(),
+            source_info: empty_source_info(),
+        })];
+        assert!(!is_single_image(&not_image));
+    }
 }
