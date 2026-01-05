@@ -56,18 +56,18 @@ Last verified against coverage report: 2026-01-05
 | src/pandoc/treesitter_utils/fenced_div_block.rs | done | 93.18% | Improved from 53.42% by removing dead warning paths (IntermediateBaseText, IntermediateRawFormat, catch-all) and unused `buf` parameter. Remaining: catch-all branch, IntermediateMetadataString path. |
 | src/pandoc/treesitter_utils/info_string.rs | done | 100% | |
 | src/pandoc/treesitter_utils/language_attribute.rs | done | (removed) | Dead code - `language_attribute` node type doesn't exist in grammar (uses `language_specifier` inside `attribute_specifier` instead). File deleted. |
-| src/pandoc/treesitter_utils/list_marker.rs | not_started | 96.43% | |
-| src/pandoc/treesitter_utils/note_definition_fenced_block.rs | not_started | 80.00% | |
-| src/pandoc/treesitter_utils/note_definition_para.rs | not_started | 89.66% | |
-| src/pandoc/treesitter_utils/numeric_character_reference.rs | not_started | 76.19% | |
+| src/pandoc/treesitter_utils/list_marker.rs | done | 96.43% | Remaining uncovered: panic path in unwrap_or_else (line 41) - tree-sitter grammar guarantees list markers are valid numbers |
+| src/pandoc/treesitter_utils/note_definition_fenced_block.rs | done | 88.57% | Improved from 80.00% with 1 test for IntermediateSection path. Remaining: panic path (line 29), catch-all branch (lines 41-43) - defensive code |
+| src/pandoc/treesitter_utils/note_definition_para.rs | done | 89.66% | Remaining uncovered: panic paths (lines 34, 40) - tree-sitter grammar guarantees expected types |
+| src/pandoc/treesitter_utils/numeric_character_reference.rs | done | 90.48% | Improved from 76.19% with 2 tests for decimal and uppercase hex. Remaining: defensive fallback paths (lines 28, 33) |
 | src/pandoc/treesitter_utils/paragraph.rs | done | 100% | |
-| src/pandoc/treesitter_utils/pipe_table.rs | not_started | 84.55% | |
-| src/pandoc/treesitter_utils/postprocess.rs | not_started | 75.14% | |
-| src/pandoc/treesitter_utils/quote_helpers.rs | not_started | 73.86% | |
-| src/pandoc/treesitter_utils/section.rs | not_started | 76.32% | |
+| src/pandoc/treesitter_utils/pipe_table.rs | done | 84.55% | Remaining uncovered: panic paths (lines 37, 69, 72-76, 95), catch-all branches (127-129), SourceInfo extraction fallbacks (262-282) - all defensive code |
+| src/pandoc/treesitter_utils/postprocess.rs | done | 75.14% | Large file (1591 lines). Remaining uncovered: get_block_source_info comprehensive match arms (lines 117-133), list-table validation edge cases (empty divs, wrong block counts), Paragraph handling that mirrors Plain (defensive), complex filter closures for citation suffix/table caption processing |
+| src/pandoc/treesitter_utils/quote_helpers.rs | done | 73.86% | Remaining uncovered: trailing space handling (lines 62-77, 115-122) - defensive code; tree-sitter grammar doesn't capture trailing spaces in closing delimiters. Catch-all branch (line 91) also defensive. |
+| src/pandoc/treesitter_utils/section.rs | done | 76.32% | Remaining uncovered: IntermediateMetadataString handling (lines 30-40) - rare case of metadata inside sections; unreachable!() (line 79); SourceInfo variant fallbacks (lines 131-146) - all defensive code |
 | src/pandoc/treesitter_utils/shortcode.rs | done | 88.46% | Improved from 50.35% by removing dead code (`process_shortcode_boolean`, `process_shortcode_keyword_param` - tree-sitter grammar doesn't produce these node types). Remaining uncovered: panic paths and defensive branches. |
-| src/pandoc/treesitter_utils/span_link_helpers.rs | not_started | 97.20% | |
-| src/pandoc/treesitter_utils/text_helpers.rs | not_started | 72.46% | |
+| src/pandoc/treesitter_utils/span_link_helpers.rs | done | 97.20% | Remaining uncovered: defensive if-let-else branches, catch-all branches, empty URL case - all defensive code |
+| src/pandoc/treesitter_utils/text_helpers.rs | done | 72.46% | Remaining uncovered: single-quoted text path (lines 30-33), DEAD CODE: process_emphasis_inline, process_emphasis_inline_with_node, create_specifier_base_text (lines 69-98, 110-121) - should be removed |
 | src/pandoc/treesitter_utils/thematic_break.rs | done | 100% | |
 | src/pandoc/treesitter_utils/uri_autolink.rs | not_started | 80.81% | |
 | src/readers/commonmark.rs | not_started | 87.72% | |
