@@ -10,24 +10,9 @@ use std::fs;
 use std::process::Command;
 
 /// Get the path to the pampa binary.
-/// This assumes the tests are run via cargo test, which builds the binary.
-fn get_binary_path() -> String {
-    // The binary is in the target directory
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let target_dir = format!("{}/../..", manifest_dir);
-
-    // Try debug first, then release
-    let debug_path = format!("{}/target/debug/pampa", target_dir);
-    let release_path = format!("{}/target/release/pampa", target_dir);
-
-    if std::path::Path::new(&debug_path).exists() {
-        debug_path
-    } else if std::path::Path::new(&release_path).exists() {
-        release_path
-    } else {
-        // Fall back to using cargo run
-        panic!("Binary not found at {} or {}", debug_path, release_path);
-    }
+/// Uses CARGO_BIN_EXE_pampa which Cargo sets during test runs.
+fn get_binary_path() -> &'static str {
+    env!("CARGO_BIN_EXE_pampa")
 }
 
 /// Test that bibliography entries have proper delimiters between elements.
