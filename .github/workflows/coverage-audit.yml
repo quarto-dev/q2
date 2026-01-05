@@ -88,7 +88,13 @@ jobs:
           echo "percent=$PERCENT" >> $GITHUB_OUTPUT
 
       - name: Clean for rebuild
-        run: cargo llvm-cov clean --workspace
+        run: |
+          # cargo llvm-cov clean only removes profraw/profdata files, NOT the
+          # compiled binaries. The llvm-cov-target directory can be ~10GB and
+          # running twice with different cfg flags would double that, exhausting
+          # the GHA runner's disk space. We must remove it entirely.
+          cargo llvm-cov clean --workspace
+          rm -rf target/llvm-cov-target
 
       - name: Run coverage WITHOUT exclusions
         id: coverage_without

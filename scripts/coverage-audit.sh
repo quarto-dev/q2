@@ -178,8 +178,12 @@ fi
 progress "Coverage with exclusions: ${COVERAGE_WITH}%"
 
 # Step 2: Clean for rebuild
-progress "Cleaning for rebuild..."
+# IMPORTANT: cargo llvm-cov clean only removes profraw/profdata files, NOT the
+# compiled binaries. The llvm-cov-target directory can be ~10GB and running twice
+# with different cfg flags would double that. We must remove it entirely.
+progress "Cleaning for rebuild (removing llvm-cov-target to save disk space)..."
 cargo llvm-cov clean --workspace 2>/dev/null
+rm -rf "$PROJECT_ROOT/target/llvm-cov-target"
 
 # Step 3: Run coverage WITHOUT exclusions
 progress "Running coverage WITHOUT exclusions..."
