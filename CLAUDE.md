@@ -150,6 +150,16 @@ When fixing ANY bug:
 
 - **CRITICAL** If you'll be writing code, read the special instructions on file claude-notes/instructions/coding.md
 
+## Claude Code hooks
+
+This repository has Claude Code hooks configured in `.claude/settings.json`.
+
+**Post-tool-use hook**: Automatically runs `cargo fmt` on any Rust file after it's edited or written.
+
+**Required tools** (must be installed on the system):
+- `jq` - for parsing JSON input in hook scripts
+- `rustfmt` - for formatting Rust code (usually installed via `rustup component add rustfmt`)
+
 ## General Instructions
 
 - in this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, discrepancies in the behavior might not be bugs.
