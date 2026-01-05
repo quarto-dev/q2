@@ -10,7 +10,6 @@ use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::node_source_info_with_context;
 use crate::pandoc::{Inline, Shortcode, ShortcodeArg};
 use std::collections::HashMap;
-use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
@@ -45,70 +44,6 @@ pub fn process_shortcode_string(
     PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(id), range)
 }
 
-pub fn process_shortcode_keyword_param<T: Write>(
-    buf: &mut T,
-    node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
-    context: &ASTContext,
-) -> PandocNativeIntermediate {
-    let mut result = HashMap::new();
-    let mut name = String::new();
-    for (node, child) in children {
-        match node.as_str() {
-            "shortcode_key_name_and_equals" => {
-                // This is the new external token that includes "identifier = "
-                // We need to extract just the identifier part
-                let PandocNativeIntermediate::IntermediateShortcodeArg(
-                    ShortcodeArg::String(text),
-                    _,
-                ) = child
-                else {
-                    panic!(
-                        "Expected ShortcodeArg::String in shortcode_key_name_and_equals, got {:?}",
-                        child
-                    )
-                };
-                // Remove the trailing '=' and any whitespace before it
-                name = text.trim_end_matches('=').trim_end().to_string();
-            }
-            "shortcode_name" => {
-                // This handles legacy case or value side of key-value
-                let PandocNativeIntermediate::IntermediateShortcodeArg(
-                    ShortcodeArg::String(text),
-                    _,
-                ) = child
-                else {
-                    panic!("Expected BaseText in shortcode_name, got {:?}", child)
-                };
-                if name.is_empty() {
-                    name = text;
-                } else {
-                    result.insert(name.clone(), ShortcodeArg::String(text));
-                }
-            }
-            "shortcode_string"
-            | "shortcode_number"
-            | "shortcode_naked_string"
-            | "shortcode_boolean" => {
-                let PandocNativeIntermediate::IntermediateShortcodeArg(arg, _) = child else {
-                    panic!("Expected ShortcodeArg in shortcode_string, got {:?}", child)
-                };
-                result.insert(name.clone(), arg);
-            }
-            "block_continuation" => {
-                // This is a marker node, we don't need to do anything with it
-            }
-            _ => {
-                writeln!(buf, "Warning: Unhandled node kind: {}", node).unwrap();
-            }
-        }
-    }
-    let source_info = node_source_info_with_context(node, context);
-    let range =
-        crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
-    PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(result), range)
-}
-
 pub fn process_shortcode(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
@@ -130,21 +65,10 @@ pub fn process_shortcode(
                     positional_args.push(ShortcodeArg::String(text));
                 }
             }
-            (
-                "shortcode_keyword_param",
-                PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::KeyValue(spec), _),
-            ) => {
-                for (key, value) in spec {
-                    keyword_args.insert(key, value);
-                }
-            }
             ("shortcode", PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(arg))) => {
                 positional_args.push(ShortcodeArg::Shortcode(arg));
             }
-            (
-                "shortcode_number" | "shortcode_boolean",
-                PandocNativeIntermediate::IntermediateShortcodeArg(arg, _),
-            ) => {
+            ("shortcode_number", PandocNativeIntermediate::IntermediateShortcodeArg(arg, _)) => {
                 positional_args.push(arg);
             }
             ("key_value_specifier", PandocNativeIntermediate::IntermediateKeyValueSpec(specs)) => {
@@ -156,12 +80,9 @@ pub fn process_shortcode(
             ("shortcode_delimiter", _) => {
                 // This is a marker node, we don't need to do anything with it
             }
-            (child_type, child) => panic!(
-                "Unexpected node in {:?}: {:?} {:?}",
-                node,
-                child_type,
-                child.clone()
-            ),
+            _ => {
+                // Skip unknown node types (shouldn't happen in practice)
+            }
         }
     }
     PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(Shortcode {
@@ -170,23 +91,6 @@ pub fn process_shortcode(
         positional_args,
         keyword_args,
     }))
-}
-
-pub fn process_shortcode_boolean(
-    node: &tree_sitter::Node,
-    input_bytes: &[u8],
-    context: &ASTContext,
-) -> PandocNativeIntermediate {
-    let value = node.utf8_text(input_bytes).unwrap();
-    let value = match value {
-        "true" => ShortcodeArg::Boolean(true),
-        "false" => ShortcodeArg::Boolean(false),
-        _ => panic!("Unexpected shortcode_boolean value: {}", value),
-    };
-    let source_info = node_source_info_with_context(node, context);
-    let range =
-        crate::pandoc::location::source_info_to_qsm_range_or_fallback(&source_info, context);
-    PandocNativeIntermediate::IntermediateShortcodeArg(value, range)
 }
 
 pub fn process_shortcode_number(

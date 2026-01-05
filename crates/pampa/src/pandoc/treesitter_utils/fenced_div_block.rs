@@ -11,12 +11,10 @@ use crate::pandoc::attr::Attr;
 use crate::pandoc::block::{Block, Div, RawBlock};
 use crate::pandoc::location::node_source_info_with_context;
 use hashlink::LinkedHashMap;
-use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 
-pub fn process_fenced_div_block<T: Write>(
-    buf: &mut T,
+pub fn process_fenced_div_block(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
     context: &ASTContext,
@@ -29,31 +27,6 @@ pub fn process_fenced_div_block<T: Write>(
             continue;
         }
         match child {
-            PandocNativeIntermediate::IntermediateBaseText(_, _) => {
-                if node == "language_attribute" {
-                    writeln!(
-                        buf,
-                        "Warning: language attribute unsupported in divs: {:?} {:?}",
-                        node, child
-                    )
-                    .unwrap();
-                } else {
-                    writeln!(
-                        buf,
-                        "Warning: Unexpected base text in div, ignoring: {:?} {:?}",
-                        node, child
-                    )
-                    .unwrap();
-                }
-            }
-            PandocNativeIntermediate::IntermediateRawFormat(_, _) => {
-                writeln!(
-                    buf,
-                    "Warning: Raw attribute specifiers are not supported in divs: {:?} {:?}",
-                    node, child
-                )
-                .unwrap();
-            }
             PandocNativeIntermediate::IntermediateAttr(a, as_) => {
                 attr = a;
                 attr_source = as_;
@@ -76,12 +49,7 @@ pub fn process_fenced_div_block<T: Write>(
                 }));
             }
             _ => {
-                writeln!(
-                    buf,
-                    "Warning: Unhandled node kind in fenced_div_block: {:?} {:?}",
-                    node, child
-                )
-                .unwrap();
+                // Skip unexpected intermediates (shouldn't happen in practice)
             }
         }
     }

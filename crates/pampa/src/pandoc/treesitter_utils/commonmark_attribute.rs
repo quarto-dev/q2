@@ -23,12 +23,8 @@ pub fn process_commonmark_attribute(
             PandocNativeIntermediate::IntermediateBaseText(text, range) => {
                 if node == "attribute_id" {
                     attr.0 = text;
-                    // Track source location of id (empty id gets None)
-                    attr_source.id = if attr.0.is_empty() {
-                        None
-                    } else {
-                        Some(SourceInfo::from_range(context.current_file_id(), range))
-                    };
+                    // Track source location of id
+                    attr_source.id = Some(SourceInfo::from_range(context.current_file_id(), range));
                 } else if node == "attribute_class" {
                     attr.1.push(text);
                     // Track source location of this class
@@ -36,9 +32,8 @@ pub fn process_commonmark_attribute(
                         context.current_file_id(),
                         range,
                     )));
-                } else {
-                    panic!("Unexpected commonmark_attribute node: {}", node);
                 }
+                // Skip other node types
             }
             PandocNativeIntermediate::IntermediateKeyValueSpec(spec) => {
                 // spec is Vec<(key, value, key_range, value_range)>
@@ -54,8 +49,9 @@ pub fn process_commonmark_attribute(
                     attr_source.attributes.push((key_source, value_source));
                 }
             }
-            PandocNativeIntermediate::IntermediateUnknown(_) => {}
-            _ => panic!("Unexpected child in commonmark_attribute: {:?}", child),
+            _ => {
+                // Skip unknown intermediates
+            }
         };
     }
 

@@ -27,8 +27,7 @@ pub fn process_pandoc_code_span(
     let mut raw_format: Option<String> = None;
     let mut language_specifier: Option<String> = None;
     let mut has_leading_space = false;
-    let mut has_trailing_space = false;
-    let mut first_delimiter = true;
+    let mut checked_opening_delimiter = false;
 
     for (node_name, child) in &children {
         match node_name.as_str() {
@@ -42,19 +41,16 @@ pub fn process_pandoc_code_span(
                 }
             }
             "code_span_delimiter" => {
-                // Check if delimiter includes spaces
-                if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
-                    let text =
-                        std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
-                            .unwrap();
-                    if first_delimiter {
-                        // Opening delimiter - check for leading space
+                // Check if opening delimiter includes leading space
+                // (The closing delimiter never includes trailing space in the grammar)
+                if !checked_opening_delimiter {
+                    if let PandocNativeIntermediate::IntermediateUnknown(range) = child {
+                        let text =
+                            std::str::from_utf8(&input_bytes[range.start.offset..range.end.offset])
+                                .unwrap();
                         has_leading_space = text.starts_with(char::is_whitespace);
-                        first_delimiter = false;
-                    } else {
-                        // Closing delimiter - check for trailing space
-                        has_trailing_space = text.ends_with(char::is_whitespace);
                     }
+                    checked_opening_delimiter = true;
                 }
             }
             "attribute_specifier" => {
@@ -74,13 +70,9 @@ pub fn process_pandoc_code_span(
                     _ => {}
                 }
             }
-            "raw_attribute" => {
-                // Extract raw format (e.g., {=html}) - legacy path
-                if let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child {
-                    raw_format = Some(format.clone());
-                }
+            _ => {
+                // Skip unknown node types (shouldn't happen in practice)
             }
-            _ => {}
         }
     }
 
@@ -118,12 +110,6 @@ pub fn process_pandoc_code_span(
     }
 
     result.push(code);
-
-    if has_trailing_space {
-        result.push(Inline::Space(Space {
-            source_info: node_source_info_with_context(node, context),
-        }));
-    }
 
     PandocNativeIntermediate::IntermediateInlines(result)
 }

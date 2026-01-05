@@ -1,4 +1,5 @@
 #![feature(trim_prefix_suffix)]
+#![cfg_attr(coverage_nightly, feature(coverage_attribute))]
 #![allow(dead_code)]
 
 /*

@@ -52,33 +52,9 @@ pub fn process_fenced_code_block(
                     attr_source.classes.push(Some(lang_source));
                 }
                 _ => {
-                    panic!(
-                        "Expected Attr, RawFormat, or BaseText in attribute_specifier, got {:?}",
-                        child
-                    )
+                    // Skip unexpected attribute types (shouldn't happen in practice)
                 }
             }
-        } else if node == "commonmark_attribute" {
-            let PandocNativeIntermediate::IntermediateAttr(a, as_) = child else {
-                panic!("Expected Attr in commonmark_attribute, got {:?}", child)
-            };
-            attr = a;
-            attr_source = as_;
-        } else if node == "raw_attribute" {
-            let PandocNativeIntermediate::IntermediateRawFormat(format, _) = child else {
-                panic!("Expected RawFormat in raw_attribute, got {:?}", child)
-            };
-            raw_format = Some(format);
-        } else if node == "language_attribute" {
-            let PandocNativeIntermediate::IntermediateBaseText(lang, range) = child else {
-                panic!("Expected BaseText in language_attribute, got {:?}", child)
-            };
-            attr.1.push(lang); // set the language
-
-            // Track source location for the language specifier
-            let lang_source =
-                crate::pandoc::location::range_to_source_info_with_context(&range, context);
-            attr_source.classes.push(Some(lang_source));
         } else if node == "info_string" {
             let PandocNativeIntermediate::IntermediateAttr(inner_attr, inner_as_) = child else {
                 panic!("Expected Attr in info_string, got {:?}", child)

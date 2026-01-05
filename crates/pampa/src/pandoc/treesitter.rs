@@ -18,7 +18,6 @@ use crate::pandoc::treesitter_utils::editorial_marks::{
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
-use crate::pandoc::treesitter_utils::language_attribute::process_language_attribute;
 use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
 use crate::pandoc::treesitter_utils::note_definition_fenced_block::process_note_definition_fenced_block;
 use crate::pandoc::treesitter_utils::note_definition_para::process_note_definition_para;
@@ -32,8 +31,8 @@ use crate::pandoc::treesitter_utils::postprocess::{merge_strs, postprocess};
 use crate::pandoc::treesitter_utils::quote_helpers::process_quoted;
 use crate::pandoc::treesitter_utils::section::process_section;
 use crate::pandoc::treesitter_utils::shortcode::{
-    process_shortcode, process_shortcode_boolean, process_shortcode_keyword_param,
-    process_shortcode_number, process_shortcode_string, process_shortcode_string_arg,
+    process_shortcode, process_shortcode_number, process_shortcode_string,
+    process_shortcode_string_arg,
 };
 use crate::pandoc::treesitter_utils::span_link_helpers::{
     process_content_node, process_pandoc_image, process_pandoc_span, process_target,
@@ -109,38 +108,14 @@ fn process_list(
             // this is a marker node, we don't need to do anything with it
             continue;
         }
-        if node == "list_marker_parenthesis"
-            || node == "list_marker_dot"
-            || node == "list_marker_example"
-        {
-            // this is an ordered list, so we need to set the flag
-            let PandocNativeIntermediate::IntermediateOrderedListMarker(marker_number, _) = child
-            else {
-                panic!("Expected OrderedListMarker in list, got {:?}", child);
-            };
 
-            is_ordered_list = Some((
-                marker_number,
-                match node.as_str() {
-                    "list_marker_example" => ListNumberStyle::Example,
-                    _ => ListNumberStyle::Decimal,
-                },
-                match node.as_str() {
-                    "list_marker_parenthesis" => ListNumberDelim::OneParen,
-                    "list_marker_dot" => ListNumberDelim::Period,
-                    "list_marker_example" => ListNumberDelim::TwoParens,
-                    _ => panic!("Unexpected list marker node: {}", node),
-                },
-            ));
-        }
-
-        if node != "list_item" {
-            panic!("Expected list_item in list, got {}", node);
-        }
+        // List markers are processed by native_visitor before reaching here,
+        // so children are always IntermediateListItem values
         let PandocNativeIntermediate::IntermediateListItem(blocks, child_range, ordered_list) =
             child
         else {
-            panic!("Expected Blocks in list_item, got {:?}", child);
+            // Skip non-list-item intermediates (shouldn't happen in practice)
+            continue;
         };
         if is_ordered_list.is_none()
             && let attr @ Some(_) = ordered_list
@@ -436,51 +411,6 @@ fn process_native_inline<T: Write>(
     }
 }
 
-// Standalone function to process a collection of children into a vector of Inline objects
-fn process_native_inlines<T: Write>(
-    children: Vec<(String, PandocNativeIntermediate)>,
-    whitespace_re: &Regex,
-    inlines_buf: &mut T,
-    context: &ASTContext,
-) -> Vec<Inline> {
-    let mut inlines: Vec<Inline> = Vec::new();
-    for (_, child) in children {
-        match child {
-            PandocNativeIntermediate::IntermediateInline(inline) => inlines.push(inline),
-            PandocNativeIntermediate::IntermediateInlines(inner_inlines) => {
-                inlines.extend(inner_inlines)
-            }
-            PandocNativeIntermediate::IntermediateBaseText(text, range) => {
-                if whitespace_re.find(&text).is_some() {
-                    inlines.push(Inline::Space(Space {
-                        source_info: quarto_source_map::SourceInfo::from_range(
-                            context.current_file_id(),
-                            range,
-                        ),
-                    }))
-                } else {
-                    inlines.push(Inline::Str(Str {
-                        text: apply_smart_quotes(text),
-                        source_info: quarto_source_map::SourceInfo::from_range(
-                            context.current_file_id(),
-                            range,
-                        ),
-                    }))
-                }
-            }
-            other => {
-                writeln!(
-                    inlines_buf,
-                    "Ignoring unexpected unknown node in native_inlines {:?}.",
-                    other
-                )
-                .unwrap();
-            }
-        }
-    }
-    inlines
-}
-
 fn native_visitor<T: Write>(
     buf: &mut T,
     node: &tree_sitter::Node,
@@ -521,7 +451,7 @@ fn native_visitor<T: Write>(
         }
         "section" => process_section(node, children, context),
         "pandoc_paragraph" => process_paragraph(node, children, context),
-        "atx_heading" => process_atx_heading(buf, node, children, context),
+        "atx_heading" => process_atx_heading(node, children, context),
         "atx_h1_marker" | "atx_h2_marker" | "atx_h3_marker" | "atx_h4_marker" | "atx_h5_marker"
         | "atx_h6_marker" => {
             // Marker nodes - these are processed by the parent atx_heading node
@@ -691,15 +621,15 @@ fn native_visitor<T: Write>(
         ),
         // Editorial marks
         "insert_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "insert" => process_insert(buf, node, children, context),
+        "insert" => process_insert(node, children, context),
         "delete_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "delete" => process_delete(buf, node, children, context),
+        "delete" => process_delete(node, children, context),
         "highlight_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "highlight" => process_highlight(buf, node, children, context),
+        "highlight" => process_highlight(node, children, context),
         "edit_comment_delimiter" => {
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "edit_comment" => process_editcomment(buf, node, children, context),
+        "edit_comment" => process_editcomment(node, children, context),
         // Shortcode nodes
         "shortcode_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "shortcode_name" => process_shortcode_string_arg(node, input_bytes, context),
@@ -730,8 +660,6 @@ fn native_visitor<T: Write>(
             process_shortcode_string(&extract_quoted_text, node, context)
         }
         "shortcode_number" => process_shortcode_number(node, input_bytes, context),
-        "shortcode_boolean" => process_shortcode_boolean(node, input_bytes, context),
-        "shortcode_keyword_param" => process_shortcode_keyword_param(buf, node, children, context),
         "shortcode" | "shortcode_escaped" => process_shortcode(node, children, context),
         // Citation nodes
         "citation_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
@@ -1040,7 +968,6 @@ fn native_visitor<T: Write>(
         "pandoc_list" => process_list(node, children, context),
         "list_item" => process_list_item(node, children, context),
         "info_string" => process_info_string(node, input_bytes, context),
-        "language_attribute" => process_language_attribute(children, context),
         "language_specifier" => create_base_text_from_node_text(node, input_bytes),
         "raw_specifier" => {
             // Extract raw format from raw_specifier node (e.g., "=html")
@@ -1057,10 +984,10 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateRawFormat(format, range)
         }
         "block_continuation" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "pandoc_block_quote" => process_block_quote(buf, node, children, context),
+        "pandoc_block_quote" => process_block_quote(node, children, context),
         "pandoc_horizontal_rule" => process_thematic_break(node, context),
         "pandoc_code_block" => process_fenced_code_block(node, children, context),
-        "pandoc_div" => process_fenced_div_block(buf, node, children, context),
+        "pandoc_div" => process_fenced_div_block(node, children, context),
         "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
         "pipe_table_header" | "pipe_table_row" => {
             process_pipe_table_header_or_row(node, children, context)

@@ -1,6 +1,6 @@
 # Coverage Progress
 
-Last verified against coverage report: 2026-01-04
+Last verified against coverage report: 2026-01-05
 
 ## Crate: comrak-to-pandoc
 
@@ -42,20 +42,20 @@ Last verified against coverage report: 2026-01-04
 | src/pandoc/location.rs | done | 98.89% | Improved from 98.39% with 2 new tests |
 | src/pandoc/meta.rs | done | 94.67% | Improved from 91.43% with 16 new tests |
 | src/pandoc/shortcode.rs | done | 97.79% | Improved from 97.07% with 2 new tests |
-| src/pandoc/treesitter.rs | not_started | 75.69% | |
-| src/pandoc/treesitter_utils/atx_heading.rs | not_started | 70.31% | |
-| src/pandoc/treesitter_utils/block_quote.rs | not_started | 78.43% | |
+| src/pandoc/treesitter.rs | done | 80.89% | Improved from 75.69% with 18 new tests and removal of 60 lines of dead code (`process_native_inlines` function, duplicate ordered list marker handling in `process_list`). Remaining uncovered: internal defensive paths, several block types in `get_block_source_info` that never appear as last block in list items (Header, Figure, BlockMetadata, etc.), `shortcode_boolean` branch (tree-sitter doesn't produce this node type). |
+| src/pandoc/treesitter_utils/atx_heading.rs | done | 93.33% | Improved from 70.31% by removing dead code (old "inline" wrapper, unused warning path). Remaining uncovered: defensive branches that can't be triggered in practice. |
+| src/pandoc/treesitter_utils/block_quote.rs | done | 100% | Improved from 78.43% by removing dead code (unused warning paths, IntermediateMetadataString handling that never occurs). |
 | src/pandoc/treesitter_utils/caption.rs | done | 100% | |
-| src/pandoc/treesitter_utils/citation.rs | not_started | 96.61% | |
-| src/pandoc/treesitter_utils/code_fence_content.rs | not_started | 92.86% | |
-| src/pandoc/treesitter_utils/code_span_helpers.rs | not_started | 88.37% | |
-| src/pandoc/treesitter_utils/commonmark_attribute.rs | not_started | 89.74% | |
-| src/pandoc/treesitter_utils/document.rs | not_started | 94.12% | |
-| src/pandoc/treesitter_utils/editorial_marks.rs | not_started | 56.86% | |
-| src/pandoc/treesitter_utils/fenced_code_block.rs | not_started | 78.95% | |
-| src/pandoc/treesitter_utils/fenced_div_block.rs | not_started | 53.42% | |
+| src/pandoc/treesitter_utils/citation.rs | done | 96.61% | Remaining uncovered: panic paths for internal consistency checks |
+| src/pandoc/treesitter_utils/code_fence_content.rs | done | 92.86% | Remaining uncovered: panic path for internal consistency check |
+| src/pandoc/treesitter_utils/code_span_helpers.rs | done | 94.59% | Improved from 88.37% by removing dead code (`raw_attribute` path - grammar uses `attribute_specifier` instead; `has_trailing_space` handling - closing delimiter never includes trailing space). Remaining: defensive catch-all branches. |
+| src/pandoc/treesitter_utils/commonmark_attribute.rs | done | 92.11% | Improved from 89.74% by removing defensive panic paths. Remaining: catch-all branch for unknown intermediates. |
+| src/pandoc/treesitter_utils/document.rs | done | 96.97% | Improved from 94.12% by removing dead code (`IntermediateBlock` path - grammar wraps all blocks in sections). Remaining: panic path for unexpected node types. |
+| src/pandoc/treesitter_utils/editorial_marks.rs | done | 63.64% | Improved from 56.86% by removing warning path dead code and unused `buf` parameter. Remaining uncovered: highlight/editcomment functions (not parsed by tree-sitter in tests), whitespace path in BaseText. |
+| src/pandoc/treesitter_utils/fenced_code_block.rs | done | 91.94% | Improved from 78.95% by removing dead code (`commonmark_attribute`, `raw_attribute`, `language_attribute` paths - grammar uses `attribute_specifier` instead). Remaining: panic paths for defensive consistency checks. |
+| src/pandoc/treesitter_utils/fenced_div_block.rs | done | 93.18% | Improved from 53.42% by removing dead warning paths (IntermediateBaseText, IntermediateRawFormat, catch-all) and unused `buf` parameter. Remaining: catch-all branch, IntermediateMetadataString path. |
 | src/pandoc/treesitter_utils/info_string.rs | done | 100% | |
-| src/pandoc/treesitter_utils/language_attribute.rs | not_started | 0% | |
+| src/pandoc/treesitter_utils/language_attribute.rs | done | (removed) | Dead code - `language_attribute` node type doesn't exist in grammar (uses `language_specifier` inside `attribute_specifier` instead). File deleted. |
 | src/pandoc/treesitter_utils/list_marker.rs | not_started | 96.43% | |
 | src/pandoc/treesitter_utils/note_definition_fenced_block.rs | not_started | 80.00% | |
 | src/pandoc/treesitter_utils/note_definition_para.rs | not_started | 89.66% | |
@@ -65,7 +65,7 @@ Last verified against coverage report: 2026-01-04
 | src/pandoc/treesitter_utils/postprocess.rs | not_started | 75.14% | |
 | src/pandoc/treesitter_utils/quote_helpers.rs | not_started | 73.86% | |
 | src/pandoc/treesitter_utils/section.rs | not_started | 76.32% | |
-| src/pandoc/treesitter_utils/shortcode.rs | not_started | 50.35% | |
+| src/pandoc/treesitter_utils/shortcode.rs | done | 88.46% | Improved from 50.35% by removing dead code (`process_shortcode_boolean`, `process_shortcode_keyword_param` - tree-sitter grammar doesn't produce these node types). Remaining uncovered: panic paths and defensive branches. |
 | src/pandoc/treesitter_utils/span_link_helpers.rs | not_started | 97.20% | |
 | src/pandoc/treesitter_utils/text_helpers.rs | not_started | 72.46% | |
 | src/pandoc/treesitter_utils/thematic_break.rs | done | 100% | |

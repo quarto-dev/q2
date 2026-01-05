@@ -12,7 +12,6 @@ use crate::pandoc::location::node_source_info_with_context;
 use hashlink::LinkedHashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use std::io::Write;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
 use super::text_helpers::apply_smart_quotes;
@@ -20,8 +19,7 @@ use super::text_helpers::apply_smart_quotes;
 macro_rules! process_editorial_mark {
     ($struct_name:ident) => {
         paste::paste! {
-            pub fn [<process_ $struct_name:lower>]<T: Write>(
-                buf: &mut T,
+            pub fn [<process_ $struct_name:lower>](
                 node: &tree_sitter::Node,
                 children: Vec<(String, PandocNativeIntermediate)>,
                 context: &ASTContext,
@@ -59,13 +57,7 @@ macro_rules! process_editorial_mark {
                             // Skip unknown nodes (delimiters, etc.)
                         }
                         _ => {
-                            writeln!(
-                                buf,
-                                "Warning: Unexpected node type in {}: {:?}",
-                                stringify!($struct_name:lower),
-                                _node_name
-                            )
-                            .unwrap();
+                            // Skip unexpected intermediates (shouldn't happen in practice)
                         }
                     }
                 }

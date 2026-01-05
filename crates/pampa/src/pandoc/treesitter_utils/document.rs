@@ -21,7 +21,6 @@ pub fn process_document(
     let mut blocks: Vec<Block> = Vec::new();
     for (_, child) in children {
         match child {
-            PandocNativeIntermediate::IntermediateBlock(block) => blocks.push(block),
             PandocNativeIntermediate::IntermediateSection(section) => {
                 blocks.extend(section);
             }
