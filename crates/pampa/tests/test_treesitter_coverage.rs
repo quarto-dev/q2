@@ -420,6 +420,43 @@ Second paragraph of note.
     assert!(has_fenced_note, "Expected NoteDefinitionFencedBlock block");
 }
 
+#[test]
+fn test_note_definition_fenced_block_with_heading() {
+    // Test note definition fenced block containing a heading
+    // This exercises the IntermediateSection path in process_note_definition_fenced_block
+    let input = r#"::: ^note
+# Heading in note
+
+Paragraph in note.
+:::"#;
+
+    let pandoc = parse_qmd(input);
+
+    // Should have NoteDefinitionFencedBlock
+    let note_def = pandoc
+        .blocks
+        .iter()
+        .find(|b| matches!(b, Block::NoteDefinitionFencedBlock(_)));
+    assert!(
+        note_def.is_some(),
+        "Expected NoteDefinitionFencedBlock block"
+    );
+
+    if let Some(Block::NoteDefinitionFencedBlock(note)) = note_def {
+        // The note should contain a Header and a Paragraph
+        assert!(
+            note.content.iter().any(|b| matches!(b, Block::Header(_))),
+            "Expected Header in note content"
+        );
+        assert!(
+            note.content
+                .iter()
+                .any(|b| matches!(b, Block::Paragraph(_))),
+            "Expected Paragraph in note content"
+        );
+    }
+}
+
 // ============================================================================
 // Inline note test
 // ============================================================================
@@ -434,6 +471,50 @@ fn test_inline_note() {
     if let Block::Paragraph(para) = &pandoc.blocks[0] {
         let has_note = para.content.iter().any(|i| matches!(i, Inline::Note(_)));
         assert!(has_note, "Expected Note inline in paragraph");
+    }
+}
+
+// ============================================================================
+// Numeric character reference tests
+// ============================================================================
+
+#[test]
+fn test_numeric_character_reference_decimal() {
+    // Test decimal numeric character reference: &#64; -> @
+    let input = r#"Test &#64; decimal"#;
+
+    let pandoc = parse_qmd(input);
+
+    if let Block::Paragraph(para) = &pandoc.blocks[0] {
+        // Should have converted &#64; to @
+        let has_at = para.content.iter().any(|i| {
+            if let Inline::Str(s) = i {
+                s.text == "@"
+            } else {
+                false
+            }
+        });
+        assert!(has_at, "Expected @ character from decimal reference");
+    }
+}
+
+#[test]
+fn test_numeric_character_reference_uppercase_hex() {
+    // Test uppercase hex numeric character reference: &#X0040; -> @
+    let input = r#"Test &#X0040; uppercase"#;
+
+    let pandoc = parse_qmd(input);
+
+    if let Block::Paragraph(para) = &pandoc.blocks[0] {
+        // Should have converted &#X0040; to @
+        let has_at = para.content.iter().any(|i| {
+            if let Inline::Str(s) = i {
+                s.text == "@"
+            } else {
+                false
+            }
+        });
+        assert!(has_at, "Expected @ character from uppercase hex reference");
     }
 }
 
