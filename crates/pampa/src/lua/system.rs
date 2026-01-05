@@ -771,7 +771,10 @@ mod tests {
             }
             Err(e) => {
                 // It's OK if cputime is not supported on this platform
-                assert!(e.to_string().contains("not available") || e.to_string().contains("not supported"));
+                assert!(
+                    e.to_string().contains("not available")
+                        || e.to_string().contains("not supported")
+                );
             }
         }
     }
@@ -867,10 +870,7 @@ mod tests {
         let (lua, _) = create_test_lua();
 
         // Test list_directory with no argument (defaults to current directory)
-        let entries: Table = lua
-            .load("pandoc.system.list_directory()")
-            .eval()
-            .unwrap();
+        let entries: Table = lua.load("pandoc.system.list_directory()").eval().unwrap();
 
         // Should have entries
         assert!(entries.len().unwrap() > 0);

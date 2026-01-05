@@ -295,7 +295,9 @@ mod tests {
         let json: Table = pandoc.get("json").unwrap();
         let decode: Function = json.get("decode").unwrap();
 
-        let result: Table = decode.call(r#"{"name": "test", "value": 42}"#.to_string()).unwrap();
+        let result: Table = decode
+            .call(r#"{"name": "test", "value": 42}"#.to_string())
+            .unwrap();
         assert_eq!(result.get::<String>("name").unwrap(), "test");
         assert_eq!(result.get::<i64>("value").unwrap(), 42);
     }
@@ -478,7 +480,9 @@ mod tests {
         table.set("value", 42).unwrap();
 
         let metatable = lua.create_table().unwrap();
-        let tojson_fn = lua.create_function(|_, _: Value| Ok(r#"{"custom": true}"#.to_string())).unwrap();
+        let tojson_fn = lua
+            .create_function(|_, _: Value| Ok(r#"{"custom": true}"#.to_string()))
+            .unwrap();
         metatable.set("__tojson", tojson_fn).unwrap();
         table.set_metatable(Some(metatable));
 

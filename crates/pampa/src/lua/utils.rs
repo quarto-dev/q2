@@ -1137,10 +1137,7 @@ mod tests {
     fn test_type_number() {
         let lua = create_test_lua();
 
-        let result: String = lua
-            .load("return pandoc.utils.type(42)")
-            .eval()
-            .unwrap();
+        let result: String = lua.load("return pandoc.utils.type(42)").eval().unwrap();
 
         assert_eq!(result, "number");
     }
@@ -1151,10 +1148,7 @@ mod tests {
     fn test_sha1_empty() {
         let lua = create_test_lua();
 
-        let result: String = lua
-            .load("return pandoc.utils.sha1('')")
-            .eval()
-            .unwrap();
+        let result: String = lua.load("return pandoc.utils.sha1('')").eval().unwrap();
 
         // SHA1 of empty string
         assert_eq!(result, "da39a3ee5e6b4b0d3255bfef95601890afd80709");
@@ -1385,9 +1379,8 @@ mod tests {
     fn test_roman_numeral_invalid_zero() {
         let lua = create_test_lua();
 
-        let result: mlua::Result<String> = lua
-            .load("return pandoc.utils.to_roman_numeral(0)")
-            .eval();
+        let result: mlua::Result<String> =
+            lua.load("return pandoc.utils.to_roman_numeral(0)").eval();
 
         assert!(result.is_err());
     }
@@ -1396,9 +1389,8 @@ mod tests {
     fn test_roman_numeral_invalid_negative() {
         let lua = create_test_lua();
 
-        let result: mlua::Result<String> = lua
-            .load("return pandoc.utils.to_roman_numeral(-1)")
-            .eval();
+        let result: mlua::Result<String> =
+            lua.load("return pandoc.utils.to_roman_numeral(-1)").eval();
 
         assert!(result.is_err());
     }

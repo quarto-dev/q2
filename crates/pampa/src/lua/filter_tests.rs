@@ -5076,7 +5076,11 @@ end
     let pandoc = Pandoc {
         meta: quarto_pandoc_types::ConfigValue::default(),
         blocks: vec![Block::OrderedList(crate::pandoc::OrderedList {
-            attr: (1, quarto_pandoc_types::ListNumberStyle::Default, quarto_pandoc_types::ListNumberDelim::Default),
+            attr: (
+                1,
+                quarto_pandoc_types::ListNumberStyle::Default,
+                quarto_pandoc_types::ListNumberDelim::Default,
+            ),
             content: vec![vec![Block::Plain(crate::pandoc::Plain {
                 content: vec![Inline::Str(crate::pandoc::Str {
                     text: "numbered".to_string(),
@@ -5343,15 +5347,13 @@ end
     let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
     assert_eq!(filtered.blocks.len(), 2);
     match (&filtered.blocks[0], &filtered.blocks[1]) {
-        (Block::Paragraph(p1), Block::Paragraph(p2)) => {
-            match (&p1.content[0], &p2.content[0]) {
-                (Inline::Str(s1), Inline::Str(s2)) => {
-                    assert_eq!(s1.text, "first");
-                    assert_eq!(s2.text, "second");
-                }
-                _ => panic!("Expected Str inlines"),
+        (Block::Paragraph(p1), Block::Paragraph(p2)) => match (&p1.content[0], &p2.content[0]) {
+            (Inline::Str(s1), Inline::Str(s2)) => {
+                assert_eq!(s1.text, "first");
+                assert_eq!(s2.text, "second");
             }
-        }
+            _ => panic!("Expected Str inlines"),
+        },
         _ => panic!("Expected two Paragraphs"),
     }
 }
@@ -5449,15 +5451,13 @@ end
     let (filtered, _, _) = apply_lua_filter(&pandoc, &context, &filter_path, "html").unwrap();
     assert_eq!(filtered.blocks.len(), 2);
     match (&filtered.blocks[0], &filtered.blocks[1]) {
-        (Block::Paragraph(p1), Block::Paragraph(p2)) => {
-            match (&p1.content[0], &p2.content[0]) {
-                (Inline::Str(s1), Inline::Str(s2)) => {
-                    assert_eq!(s1.text, "replaced1");
-                    assert_eq!(s2.text, "replaced2");
-                }
-                _ => panic!("Expected Str inlines"),
+        (Block::Paragraph(p1), Block::Paragraph(p2)) => match (&p1.content[0], &p2.content[0]) {
+            (Inline::Str(s1), Inline::Str(s2)) => {
+                assert_eq!(s1.text, "replaced1");
+                assert_eq!(s2.text, "replaced2");
             }
-        }
+            _ => panic!("Expected Str inlines"),
+        },
         _ => panic!("Expected two Paragraphs"),
     }
 }

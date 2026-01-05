@@ -891,7 +891,9 @@ mod tests {
         list.set(2, 2).unwrap();
         list.set(3, 3).unwrap();
 
-        let pred = lua.create_function(|_, (val, _): (i64, i64)| Ok(val > 1)).unwrap();
+        let pred = lua
+            .create_function(|_, (val, _): (i64, i64)| Ok(val > 1))
+            .unwrap();
 
         let result: Table = filter_fn.call((list, pred)).unwrap();
         assert_eq!(result.raw_len(), 2);
@@ -941,7 +943,9 @@ mod tests {
         list.set(2, 20).unwrap();
         list.set(3, 30).unwrap();
 
-        let pred = lua.create_function(|_, (val, _): (i64, i64)| Ok(val > 15)).unwrap();
+        let pred = lua
+            .create_function(|_, (val, _): (i64, i64)| Ok(val > 15))
+            .unwrap();
 
         let (val, idx): (i64, Option<i64>) = find_if_fn.call((list, pred, Value::Nil)).unwrap();
         assert_eq!(val, 20);
@@ -958,7 +962,9 @@ mod tests {
         list.set(1, 10).unwrap();
         list.set(2, 20).unwrap();
 
-        let pred = lua.create_function(|_, (val, _): (i64, i64)| Ok(val > 100)).unwrap();
+        let pred = lua
+            .create_function(|_, (val, _): (i64, i64)| Ok(val > 100))
+            .unwrap();
 
         let (val, idx): (Value, Option<i64>) = find_if_fn.call((list, pred, Value::Nil)).unwrap();
         assert_eq!(val, Value::Nil);
@@ -1078,17 +1084,19 @@ mod tests {
         let new_fn: Function = mt.get("new").unwrap();
 
         // Create an iterator function that returns 1, 2, 3, then nil
-        let iter_fn = lua.create_function_mut({
-            let mut i = 0;
-            move |_, ()| {
-                i += 1;
-                if i <= 3 {
-                    Ok(Value::Integer(i))
-                } else {
-                    Ok(Value::Nil)
+        let iter_fn = lua
+            .create_function_mut({
+                let mut i = 0;
+                move |_, ()| {
+                    i += 1;
+                    if i <= 3 {
+                        Ok(Value::Integer(i))
+                    } else {
+                        Ok(Value::Nil)
+                    }
                 }
-            }
-        }).unwrap();
+            })
+            .unwrap();
 
         let result: Table = new_fn.call((mt.clone(), Value::Function(iter_fn))).unwrap();
         assert_eq!(result.raw_len(), 3);

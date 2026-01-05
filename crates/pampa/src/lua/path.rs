@@ -830,7 +830,8 @@ mod tests {
 
     #[test]
     fn test_compute_relative_path_child() {
-        let result = compute_relative_path(Path::new("/home/user/sub/file"), Path::new("/home/user"));
+        let result =
+            compute_relative_path(Path::new("/home/user/sub/file"), Path::new("/home/user"));
         assert!(result.contains("sub"));
         assert!(result.contains("file"));
         assert!(!result.contains(".."));
@@ -838,8 +839,7 @@ mod tests {
 
     #[test]
     fn test_compute_relative_path_deep_nesting() {
-        let result =
-            compute_relative_path(Path::new("/a/b/c/d"), Path::new("/a/x/y/z"));
+        let result = compute_relative_path(Path::new("/a/b/c/d"), Path::new("/a/x/y/z"));
         // Should go up 3 levels (from x/y/z) then down to b/c/d
         let parent_count = result.matches("..").count();
         assert_eq!(parent_count, 3);

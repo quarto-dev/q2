@@ -1746,7 +1746,11 @@ mod unit_tests {
         );
         assert_eq!(
             block_tag(&Block::OrderedList(OrderedList {
-                attr: (1, crate::pandoc::list::ListNumberStyle::Default, crate::pandoc::list::ListNumberDelim::Default),
+                attr: (
+                    1,
+                    crate::pandoc::list::ListNumberStyle::Default,
+                    crate::pandoc::list::ListNumberDelim::Default
+                ),
                 content: vec![],
                 source_info: source_info.clone()
             })),
@@ -1848,11 +1852,13 @@ mod unit_tests {
             "NoteDefinitionPara"
         );
         assert_eq!(
-            block_tag(&Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
-                id: String::new(),
-                content: vec![],
-                source_info: source_info.clone()
-            })),
+            block_tag(&Block::NoteDefinitionFencedBlock(
+                NoteDefinitionFencedBlock {
+                    id: String::new(),
+                    content: vec![],
+                    source_info: source_info.clone()
+                }
+            )),
             "NoteDefinitionFencedBlock"
         );
         assert_eq!(
@@ -2043,12 +2049,14 @@ mod unit_tests {
             "Span"
         );
         assert_eq!(
-            inline_tag(&Inline::Shortcode(quarto_pandoc_types::shortcode::Shortcode {
-                is_escaped: false,
-                name: String::new(),
-                positional_args: vec![],
-                keyword_args: HashMap::new()
-            })),
+            inline_tag(&Inline::Shortcode(
+                quarto_pandoc_types::shortcode::Shortcode {
+                    is_escaped: false,
+                    name: String::new(),
+                    positional_args: vec![],
+                    keyword_args: HashMap::new()
+                }
+            )),
             "Shortcode"
         );
         assert_eq!(
@@ -2119,8 +2127,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_nil() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
@@ -2137,8 +2145,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_empty_table() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let lua = Lua::new();
@@ -2153,8 +2161,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_other_value() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
@@ -2176,8 +2184,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_block_return_nil() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = Block::Plain(Plain {
@@ -2191,8 +2199,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_block_return_empty_table() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let lua = Lua::new();
@@ -2207,8 +2215,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_block_return_other_value() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = Block::Plain(Plain {
@@ -2227,8 +2235,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_with_control_nil() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
@@ -2243,8 +2251,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_with_control_stop() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
@@ -2261,8 +2269,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inline_return_with_control_continue_explicit() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = Inline::Str(Str {
@@ -2279,8 +2287,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_block_return_with_control_nil() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = Block::Plain(Plain {
@@ -2295,8 +2303,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_block_return_with_control_stop() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = Block::Plain(Plain {
@@ -2313,8 +2321,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_blocks_return_with_control_nil() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = vec![Block::Plain(Plain {
@@ -2329,8 +2337,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_blocks_return_with_control_stop() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = vec![Block::Plain(Plain {
@@ -2347,8 +2355,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inlines_return_with_control_nil() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
@@ -2363,8 +2371,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inlines_return_with_control_stop() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
@@ -2381,8 +2389,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_inlines_return_with_control_other_value() {
-        use crate::pandoc::inline::Str;
         use crate::pandoc::Inline;
+        use crate::pandoc::inline::Str;
         use quarto_source_map::SourceInfo;
 
         let original = vec![Inline::Str(Str {
@@ -2398,8 +2406,8 @@ mod unit_tests {
 
     #[test]
     fn test_handle_blocks_return_with_control_other_value() {
-        use crate::pandoc::block::Plain;
         use crate::pandoc::Block;
+        use crate::pandoc::block::Plain;
         use quarto_source_map::SourceInfo;
 
         let original = vec![Block::Plain(Plain {
