@@ -21,8 +21,8 @@ use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
-use tokio_util::sync::CancellationToken;
 
+use super::cancellation::Cancellation;
 use super::error::PipelineError;
 use super::observer::{NoopObserver, PipelineObserver};
 use crate::artifact::ArtifactStore;
@@ -74,7 +74,7 @@ pub struct StageContext {
     pub observer: Arc<dyn PipelineObserver>,
 
     /// Cancellation token for graceful shutdown (Ctrl+C)
-    pub cancellation: CancellationToken,
+    pub cancellation: Cancellation,
 }
 
 impl StageContext {
@@ -105,7 +105,7 @@ impl StageContext {
             artifacts: ArtifactStore::new(),
             warnings: Vec::new(),
             observer: Arc::new(NoopObserver),
-            cancellation: CancellationToken::new(),
+            cancellation: Cancellation::new(),
         })
     }
 
@@ -116,7 +116,7 @@ impl StageContext {
     }
 
     /// Set a custom cancellation token (for CLI integration).
-    pub fn with_cancellation(mut self, token: CancellationToken) -> Self {
+    pub fn with_cancellation(mut self, token: Cancellation) -> Self {
         self.cancellation = token;
         self
     }
@@ -423,12 +423,14 @@ mod tests {
 
     #[test]
     fn test_context_cancellation() {
+        use super::super::cancellation::Cancellation;
+
         let runtime = Arc::new(MockRuntime::new());
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/test.qmd");
         let format = Format::html();
 
-        let token = CancellationToken::new();
+        let token = Cancellation::new();
         let ctx = StageContext::new(runtime, format, project, doc)
             .unwrap()
             .with_cancellation(token.clone());

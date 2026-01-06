@@ -81,6 +81,7 @@
 //! - Format-specific stages (HTML, PDF, etc.)
 //! - Project vs single-document mode
 
+mod cancellation;
 mod context;
 mod data;
 mod error;

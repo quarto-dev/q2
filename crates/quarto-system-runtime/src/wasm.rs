@@ -18,12 +18,16 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::sync::RwLock;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
 };
+
+/// Counter for generating unique temp directory names in WASM.
+/// SystemTime::now() is not available in WASM, so we use a simple counter.
+static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 /// Helper function to create a "not found" error.
 fn not_found_error(path: &Path) -> RuntimeError {
@@ -442,14 +446,9 @@ impl SystemRuntime for WasmRuntime {
 
     fn temp_dir(&self, template: &str) -> RuntimeResult<TempDir> {
         // Create a temp directory in /tmp within VFS
-        let temp_name = format!(
-            "/tmp/{}-{}",
-            template,
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or(Duration::ZERO)
-                .as_nanos()
-        );
+        // Use a counter instead of SystemTime::now() since time is not available in WASM
+        let counter = TEMP_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
+        let temp_name = format!("/tmp/{}-{}", template, counter);
         let temp_path = PathBuf::from(&temp_name);
         self.vfs.write().unwrap().add_directory(&temp_path);
         // Return a TempDir (cleanup won't work in VFS, but that's fine)
