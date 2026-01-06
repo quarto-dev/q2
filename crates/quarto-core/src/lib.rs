@@ -43,6 +43,7 @@ pub mod pipeline;
 pub mod project;
 pub mod render;
 pub mod resources;
+pub mod stage;
 pub mod template;
 pub mod transform;
 pub mod transforms;

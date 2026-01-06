@@ -117,6 +117,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.89"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1758,6 +1769,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
+name = "pollster"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
+
+[[package]]
 name = "potential_utf"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1837,6 +1854,7 @@ dependencies = [
  "anyhow",
  "clap",
  "pampa",
+ "pollster",
  "quarto-core",
  "quarto-doctemplate",
  "quarto-system-runtime",
@@ -1885,8 +1903,10 @@ name = "quarto-core"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "hashlink",
  "pampa",
+ "pollster",
  "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",
@@ -1899,6 +1919,8 @@ dependencies = [
  "serde_yaml",
  "tempfile",
  "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
  "tracing",
 ]
 

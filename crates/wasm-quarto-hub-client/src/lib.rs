@@ -15,14 +15,14 @@
 pub mod c_shim;
 
 use std::path::Path;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
-    render_qmd_to_html, BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig,
-    ProjectContext, QuartoError, RenderContext, RenderOptions,
+    BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
+    QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
 };
-use quarto_pandoc_types::ConfigValue;
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
+use quarto_pandoc_types::ConfigValue;
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
 use serde::{Deserialize, Serialize};
@@ -256,7 +256,7 @@ fn diagnostic_to_json(diag: &DiagnosticMessage, ctx: &SourceContext) -> JsonDiag
 
         match (start, end) {
             (Some(s), Some(e)) => (
-                Some((s.location.row + 1) as u32),   // 1-based line
+                Some((s.location.row + 1) as u32),    // 1-based line
                 Some((s.location.column + 1) as u32), // 1-based column
                 Some((e.location.row + 1) as u32),
                 Some((e.location.column + 1) as u32),
@@ -388,7 +388,7 @@ fn create_wasm_project_context(path: &Path) -> ProjectContext {
 /// # Returns
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub fn render_qmd(path: &str) -> String {
+pub async fn render_qmd(path: &str) -> String {
     let runtime = get_runtime();
     let path = Path::new(path);
 
@@ -422,11 +422,14 @@ pub fn render_qmd(path: &str) -> String {
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
 
-    // Use the unified pipeline (same as CLI)
+    // Use the unified async pipeline (same as CLI)
     let config = HtmlRenderConfig::default();
     let source_name = path.to_string_lossy();
 
-    match render_qmd_to_html(&content, &source_name, &mut ctx, &config) {
+    // Create Arc runtime for the async pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+
+    match render_qmd_to_html(&content, &source_name, &mut ctx, &config, runtime_arc).await {
         Ok(output) => {
             // Populate VFS with artifacts so post-processor can resolve them.
             // This includes CSS at /.quarto/project-artifacts/styles.css.
@@ -483,7 +486,7 @@ pub fn render_qmd(path: &str) -> String {
 /// # Returns
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
+pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
     // Create a virtual path for this content
     let path = Path::new("/input.qmd");
 
@@ -502,11 +505,21 @@ pub fn render_qmd_content(content: &str, _template_bundle: &str) -> String {
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
 
-    // Use the unified pipeline (same as CLI)
+    // Use the unified async pipeline (same as CLI)
     // TODO: Support custom templates via template_bundle parameter
     let config = HtmlRenderConfig::default();
 
-    let result = render_qmd_to_html(content.as_bytes(), "/input.qmd", &mut ctx, &config);
+    // Create Arc runtime for the async pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+
+    let result = render_qmd_to_html(
+        content.as_bytes(),
+        "/input.qmd",
+        &mut ctx,
+        &config,
+        runtime_arc,
+    )
+    .await;
 
     match result {
         Ok(output) => {
@@ -584,7 +597,7 @@ struct WasmRenderOptions {
 /// # Returns
 /// JSON: `{ "success": true, "html": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
-pub fn render_qmd_content_with_options(
+pub async fn render_qmd_content_with_options(
     content: &str,
     _template_bundle: &str,
     options_json: &str,
@@ -597,8 +610,7 @@ pub fn render_qmd_content_with_options(
 
     // Create project context, optionally with format config for source location tracking
     let project = if wasm_options.source_location {
-        let format_config =
-            ConfigValue::from_path(&["format", "html", "source-location"], "full");
+        let format_config = ConfigValue::from_path(&["format", "html", "source-location"], "full");
         let project_config = ProjectConfig::with_format_config(format_config);
         let dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
         ProjectContext {
@@ -625,10 +637,20 @@ pub fn render_qmd_content_with_options(
 
     let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
 
-    // Use the unified pipeline (same as CLI)
+    // Use the unified async pipeline (same as CLI)
     let config = HtmlRenderConfig::default();
 
-    let result = render_qmd_to_html(content.as_bytes(), "/input.qmd", &mut ctx, &config);
+    // Create Arc runtime for the async pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+
+    let result = render_qmd_to_html(
+        content.as_bytes(),
+        "/input.qmd",
+        &mut ctx,
+        &config,
+        runtime_arc,
+    )
+    .await;
 
     match result {
         Ok(output) => {

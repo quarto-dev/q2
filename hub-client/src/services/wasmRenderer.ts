@@ -130,17 +130,17 @@ export function vfsReadFile(path: string): VfsResponse {
 /**
  * Render a QMD file from the virtual filesystem
  */
-export function renderQmd(path: string): RenderResponse {
+export async function renderQmd(path: string): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(wasm.render_qmd(path));
+  return JSON.parse(await wasm.render_qmd(path));
 }
 
 /**
  * Render QMD content directly (without VFS)
  */
-export function renderQmdContent(content: string, templateBundle: string = ''): RenderResponse {
+export async function renderQmdContent(content: string, templateBundle: string = ''): Promise<RenderResponse> {
   const wasm = getWasm();
-  return JSON.parse(wasm.render_qmd_content(content, templateBundle));
+  return JSON.parse(await wasm.render_qmd_content(content, templateBundle));
 }
 
 /**
@@ -158,16 +158,16 @@ export interface WasmRenderOptions {
 /**
  * Render QMD content with options (without VFS)
  */
-export function renderQmdContentWithOptions(
+export async function renderQmdContentWithOptions(
   content: string,
   templateBundle: string = '',
   options: WasmRenderOptions = {}
-): RenderResponse {
+): Promise<RenderResponse> {
   const wasm = getWasm();
   const optionsJson = JSON.stringify({
     source_location: options.sourceLocation ?? false,
   });
-  return JSON.parse(wasm.render_qmd_content_with_options(content, templateBundle, optionsJson));
+  return JSON.parse(await wasm.render_qmd_content_with_options(content, templateBundle, optionsJson));
 }
 
 /**
@@ -228,10 +228,10 @@ export async function renderToHtml(
 
     // Use the options-aware render function if options are specified
     const result: RenderResponse = options.sourceLocation
-      ? renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
+      ? await renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
           sourceLocation: options.sourceLocation,
         })
-      : renderQmdContent(qmdContent, htmlTemplateBundle || '');
+      : await renderQmdContent(qmdContent, htmlTemplateBundle || '');
 
     console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
 

@@ -24,21 +24,23 @@ function getWasm() {
   return wasm;
 }
 
-function renderQmdContentWithOptions(content, templateBundle = '', options = {}) {
+async function renderQmdContentWithOptions(content, templateBundle = '', options = {}) {
   const wasmModule = getWasm();
   const optionsJson = JSON.stringify({
     source_location: options.sourceLocation ?? false,
   });
   console.log('optionsJson:', optionsJson);
-  return JSON.parse(wasmModule.render_qmd_content_with_options(content, templateBundle, optionsJson));
+  // WASM render functions are now async (return Promise)
+  return JSON.parse(await wasmModule.render_qmd_content_with_options(content, templateBundle, optionsJson));
 }
 
 async function renderToHtml(qmdContent, options = {}) {
   console.log('[renderToHtml] sourceLocation option:', options.sourceLocation);
 
+  // WASM render functions are now async (return Promise)
   const result = options.sourceLocation
-    ? renderQmdContentWithOptions(qmdContent, '', { sourceLocation: options.sourceLocation })
-    : JSON.parse(getWasm().render_qmd_content(qmdContent, ''));
+    ? await renderQmdContentWithOptions(qmdContent, '', { sourceLocation: options.sourceLocation })
+    : JSON.parse(await getWasm().render_qmd_content(qmdContent, ''));
 
   console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
   return result;

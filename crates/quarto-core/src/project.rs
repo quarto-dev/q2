@@ -140,7 +140,7 @@ impl DocumentInfo {
 }
 
 /// Project context for rendering
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProjectContext {
     /// Project root directory (directory containing `_quarto.yml`, or input file directory)
     pub dir: PathBuf,

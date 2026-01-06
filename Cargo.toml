@@ -36,6 +36,9 @@ thiserror = "1.0"
 toml = "0.8.19"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 yaml-rust2 = "0.10"
+async-trait = "0.1"
+tokio-util = "0.7"
+pollster = "0.4"
 
 [workspace.dependencies.proc-macro-error2]
 version = "2.0.1"
