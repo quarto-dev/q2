@@ -11,6 +11,16 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'PRECOMPACT: Before summarization, ensure claude-notes/plans/CURRENT.md symlink points to the active plan. Update it now with: ln -sf <plan-filename>.md claude-notes/plans/CURRENT.md'"
+          }
+        ]
+      }
     ]
   }
 }

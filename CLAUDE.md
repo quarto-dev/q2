@@ -10,6 +10,16 @@ printf '\033[0m' && printf '\033]8;;\007' && echo "Terminal reset"
 
 When the user asks you to "reset the terminal", run this command.
 
+## **ACTIVE PLAN (READ AFTER COMPACTION)**
+
+After context compaction, IMMEDIATELY read the current plan file:
+
+```
+claude-notes/plans/CURRENT.md
+```
+
+This symlink points to the active plan. If it doesn't exist or is broken, ask the user which plan to follow.
+
 ## **WORK TRACKING**
 
 We use bd (beads) for issue tracking instead of Markdown TODOs or external tools.

@@ -33,3 +33,6 @@ lcov.info
 .corpus-validation/
 external-sites.tar.gz
 resources/basic-quarto-website-compiled/
+
+# Claude Code session-specific plan symlink
+claude-notes/plans/CURRENT.md
