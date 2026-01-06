@@ -25,6 +25,7 @@
 //! - Non-HTML formats
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use tracing::{debug, info};
@@ -205,7 +206,17 @@ fn render_document(
         template: None,
     };
 
-    let output = match render_qmd_to_html(&input_content, &input_path_str, &mut ctx, &config) {
+    // Create Arc runtime for the async pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
+
+    // Use pollster to run the async pipeline synchronously
+    let output = match pollster::block_on(render_qmd_to_html(
+        &input_content,
+        &input_path_str,
+        &mut ctx,
+        &config,
+        runtime_arc,
+    )) {
         Ok(output) => output,
         Err(QuartoError::Parse(parse_error)) => {
             // Parse errors have rich ariadne formatting with their own "Error:" prefix.
