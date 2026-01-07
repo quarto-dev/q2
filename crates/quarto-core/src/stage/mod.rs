@@ -102,7 +102,10 @@ pub use pipeline::Pipeline;
 pub use traits::PipelineStage;
 
 // Re-export concrete stages for convenience
-pub use stages::{ApplyTemplateStage, AstTransformsStage, ParseDocumentStage, RenderHtmlBodyStage};
+pub use stages::{
+    ApplyTemplateStage, AstTransformsStage, EngineExecutionStage, ParseDocumentStage,
+    RenderHtmlBodyStage,
+};
 
 // Re-export the trace_event macro
 pub use crate::trace_event;

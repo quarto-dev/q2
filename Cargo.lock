@@ -1905,6 +1905,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "hashlink",
+ "include_dir",
  "pampa",
  "pollster",
  "quarto-config",
@@ -1914,6 +1915,7 @@ dependencies = [
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-util",
+ "regex",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1922,6 +1924,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "which",
 ]
 
 [[package]]
