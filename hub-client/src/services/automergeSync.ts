@@ -86,6 +86,13 @@ export async function connect(syncServerUrl: string, indexDocId: string): Promis
       network: [state.wsAdapter],
     });
 
+    // Wait for a peer to connect before requesting documents
+    // This prevents a race condition where the document is marked unavailable
+    // before the websocket connection is established
+    console.log('Waiting for peer connection...');
+    await waitForPeer(state.repo, 30000); // 30 second timeout
+    console.log('Peer connected');
+
     // Load the index document
     const docId = indexDocId as DocumentId;
     console.log('Looking for index document:', docId);
@@ -264,6 +271,35 @@ export function getFilePaths(): string[] {
 }
 
 // Helper functions
+
+/**
+ * Wait for a peer to connect to the repo.
+ * This is necessary to avoid a race condition where we try to find documents
+ * before the websocket connection is established, causing them to be marked unavailable.
+ */
+function waitForPeer(repo: Repo, timeoutMs: number = 30000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timeout waiting for peer connection'));
+    }, timeoutMs);
+
+    const onPeer = () => {
+      cleanup();
+      resolve();
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      // Access the networkSubsystem to remove the listener
+      // Note: networkSubsystem is marked @hidden but is the only way to listen for peer events
+      repo.networkSubsystem.off('peer', onPeer);
+    };
+
+    // Listen for peer connection
+    repo.networkSubsystem.on('peer', onPeer);
+  });
+}
 
 function getFilesFromIndex(doc: IndexDocument): FileEntry[] {
   const files = doc.files || {};
