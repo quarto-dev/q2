@@ -209,6 +209,7 @@ pub async fn render_qmd_to_html(
 
         let stages: Vec<Box<dyn PipelineStage>> = vec![
             Box::new(ParseDocumentStage::new()),
+            Box::new(EngineExecutionStage::new()),
             Box::new(AstTransformsStage::new()),
             Box::new(RenderHtmlBodyStage::new()),
             Box::new(ApplyTemplateStage::with_config(apply_config)),

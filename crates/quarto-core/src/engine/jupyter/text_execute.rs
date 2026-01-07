@@ -72,6 +72,8 @@ fn map_language_to_kernel(language: &str) -> String {
         "r" => "ir".to_string(),
         "ruby" | "rb" => "ruby".to_string(),
         "rust" | "rs" => "rust".to_string(),
+        "typescript" | "ts" => "deno".to_string(),
+        "javascript" | "js" => "deno".to_string(),
         other => other.to_string(),
     }
 }
@@ -115,7 +117,20 @@ fn parse_code_blocks(input: &str) -> Vec<CodeBlock> {
 fn is_executable_language(language: &str) -> bool {
     matches!(
         language.to_lowercase().as_str(),
-        "python" | "python3" | "py" | "julia" | "jl" | "r" | "ruby" | "rb" | "rust" | "rs"
+        "python"
+            | "python3"
+            | "py"
+            | "julia"
+            | "jl"
+            | "r"
+            | "ruby"
+            | "rb"
+            | "rust"
+            | "rs"
+            | "typescript"
+            | "ts"
+            | "javascript"
+            | "js"
     )
 }
 
@@ -345,6 +360,10 @@ print("hello")
         assert_eq!(map_language_to_kernel("julia"), "julia");
         assert_eq!(map_language_to_kernel("r"), "ir");
         assert_eq!(map_language_to_kernel("rust"), "rust");
+        assert_eq!(map_language_to_kernel("typescript"), "deno");
+        assert_eq!(map_language_to_kernel("ts"), "deno");
+        assert_eq!(map_language_to_kernel("javascript"), "deno");
+        assert_eq!(map_language_to_kernel("js"), "deno");
         assert_eq!(map_language_to_kernel("unknown"), "unknown");
     }
 
@@ -354,6 +373,10 @@ print("hello")
         assert!(is_executable_language("Python"));
         assert!(is_executable_language("julia"));
         assert!(is_executable_language("r"));
+        assert!(is_executable_language("typescript"));
+        assert!(is_executable_language("ts"));
+        assert!(is_executable_language("javascript"));
+        assert!(is_executable_language("js"));
         assert!(!is_executable_language("json"));
         assert!(!is_executable_language("markdown"));
     }
