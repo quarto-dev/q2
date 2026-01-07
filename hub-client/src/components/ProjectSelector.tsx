@@ -348,6 +348,12 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
           <button onClick={handleImport}>Import from JSON</button>
           <button onClick={handleExport}>Export to JSON</button>
         </div>
+
+        <div className="version-info">
+          <span className="commit-hash" title={`Built: ${__BUILD_TIME__}\nCommit date: ${__GIT_COMMIT_DATE__}`}>
+            {__GIT_COMMIT_HASH__}
+          </span>
+        </div>
       </div>
     </div>
   );

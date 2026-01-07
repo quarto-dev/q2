@@ -414,3 +414,21 @@
   border-color: #fff;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
 }
+
+/* Version info */
+.version-info {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #333;
+  text-align: center;
+}
+
+.version-info .commit-hash {
+  font-family: monospace;
+  font-size: 14px;
+  color: #646cff;
+  background: #16213e;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: help;
+}
