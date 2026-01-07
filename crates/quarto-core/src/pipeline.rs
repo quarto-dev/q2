@@ -14,9 +14,10 @@
 //! ## Pipeline Stages
 //!
 //! 1. **Parse**: QMD source → Pandoc AST (via `pampa`)
-//! 2. **Transform**: Apply Quarto-specific transforms (callouts, metadata, etc.)
-//! 3. **Render body**: Pandoc AST → HTML body (via `pampa`)
-//! 4. **Apply template**: Wrap body with HTML template
+//! 2. **Engine execution**: Execute code cells (Jupyter, Knitr, or markdown passthrough)
+//! 3. **Transform**: Apply Quarto-specific transforms (callouts, metadata, etc.)
+//! 4. **Render body**: Pandoc AST → HTML body (via `pampa`)
+//! 5. **Apply template**: Wrap body with HTML template
 //!
 //! ## Usage
 //!
@@ -53,8 +54,8 @@ use crate::Result;
 use crate::render::RenderContext;
 use crate::stage::stages::ApplyTemplateConfig;
 use crate::stage::{
-    ApplyTemplateStage, AstTransformsStage, LoadedSource, ParseDocumentStage, Pipeline,
-    PipelineData, PipelineStage, RenderHtmlBodyStage, StageContext,
+    ApplyTemplateStage, AstTransformsStage, EngineExecutionStage, LoadedSource, ParseDocumentStage,
+    Pipeline, PipelineData, PipelineStage, RenderHtmlBodyStage, StageContext,
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
@@ -112,9 +113,10 @@ pub struct RenderOutput {
 ///
 /// This creates a pipeline with the following stages:
 /// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
-/// 2. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
-/// 3. `RenderHtmlBodyStage` - Render AST to HTML body
-/// 4. `ApplyTemplateStage` - Apply HTML template
+/// 2. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
+/// 3. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 4. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 5. `ApplyTemplateStage` - Apply HTML template
 ///
 /// # Returns
 ///
@@ -127,6 +129,7 @@ pub struct RenderOutput {
 pub fn build_html_pipeline() -> Pipeline {
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
+        Box::new(EngineExecutionStage::new()),
         Box::new(AstTransformsStage::new()),
         Box::new(RenderHtmlBodyStage::new()),
         Box::new(ApplyTemplateStage::new()),

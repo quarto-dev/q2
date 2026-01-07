@@ -39,6 +39,8 @@ yaml-rust2 = "0.10"
 async-trait = "0.1"
 tokio-util = "0.7"
 pollster = "0.4"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
 
 [workspace.dependencies.proc-macro-error2]
 version = "2.0.1"

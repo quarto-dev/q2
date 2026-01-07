@@ -1,5 +1,5 @@
 /*
- * engine/jupyter.rs
+ * engine/jupyter/mod.rs
  * Copyright (c) 2025 Posit, PBC
  *
  * Jupyter engine for Python/Julia code execution.
@@ -8,23 +8,55 @@
 //! Jupyter engine for Python/Julia code execution.
 //!
 //! This engine executes code cells using Jupyter kernels. It communicates
-//! with kernels to run Python, Julia, or other supported languages.
+//! with kernels via ZeroMQ using the runtimelib crate.
+//!
+//! # Architecture
+//!
+//! The Jupyter engine implements the text-in/text-out [`ExecutionEngine`] trait,
+//! parsing QMD input, executing code blocks via the Jupyter kernel, and returning
+//! markdown with outputs inserted.
+//!
+//! ```text
+//! JupyterEngine (ExecutionEngine)
+//!     │
+//!     └── JupyterDaemon (in-process, async)
+//!            │
+//!            └── KernelSession ──► ZeroMQ ──► Jupyter Kernel
+//! ```
+//!
+//! # Kernel Management
+//!
+//! Kernels are managed by an in-process daemon that:
+//! - Starts kernels on demand
+//! - Reuses kernels for documents in the same directory
+//! - Shuts down idle kernels after a timeout
+//! - Cleans up kernel processes on shutdown
 //!
 //! # Availability
 //!
 //! This engine is only available in native builds (not WASM).
-//! It requires jupyter to be installed.
-//!
-//! # Current Status
-//!
-//! This is a placeholder implementation. The actual Jupyter integration
-//! will be implemented in a future phase.
+//! It requires a Jupyter kernel to be installed (e.g., `ipykernel` for Python).
 
-#![cfg(not(target_arch = "wasm32"))]
+mod daemon;
+mod error;
+mod execute;
+mod kernelspec;
+mod output;
+mod session;
+mod text_execute;
+mod transform;
+
+pub use daemon::{JupyterDaemon, daemon};
+pub use error::{JupyterError, Result};
+pub use execute::{CellOutput, ExecuteResult, ExecuteStatus, MimeBundle};
+pub use kernelspec::{ResolvedKernel, find_kernelspec, is_jupyter_language, list_kernelspecs};
+pub use output::{OutputOptions, outputs_to_blocks};
+pub use session::{KernelInfo, KernelSession, SessionKey};
+pub use transform::JupyterTransform;
 
 use std::path::{Path, PathBuf};
 
-use super::context::{ExecuteResult, ExecutionContext};
+use super::context::{ExecuteResult as EngineExecuteResult, ExecutionContext};
 use super::error::ExecutionError;
 use super::traits::ExecutionEngine;
 
@@ -43,7 +75,7 @@ use super::traits::ExecutionEngine;
 /// - Julia (via IJulia)
 /// - Other Jupyter-compatible kernels
 pub struct JupyterEngine {
-    /// Path to jupyter executable
+    /// Path to jupyter executable (for availability check).
     jupyter_path: Option<PathBuf>,
 }
 
@@ -56,8 +88,6 @@ impl JupyterEngine {
     }
 
     /// Try to find jupyter executable on the system.
-    ///
-    /// Uses `command -v` (Unix) or `where` (Windows) to locate the executable.
     fn find_jupyter() -> Option<PathBuf> {
         Self::find_executable("jupyter")
     }
@@ -120,19 +150,16 @@ impl ExecutionEngine for JupyterEngine {
 
     fn execute(
         &self,
-        _input: &str,
-        _ctx: &ExecutionContext,
-    ) -> Result<ExecuteResult, ExecutionError> {
+        input: &str,
+        ctx: &ExecutionContext,
+    ) -> std::result::Result<EngineExecuteResult, ExecutionError> {
         // Check if jupyter is available
         if self.jupyter_path.is_none() {
             return Err(ExecutionError::runtime_not_found("jupyter", "jupyter"));
         }
 
-        // TODO: Implement actual jupyter execution
-        // For now, return a "not implemented" error
-        Err(ExecutionError::not_available(
-            "jupyter engine execution not yet implemented",
-        ))
+        // Execute code blocks via the Jupyter daemon
+        text_execute::execute_qmd(input, ctx)
     }
 
     fn can_freeze(&self) -> bool {

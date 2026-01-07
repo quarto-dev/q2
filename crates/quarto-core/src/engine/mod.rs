@@ -63,7 +63,7 @@ mod traits;
 
 // Native-only modules
 #[cfg(not(target_arch = "wasm32"))]
-mod jupyter;
+pub mod jupyter;
 #[cfg(not(target_arch = "wasm32"))]
 mod knitr;
 
