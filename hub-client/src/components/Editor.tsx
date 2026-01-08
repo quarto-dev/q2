@@ -330,11 +330,15 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   }, []);
 
   // Helper to set HTML on the inactive iframe (uses ref for current active state)
+  // We add a unique timestamp comment to ensure srcDoc always changes, forcing onLoad to fire.
+  // Without this, if the rendered HTML matches what's already in the inactive iframe
+  // (e.g., after undo), React won't update the DOM and onLoad won't fire, breaking the swap.
   const setInactiveHtml = useCallback((html: string) => {
+    const uniqueHtml = html + `<!-- render-${Date.now()} -->`;
     if (activeIframeRef.current === 'A') {
-      setIframeBHtml(html);
+      setIframeBHtml(uniqueHtml);
     } else {
-      setIframeAHtml(html);
+      setIframeAHtml(uniqueHtml);
     }
   }, []);
 
