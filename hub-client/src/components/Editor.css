@@ -246,3 +246,112 @@
 .monaco-editor .margin {
   background: #1a1a2e !important;
 }
+
+/* Preview error overlay (toast notification) */
+.preview-error-overlay {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  z-index: 1000;
+  background: #1e1e1e;
+  border: 1px solid #f44336;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  color: #e0e0e0;
+}
+
+.preview-error-overlay--collapsed {
+  padding: 8px 12px;
+}
+
+.preview-error-overlay--expanded {
+  max-width: 400px;
+  min-width: 280px;
+}
+
+.preview-error-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #333;
+  background: #2d2d2d;
+  border-radius: 8px 8px 0 0;
+}
+
+.preview-error-title {
+  color: #f44336;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-error-icon {
+  font-size: 16px;
+}
+
+.preview-error-collapse-btn,
+.preview-error-expand-btn {
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-error-expand-btn {
+  color: #f44336;
+  font-weight: 600;
+}
+
+.preview-error-collapse-btn:hover,
+.preview-error-expand-btn:hover {
+  color: #fff;
+}
+
+.preview-error-content {
+  padding: 12px;
+  max-height: calc(20 * 1.4em); /* ~20 lines */
+  overflow-y: auto;
+}
+
+.preview-error-message {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #e0e0e0;
+}
+
+.preview-error-diagnostics {
+  margin: 8px 0 0 0;
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.preview-error-diagnostics li {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.preview-error-diagnostics .diagnostic-line {
+  color: #fbbf24;
+  font-weight: 500;
+}
+
+.preview-error-diagnostics .diagnostic-title {
+  color: #f87171;
+}
+
+.preview-error-diagnostics .diagnostic-problem {
+  color: #a5b4fc;
+}

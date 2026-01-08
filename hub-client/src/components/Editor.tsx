@@ -10,7 +10,22 @@ import { usePresence } from '../hooks/usePresence';
 import { useScrollSync } from '../hooks/useScrollSync';
 import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
+import { stripAnsi } from '../utils/stripAnsi';
+import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import './Editor.css';
+
+// Preview pane state machine:
+// START: Initial blank page
+// ERROR_AT_START: Error page shown before any successful render
+// GOOD: Successfully rendered HTML preview
+// ERROR_FROM_GOOD: Error occurred after previous successful render (keep last good HTML, show overlay)
+type PreviewState = 'START' | 'ERROR_AT_START' | 'GOOD' | 'ERROR_FROM_GOOD';
+
+// Error info for the overlay
+interface CurrentError {
+  message: string;
+  diagnostics?: Diagnostic[];
+}
 
 interface Props {
   project: ProjectEntry;
@@ -59,13 +74,6 @@ function renderFallback(content: string, message: string): string {
       </body>
     </html>
   `;
-}
-
-// Strip ANSI escape codes from text
-function stripAnsi(text: string): string {
-  // Match ANSI escape sequences: ESC [ ... m (SGR sequences)
-  // This covers color codes like \x1b[31m, \x1b[38;5;246m, \x1b[0m, etc.
-  return text.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
 // Error display HTML
@@ -187,6 +195,15 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   // Diagnostics state for Monaco markers
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
   const [unlocatedErrors, setUnlocatedErrors] = useState<Diagnostic[]>([]);
+
+  // Preview state machine for error handling
+  const [previewState, setPreviewState] = useState<PreviewState>('START');
+  const [currentError, setCurrentError] = useState<CurrentError | null>(null);
+  // Track previewState in a ref for use in callbacks
+  const previewStateRef = useRef<PreviewState>('START');
+  useEffect(() => {
+    previewStateRef.current = previewState;
+  }, [previewState]);
 
   // Scroll sync state (enabled by default)
   const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
@@ -322,6 +339,10 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   }, []);
 
   // Render function that uses WASM when available
+  // Implements state machine transitions for error handling:
+  // - On success: always transition to GOOD, swap to new content
+  // - On error from START/ERROR_AT_START: show full error page
+  // - On error from GOOD/ERROR_FROM_GOOD: keep last good HTML, show overlay
   const doRender = useCallback(async (qmdContent: string) => {
     lastContentRef.current = qmdContent;
 
@@ -355,6 +376,9 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       setDiagnostics(allDiagnostics);
 
       if (result.success) {
+        // Success: transition to GOOD state from any state
+        setCurrentError(null);
+        setPreviewState('GOOD');
         // Load new content into inactive iframe (will swap on load)
         setInactiveHtml(result.html);
         setSwapPending(true);
@@ -363,15 +387,42 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           typeof result.error === 'string'
             ? result.error
             : JSON.stringify(result.error, null, 2) || 'Unknown error';
-        // Show error in preview pane
-        setInactiveHtml(renderError(qmdContent, errorMsg));
-        setSwapPending(true);
+
+        // Set current error for overlay
+        setCurrentError({
+          message: errorMsg,
+          diagnostics: result.diagnostics,
+        });
+
+        const currentState = previewStateRef.current;
+        if (currentState === 'START' || currentState === 'ERROR_AT_START') {
+          // No good render yet - show full error page
+          setPreviewState('ERROR_AT_START');
+          setInactiveHtml(renderError(qmdContent, errorMsg));
+          setSwapPending(true);
+        } else {
+          // Was GOOD or ERROR_FROM_GOOD - keep last good HTML, show overlay
+          // DON'T swap iframes, DON'T change HTML content
+          setPreviewState('ERROR_FROM_GOOD');
+        }
       }
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : JSON.stringify(err, null, 2);
-      setInactiveHtml(renderError(qmdContent, errorMsg));
-      setSwapPending(true);
+
+      // Set current error for overlay
+      setCurrentError({
+        message: errorMsg,
+      });
+
+      const currentState = previewStateRef.current;
+      if (currentState === 'START' || currentState === 'ERROR_AT_START') {
+        setPreviewState('ERROR_AT_START');
+        setInactiveHtml(renderError(qmdContent, errorMsg));
+        setSwapPending(true);
+      } else {
+        setPreviewState('ERROR_FROM_GOOD');
+      }
       setDiagnostics([]);
     }
   }, [scrollSyncEnabled, setInactiveHtml]);
@@ -486,6 +537,9 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       // Clear diagnostics when switching files
       setDiagnostics([]);
       setUnlocatedErrors([]);
+      // Reset preview state machine when switching files
+      setPreviewState('START');
+      setCurrentError(null);
     }
   };
 
@@ -588,6 +642,11 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
             sandbox="allow-same-origin"
             onLoad={activeIframe === 'B' ? handleActiveIframeLoad : handleInactiveIframeLoad}
             className={activeIframe === 'B' ? 'preview-active' : 'preview-hidden'}
+          />
+          {/* Error overlay shown when error occurs after successful render */}
+          <PreviewErrorOverlay
+            error={currentError}
+            visible={previewState === 'ERROR_FROM_GOOD'}
           />
         </div>
       </main>
