@@ -413,17 +413,15 @@ where
     G: FnOnce(Vec<Inline>, quarto_source_map::SourceInfo) -> Inline,
 {
     // Extract delimiter space information
-    let space_info = extract_delimiter_space_info(
-        &children,
-        delimiter_name,
-        input_bytes,
-        node_location(node),
-    );
+    let space_info =
+        extract_delimiter_space_info(&children, delimiter_name, input_bytes, node_location(node));
 
     // Build the inline element using existing helper
     let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
-    let adjusted_source_info =
-        quarto_source_map::SourceInfo::from_range(context.current_file_id(), space_info.adjusted_range.clone());
+    let adjusted_source_info = quarto_source_map::SourceInfo::from_range(
+        context.current_file_id(),
+        space_info.adjusted_range.clone(),
+    );
     let inline = create_inline(inlines, adjusted_source_info);
 
     // Wrap with Space nodes as needed

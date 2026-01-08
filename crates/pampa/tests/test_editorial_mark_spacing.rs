@@ -11,7 +11,7 @@
  * Run with: cargo nextest run -p pampa test_editorial_mark_spacing
  */
 
-use pampa::pandoc::{treesitter_to_pandoc, ASTContext};
+use pampa::pandoc::{ASTContext, treesitter_to_pandoc};
 use pampa::utils::diagnostic_collector::DiagnosticCollector;
 use pampa::writers;
 use tree_sitter_qmd::MarkdownParser;

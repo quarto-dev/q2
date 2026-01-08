@@ -14,7 +14,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
-use super::text_helpers::{apply_smart_quotes, extract_delimiter_space_info, wrap_inline_with_delimiter_spaces};
+use super::text_helpers::{
+    apply_smart_quotes, extract_delimiter_space_info, wrap_inline_with_delimiter_spaces,
+};
 
 macro_rules! process_editorial_mark {
     ($struct_name:ident, $delimiter_name:literal) => {
