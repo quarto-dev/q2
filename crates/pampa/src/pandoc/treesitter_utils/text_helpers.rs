@@ -222,35 +222,39 @@ pub fn create_line_break_inline(
     PandocNativeIntermediate::IntermediateInline(inline)
 }
 
-/// Helper function to process inline nodes with delimiter-based space handling.
-/// This is used for emphasis, strong, strikeout, superscript, and subscript nodes
+/// Information about whitespace captured in delimiter tokens.
+/// Used for injecting Space nodes around inline elements.
+#[derive(Debug, Clone)]
+pub struct DelimiterSpaceInfo {
+    /// Range of leading whitespace in the opening delimiter, if any
+    pub leading_space_range: Option<quarto_source_map::Range>,
+    /// Range of trailing whitespace in the closing delimiter, if any
+    pub trailing_space_range: Option<quarto_source_map::Range>,
+    /// The adjusted source range for the inline element (excluding delimiter spaces)
+    pub adjusted_range: quarto_source_map::Range,
+}
+
+/// Extract whitespace information from delimiter nodes.
+///
+/// This function scans the children for delimiter nodes and detects any leading
+/// or trailing whitespace that was captured by the delimiter tokens. This is used
+/// for emphasis, strong, strikeout, superscript, subscript, and editorial marks
 /// which may capture spaces in their delimiters that need to be injected as Space nodes.
 ///
 /// # Parameters
-/// - `node`: The tree-sitter node being processed
-/// - `children`: The children of the node
-/// - `delimiter_name`: The name of the delimiter node to scan (e.g., "emphasis_delimiter")
+/// - `children`: The children of the node (borrowed for scanning)
+/// - `delimiter_name`: The name of the delimiter node to scan (e.g., "emphasis_delimiter", "delete_delimiter")
 /// - `input_bytes`: The input source bytes (needed to extract delimiter text)
-/// - `context`: The AST context
-/// - `native_inline`: Function to recursively process inline nodes
-/// - `create_inline`: Closure to create the final inline element from processed inlines
+/// - `fallback_range`: Range to use if delimiters are not found
 ///
 /// # Returns
-/// IntermediateInlines containing the inline element, potentially wrapped with Space nodes
-pub fn process_inline_with_delimiter_spaces<F, G>(
-    _node: &tree_sitter::Node,
-    children: Vec<(String, PandocNativeIntermediate)>,
+/// DelimiterSpaceInfo containing the space ranges and adjusted element range
+pub fn extract_delimiter_space_info(
+    children: &[(String, PandocNativeIntermediate)],
     delimiter_name: &str,
     input_bytes: &[u8],
-    context: &ASTContext,
-    native_inline: F,
-    create_inline: G,
-) -> PandocNativeIntermediate
-where
-    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
-    G: FnOnce(Vec<Inline>, quarto_source_map::SourceInfo) -> Inline,
-{
-    // Scan delimiters to check for captured spaces and save their ranges
+    fallback_range: quarto_source_map::Range,
+) -> DelimiterSpaceInfo {
     let mut leading_space_range: Option<quarto_source_map::Range> = None;
     let mut trailing_space_range: Option<quarto_source_map::Range> = None;
     let mut first_delimiter_range: Option<quarto_source_map::Range> = None;
@@ -259,7 +263,7 @@ where
     let mut trailing_ws_count = 0;
     let mut first_delimiter = true;
 
-    for (node_name, child) in &children {
+    for (node_name, child) in children {
         if node_name == delimiter_name
             && let PandocNativeIntermediate::IntermediateUnknown(range) = child
         {
@@ -331,38 +335,97 @@ where
             },
         }
     } else {
-        // Fallback to node range if we don't have delimiter ranges
-        crate::pandoc::location::node_location(_node)
+        fallback_range
     };
 
-    // Build the inline element using existing helper
-    let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
-    let adjusted_source_info =
-        quarto_source_map::SourceInfo::from_range(context.current_file_id(), adjusted_range);
-    let inline = create_inline(inlines, adjusted_source_info);
+    DelimiterSpaceInfo {
+        leading_space_range,
+        trailing_space_range,
+        adjusted_range,
+    }
+}
 
-    // Build result with injected Space nodes as needed
+/// Wrap an inline element with Space nodes based on delimiter space info.
+///
+/// # Parameters
+/// - `inline`: The inline element to wrap
+/// - `space_info`: The delimiter space information
+/// - `context`: The AST context for creating SourceInfo
+///
+/// # Returns
+/// IntermediateInlines containing the inline element, potentially wrapped with Space nodes
+pub fn wrap_inline_with_delimiter_spaces(
+    inline: Inline,
+    space_info: &DelimiterSpaceInfo,
+    context: &ASTContext,
+) -> PandocNativeIntermediate {
     let mut result = Vec::new();
 
-    if let Some(space_range) = leading_space_range {
+    if let Some(space_range) = &space_info.leading_space_range {
         result.push(Inline::Space(Space {
             source_info: quarto_source_map::SourceInfo::from_range(
                 context.current_file_id(),
-                space_range,
+                space_range.clone(),
             ),
         }));
     }
 
     result.push(inline);
 
-    if let Some(space_range) = trailing_space_range {
+    if let Some(space_range) = &space_info.trailing_space_range {
         result.push(Inline::Space(Space {
             source_info: quarto_source_map::SourceInfo::from_range(
                 context.current_file_id(),
-                space_range,
+                space_range.clone(),
             ),
         }));
     }
 
     PandocNativeIntermediate::IntermediateInlines(result)
+}
+
+/// Helper function to process inline nodes with delimiter-based space handling.
+/// This is used for emphasis, strong, strikeout, superscript, and subscript nodes
+/// which may capture spaces in their delimiters that need to be injected as Space nodes.
+///
+/// # Parameters
+/// - `node`: The tree-sitter node being processed
+/// - `children`: The children of the node
+/// - `delimiter_name`: The name of the delimiter node to scan (e.g., "emphasis_delimiter")
+/// - `input_bytes`: The input source bytes (needed to extract delimiter text)
+/// - `context`: The AST context
+/// - `native_inline`: Function to recursively process inline nodes
+/// - `create_inline`: Closure to create the final inline element from processed inlines
+///
+/// # Returns
+/// IntermediateInlines containing the inline element, potentially wrapped with Space nodes
+pub fn process_inline_with_delimiter_spaces<F, G>(
+    node: &tree_sitter::Node,
+    children: Vec<(String, PandocNativeIntermediate)>,
+    delimiter_name: &str,
+    input_bytes: &[u8],
+    context: &ASTContext,
+    native_inline: F,
+    create_inline: G,
+) -> PandocNativeIntermediate
+where
+    F: FnMut((String, PandocNativeIntermediate)) -> Inline,
+    G: FnOnce(Vec<Inline>, quarto_source_map::SourceInfo) -> Inline,
+{
+    // Extract delimiter space information
+    let space_info = extract_delimiter_space_info(
+        &children,
+        delimiter_name,
+        input_bytes,
+        node_location(node),
+    );
+
+    // Build the inline element using existing helper
+    let inlines = process_emphasis_like_inline(children, delimiter_name, native_inline);
+    let adjusted_source_info =
+        quarto_source_map::SourceInfo::from_range(context.current_file_id(), space_info.adjusted_range.clone());
+    let inline = create_inline(inlines, adjusted_source_info);
+
+    // Wrap with Space nodes as needed
+    wrap_inline_with_delimiter_spaces(inline, &space_info, context)
 }

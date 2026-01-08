@@ -621,15 +621,15 @@ fn native_visitor<T: Write>(
         ),
         // Editorial marks
         "insert_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "insert" => process_insert(node, children, context),
+        "insert" => process_insert(node, children, input_bytes, context),
         "delete_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "delete" => process_delete(node, children, context),
+        "delete" => process_delete(node, children, input_bytes, context),
         "highlight_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
-        "highlight" => process_highlight(node, children, context),
+        "highlight" => process_highlight(node, children, input_bytes, context),
         "edit_comment_delimiter" => {
             PandocNativeIntermediate::IntermediateUnknown(node_location(node))
         }
-        "edit_comment" => process_editcomment(node, children, context),
+        "edit_comment" => process_editcomment(node, children, input_bytes, context),
         // Shortcode nodes
         "shortcode_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "shortcode_name" => process_shortcode_string_arg(node, input_bytes, context),
