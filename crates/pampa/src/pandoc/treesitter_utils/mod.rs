@@ -15,6 +15,7 @@ pub mod editorial_marks;
 pub mod fenced_code_block;
 pub mod fenced_div_block;
 pub mod info_string;
+pub mod language_specifier;
 pub mod list_marker;
 pub mod note_definition_fenced_block;
 pub mod note_definition_para;

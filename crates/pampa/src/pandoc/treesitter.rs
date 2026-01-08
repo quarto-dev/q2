@@ -18,6 +18,7 @@ use crate::pandoc::treesitter_utils::editorial_marks::{
 use crate::pandoc::treesitter_utils::fenced_code_block::process_fenced_code_block;
 use crate::pandoc::treesitter_utils::fenced_div_block::process_fenced_div_block;
 use crate::pandoc::treesitter_utils::info_string::process_info_string;
+use crate::pandoc::treesitter_utils::language_specifier::process_language_specifier;
 use crate::pandoc::treesitter_utils::list_marker::process_list_marker;
 use crate::pandoc::treesitter_utils::note_definition_fenced_block::process_note_definition_fenced_block;
 use crate::pandoc::treesitter_utils::note_definition_para::process_note_definition_para;
@@ -912,15 +913,16 @@ fn native_visitor<T: Write>(
             PandocNativeIntermediate::IntermediateAttr(attr, attr_source)
         }
         "attribute_specifier" => {
-            // Filter out delimiter nodes and pass through the commonmark_specifier or raw_specifier result
-            // For language_specifier, we pass it through as-is (IntermediateBaseText)
+            // Filter out delimiter nodes and pass through the relevant child result
+            // language_specifier can return IntermediateBaseText (simple {python})
+            // or IntermediateAttr (with attributes like {python #id .class})
             for (node_name, child) in children {
                 if node_name == "commonmark_specifier" {
                     return child; // Should be IntermediateAttr
                 } else if node_name == "raw_specifier" {
                     return child; // Should be IntermediateRawFormat
                 } else if node_name == "language_specifier" {
-                    return child; // Should be IntermediateBaseText - let the parent handle it
+                    return child; // IntermediateBaseText or IntermediateAttr
                 } else if node_name == "unnumbered_specifier" {
                     return child; // Should be IntermediateAttr with "unnumbered" class
                 }
@@ -968,7 +970,7 @@ fn native_visitor<T: Write>(
         "pandoc_list" => process_list(node, children, context),
         "list_item" => process_list_item(node, children, context),
         "info_string" => process_info_string(node, input_bytes, context),
-        "language_specifier" => create_base_text_from_node_text(node, input_bytes),
+        "language_specifier" => process_language_specifier(node, children, input_bytes, context),
         "raw_specifier" => {
             // Extract raw format from raw_specifier node (e.g., "=html")
             let text = std::str::from_utf8(&input_bytes[node.byte_range()])
@@ -986,7 +988,36 @@ fn native_visitor<T: Write>(
         "block_continuation" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "pandoc_block_quote" => process_block_quote(node, children, context),
         "pandoc_horizontal_rule" => process_thematic_break(node, context),
-        "pandoc_code_block" => process_fenced_code_block(node, children, context),
+        "pandoc_code_block" => {
+            let result = process_fenced_code_block(node, children, context);
+
+            // Check for Q-2-8 warning: code block options in header without classes
+            // This warns about syntax like {r eval=FALSE} and suggests YAML block syntax
+            // But does NOT warn if there are additional classes like {python .marimo}
+            if let PandocNativeIntermediate::IntermediateBlock(Block::CodeBlock(ref cb)) = result {
+                let (ref _id, ref classes, ref attrs) = cb.attr;
+
+                // Check if: exactly one class matching {language} pattern, and has key-value attrs
+                let has_only_braced_language =
+                    classes.len() == 1 && classes[0].starts_with('{') && classes[0].ends_with('}');
+                let has_key_value_attrs = !attrs.is_empty();
+
+                if has_only_braced_language && has_key_value_attrs {
+                    let msg = DiagnosticMessageBuilder::warning("Code block options in header")
+                        .with_code("Q-2-8")
+                        .with_location(cb.source_info.clone())
+                        .problem("This code block has options specified in the header line")
+                        .add_info(
+                            "For executable code blocks, Quarto recommends using YAML block syntax",
+                        )
+                        .add_hint("Use `#| key: value` syntax inside the code block instead")
+                        .build();
+                    error_collector.add(msg);
+                }
+            }
+
+            result
+        }
         "pandoc_div" => process_fenced_div_block(node, children, context),
         "pipe_table_delimiter_cell" => process_pipe_table_delimiter_cell(children, context),
         "pipe_table_header" | "pipe_table_row" => {

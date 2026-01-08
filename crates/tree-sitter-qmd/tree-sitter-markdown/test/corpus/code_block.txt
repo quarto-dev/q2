@@ -62,3 +62,21 @@ stuff
               (pandoc_str)
               (pandoc_space)
               (pandoc_str))))))
+================================================================================
+4
+================================================================================
+```{python .marimo}
+print("hi")
+```
+--------------------------------------------------------------------------------
+    (document
+      (section
+        (pandoc_code_block
+          (fenced_code_block_delimiter)
+          (attribute_specifier
+            (language_specifier
+              (commonmark_specifier
+                (attribute_class))))
+          (block_continuation)
+          (code_fence_content
+            (block_continuation)))))

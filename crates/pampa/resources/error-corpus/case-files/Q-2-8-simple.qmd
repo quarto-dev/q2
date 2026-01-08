@@ -1,3 +1,0 @@
-```{r eval=FALSE}
-cat("hello")
-```

@@ -416,9 +416,14 @@ module.exports = grammar({
         attribute_specifier: $ => seq(
             '{',
             optional(choice(
-                $.raw_specifier,
-                $.language_specifier,
-                $.commonmark_specifier,
+                $.raw_specifier, // =aslkjfdasd
+                $.language_specifier, // python 
+                $.commonmark_specifier, 
+                // #id
+                // .class
+                // #id .class
+                // key=value
+                // NOT: python .class 
                 alias($._commonmark_specifier_start_with_class, $.commonmark_specifier),
                 alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier)
             )),
@@ -439,7 +444,12 @@ module.exports = grammar({
         unnumbered_specifier: $ => "-",
 
         language_specifier: $ => choice(
-            $._language_specifier_token,
+            seq($._language_specifier_token,
+                optional(choice(
+                    $.commonmark_specifier,
+                    seq(optional($._inline_whitespace), alias($._commonmark_specifier_start_with_class, $.commonmark_specifier)),
+                    seq(optional($._inline_whitespace), alias($._commonmark_specifier_start_with_kv, $.commonmark_specifier))
+                ))),
             seq('{', $.language_specifier, '}')
         ),
 

@@ -383,3 +383,158 @@ fn test_comparison_with_explicit_raw_inline_syntax() {
     assert_eq!(raw_implicit[1], "</b>");
     assert_eq!(raw_explicit[1], "</b>");
 }
+
+// Tests for Q-2-8: Code block options in header warning
+
+#[test]
+fn test_code_block_with_header_options_produces_warning() {
+    // {r eval=FALSE} should produce a Q-2-8 warning
+    let input = "```{r eval=FALSE}\ncat(\"hello\")\n```\n";
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let (_pandoc, _context, warnings) = result.unwrap();
+
+    // Should have a Q-2-8 warning
+    let q28_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .collect();
+
+    assert_eq!(
+        q28_warnings.len(),
+        1,
+        "Should have exactly one Q-2-8 warning for code block with header options"
+    );
+
+    // Verify it's a warning, not an error
+    assert_eq!(
+        q28_warnings[0].kind,
+        quarto_error_reporting::DiagnosticKind::Warning
+    );
+}
+
+#[test]
+fn test_code_block_with_class_no_warning() {
+    // {python .marimo} should NOT produce a Q-2-8 warning (has a class)
+    let input = "```{python .marimo}\ncode()\n```\n";
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let (_pandoc, _context, warnings) = result.unwrap();
+
+    // Should NOT have a Q-2-8 warning
+    let q28_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .collect();
+
+    assert!(
+        q28_warnings.is_empty(),
+        "Should NOT have Q-2-8 warning when class is present"
+    );
+}
+
+#[test]
+fn test_code_block_with_class_and_options_no_warning() {
+    // {r .class key=value} should NOT produce a Q-2-8 warning (has a class)
+    let input = "```{r .myclass eval=FALSE}\ncode()\n```\n";
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let (_pandoc, _context, warnings) = result.unwrap();
+
+    // Should NOT have a Q-2-8 warning
+    let q28_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .collect();
+
+    assert!(
+        q28_warnings.is_empty(),
+        "Should NOT have Q-2-8 warning when class is present alongside options"
+    );
+}
+
+#[test]
+fn test_simple_code_block_no_warning() {
+    // {python} should NOT produce a Q-2-8 warning (no key-value options)
+    let input = "```{python}\ncode()\n```\n";
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let (_pandoc, _context, warnings) = result.unwrap();
+
+    // Should NOT have a Q-2-8 warning
+    let q28_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .collect();
+
+    assert!(
+        q28_warnings.is_empty(),
+        "Should NOT have Q-2-8 warning for simple language specifier"
+    );
+}
+
+#[test]
+fn test_code_block_with_id_and_options_produces_warning() {
+    // {python #fig-test key=value} should produce warning (has id but no class)
+    let input = "```{python #fig-test key=value}\ncode()\n```\n";
+
+    let result = readers::qmd::read(
+        input.as_bytes(),
+        false,
+        "test.md",
+        &mut std::io::sink(),
+        true,
+        None,
+    );
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let (_pandoc, _context, warnings) = result.unwrap();
+
+    // Should have a Q-2-8 warning (id doesn't count as a class)
+    let q28_warnings: Vec<_> = warnings
+        .iter()
+        .filter(|w| w.code.as_deref() == Some("Q-2-8"))
+        .collect();
+
+    assert_eq!(
+        q28_warnings.len(),
+        1,
+        "Should have Q-2-8 warning - id does not prevent warning, only classes do"
+    );
+}

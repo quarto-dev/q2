@@ -877,9 +877,17 @@
     "named": true,
     "fields": {},
     "children": {
-      "multiple": false,
+      "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "block_continuation",
+          "named": true
+        },
+        {
+          "type": "commonmark_specifier",
+          "named": true
+        },
         {
           "type": "language_specifier",
           "named": true
