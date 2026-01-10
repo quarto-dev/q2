@@ -175,14 +175,18 @@ npm run build  # Production build
 1. **First commit**: Make your hub-client changes and commit them
 2. **Second commit**: Update `hub-client/changelog.md` with the hash from step 1
 
-Add a new entry at the top of the changelog (entries are in reverse chronological order) with this format:
+Entries are grouped by date under level-three headers. Add your entry under today's date header (create it if needed):
 ```
-- YYYY-MM-DD [`<short-hash>`](https://github.com/quarto-dev/kyoto/commits/<short-hash>): One-sentence description
+### YYYY-MM-DD
+
+- [`<short-hash>`](https://github.com/quarto-dev/kyoto/commits/<short-hash>): One-sentence description
 ```
 
 Example:
 ```
-- 2026-01-10 [`e6f742c`](https://github.com/quarto-dev/kyoto/commits/e6f742c): Refactor navigation to VS Code-style collapsible sidebar
+### 2026-01-10
+
+- [`e6f742c`](https://github.com/quarto-dev/kyoto/commits/e6f742c): Refactor navigation to VS Code-style collapsible sidebar
 ```
 
 The changelog is rendered in the About section of the hub-client UI.

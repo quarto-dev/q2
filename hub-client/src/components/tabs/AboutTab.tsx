@@ -4,7 +4,7 @@
  * Displays information about Quarto Hub:
  * - Commit indicator
  * - Links to documentation and resources
- * - Rendered changelog
+ * - Button to view changelog in modal
  */
 
 import { useState, useEffect } from 'react';
@@ -18,9 +18,50 @@ interface AboutTabProps {
   wasmStatus: WasmStatus;
 }
 
+// Minimal CSS for changelog rendering
+const changelogStyles = `
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    padding: 24px;
+    margin: 0;
+    max-width: 800px;
+  }
+  h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+    color: #111;
+  }
+  ul {
+    margin: 0;
+    padding: 0 0 0 20px;
+  }
+  li {
+    margin: 8px 0;
+  }
+  a {
+    color: #646cff;
+    text-decoration: none;
+  }
+  a:hover {
+    text-decoration: underline;
+  }
+  code {
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+    font-size: 13px;
+    background: #f4f4f4;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+`;
+
 export default function AboutTab({ wasmStatus }: AboutTabProps) {
   const [changelogHtml, setChangelogHtml] = useState<string>('');
   const [changelogError, setChangelogError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
 
   // Render changelog when WASM becomes ready
   useEffect(() => {
@@ -32,7 +73,12 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
       try {
         const result = await renderToHtml(changelogMd);
         if (result.success) {
-          setChangelogHtml(result.html);
+          // Inject minimal styles into the rendered HTML
+          const styledHtml = result.html.replace(
+            '</head>',
+            `<style>${changelogStyles}</style></head>`
+          );
+          setChangelogHtml(styledHtml);
           setChangelogError(null);
         } else {
           setChangelogError(result.error || 'Failed to render changelog');
@@ -44,6 +90,14 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
 
     renderChangelog();
   }, [wasmStatus]);
+
+  const handleOpenChangelog = () => {
+    setShowModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+  };
 
   return (
     <div className="about-tab">
@@ -66,6 +120,18 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
               GitHub Repository
             </a>
           </li>
+          <li>
+            <button
+              className="changelog-link-btn"
+              onClick={handleOpenChangelog}
+              disabled={wasmStatus !== 'ready' || !!changelogError}
+            >
+              {wasmStatus === 'loading' ? 'Loading...' : 'View Changelog'}
+            </button>
+            {changelogError && (
+              <span className="changelog-error-hint"> (unavailable)</span>
+            )}
+          </li>
         </ul>
       </div>
 
@@ -82,28 +148,31 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
         </div>
       </div>
 
-      <div className="about-tab-section changelog-section">
-        <label className="section-label">Changelog</label>
-        {wasmStatus === 'loading' && (
-          <div className="changelog-loading">Loading renderer...</div>
-        )}
-        {wasmStatus === 'error' && (
-          <div className="changelog-error">Renderer unavailable</div>
-        )}
-        {changelogError && (
-          <div className="changelog-error">{changelogError}</div>
-        )}
-        {changelogHtml && (
-          <div className="changelog-container">
-            <iframe
-              srcDoc={changelogHtml}
-              title="Changelog"
-              sandbox="allow-same-origin"
-              className="changelog-iframe"
-            />
+      {/* Changelog Modal */}
+      {showModal && (
+        <div className="changelog-modal-overlay" onClick={handleCloseModal}>
+          <div className="changelog-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="changelog-modal-header">
+              <h3>Changelog</h3>
+              <button className="changelog-modal-close" onClick={handleCloseModal}>
+                ×
+              </button>
+            </div>
+            <div className="changelog-modal-content">
+              {changelogHtml ? (
+                <iframe
+                  srcDoc={changelogHtml}
+                  title="Changelog"
+                  sandbox="allow-same-origin"
+                  className="changelog-iframe"
+                />
+              ) : (
+                <div className="changelog-loading">Loading changelog...</div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
