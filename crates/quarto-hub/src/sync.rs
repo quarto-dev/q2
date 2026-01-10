@@ -9,6 +9,8 @@
 //! - Filesystem changed: local file edited, automerge unchanged
 //! - Both changed: true divergence requiring CRDT merge
 //! - First run: no prior sync checkpoint
+//!
+//! Binary files use simpler semantics: last-writer-wins based on content hash.
 
 use std::path::Path;
 use std::str::FromStr;
@@ -19,6 +21,10 @@ use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
 use crate::index::IndexDocument;
+use crate::resource::{
+    self, DocumentType, compute_hash, detect_document_type, detect_mime_type, read_binary_content,
+    read_content_hash,
+};
 use crate::sync_state::{SyncState, sha256_hash};
 
 /// Synchronize a single document with its corresponding filesystem file.
@@ -204,6 +210,191 @@ pub fn sync_document(
     result
 }
 
+/// Synchronize a binary document with its corresponding filesystem file.
+///
+/// Binary files use simpler last-writer-wins semantics:
+/// - If filesystem hash differs from document hash, update the one that changed
+/// - If both changed since checkpoint, filesystem wins (local edits take precedence)
+/// - No CRDT merging for binary content
+///
+/// # Arguments
+/// * `doc_handle` - Handle to the automerge document
+/// * `file_path` - Path to the filesystem file
+/// * `sync_state` - Mutable reference to sync state
+///
+/// # Returns
+/// * `Ok(SyncResult)` - Summary of what happened during sync
+/// * `Err(Error)` - If sync failed
+pub fn sync_binary_document(
+    doc_handle: &DocHandle,
+    file_path: &Path,
+    sync_state: &mut SyncState,
+) -> Result<SyncResult> {
+    let doc_id = doc_handle.document_id().to_string();
+
+    // Read filesystem content
+    let fs_content = std::fs::read(file_path).map_err(|e| {
+        Error::Sync(format!(
+            "failed to read binary file {}: {}",
+            file_path.display(),
+            e
+        ))
+    })?;
+    let fs_hash = compute_hash(&fs_content);
+
+    let result = doc_handle.with_document(|doc| {
+        // Get document content hash
+        let doc_hash = read_content_hash(doc);
+
+        // Get last synced hash from checkpoint
+        let checkpoint_hash = sync_state.get_content_hash(&doc_id);
+
+        // Determine what changed
+        let doc_unchanged = doc_hash.as_deref() == checkpoint_hash;
+        let fs_unchanged = checkpoint_hash == Some(fs_hash.as_str());
+
+        // Early exit: no changes
+        if doc_unchanged && fs_unchanged {
+            debug!(doc_id = %doc_id, "No changes detected in binary file, skipping sync");
+            return Ok(SyncResult::NoChanges);
+        }
+
+        // Determine sync direction
+        let (result_type, final_content, final_hash) = if !doc_unchanged && fs_unchanged {
+            // Document changed, filesystem unchanged -> write doc to filesystem
+            let content = read_binary_content(doc).ok_or_else(|| {
+                Error::Sync(format!(
+                    "failed to read binary content from document {}",
+                    doc_id
+                ))
+            })?;
+            let hash = doc_hash.unwrap_or_else(|| compute_hash(&content));
+            (
+                SyncResult::AutomergeChanged {
+                    new_len: content.len(),
+                },
+                content,
+                hash,
+            )
+        } else {
+            // Filesystem changed (or both changed) -> filesystem wins
+            // For binary files, we don't have meaningful merge, so local edits take precedence
+            let result_type = if !doc_unchanged && !fs_unchanged {
+                SyncResult::BothChanged {
+                    merged_len: fs_content.len(),
+                }
+            } else {
+                SyncResult::FilesystemChanged {
+                    new_len: fs_content.len(),
+                }
+            };
+
+            // Update document with filesystem content
+            let mime_type = detect_mime_type(&fs_content, file_path.to_str());
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                tx.put(ROOT, "content", fs_content.clone())?;
+                tx.put(ROOT, "mimeType", mime_type)?;
+                tx.put(ROOT, "hash", fs_hash.clone())?;
+                Ok(())
+            })
+            .map_err(|e| Error::Sync(format!("failed to update binary document: {:?}", e)))?;
+
+            (result_type, fs_content, fs_hash)
+        };
+
+        // Write to filesystem if needed (only if doc changed)
+        if matches!(result_type, SyncResult::AutomergeChanged { .. }) {
+            std::fs::write(file_path, &final_content).map_err(|e| {
+                Error::Sync(format!(
+                    "failed to write binary content to {}: {}",
+                    file_path.display(),
+                    e
+                ))
+            })?;
+            debug!(
+                doc_id = %doc_id,
+                path = %file_path.display(),
+                "Wrote binary content to filesystem"
+            );
+        }
+
+        // Update sync checkpoint
+        let new_heads = doc.get_heads();
+        sync_state.set_checkpoint(&doc_id, &new_heads, &final_hash);
+
+        Ok(result_type)
+    });
+
+    match &result {
+        Ok(SyncResult::NoChanges) => {
+            debug!(doc_id = %doc_id, path = %file_path.display(), "Binary sync: no changes");
+        }
+        Ok(SyncResult::AutomergeChanged { new_len }) => {
+            info!(
+                doc_id = %doc_id,
+                path = %file_path.display(),
+                new_len = new_len,
+                "Binary sync: automerge → filesystem"
+            );
+        }
+        Ok(SyncResult::FilesystemChanged { new_len }) => {
+            info!(
+                doc_id = %doc_id,
+                path = %file_path.display(),
+                new_len = new_len,
+                "Binary sync: filesystem → automerge"
+            );
+        }
+        Ok(SyncResult::BothChanged { merged_len }) => {
+            info!(
+                doc_id = %doc_id,
+                path = %file_path.display(),
+                merged_len = merged_len,
+                "Binary sync: both changed, filesystem wins"
+            );
+        }
+        Err(e) => {
+            warn!(
+                doc_id = %doc_id,
+                path = %file_path.display(),
+                error = %e,
+                "Binary sync failed"
+            );
+        }
+    }
+
+    result
+}
+
+/// Synchronize a document based on its type (text or binary).
+///
+/// Detects the document type and dispatches to the appropriate sync function.
+pub fn sync_document_auto(
+    doc_handle: &DocHandle,
+    file_path: &Path,
+    sync_state: &mut SyncState,
+) -> Result<SyncResult> {
+    let doc_type = doc_handle.with_document(|doc| detect_document_type(doc));
+
+    match doc_type {
+        DocumentType::Text => sync_document(doc_handle, file_path, sync_state),
+        DocumentType::Binary => sync_binary_document(doc_handle, file_path, sync_state),
+        DocumentType::Invalid => {
+            // Try to infer from file extension
+            let is_binary = file_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(resource::is_binary_extension);
+
+            if is_binary {
+                sync_binary_document(doc_handle, file_path, sync_state)
+            } else {
+                sync_document(doc_handle, file_path, sync_state)
+            }
+        }
+    }
+}
+
 /// Synchronize a single file by its path.
 ///
 /// This looks up the document ID for the given file path in the index,
@@ -274,8 +465,8 @@ pub async fn sync_file_by_path(
         }
     };
 
-    // Sync the document
-    let result = sync_document(&doc_handle, file_path, sync_state)?;
+    // Sync the document (auto-detects text vs binary)
+    let result = sync_document_auto(&doc_handle, file_path, sync_state)?;
 
     // Save sync state
     sync_state.save()?;
@@ -369,8 +560,8 @@ pub async fn sync_all_documents(
             }
         };
 
-        // Sync the document
-        match sync_document(&doc_handle, &file_path, sync_state) {
+        // Sync the document (auto-detects text vs binary)
+        match sync_document_auto(&doc_handle, &file_path, sync_state) {
             Ok(sync_result) => match sync_result {
                 SyncResult::NoChanges => result.no_changes += 1,
                 SyncResult::AutomergeChanged { .. } => result.automerge_changed += 1,
@@ -774,5 +965,255 @@ mod tests {
         assert_eq!(result.total_synced(), 1);
         assert_eq!(result.skipped, 1);
         assert!(!result.has_errors());
+    }
+
+    // ========== Binary file sync tests ==========
+
+    /// Helper to create a binary document
+    fn create_doc_with_binary(content: &[u8], mime_type: &str) -> Automerge {
+        crate::resource::create_binary_document(content, mime_type).unwrap()
+    }
+
+    /// Helper to read binary content from doc handle
+    fn read_binary_from_handle(handle: &DocHandle) -> Vec<u8> {
+        handle.with_document(|doc| crate::resource::read_binary_content(doc).unwrap())
+    }
+
+    /// Helper to update binary content in doc handle
+    fn update_binary_in_handle(handle: &DocHandle, content: &[u8], mime_type: &str) {
+        handle.with_document(|doc| {
+            doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+                tx.put(ROOT, "content", content.to_vec())?;
+                tx.put(ROOT, "mimeType", mime_type)?;
+                tx.put(ROOT, "hash", compute_hash(content))?;
+                Ok(())
+            })
+            .unwrap();
+        });
+    }
+
+    #[tokio::test]
+    async fn test_sync_binary_no_changes() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create binary document with content
+        let binary_content = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]; // PNG header
+        let doc = create_doc_with_binary(&binary_content, "image/png");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+
+        // Create file with same content
+        let file_path = temp.path().join("image.png");
+        std::fs::write(&file_path, &binary_content).unwrap();
+
+        // Create sync state and set initial checkpoint
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+        let content_hash = compute_hash(&binary_content);
+        let heads = handle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&doc_id, &heads, &content_hash);
+
+        // Sync should detect no changes
+        let result = sync_binary_document(&handle, &file_path, &mut sync_state).unwrap();
+        assert_eq!(result, SyncResult::NoChanges);
+
+        // Content should be unchanged
+        assert_eq!(read_binary_from_handle(&handle), binary_content);
+        assert_eq!(std::fs::read(&file_path).unwrap(), binary_content);
+    }
+
+    #[tokio::test]
+    async fn test_sync_binary_filesystem_changed() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create binary document
+        let original_content = vec![0x89, 0x50, 0x4E, 0x47]; // short PNG-like header
+        let doc = create_doc_with_binary(&original_content, "image/png");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+
+        // Create file with modified content
+        let modified_content = vec![0xFF, 0xD8, 0xFF, 0xE0]; // JPEG header
+        let file_path = temp.path().join("image.jpg");
+        std::fs::write(&file_path, &modified_content).unwrap();
+
+        // Create sync state with checkpoint at original state
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+        let heads = handle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&doc_id, &heads, &compute_hash(&original_content));
+
+        // Sync should update document from filesystem
+        let result = sync_binary_document(&handle, &file_path, &mut sync_state).unwrap();
+        assert!(matches!(result, SyncResult::FilesystemChanged { .. }));
+
+        // Document should have new content
+        assert_eq!(read_binary_from_handle(&handle), modified_content);
+    }
+
+    #[tokio::test]
+    async fn test_sync_binary_automerge_changed() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create binary document with initial content
+        let original_content = vec![0x89, 0x50, 0x4E, 0x47];
+        let doc = create_doc_with_binary(&original_content, "image/png");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+
+        // Create file with original content (unchanged)
+        let file_path = temp.path().join("image.png");
+        std::fs::write(&file_path, &original_content).unwrap();
+
+        // Record checkpoint at initial state
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+        let initial_heads = handle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&doc_id, &initial_heads, &compute_hash(&original_content));
+
+        // Modify document (simulating remote peer changes)
+        let new_content = vec![0xFF, 0xD8, 0xFF, 0xE0];
+        update_binary_in_handle(&handle, &new_content, "image/jpeg");
+
+        // Sync should push document changes to filesystem
+        let result = sync_binary_document(&handle, &file_path, &mut sync_state).unwrap();
+        assert!(matches!(result, SyncResult::AutomergeChanged { .. }));
+
+        // File should have new content
+        assert_eq!(std::fs::read(&file_path).unwrap(), new_content);
+    }
+
+    #[tokio::test]
+    async fn test_sync_binary_both_changed_filesystem_wins() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create binary document
+        let original_content = vec![0x00, 0x01, 0x02, 0x03];
+        let doc = create_doc_with_binary(&original_content, "application/octet-stream");
+        let handle = repo.create(doc).await.unwrap();
+        let doc_id = handle.document_id().to_string();
+
+        // Record checkpoint
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+        let initial_heads = handle.with_document(|doc| doc.get_heads());
+        sync_state.set_checkpoint(&doc_id, &initial_heads, &compute_hash(&original_content));
+
+        // Modify filesystem
+        let fs_content = vec![0x10, 0x11, 0x12, 0x13];
+        let file_path = temp.path().join("data.bin");
+        std::fs::write(&file_path, &fs_content).unwrap();
+
+        // Modify document differently
+        let doc_content = vec![0x20, 0x21, 0x22, 0x23];
+        update_binary_in_handle(&handle, &doc_content, "application/octet-stream");
+
+        // Sync should pick filesystem (last-writer-wins for binary)
+        let result = sync_binary_document(&handle, &file_path, &mut sync_state).unwrap();
+        assert!(matches!(result, SyncResult::BothChanged { .. }));
+
+        // Filesystem content wins
+        assert_eq!(read_binary_from_handle(&handle), fs_content);
+        assert_eq!(std::fs::read(&file_path).unwrap(), fs_content);
+    }
+
+    #[tokio::test]
+    async fn test_sync_document_auto_dispatches_text() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create text document
+        let doc = create_doc_with_text("Hello text");
+        let handle = repo.create(doc).await.unwrap();
+
+        // Create file
+        let file_path = temp.path().join("test.qmd");
+        std::fs::write(&file_path, "Hello text").unwrap();
+
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+
+        // sync_document_auto should work for text documents
+        let result = sync_document_auto(&handle, &file_path, &mut sync_state);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sync_document_auto_dispatches_binary() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create binary document
+        let content = vec![0x89, 0x50, 0x4E, 0x47];
+        let doc = create_doc_with_binary(&content, "image/png");
+        let handle = repo.create(doc).await.unwrap();
+
+        // Create file
+        let file_path = temp.path().join("image.png");
+        std::fs::write(&file_path, &content).unwrap();
+
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+
+        // sync_document_auto should work for binary documents
+        let result = sync_document_auto(&handle, &file_path, &mut sync_state);
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sync_document_auto_uses_extension_fallback() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create an empty/invalid document (neither text nor content field)
+        let mut doc = Automerge::new();
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.put(ROOT, "other_field", "something")?;
+            Ok(())
+        })
+        .unwrap();
+        let handle = repo.create(doc).await.unwrap();
+
+        // Create a .png file (should use binary sync based on extension)
+        let content = vec![0x89, 0x50, 0x4E, 0x47];
+        let file_path = temp.path().join("image.png");
+        std::fs::write(&file_path, &content).unwrap();
+
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+
+        // sync_document_auto should fall back to extension-based detection
+        // For binary extension with .png, it should use binary sync which
+        // will update the empty document with the filesystem content
+        let result = sync_document_auto(&handle, &file_path, &mut sync_state);
+        assert!(result.is_ok());
+
+        // After sync, document should have the binary content
+        let doc_content = read_binary_from_handle(&handle);
+        assert_eq!(doc_content, content);
+    }
+
+    #[tokio::test]
+    async fn test_sync_document_auto_text_extension_fallback() {
+        let temp = TempDir::new().unwrap();
+        let repo = create_test_repo().await;
+
+        // Create an empty/invalid document (neither text nor content field)
+        let mut doc = Automerge::new();
+        doc.transact::<_, _, automerge::AutomergeError>(|tx| {
+            tx.put(ROOT, "other_field", "something")?;
+            Ok(())
+        })
+        .unwrap();
+        let handle = repo.create(doc).await.unwrap();
+
+        // Create a .qmd file (should use text sync based on extension)
+        let file_path = temp.path().join("test.qmd");
+        std::fs::write(&file_path, "# Hello").unwrap();
+
+        let mut sync_state = SyncState::load(temp.path()).unwrap();
+
+        // sync_document_auto should fall back to extension-based detection
+        // For text extension .qmd, it should attempt text sync which will fail
+        // because the document has no "text" field
+        let result = sync_document_auto(&handle, &file_path, &mut sync_state);
+        assert!(result.is_err());
     }
 }

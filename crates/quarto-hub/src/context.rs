@@ -15,6 +15,7 @@ use crate::discovery::ProjectFiles;
 use crate::error::Result;
 use crate::index::{IndexDocument, load_or_create_index};
 use crate::peer::spawn_peer_connection;
+use crate::resource::{create_binary_document, detect_mime_type};
 use crate::storage::StorageManager;
 use crate::sync::{SyncAllResult, SyncResult, sync_all_documents, sync_file_by_path};
 use crate::sync_state::SyncState;
@@ -99,6 +100,7 @@ impl HubContext {
         info!(
             qmd_count = project_files.qmd_files.len(),
             config_count = project_files.config_files.len(),
+            binary_count = project_files.binary_files.len(),
             "Discovered project files"
         );
 
@@ -226,7 +228,7 @@ pub type SharedContext = Arc<HubContext>;
 ///
 /// For each file in `project_files` that is not already in the index:
 /// - Read the file content from disk
-/// - Create a new automerge document with a Text object containing the content
+/// - Create a new automerge document (Text for text files, Binary for binary files)
 /// - Add the mapping to the index
 ///
 /// Returns the number of new files added.
@@ -238,7 +240,8 @@ async fn reconcile_files_with_index(
 ) -> Result<usize> {
     let mut added = 0;
 
-    for file_path in project_files.all_files() {
+    // Reconcile text files (config + qmd)
+    for file_path in project_files.text_files() {
         let path_str = file_path.to_string_lossy();
 
         // Skip if already in index
@@ -252,7 +255,7 @@ async fn reconcile_files_with_index(
         let file_content = match std::fs::read_to_string(&full_path) {
             Ok(content) => content,
             Err(e) => {
-                warn!(path = %path_str, error = %e, "Failed to read file, skipping");
+                warn!(path = %path_str, error = %e, "Failed to read text file, skipping");
                 continue;
             }
         };
@@ -266,7 +269,7 @@ async fn reconcile_files_with_index(
             tx.update_text(&text_obj, &file_content)?;
             Ok(())
         }) {
-            warn!(path = %path_str, error = ?e, "Failed to initialize document, skipping");
+            warn!(path = %path_str, error = ?e, "Failed to initialize text document, skipping");
             continue;
         }
 
@@ -280,7 +283,59 @@ async fn reconcile_files_with_index(
         // Add to index
         index.add_file(&path_str, &doc_id)?;
 
-        info!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new file to index");
+        info!(path = %path_str, doc_id = %doc_id, content_len = file_content.len(), "Added new text file to index");
+        added += 1;
+    }
+
+    // Reconcile binary files
+    for file_path in &project_files.binary_files {
+        let path_str = file_path.to_string_lossy();
+
+        // Skip if already in index
+        if index.has_file(&path_str) {
+            debug!(path = %path_str, "Binary file already in index");
+            continue;
+        }
+
+        // Read file content from disk as bytes
+        let full_path = project_root.join(file_path);
+        let file_content = match std::fs::read(&full_path) {
+            Ok(content) => content,
+            Err(e) => {
+                warn!(path = %path_str, error = %e, "Failed to read binary file, skipping");
+                continue;
+            }
+        };
+
+        // Detect MIME type from content and filename
+        let mime_type = detect_mime_type(&file_content, full_path.to_str());
+
+        // Create binary document
+        let doc = match create_binary_document(&file_content, &mime_type) {
+            Ok(doc) => doc,
+            Err(e) => {
+                warn!(path = %path_str, error = ?e, "Failed to create binary document, skipping");
+                continue;
+            }
+        };
+
+        let doc_handle = repo
+            .create(doc)
+            .await
+            .map_err(|_| crate::error::Error::IndexDocument("repo is stopped".to_string()))?;
+
+        let doc_id = doc_handle.document_id().to_string();
+
+        // Add to index
+        index.add_file(&path_str, &doc_id)?;
+
+        info!(
+            path = %path_str,
+            doc_id = %doc_id,
+            content_len = file_content.len(),
+            mime_type = %mime_type,
+            "Added new binary file to index"
+        );
         added += 1;
     }
 

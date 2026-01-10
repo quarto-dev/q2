@@ -66,6 +66,9 @@ sha2 = "0.10"
 # Hex encoding/decoding for change hash serialization
 hex = "0.4"
 
+# MIME type detection from file content
+infer = "0.19"
+
 [dev-dependencies]
 tempfile = "3"
 

@@ -11,6 +11,7 @@ pub mod discovery;
 pub mod error;
 pub mod index;
 pub mod peer;
+pub mod resource;
 pub mod server;
 pub mod storage;
 pub mod sync;
