@@ -170,7 +170,7 @@ pub fn vfs_clear() -> String {
     VfsResponse::ok()
 }
 
-/// Read a file from the virtual filesystem.
+/// Read a text file from the virtual filesystem.
 ///
 /// # Arguments
 /// * `path` - File path to read
@@ -186,6 +186,29 @@ pub fn vfs_read_file(path: &str) -> String {
             Ok(text) => VfsResponse::with_content(text),
             Err(_) => VfsResponse::error("File is not valid UTF-8"),
         },
+        Err(e) => VfsResponse::error(&format!("Failed to read file: {}", e)),
+    }
+}
+
+/// Read a binary file from the virtual filesystem.
+///
+/// Returns the content as base64-encoded string, suitable for data URLs.
+///
+/// # Arguments
+/// * `path` - File path to read
+///
+/// # Returns
+/// JSON: `{ "success": true, "content": "<base64>" }` or `{ "success": false, "error": "..." }`
+#[wasm_bindgen]
+pub fn vfs_read_binary_file(path: &str) -> String {
+    use base64::Engine;
+    let runtime = get_runtime();
+
+    match runtime.file_read(Path::new(path)) {
+        Ok(content) => {
+            let base64_content = base64::engine::general_purpose::STANDARD.encode(&content);
+            VfsResponse::with_content(base64_content)
+        }
         Err(e) => VfsResponse::error(&format!("Failed to read file: {}", e)),
     }
 }

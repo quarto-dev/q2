@@ -123,6 +123,15 @@ export function vfsReadFile(path: string): VfsResponse {
   return JSON.parse(wasm.vfs_read_file(path));
 }
 
+/**
+ * Read a binary file from the virtual filesystem.
+ * Returns the content as a base64-encoded string.
+ */
+export function vfsReadBinaryFile(path: string): VfsResponse {
+  const wasm = getWasm();
+  return JSON.parse(wasm.vfs_read_binary_file(path));
+}
+
 // ============================================================================
 // Rendering Operations
 // ============================================================================

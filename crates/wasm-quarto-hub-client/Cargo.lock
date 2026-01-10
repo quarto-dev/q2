@@ -1935,6 +1935,7 @@ dependencies = [
 name = "wasm-quarto-hub-client"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "console_error_panic_hook",
  "pampa",
  "quarto-core",

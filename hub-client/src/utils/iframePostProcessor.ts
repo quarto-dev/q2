@@ -6,7 +6,7 @@
  * - Converts .qmd links to click handlers for internal navigation
  */
 
-import { vfsReadFile } from '../services/wasmRenderer';
+import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
 
 export interface PostProcessOptions {
   /** Current file path for resolving relative links */
@@ -43,14 +43,35 @@ export function postProcessIframe(
   // Replace image sources with data URIs
   doc.querySelectorAll('img').forEach((img) => {
     const src = img.getAttribute('src');
-    if (src?.startsWith('/.quarto/')) {
+    if (!src) return;
+
+    // Skip external URLs and data URIs
+    if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('data:')) {
+      return;
+    }
+
+    // Handle /.quarto/ paths (built-in resources)
+    if (src.startsWith('/.quarto/')) {
       const result = vfsReadFile(src);
       if (result.success && result.content) {
         const mimeType = guessMimeType(src);
-        // For binary files, content should already be base64 encoded
         const dataUri = `data:${mimeType};base64,${result.content}`;
         img.setAttribute('src', dataUri);
       }
+      return;
+    }
+
+    // Handle project-relative paths (images uploaded to project)
+    const resolvedPath = resolveRelativePath(options.currentFilePath, src);
+    // Remove leading slash for VFS path (VFS stores as "images/foo.png" not "/images/foo.png")
+    const vfsPath = resolvedPath.startsWith('/') ? resolvedPath.slice(1) : resolvedPath;
+
+    const result = vfsReadBinaryFile(vfsPath);
+    if (result.success && result.content) {
+      const mimeType = guessMimeType(src);
+      // vfsReadBinaryFile returns base64-encoded content
+      const dataUri = `data:${mimeType};base64,${result.content}`;
+      img.setAttribute('src', dataUri);
     }
   });
 

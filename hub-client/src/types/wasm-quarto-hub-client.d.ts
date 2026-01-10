@@ -9,6 +9,7 @@ declare module 'wasm-quarto-hub-client' {
   export function vfs_list_files(): string;
   export function vfs_clear(): string;
   export function vfs_read_file(path: string): string;
+  export function vfs_read_binary_file(path: string): string;
   export function render_qmd(path: string): Promise<string>;
   export function render_qmd_content(content: string, template_bundle: string): Promise<string>;
   export function render_qmd_content_with_options(

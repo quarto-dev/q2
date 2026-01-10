@@ -573,6 +573,35 @@ Recommended order: 1 → 2 → 3 → 4 → 5
 
 ---
 
+## Build Instructions
+
+### Building wasm-quarto-hub-client
+
+**Recommended method** - use the hub-client build script:
+
+```bash
+cd hub-client
+npm run build:wasm
+```
+
+This script (`scripts/build-wasm.js`) handles:
+- Finding Homebrew LLVM with wasm32 support on macOS
+- Setting proper CFLAGS for the wasm-sysroot
+- Using wasm-pack for proper wasm-bindgen integration
+
+**Manual method** (if not using npm):
+
+```bash
+cd crates/wasm-quarto-hub-client
+export PATH="/opt/homebrew/opt/llvm/bin:$PATH"  # macOS Apple Silicon
+export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
+wasm-pack build --target web
+```
+
+**Important:** The system clang doesn't support wasm32 targets - you need Homebrew's LLVM which has wasm support. Do NOT use `cargo build` directly without wasm-pack and the proper LLVM in PATH.
+
+---
+
 ## References
 
 - [Automerge Document Data Model](https://automerge.org/docs/reference/documents/)
