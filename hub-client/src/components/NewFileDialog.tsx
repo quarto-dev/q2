@@ -48,34 +48,7 @@ export default function NewFileDialog({
   const filenameInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Handle initial files from drag-and-drop
-  useEffect(() => {
-    if (isOpen && initialFiles && initialFiles.length > 0) {
-      setMode('upload');
-      processFiles(initialFiles);
-    }
-  }, [isOpen, initialFiles, processFiles]);
-
-  // Focus filename input when dialog opens in text mode
-  useEffect(() => {
-    if (isOpen && mode === 'text') {
-      setTimeout(() => filenameInputRef.current?.focus(), 100);
-    }
-  }, [isOpen, mode]);
-
-  // Reset state when dialog closes
-  useEffect(() => {
-    if (!isOpen) {
-      setFilename('');
-      setError(null);
-      setFilePreviews([]);
-      setMode('text');
-      setIsDragOver(false);
-      setIsUploading(false);
-    }
-  }, [isOpen]);
-
-  // Process dropped/selected files
+  // Process dropped/selected files (defined before effects that use it)
   const processFiles = useCallback((files: File[]) => {
     const previews: FilePreview[] = [];
 
@@ -119,6 +92,33 @@ export default function NewFileDialog({
 
     setFilePreviews(previews);
   }, []);
+
+  // Handle initial files from drag-and-drop
+  useEffect(() => {
+    if (isOpen && initialFiles && initialFiles.length > 0) {
+      setMode('upload');
+      processFiles(initialFiles);
+    }
+  }, [isOpen, initialFiles, processFiles]);
+
+  // Focus filename input when dialog opens in text mode
+  useEffect(() => {
+    if (isOpen && mode === 'text') {
+      setTimeout(() => filenameInputRef.current?.focus(), 100);
+    }
+  }, [isOpen, mode]);
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFilename('');
+      setError(null);
+      setFilePreviews([]);
+      setMode('text');
+      setIsDragOver(false);
+      setIsUploading(false);
+    }
+  }, [isOpen]);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {

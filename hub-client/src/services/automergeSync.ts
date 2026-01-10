@@ -381,6 +381,62 @@ export function deleteFile(path: string): void {
 }
 
 /**
+ * Rename a file in the project.
+ * Updates the index mapping without changing the document content.
+ */
+export function renameFile(oldPath: string, newPath: string): void {
+  if (!state.indexHandle) {
+    throw new Error('Not connected');
+  }
+
+  // Get the document ID from the current index
+  const indexDoc = state.indexHandle.doc();
+  const docId = indexDoc?.files?.[oldPath];
+  if (!docId) {
+    throw new Error(`File not found: ${oldPath}`);
+  }
+
+  // Check if new path already exists
+  if (indexDoc?.files?.[newPath]) {
+    throw new Error(`File already exists: ${newPath}`);
+  }
+
+  // Update the index: delete old, add new with same docId
+  const indexHandle = state.indexHandle;
+  indexHandle.change(doc => {
+    delete doc.files[oldPath];
+    doc.files[newPath] = docId;
+  });
+
+  // Update local state
+  const handle = state.fileHandles.get(oldPath);
+  if (handle) {
+    state.fileHandles.delete(oldPath);
+    state.fileHandles.set(newPath, handle);
+  }
+
+  // Update binary tracking
+  if (state.binaryFiles.has(oldPath)) {
+    state.binaryFiles.delete(oldPath);
+    state.binaryFiles.add(newPath);
+
+    // Update VFS for binary files
+    const binaryContent = getBinaryFileContent(newPath);
+    if (binaryContent) {
+      vfsRemoveFile(oldPath);
+      vfsAddBinaryFile(newPath, binaryContent.content);
+    }
+  } else {
+    // Update VFS for text files
+    const textContent = getFileContent(newPath);
+    if (textContent !== null) {
+      vfsRemoveFile(oldPath);
+      vfsAddFile(newPath, textContent);
+    }
+  }
+}
+
+/**
  * Check if connected
  */
 export function isConnected(): boolean {

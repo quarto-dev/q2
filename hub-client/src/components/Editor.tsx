@@ -8,6 +8,7 @@ import {
   createFile,
   createBinaryFile,
   deleteFile,
+  renameFile,
 } from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady, vfsReadFile } from '../services/wasmRenderer';
@@ -614,6 +615,21 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     }
   }, [currentFile, files]);
 
+  // Handle renaming a file
+  const handleRenameFile = useCallback((file: FileEntry, newPath: string) => {
+    try {
+      renameFile(file.path, newPath);
+      // If we renamed the current file, update the reference
+      if (currentFile?.path === file.path) {
+        setCurrentFile({ ...currentFile, path: newPath });
+      }
+    } catch (err) {
+      console.error('Failed to rename file:', err);
+      // Show error to user (could use a toast notification in the future)
+      alert(`Failed to rename file: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [currentFile]);
+
   return (
     <div className="editor-container">
       <header className="editor-header">
@@ -679,6 +695,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           onNewFile={handleNewFile}
           onUploadFiles={handleUploadFiles}
           onDeleteFile={handleDeleteFile}
+          onRenameFile={handleRenameFile}
         />
         <div className="pane editor-pane">
           <MonacoEditor
