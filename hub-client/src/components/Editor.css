@@ -108,41 +108,18 @@
   cursor: help;
 }
 
-.file-selector {
-  display: flex;
-  gap: 8px;
-}
-
-.file-selector select {
-  padding: 8px 12px;
+/* Current file indicator in header */
+.current-file-indicator {
+  padding: 6px 12px;
   background: #0f3460;
   border: 1px solid #1f4460;
   border-radius: 6px;
-  color: #fff;
-  font-size: 14px;
-  min-width: 200px;
-  cursor: pointer;
 }
 
-.file-selector select:focus {
-  outline: none;
-  border-color: #646cff;
-}
-
-.new-file-btn {
-  padding: 8px 12px;
-  background: #0f3460;
-  border: 1px solid #1f4460;
-  border-radius: 6px;
-  color: #888;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.new-file-btn:hover {
-  background: #1f4460;
-  color: #fff;
+.current-file-indicator .file-path {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 13px;
+  color: #ddd;
 }
 
 .toolbar-actions {

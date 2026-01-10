@@ -2,9 +2,16 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
+import { isBinaryExtension } from '../types/project';
 import type { Patch } from '../services/automergeSync';
+import {
+  createFile,
+  createBinaryFile,
+  deleteFile,
+} from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady, vfsReadFile } from '../services/wasmRenderer';
+import { processFileForUpload } from '../services/resourceService';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
 import { useScrollSync } from '../hooks/useScrollSync';
@@ -12,6 +19,8 @@ import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
+import FileSidebar from './FileSidebar';
+import NewFileDialog from './NewFileDialog';
 import './Editor.css';
 
 // Preview pane state machine:
@@ -215,6 +224,10 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
 
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);
+
+  // New file dialog state
+  const [showNewFileDialog, setShowNewFileDialog] = useState(false);
+  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
 
   // Handler for .qmd link clicks in the preview
   const handleQmdLinkClick = useCallback(
@@ -532,20 +545,74 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     setEditorReady(true);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const file = files.find(f => f.path === e.target.value);
-    if (file) {
-      setCurrentFile(file);
-      const fileContent = fileContents.get(file.path);
-      setContent(fileContent ?? '');
-      // Clear diagnostics when switching files
-      setDiagnostics([]);
-      setUnlocatedErrors([]);
-      // Reset preview state machine when switching files
-      setPreviewState('START');
-      setCurrentError(null);
+  // Handle file selection from sidebar
+  const handleSelectFile = useCallback((file: FileEntry) => {
+    // Don't switch to binary files in the editor
+    if (isBinaryExtension(file.path)) {
+      // For now, just ignore binary file selection
+      // Future: could show a preview panel for images
+      return;
     }
-  };
+
+    setCurrentFile(file);
+    const fileContent = fileContents.get(file.path);
+    setContent(fileContent ?? '');
+    // Clear diagnostics when switching files
+    setDiagnostics([]);
+    setUnlocatedErrors([]);
+    // Reset preview state machine when switching files
+    setPreviewState('START');
+    setCurrentError(null);
+  }, [fileContents]);
+
+  // Handle opening new file dialog
+  const handleNewFile = useCallback(() => {
+    setPendingUploadFiles([]);
+    setShowNewFileDialog(true);
+  }, []);
+
+  // Handle files dropped on sidebar (open dialog with files pre-filled)
+  const handleUploadFiles = useCallback((droppedFiles: File[]) => {
+    setPendingUploadFiles(droppedFiles);
+    setShowNewFileDialog(true);
+  }, []);
+
+  // Handle creating a new text file
+  const handleCreateTextFile = useCallback(async (path: string, initialContent: string) => {
+    try {
+      await createFile(path, initialContent);
+      // Select the newly created file
+      const newFile: FileEntry = { path, docId: '' }; // docId will be set by automerge
+      setCurrentFile(newFile);
+      setContent(initialContent);
+    } catch (err) {
+      console.error('Failed to create file:', err);
+    }
+  }, []);
+
+  // Handle uploading a binary file
+  const handleUploadBinaryFile = useCallback(async (file: File) => {
+    try {
+      const { content: binaryContent, mimeType } = await processFileForUpload(file);
+      await createBinaryFile(file.name, binaryContent, mimeType);
+    } catch (err) {
+      console.error('Failed to upload file:', err);
+    }
+  }, []);
+
+  // Handle deleting a file
+  const handleDeleteFile = useCallback((file: FileEntry) => {
+    try {
+      deleteFile(file.path);
+      // If we deleted the current file, select another one
+      if (currentFile?.path === file.path) {
+        const remaining = files.filter(f => f.path !== file.path);
+        setCurrentFile(selectDefaultFile(remaining));
+      }
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+    }
+  }, [currentFile, files]);
 
   return (
     <div className="editor-container">
@@ -565,18 +632,12 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
             )}
           </div>
         </div>
-        <div className="file-selector">
-          <select value={currentFile?.path || ''} onChange={handleFileChange}>
-            {files.length === 0 ? (
-              <option value="">No files</option>
-            ) : (
-              files.map(file => (
-                <option key={file.path} value={file.path}>{file.path}</option>
-              ))
-            )}
-          </select>
-          <button className="new-file-btn" title="New file">+</button>
-        </div>
+        {/* Current file indicator (file selector moved to sidebar) */}
+        {currentFile && (
+          <div className="current-file-indicator">
+            <span className="file-path">{currentFile.path}</span>
+          </div>
+        )}
         <div className="toolbar-actions">
           <label className="scroll-sync-toggle" title="Sync editor and preview scroll positions">
             <input
@@ -611,6 +672,14 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       )}
 
       <main className="editor-main">
+        <FileSidebar
+          files={files}
+          currentFile={currentFile}
+          onSelectFile={handleSelectFile}
+          onNewFile={handleNewFile}
+          onUploadFiles={handleUploadFiles}
+          onDeleteFile={handleDeleteFile}
+        />
         <div className="pane editor-pane">
           <MonacoEditor
             height="100%"
@@ -654,6 +723,16 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           />
         </div>
       </main>
+
+      {/* New file dialog */}
+      <NewFileDialog
+        isOpen={showNewFileDialog}
+        existingPaths={files.map(f => f.path)}
+        onClose={() => setShowNewFileDialog(false)}
+        onCreateTextFile={handleCreateTextFile}
+        onUploadBinaryFile={handleUploadBinaryFile}
+        initialFiles={pendingUploadFiles}
+      />
     </div>
   );
 }
