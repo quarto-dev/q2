@@ -590,10 +590,11 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     setShowNewFileDialog(true);
   }, []);
 
-  // Handle closing the new file dialog (clears pending drop position)
+  // Handle closing the new file dialog
+  // Note: We don't clear pendingDropPositionRef here because the upload
+  // happens asynchronously after dialog close. It's cleared after insertion.
   const handleDialogClose = useCallback(() => {
     setShowNewFileDialog(false);
-    pendingDropPositionRef.current = null;
   }, []);
 
   // Handle files dropped on sidebar (open dialog with files pre-filled)
@@ -693,6 +694,9 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
           forceMoveMarkers: true,
         }]);
 
+        // Clear the pending position after insertion
+        pendingDropPositionRef.current = null;
+
         // Update local content state to match
         const newContent = editorRef.current.getValue();
         setContent(newContent);
@@ -702,6 +706,8 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       }
     } catch (err) {
       console.error('Failed to upload file:', err);
+      // Clear pending position on error too
+      pendingDropPositionRef.current = null;
     }
   }, [currentFile, onContentChange]);
 
