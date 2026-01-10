@@ -1,0 +1,94 @@
+.project-tab {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.project-tab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+}
+
+.project-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+}
+
+.doc-id-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #0f3460;
+  border: 1px solid #1f4460;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  width: 100%;
+}
+
+.doc-id-button:hover {
+  background: #1f4460;
+  border-color: #2f5470;
+}
+
+.doc-id-value {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #ddd;
+}
+
+.copy-indicator {
+  font-size: 11px;
+  color: #888;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.doc-id-button:hover .copy-indicator {
+  background: rgba(255, 255, 255, 0.15);
+  color: #bbb;
+}
+
+.sync-server {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 12px;
+  color: #aaa;
+  word-break: break-all;
+}
+
+.project-tab-actions {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid #1f3460;
+}
+
+.choose-project-btn {
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #888;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.choose-project-btn:hover {
+  border-color: #646cff;
+  color: #646cff;
+}

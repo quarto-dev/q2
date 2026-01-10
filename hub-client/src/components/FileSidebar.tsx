@@ -252,9 +252,8 @@ export default function FileSidebar({
       onClick={handleSidebarClick}
     >
       <div className="sidebar-header">
-        <span className="sidebar-title">Files</span>
         <button className="new-file-btn" onClick={onNewFile} title="New file">
-          +
+          + New
         </button>
       </div>
 

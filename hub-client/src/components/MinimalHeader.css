@@ -1,0 +1,61 @@
+.minimal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #16213e;
+  border-bottom: 1px solid #1f3460;
+  min-height: 36px;
+  gap: 16px;
+}
+
+.header-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.minimal-header .file-path {
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  font-size: 13px;
+  color: #ddd;
+}
+
+.minimal-header .file-path.empty {
+  color: #666;
+  font-style: italic;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.header-right .project-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #aaa;
+  min-width: 120px;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.header-right .choose-project-btn {
+  padding: 4px 10px;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 4px;
+  color: #888;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.header-right .choose-project-btn:hover {
+  border-color: #646cff;
+  color: #646cff;
+}

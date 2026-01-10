@@ -1,0 +1,76 @@
+.sidebar-sections {
+  width: 220px;
+  min-width: 180px;
+  max-width: 300px;
+  background: #16213e;
+  border-right: 1px solid #1f3460;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid #1f3460;
+}
+
+.sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #12192e;
+  border: none;
+  color: #ccc;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.section-header:hover {
+  background: #1a2440;
+}
+
+.section-chevron {
+  font-size: 8px;
+  color: #888;
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.section-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-content {
+  display: flex;
+  flex-direction: column;
+  background: #16213e;
+}
+
+/* When FILES section is expanded, let it take available space */
+.sidebar-section.expanded:first-child .section-content {
+  flex: 1;
+  min-height: 150px;
+  max-height: 50vh;
+  overflow: hidden;
+}
+
+/* Other expanded sections have max height */
+.sidebar-section.expanded:not(:first-child) .section-content {
+  max-height: 300px;
+  overflow-y: auto;
+}

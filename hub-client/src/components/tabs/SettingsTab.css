@@ -1,0 +1,76 @@
+.settings-tab {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.settings-tab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+}
+
+.setting-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.setting-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.setting-toggle input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.setting-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ddd;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-name::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #444;
+  border-radius: 4px;
+  background: #1a1a2e;
+  transition: all 0.15s;
+}
+
+.setting-toggle input[type="checkbox"]:checked + .setting-name::before {
+  background: #4ade80;
+  border-color: #4ade80;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='white'%3E%3Cpath d='M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z'/%3E%3C/svg%3E");
+  background-size: 14px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.setting-description {
+  font-size: 12px;
+  color: #666;
+  padding-left: 26px;
+}

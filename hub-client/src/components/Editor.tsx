@@ -22,6 +22,12 @@ import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
+import MinimalHeader from './MinimalHeader';
+import SidebarTabs from './SidebarTabs';
+import ProjectTab from './tabs/ProjectTab';
+import StatusTab from './tabs/StatusTab';
+import SettingsTab from './tabs/SettingsTab';
+import AboutTab from './tabs/AboutTab';
 import './Editor.css';
 
 // Preview pane state machine:
@@ -632,42 +638,11 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
 
   return (
     <div className="editor-container">
-      <header className="editor-header">
-        <div className="project-info">
-          <h1>{project.description}</h1>
-          <div className="status-indicators">
-            <span className={`sync-status ${wasmStatus === 'ready' ? 'connected' : 'disconnected'}`}>
-              {wasmStatus === 'loading' && 'Loading WASM...'}
-              {wasmStatus === 'ready' && 'Ready'}
-              {wasmStatus === 'error' && 'WASM Error'}
-            </span>
-            {userCount > 0 && (
-              <span className="user-count" title={remoteUsers.map(u => u.userName).join(', ')}>
-                {userCount} other{userCount === 1 ? '' : 's'} here
-              </span>
-            )}
-          </div>
-        </div>
-        {/* Current file indicator (file selector moved to sidebar) */}
-        {currentFile && (
-          <div className="current-file-indicator">
-            <span className="file-path">{currentFile.path}</span>
-          </div>
-        )}
-        <div className="toolbar-actions">
-          <label className="scroll-sync-toggle" title="Sync editor and preview scroll positions">
-            <input
-              type="checkbox"
-              checked={scrollSyncEnabled}
-              onChange={(e) => setScrollSyncEnabled(e.target.checked)}
-            />
-            <span>Scroll sync</span>
-          </label>
-          <button className="disconnect-btn" onClick={onDisconnect}>
-            Disconnect
-          </button>
-        </div>
-      </header>
+      <MinimalHeader
+        currentFilePath={currentFile?.path ?? null}
+        projectName={project.description}
+        onChooseNewProject={onDisconnect}
+      />
 
       {wasmError && (
         <div className="wasm-error-banner">
@@ -688,15 +663,51 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       )}
 
       <main className="editor-main">
-        <FileSidebar
-          files={files}
-          currentFile={currentFile}
-          onSelectFile={handleSelectFile}
-          onNewFile={handleNewFile}
-          onUploadFiles={handleUploadFiles}
-          onDeleteFile={handleDeleteFile}
-          onRenameFile={handleRenameFile}
-        />
+        <SidebarTabs>
+          {(activeTab) => {
+            switch (activeTab) {
+              case 'files':
+                return (
+                  <FileSidebar
+                    files={files}
+                    currentFile={currentFile}
+                    onSelectFile={handleSelectFile}
+                    onNewFile={handleNewFile}
+                    onUploadFiles={handleUploadFiles}
+                    onDeleteFile={handleDeleteFile}
+                    onRenameFile={handleRenameFile}
+                  />
+                );
+              case 'project':
+                return (
+                  <ProjectTab
+                    project={project}
+                    onChooseNewProject={onDisconnect}
+                  />
+                );
+              case 'status':
+                return (
+                  <StatusTab
+                    wasmStatus={wasmStatus}
+                    wasmError={wasmError}
+                    userCount={userCount}
+                    remoteUsers={remoteUsers}
+                  />
+                );
+              case 'settings':
+                return (
+                  <SettingsTab
+                    scrollSyncEnabled={scrollSyncEnabled}
+                    onScrollSyncChange={setScrollSyncEnabled}
+                  />
+                );
+              case 'about':
+                return <AboutTab />;
+              default:
+                return null;
+            }
+          }}
+        </SidebarTabs>
         <div className="pane editor-pane">
           <MonacoEditor
             height="100%"

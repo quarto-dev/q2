@@ -1,0 +1,110 @@
+.status-tab {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.status-tab-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.status-indicator.loading {
+  background: #2a2a1e;
+  color: #fbbf24;
+}
+
+.status-indicator.ready {
+  background: #0a4f0a;
+  color: #4ade80;
+}
+
+.status-indicator.error {
+  background: #4f0a0a;
+  color: #f87171;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-error {
+  font-size: 12px;
+  color: #f87171;
+  padding: 8px;
+  background: #2d1b1b;
+  border-radius: 4px;
+  word-break: break-word;
+}
+
+.no-users {
+  font-size: 13px;
+  color: #666;
+  padding: 8px 0;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-count-summary {
+  font-size: 13px;
+  color: #60a5fa;
+  padding: 8px 12px;
+  background: #1f3460;
+  border-radius: 6px;
+}
+
+.user-names {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.user-names li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.user-color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.user-name {
+  font-size: 13px;
+  color: #ddd;
+}
