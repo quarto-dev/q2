@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-10
 
+- [`7fed669`](https://github.com/quarto-dev/kyoto/commits/7fed669): Fix race condition in image drop markdown insertion
 - [`eed9975`](https://github.com/quarto-dev/kyoto/commits/eed9975): Add drag-drop image upload to Monaco editor with markdown insertion
 - [`81fed79`](https://github.com/quarto-dev/kyoto/commits/81fed79): Add More Information modal and refactor markdown viewer
 - [`b0ddb29`](https://github.com/quarto-dev/kyoto/commits/b0ddb29): Add changelog view to About tab
