@@ -12,17 +12,18 @@ import { updateText } from '@automerge/automerge';
 // Re-export Patch type for use in other components
 export type { Patch };
 import { BrowserWebSocketClientAdapter } from '@automerge/automerge-repo-network-websocket';
-import type { FileEntry } from '../types/project';
-import { vfsAddFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
+import type { FileEntry, TextDocumentContent, BinaryDocumentContent } from '../types/project';
+import { isTextDocument, isBinaryDocument, getDocumentType, isBinaryExtension } from '../types/project';
+import { vfsAddFile, vfsAddBinaryFile, vfsRemoveFile, vfsClear, initWasm } from './wasmRenderer';
+import { computeSHA256 } from './resourceService';
 
 // Document types
 interface IndexDocument {
   files: Record<string, string>; // path -> docId mapping
 }
 
-interface FileDocument {
-  text: string; // automerge Text type serializes to string
-}
+// FileDocument can be text or binary - use runtime detection
+type FileDocument = TextDocumentContent | BinaryDocumentContent;
 
 // Connection state
 interface SyncState {
@@ -30,6 +31,8 @@ interface SyncState {
   wsAdapter: BrowserWebSocketClientAdapter | null;
   indexHandle: DocHandle<IndexDocument> | null;
   fileHandles: Map<string, DocHandle<FileDocument>>;
+  /** Track which files are binary for quick lookup */
+  binaryFiles: Set<string>;
   cleanupFns: (() => void)[];
 }
 
@@ -38,17 +41,20 @@ const state: SyncState = {
   wsAdapter: null,
   indexHandle: null,
   fileHandles: new Map(),
+  binaryFiles: new Set(),
   cleanupFns: [],
 };
 
 // Event handlers for state changes
 type FilesChangeHandler = (files: FileEntry[]) => void;
 type FileContentHandler = (path: string, content: string, patches: Patch[]) => void;
+type BinaryContentHandler = (path: string, content: Uint8Array, mimeType: string) => void;
 type ConnectionHandler = (connected: boolean) => void;
 type ErrorHandler = (error: Error) => void;
 
 let onFilesChange: FilesChangeHandler | null = null;
 let onFileContent: FileContentHandler | null = null;
+let onBinaryContent: BinaryContentHandler | null = null;
 let onConnectionChange: ConnectionHandler | null = null;
 let onError: ErrorHandler | null = null;
 
@@ -58,11 +64,13 @@ let onError: ErrorHandler | null = null;
 export function setSyncHandlers(handlers: {
   onFilesChange?: FilesChangeHandler;
   onFileContent?: FileContentHandler;
+  onBinaryContent?: BinaryContentHandler;
   onConnectionChange?: ConnectionHandler;
   onError?: ErrorHandler;
 }) {
   if (handlers.onFilesChange) onFilesChange = handlers.onFilesChange;
   if (handlers.onFileContent) onFileContent = handlers.onFileContent;
+  if (handlers.onBinaryContent) onBinaryContent = handlers.onBinaryContent;
   if (handlers.onConnectionChange) onConnectionChange = handlers.onConnectionChange;
   if (handlers.onError) onError = handlers.onError;
 }
@@ -149,8 +157,9 @@ export async function disconnect(): Promise<void> {
   }
   state.cleanupFns = [];
 
-  // Clear file handles
+  // Clear file handles and binary tracking
   state.fileHandles.clear();
+  state.binaryFiles.clear();
 
   // Clear VFS
   vfsClear();
@@ -169,14 +178,38 @@ export async function disconnect(): Promise<void> {
 }
 
 /**
- * Get the current content of a file
+ * Check if a file is binary (based on loaded document type)
+ */
+export function isFileBinary(path: string): boolean {
+  return state.binaryFiles.has(path);
+}
+
+/**
+ * Get the current text content of a file.
+ * Returns null if file doesn't exist or is binary.
  */
 export function getFileContent(path: string): string | null {
   const handle = state.fileHandles.get(path);
   if (!handle) return null;
+  if (state.binaryFiles.has(path)) return null; // Binary files don't have text content
+
   const doc = handle.doc();
-  if (!doc) return null;
+  if (!doc || !isTextDocument(doc)) return null;
   return doc.text;
+}
+
+/**
+ * Get the current binary content of a file.
+ * Returns null if file doesn't exist or is text.
+ */
+export function getBinaryFileContent(path: string): { content: Uint8Array; mimeType: string } | null {
+  const handle = state.fileHandles.get(path);
+  if (!handle) return null;
+  if (!state.binaryFiles.has(path)) return null; // Text files don't have binary content
+
+  const doc = handle.doc();
+  if (!doc || !isBinaryDocument(doc)) return null;
+  return { content: doc.content, mimeType: doc.mimeType };
 }
 
 /**
@@ -201,15 +234,15 @@ export function updateFileContent(path: string, content: string): void {
 }
 
 /**
- * Create a new file in the project
+ * Create a new text file in the project
  */
 export async function createFile(path: string, content: string = ''): Promise<void> {
   if (!state.repo || !state.indexHandle) {
     throw new Error('Not connected');
   }
 
-  // Create new document for the file
-  const handle = state.repo.create<FileDocument>();
+  // Create new document for the file (cast to TextDocumentContent for text files)
+  const handle = state.repo.create<TextDocumentContent>();
   handle.change(doc => {
     doc.text = content;
   });
@@ -220,11 +253,109 @@ export async function createFile(path: string, content: string = ''): Promise<vo
     doc.files[path] = handle.documentId;
   });
 
-  // Set up subscription
-  await subscribeToFile(path, handle);
+  // Set up subscription (cast back to FileDocument for storage)
+  await subscribeToFile(path, handle as unknown as DocHandle<FileDocument>);
 
   // Update VFS
   vfsAddFile(path, content);
+}
+
+/**
+ * Result of creating a binary file
+ */
+export interface CreateBinaryFileResult {
+  /** The document ID of the created file */
+  docId: string;
+  /** The actual path used (may differ from original if conflict was resolved) */
+  path: string;
+  /** Whether the file was deduplicated (same hash as existing file) */
+  deduplicated: boolean;
+}
+
+/**
+ * Create a new binary file in the project.
+ *
+ * Handles conflict resolution:
+ * - If a file with the same path and same hash exists, returns existing file (deduplication)
+ * - If a file with the same path but different hash exists, generates a unique name
+ *
+ * @param path - Desired file path (may be modified to resolve conflicts)
+ * @param content - Binary content as Uint8Array
+ * @param mimeType - MIME type of the content
+ * @returns Information about the created file
+ */
+export async function createBinaryFile(
+  path: string,
+  content: Uint8Array,
+  mimeType: string
+): Promise<CreateBinaryFileResult> {
+  if (!state.repo || !state.indexHandle) {
+    throw new Error('Not connected');
+  }
+
+  // Compute hash for conflict detection
+  const hash = await computeSHA256(content);
+
+  // Check for existing file at this path
+  const indexDoc = state.indexHandle.doc();
+  const existingDocId = indexDoc?.files?.[path];
+
+  if (existingDocId) {
+    // Check if it's the same content (same hash)
+    const existingHandle = state.fileHandles.get(path);
+    if (existingHandle) {
+      const existingDoc = existingHandle.doc();
+      if (existingDoc && isBinaryDocument(existingDoc) && existingDoc.hash === hash) {
+        // Same content - deduplication
+        console.log(`Binary file at ${path} has same content, reusing existing document`);
+        return {
+          docId: existingDocId,
+          path,
+          deduplicated: true,
+        };
+      }
+    }
+
+    // Different content - generate unique name
+    const lastDot = path.lastIndexOf('.');
+    const hashPrefix = hash.slice(0, 8);
+    if (lastDot > 0) {
+      const name = path.slice(0, lastDot);
+      const ext = path.slice(lastDot);
+      path = `${name}-${hashPrefix}${ext}`;
+    } else {
+      path = `${path}-${hashPrefix}`;
+    }
+    console.log(`Binary file conflict, using unique name: ${path}`);
+  }
+
+  // Create new document for the binary file
+  const handle = state.repo.create<BinaryDocumentContent>();
+  handle.change(doc => {
+    doc.content = content;
+    doc.mimeType = mimeType;
+    doc.hash = hash;
+  });
+
+  // Add to index
+  const indexHandle = state.indexHandle;
+  const docId = handle.documentId;
+  indexHandle.change(doc => {
+    doc.files[path] = docId;
+  });
+
+  // Track as binary and set up subscription
+  state.binaryFiles.add(path);
+  await subscribeToFile(path, handle as unknown as DocHandle<FileDocument>);
+
+  // Update VFS with binary content
+  vfsAddBinaryFile(path, content);
+
+  return {
+    docId,
+    path,
+    deduplicated: false,
+  };
 }
 
 /**
@@ -241,8 +372,9 @@ export function deleteFile(path: string): void {
     delete doc.files[path];
   });
 
-  // Remove handle (cleanup will be handled by syncVfsWithFiles on next change event)
+  // Remove handle and binary tracking
   state.fileHandles.delete(path);
+  state.binaryFiles.delete(path);
 
   // Update VFS
   vfsRemoveFile(path);
@@ -335,17 +467,47 @@ async function subscribeToFile(path: string, handle: DocHandle<FileDocument>): P
   // Store handle
   state.fileHandles.set(path, handle);
 
-  // Initial VFS population (no patches on initial load)
+  // Detect document type and handle accordingly
   const doc = handle.doc();
   if (doc) {
-    vfsAddFile(path, doc.text || '');
-    onFileContent?.(path, doc.text || '', []);
+    const docType = getDocumentType(doc);
+
+    if (docType === 'binary' && isBinaryDocument(doc)) {
+      // Binary document
+      state.binaryFiles.add(path);
+      vfsAddBinaryFile(path, doc.content);
+      onBinaryContent?.(path, doc.content, doc.mimeType);
+    } else if (docType === 'text' && isTextDocument(doc)) {
+      // Text document
+      vfsAddFile(path, doc.text || '');
+      onFileContent?.(path, doc.text || '', []);
+    } else {
+      // Invalid or unknown document type - try to infer from extension
+      if (isBinaryExtension(path)) {
+        console.warn(`Document at ${path} has invalid structure but binary extension, skipping`);
+      } else {
+        console.warn(`Document at ${path} has invalid structure, treating as empty text`);
+        vfsAddFile(path, '');
+        onFileContent?.(path, '', []);
+      }
+    }
   }
 
   // Subscribe to changes - forward patches from the change event
   const changeHandler = ({ patches }: { patches: Patch[] }) => {
     const changedDoc = handle.doc();
-    if (changedDoc) {
+    if (!changedDoc) return;
+
+    const docType = getDocumentType(changedDoc);
+
+    if (docType === 'binary' && isBinaryDocument(changedDoc)) {
+      // Binary document changed
+      state.binaryFiles.add(path);
+      vfsAddBinaryFile(path, changedDoc.content);
+      onBinaryContent?.(path, changedDoc.content, changedDoc.mimeType);
+    } else if (docType === 'text' && isTextDocument(changedDoc)) {
+      // Text document changed
+      state.binaryFiles.delete(path); // In case it was previously binary
       vfsAddFile(path, changedDoc.text || '');
       onFileContent?.(path, changedDoc.text || '', patches);
     }
@@ -374,6 +536,7 @@ async function syncVfsWithFiles(newFiles: FileEntry[]): Promise<void> {
   for (const path of currentPaths) {
     if (!newPaths.has(path)) {
       state.fileHandles.delete(path);
+      state.binaryFiles.delete(path);
       vfsRemoveFile(path);
     }
   }
