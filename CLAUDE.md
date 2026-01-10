@@ -150,6 +150,39 @@ When fixing ANY bug:
 **WASM:**
 - `wasm-qmd-parser`: WASM module with entry points from `pampa`
 
+### `hub-client/` - Quarto Hub web client
+
+A React/TypeScript web application for collaborative editing of Quarto projects. Uses Automerge for real-time sync and the WASM build of `wasm-qmd-parser` for live preview rendering.
+
+**Key directories:**
+- `src/components/` - React components (Editor, FileSidebar, tabs, etc.)
+- `src/services/` - Services for Automerge sync, presence, storage
+- `src/hooks/` - React hooks for presence, scroll sync, etc.
+
+**Development:**
+```bash
+cd hub-client
+npm install
+npm run dev    # Start dev server with HMR
+npm run build  # Production build
+```
+
+## hub-client Commit Instructions
+
+**IMPORTANT**: When making commits that include changes to `hub-client/`, you MUST also update `hub-client/changelog.md`.
+
+Add a new entry at the top of the changelog (entries are in reverse chronological order) with this format:
+```
+- YYYY-MM-DD [`<short-hash>`](https://github.com/quarto-dev/kyoto/commits/<short-hash>): One-sentence description
+```
+
+Example:
+```
+- 2026-01-10 [`e6f742c`](https://github.com/quarto-dev/kyoto/commits/e6f742c): Refactor navigation to VS Code-style collapsible sidebar
+```
+
+The changelog is rendered in the About section of the hub-client UI.
+
 ## Testing instructions
 
 - **CRITICAL**: Use `cargo nextest run` instead of `cargo test`.

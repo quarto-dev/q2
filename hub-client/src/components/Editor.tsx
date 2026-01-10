@@ -702,7 +702,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
                   />
                 );
               case 'about':
-                return <AboutTab />;
+                return <AboutTab wasmStatus={wasmStatus} />;
               default:
                 return null;
             }
