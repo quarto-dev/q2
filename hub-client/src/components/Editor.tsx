@@ -603,10 +603,13 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     setShowNewFileDialog(true);
   }, []);
 
-  // Editor drag-drop handlers for image insertion
+  // Editor drag-drop handlers for image/file insertion
   const handleEditorDragOver = useCallback((e: DragEvent) => {
-    // Only handle if dragging files
-    if (!e.dataTransfer?.types.includes('Files')) return;
+    // Handle external files OR internal file drags from sidebar
+    const hasFiles = e.dataTransfer?.types.includes('Files');
+    const hasInternalFile = e.dataTransfer?.types.includes('application/x-hub-file');
+
+    if (!hasFiles && !hasInternalFile) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -624,6 +627,53 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     e.stopPropagation();
     setIsEditorDragOver(false);
 
+    // Check for internal file drag from sidebar first
+    const internalData = e.dataTransfer?.getData('application/x-hub-file');
+    if (internalData && editorRef.current) {
+      try {
+        const { path, type } = JSON.parse(internalData) as { path: string; type: 'image' | 'qmd' | 'other' };
+
+        // Get editor position at drop point
+        const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
+        const position = target?.position ?? editorRef.current.getPosition();
+
+        if (position && (type === 'image' || type === 'qmd')) {
+          // Generate appropriate markdown
+          let markdown: string;
+          if (type === 'image') {
+            markdown = `![](${path})`;
+          } else {
+            // For qmd files, use the filename as link text
+            const fileName = path.split('/').pop() || path;
+            markdown = `[${fileName}](${path})`;
+          }
+
+          // Insert markdown at drop position
+          editorRef.current.executeEdits('file-drop', [{
+            range: {
+              startLineNumber: position.lineNumber,
+              startColumn: position.column,
+              endLineNumber: position.lineNumber,
+              endColumn: position.column,
+            },
+            text: markdown,
+            forceMoveMarkers: true,
+          }]);
+
+          // Update local content state to match
+          const newContent = editorRef.current.getValue();
+          setContent(newContent);
+          if (currentFile) {
+            onContentChange(currentFile.path, newContent);
+          }
+        }
+        return; // Internal drag handled, don't process as external
+      } catch {
+        // Failed to parse internal data, fall through to external handling
+      }
+    }
+
+    // Handle external file drop (from desktop)
     const files = Array.from(e.dataTransfer?.files ?? []);
     // Filter for image files only (for markdown insertion)
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
@@ -645,7 +695,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       setPendingUploadFiles(files);
       setShowNewFileDialog(true);
     }
-  }, []);
+  }, [currentFile, onContentChange]);
 
   // Cleanup editor drag-drop listeners on unmount
   useEffect(() => {

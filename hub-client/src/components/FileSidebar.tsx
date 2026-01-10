@@ -30,12 +30,27 @@ interface ContextMenuState {
   file: FileEntry | null;
 }
 
+/** Image extensions for drag-drop detection */
+const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp', 'tiff', 'tif'];
+
+/** Check if a file path is an image */
+function isImageFile(path: string): boolean {
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  return IMAGE_EXTENSIONS.includes(ext);
+}
+
+/** Check if a file path is a qmd file */
+function isQmdFile(path: string): boolean {
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  return ext === 'qmd';
+}
+
 /** Get file icon based on extension */
 function getFileIcon(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase() || '';
 
   // Images
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'].includes(ext)) {
+  if (IMAGE_EXTENSIONS.includes(ext)) {
     return '🖼️';
   }
   // Documents
@@ -189,12 +204,32 @@ export default function FileSidebar({
     [onDeleteFile, closeContextMenu]
   );
 
+  // Drag start handler for file items (for dragging to editor)
+  const handleFileDragStart = useCallback((e: React.DragEvent, file: FileEntry) => {
+    // Determine the type of file for markdown insertion
+    let fileType: 'image' | 'qmd' | 'other' = 'other';
+    if (isImageFile(file.path)) {
+      fileType = 'image';
+    } else if (isQmdFile(file.path)) {
+      fileType = 'qmd';
+    }
+
+    // Set custom data for internal drag detection
+    e.dataTransfer.setData('application/x-hub-file', JSON.stringify({
+      path: file.path,
+      type: fileType,
+    }));
+    e.dataTransfer.effectAllowed = 'copy';
+  }, []);
+
   // Render a file item
   const renderFileItem = (file: FileEntry) => {
     const fileName = file.path.split('/').pop() || file.path;
     const isActive = currentFile?.path === file.path;
     const isBinary = isBinaryExtension(file.path);
     const isRenaming = renamingFile?.path === file.path;
+    // Only make images and qmd files draggable (for editor insertion)
+    const isDraggable = !isRenaming && (isImageFile(file.path) || isQmdFile(file.path));
 
     return (
       <div
@@ -202,6 +237,8 @@ export default function FileSidebar({
         className={`file-item ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
         onClick={() => !isRenaming && onSelectFile(file)}
         onContextMenu={(e) => handleContextMenu(e, file)}
+        draggable={isDraggable}
+        onDragStart={isDraggable ? (e) => handleFileDragStart(e, file) : undefined}
         title={file.path}
       >
         <span className="file-icon">{getFileIcon(file.path)}</span>
