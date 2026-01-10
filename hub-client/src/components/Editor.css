@@ -187,6 +187,28 @@
 
 .editor-pane {
   border-right: 1px solid #1f3460;
+  position: relative;
+}
+
+/* Editor drag-over state for image drop */
+.editor-pane.drag-over {
+  box-shadow: inset 0 0 0 3px #4ade80;
+}
+
+.editor-pane.drag-over::after {
+  content: 'Drop image to insert';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(74, 222, 128, 0.95);
+  color: #1a1a2e;
+  padding: 16px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  z-index: 100;
+  pointer-events: none;
 }
 
 .preview-pane {

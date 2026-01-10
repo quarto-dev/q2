@@ -236,6 +236,10 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
 
+  // Editor drag-drop state for image insertion
+  const [isEditorDragOver, setIsEditorDragOver] = useState(false);
+  const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
+
   // Handler for .qmd link clicks in the preview
   const handleQmdLinkClick = useCallback(
     (targetPath: string) => {
@@ -548,6 +552,14 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       editorHasFocusRef.current = false;
     });
 
+    // Attach drag-drop handlers to editor container
+    const domNode = editor.getDomNode();
+    if (domNode) {
+      domNode.addEventListener('dragover', handleEditorDragOver);
+      domNode.addEventListener('dragleave', handleEditorDragLeave);
+      domNode.addEventListener('drop', handleEditorDrop);
+    }
+
     // Signal that editor is ready for scroll sync
     setEditorReady(true);
   };
@@ -578,11 +590,73 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     setShowNewFileDialog(true);
   }, []);
 
+  // Handle closing the new file dialog (clears pending drop position)
+  const handleDialogClose = useCallback(() => {
+    setShowNewFileDialog(false);
+    pendingDropPositionRef.current = null;
+  }, []);
+
   // Handle files dropped on sidebar (open dialog with files pre-filled)
   const handleUploadFiles = useCallback((droppedFiles: File[]) => {
     setPendingUploadFiles(droppedFiles);
     setShowNewFileDialog(true);
   }, []);
+
+  // Editor drag-drop handlers for image insertion
+  const handleEditorDragOver = useCallback((e: DragEvent) => {
+    // Only handle if dragging files
+    if (!e.dataTransfer?.types.includes('Files')) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditorDragOver(true);
+  }, []);
+
+  const handleEditorDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditorDragOver(false);
+  }, []);
+
+  const handleEditorDrop = useCallback((e: DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsEditorDragOver(false);
+
+    const files = Array.from(e.dataTransfer?.files ?? []);
+    // Filter for image files only (for markdown insertion)
+    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+
+    if (imageFiles.length > 0 && editorRef.current) {
+      // Get editor position at drop point
+      const target = editorRef.current.getTargetAtClientPoint(e.clientX, e.clientY);
+      if (target?.position) {
+        pendingDropPositionRef.current = target.position;
+      } else {
+        // Fall back to current cursor position
+        pendingDropPositionRef.current = editorRef.current.getPosition();
+      }
+      // Open upload dialog with image files
+      setPendingUploadFiles(imageFiles);
+      setShowNewFileDialog(true);
+    } else if (files.length > 0) {
+      // Non-image files: upload without markdown insertion
+      setPendingUploadFiles(files);
+      setShowNewFileDialog(true);
+    }
+  }, []);
+
+  // Cleanup editor drag-drop listeners on unmount
+  useEffect(() => {
+    return () => {
+      const domNode = editorRef.current?.getDomNode();
+      if (domNode) {
+        domNode.removeEventListener('dragover', handleEditorDragOver);
+        domNode.removeEventListener('dragleave', handleEditorDragLeave);
+        domNode.removeEventListener('drop', handleEditorDrop);
+      }
+    };
+  }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop]);
 
   // Handle creating a new text file
   const handleCreateTextFile = useCallback(async (path: string, initialContent: string) => {
@@ -597,15 +671,39 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     }
   }, []);
 
-  // Handle uploading a binary file
+  // Handle uploading a binary file (with optional markdown insertion for images)
   const handleUploadBinaryFile = useCallback(async (file: File) => {
     try {
       const { content: binaryContent, mimeType } = await processFileForUpload(file);
-      await createBinaryFile(file.name, binaryContent, mimeType);
+      const result = await createBinaryFile(file.name, binaryContent, mimeType);
+
+      // If this is an image and we have a pending drop position, insert markdown
+      if (file.type.startsWith('image/') && pendingDropPositionRef.current && editorRef.current) {
+        const position = pendingDropPositionRef.current;
+        const markdown = `![](${result.path})`;
+
+        editorRef.current.executeEdits('image-drop', [{
+          range: {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          },
+          text: markdown,
+          forceMoveMarkers: true,
+        }]);
+
+        // Update local content state to match
+        const newContent = editorRef.current.getValue();
+        setContent(newContent);
+        if (currentFile) {
+          onContentChange(currentFile.path, newContent);
+        }
+      }
     } catch (err) {
       console.error('Failed to upload file:', err);
     }
-  }, []);
+  }, [currentFile, onContentChange]);
 
   // Handle deleting a file
   const handleDeleteFile = useCallback((file: FileEntry) => {
@@ -708,7 +806,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
             }
           }}
         </SidebarTabs>
-        <div className="pane editor-pane">
+        <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
           <MonacoEditor
             height="100%"
             language="markdown"
@@ -756,7 +854,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       <NewFileDialog
         isOpen={showNewFileDialog}
         existingPaths={files.map(f => f.path)}
-        onClose={() => setShowNewFileDialog(false)}
+        onClose={handleDialogClose}
         onCreateTextFile={handleCreateTextFile}
         onUploadBinaryFile={handleUploadBinaryFile}
         initialFiles={pendingUploadFiles}
