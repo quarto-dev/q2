@@ -149,6 +149,13 @@ Add CSS class `.editor-pane.drag-over` with visual indicator (border glow or ove
 - [x] TypeScript check passes
 - [x] Build succeeds
 
+### Phase 5: Internal Drag-Drop from Files Pane (Added)
+- [x] Make image and qmd files draggable in FileSidebar
+- [x] Set custom MIME type `application/x-hub-file` with file path and type
+- [x] Update editor drop handler to detect internal drags
+- [x] Insert `![](path)` for image files
+- [x] Insert `[filename](path)` for qmd files
+
 ## Files to Modify
 
 1. `hub-client/src/components/Editor.tsx` - Main changes
