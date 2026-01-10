@@ -11,9 +11,10 @@ import {
   renameFile,
 } from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, renderToHtml, isWasmReady, vfsReadFile } from '../services/wasmRenderer';
+import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { processFileForUpload } from '../services/resourceService';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
+import { postProcessIframe } from '../utils/iframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
 import { useScrollSync } from '../hooks/useScrollSync';
 import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
@@ -277,19 +278,13 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       };
     }
 
-    // Post-process the inactive iframe (CSS data URIs, link handlers)
-    if (inactiveIframeEl?.contentDocument) {
-      const doc = inactiveIframeEl.contentDocument;
-      // Inline the post-processing logic for the inactive iframe
-      doc.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
-        const href = link.getAttribute('href');
-        if (href?.startsWith('/.quarto/')) {
-          const result = vfsReadFile(href);
-          if (result.success && result.content) {
-            const dataUri = `data:text/css;base64,${btoa(result.content)}`;
-            link.setAttribute('href', dataUri);
-          }
-        }
+    // Post-process the inactive iframe (CSS, images, link handlers)
+    // This must happen BEFORE the swap to prevent layout shifts from image loading
+    // on the visible iframe, which would cause scroll sync issues.
+    if (inactiveIframeEl) {
+      postProcessIframe(inactiveIframeEl, {
+        currentFilePath: currentFile?.path ?? '',
+        onQmdLinkClick: handleQmdLinkClick,
       });
     }
 
@@ -309,7 +304,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
         }
       }, 0);
     }
-  }, [swapPending, iframeRef, inactiveIframeRef]);
+  }, [swapPending, iframeRef, inactiveIframeRef, currentFile, handleQmdLinkClick]);
 
   // Handler for active iframe load (used for initial load and post-processing)
   const handleActiveIframeLoad = useCallback(() => {
