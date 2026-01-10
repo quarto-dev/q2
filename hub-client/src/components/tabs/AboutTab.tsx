@@ -4,12 +4,13 @@
  * Displays information about Quarto Hub:
  * - Commit indicator
  * - Links to documentation and resources
- * - Button to view changelog in modal
+ * - Buttons to view markdown documents (changelog, more info) in modal
  */
 
 import { useState, useEffect } from 'react';
 import { renderToHtml, isWasmReady } from '../../services/wasmRenderer';
 import changelogMd from '../../../changelog.md?raw';
+import moreInfoMd from '../../../resources/more-info.md?raw';
 import './AboutTab.css';
 
 type WasmStatus = 'loading' | 'ready' | 'error';
@@ -58,46 +59,63 @@ const changelogStyles = `
   }
 `;
 
-export default function AboutTab({ wasmStatus }: AboutTabProps) {
-  const [changelogHtml, setChangelogHtml] = useState<string>('');
-  const [changelogError, setChangelogError] = useState<string | null>(null);
-  const [showModal, setShowModal] = useState(false);
+// Document configuration for the modal viewer
+interface MarkdownDocument {
+  title: string;
+  markdown: string;
+}
 
-  // Render changelog when WASM becomes ready
+const documents: Record<string, MarkdownDocument> = {
+  changelog: { title: 'Changelog', markdown: changelogMd },
+  moreInfo: { title: 'More Information', markdown: moreInfoMd },
+};
+
+export default function AboutTab({ wasmStatus }: AboutTabProps) {
+  const [renderedDocs, setRenderedDocs] = useState<Record<string, string>>({});
+  const [renderError, setRenderError] = useState<string | null>(null);
+  const [activeModal, setActiveModal] = useState<string | null>(null);
+
+  // Render all markdown documents when WASM becomes ready
   useEffect(() => {
     if (wasmStatus !== 'ready' || !isWasmReady()) {
       return;
     }
 
-    async function renderChangelog() {
+    async function renderDocuments() {
       try {
-        const result = await renderToHtml(changelogMd);
-        if (result.success) {
-          // Inject minimal styles into the rendered HTML
-          const styledHtml = result.html.replace(
-            '</head>',
-            `<style>${changelogStyles}</style></head>`
-          );
-          setChangelogHtml(styledHtml);
-          setChangelogError(null);
-        } else {
-          setChangelogError(result.error || 'Failed to render changelog');
+        const rendered: Record<string, string> = {};
+        for (const [key, doc] of Object.entries(documents)) {
+          const result = await renderToHtml(doc.markdown);
+          if (result.success) {
+            // Inject minimal styles into the rendered HTML
+            rendered[key] = result.html.replace(
+              '</head>',
+              `<style>${changelogStyles}</style></head>`
+            );
+          } else {
+            setRenderError(result.error || `Failed to render ${doc.title}`);
+            return;
+          }
         }
+        setRenderedDocs(rendered);
+        setRenderError(null);
       } catch (err) {
-        setChangelogError(err instanceof Error ? err.message : 'Unknown error');
+        setRenderError(err instanceof Error ? err.message : 'Unknown error');
       }
     }
 
-    renderChangelog();
+    renderDocuments();
   }, [wasmStatus]);
 
-  const handleOpenChangelog = () => {
-    setShowModal(true);
+  const handleOpenModal = (docKey: string) => {
+    setActiveModal(docKey);
   };
 
   const handleCloseModal = () => {
-    setShowModal(false);
+    setActiveModal(null);
   };
+
+  const isReady = wasmStatus === 'ready' && !renderError;
 
   return (
     <div className="about-tab">
@@ -123,12 +141,21 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
           <li>
             <button
               className="changelog-link-btn"
-              onClick={handleOpenChangelog}
-              disabled={wasmStatus !== 'ready' || !!changelogError}
+              onClick={() => handleOpenModal('moreInfo')}
+              disabled={!isReady}
+            >
+              {wasmStatus === 'loading' ? 'Loading...' : 'More Information'}
+            </button>
+          </li>
+          <li>
+            <button
+              className="changelog-link-btn"
+              onClick={() => handleOpenModal('changelog')}
+              disabled={!isReady}
             >
               {wasmStatus === 'loading' ? 'Loading...' : 'View Changelog'}
             </button>
-            {changelogError && (
+            {renderError && (
               <span className="changelog-error-hint"> (unavailable)</span>
             )}
           </li>
@@ -148,26 +175,26 @@ export default function AboutTab({ wasmStatus }: AboutTabProps) {
         </div>
       </div>
 
-      {/* Changelog Modal */}
-      {showModal && (
+      {/* Markdown Document Modal */}
+      {activeModal && (
         <div className="changelog-modal-overlay" onClick={handleCloseModal}>
           <div className="changelog-modal" onClick={(e) => e.stopPropagation()}>
             <div className="changelog-modal-header">
-              <h3>Changelog</h3>
+              <h3>{documents[activeModal]?.title}</h3>
               <button className="changelog-modal-close" onClick={handleCloseModal}>
                 ×
               </button>
             </div>
             <div className="changelog-modal-content">
-              {changelogHtml ? (
+              {renderedDocs[activeModal] ? (
                 <iframe
-                  srcDoc={changelogHtml}
-                  title="Changelog"
+                  srcDoc={renderedDocs[activeModal]}
+                  title={documents[activeModal]?.title}
                   sandbox="allow-same-origin"
                   className="changelog-iframe"
                 />
               ) : (
-                <div className="changelog-loading">Loading changelog...</div>
+                <div className="changelog-loading">Loading...</div>
               )}
             </div>
           </div>
