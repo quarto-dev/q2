@@ -171,6 +171,10 @@ npm run build  # Production build
 
 **IMPORTANT**: When making commits that include changes to `hub-client/`, you MUST also update `hub-client/changelog.md`.
 
+**Two-commit workflow** (required because the changelog entry needs the commit hash):
+1. **First commit**: Make your hub-client changes and commit them
+2. **Second commit**: Update `hub-client/changelog.md` with the hash from step 1
+
 Add a new entry at the top of the changelog (entries are in reverse chronological order) with this format:
 ```
 - YYYY-MM-DD [`<short-hash>`](https://github.com/quarto-dev/kyoto/commits/<short-hash>): One-sentence description

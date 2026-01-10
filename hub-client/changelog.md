@@ -10,6 +10,7 @@ list are the latest changes.
 
 -->
 
+- 2026-01-10 [`b0ddb29`](https://github.com/quarto-dev/kyoto/commits/b0ddb29): Add changelog view to About tab
 - 2026-01-10 [`e6f742c`](https://github.com/quarto-dev/kyoto/commits/e6f742c): Refactor navigation to VS Code-style collapsible sidebar sections
 - 2026-01-09 [`bafe8d0`](https://github.com/quarto-dev/kyoto/commits/bafe8d0): Add file rename support
 - 2026-01-09 [`50a6ef1`](https://github.com/quarto-dev/kyoto/commits/50a6ef1): Add file management UI with sidebar and upload dialog
