@@ -860,3 +860,188 @@ pub async fn test_js_ejs(template: &str, data_json: &str) -> String {
 pub fn test_js_available() -> bool {
     get_runtime().js_available()
 }
+
+// ============================================================================
+// PROJECT CREATION API
+// ============================================================================
+//
+// These functions provide the WASM entry points for creating new Quarto projects.
+// They use the quarto-project-create crate which renders EJS templates via the
+// JS bridge.
+
+use quarto_project_create::{
+    CreateFromChoiceOptions, ScaffoldedFile, create_project_from_choice, implemented_choices,
+};
+
+/// A project choice for JSON serialization.
+#[derive(Serialize)]
+struct JsonProjectChoice {
+    /// Unique identifier (e.g., "website", "blog")
+    id: String,
+    /// Display name (e.g., "Website", "Blog")
+    name: String,
+    /// Short description
+    description: String,
+}
+
+/// Response for get_project_choices().
+#[derive(Serialize)]
+struct ProjectChoicesResponse {
+    success: bool,
+    choices: Vec<JsonProjectChoice>,
+}
+
+/// A project file for JSON serialization.
+#[derive(Serialize)]
+struct JsonProjectFile {
+    /// Relative path within the project
+    path: String,
+    /// Content type: "text" or "binary"
+    content_type: String,
+    /// File content (string for text, base64 for binary)
+    content: String,
+    /// MIME type (only for binary files)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mime_type: Option<String>,
+}
+
+/// Response for create_project().
+#[derive(Serialize)]
+struct CreateProjectResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    files: Option<Vec<JsonProjectFile>>,
+}
+
+impl CreateProjectResponse {
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&CreateProjectResponse {
+            success: false,
+            error: Some(msg.to_string()),
+            files: None,
+        })
+        .unwrap()
+    }
+
+    fn ok(files: Vec<JsonProjectFile>) -> String {
+        serde_json::to_string(&CreateProjectResponse {
+            success: true,
+            error: None,
+            files: Some(files),
+        })
+        .unwrap()
+    }
+}
+
+/// Get available project choices for the Create Project UI.
+///
+/// Returns a list of project types that can be created. Each choice has
+/// an id, display name, and description suitable for showing in a dropdown
+/// or selection list.
+///
+/// # Returns
+/// JSON: `{ "success": true, "choices": [{ "id": "website", "name": "Website", "description": "..." }, ...] }`
+///
+/// # Example
+/// ```javascript
+/// const response = JSON.parse(get_project_choices());
+/// // Show choices in a dropdown
+/// response.choices.forEach(choice => {
+///     dropdown.addOption(choice.id, choice.name);
+/// });
+/// ```
+#[wasm_bindgen]
+pub fn get_project_choices() -> String {
+    let choices: Vec<JsonProjectChoice> = implemented_choices()
+        .into_iter()
+        .map(|c| JsonProjectChoice {
+            id: c.id,
+            name: c.name,
+            description: c.description,
+        })
+        .collect();
+
+    serde_json::to_string(&ProjectChoicesResponse {
+        success: true,
+        choices,
+    })
+    .unwrap()
+}
+
+/// Create a new Quarto project.
+///
+/// Creates a project scaffold based on the selected choice and title.
+/// Returns a list of files with their paths and contents.
+///
+/// For text files, content is returned as a UTF-8 string.
+/// For binary files, content is returned as a base64-encoded string.
+///
+/// # Arguments
+/// * `choice_id` - The project choice ID (from get_project_choices)
+/// * `title` - The project title (used in _quarto.yml and document titles)
+///
+/// # Returns
+/// JSON: `{ "success": true, "files": [...] }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const response = JSON.parse(await create_project("website", "My Website"));
+/// if (response.success) {
+///     for (const file of response.files) {
+///         if (file.content_type === "text") {
+///             await createTextDocument(file.path, file.content);
+///         } else {
+///             const bytes = base64ToUint8Array(file.content);
+///             await createBinaryDocument(file.path, bytes, file.mime_type);
+///         }
+///     }
+/// }
+/// ```
+#[wasm_bindgen]
+pub async fn create_project(choice_id: &str, title: &str) -> String {
+    use base64::Engine;
+
+    let runtime = get_runtime();
+
+    // Check if JS is available (required for EJS template rendering)
+    if !runtime.js_available() {
+        return CreateProjectResponse::error(
+            "JavaScript execution is not available for template rendering",
+        );
+    }
+
+    // Create project options
+    let options = CreateFromChoiceOptions::new(choice_id, title);
+
+    // Create the project
+    match create_project_from_choice(runtime, options).await {
+        Ok(files) => {
+            let json_files: Vec<JsonProjectFile> = files
+                .into_iter()
+                .map(|f| match f {
+                    ScaffoldedFile::Text { path, content } => JsonProjectFile {
+                        path: path.to_string_lossy().to_string(),
+                        content_type: "text".to_string(),
+                        content,
+                        mime_type: None,
+                    },
+                    ScaffoldedFile::Binary {
+                        path,
+                        content,
+                        mime_type,
+                    } => JsonProjectFile {
+                        path: path.to_string_lossy().to_string(),
+                        content_type: "binary".to_string(),
+                        content: base64::engine::general_purpose::STANDARD.encode(&content),
+                        mime_type: Some(mime_type),
+                    },
+                })
+                .collect();
+
+            CreateProjectResponse::ok(json_files)
+        }
+        Err(e) => CreateProjectResponse::error(&e.to_string()),
+    }
+}

@@ -19,6 +19,40 @@ declare module 'wasm-quarto-hub-client' {
   ): Promise<string>;
   export function get_builtin_template(name: string): string;
 
+  // JavaScript execution test functions (interstitial validation)
+  export function test_js_available(): boolean;
+  export function test_js_simple_template(template: string, data_json: string): Promise<string>;
+  export function test_js_ejs(template: string, data_json: string): Promise<string>;
+
+  // Project creation functions
+  export function get_project_choices(): string;
+  export function create_project(choice_id: string, title: string): Promise<string>;
+
+  // Response types for project creation (for documentation/reference)
+  export interface ProjectChoice {
+    id: string;
+    name: string;
+    description: string;
+  }
+
+  export interface ProjectChoicesResponse {
+    success: boolean;
+    choices: ProjectChoice[];
+  }
+
+  export interface ProjectFile {
+    path: string;
+    content_type: 'text' | 'binary';
+    content: string;
+    mime_type?: string;
+  }
+
+  export interface CreateProjectResponse {
+    success: boolean;
+    error?: string;
+    files?: ProjectFile[];
+  }
+
   export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
   export default function __wbg_init(
