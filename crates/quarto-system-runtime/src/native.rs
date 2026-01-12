@@ -382,6 +382,11 @@ impl SystemRuntime for NativeRuntime {
 
     // ═══════════════════════════════════════════════════════════════════════
     // JAVASCRIPT EXECUTION
+    //
+    // Performance note: Creates fresh JsEngine per call. Adequate for project
+    // scaffolding (1-10 templates). For optimization strategies if large-scale
+    // template rendering becomes needed, see:
+    // `claude-notes/plans/js-execution-performance.md`
     // ═══════════════════════════════════════════════════════════════════════
 
     fn js_available(&self) -> bool {

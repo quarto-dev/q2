@@ -14,6 +14,22 @@
  *
  * NOTE: Currently using minimal setup without deno_web due to
  * yanked dependency issues. EJS may have limited functionality.
+ *
+ * ## Performance Considerations
+ *
+ * Currently, a fresh JsEngine (V8 JsRuntime) is created for each JS operation.
+ * This is because V8's JsRuntime is not Send+Sync, so it cannot be stored in
+ * NativeRuntime which must implement SystemRuntime's Send+Sync bounds.
+ *
+ * This approach is adequate for project scaffolding (1-10 templates) but may
+ * become problematic for large-scale operations (100-10,000 templates, e.g.,
+ * listing pages across a large Quarto website).
+ *
+ * **For optimization strategies and migration paths, see:**
+ * `claude-notes/plans/js-execution-performance.md`
+ *
+ * The recommended first optimization step (when needed) is thread-local storage,
+ * which requires ~20 lines of change with no API impact.
  */
 
 // This module is only compiled for non-WASM targets
