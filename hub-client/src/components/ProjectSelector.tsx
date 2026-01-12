@@ -241,7 +241,8 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
 
         {showAddForm ? (
           <form className="add-form" onSubmit={handleAddProject}>
-            <h2>Add New Project</h2>
+            <h2>Connect to Project</h2>
+            <p className="form-hint">Enter the document ID of an existing Automerge project</p>
             <div className="form-group">
               <label htmlFor="indexDocId">Index Document ID</label>
               <input
@@ -279,7 +280,7 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
           </form>
         ) : (
           <button className="add-btn" onClick={() => setShowAddForm(true)}>
-            + Add New Project
+            + Connect to Project
           </button>
         )}
 
