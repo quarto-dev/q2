@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-12
 
+- [`aff9b81`](https://github.com/quarto-dev/kyoto/commits/aff9b81): Add WASM-JS bridge for template rendering (EJS and simple templates)
 - [`1c52e8e`](https://github.com/quarto-dev/kyoto/commits/1c52e8e): Rename 'Add New Project' to 'Connect to Project' to clarify it connects to existing projects
 
 ### 2026-01-10
