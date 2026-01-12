@@ -217,6 +217,71 @@ export interface RenderToHtmlOptions {
   sourceLocation?: boolean;
 }
 
+// ============================================================================
+// Project Creation Operations
+// ============================================================================
+
+/**
+ * A project choice from the WASM module.
+ */
+export interface ProjectChoice {
+  id: string;
+  name: string;
+  description: string;
+}
+
+/**
+ * Response from get_project_choices()
+ */
+interface ProjectChoicesResponse {
+  success: boolean;
+  choices: ProjectChoice[];
+}
+
+/**
+ * A project file from create_project()
+ */
+export interface ProjectFile {
+  path: string;
+  content_type: 'text' | 'binary';
+  content: string;
+  mime_type?: string;
+}
+
+/**
+ * Response from create_project()
+ */
+export interface CreateProjectResponse {
+  success: boolean;
+  error?: string;
+  files?: ProjectFile[];
+}
+
+/**
+ * Get available project choices for the Create Project UI.
+ *
+ * Returns a list of project types that can be created.
+ */
+export async function getProjectChoices(): Promise<ProjectChoice[]> {
+  await initWasm();
+  const wasm = getWasm();
+  const response: ProjectChoicesResponse = JSON.parse(wasm.get_project_choices());
+  return response.choices;
+}
+
+/**
+ * Create a new Quarto project.
+ *
+ * @param choiceId - The project choice ID (e.g., "website", "default")
+ * @param title - The project title
+ * @returns The list of files to create, or an error
+ */
+export async function createProject(choiceId: string, title: string): Promise<CreateProjectResponse> {
+  await initWasm();
+  const wasm = getWasm();
+  return JSON.parse(await wasm.create_project(choiceId, title));
+}
+
 /**
  * Render QMD content to HTML, handling errors gracefully.
  *

@@ -3,27 +3,21 @@ import type { ProjectEntry } from '../types/project';
 import type { UserSettings } from '../services/storage/types';
 import * as projectStorage from '../services/projectStorage';
 import * as userSettingsService from '../services/userSettings';
+import {
+  getProjectChoices,
+  createProject as wasmCreateProject,
+  type ProjectChoice,
+  type ProjectFile,
+} from '../services/wasmRenderer';
 import './ProjectSelector.css';
 
 interface Props {
   onSelectProject: (project: ProjectEntry) => void;
   isConnecting?: boolean;
   error?: string | null;
+  /** Called when a new project is created with scaffold files */
+  onProjectCreated?: (files: ProjectFile[], title: string, projectType: string) => void;
 }
-
-// Project choice type (matches WASM API)
-interface ProjectChoice {
-  id: string;
-  name: string;
-  description: string;
-}
-
-// Placeholder choices until WASM integration (k-g2wq)
-// These will be replaced with get_project_choices() call
-const PLACEHOLDER_CHOICES: ProjectChoice[] = [
-  { id: 'default', name: 'Default', description: 'A minimal Quarto project' },
-  { id: 'website', name: 'Website', description: 'A Quarto website with navigation' },
-];
 
 // Curated color palette for user selection
 const COLOR_PALETTE = [
@@ -32,7 +26,7 @@ const COLOR_PALETTE = [
   '#8BC34A', '#FF9800', '#FF5722', '#795548',
 ];
 
-export default function ProjectSelector({ onSelectProject, isConnecting, error: connectionError }: Props) {
+export default function ProjectSelector({ onSelectProject, isConnecting, error: connectionError, onProjectCreated }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConnectForm, setShowConnectForm] = useState(false);
@@ -45,10 +39,11 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
   const [formError, setFormError] = useState<string | null>(null);
 
   // Create form state
-  const [createProjectType, setCreateProjectType] = useState('website');
+  const [createProjectType, setCreateProjectType] = useState('');
   const [createProjectTitle, setCreateProjectTitle] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [projectChoices] = useState<ProjectChoice[]>(PLACEHOLDER_CHOICES);
+  const [projectChoices, setProjectChoices] = useState<ProjectChoice[]>([]);
+  const [loadingChoices, setLoadingChoices] = useState(false);
 
   // User identity state
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
@@ -77,10 +72,28 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
     }
   }, []);
 
+  const loadProjectChoices = useCallback(async () => {
+    setLoadingChoices(true);
+    try {
+      const choices = await getProjectChoices();
+      setProjectChoices(choices);
+      // Set default selection to first choice
+      if (choices.length > 0 && !createProjectType) {
+        setCreateProjectType(choices[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load project choices:', err);
+      // Fall back to showing an error - choices are required for creation
+    } finally {
+      setLoadingChoices(false);
+    }
+  }, [createProjectType]);
+
   useEffect(() => {
     loadProjects();
     loadUserSettings();
-  }, [loadProjects, loadUserSettings]);
+    loadProjectChoices();
+  }, [loadProjects, loadUserSettings, loadProjectChoices]);
 
   const handleStartEditName = () => {
     if (userSettings) {
@@ -182,14 +195,48 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
       return;
     }
 
+    if (!createProjectType) {
+      setFormError('Please select a project type');
+      return;
+    }
+
     setIsCreating(true);
 
-    // TODO (k-g2wq): Wire up WASM create_project() call here
-    // For now, show placeholder message
     try {
-      // Placeholder: This will be replaced with actual WASM integration
       console.log('Creating project:', { type: createProjectType, title: createProjectTitle });
-      setFormError('Project creation coming soon! WASM integration pending (k-g2wq).');
+
+      const result = await wasmCreateProject(createProjectType, createProjectTitle.trim());
+
+      if (!result.success) {
+        setFormError(result.error || 'Failed to create project');
+        return;
+      }
+
+      if (!result.files || result.files.length === 0) {
+        setFormError('No files were generated for this project type');
+        return;
+      }
+
+      console.log('Project scaffold created:', result.files.map(f => f.path));
+
+      // Call the callback with the scaffold files
+      // The parent component (or k-tsqm task) will handle Automerge document creation
+      if (onProjectCreated) {
+        onProjectCreated(result.files, createProjectTitle.trim(), createProjectType);
+      } else {
+        // If no callback, show success message with file list
+        const fileList = result.files.map(f => f.path).join(', ');
+        setFormError(`Project scaffold created! Files: ${fileList}\n\n(Automerge integration pending - k-tsqm)`);
+      }
+
+      // Reset form on success (only if callback handled it)
+      if (onProjectCreated) {
+        setCreateProjectTitle('');
+        setShowCreateForm(false);
+      }
+    } catch (err) {
+      console.error('Failed to create project:', err);
+      setFormError(err instanceof Error ? err.message : 'Failed to create project');
     } finally {
       setIsCreating(false);
     }
@@ -315,17 +362,23 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
             <p className="form-hint">Create a new Quarto project with starter files</p>
             <div className="form-group">
               <label htmlFor="projectType">Project Type</label>
-              <select
-                id="projectType"
-                value={createProjectType}
-                onChange={(e) => setCreateProjectType(e.target.value)}
-              >
-                {projectChoices.map((choice) => (
-                  <option key={choice.id} value={choice.id}>
-                    {choice.name} — {choice.description}
-                  </option>
-                ))}
-              </select>
+              {loadingChoices ? (
+                <div className="select-loading">Loading project types...</div>
+              ) : projectChoices.length === 0 ? (
+                <div className="select-error">Failed to load project types. Please refresh.</div>
+              ) : (
+                <select
+                  id="projectType"
+                  value={createProjectType}
+                  onChange={(e) => setCreateProjectType(e.target.value)}
+                >
+                  {projectChoices.map((choice) => (
+                    <option key={choice.id} value={choice.id}>
+                      {choice.name} — {choice.description}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             <div className="form-group">
               <label htmlFor="projectTitle">Project Title</label>
@@ -340,7 +393,11 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
             </div>
             <div className="form-actions">
               <button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
-              <button type="submit" className="primary" disabled={isCreating}>
+              <button
+                type="submit"
+                className="primary"
+                disabled={isCreating || loadingChoices || projectChoices.length === 0}
+              >
                 {isCreating ? 'Creating...' : 'Create Project'}
               </button>
             </div>

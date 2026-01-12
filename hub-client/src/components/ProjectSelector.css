@@ -283,6 +283,24 @@
   padding: 8px;
 }
 
+.select-loading,
+.select-error {
+  padding: 12px;
+  background: #16213e;
+  border: 1px solid #1f3460;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.select-loading {
+  color: #888;
+}
+
+.select-error {
+  color: #ff6b6b;
+  border-color: #ff4444;
+}
+
 .form-actions {
   display: flex;
   gap: 12px;
