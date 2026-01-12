@@ -37,9 +37,18 @@
  * ```
  */
 
+mod choices;
+mod scaffold;
 mod templates;
 mod types;
 
+pub use choices::{
+    ProjectChoice, ProjectTypeWithTemplate, available_choices, find_choice,
+    find_implemented_choice, implemented_choices,
+};
+pub use scaffold::{
+    ProjectScaffold, ScaffoldContent, ScaffoldFileDef, ScaffoldedFile, get_scaffold,
+};
 pub use types::{CreateError, CreateProjectOptions, ProjectFile, ProjectType};
 
 use quarto_system_runtime::SystemRuntime;
@@ -107,6 +116,155 @@ pub async fn create_project(
             path: PathBuf::from(template_file.path),
             content,
         });
+    }
+
+    Ok(files)
+}
+
+// ============================================================================
+// New scaffold-based API
+// ============================================================================
+
+/// Options for creating a project from a choice.
+#[derive(Debug, Clone)]
+pub struct CreateFromChoiceOptions {
+    /// The choice ID (e.g., "website", "blog")
+    pub choice_id: String,
+
+    /// Project title (used in templates)
+    pub title: String,
+}
+
+impl CreateFromChoiceOptions {
+    /// Create new options.
+    pub fn new(choice_id: impl Into<String>, title: impl Into<String>) -> Self {
+        Self {
+            choice_id: choice_id.into(),
+            title: title.into(),
+        }
+    }
+}
+
+/// Create a new project from a user-facing choice.
+///
+/// This is the primary API for creating projects with template aliasing support.
+/// The `choice_id` maps to a `ProjectChoice` which may resolve to a different
+/// internal project type (e.g., "blog" → website:blog).
+///
+/// # Arguments
+///
+/// * `runtime` - The system runtime to use for EJS template rendering
+/// * `options` - Project creation options (choice ID, title)
+///
+/// # Returns
+///
+/// A list of `ScaffoldedFile` structs containing text and/or binary content.
+///
+/// # Errors
+///
+/// Returns `CreateError::UnknownProjectType` if the choice ID is not found.
+/// Returns `CreateError::InvalidConfig` if the choice is not implemented.
+/// Returns `CreateError::TemplateRender` if template rendering fails.
+///
+/// # Example
+///
+/// ```ignore
+/// let files = create_project_from_choice(
+///     &runtime,
+///     CreateFromChoiceOptions::new("website", "My Website")
+/// ).await?;
+/// ```
+pub async fn create_project_from_choice(
+    runtime: &dyn SystemRuntime,
+    options: CreateFromChoiceOptions,
+) -> Result<Vec<ScaffoldedFile>, CreateError> {
+    // Look up the choice
+    let choice = find_choice(&options.choice_id)
+        .ok_or_else(|| CreateError::UnknownProjectType(options.choice_id.clone()))?;
+
+    // Check if implemented
+    if !choice.implemented {
+        return Err(CreateError::InvalidConfig(format!(
+            "Project type '{}' is not yet implemented",
+            choice.name
+        )));
+    }
+
+    // Get the scaffold
+    let scaffold_opt = get_scaffold(&choice.target);
+    let scaffold = scaffold_opt.ok_or_else(|| {
+        CreateError::InvalidConfig(format!(
+            "No scaffold defined for {}",
+            choice.target.to_id_string()
+        ))
+    })?;
+
+    // Render the scaffold
+    create_scaffolded_files(runtime, &scaffold, &options.title).await
+}
+
+/// Create files from a project scaffold.
+///
+/// This is a lower-level API that takes a `ProjectScaffold` directly.
+/// Use `create_project_from_choice` for the higher-level API with
+/// template aliasing support.
+///
+/// # Arguments
+///
+/// * `runtime` - The system runtime to use for EJS template rendering
+/// * `scaffold` - The project scaffold definition
+/// * `title` - Project title (used in templates)
+///
+/// # Returns
+///
+/// A list of `ScaffoldedFile` structs ready to be written to disk or VFS.
+pub async fn create_scaffolded_files(
+    runtime: &dyn SystemRuntime,
+    scaffold: &ProjectScaffold,
+    title: &str,
+) -> Result<Vec<ScaffoldedFile>, CreateError> {
+    // Check if JS execution is available (needed for EJS templates)
+    if !runtime.js_available() {
+        return Err(CreateError::TemplateRender(
+            "JavaScript execution is not available for template rendering".to_string(),
+        ));
+    }
+
+    // Build template data
+    let data = json!({
+        "title": title,
+        "projectType": scaffold.target.project_type.id(),
+        "template": scaffold.target.template,
+    });
+
+    let mut files = Vec::with_capacity(scaffold.files.len());
+
+    for file_def in &scaffold.files {
+        let path = file_def.full_path();
+
+        match &file_def.content {
+            ScaffoldContent::Template(template) => {
+                let content = runtime
+                    .render_ejs(template, &data)
+                    .await
+                    .map_err(|e| CreateError::TemplateRender(e.to_string()))?;
+
+                files.push(ScaffoldedFile::Text { path, content });
+            }
+            ScaffoldContent::StaticText(text) => {
+                files.push(ScaffoldedFile::Text {
+                    path,
+                    content: (*text).to_string(),
+                });
+            }
+            ScaffoldContent::Binary { content, mime_type } => {
+                files.push(ScaffoldedFile::Binary {
+                    path,
+                    content: content.to_vec(),
+                    mime_type: (*mime_type).to_string(),
+                });
+            }
+        }
     }
 
     Ok(files)
@@ -258,5 +416,106 @@ mod integration_tests {
         assert_eq!(files.len(), 1);
         // The title should be present (EJS handles escaping)
         assert!(files[0].content.contains("quotes"));
+    }
+
+    // ========================================================================
+    // New scaffold-based API tests
+    // ========================================================================
+
+    #[test]
+    fn test_create_project_from_choice_website() {
+        let runtime = NativeRuntime::new();
+        let options = CreateFromChoiceOptions::new("website", "My Website");
+
+        let files = pollster::block_on(create_project_from_choice(&runtime, options)).unwrap();
+
+        // Should have two files: _quarto.yml and index.qmd
+        assert_eq!(files.len(), 2);
+
+        // Check we have the expected files
+        let text_files: Vec<_> = files
+            .iter()
+            .filter_map(|f| match f {
+                ScaffoldedFile::Text { path, content } => {
+                    Some((path.to_str().unwrap(), content.as_str()))
+                }
+                ScaffoldedFile::Binary { .. } => None,
+            })
+            .collect();
+
+        let paths: Vec<_> = text_files.iter().map(|(p, _)| *p).collect();
+        assert!(paths.contains(&"_quarto.yml"));
+        assert!(paths.contains(&"index.qmd"));
+
+        // Check _quarto.yml content
+        let (_, quarto_yml) = text_files
+            .iter()
+            .find(|(p, _)| *p == "_quarto.yml")
+            .unwrap();
+        assert!(quarto_yml.contains("My Website"));
+        assert!(quarto_yml.contains("type: website"));
+    }
+
+    #[test]
+    fn test_create_project_from_choice_default() {
+        let runtime = NativeRuntime::new();
+        let options = CreateFromChoiceOptions::new("default", "Test Project");
+
+        let files = pollster::block_on(create_project_from_choice(&runtime, options)).unwrap();
+
+        // Should have one file: _quarto.yml
+        assert_eq!(files.len(), 1);
+        assert!(files[0].is_text());
+
+        if let ScaffoldedFile::Text { path, content } = &files[0] {
+            assert_eq!(path.to_str().unwrap(), "_quarto.yml");
+            assert!(content.contains("Test Project"));
+        } else {
+            panic!("Expected text file");
+        }
+    }
+
+    #[test]
+    fn test_create_project_from_choice_unknown() {
+        let runtime = NativeRuntime::new();
+        let options = CreateFromChoiceOptions::new("nonexistent", "Test");
+
+        let result = pollster::block_on(create_project_from_choice(&runtime, options));
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            CreateError::UnknownProjectType(_)
+        ));
+    }
+
+    #[test]
+    fn test_create_project_from_choice_unimplemented() {
+        let runtime = NativeRuntime::new();
+        // "blog" is defined but marked as unimplemented
+        let options = CreateFromChoiceOptions::new("blog", "My Blog");
+
+        let result = pollster::block_on(create_project_from_choice(&runtime, options));
+
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), CreateError::InvalidConfig(_)));
+    }
+
+    #[test]
+    fn test_implemented_choices_are_usable() {
+        let runtime = NativeRuntime::new();
+
+        // All implemented choices should successfully create projects
+        for choice in implemented_choices() {
+            let options = CreateFromChoiceOptions::new(&choice.id, "Test Project");
+            let result = pollster::block_on(create_project_from_choice(&runtime, options));
+
+            assert!(
+                result.is_ok(),
+                "Failed to create project for implemented choice '{}': {:?}",
+                choice.id,
+                result.err()
+            );
+        }
     }
 }
