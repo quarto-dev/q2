@@ -11,6 +11,20 @@ interface Props {
   error?: string | null;
 }
 
+// Project choice type (matches WASM API)
+interface ProjectChoice {
+  id: string;
+  name: string;
+  description: string;
+}
+
+// Placeholder choices until WASM integration (k-g2wq)
+// These will be replaced with get_project_choices() call
+const PLACEHOLDER_CHOICES: ProjectChoice[] = [
+  { id: 'default', name: 'Default', description: 'A minimal Quarto project' },
+  { id: 'website', name: 'Website', description: 'A Quarto website with navigation' },
+];
+
 // Curated color palette for user selection
 const COLOR_PALETTE = [
   '#E91E63', '#9C27B0', '#673AB7', '#3F51B5',
@@ -21,13 +35,20 @@ const COLOR_PALETTE = [
 export default function ProjectSelector({ onSelectProject, isConnecting, error: connectionError }: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showConnectForm, setShowConnectForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Form state
+  // Connect form state
   const [indexDocId, setIndexDocId] = useState('');
   const [syncServer, setSyncServer] = useState('wss://sync.automerge.org');
   const [description, setDescription] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Create form state
+  const [createProjectType, setCreateProjectType] = useState('website');
+  const [createProjectTitle, setCreateProjectTitle] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+  const [projectChoices] = useState<ProjectChoice[]>(PLACEHOLDER_CHOICES);
 
   // User identity state
   const [userSettings, setUserSettings] = useState<UserSettings | null>(null);
@@ -116,7 +137,7 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
     onSelectProject(project);
   };
 
-  const handleAddProject = async (e: React.FormEvent) => {
+  const handleConnectProject = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
 
@@ -143,12 +164,34 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
       );
       setIndexDocId('');
       setDescription('');
-      setShowAddForm(false);
+      setShowConnectForm(false);
       await loadProjects();
       onSelectProject(project);
     } catch (err) {
       console.error('Failed to add project:', err);
       setFormError('Failed to add project. The document ID may already exist.');
+    }
+  };
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!createProjectTitle.trim()) {
+      setFormError('Project title is required');
+      return;
+    }
+
+    setIsCreating(true);
+
+    // TODO (k-g2wq): Wire up WASM create_project() call here
+    // For now, show placeholder message
+    try {
+      // Placeholder: This will be replaced with actual WASM integration
+      console.log('Creating project:', { type: createProjectType, title: createProjectTitle });
+      setFormError('Project creation coming soon! WASM integration pending (k-g2wq).');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -239,8 +282,74 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
           <span>OR</span>
         </div>
 
-        {showAddForm ? (
-          <form className="add-form" onSubmit={handleAddProject}>
+        {/* Show buttons when no form is visible */}
+        {!showConnectForm && !showCreateForm && (
+          <div className="action-buttons">
+            <button
+              className="action-btn create-btn"
+              onClick={() => { setShowCreateForm(true); setShowConnectForm(false); }}
+            >
+              <span className="action-btn-icon">+</span>
+              <span className="action-btn-text">
+                <span className="action-btn-title">Create New Project</span>
+                <span className="action-btn-hint">Start a new Quarto project</span>
+              </span>
+            </button>
+            <button
+              className="action-btn connect-btn"
+              onClick={() => { setShowConnectForm(true); setShowCreateForm(false); }}
+            >
+              <span className="action-btn-icon">↗</span>
+              <span className="action-btn-text">
+                <span className="action-btn-title">Connect to Project</span>
+                <span className="action-btn-hint">Join an existing Automerge project</span>
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* Create New Project form */}
+        {showCreateForm && (
+          <form className="add-form create-form" onSubmit={handleCreateProject}>
+            <h2>Create New Project</h2>
+            <p className="form-hint">Create a new Quarto project with starter files</p>
+            <div className="form-group">
+              <label htmlFor="projectType">Project Type</label>
+              <select
+                id="projectType"
+                value={createProjectType}
+                onChange={(e) => setCreateProjectType(e.target.value)}
+              >
+                {projectChoices.map((choice) => (
+                  <option key={choice.id} value={choice.id}>
+                    {choice.name} — {choice.description}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="projectTitle">Project Title</label>
+              <input
+                id="projectTitle"
+                type="text"
+                value={createProjectTitle}
+                onChange={(e) => setCreateProjectTitle(e.target.value)}
+                placeholder="My Awesome Project"
+                autoFocus
+              />
+            </div>
+            <div className="form-actions">
+              <button type="button" onClick={() => setShowCreateForm(false)}>Cancel</button>
+              <button type="submit" className="primary" disabled={isCreating}>
+                {isCreating ? 'Creating...' : 'Create Project'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {/* Connect to Project form */}
+        {showConnectForm && (
+          <form className="add-form" onSubmit={handleConnectProject}>
             <h2>Connect to Project</h2>
             <p className="form-hint">Enter the document ID of an existing Automerge project</p>
             <div className="form-group">
@@ -274,14 +383,10 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
               />
             </div>
             <div className="form-actions">
-              <button type="button" onClick={() => setShowAddForm(false)}>Cancel</button>
-              <button type="submit" className="primary">Add Project</button>
+              <button type="button" onClick={() => setShowConnectForm(false)}>Cancel</button>
+              <button type="submit" className="primary">Connect</button>
             </div>
           </form>
-        ) : (
-          <button className="add-btn" onClick={() => setShowAddForm(true)}>
-            + Connect to Project
-          </button>
         )}
 
         {userSettings && (

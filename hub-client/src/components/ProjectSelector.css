@@ -136,6 +136,70 @@
   font-size: 12px;
 }
 
+/* Action buttons (Create / Connect) */
+.action-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #0f3460;
+  border: 2px solid #1f4460;
+  border-radius: 8px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.action-btn:hover {
+  background: #1f4460;
+  border-color: #2f5480;
+}
+
+.action-btn:hover .action-btn-title {
+  color: #fff;
+}
+
+.action-btn-icon {
+  font-size: 24px;
+  color: #646cff;
+  width: 32px;
+  text-align: center;
+}
+
+.action-btn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action-btn-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ccc;
+  transition: color 0.2s;
+}
+
+.action-btn-hint {
+  font-size: 12px;
+  color: #666;
+}
+
+.action-btn.create-btn {
+  border-color: #2a5298;
+}
+
+.action-btn.create-btn:hover {
+  background: #1a3a68;
+  border-color: #3a72c8;
+}
+
 .add-btn {
   width: 100%;
   padding: 16px;
@@ -187,13 +251,36 @@
   font-size: 14px;
 }
 
-.form-group input:focus {
+.form-group input:focus,
+.form-group select:focus {
   outline: none;
   border-color: #646cff;
 }
 
 .form-group input::placeholder {
   color: #555;
+}
+
+.form-group select {
+  width: 100%;
+  padding: 12px;
+  background: #16213e;
+  border: 1px solid #1f3460;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+
+.form-group select option {
+  background: #16213e;
+  color: #fff;
+  padding: 8px;
 }
 
 .form-actions {
