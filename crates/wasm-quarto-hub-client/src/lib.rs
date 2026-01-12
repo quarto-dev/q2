@@ -734,3 +734,129 @@ pub async fn render_qmd_content_with_options(
 pub fn get_builtin_template(name: &str) -> String {
     pampa::wasm_entry_points::get_builtin_template_json(name)
 }
+
+// ============================================================================
+// JAVASCRIPT EXECUTION TEST API
+// ============================================================================
+//
+// These functions provide test entry points for validating the JS bridge.
+// They exercise the WasmRuntime -> JS -> WasmRuntime data flow.
+//
+// This is the WASM side of the "Interstitial JS runtime validation test"
+// (task k-ktjc). These functions can be called from JavaScript to verify
+// the template rendering works correctly.
+
+#[derive(Serialize)]
+struct JsTestResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl JsTestResponse {
+    fn ok(result: String) -> String {
+        serde_json::to_string(&JsTestResponse {
+            success: true,
+            result: Some(result),
+            error: None,
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&JsTestResponse {
+            success: false,
+            result: None,
+            error: Some(msg.to_string()),
+        })
+        .unwrap()
+    }
+}
+
+/// Test simple template rendering via the JS bridge.
+///
+/// This is an interstitial test to validate the WASM -> JS -> WASM data flow
+/// works correctly before implementing full EJS support.
+///
+/// # Arguments
+/// * `template` - Template string with ${key} placeholders
+/// * `data_json` - JSON string with key-value pairs
+///
+/// # Returns
+/// JSON: `{ "success": true, "result": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = await test_js_simple_template("Hello, ${name}!", '{"name": "World"}');
+/// // result: { "success": true, "result": "Hello, World!" }
+/// ```
+#[wasm_bindgen]
+pub async fn test_js_simple_template(template: &str, data_json: &str) -> String {
+    let runtime = get_runtime();
+
+    // Check if JS is available
+    if !runtime.js_available() {
+        return JsTestResponse::error("JavaScript execution is not available");
+    }
+
+    // Parse the JSON data
+    let data: serde_json::Value = match serde_json::from_str(data_json) {
+        Ok(v) => v,
+        Err(e) => return JsTestResponse::error(&format!("Invalid JSON: {}", e)),
+    };
+
+    // Call the JS template rendering
+    match runtime.js_render_simple_template(template, &data).await {
+        Ok(result) => JsTestResponse::ok(result),
+        Err(e) => JsTestResponse::error(&format!("Template rendering failed: {}", e)),
+    }
+}
+
+/// Test EJS template rendering via the JS bridge.
+///
+/// This tests the full EJS rendering capability through the JS bridge.
+///
+/// # Arguments
+/// * `template` - EJS template string
+/// * `data_json` - JSON string with template data
+///
+/// # Returns
+/// JSON: `{ "success": true, "result": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = await test_js_ejs("<%= name %>", '{"name": "World"}');
+/// // result: { "success": true, "result": "World" }
+/// ```
+#[wasm_bindgen]
+pub async fn test_js_ejs(template: &str, data_json: &str) -> String {
+    let runtime = get_runtime();
+
+    // Check if JS is available
+    if !runtime.js_available() {
+        return JsTestResponse::error("JavaScript execution is not available");
+    }
+
+    // Parse the JSON data
+    let data: serde_json::Value = match serde_json::from_str(data_json) {
+        Ok(v) => v,
+        Err(e) => return JsTestResponse::error(&format!("Invalid JSON: {}", e)),
+    };
+
+    // Call the EJS rendering
+    match runtime.render_ejs(template, &data).await {
+        Ok(result) => JsTestResponse::ok(result),
+        Err(e) => JsTestResponse::error(&format!("EJS rendering failed: {}", e)),
+    }
+}
+
+/// Check if JavaScript execution is available in the WASM runtime.
+///
+/// # Returns
+/// `true` if JS is available, `false` otherwise
+#[wasm_bindgen]
+pub fn test_js_available() -> bool {
+    get_runtime().js_available()
+}
