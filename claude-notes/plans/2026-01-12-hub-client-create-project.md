@@ -2,7 +2,25 @@
 
 **Epic ID**: k-1omt
 **Created**: 2026-01-12
-**Status**: Planning
+**Status**: In Progress
+
+## Progress Summary
+
+**Completed:**
+- Phase 1: Hub-client UI changes (rename to "Connect to Project")
+- Phase 2: JavaScript execution in SystemRuntime
+  - k-8lhe: JsExecution trait design
+  - k-m3yq: NativeRuntime JS execution (deno_core/V8)
+  - k-8kkc: WasmRuntime JS execution (wasm-bindgen)
+  - k-smz0: Hub-client WASM-JS bridge
+  - k-ktjc: Interstitial JS validation tests
+- Phase 3 (partial): Project creation logic
+  - k-oe27: Port project templates to Rust (quarto-project-create crate)
+  - k-bv6q: Data-driven project scaffolding infrastructure
+
+**In Progress:**
+- Phase 3.3: WASM entry point for project creation
+- Phase 4: Hub-client integration (Create Project UI)
 
 ## Executive Summary
 
@@ -474,11 +492,11 @@ project/
 ## Success Criteria
 
 1. [x] "Connect to Project" button clearly indicates connecting to existing project (done: 1c52e8e)
-2. [ ] Interstitial JS test passes on both native and WASM targets (Phase 2 gate)
+2. [x] Interstitial JS test passes on both native and WASM targets (Phase 2 gate) (done: 6deef7f)
 3. [ ] "Create New Project" creates a valid Quarto project structure
 4. [ ] New project appears in Automerge and syncs correctly
-5. [ ] At least "default" and "website" project types work
-6. [ ] EJS templates render correctly in both native and WASM
+5. [x] At least "default" and "website" project types work (done: f2cca35, 2d67482)
+6. [x] EJS templates render correctly in both native and WASM (done: 87f7aa8, aff9b81)
 7. [ ] No security vulnerabilities introduced
 
 ## Future Work (Out of Scope for This Epic)
