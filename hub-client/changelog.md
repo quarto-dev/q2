@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-12
+
+- [`1c52e8e`](https://github.com/quarto-dev/kyoto/commits/1c52e8e): Rename 'Add New Project' to 'Connect to Project' to clarify it connects to existing projects
+
 ### 2026-01-10
 
 - [`6c429f3`](https://github.com/quarto-dev/kyoto/commits/6c429f3): Fix scroll sync rescrolling when editing documents with images
