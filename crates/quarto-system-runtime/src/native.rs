@@ -12,6 +12,7 @@
  * This is the default runtime for native (non-WASM) targets.
  */
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
@@ -42,6 +43,7 @@ impl NativeRuntime {
     }
 }
 
+#[async_trait]
 impl SystemRuntime for NativeRuntime {
     // ═══════════════════════════════════════════════════════════════════════
     // FILE OPERATIONS
@@ -795,5 +797,40 @@ mod tests {
         // Should fail for nonexistent paths
         let result = rt.canonicalize(&temp.path().join("nonexistent.txt"));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_js_available_default() {
+        let rt = runtime();
+        // Default implementation returns false (JS not available)
+        assert!(!rt.js_available());
+    }
+
+    // Test async JS methods using pollster for simple blocking
+    #[test]
+    fn test_js_render_simple_template_not_supported() {
+        let rt = runtime();
+        let data = serde_json::json!({"name": "World"});
+
+        // Use pollster to block on the async call
+        let result = pollster::block_on(rt.js_render_simple_template("Hello, ${name}!", &data));
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, RuntimeError::NotSupported(_)));
+        assert!(err.to_string().contains("JavaScript execution"));
+    }
+
+    #[test]
+    fn test_render_ejs_not_supported() {
+        let rt = runtime();
+        let data = serde_json::json!({"title": "Test"});
+
+        let result = pollster::block_on(rt.render_ejs("<%= title %>", &data));
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, RuntimeError::NotSupported(_)));
+        assert!(err.to_string().contains("EJS rendering"));
     }
 }

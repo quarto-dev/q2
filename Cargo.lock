@@ -2180,6 +2180,9 @@ dependencies = [
 name = "quarto-system-runtime"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "pollster",
+ "serde_json",
  "tempfile",
  "which",
 ]

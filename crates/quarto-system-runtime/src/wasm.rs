@@ -14,6 +14,7 @@
 // This module is only compiled for WASM targets
 #![cfg(target_arch = "wasm32")]
 
+use async_trait::async_trait;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -354,6 +355,7 @@ impl Default for WasmRuntime {
     }
 }
 
+#[async_trait]
 impl SystemRuntime for WasmRuntime {
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
         self.vfs.read().unwrap().read_file(path)

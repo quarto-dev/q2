@@ -12,6 +12,7 @@
  * - Supports path wildcards for granular access control
  */
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -180,6 +181,7 @@ impl<R: SystemRuntime> SandboxedRuntime<R> {
 
 // Stub implementation that just delegates to inner runtime
 // Full permission checking will be implemented in the future
+#[async_trait]
 impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
         // TODO: Check policy.can_read(path)
@@ -286,6 +288,26 @@ impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
 
     fn stderr_write(&self, data: &[u8]) -> RuntimeResult<()> {
         self.inner.stderr_write(data)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // JAVASCRIPT EXECUTION (delegated to inner runtime)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    fn js_available(&self) -> bool {
+        self.inner.js_available()
+    }
+
+    async fn js_render_simple_template(
+        &self,
+        template: &str,
+        data: &serde_json::Value,
+    ) -> RuntimeResult<String> {
+        self.inner.js_render_simple_template(template, data).await
+    }
+
+    async fn render_ejs(&self, template: &str, data: &serde_json::Value) -> RuntimeResult<String> {
+        self.inner.render_ejs(template, data).await
     }
 }
 

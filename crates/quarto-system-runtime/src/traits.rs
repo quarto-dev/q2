@@ -10,6 +10,7 @@
  * - SandboxedRuntime: Restricted access for untrusted code
  */
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -203,6 +204,27 @@ impl AsRef<Path> for TempDir {
 /// - Secure by default (no permissions granted without explicit opt-in)
 /// - Detailed error messages for debugging
 /// - Full Pandoc API compatibility (functions exist but may return errors)
+///
+/// ## JavaScript Execution Design Principles
+///
+/// **IMPORTANT: These principles are intentional and must be preserved.**
+///
+/// 1. **Application-specific entry points, NOT generic `eval()`**
+///    - The trait exposes purpose-specific methods like `render_ejs()`, not `eval_js()`
+///    - This is intentional for safety, testability, and abstraction
+///    - Each method documents what it does and what inputs it accepts
+///    - No arbitrary code execution is exposed through the public API
+///
+/// 2. **Implementation-agnostic trait API**
+///    - The trait is defined purely in terms of Rust types (`String`, `serde_json::Value`, etc.)
+///    - No deno_core, rusty_v8, or wasm-bindgen types leak into the trait definition
+///    - This allows swapping the underlying JS engine without changing the public API
+///
+/// 3. **Asymmetric implementations are acceptable**
+///    - Native: embeds V8 via deno_core (Rust calls into embedded JS)
+///    - WASM: calls out to browser JS via wasm-bindgen (Rust calls external JS)
+///    - The trait hides this architectural difference from consumers
+#[async_trait]
 pub trait SystemRuntime: Send + Sync {
     // ═══════════════════════════════════════════════════════════════════════
     // FILE OPERATIONS
@@ -427,6 +449,107 @@ pub trait SystemRuntime: Send + Sync {
 
     /// Handle io.write() to stderr.
     fn stderr_write(&self, data: &[u8]) -> RuntimeResult<()>;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // JAVASCRIPT EXECUTION
+    //
+    // These methods provide JavaScript execution capability for features that
+    // require it (e.g., EJS template rendering for project creation).
+    //
+    // See trait-level documentation for design principles.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Check if JavaScript execution is available on this runtime.
+    ///
+    /// Returns `true` if the runtime supports JavaScript execution,
+    /// `false` otherwise. Use this to check before calling JS methods
+    /// if you want to provide fallback behavior.
+    ///
+    /// Default: returns `false` (JS not available).
+    fn js_available(&self) -> bool {
+        false
+    }
+
+    /// Render a simple string template using JavaScript.
+    ///
+    /// Template format: `"Hello, ${name}!"` with data `{"name": "World"}` → `"Hello, World!"`
+    ///
+    /// Uses simple `${key}` replacement, NOT full JavaScript template literals.
+    /// Keys must be simple identifiers (alphanumeric + underscore).
+    ///
+    /// # Purpose
+    ///
+    /// This method is scaffolding for validating JS execution architecture.
+    /// It tests the Rust ↔ JS data flow without requiring EJS or complex dependencies.
+    /// May be removed or refactored once `render_ejs` is working.
+    ///
+    /// # Arguments
+    ///
+    /// * `template` - Template string with `${key}` placeholders
+    /// * `data` - JSON object with key-value pairs for substitution
+    ///
+    /// # Returns
+    ///
+    /// Rendered string on success, `RuntimeError::NotSupported` if JS is not available.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use serde_json::json;
+    ///
+    /// let result = runtime.js_render_simple_template(
+    ///     "Hello, ${name}! You have ${count} messages.",
+    ///     &json!({"name": "Alice", "count": 5})
+    /// ).await?;
+    /// assert_eq!(result, "Hello, Alice! You have 5 messages.");
+    /// ```
+    async fn js_render_simple_template(
+        &self,
+        template: &str,
+        data: &serde_json::Value,
+    ) -> RuntimeResult<String> {
+        let _ = (template, data);
+        Err(RuntimeError::NotSupported(
+            "JavaScript execution is not available on this runtime".to_string(),
+        ))
+    }
+
+    /// Render an EJS template with the given data.
+    ///
+    /// [EJS](https://ejs.co/) is a simple templating language that lets you
+    /// generate HTML/text with plain JavaScript. This is used for project
+    /// scaffolding (creating `_quarto.yml`, `index.qmd`, etc.).
+    ///
+    /// # Arguments
+    ///
+    /// * `template` - EJS template string
+    /// * `data` - JSON data to pass to the template
+    ///
+    /// # Returns
+    ///
+    /// Rendered string on success, `RuntimeError::NotSupported` if JS/EJS is not available.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use serde_json::json;
+    ///
+    /// let template = r#"
+    /// project:
+    ///   title: "<%= title %>"
+    ///   type: <%= type %>
+    /// "#;
+    /// let result = runtime.render_ejs(
+    ///     template,
+    ///     &json!({"title": "My Website", "type": "website"})
+    /// ).await?;
+    /// ```
+    async fn render_ejs(&self, template: &str, data: &serde_json::Value) -> RuntimeResult<String> {
+        let _ = (template, data);
+        Err(RuntimeError::NotSupported(
+            "EJS rendering is not available on this runtime".to_string(),
+        ))
+    }
 }
 
 #[cfg(test)]
