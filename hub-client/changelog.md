@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-12
 
+- [`fa1e9e2`](https://github.com/quarto-dev/kyoto/commits/fa1e9e2): Add WASM entry points for project creation (get_project_choices, create_project)
 - [`aff9b81`](https://github.com/quarto-dev/kyoto/commits/aff9b81): Add WASM-JS bridge for template rendering (EJS and simple templates)
 - [`1c52e8e`](https://github.com/quarto-dev/kyoto/commits/1c52e8e): Rename 'Add New Project' to 'Connect to Project' to clarify it connects to existing projects
 
