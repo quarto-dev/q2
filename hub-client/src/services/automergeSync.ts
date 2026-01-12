@@ -444,6 +444,176 @@ export function isConnected(): boolean {
 }
 
 /**
+ * Options for creating a new project
+ */
+export interface CreateProjectOptions {
+  /** Sync server URL */
+  syncServer: string;
+  /** List of files to create in the project */
+  files: Array<{
+    path: string;
+    content: string;
+    contentType: 'text' | 'binary';
+    mimeType?: string;
+  }>;
+}
+
+/**
+ * Result of creating a new project
+ */
+export interface CreateProjectResult {
+  /** The document ID of the new IndexDocument */
+  indexDocId: string;
+  /** List of created files */
+  files: FileEntry[];
+}
+
+/**
+ * Create a new project with the given files.
+ *
+ * This creates a new IndexDocument, populates it with file documents,
+ * and connects to the sync server. The project can then be saved to
+ * IndexedDB using projectStorage.addProject().
+ */
+export async function createNewProject(options: CreateProjectOptions): Promise<CreateProjectResult> {
+  // Ensure WASM is initialized for VFS operations
+  await initWasm();
+
+  // Disconnect from any existing connection
+  await disconnect();
+
+  try {
+    // Create WebSocket adapter
+    state.wsAdapter = new BrowserWebSocketClientAdapter(options.syncServer);
+
+    // Create repo with the network adapter
+    state.repo = new Repo({
+      network: [state.wsAdapter],
+    });
+
+    // Wait for peer connection
+    console.log('Creating new project, waiting for peer connection...');
+    await waitForPeer(state.repo, 30000);
+    console.log('Peer connected');
+
+    // Create new IndexDocument
+    const indexHandle = state.repo.create<IndexDocument>();
+    indexHandle.change(doc => {
+      doc.files = {};
+    });
+    state.indexHandle = indexHandle;
+
+    const indexDocId = indexHandle.documentId;
+    console.log('Created new IndexDocument:', indexDocId);
+
+    // Create file documents for each scaffold file
+    const createdFiles: FileEntry[] = [];
+
+    for (const file of options.files) {
+      if (file.contentType === 'binary') {
+        // Decode base64 content for binary files
+        const binaryContent = Uint8Array.from(atob(file.content), c => c.charCodeAt(0));
+        const mimeType = file.mimeType || 'application/octet-stream';
+
+        // Create binary document
+        const handle = state.repo.create<BinaryDocumentContent>();
+        const hash = await computeSHA256(binaryContent);
+        handle.change(doc => {
+          doc.content = binaryContent;
+          doc.mimeType = mimeType;
+          doc.hash = hash;
+        });
+
+        // Add to index
+        const docId = handle.documentId;
+        indexHandle.change(doc => {
+          doc.files[file.path] = docId;
+        });
+
+        // Track and subscribe
+        state.binaryFiles.add(file.path);
+        await subscribeToFileInternal(file.path, handle as unknown as DocHandle<FileDocument>);
+        vfsAddBinaryFile(file.path, binaryContent);
+
+        createdFiles.push({ path: file.path, docId });
+        console.log(`Created binary file: ${file.path}`);
+      } else {
+        // Create text document
+        const handle = state.repo.create<TextDocumentContent>();
+        handle.change(doc => {
+          doc.text = file.content;
+        });
+
+        // Add to index
+        const docId = handle.documentId;
+        indexHandle.change(doc => {
+          doc.files[file.path] = docId;
+        });
+
+        // Subscribe to changes
+        await subscribeToFileInternal(file.path, handle as unknown as DocHandle<FileDocument>);
+        vfsAddFile(file.path, file.content);
+
+        createdFiles.push({ path: file.path, docId });
+        console.log(`Created text file: ${file.path}`);
+      }
+    }
+
+    // Subscribe to index changes
+    const indexChangeHandler = () => {
+      const changedDoc = indexHandle.doc();
+      if (changedDoc) {
+        const newFiles = getFilesFromIndex(changedDoc);
+        syncVfsWithFiles(newFiles);
+        onFilesChange?.(newFiles);
+      }
+    };
+    indexHandle.on('change', indexChangeHandler);
+    state.cleanupFns.push(() => indexHandle.off('change', indexChangeHandler));
+
+    onConnectionChange?.(true);
+
+    return {
+      indexDocId,
+      files: createdFiles,
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    onError?.(error);
+    throw error;
+  }
+}
+
+/**
+ * Internal version of subscribeToFile that doesn't wait for ready
+ * (used when we just created the document)
+ */
+async function subscribeToFileInternal(path: string, handle: DocHandle<FileDocument>): Promise<void> {
+  // Store handle
+  state.fileHandles.set(path, handle);
+
+  // Subscribe to changes - forward patches from the change event
+  const changeHandler = ({ patches }: { patches: Patch[] }) => {
+    const changedDoc = handle.doc();
+    if (!changedDoc) return;
+
+    const docType = getDocumentType(changedDoc);
+
+    if (docType === 'binary' && isBinaryDocument(changedDoc)) {
+      state.binaryFiles.add(path);
+      vfsAddBinaryFile(path, changedDoc.content);
+      onBinaryContent?.(path, changedDoc.content, changedDoc.mimeType);
+    } else if (docType === 'text' && isTextDocument(changedDoc)) {
+      state.binaryFiles.delete(path);
+      vfsAddFile(path, changedDoc.text || '');
+      onFileContent?.(path, changedDoc.text || '', patches);
+    }
+  };
+  handle.on('change', changeHandler);
+  state.cleanupFns.push(() => handle.off('change', changeHandler));
+}
+
+/**
  * Get the DocHandle for a file by path.
  * Used by the presence service for ephemeral messaging.
  */
