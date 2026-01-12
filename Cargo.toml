@@ -3,10 +3,10 @@ members = [
     "crates/*",
     "crates/pampa/fuzz",
 ]
-# wasm-quarto-hub-client uses WasmRuntime which only exists for wasm32 targets,
-# so it cannot be compiled on native platforms as part of the default workspace.
-# Build it explicitly with: cargo build -p wasm-quarto-hub-client --target wasm32-unknown-unknown
-exclude = ["crates/wasm-quarto-hub-client"]
+# WASM crates cannot be compiled on native platforms as part of the default workspace
+# because they pull in dependencies (like V8 via deno_core) that are incompatible with
+# native shared libraries. Build them explicitly with wasm-pack or --target wasm32-unknown-unknown.
+exclude = ["crates/wasm-quarto-hub-client", "crates/wasm-qmd-parser"]
 resolver = "2"
 
 [workspace.package]
