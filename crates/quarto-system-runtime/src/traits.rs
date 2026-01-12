@@ -224,7 +224,14 @@ impl AsRef<Path> for TempDir {
 ///    - Native: embeds V8 via deno_core (Rust calls into embedded JS)
 ///    - WASM: calls out to browser JS via wasm-bindgen (Rust calls external JS)
 ///    - The trait hides this architectural difference from consumers
-#[async_trait]
+///
+/// ## Async Trait Send Bounds
+///
+/// On native targets, async methods produce `Send` futures (required for multi-threaded async).
+/// On WASM, async methods produce `?Send` futures (JsFuture from wasm-bindgen-futures is not Send).
+/// This is handled via conditional compilation of the `async_trait` attribute.
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 pub trait SystemRuntime: Send + Sync {
     // ═══════════════════════════════════════════════════════════════════════
     // FILE OPERATIONS

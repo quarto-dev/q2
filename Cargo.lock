@@ -2658,11 +2658,14 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "deno_core",
+ "js-sys",
  "pollster",
  "serde_json",
  "serde_v8",
  "tempfile",
  "tokio",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "which 7.0.3",
 ]
 

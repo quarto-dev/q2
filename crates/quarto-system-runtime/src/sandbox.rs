@@ -181,7 +181,12 @@ impl<R: SystemRuntime> SandboxedRuntime<R> {
 
 // Stub implementation that just delegates to inner runtime
 // Full permission checking will be implemented in the future
-#[async_trait]
+//
+// Note: Using conditional async_trait to match the trait's Send bounds:
+// - Native targets: Send futures required (multi-threaded async)
+// - WASM targets: ?Send futures allowed (single-threaded, JsFuture is not Send)
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 impl<R: SystemRuntime> SystemRuntime for SandboxedRuntime<R> {
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
         // TODO: Check policy.can_read(path)

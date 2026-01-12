@@ -21,10 +21,63 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
+
 use crate::traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
 };
+
+// =============================================================================
+// JavaScript Interop for Template Rendering
+// =============================================================================
+//
+// These extern declarations define the JavaScript functions that the host
+// application (hub-client) must provide for template rendering.
+//
+// The functions are expected to be provided via a module at the path specified.
+// In hub-client, this is typically at: /src/wasm-js-bridge/template.js
+//
+// JavaScript implementation requirements:
+// - js_render_simple_template(template, dataJson): Promise<string>
+//   Render a simple ${key} template with the provided JSON data
+// - js_render_ejs(template, dataJson): Promise<string>
+//   Render an EJS template with the provided JSON data
+//
+// Note: Data is passed as JSON strings to avoid complex type marshalling.
+// The JavaScript side should JSON.parse the data before use.
+
+#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/template.js")]
+extern "C" {
+    /// Render a simple template with ${key} placeholders.
+    ///
+    /// # Arguments
+    /// * `template` - The template string with ${key} placeholders
+    /// * `data_json` - JSON-encoded object with key-value pairs for substitution
+    ///
+    /// # Returns
+    /// A Promise that resolves to the rendered string, or rejects with an error.
+    #[wasm_bindgen(js_name = "jsRenderSimpleTemplate", catch)]
+    fn js_render_simple_template_impl(template: &str, data_json: &str) -> Result<JsValue, JsValue>;
+
+    /// Render an EJS template with the given data.
+    ///
+    /// # Arguments
+    /// * `template` - The EJS template string
+    /// * `data_json` - JSON-encoded object with data for the template
+    ///
+    /// # Returns
+    /// A Promise that resolves to the rendered string, or rejects with an error.
+    #[wasm_bindgen(js_name = "jsRenderEjs", catch)]
+    fn js_render_ejs_impl(template: &str, data_json: &str) -> Result<JsValue, JsValue>;
+
+    /// Check if JavaScript template rendering is available.
+    ///
+    /// This can be used to gracefully degrade if the JS bridge is not set up.
+    #[wasm_bindgen(js_name = "jsTemplateAvailable")]
+    fn js_template_available_impl() -> bool;
+}
 
 /// Counter for generating unique temp directory names in WASM.
 /// SystemTime::now() is not available in WASM, so we use a simple counter.
@@ -355,7 +408,8 @@ impl Default for WasmRuntime {
     }
 }
 
-#[async_trait]
+// Note: Using ?Send because WASM is single-threaded and JsFuture is not Send
+#[async_trait(?Send)]
 impl SystemRuntime for WasmRuntime {
     fn file_read(&self, path: &Path) -> RuntimeResult<Vec<u8>> {
         self.vfs.read().unwrap().read_file(path)
@@ -521,6 +575,70 @@ impl SystemRuntime for WasmRuntime {
     fn stderr_write(&self, _data: &[u8]) -> RuntimeResult<()> {
         // TODO: Could log to console.error via wasm-bindgen
         Ok(())
+    }
+
+    // =========================================================================
+    // JavaScript Execution
+    // =========================================================================
+    //
+    // These methods call out to browser JavaScript via wasm-bindgen.
+    // The JavaScript implementation is provided by the host application (hub-client).
+    //
+    // This is asymmetric with NativeRuntime which embeds V8 - here we call OUT
+    // to JavaScript rather than embedding a JS engine.
+
+    fn js_available(&self) -> bool {
+        // Check if the JS bridge is available
+        // This calls the JavaScript function to verify the template module is loaded
+        js_template_available_impl()
+    }
+
+    async fn js_render_simple_template(
+        &self,
+        template: &str,
+        data: &serde_json::Value,
+    ) -> RuntimeResult<String> {
+        // Serialize data to JSON string
+        let data_json = serde_json::to_string(data)
+            .map_err(|e| RuntimeError::NotSupported(format!("Failed to serialize data: {}", e)))?;
+
+        // Call the JavaScript function which returns a Promise
+        let promise = js_render_simple_template_impl(template, &data_json).map_err(|e| {
+            RuntimeError::NotSupported(format!("Failed to call jsRenderSimpleTemplate: {:?}", e))
+        })?;
+
+        // Await the Promise
+        let result = JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| {
+                RuntimeError::NotSupported(format!("Simple template rendering failed: {:?}", e))
+            })?;
+
+        // Convert result to String
+        result
+            .as_string()
+            .ok_or_else(|| RuntimeError::NotSupported("Result was not a string".to_string()))
+    }
+
+    async fn render_ejs(&self, template: &str, data: &serde_json::Value) -> RuntimeResult<String> {
+        // Serialize data to JSON string
+        let data_json = serde_json::to_string(data)
+            .map_err(|e| RuntimeError::NotSupported(format!("Failed to serialize data: {}", e)))?;
+
+        // Call the JavaScript function which returns a Promise
+        let promise = js_render_ejs_impl(template, &data_json).map_err(|e| {
+            RuntimeError::NotSupported(format!("Failed to call jsRenderEjs: {:?}", e))
+        })?;
+
+        // Await the Promise
+        let result = JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| RuntimeError::NotSupported(format!("EJS rendering failed: {:?}", e)))?;
+
+        // Convert result to String
+        result
+            .as_string()
+            .ok_or_else(|| RuntimeError::NotSupported("Result was not a string".to_string()))
     }
 }
 
