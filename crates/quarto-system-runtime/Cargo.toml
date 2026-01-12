@@ -18,6 +18,15 @@ serde_json.workspace = true
 # For binary lookup on PATH
 which = "7.0"
 
+# JavaScript runtime (for EJS template rendering)
+# Note: These types MUST NOT leak into the public trait API
+deno_core.workspace = true
+# deno_web and deno_webidl have yanked dependencies, using minimal setup for now
+# deno_web.workspace = true
+# deno_webidl.workspace = true
+serde_v8.workspace = true
+tokio.workspace = true
+
 [dev-dependencies]
 tempfile = "3.10"
 pollster = "0.4"

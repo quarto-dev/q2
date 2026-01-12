@@ -23,6 +23,10 @@ mod traits;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
 
+// JavaScript execution for native targets
+#[cfg(not(target_arch = "wasm32"))]
+mod js_native;
+
 // WASM runtime is only compiled for WASM targets
 #[cfg(target_arch = "wasm32")]
 mod wasm;
