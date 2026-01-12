@@ -114,6 +114,9 @@ path = "./crates/quarto-config"
 [workspace.dependencies.quarto-system-runtime]
 path = "./crates/quarto-system-runtime"
 
+[workspace.dependencies.quarto-project-create]
+path = "./crates/quarto-project-create"
+
 [workspace.lints.clippy]
 # Architectural issues - fixing these requires significant refactoring
 large_enum_variant = "allow"  # Would require boxing large enum variants

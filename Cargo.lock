@@ -2645,6 +2645,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-project-create"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "pollster",
+ "quarto-system-runtime",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "quarto-source-map"
 version = "0.1.0"
 dependencies = [

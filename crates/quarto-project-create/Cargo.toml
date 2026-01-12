@@ -1,0 +1,31 @@
+[package]
+name = "quarto-project-create"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Project scaffolding for Quarto projects"
+
+[dependencies]
+# Runtime abstraction for JS execution (EJS template rendering)
+quarto-system-runtime.workspace = true
+
+# Async methods
+async-trait.workspace = true
+
+# JSON data for templates
+serde_json.workspace = true
+
+# Serialization for types
+serde.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+[dev-dependencies]
+# For blocking on async in tests
+pollster = "0.4"
+
+[lints]
+workspace = true
