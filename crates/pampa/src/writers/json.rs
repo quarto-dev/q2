@@ -26,6 +26,90 @@ pub struct JsonConfig {
     pub include_inline_locations: bool,
 }
 
+// ============================================================================
+// JSON Output Structs
+// ============================================================================
+//
+// These structs define the JSON output format with explicit field ordering.
+// Serde serializes struct fields in declaration order, so fields are ordered
+// alphabetically to ensure deterministic output regardless of serde_json's
+// `preserve_order` feature.
+
+/// Top-level Pandoc JSON document structure.
+/// Field order matches expected alphabetical JSON key order.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PandocDocumentJson {
+    ast_context: AstContextJson,
+    blocks: Vec<Value>,
+    meta: Value,
+    #[serde(rename = "pandoc-api-version")]
+    pandoc_api_version: [u32; 3],
+}
+
+/// AST context with source info pool.
+/// Fields ordered alphabetically.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AstContextJson {
+    files: Vec<FileEntryJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    meta_top_level_key_sources: Option<Value>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    source_info_pool: Vec<SourceInfoJson>,
+}
+
+/// File entry in AST context.
+/// Fields ordered alphabetically.
+#[derive(Serialize)]
+struct FileEntryJson {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line_breaks: Option<Vec<usize>>,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    total_length: Option<usize>,
+}
+
+/// Source info entry in the pool.
+/// Fields ordered alphabetically: d, r, t
+#[derive(Serialize)]
+struct SourceInfoJson {
+    d: Value,      // data (file_id, parent_id, pieces, or filter info)
+    r: [usize; 2], // range [start, end]
+    t: u8,         // type code (0=Original, 1=Substring, 2=Concat, 3=FilterProvenance)
+}
+
+/// Generic node with type, optional content, and source info.
+/// Fields ordered alphabetically: c, s, t
+#[derive(Serialize)]
+struct NodeJson {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    c: Option<Value>, // content
+    s: usize,  // source info ID
+    t: String, // type name
+}
+
+/// Attribute source info with alphabetically ordered fields.
+/// Fields: classes, id, kvs
+#[derive(Serialize)]
+struct AttrSourceJson {
+    classes: Vec<Value>,
+    id: Option<Value>,
+    kvs: Vec<[Option<Value>; 2]>,
+}
+
+/// Node with attribute source info.
+/// Fields ordered alphabetically: attrS, c, s, t
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NodeWithAttrJson {
+    attr_s: AttrSourceJson,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    c: Option<Value>,
+    s: usize,
+    t: String,
+}
+
 /// Serializable version of SourceInfo that uses ID references instead of Rc pointers.
 ///
 /// This structure is used during JSON serialization to avoid duplicating parent chains.
@@ -44,43 +128,28 @@ struct SerializableSourceInfo {
     mapping: SerializableSourceMapping,
 }
 
-impl Serialize for SerializableSourceInfo {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeMap;
-        let mut map = serializer.serialize_map(Some(3))?;
-
-        // Serialize offsets as array [start_offset, end_offset]
-        let offset_array = [self.start_offset, self.end_offset];
-        map.serialize_entry("r", &offset_array)?;
-
-        // Serialize type code and data based on mapping variant
-        match &self.mapping {
-            SerializableSourceMapping::Original { file_id } => {
-                map.serialize_entry("t", &0)?;
-                map.serialize_entry("d", &file_id.0)?;
-            }
-            SerializableSourceMapping::Substring { parent_id } => {
-                map.serialize_entry("t", &1)?;
-                map.serialize_entry("d", parent_id)?;
-            }
+impl SerializableSourceInfo {
+    /// Convert to SourceInfoJson for serialization with deterministic field order.
+    fn to_json(&self) -> SourceInfoJson {
+        let (t, d) = match &self.mapping {
+            SerializableSourceMapping::Original { file_id } => (0, json!(file_id.0)),
+            SerializableSourceMapping::Substring { parent_id } => (1, json!(parent_id)),
             SerializableSourceMapping::Concat { pieces } => {
-                map.serialize_entry("t", &2)?;
                 let piece_arrays: Vec<[usize; 3]> = pieces
                     .iter()
                     .map(|p| [p.source_info_id, p.offset_in_concat, p.length])
                     .collect();
-                map.serialize_entry("d", &piece_arrays)?;
+                (2, json!(piece_arrays))
             }
             SerializableSourceMapping::FilterProvenance { filter_path, line } => {
-                map.serialize_entry("t", &3)?;
-                map.serialize_entry("d", &(filter_path, line))?;
+                (3, json!((filter_path, line)))
             }
+        };
+        SourceInfoJson {
+            d,
+            r: [self.start_offset, self.end_offset],
+            t,
         }
-
-        map.end()
     }
 }
 
@@ -547,20 +616,36 @@ fn precompute_all_json(pandoc: &Pandoc, ctx: &mut JsonWriterContext) {
 
 /// Helper to build a node JSON object with type, optional content, and source info.
 ///
-/// This centralizes the pattern of creating nodes with 't', 'c', 's', and optionally 'l' fields.
+/// This centralizes the pattern of creating nodes with 'c', 's', 't', and optionally 'l' fields.
+/// Fields are ordered alphabetically for deterministic JSON output.
 fn node_with_source(
     t: &str,
     c: Option<Value>,
     source_info: &SourceInfo,
     ctx: &mut JsonWriterContext,
 ) -> Value {
-    let mut obj = serde_json::Map::new();
-    obj.insert("t".to_string(), json!(t));
-    if let Some(content) = c {
-        obj.insert("c".to_string(), content);
+    let id = ctx.serializer.intern(source_info);
+
+    // Build base node with alphabetically ordered fields: c, s, t
+    let node = NodeJson {
+        c,
+        s: id,
+        t: t.to_string(),
+    };
+
+    // Convert to Value and add 'l' field if needed
+    let mut value = serde_json::to_value(node).unwrap();
+
+    // Add location field if configured
+    if ctx.serializer.config.include_inline_locations {
+        if let Some(location) = resolve_location(source_info, ctx.serializer.context) {
+            if let Value::Object(ref mut obj) = value {
+                obj.insert("l".to_string(), location);
+            }
+        }
     }
-    ctx.serializer.add_source_info(&mut obj, source_info);
-    Value::Object(obj)
+
+    value
 }
 
 // NOTE: This function is currently unused and would need a SourceContext parameter
@@ -599,26 +684,40 @@ fn write_attr(attr: &Attr) -> Value {
     ])
 }
 
-/// Serialize AttrSourceInfo as JSON.
+/// Serialize AttrSourceInfo as JSON with alphabetically ordered fields.
 ///
 /// Format: {
-///   "id": <source_info_ref or null>,
 ///   "classes": [<source_info_ref or null>, ...],
+///   "id": <source_info_ref or null>,
 ///   "kvs": [[<key_ref or null>, <value_ref or null>], ...]
 /// }
 fn write_attr_source(attr_source: &AttrSourceInfo, ctx: &mut JsonWriterContext) -> Value {
-    json!({
-        "id": attr_source.id.as_ref().map(|s| ctx.serializer.to_json_ref(s)),
-        "classes": attr_source.classes.iter().map(|cls|
-            cls.as_ref().map(|s| ctx.serializer.to_json_ref(s))
-        ).collect::<Vec<_>>(),
-        "kvs": attr_source.attributes.iter().map(|(k, v)|
-            json!([
-                k.as_ref().map(|s| ctx.serializer.to_json_ref(s)),
-                v.as_ref().map(|s| ctx.serializer.to_json_ref(s))
-            ])
-        ).collect::<Vec<_>>()
-    })
+    let result = AttrSourceJson {
+        classes: attr_source
+            .classes
+            .iter()
+            .map(|cls| {
+                cls.as_ref()
+                    .map(|s| ctx.serializer.to_json_ref(s))
+                    .unwrap_or(Value::Null)
+            })
+            .collect(),
+        id: attr_source
+            .id
+            .as_ref()
+            .map(|s| ctx.serializer.to_json_ref(s)),
+        kvs: attr_source
+            .attributes
+            .iter()
+            .map(|(k, v)| {
+                [
+                    k.as_ref().map(|s| ctx.serializer.to_json_ref(s)),
+                    v.as_ref().map(|s| ctx.serializer.to_json_ref(s)),
+                ]
+            })
+            .collect(),
+    };
+    serde_json::to_value(result).unwrap()
 }
 
 fn write_target_source(target_source: &TargetSourceInfo, ctx: &mut JsonWriterContext) -> Value {
@@ -1226,17 +1325,18 @@ fn write_block(block: &Block, ctx: &mut JsonWriterContext) -> Value {
         }
 
         Block::Div(div) => {
+            // Insert fields in alphabetical order: attrS, c, s, t
             let mut obj = serde_json::Map::new();
-            obj.insert("t".to_string(), json!("Div"));
+            obj.insert(
+                "attrS".to_string(),
+                write_attr_source(&div.attr_source, ctx),
+            );
             obj.insert(
                 "c".to_string(),
                 json!([write_attr(&div.attr), write_blocks(&div.content, ctx)]),
             );
             ctx.serializer.add_source_info(&mut obj, &div.source_info);
-            obj.insert(
-                "attrS".to_string(),
-                write_attr_source(&div.attr_source, ctx),
-            );
+            obj.insert("t".to_string(), json!("Div"));
             Value::Object(obj)
         }
         Block::BlockQuote(quote) => node_with_source(
@@ -1541,51 +1641,41 @@ fn write_custom_inline(custom: &crate::pandoc::CustomNode, ctx: &mut JsonWriterC
     Value::Object(obj)
 }
 
-/// Write a ConfigValue directly to JSON format
+/// Helper to create a meta value node with alphabetically ordered fields (c, s, t)
+fn meta_node(t: &str, c: Value, s: Value) -> Value {
+    serde_json::to_value(NodeJson {
+        c: Some(c),
+        s: 0, // placeholder, will be replaced
+        t: t.to_string(),
+    })
+    .map(|mut v| {
+        // Replace the placeholder 's' with actual value
+        if let Value::Object(ref mut obj) = v {
+            obj.insert("s".to_string(), s);
+        }
+        v
+    })
+    .unwrap()
+}
+
+/// Write a ConfigValue directly to JSON format with alphabetically ordered fields
 fn write_config_value(value: &ConfigValue, ctx: &mut JsonWriterContext) -> Value {
+    let s = ctx.serializer.to_json_ref(&value.source_info);
     match &value.value {
         ConfigValueKind::Scalar(yaml) => match yaml {
-            yaml_rust2::Yaml::String(s) => json!({
-                "t": "MetaString",
-                "c": s,
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            }),
-            yaml_rust2::Yaml::Boolean(b) => json!({
-                "t": "MetaBool",
-                "c": b,
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            }),
-            yaml_rust2::Yaml::Integer(i) => json!({
-                "t": "MetaString",
-                "c": i.to_string(),
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            }),
-            yaml_rust2::Yaml::Real(r) => json!({
-                "t": "MetaString",
-                "c": r,
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            }),
-            yaml_rust2::Yaml::Null => json!({
-                "t": "MetaString",
-                "c": "",
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            }),
-            _ => json!({
-                "t": "MetaString",
-                "c": "",
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            }),
+            yaml_rust2::Yaml::String(str_val) => meta_node("MetaString", json!(str_val), s),
+            yaml_rust2::Yaml::Boolean(b) => meta_node("MetaBool", json!(b), s),
+            yaml_rust2::Yaml::Integer(i) => meta_node("MetaString", json!(i.to_string()), s),
+            yaml_rust2::Yaml::Real(r) => meta_node("MetaString", json!(r), s),
+            yaml_rust2::Yaml::Null => meta_node("MetaString", json!(""), s),
+            _ => meta_node("MetaString", json!(""), s),
         },
-        ConfigValueKind::PandocInlines(inlines) => json!({
-            "t": "MetaInlines",
-            "c": write_inlines(inlines, ctx),
-            "s": ctx.serializer.to_json_ref(&value.source_info)
-        }),
-        ConfigValueKind::PandocBlocks(blocks) => json!({
-            "t": "MetaBlocks",
-            "c": write_blocks(blocks, ctx),
-            "s": ctx.serializer.to_json_ref(&value.source_info)
-        }),
+        ConfigValueKind::PandocInlines(inlines) => {
+            meta_node("MetaInlines", write_inlines(inlines, ctx), s)
+        }
+        ConfigValueKind::PandocBlocks(blocks) => {
+            meta_node("MetaBlocks", write_blocks(blocks, ctx), s)
+        }
         // Path/Glob/Expr: retrieve pre-serialized JSON from the precomputation phase.
         // The Inlines for these variants were built and serialized during precompute_all_json(),
         // which ensures their SourceInfos are interned before any memory reuse can occur.
@@ -1596,37 +1686,43 @@ fn write_config_value(value: &ConfigValue, ctx: &mut JsonWriterContext) -> Value
                 .get(&ptr)
                 .expect("Path/Glob/Expr ConfigValue should have precomputed JSON")
                 .clone();
-            json!({
-                "t": "MetaInlines",
-                "c": precomputed_content,
-                "s": ctx.serializer.to_json_ref(&value.source_info)
-            })
+            meta_node("MetaInlines", precomputed_content, s)
         }
-        ConfigValueKind::Array(items) => json!({
-            "t": "MetaList",
-            "c": items.iter().map(|item| write_config_value(item, ctx)).collect::<Vec<_>>(),
-            "s": ctx.serializer.to_json_ref(&value.source_info)
-        }),
-        ConfigValueKind::Map(entries) => json!({
-            "t": "MetaMap",
-            "c": entries.iter().map(|entry| json!({
-                "key": entry.key,
-                "key_source": ctx.serializer.to_json_ref(&entry.key_source),
-                "value": write_config_value(&entry.value, ctx)
-            })).collect::<Vec<_>>(),
-            "s": ctx.serializer.to_json_ref(&value.source_info)
-        }),
+        ConfigValueKind::Array(items) => {
+            let c: Vec<Value> = items
+                .iter()
+                .map(|item| write_config_value(item, ctx))
+                .collect();
+            meta_node("MetaList", json!(c), s)
+        }
+        ConfigValueKind::Map(entries) => {
+            let c: Vec<Value> = entries
+                .iter()
+                .map(|entry| {
+                    // Map entries have alphabetical order: key, key_source, value
+                    json!({
+                        "key": entry.key,
+                        "key_source": ctx.serializer.to_json_ref(&entry.key_source),
+                        "value": write_config_value(&entry.value, ctx)
+                    })
+                })
+                .collect();
+            meta_node("MetaMap", json!(c), s)
+        }
     }
 }
 
-/// Write ConfigValue as top-level metadata map
+/// Write ConfigValue as top-level metadata map with sorted keys
 fn write_config_value_as_meta(meta: &ConfigValue, ctx: &mut JsonWriterContext) -> Value {
     match &meta.value {
         ConfigValueKind::Map(entries) => {
-            let map: serde_json::Map<String, Value> = entries
+            // Sort entries by key for deterministic output
+            let mut sorted: Vec<_> = entries
                 .iter()
                 .map(|entry| (entry.key.clone(), write_config_value(&entry.value, ctx)))
                 .collect();
+            sorted.sort_by(|(a, _), (b, _)| a.cmp(b));
+            let map: serde_json::Map<String, Value> = sorted.into_iter().collect();
             Value::Object(map)
         }
         _ => {
@@ -1684,9 +1780,10 @@ pub(crate) fn write_pandoc(
 
     // Extract top-level key sources from metadata using the serializer
     use quarto_pandoc_types::ConfigValueKind;
-    let meta_top_level_key_sources: serde_json::Map<String, Value> =
+    let meta_top_level_key_sources: Option<Value> =
         if let ConfigValueKind::Map(ref entries) = pandoc.meta.value {
-            entries
+            // Sort entries by key for deterministic output
+            let mut sorted_entries: Vec<_> = entries
                 .iter()
                 .map(|entry| {
                     (
@@ -1694,17 +1791,20 @@ pub(crate) fn write_pandoc(
                         ctx.serializer.to_json_ref(&entry.key_source),
                     )
                 })
-                .collect()
+                .collect();
+            sorted_entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+            let map: serde_json::Map<String, Value> = sorted_entries.into_iter().collect();
+            if map.is_empty() {
+                None
+            } else {
+                Some(Value::Object(map))
+            }
         } else {
-            serde_json::Map::new()
+            None
         };
 
-    // Build astContext with pool and metaTopLevelKeySources
-    let mut ast_context_obj = serde_json::Map::new();
-
-    // Serialize files array combining filenames and FileInformation
-    // Each file entry has: "name", "line_breaks", "total_length"
-    let files_array: Vec<Value> = (0..ast_context.filenames.len())
+    // Build file entries with alphabetically ordered fields
+    let files: Vec<FileEntryJson> = (0..ast_context.filenames.len())
         .map(|idx| {
             let filename = &ast_context.filenames[idx];
             let file_info = ast_context
@@ -1713,42 +1813,45 @@ pub(crate) fn write_pandoc(
                 .and_then(|file| file.file_info.as_ref());
 
             if let Some(info) = file_info {
-                // File with FileInformation - serialize everything
-                json!({
-                    "name": filename,
-                    "line_breaks": info.line_breaks(),
-                    "total_length": info.total_length()
-                })
+                FileEntryJson {
+                    line_breaks: Some(info.line_breaks().to_vec()),
+                    name: filename.clone(),
+                    total_length: Some(info.total_length()),
+                }
             } else {
-                // File without FileInformation - just the name
-                json!({
-                    "name": filename
-                })
+                FileEntryJson {
+                    line_breaks: None,
+                    name: filename.clone(),
+                    total_length: None,
+                }
             }
         })
         .collect();
 
-    ast_context_obj.insert("files".to_string(), json!(files_array));
+    // Convert source info pool to SourceInfoJson for deterministic ordering
+    let source_info_pool: Vec<SourceInfoJson> = ctx
+        .serializer
+        .pool
+        .iter()
+        .map(|info| info.to_json())
+        .collect();
 
-    // Only include sourceInfoPool if non-empty
-    if !ctx.serializer.pool.is_empty() {
-        ast_context_obj.insert("sourceInfoPool".to_string(), json!(ctx.serializer.pool));
-    }
+    // Build astContext with deterministic field ordering
+    let ast_context_json = AstContextJson {
+        files,
+        meta_top_level_key_sources,
+        source_info_pool,
+    };
 
-    // Only include metaTopLevelKeySources if non-empty
-    if !meta_top_level_key_sources.is_empty() {
-        ast_context_obj.insert(
-            "metaTopLevelKeySources".to_string(),
-            Value::Object(meta_top_level_key_sources),
-        );
-    }
+    // Build final document with deterministic field ordering
+    let document = PandocDocumentJson {
+        ast_context: ast_context_json,
+        blocks: blocks_json.as_array().cloned().unwrap_or_default(),
+        meta: meta_json,
+        pandoc_api_version: [1, 23, 1],
+    };
 
-    Ok(json!({
-        "pandoc-api-version": [1, 23, 1],
-        "meta": meta_json,
-        "blocks": blocks_json,
-        "astContext": ast_context_obj,
-    }))
+    Ok(serde_json::to_value(document).unwrap())
 }
 
 /// Write Pandoc AST to JSON with custom configuration.
