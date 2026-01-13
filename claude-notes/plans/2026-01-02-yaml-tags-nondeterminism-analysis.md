@@ -339,3 +339,45 @@ By serializing during the precomputation phase:
 - `crates/pampa/src/writers/json.rs` - SourceInfoSerializer implementation
 - `crates/quarto-source-map/src/source_info.rs` - SourceInfo type definition
 - `crates/pampa/snapshots/json/yaml-tags.snap` - Affected snapshot
+
+---
+
+## CORRECTION (2026-01-13): Original Fix Was Incomplete
+
+**The fix described above did NOT fully solve the problem.** The bug reappeared in CI on 2026-01-13.
+
+### What Was Wrong With the Original Analysis
+
+The "Why Pre-serialization Works" section claimed:
+> "The temporary Inlines created during precomputation are dropped immediately after serialization"
+> "The pointer cache never sees temporary SourceInfos that could have their memory reused"
+
+This reasoning was **flawed**. The fix prevented memory reuse between the precomputation phase and main serialization, but it did NOT prevent memory reuse **within the precomputation phase itself**.
+
+### The Actual Bug
+
+When processing entries sequentially in `precompute_config_value_json`:
+1. Process `compute` (Expr): create clone at addr A, intern, drop clone (A freed)
+2. Process `path` (Path): create clone - allocator might reuse addr A!
+3. If addr A is reused, `id_map.get(&A)` returns the wrong ID
+
+The temporaries have **non-overlapping lifetimes** because they're processed sequentially, allowing the allocator to reuse addresses.
+
+### The Correct Fix
+
+Keep ALL temporary Inlines alive until precomputation completes:
+
+```rust
+fn precompute_all_json(pandoc: &Pandoc, ctx: &mut JsonWriterContext) {
+    let mut inlines_keeper: Vec<Inlines> = Vec::new();  // Keep all alive!
+    precompute_config_value_json(&pandoc.meta, ctx, &mut inlines_keeper);
+    for block in &pandoc.blocks {
+        precompute_block_json(block, ctx, &mut inlines_keeper);
+    }
+    // inlines_keeper dropped here, AFTER all precomputation
+}
+```
+
+### See Also
+
+- `claude-notes/plans/2026-01-13-precomputation-memory-reuse-bug.md` - Full analysis of the corrected fix

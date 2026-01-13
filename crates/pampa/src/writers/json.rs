@@ -444,37 +444,50 @@ fn build_expr_inlines(expr: &str, source_info: &SourceInfo) -> Inlines {
 ///
 /// This function is called at the start of serialization to build all Inlines
 /// upfront, serialize them to JSON (which interns their SourceInfos into the pool),
-/// and store the resulting JSON for later retrieval. This ensures all SourceInfos
-/// from these variants are interned before any temporary Inlines could be created
-/// and cause memory reuse issues with the pointer cache.
-fn precompute_config_value_json(config_value: &ConfigValue, ctx: &mut JsonWriterContext) {
+/// and store the resulting JSON for later retrieval.
+///
+/// CRITICAL: The `inlines_keeper` parameter collects all temporary Inlines created
+/// during precomputation. These MUST be kept alive until precomputation completes
+/// to prevent memory reuse bugs. Without this, the allocator can reuse a freed
+/// clone's address for a subsequent clone, causing the SourceInfoSerializer's
+/// pointer cache to return incorrect IDs.
+///
+/// See: claude-notes/plans/2026-01-13-precomputation-memory-reuse-bug.md
+fn precompute_config_value_json(
+    config_value: &ConfigValue,
+    ctx: &mut JsonWriterContext,
+    inlines_keeper: &mut Vec<Inlines>,
+) {
     match &config_value.value {
         ConfigValueKind::Path(s) => {
             let inlines = build_path_inlines(s, &config_value.source_info);
             let json = write_inlines(&inlines, ctx);
             ctx.precomputed_json
                 .insert(config_value as *const ConfigValue, json);
+            inlines_keeper.push(inlines); // Keep alive until precomputation completes
         }
         ConfigValueKind::Glob(s) => {
             let inlines = build_glob_inlines(s, &config_value.source_info);
             let json = write_inlines(&inlines, ctx);
             ctx.precomputed_json
                 .insert(config_value as *const ConfigValue, json);
+            inlines_keeper.push(inlines); // Keep alive until precomputation completes
         }
         ConfigValueKind::Expr(s) => {
             let inlines = build_expr_inlines(s, &config_value.source_info);
             let json = write_inlines(&inlines, ctx);
             ctx.precomputed_json
                 .insert(config_value as *const ConfigValue, json);
+            inlines_keeper.push(inlines); // Keep alive until precomputation completes
         }
         ConfigValueKind::Map(entries) => {
             for entry in entries {
-                precompute_config_value_json(&entry.value, ctx);
+                precompute_config_value_json(&entry.value, ctx, inlines_keeper);
             }
         }
         ConfigValueKind::Array(items) => {
             for item in items {
-                precompute_config_value_json(item, ctx);
+                precompute_config_value_json(item, ctx, inlines_keeper);
             }
         }
         // Other variants don't need pre-computation
@@ -483,28 +496,34 @@ fn precompute_config_value_json(config_value: &ConfigValue, ctx: &mut JsonWriter
 }
 
 /// Walk a Block and pre-serialize JSON for any ConfigValue Path/Glob/Expr variants.
-fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
+///
+/// See `precompute_config_value_json` for why `inlines_keeper` is required.
+fn precompute_block_json(
+    block: &Block,
+    ctx: &mut JsonWriterContext,
+    inlines_keeper: &mut Vec<Inlines>,
+) {
     match block {
         Block::BlockMetadata(meta) => {
-            precompute_config_value_json(&meta.meta, ctx);
+            precompute_config_value_json(&meta.meta, ctx, inlines_keeper);
         }
         // Recursively walk blocks that contain other blocks
         Block::BlockQuote(bq) => {
             for b in &bq.content {
-                precompute_block_json(b, ctx);
+                precompute_block_json(b, ctx, inlines_keeper);
             }
         }
         Block::OrderedList(ol) => {
             for item in &ol.content {
                 for b in item {
-                    precompute_block_json(b, ctx);
+                    precompute_block_json(b, ctx, inlines_keeper);
                 }
             }
         }
         Block::BulletList(bl) => {
             for item in &bl.content {
                 for b in item {
-                    precompute_block_json(b, ctx);
+                    precompute_block_json(b, ctx, inlines_keeper);
                 }
             }
         }
@@ -512,19 +531,19 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
             for (_, blocks_list) in &dl.content {
                 for blocks in blocks_list {
                     for b in blocks {
-                        precompute_block_json(b, ctx);
+                        precompute_block_json(b, ctx, inlines_keeper);
                     }
                 }
             }
         }
         Block::Div(div) => {
             for b in &div.content {
-                precompute_block_json(b, ctx);
+                precompute_block_json(b, ctx, inlines_keeper);
             }
         }
         Block::Figure(fig) => {
             for b in &fig.content {
-                precompute_block_json(b, ctx);
+                precompute_block_json(b, ctx, inlines_keeper);
             }
         }
         Block::Table(table) => {
@@ -533,14 +552,14 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
                 for row in &table_body.head {
                     for cell in &row.cells {
                         for b in &cell.content {
-                            precompute_block_json(b, ctx);
+                            precompute_block_json(b, ctx, inlines_keeper);
                         }
                     }
                 }
                 for row in &table_body.body {
                     for cell in &row.cells {
                         for b in &cell.content {
-                            precompute_block_json(b, ctx);
+                            precompute_block_json(b, ctx, inlines_keeper);
                         }
                     }
                 }
@@ -549,7 +568,7 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
             for row in &table.head.rows {
                 for cell in &row.cells {
                     for b in &cell.content {
-                        precompute_block_json(b, ctx);
+                        precompute_block_json(b, ctx, inlines_keeper);
                     }
                 }
             }
@@ -557,7 +576,7 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
             for row in &table.foot.rows {
                 for cell in &row.cells {
                     for b in &cell.content {
-                        precompute_block_json(b, ctx);
+                        precompute_block_json(b, ctx, inlines_keeper);
                     }
                 }
             }
@@ -567,11 +586,11 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
             for slot in custom.slots.values() {
                 match slot {
                     crate::pandoc::Slot::Block(b) => {
-                        precompute_block_json(b, ctx);
+                        precompute_block_json(b, ctx, inlines_keeper);
                     }
                     crate::pandoc::Slot::Blocks(blocks) => {
                         for b in blocks {
-                            precompute_block_json(b, ctx);
+                            precompute_block_json(b, ctx, inlines_keeper);
                         }
                     }
                     // Inlines don't contain blocks
@@ -581,7 +600,7 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
         }
         Block::NoteDefinitionFencedBlock(note) => {
             for b in &note.content {
-                precompute_block_json(b, ctx);
+                precompute_block_json(b, ctx, inlines_keeper);
             }
         }
         // Leaf blocks that don't contain other blocks
@@ -602,16 +621,34 @@ fn precompute_block_json(block: &Block, ctx: &mut JsonWriterContext) {
 /// This must be called at the start of serialization. It builds temporary Inlines
 /// for Path/Glob/Expr variants, serializes them to JSON (which interns their
 /// SourceInfos into the pool), and stores the resulting JSON for later retrieval.
-/// This ensures deterministic pool IDs by interning these SourceInfos before the
-/// main serialization pass, preventing memory reuse bugs with the pointer cache.
+///
+/// CRITICAL: All temporary Inlines are kept alive in `inlines_keeper` until this
+/// function returns. This prevents a memory reuse bug where the allocator could
+/// reuse a freed clone's address for a subsequent clone. When that happens, the
+/// SourceInfoSerializer's pointer cache (`id_map`) returns a stale ID for the
+/// new clone, causing incorrect source info references in the output.
+///
+/// The bug manifests as non-deterministic `s` values in the JSON output because
+/// memory reuse depends on allocator state, which varies between runs.
+///
+/// See: claude-notes/plans/2026-01-13-precomputation-memory-reuse-bug.md
 fn precompute_all_json(pandoc: &Pandoc, ctx: &mut JsonWriterContext) {
+    // Keep all temporary Inlines alive until precomputation is complete.
+    // This prevents memory reuse where a dropped clone's address could be
+    // reused by a subsequent clone, causing stale pointer cache hits.
+    let mut inlines_keeper: Vec<Inlines> = Vec::new();
+
     // Walk top-level metadata
-    precompute_config_value_json(&pandoc.meta, ctx);
+    precompute_config_value_json(&pandoc.meta, ctx, &mut inlines_keeper);
 
     // Walk all blocks for BlockMetadata nodes
     for block in &pandoc.blocks {
-        precompute_block_json(block, ctx);
+        precompute_block_json(block, ctx, &mut inlines_keeper);
     }
+
+    // inlines_keeper is dropped here, AFTER all precomputation is done.
+    // At this point, all SourceInfos have been interned and their IDs are
+    // safely stored in precomputed_json. Memory can now be safely reused.
 }
 
 /// Helper to build a node JSON object with type, optional content, and source info.
