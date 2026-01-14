@@ -2823,8 +2823,11 @@ name = "reconcile-viewer"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "hashlink",
  "pampa",
+ "proptest",
  "quarto-pandoc-types",
+ "quarto-source-map",
  "serde",
  "serde_json",
 ]

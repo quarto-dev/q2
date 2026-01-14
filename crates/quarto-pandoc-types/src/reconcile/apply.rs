@@ -101,6 +101,8 @@ fn apply_block_container_reconciliation(
 ) -> Block {
     match (orig_container, exec_container) {
         (Block::Div(mut orig), Block::Div(exec)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            orig.attr = exec.attr;
             orig.content = apply_reconciliation_to_blocks(orig.content, exec.content, plan);
             Block::Div(orig)
         }
@@ -109,6 +111,8 @@ fn apply_block_container_reconciliation(
             Block::BlockQuote(orig)
         }
         (Block::OrderedList(mut orig), Block::OrderedList(exec)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            orig.attr = exec.attr;
             orig.content = apply_list_reconciliation(orig.content, exec.content, plan);
             Block::OrderedList(orig)
         }
@@ -117,6 +121,9 @@ fn apply_block_container_reconciliation(
             Block::BulletList(orig)
         }
         (Block::Figure(mut orig), Block::Figure(exec)) => {
+            // Use exec's attr and caption (structural), keep orig's source_info
+            orig.attr = exec.attr;
+            orig.caption = exec.caption;
             orig.content = apply_reconciliation_to_blocks(orig.content, exec.content, plan);
             Block::Figure(orig)
         }
@@ -186,6 +193,9 @@ fn apply_inline_block_reconciliation(
             Block::Plain(orig)
         }
         (Block::Header(mut orig), Block::Header(exec)) => {
+            // Use exec's level and attr (structural), keep orig's source_info
+            orig.level = exec.level;
+            orig.attr = exec.attr;
             orig.content = apply_reconciliation_to_inlines(orig.content, exec.content, inline_plan);
             Block::Header(orig)
         }

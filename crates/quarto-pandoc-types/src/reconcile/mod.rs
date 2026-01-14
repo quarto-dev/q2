@@ -27,7 +27,7 @@ pub use apply::apply_reconciliation;
 pub use compute::compute_reconciliation;
 pub use hash::{
     HashCache, compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block,
-    structural_eq_inline,
+    structural_eq_blocks, structural_eq_inline,
 };
 pub use types::{
     BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
@@ -1147,7 +1147,9 @@ mod list_length_tests {
 #[cfg(test)]
 mod property_tests {
     use super::*;
-    use crate::reconcile::generators::{gen_pandoc_b0_i0, gen_pandoc_with_list};
+    use crate::reconcile::generators::{
+        gen_full_pandoc, gen_pandoc_b0_i0, gen_pandoc_with_list, gen_pandoc_with_nested_lists,
+    };
     use crate::reconcile::hash::structural_eq_blocks;
     use proptest::prelude::*;
 
@@ -1173,13 +1175,54 @@ mod property_tests {
             );
         }
 
-        /// B5: Lists with varying numbers of items.
-        /// This test EXPOSES THE BUG: when list lengths differ,
-        /// the result may have wrong number of items.
+        /// B5: Lists with varying numbers of items (simple: only paragraphs in items).
         #[test]
         fn reconciliation_preserves_structure_with_lists(
             before in gen_pandoc_with_list(),
             after in gen_pandoc_with_list(),
+        ) {
+            let after_clone = after.clone();
+            let plan = compute_reconciliation(&before, &after);
+            let result = apply_reconciliation(before, after, &plan);
+
+            prop_assert!(
+                structural_eq_blocks(&result.blocks, &after_clone.blocks),
+                "Result should be structurally equal to 'after'.\n\
+                 Result: {:?}\n\
+                 After: {:?}",
+                result.blocks,
+                after_clone.blocks
+            );
+        }
+
+        /// Nested lists: lists can contain other lists as items.
+        /// Tests reconciliation when block types inside list items differ.
+        #[test]
+        fn reconciliation_preserves_structure_with_nested_lists(
+            before in gen_pandoc_with_nested_lists(),
+            after in gen_pandoc_with_nested_lists(),
+        ) {
+            let after_clone = after.clone();
+            let plan = compute_reconciliation(&before, &after);
+            let result = apply_reconciliation(before, after, &plan);
+
+            prop_assert!(
+                structural_eq_blocks(&result.blocks, &after_clone.blocks),
+                "Result should be structurally equal to 'after'.\n\
+                 Result: {:?}\n\
+                 After: {:?}",
+                result.blocks,
+                after_clone.blocks
+            );
+        }
+
+        /// FULL AST: Tests with all block and inline types enabled.
+        /// This is the ultimate test - if this passes with gen_full_pandoc(),
+        /// the reconciliation handles all AST combinations correctly.
+        #[test]
+        fn reconciliation_preserves_structure_full_ast(
+            before in gen_full_pandoc(),
+            after in gen_full_pandoc(),
         ) {
             let after_clone = after.clone();
             let plan = compute_reconciliation(&before, &after);

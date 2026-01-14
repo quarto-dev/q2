@@ -9,14 +9,15 @@
 #![feature(trim_prefix_suffix)]
 
 use clap::Parser;
+use hashlink::LinkedHashMap;
 use pampa::readers;
 use quarto_pandoc_types::block::{Block, Blocks};
 use quarto_pandoc_types::inline::{Inline, Inlines};
 use quarto_pandoc_types::reconcile::{
     BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
-    ReconciliationStats, compute_reconciliation,
+    compute_reconciliation,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::io;
 
 #[derive(Parser, Debug)]
@@ -37,16 +38,15 @@ struct Args {
 }
 
 /// Human-readable reconciliation report
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct ReadableReport {
     before_file: String,
     after_file: String,
-    stats: ReconciliationStats,
     block_operations: Vec<ReadableBlockOp>,
 }
 
 /// Human-readable block operation
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct ReadableBlockOp {
     /// Position in the result
     result_index: usize,
@@ -54,113 +54,48 @@ struct ReadableBlockOp {
     action: String,
     /// Type of block in result
     block_type: String,
-    /// Content snippet from the source block
+    /// Index in the before blocks (for keep_before and recurse)
     #[serde(skip_serializing_if = "Option::is_none")]
-    before_content: Option<String>,
-    /// Content snippet from the target block
+    before_idx: Option<usize>,
+    /// Index in the after blocks (for use_after and recurse)
     #[serde(skip_serializing_if = "Option::is_none")]
-    after_content: Option<String>,
-    /// Nested block operations (for containers)
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    after_idx: Option<usize>,
+    /// Nested block operations (for containers like Div, BlockQuote)
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     nested_block_ops: Vec<ReadableBlockOp>,
+    /// Per-item operations for lists (BulletList, OrderedList)
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    list_item_ops: Vec<ReadableListItemOp>,
     /// Nested inline operations
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     inline_ops: Vec<ReadableInlineOp>,
 }
 
+/// Human-readable list item operation
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct ReadableListItemOp {
+    /// Index in the result list
+    result_index: usize,
+    /// Index in the before list (if item existed in before)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    before_idx: Option<usize>,
+    /// Block operations within this list item
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    block_ops: Vec<ReadableBlockOp>,
+}
+
 /// Human-readable inline operation
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct ReadableInlineOp {
     result_index: usize,
     action: String,
     inline_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    before_content: Option<String>,
+    before_idx: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    after_content: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    after_idx: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     nested_inline_ops: Vec<ReadableInlineOp>,
-}
-
-/// Extract a text snippet from a block
-fn block_snippet(block: &Block, max_len: usize) -> String {
-    let text = extract_block_text(block);
-    truncate_snippet(&text, max_len)
-}
-
-/// Extract plain text from a block
-fn extract_block_text(block: &Block) -> String {
-    match block {
-        Block::Plain(p) => extract_inlines_text(&p.content),
-        Block::Paragraph(p) => extract_inlines_text(&p.content),
-        Block::Header(h) => format!("H{}: {}", h.level, extract_inlines_text(&h.content)),
-        Block::CodeBlock(c) => format!("```{}\n{}", c.attr.1.join(","), c.text),
-        Block::RawBlock(r) => format!("raw({}): {}", r.format, r.text),
-        Block::BlockQuote(_) => "[blockquote]".to_string(),
-        Block::OrderedList(l) => format!("[ordered list: {} items]", l.content.len()),
-        Block::BulletList(l) => format!("[bullet list: {} items]", l.content.len()),
-        Block::DefinitionList(l) => format!("[definition list: {} items]", l.content.len()),
-        Block::HorizontalRule(_) => "---".to_string(),
-        Block::Table(_) => "[table]".to_string(),
-        Block::Figure(_) => "[figure]".to_string(),
-        Block::Div(d) => format!("[div .{}]", d.attr.1.first().unwrap_or(&String::new())),
-        Block::LineBlock(l) => l
-            .content
-            .iter()
-            .map(|line| extract_inlines_text(line))
-            .collect::<Vec<_>>()
-            .join("\n"),
-        Block::BlockMetadata(_) => "[metadata]".to_string(),
-        Block::NoteDefinitionPara(n) => {
-            format!("[^{}]: {}", n.id, extract_inlines_text(&n.content))
-        }
-        Block::NoteDefinitionFencedBlock(n) => format!("[^{}]: [fenced block]", n.id),
-        Block::CaptionBlock(_) => "[caption]".to_string(),
-        Block::Custom(c) => format!("[custom: {}]", c.type_name),
-    }
-}
-
-/// Extract plain text from inlines
-fn extract_inlines_text(inlines: &Inlines) -> String {
-    let mut result = String::new();
-    for inline in inlines {
-        result.push_str(&extract_inline_text(inline));
-    }
-    result
-}
-
-/// Extract plain text from a single inline
-fn extract_inline_text(inline: &Inline) -> String {
-    match inline {
-        Inline::Str(s) => s.text.clone(),
-        Inline::Space(_) => " ".to_string(),
-        Inline::SoftBreak(_) => " ".to_string(),
-        Inline::LineBreak(_) => "\n".to_string(),
-        Inline::Emph(e) => extract_inlines_text(&e.content),
-        Inline::Strong(s) => extract_inlines_text(&s.content),
-        Inline::Underline(u) => extract_inlines_text(&u.content),
-        Inline::Strikeout(s) => extract_inlines_text(&s.content),
-        Inline::Superscript(s) => extract_inlines_text(&s.content),
-        Inline::Subscript(s) => extract_inlines_text(&s.content),
-        Inline::SmallCaps(s) => extract_inlines_text(&s.content),
-        Inline::Quoted(q) => format!("\"{}\"", extract_inlines_text(&q.content)),
-        Inline::Cite(c) => format!("[cite: {}]", c.citations.len()),
-        Inline::Code(c) => format!("`{}`", c.text),
-        Inline::Math(m) => format!("${}$", m.text),
-        Inline::RawInline(r) => format!("raw({})", r.format),
-        Inline::Link(l) => format!("[{}]({})", extract_inlines_text(&l.content), l.target.0),
-        Inline::Image(i) => format!("![{}]({})", extract_inlines_text(&i.content), i.target.0),
-        Inline::Note(_) => "[note]".to_string(),
-        Inline::Span(s) => extract_inlines_text(&s.content),
-        Inline::Shortcode(s) => format!("{{{{< {} >}}}}", s.name),
-        Inline::NoteReference(n) => format!("[^{}]", n.id),
-        Inline::Attr(_, _) => "".to_string(),
-        Inline::Insert(i) => format!("++{}++", extract_inlines_text(&i.content)),
-        Inline::Delete(d) => format!("~~{}~~", extract_inlines_text(&d.content)),
-        Inline::Highlight(h) => format!("=={}==", extract_inlines_text(&h.content)),
-        Inline::EditComment(c) => format!(">>{}<<", extract_inlines_text(&c.content)),
-        Inline::Custom(c) => format!("[custom: {}]", c.type_name),
-    }
 }
 
 /// Get the type name of a block
@@ -222,21 +157,6 @@ fn inline_type_name(inline: &Inline) -> &'static str {
     }
 }
 
-/// Truncate a string to max_len, adding "..." if truncated
-fn truncate_snippet(s: &str, max_len: usize) -> String {
-    let s = s.replace('\n', "\\n");
-    if s.len() <= max_len {
-        s
-    } else {
-        format!("{}...", &s[..max_len.saturating_sub(3)])
-    }
-}
-
-/// Get inline snippet
-fn inline_snippet(inline: &Inline, max_len: usize) -> String {
-    truncate_snippet(&extract_inline_text(inline), max_len)
-}
-
 /// Build readable inline operations from a plan
 fn build_inline_ops(
     plan: &InlineReconciliationPlan,
@@ -264,9 +184,6 @@ fn build_inline_ops(
             .map(inline_type_name)
             .unwrap_or("Unknown");
 
-        let before_content = before_inline.map(|i| inline_snippet(i, snippet_len));
-        let after_content = after_inline.map(|i| inline_snippet(i, snippet_len));
-
         // Handle nested inline plans for containers
         let nested_inline_ops =
             if let Some(nested_plan) = plan.inline_container_plans.get(&result_idx) {
@@ -281,8 +198,8 @@ fn build_inline_ops(
             result_index: result_idx,
             action: action.to_string(),
             inline_type: inline_type.to_string(),
-            before_content,
-            after_content,
+            before_idx,
+            after_idx,
             nested_inline_ops,
         });
     }
@@ -332,11 +249,61 @@ fn get_block_children(block: &Block) -> Blocks {
     }
 }
 
+/// Get list items from a block (for BulletList and OrderedList)
+fn get_list_items(block: &Block) -> Option<&Vec<Vec<Block>>> {
+    match block {
+        Block::BulletList(l) => Some(&l.content),
+        Block::OrderedList(l) => Some(&l.content),
+        _ => None,
+    }
+}
+
+/// Build readable list item operations from list_item_plans
+fn build_list_item_ops(
+    plan: &ReconciliationPlan,
+    before_items: Option<&Vec<Vec<Block>>>,
+    after_items: Option<&Vec<Vec<Block>>>,
+    snippet_len: usize,
+) -> Vec<ReadableListItemOp> {
+    let mut ops = Vec::new();
+
+    // Each entry in list_item_plans corresponds to an item in the after list
+    for (result_idx, item_plan) in plan.list_item_plans.iter().enumerate() {
+        let after_item = after_items.and_then(|items| items.get(result_idx));
+        // For simple positional matching, before_idx == result_idx if it exists
+        let before_idx = if before_items
+            .map(|items| result_idx < items.len())
+            .unwrap_or(false)
+        {
+            Some(result_idx)
+        } else {
+            None
+        };
+        let before_item = before_idx.and_then(|i| before_items.and_then(|items| items.get(i)));
+
+        // Build block ops for this list item
+        let block_ops = build_block_ops(
+            item_plan,
+            before_item.map(|v| v.as_slice()).unwrap_or(&[]),
+            after_item.map(|v| v.as_slice()).unwrap_or(&[]),
+            snippet_len,
+        );
+
+        ops.push(ReadableListItemOp {
+            result_index: result_idx,
+            before_idx,
+            block_ops,
+        });
+    }
+
+    ops
+}
+
 /// Build readable block operations from a plan
 fn build_block_ops(
     plan: &ReconciliationPlan,
-    before_blocks: &Blocks,
-    after_blocks: &Blocks,
+    before_blocks: &[Block],
+    after_blocks: &[Block],
     snippet_len: usize,
 ) -> Vec<ReadableBlockOp> {
     let mut ops = Vec::new();
@@ -359,10 +326,7 @@ fn build_block_ops(
             .map(block_type_name)
             .unwrap_or("Unknown");
 
-        let before_content = before_block.map(|b| block_snippet(b, snippet_len));
-        let after_content = after_block.map(|b| block_snippet(b, snippet_len));
-
-        // Handle nested block plans for containers
+        // Handle nested block plans for containers (Div, BlockQuote, Figure)
         let nested_block_ops =
             if let Some(nested_plan) = plan.block_container_plans.get(&result_idx) {
                 let nested_before = before_block.map(get_block_children).unwrap_or_default();
@@ -371,6 +335,19 @@ fn build_block_ops(
             } else {
                 Vec::new()
             };
+
+        // Handle list item plans (BulletList, OrderedList)
+        let list_item_ops = if let Some(nested_plan) = plan.block_container_plans.get(&result_idx) {
+            let before_items = before_block.and_then(get_list_items);
+            let after_items = after_block.and_then(get_list_items);
+            if before_items.is_some() || after_items.is_some() {
+                build_list_item_ops(nested_plan, before_items, after_items, snippet_len)
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
 
         // Handle inline plans
         let inline_ops = if let Some(inline_plan) = plan.inline_plans.get(&result_idx) {
@@ -391,14 +368,130 @@ fn build_block_ops(
             result_index: result_idx,
             action: action.to_string(),
             block_type: block_type.to_string(),
-            before_content,
-            after_content,
+            before_idx,
+            after_idx,
             nested_block_ops,
+            list_item_ops,
             inline_ops,
         });
     }
 
     ops
+}
+
+// =============================================================================
+// Plan Reconstruction from JSON (used in tests)
+// =============================================================================
+
+/// Reconstruct a ReconciliationPlan from readable block operations.
+#[allow(dead_code)] // Used in tests
+fn plan_from_block_ops(ops: &[ReadableBlockOp]) -> ReconciliationPlan {
+    let mut block_alignments = Vec::with_capacity(ops.len());
+    let mut block_container_plans = LinkedHashMap::new();
+    let mut inline_plans = LinkedHashMap::new();
+    let list_item_plans = Vec::new();
+
+    for op in ops {
+        // Convert action back to BlockAlignment
+        let alignment = match op.action.as_str() {
+            "keep_before" => BlockAlignment::KeepBefore(op.before_idx.unwrap_or(0)),
+            "use_after" => BlockAlignment::UseAfter(op.after_idx.unwrap_or(0)),
+            "recurse" => BlockAlignment::RecurseIntoContainer {
+                before_idx: op.before_idx.unwrap_or(0),
+                after_idx: op.after_idx.unwrap_or(0),
+            },
+            _ => BlockAlignment::UseAfter(op.after_idx.unwrap_or(0)),
+        };
+        block_alignments.push(alignment);
+
+        // Handle nested block ops (for Div, BlockQuote, Figure)
+        if !op.nested_block_ops.is_empty() {
+            let nested_plan = plan_from_block_ops(&op.nested_block_ops);
+            block_container_plans.insert(op.result_index, nested_plan);
+        }
+
+        // Handle list item ops (for BulletList, OrderedList)
+        if !op.list_item_ops.is_empty() {
+            let container_plan = plan_from_list_item_ops(&op.list_item_ops);
+            block_container_plans.insert(op.result_index, container_plan);
+        }
+
+        // Handle inline ops
+        if !op.inline_ops.is_empty() {
+            let inline_plan = plan_from_inline_ops(&op.inline_ops);
+            inline_plans.insert(op.result_index, inline_plan);
+        }
+    }
+
+    ReconciliationPlan {
+        block_alignments,
+        block_container_plans,
+        inline_plans,
+        custom_node_plans: LinkedHashMap::new(),
+        list_item_plans,
+        stats: Default::default(),
+    }
+}
+
+/// Reconstruct a ReconciliationPlan from list item operations.
+#[allow(dead_code)] // Used in tests
+fn plan_from_list_item_ops(ops: &[ReadableListItemOp]) -> ReconciliationPlan {
+    let mut list_item_plans = Vec::with_capacity(ops.len());
+
+    for op in ops {
+        // Each list item op contains block_ops that describe the item's blocks
+        let item_plan = plan_from_block_ops(&op.block_ops);
+        list_item_plans.push(item_plan);
+    }
+
+    ReconciliationPlan {
+        block_alignments: Vec::new(),
+        block_container_plans: LinkedHashMap::new(),
+        inline_plans: LinkedHashMap::new(),
+        custom_node_plans: LinkedHashMap::new(),
+        list_item_plans,
+        stats: Default::default(),
+    }
+}
+
+/// Reconstruct an InlineReconciliationPlan from readable inline operations.
+#[allow(dead_code)] // Used in tests
+fn plan_from_inline_ops(ops: &[ReadableInlineOp]) -> InlineReconciliationPlan {
+    let mut inline_alignments = Vec::with_capacity(ops.len());
+    let mut inline_container_plans = LinkedHashMap::new();
+
+    for op in ops {
+        // Convert action back to InlineAlignment
+        let alignment = match op.action.as_str() {
+            "keep_before" => InlineAlignment::KeepBefore(op.before_idx.unwrap_or(0)),
+            "use_after" => InlineAlignment::UseAfter(op.after_idx.unwrap_or(0)),
+            "recurse" => InlineAlignment::RecurseIntoContainer {
+                before_idx: op.before_idx.unwrap_or(0),
+                after_idx: op.after_idx.unwrap_or(0),
+            },
+            _ => InlineAlignment::UseAfter(op.after_idx.unwrap_or(0)),
+        };
+        inline_alignments.push(alignment);
+
+        // Handle nested inline ops
+        if !op.nested_inline_ops.is_empty() {
+            let nested_plan = plan_from_inline_ops(&op.nested_inline_ops);
+            inline_container_plans.insert(op.result_index, nested_plan);
+        }
+    }
+
+    InlineReconciliationPlan {
+        inline_alignments,
+        inline_container_plans,
+        note_block_plans: LinkedHashMap::new(),
+        custom_node_plans: LinkedHashMap::new(),
+    }
+}
+
+/// Reconstruct a ReconciliationPlan from a ReadableReport.
+#[allow(dead_code)] // Used in tests
+fn plan_from_report(report: &ReadableReport) -> ReconciliationPlan {
+    plan_from_block_ops(&report.block_operations)
 }
 
 fn main() {
@@ -481,7 +574,6 @@ fn main() {
     let report = ReadableReport {
         before_file: args.before,
         after_file: args.after,
-        stats: plan.stats,
         block_operations,
     };
 
@@ -491,6 +583,181 @@ fn main() {
         Err(e) => {
             eprintln!("Error serializing to JSON: {}", e);
             std::process::exit(1);
+        }
+    }
+}
+
+// =============================================================================
+// Property Tests for JSON Round-Trip
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proptest::prelude::*;
+    use quarto_pandoc_types::reconcile::{apply_reconciliation, compute_reconciliation};
+    use quarto_pandoc_types::{BulletList, Pandoc, Paragraph, Space, Str};
+    use quarto_source_map::{FileId, SourceInfo};
+
+    // Simple generators for testing
+
+    fn dummy_source() -> SourceInfo {
+        SourceInfo::original(FileId(0), 0, 0)
+    }
+
+    fn gen_str() -> impl Strategy<Value = Inline> {
+        "[a-zA-Z]{1,10}"
+            .prop_filter("non-empty", |s: &String| !s.is_empty())
+            .prop_map(|text| {
+                Inline::Str(Str {
+                    text,
+                    source_info: dummy_source(),
+                })
+            })
+    }
+
+    fn gen_space() -> impl Strategy<Value = Inline> {
+        Just(Inline::Space(Space {
+            source_info: dummy_source(),
+        }))
+    }
+
+    fn gen_inlines() -> impl Strategy<Value = Vec<Inline>> {
+        proptest::collection::vec(prop_oneof![gen_str(), gen_space()], 1..=5)
+    }
+
+    fn gen_paragraph() -> impl Strategy<Value = Block> {
+        gen_inlines().prop_map(|content| {
+            Block::Paragraph(Paragraph {
+                content,
+                source_info: dummy_source(),
+            })
+        })
+    }
+
+    fn gen_bullet_list() -> impl Strategy<Value = Block> {
+        let item_gen = gen_paragraph().prop_map(|p| vec![p]);
+        proptest::collection::vec(item_gen, 1..=4).prop_map(|content| {
+            Block::BulletList(BulletList {
+                content,
+                source_info: dummy_source(),
+            })
+        })
+    }
+
+    fn gen_pandoc_simple() -> impl Strategy<Value = Pandoc> {
+        proptest::collection::vec(gen_paragraph(), 1..=3).prop_map(|blocks| Pandoc {
+            meta: Default::default(),
+            blocks,
+        })
+    }
+
+    fn gen_pandoc_with_list() -> impl Strategy<Value = Pandoc> {
+        gen_bullet_list().prop_map(|list| Pandoc {
+            meta: Default::default(),
+            blocks: vec![list],
+        })
+    }
+
+    /// Helper: Check if two block sequences are structurally equal (ignoring source_info)
+    fn blocks_structurally_equal(a: &[Block], b: &[Block]) -> bool {
+        use quarto_pandoc_types::reconcile::structural_eq_blocks;
+        structural_eq_blocks(a, b)
+    }
+
+    proptest! {
+        /// Property: JSON round-trip preserves reconciliation semantics.
+        ///
+        /// For any pair of documents:
+        /// 1. Compute the reconciliation plan
+        /// 2. Apply it to get result_1
+        /// 3. Serialize plan to JSON, deserialize back to plan_2
+        /// 4. Apply plan_2 to get result_2
+        /// 5. result_1 and result_2 should be structurally equal
+        #[test]
+        fn json_roundtrip_preserves_reconciliation_simple(
+            before in gen_pandoc_simple(),
+            after in gen_pandoc_simple(),
+        ) {
+            // Compute plan and apply
+            let plan = compute_reconciliation(&before, &after);
+            let result_1 = apply_reconciliation(before.clone(), after.clone(), &plan);
+
+            // Build readable report (JSON serialization)
+            let block_operations = build_block_ops(
+                &plan,
+                &before.blocks,
+                &after.blocks,
+                60,
+            );
+            let report = ReadableReport {
+                before_file: "test_before".to_string(),
+                after_file: "test_after".to_string(),
+                block_operations,
+            };
+
+            // Serialize to JSON and back
+            let json = serde_json::to_string(&report).expect("Failed to serialize");
+            let report_2: ReadableReport = serde_json::from_str(&json).expect("Failed to deserialize");
+
+            // Reconstruct plan from JSON
+            let plan_2 = plan_from_report(&report_2);
+
+            // Apply reconstructed plan
+            let result_2 = apply_reconciliation(before, after, &plan_2);
+
+            // Both results should be structurally equal
+            prop_assert!(
+                blocks_structurally_equal(&result_1.blocks, &result_2.blocks),
+                "JSON round-trip should preserve reconciliation semantics.\n\
+                 Result 1 blocks: {}\n\
+                 Result 2 blocks: {}",
+                result_1.blocks.len(),
+                result_2.blocks.len()
+            );
+        }
+
+        #[test]
+        fn json_roundtrip_preserves_reconciliation_with_lists(
+            before in gen_pandoc_with_list(),
+            after in gen_pandoc_with_list(),
+        ) {
+            // Compute plan and apply
+            let plan = compute_reconciliation(&before, &after);
+            let result_1 = apply_reconciliation(before.clone(), after.clone(), &plan);
+
+            // Build readable report (JSON serialization)
+            let block_operations = build_block_ops(
+                &plan,
+                &before.blocks,
+                &after.blocks,
+                60,
+            );
+            let report = ReadableReport {
+                before_file: "test_before".to_string(),
+                after_file: "test_after".to_string(),
+                block_operations,
+            };
+
+            // Serialize to JSON and back
+            let json = serde_json::to_string(&report).expect("Failed to serialize");
+            let report_2: ReadableReport = serde_json::from_str(&json).expect("Failed to deserialize");
+
+            // Reconstruct plan from JSON
+            let plan_2 = plan_from_report(&report_2);
+
+            // Apply reconstructed plan
+            let result_2 = apply_reconciliation(before, after, &plan_2);
+
+            // Both results should be structurally equal
+            prop_assert!(
+                blocks_structurally_equal(&result_1.blocks, &result_2.blocks),
+                "JSON round-trip should preserve reconciliation semantics for lists.\n\
+                 Result 1 blocks: {}\n\
+                 Result 2 blocks: {}",
+                result_1.blocks.len(),
+                result_2.blocks.len()
+            );
         }
     }
 }
