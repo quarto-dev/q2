@@ -20,6 +20,15 @@ printf '\033[0m' && printf '\033]8;;\007' && echo "Terminal reset"
 
 When the user asks you to "reset the terminal", run this command.
 
+## **GIT PUSH POLICY**
+
+**NEVER push to the remote repository without explicit user permission.** Always:
+1. Stage and commit changes as needed
+2. Ask the user for permission before pushing
+3. Only push after receiving explicit approval
+
+This applies even at the end of sessions. Prepare the commit but wait for approval to push.
+
 ## **WORK TRACKING**
 
 We use bd (beads) for issue tracking instead of Markdown TODOs or external tools.
