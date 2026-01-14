@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-14
+
+- [`fb347c8`](https://github.com/quarto-dev/kyoto/commits/fb347c8): Extract Automerge schema and sync client into reusable packages
+
 ### 2026-01-12
 
 - [`55ade12`](https://github.com/quarto-dev/kyoto/commits/55ade12): Add Create New Project feature with project type selection
