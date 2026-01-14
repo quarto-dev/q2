@@ -1,0 +1,18 @@
+[package]
+name = "reconcile-viewer"
+description = "Experimental tool for viewing QMD reconciliation plans in readable JSON format"
+version.workspace = true
+authors.workspace = true
+license.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "reconcile-viewer"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+pampa = { workspace = true, default-features = false }
+quarto-pandoc-types.workspace = true
+serde.workspace = true
+serde_json.workspace = true

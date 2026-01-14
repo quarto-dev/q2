@@ -170,6 +170,7 @@ pub fn compute_reconciliation_for_blocks<'a>(
         block_container_plans,
         inline_plans,
         custom_node_plans,
+        list_item_plans: Vec::new(),
         stats,
     }
 }
@@ -244,18 +245,24 @@ fn compute_list_plan<'a>(
     cache: &mut HashCache<'a>,
 ) -> ReconciliationPlan {
     let mut plan = ReconciliationPlan::new();
+    let mut list_item_plans = Vec::with_capacity(exec_items.len());
 
-    // Simple pairwise matching for now
-    for (orig_item, exec_item) in orig_items.iter().zip(exec_items) {
-        let nested = compute_reconciliation_for_blocks(orig_item, exec_item, cache);
-        plan.stats.merge(&nested.stats);
+    // Simple pairwise matching: reconcile matching positions
+    for (i, exec_item) in exec_items.iter().enumerate() {
+        if let Some(orig_item) = orig_items.get(i) {
+            // Have both original and executed - compute reconciliation
+            let nested = compute_reconciliation_for_blocks(orig_item, exec_item, cache);
+            plan.stats.merge(&nested.stats);
+            list_item_plans.push(nested);
+        } else {
+            // Extra item from executed (no original) - use empty plan
+            // The apply phase will use the executed item as-is
+            plan.stats.blocks_replaced += 1;
+            list_item_plans.push(ReconciliationPlan::new());
+        }
     }
 
-    // Handle extra items in executed (new items from engine)
-    if exec_items.len() > orig_items.len() {
-        plan.stats.blocks_replaced += exec_items.len() - orig_items.len();
-    }
-
+    plan.list_item_plans = list_item_plans;
     plan
 }
 

@@ -2605,6 +2605,7 @@ version = "0.0.0"
 dependencies = [
  "hashlink",
  "indexmap",
+ "proptest",
  "quarto-source-map",
  "rustc-hash",
  "serde",
@@ -2815,6 +2816,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core 0.9.3",
+]
+
+[[package]]
+name = "reconcile-viewer"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "pampa",
+ "quarto-pandoc-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

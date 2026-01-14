@@ -18,6 +18,8 @@
 
 mod apply;
 mod compute;
+#[cfg(test)]
+mod generators;
 mod hash;
 mod types;
 
@@ -887,6 +889,310 @@ mod tests {
             if let crate::Inline::Custom(cn) = &p.content[1] {
                 assert_eq!(cn.source_info, source_original());
             }
+        }
+    }
+}
+
+// =========================================================================
+// List Length Change Tests
+// =========================================================================
+
+#[cfg(test)]
+mod list_length_tests {
+    use super::*;
+    use crate::reconcile::hash::structural_eq_blocks;
+    use crate::{BulletList, Paragraph, Str};
+    use quarto_source_map::{FileId, SourceInfo};
+
+    fn source_orig() -> SourceInfo {
+        SourceInfo::original(FileId(0), 0, 100)
+    }
+
+    fn source_exec() -> SourceInfo {
+        SourceInfo::original(FileId(1), 0, 100)
+    }
+
+    fn make_list_item(text: &str, source: SourceInfo) -> Vec<crate::Block> {
+        vec![crate::Block::Paragraph(Paragraph {
+            content: vec![crate::Inline::Str(Str {
+                text: text.to_string(),
+                source_info: source.clone(),
+            })],
+            source_info: source,
+        })]
+    }
+
+    fn make_bullet_list(items: Vec<Vec<crate::Block>>, source: SourceInfo) -> crate::Block {
+        crate::Block::BulletList(BulletList {
+            content: items,
+            source_info: source,
+        })
+    }
+
+    /// Test: List with same number of items - structural equality preserved.
+    #[test]
+    fn list_same_length_preserves_structure() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("one", source_orig()),
+                    make_list_item("two", source_orig()),
+                    make_list_item("three", source_orig()),
+                ],
+                source_orig(),
+            )],
+        };
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("one", source_exec()),
+                    make_list_item("two", source_exec()),
+                    make_list_item("three", source_exec()),
+                ],
+                source_exec(),
+            )],
+        };
+
+        let after_clone = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        // Result must be structurally equal to after
+        assert!(
+            structural_eq_blocks(&result.blocks, &after_clone.blocks),
+            "Same-length list should preserve structure"
+        );
+
+        // Verify 3 items in result
+        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+            assert_eq!(bl.content.len(), 3);
+        } else {
+            panic!("Expected BulletList");
+        }
+    }
+
+    /// Test: List item removed - result should have 2 items, not 3.
+    #[test]
+    fn list_item_removed_produces_correct_length() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("one", source_orig()),
+                    make_list_item("two", source_orig()),
+                    make_list_item("three", source_orig()),
+                ],
+                source_orig(),
+            )],
+        };
+        // Executed has only 2 items (middle one removed)
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("one", source_exec()),
+                    make_list_item("three", source_exec()),
+                ],
+                source_exec(),
+            )],
+        };
+
+        let after_clone = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        // Result must be structurally equal to after
+        assert!(
+            structural_eq_blocks(&result.blocks, &after_clone.blocks),
+            "List with removed item should match after structure"
+        );
+
+        // Verify 2 items in result, NOT 3
+        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+            assert_eq!(
+                bl.content.len(),
+                2,
+                "Result should have 2 items, not 3 (item was removed)"
+            );
+        } else {
+            panic!("Expected BulletList");
+        }
+    }
+
+    /// Test: List items added - result should have all new items.
+    #[test]
+    fn list_items_added_produces_correct_length() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![make_list_item("one", source_orig())],
+                source_orig(),
+            )],
+        };
+        // Executed has 3 items (2 added)
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("one", source_exec()),
+                    make_list_item("two", source_exec()),
+                    make_list_item("three", source_exec()),
+                ],
+                source_exec(),
+            )],
+        };
+
+        let after_clone = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        // Result must be structurally equal to after
+        assert!(
+            structural_eq_blocks(&result.blocks, &after_clone.blocks),
+            "List with added items should match after structure"
+        );
+
+        // Verify 3 items in result
+        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+            assert_eq!(
+                bl.content.len(),
+                3,
+                "Result should have 3 items (items were added)"
+            );
+        } else {
+            panic!("Expected BulletList");
+        }
+    }
+
+    /// Test: List becomes empty - result should be empty list.
+    #[test]
+    fn list_all_items_removed_produces_empty_list() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("one", source_orig()),
+                    make_list_item("two", source_orig()),
+                ],
+                source_orig(),
+            )],
+        };
+        // Executed has empty list
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(vec![], source_exec())],
+        };
+
+        let after_clone = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        // Result must be structurally equal to after
+        assert!(
+            structural_eq_blocks(&result.blocks, &after_clone.blocks),
+            "Empty list should match after structure"
+        );
+
+        // Verify empty list
+        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+            assert_eq!(bl.content.len(), 0, "Result should be empty list");
+        } else {
+            panic!("Expected BulletList");
+        }
+    }
+
+    /// Test: Empty list gains items - result should have new items.
+    #[test]
+    fn list_from_empty_produces_correct_items() {
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(vec![], source_orig())],
+        };
+        // Executed has 2 items
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_bullet_list(
+                vec![
+                    make_list_item("new one", source_exec()),
+                    make_list_item("new two", source_exec()),
+                ],
+                source_exec(),
+            )],
+        };
+
+        let after_clone = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        // Result must be structurally equal to after
+        assert!(
+            structural_eq_blocks(&result.blocks, &after_clone.blocks),
+            "List from empty should match after structure"
+        );
+
+        // Verify 2 items
+        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+            assert_eq!(
+                bl.content.len(),
+                2,
+                "Result should have 2 items from empty list"
+            );
+        } else {
+            panic!("Expected BulletList");
+        }
+    }
+}
+
+/// Property-based tests for reconciliation correctness.
+///
+/// These tests verify the fundamental property:
+/// apply_reconciliation(before, after, plan) is structurally equal to after
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+    use crate::reconcile::generators::{gen_pandoc_b0_i0, gen_pandoc_with_list};
+    use crate::reconcile::hash::structural_eq_blocks;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// B0/I0: Simple paragraphs with plain text.
+        /// This should pass with the current implementation.
+        #[test]
+        fn reconciliation_preserves_structure_b0_i0(
+            before in gen_pandoc_b0_i0(),
+            after in gen_pandoc_b0_i0(),
+        ) {
+            let after_clone = after.clone();
+            let plan = compute_reconciliation(&before, &after);
+            let result = apply_reconciliation(before, after, &plan);
+
+            prop_assert!(
+                structural_eq_blocks(&result.blocks, &after_clone.blocks),
+                "Result should be structurally equal to 'after'.\n\
+                 Result blocks: {}\n\
+                 After blocks: {}",
+                result.blocks.len(),
+                after_clone.blocks.len()
+            );
+        }
+
+        /// B5: Lists with varying numbers of items.
+        /// This test EXPOSES THE BUG: when list lengths differ,
+        /// the result may have wrong number of items.
+        #[test]
+        fn reconciliation_preserves_structure_with_lists(
+            before in gen_pandoc_with_list(),
+            after in gen_pandoc_with_list(),
+        ) {
+            let after_clone = after.clone();
+            let plan = compute_reconciliation(&before, &after);
+            let result = apply_reconciliation(before, after, &plan);
+
+            prop_assert!(
+                structural_eq_blocks(&result.blocks, &after_clone.blocks),
+                "Result should be structurally equal to 'after'.\n\
+                 Result: {:?}\n\
+                 After: {:?}",
+                result.blocks,
+                after_clone.blocks
+            );
         }
     }
 }

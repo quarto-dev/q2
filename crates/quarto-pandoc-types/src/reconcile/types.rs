@@ -136,6 +136,12 @@ pub struct ReconciliationPlan {
     #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
     pub custom_node_plans: LinkedHashMap<usize, CustomNodeSlotPlan>,
 
+    /// Per-item plans for lists (BulletList, OrderedList).
+    /// Each entry corresponds to an item in the executed list.
+    /// Used when this plan represents a list container's reconciliation.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub list_item_plans: Vec<ReconciliationPlan>,
+
     /// Diagnostics.
     pub stats: ReconciliationStats,
 }

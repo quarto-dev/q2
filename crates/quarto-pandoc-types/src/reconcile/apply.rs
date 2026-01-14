@@ -139,15 +139,35 @@ fn apply_block_container_reconciliation(
 
 /// Apply reconciliation to list items.
 fn apply_list_reconciliation(
-    mut orig_items: Vec<Vec<Block>>,
+    orig_items: Vec<Vec<Block>>,
     exec_items: Vec<Vec<Block>>,
     plan: &ReconciliationPlan,
 ) -> Vec<Vec<Block>> {
-    // Simple pairwise reconciliation
-    for (orig_item, exec_item) in orig_items.iter_mut().zip(exec_items.into_iter()) {
-        *orig_item = apply_reconciliation_to_blocks(std::mem::take(orig_item), exec_item, plan);
+    let mut result = Vec::with_capacity(exec_items.len());
+
+    // Use the per-item plans from list_item_plans
+    for (i, exec_item) in exec_items.into_iter().enumerate() {
+        let item_plan = plan.list_item_plans.get(i);
+
+        if let Some(orig_item) = orig_items.get(i).cloned() {
+            // Have both original and executed - apply the item's plan
+            if let Some(nested_plan) = item_plan {
+                result.push(apply_reconciliation_to_blocks(
+                    orig_item,
+                    exec_item,
+                    nested_plan,
+                ));
+            } else {
+                // No plan for this item (shouldn't happen if compute is correct)
+                result.push(exec_item);
+            }
+        } else {
+            // Extra item from executed (no original) - use as-is
+            result.push(exec_item);
+        }
     }
-    orig_items
+
+    result
 }
 
 /// Apply reconciliation to a block with inline content (Paragraph, Header, etc.).
