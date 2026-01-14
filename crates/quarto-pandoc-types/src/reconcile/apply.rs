@@ -128,15 +128,24 @@ fn apply_block_container_reconciliation(
             Block::Figure(orig)
         }
         (Block::DefinitionList(mut orig), Block::DefinitionList(exec)) => {
-            // Simplified: merge pairwise
-            for ((_, orig_defs), (_, exec_defs)) in
-                orig.content.iter_mut().zip(exec.content.into_iter())
-            {
-                for (orig_def, exec_def) in orig_defs.iter_mut().zip(exec_defs.into_iter()) {
-                    *orig_def =
-                        apply_reconciliation_to_blocks(std::mem::take(orig_def), exec_def, plan);
-                }
+            // Reconcile definition list items
+            // Each item is (term: Inlines, definitions: Vec<Blocks>)
+            // Note: DefinitionList doesn't have pre-computed nested plans, so we use
+            // exec's structure directly while preserving what we can from orig.
+            let mut result_content = Vec::with_capacity(exec.content.len());
+
+            for (exec_term, exec_defs) in exec.content {
+                // Use exec's term directly (no pre-computed inline plan for terms)
+                let result_term = exec_term;
+
+                // Use exec's definitions directly (no pre-computed block plans for definitions)
+                // The plan only covers top-level alignment, not nested definition content
+                let result_defs = exec_defs;
+
+                result_content.push((result_term, result_defs));
             }
+
+            orig.content = result_content;
             Block::DefinitionList(orig)
         }
         // Fallback: shouldn't happen, return original

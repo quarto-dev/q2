@@ -17,13 +17,16 @@
  */
 
 use crate::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
+use crate::caption::Caption;
+use crate::inline::{Citation, CitationMode, Cite, Note, NoteReference};
 use crate::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::{
-    Block, BlockQuote, Blocks, BulletList, CodeBlock, Div, Emph, Header, HorizontalRule, Inline,
-    Inlines, LineBlock, LineBreak, Link, Math, MathType, OrderedList, Pandoc, Paragraph, Plain,
-    QuoteType, Quoted, RawBlock, RawInline, SoftBreak, Space, Span, Str, Strikeout, Strong,
-    Subscript, Superscript, Underline,
+    Block, BlockQuote, Blocks, BulletList, CodeBlock, DefinitionList, Div, Emph, Figure, Header,
+    HorizontalRule, Inline, Inlines, LineBlock, LineBreak, Link, Math, MathType, OrderedList,
+    Pandoc, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SoftBreak, Space, Span, Str,
+    Strikeout, Strong, Subscript, Superscript, Underline,
 };
+use crate::{CaptionBlock, NoteDefinitionFencedBlock, NoteDefinitionPara};
 use crate::{Code, Image, SmallCaps, Target};
 use hashlink::LinkedHashMap;
 use proptest::prelude::*;
@@ -124,6 +127,7 @@ pub struct InlineFeatures {
     pub code: bool,
     pub math: bool,
     pub raw_inline: bool,
+    pub note_reference: bool,
 
     // Container inlines (require depth > 0)
     pub emph: bool,
@@ -137,6 +141,10 @@ pub struct InlineFeatures {
     pub span: bool,
     pub link: bool,
     pub image: bool,
+
+    // Special container inlines
+    pub cite: bool,
+    pub note: bool, // Note is special: inline that contains blocks
 }
 
 impl InlineFeatures {
@@ -159,6 +167,7 @@ impl InlineFeatures {
             code: true,
             math: true,
             raw_inline: true,
+            note_reference: true,
             ..Default::default()
         }
     }
@@ -173,6 +182,7 @@ impl InlineFeatures {
             code: true,
             math: true,
             raw_inline: true,
+            note_reference: true,
             emph: true,
             strong: true,
             underline: true,
@@ -184,6 +194,8 @@ impl InlineFeatures {
             span: true,
             link: true,
             image: true,
+            cite: true,
+            note: true,
         }
     }
 
@@ -200,6 +212,8 @@ impl InlineFeatures {
             || self.span
             || self.link
             || self.image
+            || self.cite
+            || self.note
     }
 }
 
@@ -215,11 +229,18 @@ pub struct BlockFeatures {
     pub header: bool,
     pub line_block: bool,
 
+    // Special leaf blocks (Quarto extensions)
+    pub caption_block: bool,
+    pub note_definition_para: bool,
+    pub note_definition_fenced: bool,
+
     // Container blocks (require depth > 0)
     pub blockquote: bool,
     pub bullet_list: bool,
     pub ordered_list: bool,
     pub div: bool,
+    pub definition_list: bool,
+    pub figure: bool,
 }
 
 impl BlockFeatures {
@@ -241,6 +262,9 @@ impl BlockFeatures {
             horizontal_rule: true,
             header: true,
             line_block: true,
+            caption_block: true,
+            note_definition_para: true,
+            note_definition_fenced: true,
             ..Default::default()
         }
     }
@@ -255,10 +279,15 @@ impl BlockFeatures {
             horizontal_rule: true,
             header: true,
             line_block: true,
+            caption_block: true,
+            note_definition_para: true,
+            note_definition_fenced: true,
             blockquote: true,
             bullet_list: true,
             ordered_list: true,
             div: true,
+            definition_list: true,
+            figure: true,
         }
     }
 
@@ -271,7 +300,13 @@ impl BlockFeatures {
 
     /// Check if any container features are enabled.
     pub fn has_containers(&self) -> bool {
-        self.blockquote || self.bullet_list || self.ordered_list || self.div
+        self.blockquote
+            || self.bullet_list
+            || self.ordered_list
+            || self.div
+            || self.definition_list
+            || self.figure
+            || self.note_definition_fenced
     }
 }
 
@@ -382,6 +417,54 @@ fn gen_code_text() -> impl Strategy<Value = String> {
     "[a-zA-Z0-9_ ]{1,20}"
 }
 
+/// Generate a note ID (for note definitions and references).
+fn gen_note_id() -> impl Strategy<Value = String> {
+    "[a-z]{1,6}"
+}
+
+/// Generate a CitationMode.
+fn gen_citation_mode() -> impl Strategy<Value = CitationMode> {
+    prop_oneof![
+        Just(CitationMode::NormalCitation),
+        Just(CitationMode::AuthorInText),
+        Just(CitationMode::SuppressAuthor),
+    ]
+}
+
+/// Generate a Citation.
+fn gen_citation(config: GenConfig) -> impl Strategy<Value = Citation> {
+    (
+        gen_identifier(),                  // id
+        gen_inlines_inner(config.clone()), // prefix
+        gen_inlines_inner(config),         // suffix
+        gen_citation_mode(),               // mode
+        0..10usize,                        // note_num
+        0..1000usize,                      // hash
+    )
+        .prop_map(|(id, prefix, suffix, mode, note_num, hash)| Citation {
+            id,
+            prefix,
+            suffix,
+            mode,
+            note_num,
+            hash,
+            id_source: None,
+        })
+}
+
+/// Generate a Caption (for figures and tables).
+fn gen_caption(config: GenConfig) -> impl Strategy<Value = Caption> {
+    (
+        proptest::option::of(gen_inlines_inner(config.clone())), // short
+        proptest::option::of(gen_blocks_inner(config)),          // long
+    )
+        .prop_map(|(short, long)| Caption {
+            short,
+            long,
+            source_info: dummy_source(),
+        })
+}
+
 // =============================================================================
 // Leaf Inline Generators
 // =============================================================================
@@ -446,6 +529,16 @@ fn gen_raw_inline() -> impl Strategy<Value = Inline> {
         Inline::RawInline(RawInline {
             format,
             text,
+            source_info: dummy_source(),
+        })
+    })
+}
+
+/// Generate a NoteReference inline.
+fn gen_note_reference() -> impl Strategy<Value = Inline> {
+    gen_note_id().prop_map(|id| {
+        Inline::NoteReference(NoteReference {
+            id,
             source_info: dummy_source(),
         })
     })
@@ -576,6 +669,33 @@ fn gen_image(config: GenConfig) -> impl Strategy<Value = Inline> {
     })
 }
 
+/// Generate a Cite inline containing citations.
+fn gen_cite(config: GenConfig) -> impl Strategy<Value = Inline> {
+    let max_children = config.max_children;
+    (
+        proptest::collection::vec(gen_citation(config.clone()), 1..=max_children),
+        gen_inlines_inner(config),
+    )
+        .prop_map(|(citations, content)| {
+            Inline::Cite(Cite {
+                citations,
+                content,
+                source_info: dummy_source(),
+            })
+        })
+}
+
+/// Generate a Note inline containing blocks.
+/// Note is special: it's an inline that contains blocks (for footnotes).
+fn gen_note(config: GenConfig) -> impl Strategy<Value = Inline> {
+    gen_blocks_inner(config).prop_map(|content| {
+        Inline::Note(Note {
+            content,
+            source_info: dummy_source(),
+        })
+    })
+}
+
 // =============================================================================
 // Inline Collection Generators
 // =============================================================================
@@ -606,6 +726,9 @@ fn gen_inline(config: &GenConfig) -> BoxedStrategy<Inline> {
     }
     if features.raw_inline {
         choices.push(gen_raw_inline().boxed());
+    }
+    if features.note_reference {
+        choices.push(gen_note_reference().boxed());
     }
 
     // Add container inlines only if we can recurse
@@ -644,6 +767,12 @@ fn gen_inline(config: &GenConfig) -> BoxedStrategy<Inline> {
         }
         if features.image {
             choices.push(gen_image(child_config.clone()).boxed());
+        }
+        if features.cite {
+            choices.push(gen_cite(child_config.clone()).boxed());
+        }
+        if features.note {
+            choices.push(gen_note(child_config.clone()).boxed());
         }
     }
 
@@ -817,6 +946,77 @@ fn gen_div(config: GenConfig) -> impl Strategy<Value = Block> {
     })
 }
 
+/// Generate a DefinitionList block.
+/// Each item is a (term, definitions) pair where term is Inlines and definitions is Vec<Blocks>.
+fn gen_definition_list(config: GenConfig) -> impl Strategy<Value = Block> {
+    let max_children = config.max_children;
+    // Generate a single definition item: (term, definitions)
+    let item_gen = (
+        gen_inlines_inner(config.clone()),
+        proptest::collection::vec(gen_blocks_inner(config.clone()), 1..=2),
+    );
+    proptest::collection::vec(item_gen, 1..=max_children).prop_map(|content| {
+        Block::DefinitionList(DefinitionList {
+            content,
+            source_info: dummy_source(),
+        })
+    })
+}
+
+/// Generate a Figure block with caption and content.
+fn gen_figure(config: GenConfig) -> impl Strategy<Value = Block> {
+    (
+        gen_attr(),
+        gen_caption(config.clone()),
+        gen_blocks_inner(config),
+    )
+        .prop_map(|(attr, caption, content)| {
+            Block::Figure(Figure {
+                attr,
+                caption,
+                content,
+                source_info: dummy_source(),
+                attr_source: AttrSourceInfo::empty(),
+            })
+        })
+}
+
+// =============================================================================
+// Special Block Generators (Quarto extensions)
+// =============================================================================
+
+/// Generate a CaptionBlock (leaf block with inline content).
+fn gen_caption_block(config: GenConfig) -> impl Strategy<Value = Block> {
+    gen_inlines_inner(config).prop_map(|content| {
+        Block::CaptionBlock(CaptionBlock {
+            content,
+            source_info: dummy_source(),
+        })
+    })
+}
+
+/// Generate a NoteDefinitionPara (leaf block with ID and inline content).
+fn gen_note_definition_para(config: GenConfig) -> impl Strategy<Value = Block> {
+    (gen_note_id(), gen_inlines_inner(config)).prop_map(|(id, content)| {
+        Block::NoteDefinitionPara(NoteDefinitionPara {
+            id,
+            content,
+            source_info: dummy_source(),
+        })
+    })
+}
+
+/// Generate a NoteDefinitionFencedBlock (container block with ID and block content).
+fn gen_note_definition_fenced(config: GenConfig) -> impl Strategy<Value = Block> {
+    (gen_note_id(), gen_blocks_inner(config)).prop_map(|(id, content)| {
+        Block::NoteDefinitionFencedBlock(NoteDefinitionFencedBlock {
+            id,
+            content,
+            source_info: dummy_source(),
+        })
+    })
+}
+
 // =============================================================================
 // Block Collection Generators
 // =============================================================================
@@ -848,6 +1048,13 @@ fn gen_block(config: &GenConfig) -> BoxedStrategy<Block> {
     if features.line_block {
         choices.push(gen_line_block(config.clone()).boxed());
     }
+    // Special leaf blocks (Quarto extensions)
+    if features.caption_block {
+        choices.push(gen_caption_block(config.clone()).boxed());
+    }
+    if features.note_definition_para {
+        choices.push(gen_note_definition_para(config.clone()).boxed());
+    }
 
     // Add container blocks only if we can recurse
     if config.can_recurse() {
@@ -864,6 +1071,15 @@ fn gen_block(config: &GenConfig) -> BoxedStrategy<Block> {
         }
         if features.div {
             choices.push(gen_div(child_config.clone()).boxed());
+        }
+        if features.definition_list {
+            choices.push(gen_definition_list(child_config.clone()).boxed());
+        }
+        if features.figure {
+            choices.push(gen_figure(child_config.clone()).boxed());
+        }
+        if features.note_definition_fenced {
+            choices.push(gen_note_definition_fenced(child_config.clone()).boxed());
         }
     }
 
