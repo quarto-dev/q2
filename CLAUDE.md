@@ -213,6 +213,7 @@ This repository has Claude Code hooks configured in `.claude/settings.json`.
 
 ## General Instructions
 
+- in Claude Code conversations, "Rust Quarto" means this project, and "TypeScript Quarto" or "TS Quarto" means the current version of Quarto in the quarto-dev/quarto-cli repository.
 - in this repository, "qmd" means "quarto markdown", the dialect of markdown we are developing. Although we aim to be largely compatible with Pandoc, discrepancies in the behavior might not be bugs.
 - the qmd format only supports the inline syntax for a link [link](./target.html), and not the reference-style syntax [link][1].
 - When fixing bugs, always try to isolate and fix one bug at a time.
