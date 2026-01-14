@@ -1,0 +1,13 @@
+{
+  "name": "kyoto-ts",
+  "private": true,
+  "description": "TypeScript workspace for Quarto Rust monorepo",
+  "workspaces": [
+    "ts-packages/*",
+    "hub-client"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

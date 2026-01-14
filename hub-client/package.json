@@ -18,6 +18,8 @@
     "@automerge/automerge-repo": "^2.5.1",
     "@automerge/automerge-repo-network-websocket": "^2.5.1",
     "@monaco-editor/react": "^4.7.0",
+    "@quarto/quarto-automerge-schema": "*",
+    "@quarto/quarto-sync-client": "*",
     "ejs": "^3.1.10",
     "idb": "^8.0.3",
     "react": "^19.2.0",

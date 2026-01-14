@@ -1,0 +1,22 @@
+{
+  "name": "@quarto/quarto-automerge-schema",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Automerge schema types for Quarto collaborative documents",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

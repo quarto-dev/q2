@@ -36,3 +36,5 @@ resources/basic-quarto-website-compiled/
 
 # Claude Code session-specific plan symlink
 claude-notes/plans/CURRENT.md
+node_modules/
+ts-packages/*/dist/

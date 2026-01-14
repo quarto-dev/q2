@@ -1,0 +1,27 @@
+{
+  "name": "@quarto/quarto-sync-client",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Automerge sync client for Quarto collaborative documents",
+  "license": "MIT",
+  "author": {
+    "name": "Posit PBC"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@automerge/automerge-repo": "^2.5.1",
+    "@automerge/automerge-repo-network-websocket": "^2.5.1",
+    "@quarto/quarto-automerge-schema": "*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
