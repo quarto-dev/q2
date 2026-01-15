@@ -287,6 +287,12 @@ fn clean_error_message(message: &str) -> String {
 ///
 /// This creates a nicely formatted error message with the error details
 /// and any suggestions.
+///
+/// # Note
+///
+/// Public API for displaying R errors. Not currently called from production code
+/// but useful for CLI tools and error display. Has unit tests in this module.
+#[allow(dead_code)]
 pub fn format_r_error(info: &RErrorInfo) -> String {
     let mut parts = vec![info.message.clone()];
 

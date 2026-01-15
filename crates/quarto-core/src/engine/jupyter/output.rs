@@ -263,6 +263,10 @@ pub fn strip_ansi_codes(s: &str) -> String {
 }
 
 /// Determine the MIME type priority for a target format.
+///
+/// Will be used when format-specific output conversion is implemented.
+/// Has unit test in this module.
+#[allow(dead_code)]
 pub fn mime_priority_for_format(format: &str) -> &'static [&'static str] {
     match format {
         "latex" | "pdf" | "beamer" => &[

@@ -231,6 +231,13 @@ pub struct IdentifierConfig {
 
 impl KnitrFormatConfig {
     /// Create a new format config with the given output format.
+    ///
+    /// Creates a minimal config without execution defaults. Use [`with_defaults`]
+    /// for a config with sensible execution options. This constructor is useful
+    /// when you want to customize all settings yourself.
+    ///
+    /// [`with_defaults`]: Self::with_defaults
+    #[allow(dead_code)]
     pub fn new(output_format: &str) -> Self {
         Self {
             pandoc: PandocConfig {

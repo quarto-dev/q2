@@ -40,14 +40,16 @@ use include_dir::{Dir, include_dir};
 
 use crate::resources::ResourceBundle;
 
-// Re-export commonly used types
-pub use error_parser::{RErrorInfo, RErrorType, format_r_error, parse_r_error};
+// Re-export public API types and functions.
+// These are intentionally public for external consumers even though internal code
+// uses direct module paths. The #[allow(unused_imports)] suppresses warnings for
+// re-exports that aren't used internally.
+#[allow(unused_imports)]
+pub use error_parser::{RErrorInfo, RErrorType, parse_r_error};
 pub use format::KnitrFormatConfig;
-pub use preprocess::{has_inline_r_expressions, resolve_inline_r_expressions};
-pub use subprocess::{
-    CallROptions, call_r, determine_working_dir, find_rscript, within_active_renv,
-};
-pub use types::{KnitrExecuteParams, KnitrExecuteResult, KnitrIncludes, KnitrRequest};
+pub use preprocess::resolve_inline_r_expressions;
+pub use subprocess::{CallROptions, call_r, determine_working_dir, find_rscript};
+pub use types::{KnitrExecuteParams, KnitrExecuteResult, KnitrIncludes};
 
 // ============================================================================
 // Embedded R Scripts
@@ -148,7 +150,13 @@ impl ExecutionEngine for KnitrEngine {
         }
 
         // Step 2: Preprocess markdown (resolve inline R expressions)
-        let preprocessed = resolve_inline_r_expressions(input);
+        // Use has_inline_r_expressions as optimization to skip regex replacement
+        // when there are no inline R expressions (common case).
+        let preprocessed = if preprocess::has_inline_r_expressions(input) {
+            resolve_inline_r_expressions(input)
+        } else {
+            input.to_string()
+        };
 
         // Step 3: Build format configuration
         let format_config = build_format_config(ctx);

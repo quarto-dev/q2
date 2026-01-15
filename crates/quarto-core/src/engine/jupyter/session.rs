@@ -43,7 +43,11 @@ pub struct KernelSession {
     pub(crate) kernel: ResolvedKernel,
     /// The kernel process (we manage its lifecycle).
     pub(crate) process: Child,
+    // TODO: Processing not yet implemented. See analysis in:
+    // claude-notes/plans/2026-01-15-workspace-warnings-cleanup.md (Section 2.4)
+    // Stored for future reconnect/restart functionality.
     /// Connection info (ports, key, etc.).
+    #[allow(dead_code)]
     pub(crate) connection_info: ConnectionInfo,
     /// Path to the connection file (for cleanup).
     pub(crate) connection_file: PathBuf,
@@ -51,7 +55,11 @@ pub struct KernelSession {
     pub(crate) shell_socket: ClientShellConnection,
     /// ZeroMQ iopub socket (for outputs).
     pub(crate) iopub_socket: ClientIoPubConnection,
+    // TODO: Processing not yet implemented. See analysis in:
+    // claude-notes/plans/2026-01-15-workspace-warnings-cleanup.md (Section 2.4)
+    // Stored for message correlation when shell recv is implemented.
     /// Session ID for message correlation.
+    #[allow(dead_code)]
     pub(crate) session_id: String,
     /// Execution counter for this session.
     pub(crate) execution_count: u32,
@@ -140,7 +148,11 @@ impl KernelSession {
     }
 
     /// Wait for kernel_info_reply on the shell socket.
-    async fn wait_for_kernel_info_reply(&mut self, request_id: &str) -> Result<KernelInfo> {
+    ///
+    /// Note: `_request_id` is currently unused because runtimelib's ClientShellConnection
+    /// doesn't expose a recv() method for reading replies. The kernel_info_reply would
+    /// normally be correlated using this ID.
+    async fn wait_for_kernel_info_reply(&mut self, _request_id: &str) -> Result<KernelInfo> {
         // We need to read from shell socket for the reply
         // But we also need to drain any iopub messages that arrive first
         loop {

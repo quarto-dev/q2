@@ -87,6 +87,12 @@ pub async fn find_kernelspec(name: &str) -> Result<ResolvedKernel> {
 /// # Returns
 ///
 /// The first matching kernel, or an error if none found.
+///
+/// # Note
+///
+/// Part of kernel resolution API. Will be used when Jupyter engine integration
+/// is complete. Has unit tests in this module.
+#[allow(dead_code)]
 pub async fn find_kernelspec_for_language(language: &str) -> Result<ResolvedKernel> {
     let specs = runtimelib::list_kernelspecs().await;
     let language_lower = language.to_lowercase();
@@ -114,6 +120,12 @@ pub async fn find_kernelspec_for_language(language: &str) -> Result<ResolvedKern
 /// # Returns
 ///
 /// The resolved kernel, or an error if none could be determined.
+///
+/// # Note
+///
+/// Entry point for kernel resolution. Will be used when Jupyter engine integration
+/// is complete. Has unit tests in this module.
+#[allow(dead_code)]
 pub async fn resolve_kernel(
     metadata: &ConfigValue,
     primary_language: Option<&str>,
@@ -143,6 +155,7 @@ pub async fn resolve_kernel(
 /// jupyter:
 ///   kernel: python3
 /// ```
+#[allow(dead_code)]
 fn extract_kernel_from_metadata(metadata: &ConfigValue) -> Option<String> {
     let jupyter = metadata.get("jupyter")?;
 

@@ -112,12 +112,21 @@ pub struct KnitrExecuteResult {
     #[serde(default, deserialize_with = "deserialize_includes")]
     pub includes: Option<KnitrIncludes>,
 
+    // TODO: Processing not yet implemented. See analysis in:
+    // claude-notes/plans/2026-01-15-workspace-warnings-cleanup.md (Section 2.4)
+    // These fields are deserialized from R but the processing logic
+    // (e.g., htmlwidgets dependency handling) is not yet implemented.
     /// Engine-specific dependencies (e.g., htmlwidgets)
     #[serde(default)]
+    #[allow(dead_code)]
     pub engine_dependencies: Option<Value>,
 
+    // TODO: Processing not yet implemented. See analysis in:
+    // claude-notes/plans/2026-01-15-workspace-warnings-cleanup.md (Section 2.4)
+    // Content preservation during post-processing is not yet implemented.
     /// Content to preserve during post-processing
     #[serde(default)]
+    #[allow(dead_code)]
     pub preserve: Option<Value>,
 
     /// Whether post-processing is needed

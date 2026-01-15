@@ -122,6 +122,10 @@ path = "./crates/quarto-system-runtime"
 [workspace.dependencies.quarto-project-create]
 path = "./crates/quarto-project-create"
 
+[workspace.lints.rust]
+# coverage_nightly is used by pampa for code coverage instrumentation on nightly Rust
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage_nightly)'] }
+
 [workspace.lints.clippy]
 # Architectural issues - fixing these requires significant refactoring
 large_enum_variant = "allow"  # Would require boxing large enum variants

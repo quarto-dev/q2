@@ -202,6 +202,10 @@ pub struct CallROptions {
 
 impl CallROptions {
     /// Create options with quiet mode enabled.
+    ///
+    /// Useful factory method for callers who want to suppress stderr.
+    /// Used in integration tests; available for external callers.
+    #[allow(dead_code)]
     pub fn quiet() -> Self {
         Self {
             quiet: true,
