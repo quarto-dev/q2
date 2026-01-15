@@ -182,13 +182,39 @@ These fixes are correct for:
 - Different Shortcode hash → `UseAfter` alignment → correct
 - Shortcode never reaches `apply_inline_container_reconciliation` → no fallback bug possible
 
-### Phase 3: CustomNode (Medium, Verify Correctness)
+### Phase 3: CustomNode ✅ COMPLETE (Bug Found and Fixed!)
 
-- [ ] `gen_slot(config)` - Generate Slot enum
-- [ ] `gen_custom_node(config)` - Generate CustomNode
-- [ ] Add `Block::Custom` and `Inline::Custom` to generators
-- [ ] Update `BlockFeatures` and `InlineFeatures`
-- [ ] Run tests, verify passes (or fix if bugs found)
+- [x] `gen_slot(config)` - Generate Slot enum (all 4 variants)
+- [x] `gen_slots(config)` - Generate named slots map
+- [x] `gen_plain_data()` - Generate JSON values
+- [x] `gen_custom_node(config)` - Generate CustomNode
+- [x] `gen_custom_block(config)` - Generate Block::Custom
+- [x] `gen_custom_inline(config)` - Generate Inline::Custom
+- [x] Add `custom: bool` to `BlockFeatures` and `InlineFeatures`
+- [x] Update `full()` and `has_containers()` methods
+- [x] Run tests - **FAILED** (bug found!)
+- [x] Fix bug in `apply_custom_node_reconciliation`
+
+**Bug Found (kyoto-xxx):** `apply_custom_node_reconciliation` was using wrong fields:
+```rust
+// BEFORE (buggy):
+CustomNode {
+    type_name: orig.type_name,  // Should use exec
+    attr: orig.attr,            // Should use exec
+    ...
+}
+
+// AFTER (fixed):
+CustomNode {
+    type_name: exec.type_name,  // Use exec's type_name (structural)
+    attr: exec.attr,            // Use exec's attr (structural)
+    plain_data: exec.plain_data,
+    slots: result_slots,
+    source_info: orig.source_info, // Keep orig's source location
+}
+```
+
+**Key insight**: Unlike CriticMarkup inlines (where attr bugs were unreachable), CustomNode's bug was **actually reachable** through property testing because slot reconciliation can preserve the CustomNode container while changing its structural fields.
 
 ### Phase 4: Table (Complex, 1 Bug Expected)
 
@@ -220,9 +246,9 @@ These fixes are correct for:
 | Quoted | `o.quote_type` not updated | Same as Header bug | ✅ Fixed (unreachable but fixed for consistency) |
 | Shortcode | Expected fallback bug | **NO BUG** - not a container inline | ✅ Verified correct |
 | Table | Falls through to `(orig, _) => orig` | Returns wrong structure | ⏳ Pending |
-| CustomNode | Probably correct | Needs verification | ⏳ Pending |
+| CustomNode | `attr` and `type_name` from orig instead of exec | **REAL BUG** - fixed | ✅ Fixed via TDD |
 
-Phase 1-2 complete: 8 consistency fixes applied, Shortcode verified correct. Remaining: 2 types to test (CustomNode, Table).
+Phase 1-3 complete: 8 consistency fixes + 1 real bug fix. Remaining: 1 type to test (Table).
 
 ## Success Criteria
 

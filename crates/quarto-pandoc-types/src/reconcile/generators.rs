@@ -18,6 +18,7 @@
 
 use crate::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
 use crate::caption::Caption;
+use crate::custom::{CustomNode, Slot};
 use crate::inline::{
     Citation, CitationMode, Cite, Delete, EditComment, Highlight, Insert, Note, NoteReference,
 };
@@ -155,6 +156,9 @@ pub struct InlineFeatures {
     pub delete: bool,
     pub highlight: bool,
     pub edit_comment: bool,
+
+    // Custom node (container with named slots)
+    pub custom: bool,
 }
 
 impl InlineFeatures {
@@ -212,6 +216,7 @@ impl InlineFeatures {
             delete: true,
             highlight: true,
             edit_comment: true,
+            custom: true,
         }
     }
 
@@ -234,6 +239,7 @@ impl InlineFeatures {
             || self.delete
             || self.highlight
             || self.edit_comment
+            || self.custom
     }
 }
 
@@ -261,6 +267,9 @@ pub struct BlockFeatures {
     pub div: bool,
     pub definition_list: bool,
     pub figure: bool,
+
+    // Custom node (container with named slots)
+    pub custom: bool,
 }
 
 impl BlockFeatures {
@@ -308,6 +317,7 @@ impl BlockFeatures {
             div: true,
             definition_list: true,
             figure: true,
+            custom: true,
         }
     }
 
@@ -327,6 +337,7 @@ impl BlockFeatures {
             || self.definition_list
             || self.figure
             || self.note_definition_fenced
+            || self.custom
     }
 }
 
@@ -919,6 +930,9 @@ fn gen_inline(config: &GenConfig) -> BoxedStrategy<Inline> {
         if features.edit_comment {
             choices.push(gen_edit_comment(child_config.clone()).boxed());
         }
+        if features.custom {
+            choices.push(gen_custom_inline(child_config.clone()).boxed());
+        }
     }
 
     // Default to Str if no features enabled
@@ -1163,6 +1177,97 @@ fn gen_note_definition_fenced(config: GenConfig) -> impl Strategy<Value = Block>
 }
 
 // =============================================================================
+// CustomNode Generators
+// =============================================================================
+
+/// Generate a Slot (for CustomNode).
+///
+/// Slots can contain single blocks/inlines or collections.
+/// This generates all four Slot variants with depth-limited recursion.
+fn gen_slot(config: GenConfig) -> BoxedStrategy<Slot> {
+    if config.can_recurse() {
+        let child_config = config.descend();
+        prop_oneof![
+            // Single block
+            gen_block(&child_config).prop_map(|b| Slot::Block(Box::new(b))),
+            // Single inline
+            gen_inline(&child_config).prop_map(|i| Slot::Inline(Box::new(i))),
+            // Block collection
+            gen_blocks_inner(child_config.clone()).prop_map(Slot::Blocks),
+            // Inline collection
+            gen_inlines_inner(child_config).prop_map(Slot::Inlines),
+        ]
+        .boxed()
+    } else {
+        // At depth 0, generate minimal content
+        prop_oneof![
+            gen_paragraph(config.clone()).prop_map(|b| Slot::Block(Box::new(b))),
+            gen_str().prop_map(|i| Slot::Inline(Box::new(i))),
+            gen_paragraph(config.clone()).prop_map(|b| Slot::Blocks(vec![b])),
+            gen_str().prop_map(|i| Slot::Inlines(vec![i])),
+        ]
+        .boxed()
+    }
+}
+
+/// Generate named slots for a CustomNode.
+fn gen_slots(config: GenConfig) -> impl Strategy<Value = hashlink::LinkedHashMap<String, Slot>> {
+    let max_slots = config.max_children.min(3); // Limit slot count
+    proptest::collection::vec(("[a-z]{1,10}", gen_slot(config)), 0..=max_slots)
+        .prop_map(|pairs| pairs.into_iter().collect())
+}
+
+/// Generate a simple JSON value for CustomNode plain_data.
+fn gen_plain_data() -> impl Strategy<Value = serde_json::Value> {
+    prop_oneof![
+        Just(serde_json::Value::Null),
+        proptest::bool::ANY.prop_map(serde_json::Value::Bool),
+        (-100i64..100i64).prop_map(|n| serde_json::Value::Number(n.into())),
+        "[a-z]{0,10}".prop_map(|s| serde_json::Value::String(s)),
+        // Simple object with one key
+        ("[a-z]{1,8}", "[a-z]{0,10}").prop_map(|(k, v)| { serde_json::json!({ k: v }) }),
+    ]
+}
+
+/// Generate a CustomNode type name.
+fn gen_custom_type_name() -> impl Strategy<Value = String> {
+    prop_oneof![
+        Just("Callout".to_string()),
+        Just("PanelTabset".to_string()),
+        Just("TabPanel".to_string()),
+        Just("CustomWidget".to_string()),
+        "[A-Z][a-z]{2,10}".prop_map(|s| s),
+    ]
+}
+
+/// Generate a CustomNode (for both Block::Custom and Inline::Custom).
+fn gen_custom_node(config: GenConfig) -> impl Strategy<Value = CustomNode> {
+    (
+        gen_custom_type_name(),
+        gen_slots(config),
+        gen_plain_data(),
+        gen_attr(),
+    )
+        .prop_map(|(type_name, slots, plain_data, attr)| CustomNode {
+            type_name,
+            slots,
+            plain_data,
+            attr,
+            source_info: dummy_source(),
+        })
+}
+
+/// Generate a Block::Custom.
+fn gen_custom_block(config: GenConfig) -> impl Strategy<Value = Block> {
+    gen_custom_node(config).prop_map(Block::Custom)
+}
+
+/// Generate an Inline::Custom.
+fn gen_custom_inline(config: GenConfig) -> impl Strategy<Value = Inline> {
+    gen_custom_node(config).prop_map(Inline::Custom)
+}
+
+// =============================================================================
 // Block Collection Generators
 // =============================================================================
 
@@ -1225,6 +1330,9 @@ fn gen_block(config: &GenConfig) -> BoxedStrategy<Block> {
         }
         if features.note_definition_fenced {
             choices.push(gen_note_definition_fenced(child_config.clone()).boxed());
+        }
+        if features.custom {
+            choices.push(gen_custom_block(child_config.clone()).boxed());
         }
     }
 

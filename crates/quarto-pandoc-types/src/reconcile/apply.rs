@@ -446,11 +446,11 @@ fn apply_custom_node_reconciliation(
     }
 
     CustomNode {
-        type_name: orig.type_name, // Should equal exec.type_name
+        type_name: exec.type_name, // Use exec's type_name (should equal orig)
         slots: result_slots,
-        plain_data: exec.plain_data,   // Use executed's plain_data
-        attr: orig.attr,               // Preserve original attr (source info)
-        source_info: orig.source_info, // Preserve original source
+        plain_data: exec.plain_data, // Use exec's plain_data (structural)
+        attr: exec.attr,             // Use exec's attr (structural)
+        source_info: orig.source_info, // Preserve orig's source location
     }
 }
 
