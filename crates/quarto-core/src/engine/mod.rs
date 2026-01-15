@@ -57,7 +57,6 @@ mod context;
 mod detection;
 mod error;
 mod markdown;
-pub mod reconcile;
 mod registry;
 mod traits;
 

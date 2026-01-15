@@ -26,6 +26,7 @@ quarto-source-map.workspace = true
 quarto-doctemplate.workspace = true
 quarto-error-reporting.workspace = true
 quarto-config.workspace = true
+quarto-ast-reconcile.workspace = true
 pampa.workspace = true
 
 # Native-only dependencies (for execution engines and resource extraction)

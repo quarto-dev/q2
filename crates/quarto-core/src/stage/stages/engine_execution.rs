@@ -29,10 +29,7 @@ use std::sync::Arc;
 
 use quarto_error_reporting::DiagnosticMessage;
 
-use crate::engine::{
-    EngineRegistry, ExecutionContext, ExecutionEngine, detect_engine,
-    reconcile::reconcile_source_locations,
-};
+use crate::engine::{EngineRegistry, ExecutionContext, ExecutionEngine, detect_engine};
 use crate::stage::{
     DocumentAst, EventLevel, PipelineData, PipelineDataKind, PipelineError, PipelineStage,
     StageContext,
@@ -246,17 +243,17 @@ impl PipelineStage for EngineExecutionStage {
         // Step 8: Reconcile source locations
         // For content that hasn't changed, preserve original source locations.
         // For new content (execution outputs), use locations from executed AST.
-        let mut reconciled_ast = executed_ast;
-        let reconciliation_report = reconcile_source_locations(&doc_ast.ast, &mut reconciled_ast);
+        // Uses the three-phase reconciliation algorithm from quarto-ast-reconcile.
+        let (reconciled_ast, reconciliation_plan) =
+            quarto_ast_reconcile::reconcile(doc_ast.ast, executed_ast);
 
         trace_event!(
             ctx,
             EventLevel::Debug,
-            "reconciliation: {} exact, {} changed, {} added, {} deleted",
-            reconciliation_report.exact_matches,
-            reconciliation_report.content_changes,
-            reconciliation_report.additions,
-            reconciliation_report.deletions
+            "reconciliation: {} kept, {} replaced, {} recursed",
+            reconciliation_plan.stats.blocks_kept,
+            reconciliation_plan.stats.blocks_replaced,
+            reconciliation_plan.stats.blocks_recursed
         );
 
         // Step 9: Collect warnings

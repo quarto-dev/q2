@@ -2512,6 +2512,7 @@ dependencies = [
  "jupyter-protocol",
  "pampa",
  "pollster",
+ "quarto-ast-reconcile",
  "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",
