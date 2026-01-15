@@ -5,7 +5,7 @@
 | Phase | Status | Notes |
 |-------|--------|-------|
 | **A: Block Matching** | ✅ COMPLETE | Implemented and tested |
-| **B: List Items** | 🔲 TODO | Not started |
+| **B: List Items** | ✅ COMPLETE | Implemented and tested |
 
 ### What Was Done (Phase A)
 
@@ -20,13 +20,31 @@
 3. **All 193 reconcile tests pass**
 4. **Verified ex6 example** produces correct output via `reconcile-viewer`
 
-### What Remains (Phase B)
+### What Was Done (Phase B)
 
-1. Add hash functions for `Vec<Block>` in `hash.rs`
-2. Add `structural_eq_blocks` in `hash.rs`
-3. Rewrite `compute_list_plan` to use three-phase matching
-4. Update `apply_list_reconciliation` if needed
-5. Add tests for list item matching (ex1 pattern)
+1. **Added `ListItemAlignment` enum** in `types.rs` with three variants:
+   - `KeepOriginal(usize)` - Use original item entirely (exact match)
+   - `Reconcile(usize)` - Pair with original and recurse
+   - `UseExecuted` - Use executed item as-is (no match)
+2. **Updated `ReconciliationPlan`** to use:
+   - `list_item_alignments: Vec<ListItemAlignment>` - per-item alignment decisions
+   - `list_item_plans: LinkedHashMap<usize, ReconciliationPlan>` - nested plans for Reconcile cases
+3. **Added hash functions** in `hash.rs`:
+   - `HashCache::hash_blocks()` - cached hash for block sequences
+   - `compute_blocks_hash_fresh()` - uncached hash for block sequences
+4. **Rewrote `compute_list_plan`** with three-phase algorithm:
+   - Phase 1: Exact hash matches (any position)
+   - Phase 2: Positional matches (same index only)
+   - Phase 3: Fallback (use executed as-is)
+5. **Updated `apply_list_reconciliation`** to use `ListItemAlignment` enum
+6. **Added 6 new tests** in `compute.rs` (search for `test_list_three_phase_`):
+   - `test_list_three_phase_exact_match_at_different_position` - the ex1 pattern
+   - `test_list_three_phase_positional_match_when_no_exact`
+   - `test_list_three_phase_no_recurse_when_positional_already_used`
+   - `test_list_three_phase_multiple_exact_matches_at_shifted_positions`
+   - `test_list_three_phase_exact_match_priority_over_positional`
+   - `test_list_three_phase_empty_lists`
+7. **All 342 tests pass** (previously 193 reconcile tests, now 199 with new list tests)
 
 ---
 

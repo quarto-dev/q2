@@ -71,6 +71,24 @@ impl<'a> HashCache<'a> {
         self.cache.insert(ptr, hash);
         hash
     }
+
+    /// Compute structural hash for a sequence of blocks.
+    /// Used for hashing list items in the original list.
+    ///
+    /// Note: This uses a different caching strategy than hash_block.
+    /// We use the slice's pointer as the cache key, but only if the slice
+    /// hasn't been cached before. In practice, this is fine because list
+    /// items are typically accessed once per reconciliation pass.
+    pub fn hash_blocks(&mut self, blocks: &'a [Block]) -> u64 {
+        use rustc_hash::FxHasher;
+        use std::hash::Hasher;
+        let mut hasher = FxHasher::default();
+        hasher.write_usize(blocks.len());
+        for block in blocks {
+            hasher.write_u64(self.hash_block(block));
+        }
+        hasher.finish()
+    }
 }
 
 impl Default for HashCache<'_> {
@@ -90,6 +108,20 @@ pub fn compute_block_hash_fresh(block: &Block) -> u64 {
 pub fn compute_inline_hash_fresh(inline: &Inline) -> u64 {
     let mut cache = HashCache::new();
     compute_inline_hash_inner(inline, &mut cache)
+}
+
+/// Compute structural hash for a sequence of blocks without caching.
+/// Used for hashing list items in the executed list.
+pub fn compute_blocks_hash_fresh(blocks: &[Block]) -> u64 {
+    use rustc_hash::FxHasher;
+    use std::hash::Hasher;
+    let mut cache = HashCache::new();
+    let mut hasher = FxHasher::default();
+    hasher.write_usize(blocks.len());
+    for block in blocks {
+        hasher.write_u64(compute_block_hash_inner(block, &mut cache));
+    }
+    hasher.finish()
 }
 
 /// Internal: compute block hash with a cache reference.

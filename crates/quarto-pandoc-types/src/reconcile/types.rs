@@ -123,6 +123,32 @@ pub enum InlineAlignment {
     RecurseIntoContainer { before_idx: usize, after_idx: usize },
 }
 
+/// Alignment decision for a single list item in the result.
+///
+/// List items are `Vec<Block>`, and unlike blocks they don't have a type
+/// discriminant to match on. The three-phase algorithm works as follows:
+/// 1. **Exact hash match**: Find items with identical content (any position)
+/// 2. **Positional match**: Same position, recurse into item
+/// 3. **Fallback**: Treat as new content
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ListItemAlignment {
+    /// Keep the original list item entirely (exact hash match).
+    /// Action: Use orig_items[index] as-is (preserves source locations).
+    #[serde(rename = "keep_original")]
+    KeepOriginal(usize),
+
+    /// Reconcile with an original item at the given index.
+    /// Action: Pair exec_items[exec_idx] with orig_items[index] and reconcile.
+    #[serde(rename = "reconcile")]
+    Reconcile(usize),
+
+    /// Use the executed item as-is (no match found).
+    /// Action: Use exec_items[exec_idx] directly.
+    #[serde(rename = "use_executed")]
+    UseExecuted,
+}
+
 /// Statistics about the reconciliation process.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ReconciliationStats {
@@ -197,11 +223,17 @@ pub struct ReconciliationPlan {
     #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
     pub table_plans: LinkedHashMap<usize, TableReconciliationPlan>,
 
-    /// Per-item plans for lists (BulletList, OrderedList).
+    /// Per-item alignment decisions for lists (BulletList, OrderedList).
     /// Each entry corresponds to an item in the executed list.
     /// Used when this plan represents a list container's reconciliation.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
-    pub list_item_plans: Vec<ReconciliationPlan>,
+    pub list_item_alignments: Vec<ListItemAlignment>,
+
+    /// Per-item reconciliation plans for lists (BulletList, OrderedList).
+    /// Key: index into list_item_alignments where alignment is Reconcile.
+    /// Only contains plans for items that need reconciliation.
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub list_item_plans: LinkedHashMap<usize, ReconciliationPlan>,
 
     /// Diagnostics.
     pub stats: ReconciliationStats,

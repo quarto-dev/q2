@@ -10,7 +10,7 @@
 
 use super::types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
-    ReconciliationPlan, TableCellPosition, TableReconciliationPlan,
+    ListItemAlignment, ReconciliationPlan, TableCellPosition, TableReconciliationPlan,
 };
 use crate::custom::{CustomNode, Slot};
 use crate::table::Table;
@@ -158,33 +158,54 @@ fn apply_block_container_reconciliation(
 }
 
 /// Apply reconciliation to list items.
+///
+/// Uses the list_item_alignments to determine how each executed item should be handled:
+/// - `KeepOriginal(idx)`: Use orig_items[idx] entirely (exact match)
+/// - `Reconcile(idx)`: Apply nested plan to reconcile orig_items[idx] with exec_items[i]
+/// - `UseExecuted`: Use exec_items[i] as-is (no match)
 fn apply_list_reconciliation(
     orig_items: Vec<Vec<Block>>,
     exec_items: Vec<Vec<Block>>,
     plan: &ReconciliationPlan,
 ) -> Vec<Vec<Block>> {
-    let mut result = Vec::with_capacity(exec_items.len());
+    // Convert to Option<Vec<Block>> so we can take ownership of individual items
+    let mut orig_slots: Vec<Option<Vec<Block>>> = orig_items.into_iter().map(Some).collect();
+    let mut exec_slots: Vec<Option<Vec<Block>>> = exec_items.into_iter().map(Some).collect();
 
-    // Use the per-item plans from list_item_plans
-    for (i, exec_item) in exec_items.into_iter().enumerate() {
-        let item_plan = plan.list_item_plans.get(i);
+    let mut result = Vec::with_capacity(plan.list_item_alignments.len());
 
-        if let Some(orig_item) = orig_items.get(i).cloned() {
-            // Have both original and executed - apply the item's plan
-            if let Some(nested_plan) = item_plan {
-                result.push(apply_reconciliation_to_blocks(
-                    orig_item,
-                    exec_item,
-                    nested_plan,
-                ));
-            } else {
-                // No plan for this item (shouldn't happen if compute is correct)
-                result.push(exec_item);
+    for (exec_idx, alignment) in plan.list_item_alignments.iter().enumerate() {
+        let item = match alignment {
+            ListItemAlignment::KeepOriginal(orig_idx) => {
+                // Use original item entirely (zero-copy move)
+                orig_slots[*orig_idx]
+                    .take()
+                    .expect("Original list item already used")
             }
-        } else {
-            // Extra item from executed (no original) - use as-is
-            result.push(exec_item);
-        }
+            ListItemAlignment::Reconcile(orig_idx) => {
+                // Reconcile original with executed
+                let orig_item = orig_slots[*orig_idx]
+                    .take()
+                    .expect("Original list item already used");
+                let exec_item = exec_slots[exec_idx]
+                    .take()
+                    .expect("Executed list item already used");
+
+                if let Some(nested_plan) = plan.list_item_plans.get(&exec_idx) {
+                    apply_reconciliation_to_blocks(orig_item, exec_item, nested_plan)
+                } else {
+                    // No nested plan - shouldn't happen, but fall back to original
+                    orig_item
+                }
+            }
+            ListItemAlignment::UseExecuted => {
+                // Use executed item as-is (zero-copy move)
+                exec_slots[exec_idx]
+                    .take()
+                    .expect("Executed list item already used")
+            }
+        };
+        result.push(item);
     }
 
     result

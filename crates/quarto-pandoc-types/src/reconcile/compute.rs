@@ -9,12 +9,13 @@
  */
 
 use super::hash::{
-    HashCache, compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block,
-    structural_eq_inline,
+    HashCache, compute_block_hash_fresh, compute_blocks_hash_fresh, compute_inline_hash_fresh,
+    structural_eq_block, structural_eq_blocks, structural_eq_inline,
 };
 use super::types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
-    ReconciliationPlan, ReconciliationStats, TableCellPosition, TableReconciliationPlan,
+    ListItemAlignment, ReconciliationPlan, ReconciliationStats, TableCellPosition,
+    TableReconciliationPlan,
 };
 use crate::custom::{CustomNode, Slot};
 use crate::table::Table;
@@ -207,7 +208,8 @@ pub fn compute_reconciliation_for_blocks<'a>(
         inline_plans,
         custom_node_plans,
         table_plans,
-        list_item_plans: Vec::new(),
+        list_item_alignments: Vec::new(),
+        list_item_plans: LinkedHashMap::new(),
         stats,
     }
 }
@@ -277,29 +279,114 @@ fn compute_container_plan<'a>(
 }
 
 /// Compute reconciliation for list items (Vec<Vec<Block>>).
+///
+/// Uses a three-phase algorithm analogous to block reconciliation:
+/// 1. **Exact hash matches (any position)**: Find items with identical content.
+///    These get `KeepOriginal` - we have proof they're the same.
+/// 2. **Positional matches (same index only)**: For unmatched items, check if the
+///    item at the same position in original is available. If so, recurse.
+/// 3. **Fallback**: Remaining unmatched items get `UseExecuted` - treat as new.
 fn compute_list_plan<'a>(
     orig_items: &'a [Vec<Block>],
     exec_items: &[Vec<Block>],
     cache: &mut HashCache<'a>,
 ) -> ReconciliationPlan {
     let mut plan = ReconciliationPlan::new();
-    let mut list_item_plans = Vec::with_capacity(exec_items.len());
 
-    // Simple pairwise matching: reconcile matching positions
-    for (i, exec_item) in exec_items.iter().enumerate() {
-        if let Some(orig_item) = orig_items.get(i) {
-            // Have both original and executed - compute reconciliation
-            let nested = compute_reconciliation_for_blocks(orig_item, exec_item, cache);
-            plan.stats.merge(&nested.stats);
-            list_item_plans.push(nested);
-        } else {
-            // Extra item from executed (no original) - use empty plan
-            // The apply phase will use the executed item as-is
-            plan.stats.blocks_replaced += 1;
-            list_item_plans.push(ReconciliationPlan::new());
-        }
+    // Early exit: if both are empty, nothing to do
+    if orig_items.is_empty() && exec_items.is_empty() {
+        return plan;
     }
 
+    // Compute hashes for original items (cached)
+    let orig_hashes: Vec<u64> = orig_items
+        .iter()
+        .map(|item| cache.hash_blocks(item))
+        .collect();
+
+    // Build hash → indices multimap for original items
+    let mut hash_to_indices: LinkedHashMap<u64, Vec<usize>> = LinkedHashMap::new();
+    for (idx, &hash) in orig_hashes.iter().enumerate() {
+        hash_to_indices
+            .entry(hash)
+            .or_insert_with(Vec::new)
+            .push(idx);
+    }
+
+    // Initialize alignment slots - we'll fill these across three phases
+    let mut alignments: Vec<Option<ListItemAlignment>> = vec![None; exec_items.len()];
+    let mut list_item_plans: LinkedHashMap<usize, ReconciliationPlan> = LinkedHashMap::new();
+    let mut used_original: FxHashSet<usize> = FxHashSet::default();
+
+    // Track which executed indices need further processing
+    let mut needs_phase_2: Vec<usize> = Vec::new();
+
+    // =========================================================================
+    // Phase 1: Exact hash matches (any position)
+    // =========================================================================
+    // Find items with identical content. Position mismatch is fine because
+    // we have definitive proof (hash + structural equality) they're the same.
+    for (exec_idx, exec_item) in exec_items.iter().enumerate() {
+        let exec_hash = compute_blocks_hash_fresh(exec_item);
+
+        if let Some(indices) = hash_to_indices.get(&exec_hash)
+            && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i))
+        {
+            // Verify with structural equality (guards against hash collisions)
+            if structural_eq_blocks(&orig_items[orig_idx], exec_item) {
+                used_original.insert(orig_idx);
+                alignments[exec_idx] = Some(ListItemAlignment::KeepOriginal(orig_idx));
+                // No plan needed - content is identical, just use original
+                continue;
+            }
+            // Hash collision - fall through to phase 2
+        }
+
+        needs_phase_2.push(exec_idx);
+    }
+
+    // =========================================================================
+    // Phase 2: Positional matches (same index only)
+    // =========================================================================
+    // For unmatched items, check if the item at the SAME position in original
+    // is available. Only recurse when indices match - this provides reasonable
+    // evidence they're the same logical entity.
+    let mut needs_phase_3: Vec<usize> = Vec::new();
+
+    for exec_idx in needs_phase_2 {
+        let exec_item = &exec_items[exec_idx];
+
+        // Only consider the positionally-corresponding original
+        if exec_idx < orig_items.len() && !used_original.contains(&exec_idx) {
+            used_original.insert(exec_idx);
+            // Recurse into the item to reconcile its blocks
+            let nested_plan =
+                compute_reconciliation_for_blocks(&orig_items[exec_idx], exec_item, cache);
+            plan.stats.merge(&nested_plan.stats);
+            alignments[exec_idx] = Some(ListItemAlignment::Reconcile(exec_idx));
+            list_item_plans.insert(exec_idx, nested_plan);
+            continue;
+        }
+
+        needs_phase_3.push(exec_idx);
+    }
+
+    // =========================================================================
+    // Phase 3: Fallback - treat as new content
+    // =========================================================================
+    // No evidence these items are related to any original - use executed as-is.
+    for exec_idx in needs_phase_3 {
+        alignments[exec_idx] = Some(ListItemAlignment::UseExecuted);
+        plan.stats.blocks_replaced += 1;
+    }
+
+    // Convert Option<ListItemAlignment> to ListItemAlignment
+    let alignments: Vec<ListItemAlignment> = alignments
+        .into_iter()
+        .map(|a| a.expect("All alignments should be filled"))
+        .collect();
+
+    plan.list_item_alignments = alignments;
     plan.list_item_plans = list_item_plans;
     plan
 }
@@ -1549,5 +1636,253 @@ mod tests {
             "after[1] should be UseAfter(1), got {:?}",
             plan.block_alignments[1]
         );
+    }
+
+    // ========================================================================
+    // List item three-phase algorithm tests
+    // ========================================================================
+
+    #[test]
+    fn test_list_three_phase_exact_match_at_different_position() {
+        // The ex1 pattern: list items where inner elements have exact matches
+        // at different indices.
+        //
+        // Before: ["1", "2", "3"]
+        // After:  ["0", "1", "2"]
+        //
+        // Expected:
+        //   after[0] -> UseExecuted             -- new content, no match
+        //   after[1] -> KeepOriginal(0)         -- exact hash match with before[0]
+        //   after[2] -> KeepOriginal(1)         -- exact hash match with before[1]
+
+        let orig_items: Vec<Vec<Block>> = vec![
+            vec![make_para("1")],
+            vec![make_para("2")],
+            vec![make_para("3")],
+        ];
+        let exec_items: Vec<Vec<Block>> = vec![
+            vec![make_para("0")],
+            vec![make_para("1")],
+            vec![make_para("2")],
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        assert_eq!(plan.list_item_alignments.len(), 3);
+
+        // after[0] should be UseExecuted (new content, positional orig is claimed)
+        assert!(
+            matches!(plan.list_item_alignments[0], ListItemAlignment::UseExecuted),
+            "after[0] should be UseExecuted, got {:?}",
+            plan.list_item_alignments[0]
+        );
+
+        // after[1] should be KeepOriginal(0) - exact hash match with before[0]
+        assert!(
+            matches!(
+                plan.list_item_alignments[1],
+                ListItemAlignment::KeepOriginal(0)
+            ),
+            "after[1] should be KeepOriginal(0), got {:?}",
+            plan.list_item_alignments[1]
+        );
+
+        // after[2] should be KeepOriginal(1) - exact hash match with before[1]
+        assert!(
+            matches!(
+                plan.list_item_alignments[2],
+                ListItemAlignment::KeepOriginal(1)
+            ),
+            "after[2] should be KeepOriginal(1), got {:?}",
+            plan.list_item_alignments[2]
+        );
+    }
+
+    #[test]
+    fn test_list_three_phase_positional_match_when_no_exact() {
+        // When there's no exact match but same position, recurse.
+        //
+        // Before: ["1", "2"]
+        // After:  ["1-modified", "2"]
+        //
+        // Expected:
+        //   after[0] -> Reconcile(0)   -- same position, different content
+        //   after[1] -> KeepOriginal(1)  -- exact match
+
+        let orig_items: Vec<Vec<Block>> = vec![vec![make_para("1")], vec![make_para("2")]];
+        let exec_items: Vec<Vec<Block>> = vec![vec![make_para("1-modified")], vec![make_para("2")]];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        assert_eq!(plan.list_item_alignments.len(), 2);
+
+        // after[0] should be Reconcile (same position, same "type", different content)
+        assert!(
+            matches!(
+                plan.list_item_alignments[0],
+                ListItemAlignment::Reconcile(0)
+            ),
+            "after[0] should be Reconcile(0), got {:?}",
+            plan.list_item_alignments[0]
+        );
+
+        // after[1] should be exact match
+        assert!(
+            matches!(
+                plan.list_item_alignments[1],
+                ListItemAlignment::KeepOriginal(1)
+            ),
+            "after[1] should be KeepOriginal(1), got {:?}",
+            plan.list_item_alignments[1]
+        );
+
+        // Should have a nested plan for item 0
+        assert!(
+            plan.list_item_plans.contains_key(&0),
+            "Should have nested plan for item 0"
+        );
+    }
+
+    #[test]
+    fn test_list_three_phase_no_recurse_when_positional_already_used() {
+        // When the positional original is already claimed by an exact match,
+        // don't hunt for another original - just UseExecuted.
+        //
+        // Before: ["A", "B"]
+        // After:  ["NEW", "A"]
+        //
+        // Phase 1: after[1] matches before[0] exactly -> KeepOriginal(0)
+        // Phase 2: after[0] wants to check before[0], but it's used -> skip
+        // Phase 3: after[0] -> UseExecuted
+
+        let orig_items: Vec<Vec<Block>> = vec![vec![make_para("A")], vec![make_para("B")]];
+        let exec_items: Vec<Vec<Block>> = vec![vec![make_para("NEW")], vec![make_para("A")]];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        assert_eq!(plan.list_item_alignments.len(), 2);
+
+        // after[0] should be UseExecuted (positional before[0] is claimed by exact match)
+        assert!(
+            matches!(plan.list_item_alignments[0], ListItemAlignment::UseExecuted),
+            "after[0] should be UseExecuted, got {:?}",
+            plan.list_item_alignments[0]
+        );
+
+        // after[1] should be KeepOriginal(0) - exact match
+        assert!(
+            matches!(
+                plan.list_item_alignments[1],
+                ListItemAlignment::KeepOriginal(0)
+            ),
+            "after[1] should be KeepOriginal(0), got {:?}",
+            plan.list_item_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_list_three_phase_multiple_exact_matches_at_shifted_positions() {
+        // Multiple items shifted - all should find their exact matches.
+        //
+        // Before: ["A", "B", "C"]
+        // After:  ["NEW", "A", "B", "C"]
+        //
+        // Expected:
+        //   after[0] -> UseExecuted        -- no match
+        //   after[1] -> KeepOriginal(0)    -- exact match
+        //   after[2] -> KeepOriginal(1)    -- exact match
+        //   after[3] -> KeepOriginal(2)    -- exact match
+
+        let orig_items: Vec<Vec<Block>> = vec![
+            vec![make_para("A")],
+            vec![make_para("B")],
+            vec![make_para("C")],
+        ];
+        let exec_items: Vec<Vec<Block>> = vec![
+            vec![make_para("NEW")],
+            vec![make_para("A")],
+            vec![make_para("B")],
+            vec![make_para("C")],
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        assert_eq!(plan.list_item_alignments.len(), 4);
+
+        assert!(matches!(
+            plan.list_item_alignments[0],
+            ListItemAlignment::UseExecuted
+        ));
+        assert!(matches!(
+            plan.list_item_alignments[1],
+            ListItemAlignment::KeepOriginal(0)
+        ));
+        assert!(matches!(
+            plan.list_item_alignments[2],
+            ListItemAlignment::KeepOriginal(1)
+        ));
+        assert!(matches!(
+            plan.list_item_alignments[3],
+            ListItemAlignment::KeepOriginal(2)
+        ));
+
+        assert_eq!(plan.stats.blocks_replaced, 1);
+    }
+
+    #[test]
+    fn test_list_three_phase_exact_match_priority_over_positional() {
+        // Exact match should win even when positional match is available.
+        //
+        // Before: ["X", "Y"]
+        // After:  ["Y", "Z"]
+        //
+        // Phase 1: after[0] matches before[1] exactly -> KeepOriginal(1)
+        //          after[1] has no exact match -> needs phase 2
+        // Phase 2: after[1] checks before[1], but it's used -> skip
+        // Phase 3: after[1] -> UseExecuted
+        //
+        // Note: before[0] is left unused - that's correct behavior.
+
+        let orig_items: Vec<Vec<Block>> = vec![vec![make_para("X")], vec![make_para("Y")]];
+        let exec_items: Vec<Vec<Block>> = vec![vec![make_para("Y")], vec![make_para("Z")]];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        assert_eq!(plan.list_item_alignments.len(), 2);
+
+        // after[0] exact matches before[1]
+        assert!(
+            matches!(
+                plan.list_item_alignments[0],
+                ListItemAlignment::KeepOriginal(1)
+            ),
+            "after[0] should be KeepOriginal(1), got {:?}",
+            plan.list_item_alignments[0]
+        );
+
+        // after[1] has no match (before[1] used, before[0] wrong content)
+        assert!(
+            matches!(plan.list_item_alignments[1], ListItemAlignment::UseExecuted),
+            "after[1] should be UseExecuted, got {:?}",
+            plan.list_item_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_list_three_phase_empty_lists() {
+        // Empty lists should produce empty plan
+        let orig_items: Vec<Vec<Block>> = vec![];
+        let exec_items: Vec<Vec<Block>> = vec![];
+
+        let mut cache = HashCache::new();
+        let plan = compute_list_plan(&orig_items, &exec_items, &mut cache);
+
+        assert!(plan.list_item_alignments.is_empty());
+        assert!(plan.list_item_plans.is_empty());
     }
 }
