@@ -2190,6 +2190,7 @@ dependencies = [
  "mlua",
  "once_cell",
  "paste",
+ "quarto-ast-reconcile",
  "quarto-citeproc",
  "quarto-config",
  "quarto-csl",
@@ -2454,6 +2455,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-ast-reconcile"
+version = "0.0.0"
+dependencies = [
+ "hashlink",
+ "proptest",
+ "quarto-pandoc-types",
+ "quarto-source-map",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "quarto-citeproc"
 version = "0.1.0"
 dependencies = [
@@ -2605,9 +2619,7 @@ version = "0.0.0"
 dependencies = [
  "hashlink",
  "indexmap",
- "proptest",
  "quarto-source-map",
- "rustc-hash",
  "serde",
  "serde_json",
  "yaml-rust2",
@@ -2826,6 +2838,7 @@ dependencies = [
  "hashlink",
  "pampa",
  "proptest",
+ "quarto-ast-reconcile",
  "quarto-pandoc-types",
  "quarto-source-map",
  "serde",

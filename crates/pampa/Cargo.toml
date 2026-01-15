@@ -44,6 +44,7 @@ quarto-config = { path = "../quarto-config" }
 quarto-parse-errors = { path = "../quarto-parse-errors" }
 quarto-treesitter-ast = { workspace = true }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
+quarto-ast-reconcile = { path = "../quarto-ast-reconcile" }
 quarto-doctemplate = { workspace = true }
 quarto-citeproc = { path = "../quarto-citeproc" }
 quarto-csl = { path = "../quarto-csl" }

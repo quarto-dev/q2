@@ -19,7 +19,6 @@ pub mod inline;
 pub mod list;
 pub mod meta;
 pub mod pandoc;
-pub mod reconcile;
 pub mod shortcode;
 pub mod table;
 

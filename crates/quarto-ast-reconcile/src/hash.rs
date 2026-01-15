@@ -10,8 +10,8 @@
  * - Uses address-based memoization for the original AST
  */
 
-use crate::custom::{CustomNode, Slot};
-use crate::{Attr, Block, Inline};
+use quarto_pandoc_types::custom::{CustomNode, Slot};
+use quarto_pandoc_types::{Attr, Block, Inline};
 use rustc_hash::FxHashMap;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -421,7 +421,7 @@ fn hash_inlines(inlines: &[Inline], cache: &mut HashCache<'_>, hasher: &mut impl
 
 /// Hash table rows.
 fn hash_table_rows(
-    rows: &[crate::table::Row],
+    rows: &[quarto_pandoc_types::table::Row],
     cache: &mut HashCache<'_>,
     hasher: &mut impl Hasher,
 ) {
@@ -731,15 +731,15 @@ fn attr_eq(a: &Attr, b: &Attr) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::custom::{CustomNode, Slot};
-    use crate::{
+    use hashlink::LinkedHashMap;
+    use quarto_pandoc_types::custom::{CustomNode, Slot};
+    use quarto_pandoc_types::{
         AttrSourceInfo, BlockQuote, BulletList, Code, CodeBlock, DefinitionList, Div, Emph, Header,
         HorizontalRule, Image, LineBlock, LineBreak, Link, Math, MathType, Note, OrderedList,
         Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SmallCaps, SoftBreak, Space,
         Span, Str, Strikeout, Strong, Subscript, Superscript, TargetSourceInfo, Underline,
     };
-    use crate::{ListNumberDelim, ListNumberStyle};
-    use hashlink::LinkedHashMap;
+    use quarto_pandoc_types::{ListNumberDelim, ListNumberStyle};
     use quarto_source_map::{FileId, SourceInfo};
 
     fn dummy_source() -> SourceInfo {

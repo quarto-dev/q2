@@ -1,5 +1,5 @@
 [package]
-name = "quarto-pandoc-types"
+name = "quarto-ast-reconcile"
 version = "0.0.0"
 publish = false
 authors.workspace = true
@@ -9,15 +9,18 @@ homepage.workspace = true
 keywords.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Pandoc AST type definitions for Quarto"
+description = "Three-phase AST reconciliation for preserving source locations"
 
 [dependencies]
+quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-source-map = { path = "../quarto-source-map" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 hashlink = { version = "0.10.0", features = ["serde_impl"] }
-yaml-rust2 = { workspace = true }
-indexmap = "2.0"
+rustc-hash = "2.1"
+
+[dev-dependencies]
+proptest = "1.5"
 
 [lints]
 workspace = true

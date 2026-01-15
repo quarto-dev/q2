@@ -12,10 +12,10 @@ use super::types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
     ListItemAlignment, ReconciliationPlan, TableCellPosition, TableReconciliationPlan,
 };
-use crate::custom::{CustomNode, Slot};
-use crate::table::Table;
-use crate::{Block, Inline, Pandoc};
 use hashlink::LinkedHashMap;
+use quarto_pandoc_types::custom::{CustomNode, Slot};
+use quarto_pandoc_types::table::Table;
+use quarto_pandoc_types::{Block, Inline, Pandoc};
 
 /// Apply a reconciliation plan to produce a merged Pandoc AST.
 ///
@@ -549,7 +549,7 @@ fn apply_table_reconciliation(
     exec: Table,
     table_plan: &TableReconciliationPlan,
 ) -> Table {
-    use crate::table::{Cell, Row, TableBody, TableFoot, TableHead};
+    use quarto_pandoc_types::table::{Cell, Row, TableBody, TableFoot, TableHead};
 
     // Helper to reconcile rows at matching positions
     let reconcile_rows = |orig_rows: Vec<Row>,
@@ -694,7 +694,7 @@ fn apply_table_reconciliation(
     // Reconcile caption.long if we have a plan for it
     let result_caption = if let Some(caption_plan) = &table_plan.caption_plan {
         match (orig.caption.long, exec.caption.long) {
-            (Some(orig_long), Some(exec_long)) => crate::Caption {
+            (Some(orig_long), Some(exec_long)) => quarto_pandoc_types::Caption {
                 short: exec.caption.short,
                 long: Some(apply_reconciliation_to_blocks(
                     orig_long,
@@ -703,7 +703,7 @@ fn apply_table_reconciliation(
                 )),
                 source_info: orig.caption.source_info,
             },
-            (_, exec_long) => crate::Caption {
+            (_, exec_long) => quarto_pandoc_types::Caption {
                 short: exec.caption.short,
                 long: exec_long,
                 source_info: orig.caption.source_info,
@@ -712,12 +712,12 @@ fn apply_table_reconciliation(
     } else {
         // No caption plan - use orig's long content if both exist, otherwise exec's
         match (orig.caption.long, exec.caption.long) {
-            (Some(orig_long), Some(_)) => crate::Caption {
+            (Some(orig_long), Some(_)) => quarto_pandoc_types::Caption {
                 short: exec.caption.short,
                 long: Some(orig_long),
                 source_info: orig.caption.source_info,
             },
-            (_, exec_long) => crate::Caption {
+            (_, exec_long) => quarto_pandoc_types::Caption {
                 short: exec.caption.short,
                 long: exec_long,
                 source_info: orig.caption.source_info,
@@ -740,16 +740,16 @@ fn apply_table_reconciliation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reconcile::compute::compute_reconciliation;
-    use crate::reconcile::types::{
+    use crate::compute::compute_reconciliation;
+    use crate::types::{
         BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
     };
-    use crate::{
+    use hashlink::LinkedHashMap;
+    use quarto_pandoc_types::{
         AttrSourceInfo, BlockQuote, BulletList, Div, Emph, Header, Note, OrderedList, Paragraph,
         Plain, Str, Strong,
     };
-    use crate::{ListNumberDelim, ListNumberStyle};
-    use hashlink::LinkedHashMap;
+    use quarto_pandoc_types::{ListNumberDelim, ListNumberStyle};
     use quarto_source_map::{FileId, SourceInfo};
 
     fn source_a() -> SourceInfo {
@@ -782,7 +782,7 @@ mod tests {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: blocks,
             source_info: source,
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 

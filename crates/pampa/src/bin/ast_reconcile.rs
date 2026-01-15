@@ -8,7 +8,7 @@
 
 use clap::Parser;
 use pampa::readers;
-use quarto_pandoc_types::reconcile::{ReconciliationPlan, compute_reconciliation};
+use quarto_ast_reconcile::{ReconciliationPlan, compute_reconciliation};
 use serde::Serialize;
 use std::io;
 
@@ -209,13 +209,13 @@ fn main() {
             println!("Block Alignments:");
             for (i, alignment) in plan.block_alignments.iter().enumerate() {
                 let desc = match alignment {
-                    quarto_pandoc_types::reconcile::BlockAlignment::KeepBefore(idx) => {
+                    quarto_ast_reconcile::BlockAlignment::KeepBefore(idx) => {
                         format!("KEEP before[{}]", idx)
                     }
-                    quarto_pandoc_types::reconcile::BlockAlignment::UseAfter(idx) => {
+                    quarto_ast_reconcile::BlockAlignment::UseAfter(idx) => {
                         format!("USE after[{}]", idx)
                     }
-                    quarto_pandoc_types::reconcile::BlockAlignment::RecurseIntoContainer {
+                    quarto_ast_reconcile::BlockAlignment::RecurseIntoContainer {
                         before_idx,
                         after_idx,
                     } => {

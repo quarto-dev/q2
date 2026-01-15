@@ -1,10 +1,10 @@
 /*
- * mod.rs
+ * lib.rs
  * Copyright (c) 2025 Posit, PBC
  *
- * AST reconciliation module.
+ * AST reconciliation for Quarto.
  *
- * This module provides reconciliation of two Pandoc ASTs, enabling
+ * This crate provides reconciliation of two Pandoc ASTs, enabling
  * selective node replacement to preserve source locations for unchanged
  * content after engine execution.
  *
@@ -21,20 +21,21 @@ mod compute;
 #[cfg(test)]
 mod generators;
 mod hash;
-mod types;
+pub mod types;
 
 pub use apply::apply_reconciliation;
-pub use compute::compute_reconciliation;
+pub use compute::{compute_reconciliation, compute_reconciliation_for_blocks};
 pub use hash::{
-    HashCache, compute_block_hash_fresh, compute_inline_hash_fresh, structural_eq_block,
-    structural_eq_blocks, structural_eq_inline,
+    HashCache, compute_block_hash_fresh, compute_blocks_hash_fresh, compute_inline_hash_fresh,
+    structural_eq_block, structural_eq_blocks, structural_eq_inline,
 };
 pub use types::{
-    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ListItemAlignment,
-    ReconciliationPlan, ReconciliationStats,
+    BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
+    ListItemAlignment, ReconciliationPlan, ReconciliationStats, TableCellPosition,
+    TableReconciliationPlan,
 };
 
-use crate::Pandoc;
+use quarto_pandoc_types::Pandoc;
 
 /// Reconcile two Pandoc ASTs, producing a merged result.
 ///
@@ -69,9 +70,9 @@ pub fn reconcile(original: Pandoc, executed: Pandoc) -> (Pandoc, ReconciliationP
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::custom::{CustomNode, Slot};
-    use crate::{CodeBlock, Div, Header, Paragraph, Str};
     use hashlink::LinkedHashMap;
+    use quarto_pandoc_types::custom::{CustomNode, Slot};
+    use quarto_pandoc_types::{CodeBlock, Div, Header, Paragraph, Str};
     use quarto_source_map::{FileId, SourceInfo};
 
     fn source_original() -> SourceInfo {
@@ -82,9 +83,9 @@ mod tests {
         SourceInfo::original(FileId(1), 0, 100)
     }
 
-    fn make_para(text: &str, source: SourceInfo) -> crate::Block {
-        crate::Block::Paragraph(Paragraph {
-            content: vec![crate::Inline::Str(Str {
+    fn make_para(text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
+        quarto_pandoc_types::Block::Paragraph(Paragraph {
+            content: vec![quarto_pandoc_types::Inline::Str(Str {
                 text: text.to_string(),
                 source_info: source.clone(),
             })],
@@ -92,30 +93,33 @@ mod tests {
         })
     }
 
-    fn make_header(level: usize, text: &str, source: SourceInfo) -> crate::Block {
-        crate::Block::Header(Header {
+    fn make_header(level: usize, text: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
+        quarto_pandoc_types::Block::Header(Header {
             level,
             attr: (String::new(), vec![], LinkedHashMap::new()),
-            content: vec![crate::Inline::Str(Str {
+            content: vec![quarto_pandoc_types::Inline::Str(Str {
                 text: text.to_string(),
                 source_info: source.clone(),
             })],
             source_info: source,
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 
-    fn make_code_block(code: &str, source: SourceInfo) -> crate::Block {
-        crate::Block::CodeBlock(CodeBlock {
+    fn make_code_block(code: &str, source: SourceInfo) -> quarto_pandoc_types::Block {
+        quarto_pandoc_types::Block::CodeBlock(CodeBlock {
             attr: (String::new(), vec!["{r}".to_string()], LinkedHashMap::new()),
             text: code.to_string(),
             source_info: source,
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 
-    fn make_div(blocks: Vec<crate::Block>, source: SourceInfo) -> crate::Block {
-        crate::Block::Div(Div {
+    fn make_div(
+        blocks: Vec<quarto_pandoc_types::Block>,
+        source: SourceInfo,
+    ) -> quarto_pandoc_types::Block {
+        quarto_pandoc_types::Block::Div(Div {
             attr: (
                 String::new(),
                 vec!["cell".to_string()],
@@ -123,7 +127,7 @@ mod tests {
             ),
             content: blocks,
             source_info: source,
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 
@@ -151,7 +155,7 @@ mod tests {
 
         // Both blocks should have original source locations
         for block in &result.blocks {
-            if let crate::Block::Paragraph(p) = block {
+            if let quarto_pandoc_types::Block::Paragraph(p) = block {
                 assert_eq!(p.source_info, source_original());
             }
         }
@@ -174,7 +178,7 @@ mod tests {
         assert!(plan.stats.blocks_replaced > 0 || plan.stats.blocks_recursed > 0);
 
         // Result should have executed source location
-        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
             assert_eq!(p.source_info, source_executed());
         }
     }
@@ -200,12 +204,12 @@ mod tests {
         assert_eq!(plan.stats.blocks_replaced, 1);
 
         // First block should keep original source
-        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
             assert_eq!(p.source_info, source_original());
         }
 
         // New block should have executed source
-        if let crate::Block::Paragraph(p) = &result.blocks[1] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[1] {
             assert_eq!(p.source_info, source_executed());
         }
     }
@@ -261,37 +265,37 @@ mod tests {
         assert_eq!(plan.stats.blocks_replaced, 1);
 
         // First header should keep original source
-        if let crate::Block::Header(h) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Header(h) = &result.blocks[0] {
             assert_eq!(h.source_info, source_original());
         } else {
             panic!("Expected Header at position 0");
         }
 
         // Paragraphs before the cell should keep original source
-        if let crate::Block::Paragraph(p) = &result.blocks[1] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[1] {
             assert_eq!(p.source_info, source_original());
         }
-        if let crate::Block::Paragraph(p) = &result.blocks[2] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[2] {
             assert_eq!(p.source_info, source_original());
         }
 
         // The cell div (replaced from code block) should have executed source
-        if let crate::Block::Div(d) = &result.blocks[3] {
+        if let quarto_pandoc_types::Block::Div(d) = &result.blocks[3] {
             assert_eq!(d.source_info, source_executed());
         } else {
             panic!("Expected Div at position 3");
         }
 
         // Second header should keep original source
-        if let crate::Block::Header(h) = &result.blocks[4] {
+        if let quarto_pandoc_types::Block::Header(h) = &result.blocks[4] {
             assert_eq!(h.source_info, source_original());
         }
 
         // Last paragraphs should keep original source
-        if let crate::Block::Paragraph(p) = &result.blocks[5] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[5] {
             assert_eq!(p.source_info, source_original());
         }
-        if let crate::Block::Paragraph(p) = &result.blocks[6] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[6] {
             assert_eq!(p.source_info, source_original());
         }
     }
@@ -303,30 +307,30 @@ mod tests {
     fn test_inline_code_replaced_with_result() {
         // Original paragraph has: "This has inline code in it, `r 23 * 37`. Let's see what happens."
         // We simulate this as multiple inline elements
-        let original_para = crate::Block::Paragraph(Paragraph {
+        let original_para = quarto_pandoc_types::Block::Paragraph(Paragraph {
             content: vec![
-                crate::Inline::Str(Str {
+                quarto_pandoc_types::Inline::Str(Str {
                     text: "Value: ".to_string(),
                     source_info: source_original(),
                 }),
-                crate::Inline::Code(crate::Code {
+                quarto_pandoc_types::Inline::Code(quarto_pandoc_types::Code {
                     attr: (String::new(), vec![], LinkedHashMap::new()),
                     text: "r 23 * 37".to_string(),
                     source_info: source_original(),
-                    attr_source: crate::AttrSourceInfo::empty(),
+                    attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
                 }),
             ],
             source_info: source_original(),
         });
 
         // Executed paragraph has: "Value: 851" (inline code replaced with result)
-        let executed_para = crate::Block::Paragraph(Paragraph {
+        let executed_para = quarto_pandoc_types::Block::Paragraph(Paragraph {
             content: vec![
-                crate::Inline::Str(Str {
+                quarto_pandoc_types::Inline::Str(Str {
                     text: "Value: ".to_string(),
                     source_info: source_executed(),
                 }),
-                crate::Inline::Str(Str {
+                quarto_pandoc_types::Inline::Str(Str {
                     text: "851".to_string(),
                     source_info: source_executed(),
                 }),
@@ -359,16 +363,16 @@ mod tests {
         assert_eq!(result.blocks.len(), 4);
 
         // First header should keep original source (unchanged)
-        if let crate::Block::Header(h) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Header(h) = &result.blocks[0] {
             assert_eq!(h.source_info, source_original());
         }
 
         // The paragraph with inline code replacement:
         // Since "Value: " matches but the Code→Str change means not all inlines match,
         // the whole paragraph uses executed source
-        if let crate::Block::Paragraph(p) = &result.blocks[1] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[1] {
             // Check that at least the first inline (matching "Value: ") has original source
-            if let crate::Inline::Str(s) = &p.content[0] {
+            if let quarto_pandoc_types::Inline::Str(s) = &p.content[0] {
                 assert_eq!(s.text, "Value: ");
                 // This inline matches, so should have original source
                 assert_eq!(s.source_info, source_original());
@@ -376,12 +380,12 @@ mod tests {
         }
 
         // Second header should keep original source
-        if let crate::Block::Header(h) = &result.blocks[2] {
+        if let quarto_pandoc_types::Block::Header(h) = &result.blocks[2] {
             assert_eq!(h.source_info, source_original());
         }
 
         // Last paragraph should keep original source (unchanged)
-        if let crate::Block::Paragraph(p) = &result.blocks[3] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[3] {
             assert_eq!(p.source_info, source_original());
         }
 
@@ -420,7 +424,7 @@ mod tests {
 
         // All should have original source
         for block in &result.blocks {
-            if let crate::Block::Paragraph(p) = block {
+            if let quarto_pandoc_types::Block::Paragraph(p) = block {
                 assert_eq!(p.source_info, source_original());
             }
         }
@@ -455,8 +459,8 @@ mod tests {
 
         // The order follows executed, but sources come from original
         // "Second" in executed matches "Second" in original
-        if let crate::Block::Paragraph(p) = &result.blocks[0] {
-            if let crate::Inline::Str(s) = &p.content[0] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
+            if let quarto_pandoc_types::Inline::Str(s) = &p.content[0] {
                 assert_eq!(s.text, "Second");
             }
             assert_eq!(p.source_info, source_original());
@@ -479,7 +483,7 @@ mod tests {
         // Title slot (Inlines)
         slots.insert(
             "title".to_string(),
-            Slot::Inlines(vec![crate::Inline::Str(Str {
+            Slot::Inlines(vec![quarto_pandoc_types::Inline::Str(Str {
                 text: title_text.to_string(),
                 source_info: source.clone(),
             })]),
@@ -488,8 +492,8 @@ mod tests {
         // Content slot (Blocks)
         slots.insert(
             "content".to_string(),
-            Slot::Blocks(vec![crate::Block::Paragraph(Paragraph {
-                content: vec![crate::Inline::Str(Str {
+            Slot::Blocks(vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![quarto_pandoc_types::Inline::Str(Str {
                     text: content_text.to_string(),
                     source_info: source.clone(),
                 })],
@@ -511,7 +515,7 @@ mod tests {
     fn test_custom_node_identical_content_kept() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_custom_node(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
                 "Callout",
                 "Note",
                 "This is important.",
@@ -520,7 +524,7 @@ mod tests {
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_custom_node(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
                 "Callout",
                 "Note",
                 "This is important.",
@@ -535,7 +539,7 @@ mod tests {
         assert_eq!(plan.stats.blocks_replaced, 0);
 
         // Source should be from original
-        if let crate::Block::Custom(cn) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Custom(cn) = &result.blocks[0] {
             assert_eq!(cn.source_info, source_original());
             assert_eq!(cn.type_name, "Callout");
         } else {
@@ -548,7 +552,7 @@ mod tests {
     fn test_custom_node_slot_content_changed() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_custom_node(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
                 "Callout",
                 "Note",
                 "Original content.",
@@ -557,7 +561,7 @@ mod tests {
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_custom_node(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
                 "Callout",
                 "Note",             // Title unchanged
                 "Changed content.", // Content changed
@@ -570,13 +574,13 @@ mod tests {
         // Should recurse into the CustomNode
         assert_eq!(plan.stats.blocks_recursed, 1);
 
-        if let crate::Block::Custom(cn) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Custom(cn) = &result.blocks[0] {
             // CustomNode itself should preserve original source
             assert_eq!(cn.source_info, source_original());
 
             // Title slot should preserve original source (unchanged)
             if let Some(Slot::Inlines(title)) = cn.slots.get("title") {
-                if let crate::Inline::Str(s) = &title[0] {
+                if let quarto_pandoc_types::Inline::Str(s) = &title[0] {
                     assert_eq!(s.text, "Note");
                     assert_eq!(s.source_info, source_original());
                 }
@@ -586,9 +590,9 @@ mod tests {
 
             // Content slot should have executed source (changed)
             if let Some(Slot::Blocks(content)) = cn.slots.get("content") {
-                if let crate::Block::Paragraph(p) = &content[0] {
+                if let quarto_pandoc_types::Block::Paragraph(p) = &content[0] {
                     assert_eq!(p.source_info, source_executed());
-                    if let crate::Inline::Str(s) = &p.content[0] {
+                    if let quarto_pandoc_types::Inline::Str(s) = &p.content[0] {
                         assert_eq!(s.text, "Changed content.");
                     }
                 }
@@ -605,7 +609,7 @@ mod tests {
     fn test_custom_node_different_type_not_reconciled() {
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_custom_node(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
                 "Callout",
                 "Note",
                 "Content",
@@ -614,7 +618,7 @@ mod tests {
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_custom_node(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_custom_node(
                 "PanelTabset", // Different type!
                 "Note",
                 "Content",
@@ -629,7 +633,7 @@ mod tests {
         assert_eq!(plan.stats.blocks_recursed, 0);
 
         // Result should have executed's CustomNode
-        if let crate::Block::Custom(cn) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Custom(cn) = &result.blocks[0] {
             assert_eq!(cn.type_name, "PanelTabset");
             assert_eq!(cn.source_info, source_executed());
         } else {
@@ -648,16 +652,16 @@ mod tests {
 
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(orig_cn)],
+            blocks: vec![quarto_pandoc_types::Block::Custom(orig_cn)],
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(exec_cn)],
+            blocks: vec![quarto_pandoc_types::Block::Custom(exec_cn)],
         };
 
         let (result, _plan) = reconcile(original, executed);
 
-        if let crate::Block::Custom(cn) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Custom(cn) = &result.blocks[0] {
             // plain_data should come from executed
             assert_eq!(cn.plain_data["collapse"], true);
             // But source_info should be from original
@@ -674,7 +678,7 @@ mod tests {
             meta: Default::default(),
             blocks: vec![
                 make_para("Before callout", source_original()),
-                crate::Block::Custom(make_custom_node(
+                quarto_pandoc_types::Block::Custom(make_custom_node(
                     "Callout",
                     "Warning",
                     "Be careful!",
@@ -687,7 +691,7 @@ mod tests {
             meta: Default::default(),
             blocks: vec![
                 make_para("Before callout", source_executed()),
-                crate::Block::Custom(make_custom_node(
+                quarto_pandoc_types::Block::Custom(make_custom_node(
                     "Callout",
                     "Warning",
                     "Be careful!",
@@ -704,17 +708,17 @@ mod tests {
         assert_eq!(plan.stats.blocks_replaced, 0);
 
         // First para
-        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
             assert_eq!(p.source_info, source_original());
         }
 
         // CustomNode
-        if let crate::Block::Custom(cn) = &result.blocks[1] {
+        if let quarto_pandoc_types::Block::Custom(cn) = &result.blocks[1] {
             assert_eq!(cn.source_info, source_original());
         }
 
         // Last para
-        if let crate::Block::Paragraph(p) = &result.blocks[2] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[2] {
             assert_eq!(p.source_info, source_original());
         }
     }
@@ -733,7 +737,7 @@ mod tests {
 
             slots.insert(
                 "title".to_string(),
-                Slot::Inlines(vec![crate::Inline::Str(Str {
+                Slot::Inlines(vec![quarto_pandoc_types::Inline::Str(Str {
                     text: title.to_string(),
                     source_info: source.clone(),
                 })]),
@@ -742,15 +746,15 @@ mod tests {
             slots.insert(
                 "content".to_string(),
                 Slot::Blocks(vec![
-                    crate::Block::Paragraph(Paragraph {
-                        content: vec![crate::Inline::Str(Str {
+                    quarto_pandoc_types::Block::Paragraph(Paragraph {
+                        content: vec![quarto_pandoc_types::Inline::Str(Str {
                             text: body1.to_string(),
                             source_info: source.clone(),
                         })],
                         source_info: source.clone(),
                     }),
-                    crate::Block::Paragraph(Paragraph {
-                        content: vec![crate::Inline::Str(Str {
+                    quarto_pandoc_types::Block::Paragraph(Paragraph {
+                        content: vec![quarto_pandoc_types::Inline::Str(Str {
                             text: body2.to_string(),
                             source_info: source.clone(),
                         })],
@@ -770,7 +774,7 @@ mod tests {
 
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_complex_callout(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_complex_callout(
                 "Important",
                 "First paragraph unchanged.",
                 "Second paragraph will change.",
@@ -779,7 +783,7 @@ mod tests {
         };
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Custom(make_complex_callout(
+            blocks: vec![quarto_pandoc_types::Block::Custom(make_complex_callout(
                 "Important",                  // Title unchanged
                 "First paragraph unchanged.", // First para unchanged
                 "Second paragraph CHANGED!",  // Second para changed
@@ -792,13 +796,13 @@ mod tests {
         // Should recurse
         assert_eq!(plan.stats.blocks_recursed, 1);
 
-        if let crate::Block::Custom(cn) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Custom(cn) = &result.blocks[0] {
             // CustomNode keeps original source
             assert_eq!(cn.source_info, source_original());
 
             // Title should keep original
             if let Some(Slot::Inlines(title)) = cn.slots.get("title")
-                && let crate::Inline::Str(s) = &title[0]
+                && let quarto_pandoc_types::Inline::Str(s) = &title[0]
             {
                 assert_eq!(s.source_info, source_original());
             }
@@ -806,14 +810,14 @@ mod tests {
             // Content slot - first para unchanged, second changed
             if let Some(Slot::Blocks(content)) = cn.slots.get("content") {
                 // First paragraph should keep original source
-                if let crate::Block::Paragraph(p1) = &content[0] {
+                if let quarto_pandoc_types::Block::Paragraph(p1) = &content[0] {
                     assert_eq!(p1.source_info, source_original());
                 }
 
                 // Second paragraph should have executed source
-                if let crate::Block::Paragraph(p2) = &content[1] {
+                if let quarto_pandoc_types::Block::Paragraph(p2) = &content[1] {
                     assert_eq!(p2.source_info, source_executed());
-                    if let crate::Inline::Str(s) = &p2.content[0] {
+                    if let quarto_pandoc_types::Inline::Str(s) = &p2.content[0] {
                         assert_eq!(s.text, "Second paragraph CHANGED!");
                     }
                 }
@@ -824,17 +828,17 @@ mod tests {
     /// Test: Inline CustomNode reconciliation.
     #[test]
     fn test_inline_custom_node_reconciliation() {
-        fn make_inline_custom(text: &str, source: SourceInfo) -> crate::Inline {
+        fn make_inline_custom(text: &str, source: SourceInfo) -> quarto_pandoc_types::Inline {
             let mut slots = LinkedHashMap::new();
             slots.insert(
                 "content".to_string(),
-                Slot::Inlines(vec![crate::Inline::Str(Str {
+                Slot::Inlines(vec![quarto_pandoc_types::Inline::Str(Str {
                     text: text.to_string(),
                     source_info: source.clone(),
                 })]),
             );
 
-            crate::Inline::Custom(CustomNode {
+            quarto_pandoc_types::Inline::Custom(CustomNode {
                 type_name: "Shortcode".to_string(),
                 slots,
                 plain_data: serde_json::json!({"name": "video"}),
@@ -845,14 +849,14 @@ mod tests {
 
         let original = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Paragraph(Paragraph {
+            blocks: vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
-                    crate::Inline::Str(Str {
+                    quarto_pandoc_types::Inline::Str(Str {
                         text: "Text before ".to_string(),
                         source_info: source_original(),
                     }),
                     make_inline_custom("unchanged", source_original()),
-                    crate::Inline::Str(Str {
+                    quarto_pandoc_types::Inline::Str(Str {
                         text: " text after".to_string(),
                         source_info: source_original(),
                     }),
@@ -863,14 +867,14 @@ mod tests {
 
         let executed = Pandoc {
             meta: Default::default(),
-            blocks: vec![crate::Block::Paragraph(Paragraph {
+            blocks: vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
                 content: vec![
-                    crate::Inline::Str(Str {
+                    quarto_pandoc_types::Inline::Str(Str {
                         text: "Text before ".to_string(),
                         source_info: source_executed(),
                     }),
                     make_inline_custom("unchanged", source_executed()),
-                    crate::Inline::Str(Str {
+                    quarto_pandoc_types::Inline::Str(Str {
                         text: " text after".to_string(),
                         source_info: source_executed(),
                     }),
@@ -881,12 +885,12 @@ mod tests {
 
         let (result, _plan) = reconcile(original, executed);
 
-        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
             // Paragraph should keep original source (content unchanged)
             assert_eq!(p.source_info, source_original());
 
             // Inline Custom should keep original source
-            if let crate::Inline::Custom(cn) = &p.content[1] {
+            if let quarto_pandoc_types::Inline::Custom(cn) = &p.content[1] {
                 assert_eq!(cn.source_info, source_original());
             }
         }
@@ -900,8 +904,8 @@ mod tests {
 #[cfg(test)]
 mod list_length_tests {
     use super::*;
-    use crate::reconcile::hash::structural_eq_blocks;
-    use crate::{BulletList, Paragraph, Str};
+    use crate::hash::structural_eq_blocks;
+    use quarto_pandoc_types::{BulletList, Paragraph, Str};
     use quarto_source_map::{FileId, SourceInfo};
 
     fn source_orig() -> SourceInfo {
@@ -912,9 +916,9 @@ mod list_length_tests {
         SourceInfo::original(FileId(1), 0, 100)
     }
 
-    fn make_list_item(text: &str, source: SourceInfo) -> Vec<crate::Block> {
-        vec![crate::Block::Paragraph(Paragraph {
-            content: vec![crate::Inline::Str(Str {
+    fn make_list_item(text: &str, source: SourceInfo) -> Vec<quarto_pandoc_types::Block> {
+        vec![quarto_pandoc_types::Block::Paragraph(Paragraph {
+            content: vec![quarto_pandoc_types::Inline::Str(Str {
                 text: text.to_string(),
                 source_info: source.clone(),
             })],
@@ -922,8 +926,11 @@ mod list_length_tests {
         })]
     }
 
-    fn make_bullet_list(items: Vec<Vec<crate::Block>>, source: SourceInfo) -> crate::Block {
-        crate::Block::BulletList(BulletList {
+    fn make_bullet_list(
+        items: Vec<Vec<quarto_pandoc_types::Block>>,
+        source: SourceInfo,
+    ) -> quarto_pandoc_types::Block {
+        quarto_pandoc_types::Block::BulletList(BulletList {
             content: items,
             source_info: source,
         })
@@ -965,7 +972,7 @@ mod list_length_tests {
         );
 
         // Verify 3 items in result
-        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::BulletList(bl) = &result.blocks[0] {
             assert_eq!(bl.content.len(), 3);
         } else {
             panic!("Expected BulletList");
@@ -1008,7 +1015,7 @@ mod list_length_tests {
         );
 
         // Verify 2 items in result, NOT 3
-        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::BulletList(bl) = &result.blocks[0] {
             assert_eq!(
                 bl.content.len(),
                 2,
@@ -1052,7 +1059,7 @@ mod list_length_tests {
         );
 
         // Verify 3 items in result
-        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::BulletList(bl) = &result.blocks[0] {
             assert_eq!(
                 bl.content.len(),
                 3,
@@ -1092,7 +1099,7 @@ mod list_length_tests {
         );
 
         // Verify empty list
-        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::BulletList(bl) = &result.blocks[0] {
             assert_eq!(bl.content.len(), 0, "Result should be empty list");
         } else {
             panic!("Expected BulletList");
@@ -1128,7 +1135,7 @@ mod list_length_tests {
         );
 
         // Verify 2 items
-        if let crate::Block::BulletList(bl) = &result.blocks[0] {
+        if let quarto_pandoc_types::Block::BulletList(bl) = &result.blocks[0] {
             assert_eq!(
                 bl.content.len(),
                 2,
@@ -1144,21 +1151,24 @@ mod list_length_tests {
     /// This test verifies the fix for kyoto-49j bugs.
     #[test]
     fn criticmark_inlines_update_attr_from_after() {
-        use crate::attr::AttrSourceInfo;
-        use crate::inline::Insert;
-        use crate::reconcile::hash::structural_eq_blocks;
         use hashlink::LinkedHashMap;
+        use quarto_pandoc_types::attr::AttrSourceInfo;
+        use quarto_pandoc_types::inline::Insert;
 
         // Helper to create an Insert inline with specific attr
-        fn make_insert_para(attr_class: &str, text: &str, source: SourceInfo) -> crate::Block {
-            crate::Block::Paragraph(Paragraph {
-                content: vec![crate::Inline::Insert(Insert {
+        fn make_insert_para(
+            attr_class: &str,
+            text: &str,
+            source: SourceInfo,
+        ) -> quarto_pandoc_types::Block {
+            quarto_pandoc_types::Block::Paragraph(Paragraph {
+                content: vec![quarto_pandoc_types::Inline::Insert(Insert {
                     attr: (
                         String::new(),
                         vec![attr_class.to_string()],
                         LinkedHashMap::new(),
                     ),
-                    content: vec![crate::Inline::Str(Str {
+                    content: vec![quarto_pandoc_types::Inline::Str(Str {
                         text: text.to_string(),
                         source_info: source.clone(),
                     })],
@@ -1196,8 +1206,8 @@ mod list_length_tests {
         );
 
         // Verify the attr class is "after-class"
-        if let crate::Block::Paragraph(p) = &result.blocks[0] {
-            if let crate::Inline::Insert(insert) = &p.content[0] {
+        if let quarto_pandoc_types::Block::Paragraph(p) = &result.blocks[0] {
+            if let quarto_pandoc_types::Inline::Insert(insert) = &p.content[0] {
                 assert_eq!(
                     insert.attr.1,
                     vec!["after-class".to_string()],
@@ -1219,10 +1229,10 @@ mod list_length_tests {
 #[cfg(test)]
 mod property_tests {
     use super::*;
-    use crate::reconcile::generators::{
+    use crate::generators::{
         gen_full_pandoc, gen_pandoc_b0_i0, gen_pandoc_with_list, gen_pandoc_with_nested_lists,
     };
-    use crate::reconcile::hash::structural_eq_blocks;
+    use crate::hash::structural_eq_blocks;
     use proptest::prelude::*;
 
     proptest! {

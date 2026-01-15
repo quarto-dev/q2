@@ -17,10 +17,10 @@ use super::types::{
     ListItemAlignment, ReconciliationPlan, ReconciliationStats, TableCellPosition,
     TableReconciliationPlan,
 };
-use crate::custom::{CustomNode, Slot};
-use crate::table::Table;
-use crate::{Block, Inline, Pandoc};
 use hashlink::LinkedHashMap;
+use quarto_pandoc_types::custom::{CustomNode, Slot};
+use quarto_pandoc_types::table::Table;
+use quarto_pandoc_types::{Block, Inline, Pandoc};
 use rustc_hash::FxHashSet;
 
 /// Compute a reconciliation plan for two Pandoc ASTs.
@@ -526,8 +526,8 @@ fn compute_table_plan<'a>(
     };
 
     // Helper to reconcile cells at matching positions in two row slices
-    let reconcile_rows = |orig_rows: &'a [crate::table::Row],
-                          exec_rows: &[crate::table::Row],
+    let reconcile_rows = |orig_rows: &'a [quarto_pandoc_types::table::Row],
+                          exec_rows: &[quarto_pandoc_types::table::Row],
                           cache: &mut HashCache<'a>,
                           make_position: &dyn Fn(usize, usize) -> TableCellPosition|
      -> Vec<(TableCellPosition, ReconciliationPlan)> {
@@ -843,11 +843,11 @@ fn compute_inline_container_plan<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
+    use hashlink::LinkedHashMap;
+    use quarto_pandoc_types::{
         BlockQuote, BulletList, Caption, Div, Emph, Figure, Header, ListNumberDelim,
         ListNumberStyle, OrderedList, Paragraph, Plain, Str, Strong,
     };
-    use hashlink::LinkedHashMap;
     use quarto_source_map::{FileId, SourceInfo};
 
     fn dummy_source() -> SourceInfo {
@@ -881,7 +881,7 @@ mod tests {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: vec![make_str(text)],
             source_info: dummy_source(),
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 
@@ -890,7 +890,7 @@ mod tests {
             attr: (String::new(), vec![], LinkedHashMap::new()),
             content: blocks,
             source_info: dummy_source(),
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 
@@ -926,7 +926,7 @@ mod tests {
             },
             content: blocks,
             source_info: dummy_source(),
-            attr_source: crate::AttrSourceInfo::empty(),
+            attr_source: quarto_pandoc_types::AttrSourceInfo::empty(),
         })
     }
 

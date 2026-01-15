@@ -11,12 +11,12 @@
 use clap::Parser;
 use hashlink::LinkedHashMap;
 use pampa::readers;
-use quarto_pandoc_types::block::{Block, Blocks};
-use quarto_pandoc_types::inline::{Inline, Inlines};
-use quarto_pandoc_types::reconcile::{
+use quarto_ast_reconcile::{
     BlockAlignment, InlineAlignment, InlineReconciliationPlan, ListItemAlignment,
     ReconciliationPlan, compute_reconciliation,
 };
+use quarto_pandoc_types::block::{Block, Blocks};
+use quarto_pandoc_types::inline::{Inline, Inlines};
 use serde::{Deserialize, Serialize};
 use std::io;
 
@@ -619,7 +619,7 @@ fn main() {
 mod tests {
     use super::*;
     use proptest::prelude::*;
-    use quarto_pandoc_types::reconcile::{apply_reconciliation, compute_reconciliation};
+    use quarto_ast_reconcile::{apply_reconciliation, compute_reconciliation};
     use quarto_pandoc_types::{BulletList, Pandoc, Paragraph, Space, Str};
     use quarto_source_map::{FileId, SourceInfo};
 
@@ -685,7 +685,7 @@ mod tests {
 
     /// Helper: Check if two block sequences are structurally equal (ignoring source_info)
     fn blocks_structurally_equal(a: &[Block], b: &[Block]) -> bool {
-        use quarto_pandoc_types::reconcile::structural_eq_blocks;
+        use quarto_ast_reconcile::structural_eq_blocks;
         structural_eq_blocks(a, b)
     }
 

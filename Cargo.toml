@@ -110,6 +110,9 @@ path = "./crates/quarto-treesitter-ast"
 [workspace.dependencies.quarto-pandoc-types]
 path = "./crates/quarto-pandoc-types"
 
+[workspace.dependencies.quarto-ast-reconcile]
+path = "./crates/quarto-ast-reconcile"
+
 [workspace.dependencies.quarto-config]
 path = "./crates/quarto-config"
 

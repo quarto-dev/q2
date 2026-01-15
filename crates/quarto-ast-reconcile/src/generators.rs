@@ -16,27 +16,27 @@
  * - Feature flags allow selective enabling/disabling of node types
  */
 
-use crate::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
-use crate::caption::Caption;
-use crate::custom::{CustomNode, Slot};
-use crate::inline::{
+use hashlink::LinkedHashMap;
+use proptest::prelude::*;
+use quarto_pandoc_types::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
+use quarto_pandoc_types::caption::Caption;
+use quarto_pandoc_types::custom::{CustomNode, Slot};
+use quarto_pandoc_types::inline::{
     Citation, CitationMode, Cite, Delete, EditComment, Highlight, Insert, Note, NoteReference,
 };
-use crate::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
-use crate::shortcode::{Shortcode, ShortcodeArg};
-use crate::table::{
+use quarto_pandoc_types::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
+use quarto_pandoc_types::shortcode::{Shortcode, ShortcodeArg};
+use quarto_pandoc_types::table::{
     Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
 };
-use crate::{
+use quarto_pandoc_types::{
     Block, BlockQuote, Blocks, BulletList, CodeBlock, DefinitionList, Div, Emph, Figure, Header,
     HorizontalRule, Inline, Inlines, LineBlock, LineBreak, Link, Math, MathType, OrderedList,
     Pandoc, Paragraph, Plain, QuoteType, Quoted, RawBlock, RawInline, SoftBreak, Space, Span, Str,
     Strikeout, Strong, Subscript, Superscript, Underline,
 };
-use crate::{CaptionBlock, NoteDefinitionFencedBlock, NoteDefinitionPara};
-use crate::{Code, Image, SmallCaps, Target};
-use hashlink::LinkedHashMap;
-use proptest::prelude::*;
+use quarto_pandoc_types::{CaptionBlock, NoteDefinitionFencedBlock, NoteDefinitionPara};
+use quarto_pandoc_types::{Code, Image, SmallCaps, Target};
 use quarto_source_map::{FileId, SourceInfo};
 
 // =============================================================================
