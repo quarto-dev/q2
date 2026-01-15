@@ -99,15 +99,13 @@ function App() {
   const handleProjectCreated = useCallback(async (
     scaffoldFiles: ProjectFile[],
     title: string,
-    _projectType: string
+    _projectType: string,
+    syncServer: string
   ) => {
     setIsConnecting(true);
     setConnectionError(null);
 
     try {
-      // Default sync server (same as the connect form default)
-      const syncServer = 'wss://sync.automerge.org';
-
       // Convert scaffold files to the format expected by createNewProject
       const files = scaffoldFiles.map(f => ({
         path: f.path,

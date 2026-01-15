@@ -16,7 +16,7 @@ interface Props {
   isConnecting?: boolean;
   error?: string | null;
   /** Called when a new project is created with scaffold files */
-  onProjectCreated?: (files: ProjectFile[], title: string, projectType: string) => void;
+  onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
 }
 
 // Curated color palette for user selection
@@ -200,6 +200,11 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
       return;
     }
 
+    if (!syncServer.trim()) {
+      setFormError('Sync Server URL is required');
+      return;
+    }
+
     setIsCreating(true);
 
     try {
@@ -222,7 +227,7 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
       // Call the callback with the scaffold files
       // The parent component (or k-tsqm task) will handle Automerge document creation
       if (onProjectCreated) {
-        onProjectCreated(result.files, createProjectTitle.trim(), createProjectType);
+        onProjectCreated(result.files, createProjectTitle.trim(), createProjectType, syncServer.trim());
       } else {
         // If no callback, show success message with file list
         const fileList = result.files.map(f => f.path).join(', ');
@@ -389,6 +394,16 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
                 onChange={(e) => setCreateProjectTitle(e.target.value)}
                 placeholder="My Awesome Project"
                 autoFocus
+              />
+            </div>
+            <div className="form-group">
+              <label htmlFor="createSyncServer">Sync Server URL</label>
+              <input
+                id="createSyncServer"
+                type="text"
+                value={syncServer}
+                onChange={(e) => setSyncServer(e.target.value)}
+                placeholder="wss://sync.automerge.org"
               />
             </div>
             <div className="form-actions">
