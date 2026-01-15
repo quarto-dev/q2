@@ -30,8 +30,8 @@ pub use hash::{
     structural_eq_blocks, structural_eq_inline,
 };
 pub use types::{
-    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
-    ReconciliationStats,
+    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ListItemAlignment,
+    ReconciliationPlan, ReconciliationStats,
 };
 
 use crate::Pandoc;

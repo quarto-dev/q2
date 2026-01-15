@@ -14,8 +14,8 @@ use pampa::readers;
 use quarto_pandoc_types::block::{Block, Blocks};
 use quarto_pandoc_types::inline::{Inline, Inlines};
 use quarto_pandoc_types::reconcile::{
-    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ReconciliationPlan,
-    compute_reconciliation,
+    BlockAlignment, InlineAlignment, InlineReconciliationPlan, ListItemAlignment,
+    ReconciliationPlan, compute_reconciliation,
 };
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -76,10 +76,12 @@ struct ReadableBlockOp {
 struct ReadableListItemOp {
     /// Index in the result list
     result_index: usize,
+    /// Action taken for this list item (keep_original, reconcile, use_executed)
+    action: String,
     /// Index in the before list (if item existed in before)
     #[serde(skip_serializing_if = "Option::is_none")]
     before_idx: Option<usize>,
-    /// Block operations within this list item
+    /// Block operations within this list item (only for reconcile action)
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     block_ops: Vec<ReadableBlockOp>,
 }
@@ -258,7 +260,7 @@ fn get_list_items(block: &Block) -> Option<&Vec<Vec<Block>>> {
     }
 }
 
-/// Build readable list item operations from list_item_plans
+/// Build readable list item operations from list_item_alignments
 fn build_list_item_ops(
     plan: &ReconciliationPlan,
     before_items: Option<&Vec<Vec<Block>>>,
@@ -267,30 +269,39 @@ fn build_list_item_ops(
 ) -> Vec<ReadableListItemOp> {
     let mut ops = Vec::new();
 
-    // Each entry in list_item_plans corresponds to an item in the after list
-    for (result_idx, item_plan) in plan.list_item_plans.iter().enumerate() {
+    // Each entry in list_item_alignments corresponds to an item in the after list
+    for (result_idx, alignment) in plan.list_item_alignments.iter().enumerate() {
         let after_item = after_items.and_then(|items| items.get(result_idx));
-        // For simple positional matching, before_idx == result_idx if it exists
-        let before_idx = if before_items
-            .map(|items| result_idx < items.len())
-            .unwrap_or(false)
-        {
-            Some(result_idx)
-        } else {
-            None
-        };
-        let before_item = before_idx.and_then(|i| before_items.and_then(|items| items.get(i)));
 
-        // Build block ops for this list item
-        let block_ops = build_block_ops(
-            item_plan,
-            before_item.map(|v| v.as_slice()).unwrap_or(&[]),
-            after_item.map(|v| v.as_slice()).unwrap_or(&[]),
-            snippet_len,
-        );
+        let (action, before_idx, block_ops) = match alignment {
+            ListItemAlignment::KeepOriginal(orig_idx) => {
+                // Exact match - use original item entirely
+                ("keep_original".to_string(), Some(*orig_idx), Vec::new())
+            }
+            ListItemAlignment::Reconcile(orig_idx) => {
+                // Need to reconcile - get nested plan if available
+                let before_item = before_items.and_then(|items| items.get(*orig_idx));
+                let nested_ops = if let Some(item_plan) = plan.list_item_plans.get(&result_idx) {
+                    build_block_ops(
+                        item_plan,
+                        before_item.map(|v| v.as_slice()).unwrap_or(&[]),
+                        after_item.map(|v| v.as_slice()).unwrap_or(&[]),
+                        snippet_len,
+                    )
+                } else {
+                    Vec::new()
+                };
+                ("reconcile".to_string(), Some(*orig_idx), nested_ops)
+            }
+            ListItemAlignment::UseExecuted => {
+                // No match - use executed item as-is
+                ("use_executed".to_string(), None, Vec::new())
+            }
+        };
 
         ops.push(ReadableListItemOp {
             result_index: result_idx,
+            action,
             before_idx,
             block_ops,
         });
@@ -389,7 +400,6 @@ fn plan_from_block_ops(ops: &[ReadableBlockOp]) -> ReconciliationPlan {
     let mut block_alignments = Vec::with_capacity(ops.len());
     let mut block_container_plans = LinkedHashMap::new();
     let mut inline_plans = LinkedHashMap::new();
-    let list_item_plans = Vec::new();
 
     for op in ops {
         // Convert action back to BlockAlignment
@@ -429,7 +439,8 @@ fn plan_from_block_ops(ops: &[ReadableBlockOp]) -> ReconciliationPlan {
         inline_plans,
         custom_node_plans: LinkedHashMap::new(),
         table_plans: LinkedHashMap::new(),
-        list_item_plans,
+        list_item_alignments: Vec::new(),
+        list_item_plans: LinkedHashMap::new(),
         stats: Default::default(),
     }
 }
@@ -437,12 +448,22 @@ fn plan_from_block_ops(ops: &[ReadableBlockOp]) -> ReconciliationPlan {
 /// Reconstruct a ReconciliationPlan from list item operations.
 #[allow(dead_code)] // Used in tests
 fn plan_from_list_item_ops(ops: &[ReadableListItemOp]) -> ReconciliationPlan {
-    let mut list_item_plans = Vec::with_capacity(ops.len());
+    let mut list_item_alignments = Vec::with_capacity(ops.len());
+    let mut list_item_plans = LinkedHashMap::new();
 
     for op in ops {
-        // Each list item op contains block_ops that describe the item's blocks
-        let item_plan = plan_from_block_ops(&op.block_ops);
-        list_item_plans.push(item_plan);
+        // Convert action back to ListItemAlignment
+        let alignment = match op.action.as_str() {
+            "keep_original" => ListItemAlignment::KeepOriginal(op.before_idx.unwrap_or(0)),
+            "reconcile" => {
+                // Each list item op contains block_ops that describe the item's blocks
+                let item_plan = plan_from_block_ops(&op.block_ops);
+                list_item_plans.insert(op.result_index, item_plan);
+                ListItemAlignment::Reconcile(op.before_idx.unwrap_or(0))
+            }
+            _ => ListItemAlignment::UseExecuted,
+        };
+        list_item_alignments.push(alignment);
     }
 
     ReconciliationPlan {
@@ -451,6 +472,7 @@ fn plan_from_list_item_ops(ops: &[ReadableListItemOp]) -> ReconciliationPlan {
         inline_plans: LinkedHashMap::new(),
         custom_node_plans: LinkedHashMap::new(),
         table_plans: LinkedHashMap::new(),
+        list_item_alignments,
         list_item_plans,
         stats: Default::default(),
     }
