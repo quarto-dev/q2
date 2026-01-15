@@ -1,7 +1,7 @@
 # Remaining AST Generators Plan
 
 **Date:** 2026-01-14
-**Status:** Phases 1-2 Complete
+**Status:** ✅ COMPLETE (All 4 Phases)
 **Parent:** 2026-01-14-complete-ast-generators.md
 **Epic:** kyoto-tsq
 
@@ -216,21 +216,32 @@ CustomNode {
 
 **Key insight**: Unlike CriticMarkup inlines (where attr bugs were unreachable), CustomNode's bug was **actually reachable** through property testing because slot reconciliation can preserve the CustomNode container while changing its structural fields.
 
-### Phase 4: Table (Complex, 1 Bug Expected)
+### Phase 4: Table ✅ COMPLETE (No Bug - Plan Analysis Was Incorrect)
 
-- [ ] `gen_alignment()` - Alignment enum
-- [ ] `gen_col_width()` - ColWidth enum
-- [ ] `gen_col_spec()` - (Alignment, ColWidth)
-- [ ] `gen_cell(config)` - Cell with blocks
-- [ ] `gen_row(config)` - Row with cells
-- [ ] `gen_table_head(config)` - TableHead
-- [ ] `gen_table_body(config)` - TableBody
-- [ ] `gen_table_foot(config)` - TableFoot
-- [ ] `gen_table(config)` - Full table
-- [ ] Update `BlockFeatures` with `table`
-- [ ] Update `gen_block()` to include Table
-- [ ] Run tests, expect failure (fallback returns orig)
-- [ ] Add explicit Table handling in `apply_block_container_reconciliation`
+- [x] `gen_alignment()` - Alignment enum
+- [x] `gen_col_width()` - ColWidth enum
+- [x] `gen_col_spec()` - (Alignment, ColWidth)
+- [x] `gen_cell(config)` - Cell with blocks
+- [x] `gen_row(config)` - Row with cells
+- [x] `gen_table_head(config)` - TableHead
+- [x] `gen_table_body(config)` - TableBody
+- [x] `gen_table_foot(config)` - TableFoot
+- [x] `gen_table(config)` - Full table
+- [x] Update `BlockFeatures` with `table`
+- [x] Update `gen_block()` to include Table
+- [x] Run tests - **ALL PASSED** (no bug exists)
+
+**Key Finding:** The expected bug was **incorrect**. Table does NOT fall through to the fallback:
+
+1. **Not in `is_container_block()`**: Table is not in the container check at compute.rs:179-189
+2. **Alignment behavior for Table**:
+   - Same hash → `KeepBefore` → Uses original table (correct)
+   - Different hash → `UseAfter` → Uses executed table entirely (correct)
+3. **Never reaches `apply_block_container_reconciliation`**: Since Table is not a container block, it never gets `RecurseIntoContainer` alignment, so the fallback case `(orig, _) => orig` is never reached for Table
+
+**Correct behavior (already implemented):**
+- Table reconciliation is structurally correct
+- The only "missing" functionality is recursive reconciliation of cell content to preserve source info in nested blocks, but this is a quality/performance optimization, not a correctness bug
 
 ## Expected Bugs Summary
 
@@ -245,19 +256,19 @@ CustomNode {
 | Image | `o.attr`, `o.target` not updated | Same as Header bug | ✅ Fixed (unreachable but fixed for consistency) |
 | Quoted | `o.quote_type` not updated | Same as Header bug | ✅ Fixed (unreachable but fixed for consistency) |
 | Shortcode | Expected fallback bug | **NO BUG** - not a container inline | ✅ Verified correct |
-| Table | Falls through to `(orig, _) => orig` | Returns wrong structure | ⏳ Pending |
+| Table | Expected fallback bug | **NO BUG** - not a container block | ✅ Verified correct |
 | CustomNode | `attr` and `type_name` from orig instead of exec | **REAL BUG** - fixed | ✅ Fixed via TDD |
 
-Phase 1-3 complete: 8 consistency fixes + 1 real bug fix. Remaining: 1 type to test (Table).
+**Final Summary:** All 4 phases complete. 8 consistency fixes + 1 real bug fix (CustomNode). 2 expected bugs (Shortcode, Table) were actually correct behavior.
 
 ## Success Criteria
 
 - [x] All 4 CriticMarkup inlines have generators and reconciliation works
 - [x] Shortcode has generator and reconciliation works (verified correct, no bug)
-- [ ] CustomNode has generator and reconciliation works
-- [ ] Table has generator and reconciliation works
-- [x] Full AST property test passes with all types enabled (187 tests, including full_ast)
-- [x] All bugs found via TDD (test first, then fix) - 8 consistency fixes applied in Phase 1
+- [x] CustomNode has generator and reconciliation works (bug found and fixed)
+- [x] Table has generator and reconciliation works (verified correct, no bug)
+- [x] Full AST property test passes with all types enabled (22 tests passing)
+- [x] All bugs found via TDD (test first, then fix) - 8 consistency fixes + 1 real fix
 
 ## TDD Protocol
 

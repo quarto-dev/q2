@@ -24,6 +24,9 @@ use crate::inline::{
 };
 use crate::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::shortcode::{Shortcode, ShortcodeArg};
+use crate::table::{
+    Alignment, Cell, ColSpec, ColWidth, Row, Table, TableBody, TableFoot, TableHead,
+};
 use crate::{
     Block, BlockQuote, Blocks, BulletList, CodeBlock, DefinitionList, Div, Emph, Figure, Header,
     HorizontalRule, Inline, Inlines, LineBlock, LineBreak, Link, Math, MathType, OrderedList,
@@ -267,6 +270,7 @@ pub struct BlockFeatures {
     pub div: bool,
     pub definition_list: bool,
     pub figure: bool,
+    pub table: bool, // Complex container with head/body/foot
 
     // Custom node (container with named slots)
     pub custom: bool,
@@ -317,6 +321,7 @@ impl BlockFeatures {
             div: true,
             definition_list: true,
             figure: true,
+            table: true,
             custom: true,
         }
     }
@@ -336,6 +341,7 @@ impl BlockFeatures {
             || self.div
             || self.definition_list
             || self.figure
+            || self.table
             || self.note_definition_fenced
             || self.custom
     }
@@ -1268,6 +1274,150 @@ fn gen_custom_inline(config: GenConfig) -> impl Strategy<Value = Inline> {
 }
 
 // =============================================================================
+// Table Generators
+// =============================================================================
+
+/// Generate an Alignment enum value.
+fn gen_alignment() -> impl Strategy<Value = Alignment> {
+    prop_oneof![
+        Just(Alignment::Left),
+        Just(Alignment::Center),
+        Just(Alignment::Right),
+        Just(Alignment::Default),
+    ]
+}
+
+/// Generate a ColWidth enum value.
+fn gen_col_width() -> impl Strategy<Value = ColWidth> {
+    prop_oneof![
+        Just(ColWidth::Default),
+        (0.1f64..0.9f64).prop_map(ColWidth::Percentage),
+    ]
+}
+
+/// Generate a ColSpec (Alignment, ColWidth) tuple.
+fn gen_col_spec() -> impl Strategy<Value = ColSpec> {
+    (gen_alignment(), gen_col_width())
+}
+
+/// Generate a table Cell with block content.
+fn gen_cell(config: GenConfig) -> impl Strategy<Value = Cell> {
+    (
+        gen_attr(),
+        gen_alignment(),
+        1usize..=2usize, // row_span
+        1usize..=2usize, // col_span
+        gen_blocks_inner(config),
+    )
+        .prop_map(|(attr, alignment, row_span, col_span, content)| Cell {
+            attr,
+            alignment,
+            row_span,
+            col_span,
+            content,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+}
+
+/// Generate a table Row with cells.
+fn gen_row(config: GenConfig, num_cols: usize) -> impl Strategy<Value = Row> {
+    let max_cells = num_cols.max(1);
+    (
+        gen_attr(),
+        proptest::collection::vec(gen_cell(config), 1..=max_cells),
+    )
+        .prop_map(|(attr, cells)| Row {
+            attr,
+            cells,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+}
+
+/// Generate a TableHead with rows.
+fn gen_table_head(config: GenConfig, num_cols: usize) -> impl Strategy<Value = TableHead> {
+    (
+        gen_attr(),
+        proptest::collection::vec(gen_row(config, num_cols), 0..=2),
+    )
+        .prop_map(|(attr, rows)| TableHead {
+            attr,
+            rows,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+}
+
+/// Generate a TableBody with head and body rows.
+fn gen_table_body(config: GenConfig, num_cols: usize) -> impl Strategy<Value = TableBody> {
+    (
+        gen_attr(),
+        0usize..=2usize, // rowhead_columns
+        proptest::collection::vec(gen_row(config.clone(), num_cols), 0..=2), // head rows
+        proptest::collection::vec(gen_row(config, num_cols), 1..=3), // body rows
+    )
+        .prop_map(|(attr, rowhead_columns, head, body)| TableBody {
+            attr,
+            rowhead_columns,
+            head,
+            body,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+}
+
+/// Generate a TableFoot with rows.
+fn gen_table_foot(config: GenConfig, num_cols: usize) -> impl Strategy<Value = TableFoot> {
+    (
+        gen_attr(),
+        proptest::collection::vec(gen_row(config, num_cols), 0..=2),
+    )
+        .prop_map(|(attr, rows)| TableFoot {
+            attr,
+            rows,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+}
+
+/// Generate a complete Table block.
+///
+/// Tables are complex structures with:
+/// - attr: Table-level attributes
+/// - caption: Caption with optional short and long forms
+/// - colspec: Column specifications (alignment and width)
+/// - head: Table header rows
+/// - bodies: One or more table body sections
+/// - foot: Table footer rows
+fn gen_table(config: GenConfig) -> impl Strategy<Value = Block> {
+    // First generate the number of columns (affects colspec and row generation)
+    (1usize..=4usize).prop_flat_map(move |num_cols| {
+        let child_config = config.descend();
+        (
+            gen_attr(),
+            gen_caption(child_config.clone()),
+            proptest::collection::vec(gen_col_spec(), num_cols..=num_cols),
+            gen_table_head(child_config.clone(), num_cols),
+            proptest::collection::vec(gen_table_body(child_config.clone(), num_cols), 1..=2),
+            gen_table_foot(child_config, num_cols),
+        )
+            .prop_map(|(attr, caption, colspec, head, bodies, foot)| {
+                Block::Table(Table {
+                    attr,
+                    caption,
+                    colspec,
+                    head,
+                    bodies,
+                    foot,
+                    source_info: dummy_source(),
+                    attr_source: AttrSourceInfo::empty(),
+                })
+            })
+    })
+}
+
+// =============================================================================
 // Block Collection Generators
 // =============================================================================
 
@@ -1327,6 +1477,9 @@ fn gen_block(config: &GenConfig) -> BoxedStrategy<Block> {
         }
         if features.figure {
             choices.push(gen_figure(child_config.clone()).boxed());
+        }
+        if features.table {
+            choices.push(gen_table(child_config.clone()).boxed());
         }
         if features.note_definition_fenced {
             choices.push(gen_note_definition_fenced(child_config.clone()).boxed());
