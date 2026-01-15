@@ -18,7 +18,9 @@
 
 use crate::attr::{Attr, AttrSourceInfo, TargetSourceInfo, empty_attr};
 use crate::caption::Caption;
-use crate::inline::{Citation, CitationMode, Cite, Note, NoteReference};
+use crate::inline::{
+    Citation, CitationMode, Cite, Delete, EditComment, Highlight, Insert, Note, NoteReference,
+};
 use crate::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
 use crate::{
     Block, BlockQuote, Blocks, BulletList, CodeBlock, DefinitionList, Div, Emph, Figure, Header,
@@ -145,6 +147,12 @@ pub struct InlineFeatures {
     // Special container inlines
     pub cite: bool,
     pub note: bool, // Note is special: inline that contains blocks
+
+    // CriticMarkup inlines (containers with attr + inlines)
+    pub insert: bool,
+    pub delete: bool,
+    pub highlight: bool,
+    pub edit_comment: bool,
 }
 
 impl InlineFeatures {
@@ -196,6 +204,10 @@ impl InlineFeatures {
             image: true,
             cite: true,
             note: true,
+            insert: true,
+            delete: true,
+            highlight: true,
+            edit_comment: true,
         }
     }
 
@@ -214,6 +226,10 @@ impl InlineFeatures {
             || self.image
             || self.cite
             || self.note
+            || self.insert
+            || self.delete
+            || self.highlight
+            || self.edit_comment
     }
 }
 
@@ -697,6 +713,58 @@ fn gen_note(config: GenConfig) -> impl Strategy<Value = Inline> {
 }
 
 // =============================================================================
+// CriticMarkup Inline Generators
+// =============================================================================
+
+/// Generate an Insert inline (CriticMarkup addition).
+fn gen_insert(config: GenConfig) -> impl Strategy<Value = Inline> {
+    (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
+        Inline::Insert(Insert {
+            attr,
+            content,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    })
+}
+
+/// Generate a Delete inline (CriticMarkup deletion).
+fn gen_delete(config: GenConfig) -> impl Strategy<Value = Inline> {
+    (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
+        Inline::Delete(Delete {
+            attr,
+            content,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    })
+}
+
+/// Generate a Highlight inline (CriticMarkup highlight).
+fn gen_highlight(config: GenConfig) -> impl Strategy<Value = Inline> {
+    (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
+        Inline::Highlight(Highlight {
+            attr,
+            content,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    })
+}
+
+/// Generate an EditComment inline (CriticMarkup comment).
+fn gen_edit_comment(config: GenConfig) -> impl Strategy<Value = Inline> {
+    (gen_attr(), gen_inlines_inner(config)).prop_map(|(attr, content)| {
+        Inline::EditComment(EditComment {
+            attr,
+            content,
+            source_info: dummy_source(),
+            attr_source: AttrSourceInfo::empty(),
+        })
+    })
+}
+
+// =============================================================================
 // Inline Collection Generators
 // =============================================================================
 
@@ -773,6 +841,19 @@ fn gen_inline(config: &GenConfig) -> BoxedStrategy<Inline> {
         }
         if features.note {
             choices.push(gen_note(child_config.clone()).boxed());
+        }
+        // CriticMarkup inlines
+        if features.insert {
+            choices.push(gen_insert(child_config.clone()).boxed());
+        }
+        if features.delete {
+            choices.push(gen_delete(child_config.clone()).boxed());
+        }
+        if features.highlight {
+            choices.push(gen_highlight(child_config.clone()).boxed());
+        }
+        if features.edit_comment {
+            choices.push(gen_edit_comment(child_config.clone()).boxed());
         }
     }
 

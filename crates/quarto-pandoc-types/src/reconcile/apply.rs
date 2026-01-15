@@ -313,6 +313,8 @@ fn apply_inline_container_reconciliation(
             Inline::SmallCaps(o)
         }
         (Inline::Quoted(mut o), Inline::Quoted(e)) => {
+            // Use exec's quote_type (structural), keep orig's source_info
+            o.quote_type = e.quote_type;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Quoted(o)
         }
@@ -321,30 +323,46 @@ fn apply_inline_container_reconciliation(
             Inline::Cite(o)
         }
         (Inline::Link(mut o), Inline::Link(e)) => {
+            // Use exec's attr and target (structural), keep orig's source_info
+            o.attr = e.attr;
+            o.target = e.target;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Link(o)
         }
         (Inline::Image(mut o), Inline::Image(e)) => {
+            // Use exec's attr and target (structural), keep orig's source_info
+            o.attr = e.attr;
+            o.target = e.target;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Image(o)
         }
         (Inline::Span(mut o), Inline::Span(e)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            o.attr = e.attr;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Span(o)
         }
         (Inline::Insert(mut o), Inline::Insert(e)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            o.attr = e.attr;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Insert(o)
         }
         (Inline::Delete(mut o), Inline::Delete(e)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            o.attr = e.attr;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Delete(o)
         }
         (Inline::Highlight(mut o), Inline::Highlight(e)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            o.attr = e.attr;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::Highlight(o)
         }
         (Inline::EditComment(mut o), Inline::EditComment(e)) => {
+            // Use exec's attr (structural), keep orig's source_info
+            o.attr = e.attr;
             o.content = apply_reconciliation_to_inlines(o.content, e.content, plan);
             Inline::EditComment(o)
         }

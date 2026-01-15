@@ -1138,6 +1138,78 @@ mod list_length_tests {
             panic!("Expected BulletList");
         }
     }
+
+    /// Test: CriticMarkup inlines (Insert, Delete, Highlight, EditComment) should
+    /// update their attr from 'after' during reconciliation.
+    /// This test verifies the fix for kyoto-49j bugs.
+    #[test]
+    fn criticmark_inlines_update_attr_from_after() {
+        use crate::attr::AttrSourceInfo;
+        use crate::inline::Insert;
+        use crate::reconcile::hash::structural_eq_blocks;
+        use hashlink::LinkedHashMap;
+
+        // Helper to create an Insert inline with specific attr
+        fn make_insert_para(attr_class: &str, text: &str, source: SourceInfo) -> crate::Block {
+            crate::Block::Paragraph(Paragraph {
+                content: vec![crate::Inline::Insert(Insert {
+                    attr: (
+                        String::new(),
+                        vec![attr_class.to_string()],
+                        LinkedHashMap::new(),
+                    ),
+                    content: vec![crate::Inline::Str(Str {
+                        text: text.to_string(),
+                        source_info: source.clone(),
+                    })],
+                    source_info: source.clone(),
+                    attr_source: AttrSourceInfo::empty(),
+                })],
+                source_info: source,
+            })
+        }
+
+        // Original has Insert with attr class "before-class"
+        let original = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_insert_para("before-class", "text", source_orig())],
+        };
+
+        // Executed has Insert with attr class "after-class"
+        let executed = Pandoc {
+            meta: Default::default(),
+            blocks: vec![make_insert_para("after-class", "text", source_exec())],
+        };
+
+        let after_clone = executed.clone();
+        let (result, _plan) = reconcile(original, executed);
+
+        // Result MUST be structurally equal to 'after'
+        // This means the attr should be "after-class", not "before-class"
+        assert!(
+            structural_eq_blocks(&result.blocks, &after_clone.blocks),
+            "Insert attr should be updated from 'after'. \
+             Result: {:?}\n\
+             After: {:?}",
+            result.blocks,
+            after_clone.blocks
+        );
+
+        // Verify the attr class is "after-class"
+        if let crate::Block::Paragraph(p) = &result.blocks[0] {
+            if let crate::Inline::Insert(insert) = &p.content[0] {
+                assert_eq!(
+                    insert.attr.1,
+                    vec!["after-class".to_string()],
+                    "Insert attr class should be 'after-class' from executed, not 'before-class'"
+                );
+            } else {
+                panic!("Expected Insert inline");
+            }
+        } else {
+            panic!("Expected Paragraph");
+        }
+    }
 }
 
 /// Property-based tests for reconciliation correctness.

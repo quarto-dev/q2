@@ -44,10 +44,12 @@ This meant property tests could not exercise most reconciliation code paths.
 2. Header was preserving `attr` and `level` from `before` instead of using `after`'s values. Fixed in `apply_inline_block_reconciliation`.
 3. kyoto-fhh: DefinitionList was not updating terms or definitions from `after`. The bug was twofold: (a) terms were ignored using `_` pattern, (b) `zip` only processed items existing in both lists. Fixed by taking exec's content directly since there are no pre-computed nested plans for DefinitionList.
 
-**Remaining (Phases 5-6):**
-- Table generator (complex structure with head, body, foot)
-- Shortcode, CustomNode (special Quarto types)
-- Unified `gen_any_*` generators
+**Remaining:**
+See child plan: `2026-01-14-remaining-generators.md` (kyoto-49j)
+- CriticMarkup inlines (Insert, Delete, Highlight, EditComment) - 4 attr bugs expected
+- Shortcode - fallback bug expected
+- CustomNode - needs verification
+- Table - fallback bug expected
 
 ## Design Goals
 
