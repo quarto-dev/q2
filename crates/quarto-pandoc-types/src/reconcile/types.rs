@@ -30,6 +30,61 @@ pub struct CustomNodeSlotPlan {
     pub inline_slot_plans: LinkedHashMap<String, InlineReconciliationPlan>,
 }
 
+/// Position of a cell within a table.
+///
+/// Tables have a complex nested structure: head, multiple bodies, and foot.
+/// Each section contains rows, and each row contains cells. This enum
+/// identifies a cell's position using indices at each level.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TableCellPosition {
+    /// Cell in the table head section.
+    Head { row: usize, cell: usize },
+    /// Cell in the head rows of a table body (TableBody.head).
+    BodyHead {
+        body: usize,
+        row: usize,
+        cell: usize,
+    },
+    /// Cell in the body rows of a table body (TableBody.body).
+    BodyBody {
+        body: usize,
+        row: usize,
+        cell: usize,
+    },
+    /// Cell in the table foot section.
+    Foot { row: usize, cell: usize },
+}
+
+/// Plan for reconciling a Table's nested content.
+///
+/// Tables contain nested block content in cells. This plan describes how to
+/// reconcile cell content using position-based matching: cells at the same
+/// (section, row, column) position in both tables are matched and their
+/// content is recursively reconciled.
+///
+/// # Position-Based Matching
+///
+/// Unlike list items which can be reordered, table cells have semantic positions.
+/// A cell at row 2, column 3 in the original table corresponds to row 2, column 3
+/// in the executed table. If the table structure changes (rows/columns added or
+/// removed), unmatched cells simply use the executed table's content.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TableReconciliationPlan {
+    /// Plan for the caption's long content (caption.long: Option<Blocks>).
+    /// Only present if both tables have long captions.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub caption_plan: Option<Box<ReconciliationPlan>>,
+
+    /// Plans for cell content, keyed by cell position.
+    /// Only contains entries for cells that exist in both tables at the same position.
+    /// Absence means either:
+    /// - Cell doesn't exist in original (use executed cell entirely)
+    /// - Cell doesn't exist in executed (cell is gone)
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub cell_plans: LinkedHashMap<TableCellPosition, ReconciliationPlan>,
+}
+
 /// Alignment decision for a single block in the result.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -135,6 +190,12 @@ pub struct ReconciliationPlan {
     /// and the block is a Custom node.
     #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
     pub custom_node_plans: LinkedHashMap<usize, CustomNodeSlotPlan>,
+
+    /// Plans for Table cell content (Block::Table).
+    /// Key: index into block_alignments where alignment is RecurseIntoContainer
+    /// and the block is a Table.
+    #[serde(skip_serializing_if = "LinkedHashMap::is_empty", default)]
+    pub table_plans: LinkedHashMap<usize, TableReconciliationPlan>,
 
     /// Per-item plans for lists (BulletList, OrderedList).
     /// Each entry corresponds to an item in the executed list.

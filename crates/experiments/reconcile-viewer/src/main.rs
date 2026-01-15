@@ -428,6 +428,7 @@ fn plan_from_block_ops(ops: &[ReadableBlockOp]) -> ReconciliationPlan {
         block_container_plans,
         inline_plans,
         custom_node_plans: LinkedHashMap::new(),
+        table_plans: LinkedHashMap::new(),
         list_item_plans,
         stats: Default::default(),
     }
@@ -449,6 +450,7 @@ fn plan_from_list_item_ops(ops: &[ReadableListItemOp]) -> ReconciliationPlan {
         block_container_plans: LinkedHashMap::new(),
         inline_plans: LinkedHashMap::new(),
         custom_node_plans: LinkedHashMap::new(),
+        table_plans: LinkedHashMap::new(),
         list_item_plans,
         stats: Default::default(),
     }

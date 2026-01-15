@@ -14,9 +14,10 @@ use super::hash::{
 };
 use super::types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
-    ReconciliationPlan, ReconciliationStats,
+    ReconciliationPlan, ReconciliationStats, TableCellPosition, TableReconciliationPlan,
 };
 use crate::custom::{CustomNode, Slot};
+use crate::table::Table;
 use crate::{Block, Inline, Pandoc};
 use hashlink::LinkedHashMap;
 use rustc_hash::FxHashSet;
@@ -57,6 +58,7 @@ pub fn compute_reconciliation_for_blocks<'a>(
     let mut block_container_plans = LinkedHashMap::new();
     let mut inline_plans = LinkedHashMap::new();
     let mut custom_node_plans = LinkedHashMap::new();
+    let mut table_plans = LinkedHashMap::new();
     let mut used_original: FxHashSet<usize> = FxHashSet::default();
     let mut stats = ReconciliationStats::default();
 
@@ -109,6 +111,12 @@ pub fn compute_reconciliation_for_blocks<'a>(
             if let (Block::Custom(orig_cn), Block::Custom(exec_cn)) = (orig_block, exec_block) {
                 let slot_plan = compute_custom_node_slot_plan(orig_cn, exec_cn, cache);
                 custom_node_plans.insert(alignment_idx, slot_plan);
+            } else if let (Block::Table(orig_table), Block::Table(exec_table)) =
+                (orig_block, exec_block)
+            {
+                // Handle Table blocks specially (position-based cell reconciliation)
+                let table_plan = compute_table_plan(orig_table, exec_table, cache);
+                table_plans.insert(alignment_idx, table_plan);
             } else {
                 let nested_plan = compute_container_plan(orig_block, exec_block, cache);
                 stats.merge(&nested_plan.stats);
@@ -170,6 +178,7 @@ pub fn compute_reconciliation_for_blocks<'a>(
         block_container_plans,
         inline_plans,
         custom_node_plans,
+        table_plans,
         list_item_plans: Vec::new(),
         stats,
     }
@@ -185,6 +194,7 @@ fn is_container_block(block: &Block) -> bool {
             | Block::BulletList(_)
             | Block::DefinitionList(_)
             | Block::Figure(_)
+            | Block::Table(_)
             | Block::Custom(_)
     )
 }
@@ -362,6 +372,136 @@ fn compute_custom_node_slot_plan<'a>(
     CustomNodeSlotPlan {
         block_slot_plans,
         inline_slot_plans,
+    }
+}
+
+/// Compute reconciliation plan for a Table's nested content.
+///
+/// This uses position-based matching: cells at the same (section, row, column)
+/// position in both tables are matched and their content is recursively reconciled.
+/// If the table structure changes (rows/columns added or removed), unmatched cells
+/// simply use the executed table's content.
+fn compute_table_plan<'a>(
+    orig_table: &'a Table,
+    exec_table: &Table,
+    cache: &mut HashCache<'a>,
+) -> TableReconciliationPlan {
+    let mut cell_plans = LinkedHashMap::new();
+
+    // Reconcile caption.long if both tables have one
+    let caption_plan = match (&orig_table.caption.long, &exec_table.caption.long) {
+        (Some(orig_blocks), Some(exec_blocks)) => {
+            let plan = compute_reconciliation_for_blocks(orig_blocks, exec_blocks, cache);
+            // Only include if there's actual reconciliation work
+            let needs_plan = plan
+                .block_alignments
+                .iter()
+                .any(|a| !matches!(a, BlockAlignment::KeepBefore(_)))
+                || !plan.block_container_plans.is_empty()
+                || !plan.inline_plans.is_empty()
+                || !plan.custom_node_plans.is_empty()
+                || !plan.table_plans.is_empty();
+            if needs_plan {
+                Some(Box::new(plan))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+
+    // Helper to reconcile cells at matching positions in two row slices
+    let reconcile_rows = |orig_rows: &'a [crate::table::Row],
+                          exec_rows: &[crate::table::Row],
+                          cache: &mut HashCache<'a>,
+                          make_position: &dyn Fn(usize, usize) -> TableCellPosition|
+     -> Vec<(TableCellPosition, ReconciliationPlan)> {
+        let mut results = Vec::new();
+        for (row_idx, (orig_row, exec_row)) in orig_rows.iter().zip(exec_rows.iter()).enumerate() {
+            for (cell_idx, (orig_cell, exec_cell)) in
+                orig_row.cells.iter().zip(exec_row.cells.iter()).enumerate()
+            {
+                let plan = compute_reconciliation_for_blocks(
+                    &orig_cell.content,
+                    &exec_cell.content,
+                    cache,
+                );
+                // Only include if there's actual reconciliation work
+                let needs_plan = plan
+                    .block_alignments
+                    .iter()
+                    .any(|a| !matches!(a, BlockAlignment::KeepBefore(_)))
+                    || !plan.block_container_plans.is_empty()
+                    || !plan.inline_plans.is_empty()
+                    || !plan.custom_node_plans.is_empty()
+                    || !plan.table_plans.is_empty();
+                if needs_plan {
+                    results.push((make_position(row_idx, cell_idx), plan));
+                }
+            }
+        }
+        results
+    };
+
+    // Reconcile head cells
+    let head_plans = reconcile_rows(
+        &orig_table.head.rows,
+        &exec_table.head.rows,
+        cache,
+        &|row, cell| TableCellPosition::Head { row, cell },
+    );
+    for (pos, plan) in head_plans {
+        cell_plans.insert(pos, plan);
+    }
+
+    // Reconcile body cells (both head rows and body rows of each TableBody)
+    for (body_idx, (orig_body, exec_body)) in orig_table
+        .bodies
+        .iter()
+        .zip(exec_table.bodies.iter())
+        .enumerate()
+    {
+        // Body's head rows
+        let body_head_plans =
+            reconcile_rows(&orig_body.head, &exec_body.head, cache, &|row, cell| {
+                TableCellPosition::BodyHead {
+                    body: body_idx,
+                    row,
+                    cell,
+                }
+            });
+        for (pos, plan) in body_head_plans {
+            cell_plans.insert(pos, plan);
+        }
+
+        // Body's body rows
+        let body_body_plans =
+            reconcile_rows(&orig_body.body, &exec_body.body, cache, &|row, cell| {
+                TableCellPosition::BodyBody {
+                    body: body_idx,
+                    row,
+                    cell,
+                }
+            });
+        for (pos, plan) in body_body_plans {
+            cell_plans.insert(pos, plan);
+        }
+    }
+
+    // Reconcile foot cells
+    let foot_plans = reconcile_rows(
+        &orig_table.foot.rows,
+        &exec_table.foot.rows,
+        cache,
+        &|row, cell| TableCellPosition::Foot { row, cell },
+    );
+    for (pos, plan) in foot_plans {
+        cell_plans.insert(pos, plan);
+    }
+
+    TableReconciliationPlan {
+        caption_plan,
+        cell_plans,
     }
 }
 

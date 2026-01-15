@@ -10,9 +10,10 @@
 
 use super::types::{
     BlockAlignment, CustomNodeSlotPlan, InlineAlignment, InlineReconciliationPlan,
-    ReconciliationPlan,
+    ReconciliationPlan, TableCellPosition, TableReconciliationPlan,
 };
 use crate::custom::{CustomNode, Slot};
+use crate::table::Table;
 use crate::{Block, Inline, Pandoc};
 use hashlink::LinkedHashMap;
 
@@ -71,7 +72,7 @@ pub fn apply_reconciliation_to_blocks(
                     .take()
                     .expect("Executed block already used");
 
-                // Check if this is a block container, inline container, or custom node
+                // Check if this is a block container, inline container, custom node, or table
                 if let Some(nested_plan) = plan.block_container_plans.get(&alignment_idx) {
                     // Block container (Div, BlockQuote, etc.)
                     apply_block_container_reconciliation(orig_block, exec_block, nested_plan)
@@ -81,6 +82,9 @@ pub fn apply_reconciliation_to_blocks(
                 } else if let Some(slot_plan) = plan.custom_node_plans.get(&alignment_idx) {
                     // Custom node (Callout, PanelTabset, etc.)
                     apply_custom_node_block_reconciliation(orig_block, exec_block, slot_plan)
+                } else if let Some(table_plan) = plan.table_plans.get(&alignment_idx) {
+                    // Table (position-based cell reconciliation)
+                    apply_table_block_reconciliation(orig_block, exec_block, table_plan)
                 } else {
                     // No nested plan - just use original (shouldn't happen)
                     orig_block
@@ -495,6 +499,220 @@ fn apply_inline_slot_reconciliation(
         }
         // Type mismatch or no original, use executed
         (_, exec_slot) => exec_slot,
+    }
+}
+
+/// Apply reconciliation to a Table block.
+fn apply_table_block_reconciliation(
+    orig_block: Block,
+    exec_block: Block,
+    table_plan: &TableReconciliationPlan,
+) -> Block {
+    match (orig_block, exec_block) {
+        (Block::Table(orig), Block::Table(exec)) => {
+            Block::Table(apply_table_reconciliation(orig, exec, table_plan))
+        }
+        // Fallback: shouldn't happen, return original
+        (orig, _) => orig,
+    }
+}
+
+/// Apply reconciliation to a Table's nested content.
+///
+/// This produces a new Table with:
+/// - source_info from original (preserves source location)
+/// - All structural fields from executed (attr, colspec, caption structure, etc.)
+/// - Cell content recursively reconciled where positions match
+fn apply_table_reconciliation(
+    orig: Table,
+    exec: Table,
+    table_plan: &TableReconciliationPlan,
+) -> Table {
+    use crate::table::{Cell, Row, TableBody, TableFoot, TableHead};
+
+    // Helper to reconcile rows at matching positions
+    let reconcile_rows = |orig_rows: Vec<Row>,
+                          exec_rows: Vec<Row>,
+                          make_position: &dyn Fn(usize, usize) -> TableCellPosition|
+     -> Vec<Row> {
+        let mut result_rows = Vec::with_capacity(exec_rows.len());
+        let mut orig_row_slots: Vec<Option<Row>> = orig_rows.into_iter().map(Some).collect();
+
+        for (row_idx, exec_row) in exec_rows.into_iter().enumerate() {
+            // Try to get matching original row (if exists)
+            let orig_row_opt = orig_row_slots.get_mut(row_idx).and_then(|r| r.take());
+
+            let result_row = if let Some(orig_row) = orig_row_opt {
+                // Reconcile cells within the row
+                let mut result_cells = Vec::with_capacity(exec_row.cells.len());
+                let mut orig_cells: Vec<Option<Cell>> =
+                    orig_row.cells.into_iter().map(Some).collect();
+
+                for (cell_idx, exec_cell) in exec_row.cells.into_iter().enumerate() {
+                    let position = make_position(row_idx, cell_idx);
+
+                    let result_cell = if let Some(cell_plan) = table_plan.cell_plans.get(&position)
+                    {
+                        // Have a plan for this cell - reconcile content
+                        if let Some(orig_cell) = orig_cells.get_mut(cell_idx).and_then(|c| c.take())
+                        {
+                            Cell {
+                                // Use exec's structural fields
+                                attr: exec_cell.attr,
+                                alignment: exec_cell.alignment,
+                                row_span: exec_cell.row_span,
+                                col_span: exec_cell.col_span,
+                                attr_source: exec_cell.attr_source,
+                                // Preserve orig's source_info
+                                source_info: orig_cell.source_info,
+                                // Recursively reconcile content
+                                content: apply_reconciliation_to_blocks(
+                                    orig_cell.content,
+                                    exec_cell.content,
+                                    cell_plan,
+                                ),
+                            }
+                        } else {
+                            // No original cell at this position, use exec
+                            exec_cell
+                        }
+                    } else if let Some(orig_cell) =
+                        orig_cells.get_mut(cell_idx).and_then(|c| c.take())
+                    {
+                        // No plan means content matched exactly - use orig to preserve source_info
+                        Cell {
+                            attr: exec_cell.attr,
+                            alignment: exec_cell.alignment,
+                            row_span: exec_cell.row_span,
+                            col_span: exec_cell.col_span,
+                            attr_source: exec_cell.attr_source,
+                            source_info: orig_cell.source_info,
+                            content: orig_cell.content,
+                        }
+                    } else {
+                        // No original cell, use exec
+                        exec_cell
+                    };
+
+                    result_cells.push(result_cell);
+                }
+
+                Row {
+                    attr: exec_row.attr,
+                    attr_source: exec_row.attr_source,
+                    source_info: orig_row.source_info,
+                    cells: result_cells,
+                }
+            } else {
+                // No original row at this position, use exec
+                exec_row
+            };
+
+            result_rows.push(result_row);
+        }
+
+        result_rows
+    };
+
+    // Reconcile head rows
+    let result_head = TableHead {
+        attr: exec.head.attr,
+        attr_source: exec.head.attr_source,
+        source_info: orig.head.source_info,
+        rows: reconcile_rows(orig.head.rows, exec.head.rows, &|row, cell| {
+            TableCellPosition::Head { row, cell }
+        }),
+    };
+
+    // Reconcile body sections
+    let mut orig_bodies: Vec<Option<TableBody>> = orig.bodies.into_iter().map(Some).collect();
+    let mut result_bodies = Vec::with_capacity(exec.bodies.len());
+
+    for (body_idx, exec_body) in exec.bodies.into_iter().enumerate() {
+        let orig_body_opt = orig_bodies.get_mut(body_idx).and_then(|b| b.take());
+
+        let result_body = if let Some(orig_body) = orig_body_opt {
+            TableBody {
+                attr: exec_body.attr,
+                rowhead_columns: exec_body.rowhead_columns,
+                attr_source: exec_body.attr_source,
+                source_info: orig_body.source_info,
+                head: reconcile_rows(orig_body.head, exec_body.head, &|row, cell| {
+                    TableCellPosition::BodyHead {
+                        body: body_idx,
+                        row,
+                        cell,
+                    }
+                }),
+                body: reconcile_rows(orig_body.body, exec_body.body, &|row, cell| {
+                    TableCellPosition::BodyBody {
+                        body: body_idx,
+                        row,
+                        cell,
+                    }
+                }),
+            }
+        } else {
+            // No original body at this position, use exec
+            exec_body
+        };
+
+        result_bodies.push(result_body);
+    }
+
+    // Reconcile foot rows
+    let result_foot = TableFoot {
+        attr: exec.foot.attr,
+        attr_source: exec.foot.attr_source,
+        source_info: orig.foot.source_info,
+        rows: reconcile_rows(orig.foot.rows, exec.foot.rows, &|row, cell| {
+            TableCellPosition::Foot { row, cell }
+        }),
+    };
+
+    // Reconcile caption.long if we have a plan for it
+    let result_caption = if let Some(caption_plan) = &table_plan.caption_plan {
+        match (orig.caption.long, exec.caption.long) {
+            (Some(orig_long), Some(exec_long)) => crate::Caption {
+                short: exec.caption.short,
+                long: Some(apply_reconciliation_to_blocks(
+                    orig_long,
+                    exec_long,
+                    caption_plan,
+                )),
+                source_info: orig.caption.source_info,
+            },
+            (_, exec_long) => crate::Caption {
+                short: exec.caption.short,
+                long: exec_long,
+                source_info: orig.caption.source_info,
+            },
+        }
+    } else {
+        // No caption plan - use orig's long content if both exist, otherwise exec's
+        match (orig.caption.long, exec.caption.long) {
+            (Some(orig_long), Some(_)) => crate::Caption {
+                short: exec.caption.short,
+                long: Some(orig_long),
+                source_info: orig.caption.source_info,
+            },
+            (_, exec_long) => crate::Caption {
+                short: exec.caption.short,
+                long: exec_long,
+                source_info: orig.caption.source_info,
+            },
+        }
+    };
+
+    Table {
+        attr: exec.attr,
+        caption: result_caption,
+        colspec: exec.colspec,
+        head: result_head,
+        bodies: result_bodies,
+        foot: result_foot,
+        source_info: orig.source_info,
+        attr_source: exec.attr_source,
     }
 }
 
