@@ -75,6 +75,10 @@ bd import -i .beads/issues.jsonl --dry-run             # Preview only
 bd import -i .beads/issues.jsonl --resolve-collisions  # Auto-resolve
 ```
 
+### Known Issues
+
+- **Prefix mismatch error on `bd sync`**: You may see an error like `Import failed: prefix mismatch detected: database uses 'kyoto-' but found issues with prefixes: [k- (636 issues)]`. This is a known beads bug - ignore it. The local operations (create, close, update) still work correctly.
+
 ### Workflow
 
 1. **Check for ready work**: Run `bd ready` to see what's unblocked
