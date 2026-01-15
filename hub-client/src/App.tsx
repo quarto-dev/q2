@@ -106,7 +106,6 @@ function App() {
     setConnectionError(null);
 
     try {
-
       // Convert scaffold files to the format expected by createNewProject
       const files = scaffoldFiles.map(f => ({
         path: f.path,
