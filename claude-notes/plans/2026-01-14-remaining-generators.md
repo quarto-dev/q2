@@ -1,7 +1,7 @@
 # Remaining AST Generators Plan
 
 **Date:** 2026-01-14
-**Status:** Phase 1 Complete
+**Status:** Phases 1-2 Complete
 **Parent:** 2026-01-14-complete-ast-generators.md
 **Epic:** kyoto-tsq
 
@@ -161,14 +161,26 @@ These fixes are correct for:
 2. **Future-proofing** if hashing strategy changes
 3. **Code clarity** (explicit > implicit)
 
-### Phase 2: Shortcode (Medium, 1 Bug Expected)
+### Phase 2: Shortcode ✅ COMPLETE (No Bug - Plan Was Incorrect)
 
-- [ ] `gen_shortcode_arg()` - Recursive enum generator
-- [ ] `gen_shortcode()` - Generate Shortcode inline
-- [ ] Update `InlineFeatures` with `shortcode`
-- [ ] Update `gen_inline()` to include Shortcode
-- [ ] Run tests, expect failure (fallback returns orig)
-- [ ] Add explicit Shortcode handling in `apply_inline_container_reconciliation`
+- [x] `gen_shortcode_arg()` - Recursive enum generator (depth-limited)
+- [x] `gen_shortcode_inner()` - Inner Shortcode generator for recursion
+- [x] `gen_shortcode()` - Generate Shortcode inline
+- [x] Update `InlineFeatures` with `shortcode`
+- [x] Update `gen_inline()` to include Shortcode (as leaf inline)
+- [x] Run tests - **ALL PASSED** (no bug exists)
+
+**Key Finding:** The expected bug was **incorrect**. Shortcode is NOT a container inline:
+
+1. **Not in `is_container_inline()`**: Shortcode is not listed in compute.rs:504-525
+2. **No nested Inlines**: Shortcode has `positional_args` and `keyword_args` (ShortcodeArg), not `content: Inlines`
+3. **No source_info**: The Shortcode struct has no source location to preserve
+4. **Desugared early**: Comment in inline.rs says "after desugaring, these nodes should not appear in a document"
+
+**Correct behavior (already implemented):**
+- Same Shortcode hash → `KeepBefore` alignment → correct
+- Different Shortcode hash → `UseAfter` alignment → correct
+- Shortcode never reaches `apply_inline_container_reconciliation` → no fallback bug possible
 
 ### Phase 3: CustomNode (Medium, Verify Correctness)
 
@@ -206,16 +218,16 @@ These fixes are correct for:
 | Link | `o.attr`, `o.target` not updated | Same as Header bug | ✅ Fixed (unreachable but fixed for consistency) |
 | Image | `o.attr`, `o.target` not updated | Same as Header bug | ✅ Fixed (unreachable but fixed for consistency) |
 | Quoted | `o.quote_type` not updated | Same as Header bug | ✅ Fixed (unreachable but fixed for consistency) |
-| Shortcode | Falls through to `(orig, _) => orig` | Returns wrong structure | ⏳ Pending |
+| Shortcode | Expected fallback bug | **NO BUG** - not a container inline | ✅ Verified correct |
 | Table | Falls through to `(orig, _) => orig` | Returns wrong structure | ⏳ Pending |
 | CustomNode | Probably correct | Needs verification | ⏳ Pending |
 
-Phase 1 complete: 8 consistency fixes applied. Remaining: 3 types to test.
+Phase 1-2 complete: 8 consistency fixes applied, Shortcode verified correct. Remaining: 2 types to test (CustomNode, Table).
 
 ## Success Criteria
 
 - [x] All 4 CriticMarkup inlines have generators and reconciliation works
-- [ ] Shortcode has generator and reconciliation works
+- [x] Shortcode has generator and reconciliation works (verified correct, no bug)
 - [ ] CustomNode has generator and reconciliation works
 - [ ] Table has generator and reconciliation works
 - [x] Full AST property test passes with all types enabled (187 tests, including full_ast)

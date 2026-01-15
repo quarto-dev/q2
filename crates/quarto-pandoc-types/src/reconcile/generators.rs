@@ -22,6 +22,7 @@ use crate::inline::{
     Citation, CitationMode, Cite, Delete, EditComment, Highlight, Insert, Note, NoteReference,
 };
 use crate::list::{ListAttributes, ListNumberDelim, ListNumberStyle};
+use crate::shortcode::{Shortcode, ShortcodeArg};
 use crate::{
     Block, BlockQuote, Blocks, BulletList, CodeBlock, DefinitionList, Div, Emph, Figure, Header,
     HorizontalRule, Inline, Inlines, LineBlock, LineBreak, Link, Math, MathType, OrderedList,
@@ -130,6 +131,7 @@ pub struct InlineFeatures {
     pub math: bool,
     pub raw_inline: bool,
     pub note_reference: bool,
+    pub shortcode: bool, // Quarto extension - leaf inline with recursive args
 
     // Container inlines (require depth > 0)
     pub emph: bool,
@@ -176,6 +178,7 @@ impl InlineFeatures {
             math: true,
             raw_inline: true,
             note_reference: true,
+            shortcode: true,
             ..Default::default()
         }
     }
@@ -191,6 +194,7 @@ impl InlineFeatures {
             math: true,
             raw_inline: true,
             note_reference: true,
+            shortcode: true,
             emph: true,
             strong: true,
             underline: true,
@@ -560,6 +564,63 @@ fn gen_note_reference() -> impl Strategy<Value = Inline> {
     })
 }
 
+/// Generate a ShortcodeArg (recursive structure, depth-limited).
+///
+/// At depth 0, only generates leaf args (String, Number, Boolean).
+/// At depth > 0, can also generate nested Shortcodes and KeyValue maps.
+fn gen_shortcode_arg(depth: usize) -> BoxedStrategy<ShortcodeArg> {
+    if depth == 0 {
+        // Leaf args only
+        prop_oneof![
+            "[a-z]{1,10}".prop_map(ShortcodeArg::String),
+            (-100.0f64..100.0f64).prop_map(ShortcodeArg::Number),
+            proptest::bool::ANY.prop_map(ShortcodeArg::Boolean),
+        ]
+        .boxed()
+    } else {
+        // Include recursive variants
+        prop_oneof![
+            3 => "[a-z]{1,10}".prop_map(ShortcodeArg::String),
+            2 => (-100.0f64..100.0f64).prop_map(ShortcodeArg::Number),
+            2 => proptest::bool::ANY.prop_map(ShortcodeArg::Boolean),
+            1 => gen_shortcode_inner(depth - 1).prop_map(ShortcodeArg::Shortcode),
+            1 => gen_shortcode_keyvalue(depth - 1).prop_map(ShortcodeArg::KeyValue),
+        ]
+        .boxed()
+    }
+}
+
+/// Generate a KeyValue map for ShortcodeArg::KeyValue.
+fn gen_shortcode_keyvalue(
+    depth: usize,
+) -> impl Strategy<Value = std::collections::HashMap<String, ShortcodeArg>> {
+    proptest::collection::hash_map("[a-z]{1,8}", gen_shortcode_arg(depth), 0..3)
+}
+
+/// Generate a Shortcode (inner, for recursion).
+fn gen_shortcode_inner(depth: usize) -> impl Strategy<Value = Shortcode> {
+    let pos_args = proptest::collection::vec(gen_shortcode_arg(depth), 0..3);
+    let kw_args = proptest::collection::hash_map("[a-z]{1,8}", gen_shortcode_arg(depth), 0..3);
+
+    (proptest::bool::ANY, "[a-z]{1,12}", pos_args, kw_args).prop_map(
+        |(is_escaped, name, positional_args, keyword_args)| Shortcode {
+            is_escaped,
+            name,
+            positional_args,
+            keyword_args,
+        },
+    )
+}
+
+/// Generate a Shortcode inline (Quarto extension).
+///
+/// Shortcodes are leaf inlines (no nested Inlines), but they can have
+/// recursive args (ShortcodeArg can contain nested Shortcodes).
+fn gen_shortcode() -> impl Strategy<Value = Inline> {
+    // Use depth 2 to allow some nesting in args
+    gen_shortcode_inner(2).prop_map(Inline::Shortcode)
+}
+
 // =============================================================================
 // Container Inline Generators (require recursion)
 // =============================================================================
@@ -797,6 +858,9 @@ fn gen_inline(config: &GenConfig) -> BoxedStrategy<Inline> {
     }
     if features.note_reference {
         choices.push(gen_note_reference().boxed());
+    }
+    if features.shortcode {
+        choices.push(gen_shortcode().boxed());
     }
 
     // Add container inlines only if we can recurse
