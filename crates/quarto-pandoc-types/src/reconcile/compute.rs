@@ -32,6 +32,17 @@ pub fn compute_reconciliation(original: &Pandoc, executed: &Pandoc) -> Reconcili
 }
 
 /// Compute reconciliation plan for two block sequences.
+///
+/// Uses a three-phase algorithm:
+/// 1. **Exact matches (any position)**: Find blocks with identical content (hash match).
+///    These get `KeepBefore` - we have proof they're the same.
+/// 2. **Positional matches (same index only)**: For unmatched blocks, check if the
+///    block at the same position in original has the same type. If so, recurse.
+///    Position match provides reasonable evidence they're related.
+/// 3. **Fallback**: Remaining unmatched blocks get `UseAfter` - treat as new content.
+///
+/// This approach avoids "trying too hard" to match unrelated containers. We only
+/// recurse when we have evidence the containers are the same logical entity.
 pub fn compute_reconciliation_for_blocks<'a>(
     original: &'a [Block],
     executed: &[Block],
@@ -54,7 +65,8 @@ pub fn compute_reconciliation_for_blocks<'a>(
             .push(idx);
     }
 
-    let mut alignments = Vec::with_capacity(executed.len());
+    // Initialize alignment slots - we'll fill these across three phases
+    let mut alignments: Vec<Option<BlockAlignment>> = vec![None; executed.len()];
     let mut block_container_plans = LinkedHashMap::new();
     let mut inline_plans = LinkedHashMap::new();
     let mut custom_node_plans = LinkedHashMap::new();
@@ -62,116 +74,132 @@ pub fn compute_reconciliation_for_blocks<'a>(
     let mut used_original: FxHashSet<usize> = FxHashSet::default();
     let mut stats = ReconciliationStats::default();
 
-    // For each executed block, find a matching original
+    // Track which executed indices need further processing
+    let mut needs_phase_2: Vec<usize> = Vec::new();
+
+    // =========================================================================
+    // Phase 1: Exact hash matches (any position)
+    // =========================================================================
+    // Find blocks with identical content. Position mismatch is fine because
+    // we have definitive proof (hash + structural equality) they're the same.
     for (exec_idx, exec_block) in executed.iter().enumerate() {
         let exec_hash = compute_block_hash_fresh(exec_block);
 
-        // Step 1: Try exact hash match first
         if let Some(indices) = hash_to_indices.get(&exec_hash)
             && let Some(&orig_idx) = indices.iter().find(|&&i| !used_original.contains(&i))
         {
             // Verify with structural equality (guards against hash collisions)
             if structural_eq_block(&original[orig_idx], exec_block) {
                 used_original.insert(orig_idx);
-                alignments.push(BlockAlignment::KeepBefore(orig_idx));
+                alignments[exec_idx] = Some(BlockAlignment::KeepBefore(orig_idx));
                 stats.blocks_kept += 1;
                 continue;
             }
-            // Hash collision - fall through to type-based matching
+            // Hash collision - fall through to phase 2
         }
 
-        // Step 2: No exact match - try type-based matching for containers
-        let exec_discriminant = std::mem::discriminant(exec_block);
-        let type_match = original
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| !used_original.contains(i))
-            .find(|(_, orig_block)| {
-                if std::mem::discriminant(*orig_block) != exec_discriminant {
-                    return false;
-                }
-                if !is_container_block(orig_block) {
-                    return false;
-                }
-                // For Custom blocks, also check type_name matches
-                match (*orig_block, exec_block) {
+        needs_phase_2.push(exec_idx);
+    }
+
+    // =========================================================================
+    // Phase 2: Positional type matches (same index only)
+    // =========================================================================
+    // For unmatched blocks, check if the block at the SAME position in original
+    // is available and has the same type. Only recurse when indices match -
+    // this provides reasonable evidence they're the same logical entity.
+    let mut needs_phase_3: Vec<usize> = Vec::new();
+
+    for exec_idx in needs_phase_2 {
+        let exec_block = &executed[exec_idx];
+
+        // Only consider the positionally-corresponding original
+        if exec_idx < original.len() && !used_original.contains(&exec_idx) {
+            let orig_block = &original[exec_idx];
+            let exec_discriminant = std::mem::discriminant(exec_block);
+            let orig_discriminant = std::mem::discriminant(orig_block);
+
+            if exec_discriminant == orig_discriminant {
+                // Same type at same position - check if we should recurse
+
+                // For Custom blocks, also verify type_name matches
+                let type_name_matches = match (orig_block, exec_block) {
                     (Block::Custom(o), Block::Custom(e)) => o.type_name == e.type_name,
                     _ => true,
-                }
-            });
+                };
 
-        if let Some((orig_idx, orig_block)) = type_match {
-            // Container with same type but different hash: recurse
-            used_original.insert(orig_idx);
+                if type_name_matches && is_container_block(orig_block) {
+                    // Container block: recurse into children
+                    used_original.insert(exec_idx);
 
-            // Pre-compute the nested reconciliation plan for this container
-            let alignment_idx = alignments.len();
+                    // Handle Custom blocks specially (slot-based reconciliation)
+                    if let (Block::Custom(orig_cn), Block::Custom(exec_cn)) =
+                        (orig_block, exec_block)
+                    {
+                        let slot_plan = compute_custom_node_slot_plan(orig_cn, exec_cn, cache);
+                        custom_node_plans.insert(exec_idx, slot_plan);
+                    } else if let (Block::Table(orig_table), Block::Table(exec_table)) =
+                        (orig_block, exec_block)
+                    {
+                        let table_plan = compute_table_plan(orig_table, exec_table, cache);
+                        table_plans.insert(exec_idx, table_plan);
+                    } else {
+                        let nested_plan = compute_container_plan(orig_block, exec_block, cache);
+                        stats.merge(&nested_plan.stats);
+                        block_container_plans.insert(exec_idx, nested_plan);
+                    }
 
-            // Handle Custom blocks specially (slot-based reconciliation)
-            if let (Block::Custom(orig_cn), Block::Custom(exec_cn)) = (orig_block, exec_block) {
-                let slot_plan = compute_custom_node_slot_plan(orig_cn, exec_cn, cache);
-                custom_node_plans.insert(alignment_idx, slot_plan);
-            } else if let (Block::Table(orig_table), Block::Table(exec_table)) =
-                (orig_block, exec_block)
-            {
-                // Handle Table blocks specially (position-based cell reconciliation)
-                let table_plan = compute_table_plan(orig_table, exec_table, cache);
-                table_plans.insert(alignment_idx, table_plan);
-            } else {
-                let nested_plan = compute_container_plan(orig_block, exec_block, cache);
-                stats.merge(&nested_plan.stats);
-                block_container_plans.insert(alignment_idx, nested_plan);
-            }
-
-            alignments.push(BlockAlignment::RecurseIntoContainer {
-                before_idx: orig_idx,
-                after_idx: exec_idx,
-            });
-            stats.blocks_recursed += 1;
-            continue;
-        }
-
-        // Step 3: Try type-based matching for blocks with inline content
-        let type_match_inline = original
-            .iter()
-            .enumerate()
-            .filter(|(i, _)| !used_original.contains(i))
-            .find(|(_, orig_block)| {
-                std::mem::discriminant(*orig_block) == exec_discriminant
-                    && has_inline_content(orig_block)
-            });
-
-        if let Some((orig_idx, orig_block)) = type_match_inline {
-            // Block with inline content (Paragraph, Header, etc.)
-            // Compute inline reconciliation plan to see if any inlines match
-            if let Some(inline_plan) = compute_inline_plan_for_block(orig_block, exec_block, cache)
-            {
-                // Check if any inlines are kept from original
-                let has_kept_inlines = inline_plan
-                    .inline_alignments
-                    .iter()
-                    .any(|a| matches!(a, InlineAlignment::KeepBefore(_)));
-
-                if has_kept_inlines {
-                    // Some inlines match - recurse to preserve them
-                    used_original.insert(orig_idx);
-                    let alignment_idx = alignments.len();
-                    inline_plans.insert(alignment_idx, inline_plan);
-                    alignments.push(BlockAlignment::RecurseIntoContainer {
-                        before_idx: orig_idx,
+                    alignments[exec_idx] = Some(BlockAlignment::RecurseIntoContainer {
+                        before_idx: exec_idx,
                         after_idx: exec_idx,
                     });
                     stats.blocks_recursed += 1;
                     continue;
                 }
-                // No inlines kept - fall through to use executed block
+
+                if type_name_matches && has_inline_content(orig_block) {
+                    // Block with inline content: check if any inlines match
+                    if let Some(inline_plan) =
+                        compute_inline_plan_for_block(orig_block, exec_block, cache)
+                    {
+                        let has_kept_inlines = inline_plan
+                            .inline_alignments
+                            .iter()
+                            .any(|a| matches!(a, InlineAlignment::KeepBefore(_)));
+
+                        if has_kept_inlines {
+                            // Some inlines match - recurse to preserve them
+                            used_original.insert(exec_idx);
+                            inline_plans.insert(exec_idx, inline_plan);
+                            alignments[exec_idx] = Some(BlockAlignment::RecurseIntoContainer {
+                                before_idx: exec_idx,
+                                after_idx: exec_idx,
+                            });
+                            stats.blocks_recursed += 1;
+                            continue;
+                        }
+                        // No inlines kept - fall through to phase 3
+                    }
+                }
             }
         }
 
-        // Step 4: No match at all - use executed block
-        alignments.push(BlockAlignment::UseAfter(exec_idx));
+        needs_phase_3.push(exec_idx);
+    }
+
+    // =========================================================================
+    // Phase 3: Fallback - treat as new content
+    // =========================================================================
+    // No evidence these blocks are related to any original - use executed as-is.
+    for exec_idx in needs_phase_3 {
+        alignments[exec_idx] = Some(BlockAlignment::UseAfter(exec_idx));
         stats.blocks_replaced += 1;
     }
+
+    // Convert Option<BlockAlignment> to BlockAlignment
+    let alignments: Vec<BlockAlignment> = alignments
+        .into_iter()
+        .map(|a| a.expect("All alignments should be filled"))
+        .collect();
 
     ReconciliationPlan {
         block_alignments: alignments,
@@ -1247,5 +1275,279 @@ mod tests {
         // Should detect the common inline and recurse
         assert_eq!(plan.block_alignments.len(), 1);
         // May be RecurseIntoContainer if inline matching triggers it
+    }
+
+    // ========================================================================
+    // Three-phase algorithm tests
+    // ========================================================================
+
+    #[test]
+    fn test_three_phase_exact_match_at_different_position() {
+        // The ex6 pattern: nested divs where inner elements have exact matches
+        // at different indices.
+        //
+        // Before: [Div("1"), Div("2"), Div("3")]
+        // After:  [Div("0"), Div("1"), Div("2")]
+        //
+        // Expected:
+        //   after[0] -> UseAfter(0)     -- new content, no match
+        //   after[1] -> KeepBefore(0)   -- exact hash match with before[0]
+        //   after[2] -> KeepBefore(1)   -- exact hash match with before[1]
+        //
+        // The current (wrong) behavior would recurse into (0,0), (1,1), (2,2)
+        // because it greedily matches by type before checking for exact matches elsewhere.
+
+        let original = vec![
+            make_div(vec![make_para("1")]),
+            make_div(vec![make_para("2")]),
+            make_div(vec![make_para("3")]),
+        ];
+        let executed = vec![
+            make_div(vec![make_para("0")]),
+            make_div(vec![make_para("1")]),
+            make_div(vec![make_para("2")]),
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 3);
+
+        // after[0] should be UseAfter (new content, no exact match, positional orig is claimed)
+        assert!(
+            matches!(plan.block_alignments[0], BlockAlignment::UseAfter(0)),
+            "after[0] should be UseAfter(0), got {:?}",
+            plan.block_alignments[0]
+        );
+
+        // after[1] should be KeepBefore(0) - exact hash match with before[0]
+        assert!(
+            matches!(plan.block_alignments[1], BlockAlignment::KeepBefore(0)),
+            "after[1] should be KeepBefore(0), got {:?}",
+            plan.block_alignments[1]
+        );
+
+        // after[2] should be KeepBefore(1) - exact hash match with before[1]
+        assert!(
+            matches!(plan.block_alignments[2], BlockAlignment::KeepBefore(1)),
+            "after[2] should be KeepBefore(1), got {:?}",
+            plan.block_alignments[2]
+        );
+
+        // Stats should reflect: 2 kept, 1 replaced, 0 recursed
+        assert_eq!(plan.stats.blocks_kept, 2);
+        assert_eq!(plan.stats.blocks_replaced, 1);
+        assert_eq!(plan.stats.blocks_recursed, 0);
+    }
+
+    #[test]
+    fn test_three_phase_positional_match_when_no_exact() {
+        // When there's no exact match but same position and type, recurse.
+        //
+        // Before: [Div("1"), Div("2")]
+        // After:  [Div("1-modified"), Div("2")]
+        //
+        // Expected:
+        //   after[0] -> RecurseIntoContainer(0, 0) -- same position, different content
+        //   after[1] -> KeepBefore(1)              -- exact match
+
+        let original = vec![
+            make_div(vec![make_para("1")]),
+            make_div(vec![make_para("2")]),
+        ];
+        let executed = vec![
+            make_div(vec![make_para("1-modified")]),
+            make_div(vec![make_para("2")]),
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 2);
+
+        // after[0] should recurse (same position, same type, different content)
+        assert!(
+            matches!(
+                plan.block_alignments[0],
+                BlockAlignment::RecurseIntoContainer {
+                    before_idx: 0,
+                    after_idx: 0
+                }
+            ),
+            "after[0] should be RecurseIntoContainer(0, 0), got {:?}",
+            plan.block_alignments[0]
+        );
+
+        // after[1] should be exact match
+        assert!(
+            matches!(plan.block_alignments[1], BlockAlignment::KeepBefore(1)),
+            "after[1] should be KeepBefore(1), got {:?}",
+            plan.block_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_three_phase_no_recurse_when_positional_already_used() {
+        // When the positional original is already claimed by an exact match,
+        // don't hunt for another original - just UseAfter.
+        //
+        // Before: [Div("A"), Div("B")]
+        // After:  [Div("NEW"), Div("A")]
+        //
+        // Phase 1: after[1] matches before[0] exactly -> KeepBefore(0)
+        // Phase 2: after[0] wants to check before[0], but it's used -> skip
+        // Phase 3: after[0] -> UseAfter(0)
+
+        let original = vec![
+            make_div(vec![make_para("A")]),
+            make_div(vec![make_para("B")]),
+        ];
+        let executed = vec![
+            make_div(vec![make_para("NEW")]),
+            make_div(vec![make_para("A")]),
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 2);
+
+        // after[0] should be UseAfter (positional before[0] is claimed by exact match)
+        assert!(
+            matches!(plan.block_alignments[0], BlockAlignment::UseAfter(0)),
+            "after[0] should be UseAfter(0), got {:?}",
+            plan.block_alignments[0]
+        );
+
+        // after[1] should be KeepBefore(0) - exact match
+        assert!(
+            matches!(plan.block_alignments[1], BlockAlignment::KeepBefore(0)),
+            "after[1] should be KeepBefore(0), got {:?}",
+            plan.block_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_three_phase_type_mismatch_at_position_uses_after() {
+        // When the positional original has different type, UseAfter.
+        //
+        // Before: [Div("A"), Para("B")]
+        // After:  [Para("X"), Para("B")]
+        //
+        // Phase 1: after[1] matches before[1] exactly -> KeepBefore(1)
+        // Phase 2: after[0] checks before[0], but Div != Para -> skip
+        // Phase 3: after[0] -> UseAfter(0)
+
+        let original = vec![make_div(vec![make_para("A")]), make_para("B")];
+        let executed = vec![make_para("X"), make_para("B")];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 2);
+
+        // after[0] should be UseAfter (type mismatch with positional before[0])
+        assert!(
+            matches!(plan.block_alignments[0], BlockAlignment::UseAfter(0)),
+            "after[0] should be UseAfter(0), got {:?}",
+            plan.block_alignments[0]
+        );
+
+        // after[1] should be KeepBefore(1) - exact match
+        assert!(
+            matches!(plan.block_alignments[1], BlockAlignment::KeepBefore(1)),
+            "after[1] should be KeepBefore(1), got {:?}",
+            plan.block_alignments[1]
+        );
+    }
+
+    #[test]
+    fn test_three_phase_multiple_exact_matches_at_shifted_positions() {
+        // Multiple items shifted - all should find their exact matches.
+        //
+        // Before: [Para("A"), Para("B"), Para("C")]
+        // After:  [Para("NEW"), Para("A"), Para("B"), Para("C")]
+        //
+        // Expected:
+        //   after[0] -> UseAfter(0)     -- no match
+        //   after[1] -> KeepBefore(0)   -- exact match
+        //   after[2] -> KeepBefore(1)   -- exact match
+        //   after[3] -> KeepBefore(2)   -- exact match
+
+        let original = vec![make_para("A"), make_para("B"), make_para("C")];
+        let executed = vec![
+            make_para("NEW"),
+            make_para("A"),
+            make_para("B"),
+            make_para("C"),
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 4);
+
+        assert!(matches!(
+            plan.block_alignments[0],
+            BlockAlignment::UseAfter(0)
+        ));
+        assert!(matches!(
+            plan.block_alignments[1],
+            BlockAlignment::KeepBefore(0)
+        ));
+        assert!(matches!(
+            plan.block_alignments[2],
+            BlockAlignment::KeepBefore(1)
+        ));
+        assert!(matches!(
+            plan.block_alignments[3],
+            BlockAlignment::KeepBefore(2)
+        ));
+
+        assert_eq!(plan.stats.blocks_kept, 3);
+        assert_eq!(plan.stats.blocks_replaced, 1);
+    }
+
+    #[test]
+    fn test_three_phase_exact_match_priority_over_positional() {
+        // Exact match should win even when positional match is available.
+        //
+        // Before: [Div("X"), Div("Y")]
+        // After:  [Div("Y"), Div("Z")]
+        //
+        // Phase 1: after[0] matches before[1] exactly -> KeepBefore(1)
+        //          after[1] has no exact match -> needs phase 2
+        // Phase 2: after[1] checks before[1], but it's used -> skip
+        // Phase 3: after[1] -> UseAfter(1)
+        //
+        // Note: before[0] is left unused - that's correct behavior.
+
+        let original = vec![
+            make_div(vec![make_para("X")]),
+            make_div(vec![make_para("Y")]),
+        ];
+        let executed = vec![
+            make_div(vec![make_para("Y")]),
+            make_div(vec![make_para("Z")]),
+        ];
+
+        let mut cache = HashCache::new();
+        let plan = compute_reconciliation_for_blocks(&original, &executed, &mut cache);
+
+        assert_eq!(plan.block_alignments.len(), 2);
+
+        // after[0] exact matches before[1]
+        assert!(
+            matches!(plan.block_alignments[0], BlockAlignment::KeepBefore(1)),
+            "after[0] should be KeepBefore(1), got {:?}",
+            plan.block_alignments[0]
+        );
+
+        // after[1] has no match (before[1] used, before[0] wrong content)
+        assert!(
+            matches!(plan.block_alignments[1], BlockAlignment::UseAfter(1)),
+            "after[1] should be UseAfter(1), got {:?}",
+            plan.block_alignments[1]
+        );
     }
 }
