@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-16
+
+- [`4b9db07`](https://github.com/quarto-dev/kyoto/commits/4b9db07): Update browser tab title and favicon for Quarto Hub
+
 ### 2026-01-14
 
 - [`fb347c8`](https://github.com/quarto-dev/kyoto/commits/fb347c8): Extract Automerge schema and sync client into reusable packages
