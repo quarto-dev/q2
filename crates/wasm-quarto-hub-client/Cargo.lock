@@ -1378,6 +1378,7 @@ dependencies = [
  "indexmap",
  "once_cell",
  "paste",
+ "quarto-ast-reconcile",
  "quarto-citeproc",
  "quarto-config",
  "quarto-csl",
@@ -1512,6 +1513,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-ast-reconcile"
+version = "0.0.0"
+dependencies = [
+ "hashlink",
+ "quarto-pandoc-types",
+ "quarto-source-map",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "quarto-citeproc"
 version = "0.1.0"
 dependencies = [
@@ -1554,6 +1567,7 @@ dependencies = [
  "jupyter-protocol",
  "pampa",
  "pollster",
+ "quarto-ast-reconcile",
  "quarto-config",
  "quarto-doctemplate",
  "quarto-error-reporting",
@@ -1631,7 +1645,6 @@ dependencies = [
  "hashlink",
  "indexmap",
  "quarto-source-map",
- "rustc-hash",
  "serde",
  "serde_json",
  "yaml-rust2",
