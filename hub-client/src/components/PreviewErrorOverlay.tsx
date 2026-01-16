@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import type { Diagnostic } from '../types/diagnostic';
 import { stripAnsi } from '../utils/stripAnsi';
+import { usePreference } from '../hooks/usePreference';
 
 interface PreviewErrorOverlayProps {
   error: { message: string; diagnostics?: Diagnostic[] } | null;
@@ -8,7 +8,8 @@ interface PreviewErrorOverlayProps {
 }
 
 export function PreviewErrorOverlay({ error, visible }: PreviewErrorOverlayProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  // Collapsed state persisted in localStorage (defaults to collapsed)
+  const [collapsed, setCollapsed] = usePreference('errorOverlayCollapsed');
 
   if (!visible || !error) return null;
 

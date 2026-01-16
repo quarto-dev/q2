@@ -17,6 +17,7 @@ import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
 import { postProcessIframe } from '../utils/iframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
 import { useScrollSync } from '../hooks/useScrollSync';
+import { usePreference } from '../hooks/usePreference';
 import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import { stripAnsi } from '../utils/stripAnsi';
@@ -222,8 +223,8 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     previewStateRef.current = previewState;
   }, [previewState]);
 
-  // Scroll sync state (enabled by default)
-  const [scrollSyncEnabled, setScrollSyncEnabled] = useState(true);
+  // Scroll sync state (persisted in localStorage)
+  const [scrollSyncEnabled, setScrollSyncEnabled] = usePreference('scrollSyncEnabled');
   // Track if editor has focus (to prevent scroll feedback loop)
   const editorHasFocusRef = useRef(false);
   // Track when editor is mounted (for scroll sync initialization)
