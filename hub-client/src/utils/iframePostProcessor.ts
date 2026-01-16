@@ -11,8 +11,35 @@ import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
 export interface PostProcessOptions {
   /** Current file path for resolving relative links */
   currentFilePath: string;
-  /** Callback when user clicks a .qmd link */
-  onQmdLinkClick?: (targetPath: string) => void;
+  /**
+   * Callback when user clicks a .qmd link or anchor link.
+   * @param targetPath - The resolved path to the target file, or null for same-document anchors
+   * @param anchor - The anchor/fragment identifier (without #), or null if no anchor
+   */
+  onQmdLinkClick?: (targetPath: string | null, anchor: string | null) => void;
+}
+
+/** Parsed components of a link href */
+interface ParsedLink {
+  path: string | null; // null for same-document anchors
+  anchor: string | null; // null if no anchor
+}
+
+/**
+ * Parse a link href into path and anchor components.
+ * Examples:
+ *   "file.qmd" -> { path: "file.qmd", anchor: null }
+ *   "file.qmd#section" -> { path: "file.qmd", anchor: "section" }
+ *   "#section" -> { path: null, anchor: "section" }
+ */
+function parseLink(href: string): ParsedLink {
+  const hashIndex = href.indexOf('#');
+  if (hashIndex === -1) {
+    return { path: href, anchor: null };
+  }
+  const path = hashIndex === 0 ? null : href.substring(0, hashIndex);
+  const anchor = href.substring(hashIndex + 1);
+  return { path, anchor: anchor || null };
 }
 
 /**
@@ -75,18 +102,42 @@ export function postProcessIframe(
     }
   });
 
-  // Convert .qmd links to click handlers
+  // Handle external links - open in new tab
+  doc.querySelectorAll('a[href^="http://"], a[href^="https://"]').forEach((anchor) => {
+    anchor.setAttribute('target', '_blank');
+    anchor.setAttribute('rel', 'noopener noreferrer');
+  });
+
+  // Convert .qmd links and anchor links to click handlers
   if (options.onQmdLinkClick) {
-    doc.querySelectorAll('a[href$=".qmd"]').forEach((anchor) => {
+    // Handle .qmd links (with or without anchors)
+    // Match both "file.qmd" and "file.qmd#section"
+    doc.querySelectorAll('a[href*=".qmd"]').forEach((anchor) => {
+      const href = anchor.getAttribute('href');
+      if (href && !href.startsWith('http://') && !href.startsWith('https://')) {
+        const parsed = parseLink(href);
+        // Only process if the path ends with .qmd (handles "file.qmd" and "file.qmd#section")
+        if (parsed.path && parsed.path.endsWith('.qmd')) {
+          const targetPath = resolveRelativePath(options.currentFilePath, parsed.path);
+          anchor.addEventListener('click', (e) => {
+            e.preventDefault();
+            options.onQmdLinkClick!(targetPath, parsed.anchor);
+          });
+          // Visual hint that it's an internal link
+          anchor.setAttribute('data-internal-link', 'true');
+        }
+      }
+    });
+
+    // Handle same-document anchor links (#section)
+    doc.querySelectorAll('a[href^="#"]').forEach((anchor) => {
       const href = anchor.getAttribute('href');
       if (href) {
-        const targetPath = resolveRelativePath(options.currentFilePath, href);
+        const parsed = parseLink(href);
         anchor.addEventListener('click', (e) => {
           e.preventDefault();
-          options.onQmdLinkClick!(targetPath);
+          options.onQmdLinkClick!(null, parsed.anchor);
         });
-        // Visual hint that it's an internal link
-        anchor.setAttribute('data-internal-link', 'true');
       }
     });
   }

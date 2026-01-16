@@ -22,6 +22,8 @@ export interface NewFileDialogProps {
   onUploadBinaryFile: (file: File) => void;
   /** Optional pre-filled files from drag-and-drop */
   initialFiles?: File[];
+  /** Optional initial filename for text file creation (e.g., from clicking a link to a non-existent file) */
+  initialFilename?: string;
 }
 
 interface FilePreview {
@@ -37,6 +39,7 @@ export default function NewFileDialog({
   onCreateTextFile,
   onUploadBinaryFile,
   initialFiles,
+  initialFilename,
 }: NewFileDialogProps) {
   const [mode, setMode] = useState<'text' | 'upload'>('text');
   const [filename, setFilename] = useState('');
@@ -100,6 +103,14 @@ export default function NewFileDialog({
       processFiles(initialFiles);
     }
   }, [isOpen, initialFiles, processFiles]);
+
+  // Handle initial filename (e.g., from clicking a link to a non-existent file)
+  useEffect(() => {
+    if (isOpen && initialFilename) {
+      setMode('text');
+      setFilename(initialFilename);
+    }
+  }, [isOpen, initialFilename]);
 
   // Focus filename input when dialog opens in text mode
   useEffect(() => {

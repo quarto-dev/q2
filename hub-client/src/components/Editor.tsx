@@ -237,22 +237,71 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   // New file dialog state
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
+  // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
+  const [newFileInitialName, setNewFileInitialName] = useState<string>('');
+
+  // Pending anchor state for cross-document navigation
+  // When navigating to another file with an anchor, we store the anchor and
+  // the iframeLoadCount at the time of setting. We only scroll when the load
+  // count increases (indicating the new content has loaded).
+  const [pendingAnchor, setPendingAnchor] = useState<{
+    anchor: string;
+    loadCountAtSet: number;
+  } | null>(null);
 
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
 
-  // Handler for .qmd link clicks in the preview
+  // Scroll the preview to an anchor element
+  // Note: We find the active iframe via DOM query instead of using activeIframe state
+  // to avoid timing issues where the effect runs before activeIframe is updated
+  const scrollToAnchor = useCallback((anchor: string) => {
+    // Find the active iframe by its class rather than relying on state
+    const activeIframeEl = document.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
+    const doc = activeIframeEl?.contentDocument;
+    if (!doc) return;
+
+    const element = doc.getElementById(anchor);
+    if (element) {
+      element.scrollIntoView({ behavior: 'instant', block: 'start' });
+      // Scroll sync will automatically update the editor via scroll event listener
+    }
+    // If element doesn't exist, do nothing (no-op as specified)
+  }, []);
+
+  // Handler for .qmd link clicks and anchor clicks in the preview
   const handleQmdLinkClick = useCallback(
-    (targetPath: string) => {
-      const file = files.find(
-        (f) => f.path === targetPath || '/' + f.path === targetPath
-      );
-      if (file) {
-        setCurrentFile(file);
+    (targetPath: string | null, anchor: string | null) => {
+      // Case 1: Same-document anchor only (e.g., #section)
+      if (!targetPath && anchor) {
+        scrollToAnchor(anchor);
+        return;
+      }
+
+      // Case 2: Link to a different document (with or without anchor)
+      if (targetPath) {
+        const file = files.find(
+          (f) => f.path === targetPath || '/' + f.path === targetPath
+        );
+
+        if (file) {
+          // Existing file - switch to it
+          setCurrentFile(file);
+          if (anchor) {
+            // Store anchor and current load count to apply after new content loads
+            setPendingAnchor({ anchor, loadCountAtSet: iframeLoadCount });
+          }
+        } else {
+          // Non-existent file - open create dialog with pre-filled name
+          // Strip leading slash for the dialog
+          const filename = targetPath.startsWith('/') ? targetPath.slice(1) : targetPath;
+          setNewFileInitialName(filename);
+          setShowNewFileDialog(true);
+        }
       }
     },
-    [files]
+    [files, scrollToAnchor, iframeLoadCount]
   );
 
   // Post-process iframe content after render (replace CSS links with data URIs)
@@ -321,6 +370,20 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     iframeLoadCount,
     editorHasFocusRef,
   });
+
+  // Apply pending anchor after iframe loads new content (for cross-document navigation with anchors)
+  useEffect(() => {
+    // Only scroll when the load count has increased since the anchor was set
+    // This ensures we wait for the new document to actually load
+    if (pendingAnchor && iframeLoadCount > pendingAnchor.loadCountAtSet) {
+      // Small delay to ensure content is fully rendered
+      const timer = setTimeout(() => {
+        scrollToAnchor(pendingAnchor.anchor);
+        setPendingAnchor(null);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [pendingAnchor, iframeLoadCount, scrollToAnchor]);
 
   // Debounce rendering
   const renderTimeoutRef = useRef<number | null>(null);
@@ -893,7 +956,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
             ref={iframeARef}
             srcDoc={iframeAHtml}
             title="Preview A"
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-popups"
             onLoad={activeIframe === 'A' ? handleActiveIframeLoad : handleInactiveIframeLoad}
             className={activeIframe === 'A' ? 'preview-active' : 'preview-hidden'}
           />
@@ -901,7 +964,7 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
             ref={iframeBRef}
             srcDoc={iframeBHtml}
             title="Preview B"
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-popups"
             onLoad={activeIframe === 'B' ? handleActiveIframeLoad : handleInactiveIframeLoad}
             className={activeIframe === 'B' ? 'preview-active' : 'preview-hidden'}
           />
@@ -917,10 +980,14 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
       <NewFileDialog
         isOpen={showNewFileDialog}
         existingPaths={files.map(f => f.path)}
-        onClose={handleDialogClose}
+        onClose={() => {
+          handleDialogClose();
+          setNewFileInitialName(''); // Clear on close
+        }}
         onCreateTextFile={handleCreateTextFile}
         onUploadBinaryFile={handleUploadBinaryFile}
         initialFiles={pendingUploadFiles}
+        initialFilename={newFileInitialName}
       />
     </div>
   );
