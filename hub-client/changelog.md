@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-16
 
+- [`f447654`](https://github.com/quarto-dev/kyoto/commits/f447654): Add persistent user preferences with zod validation (scroll sync, error overlay)
 - [`4b9db07`](https://github.com/quarto-dev/kyoto/commits/4b9db07): Update browser tab title and favicon for Quarto Hub
 
 ### 2026-01-14
