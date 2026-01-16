@@ -10,7 +10,6 @@ import {
   updateFileContent,
   createNewProject,
 } from './services/automergeSync';
-import type { Patch } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
 import './App.css';
@@ -21,7 +20,6 @@ function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
-  const [filePatches, setFilePatches] = useState<Map<string, Patch[]>>(new Map());
 
   // Set up sync handlers
   useEffect(() => {
@@ -29,15 +27,11 @@ function App() {
       onFilesChange: (newFiles) => {
         setFiles(newFiles);
       },
-      onFileContent: (path, content, patches) => {
+      onFileContent: (path, content, _patches) => {
+        // Note: patches are ignored - we use diff-based sync in Editor.tsx
         setFileContents((prev) => {
           const next = new Map(prev);
           next.set(path, content);
-          return next;
-        });
-        setFilePatches((prev) => {
-          const next = new Map(prev);
-          next.set(path, patches);
           return next;
         });
       },
@@ -83,7 +77,6 @@ function App() {
     setProject(null);
     setFiles([]);
     setFileContents(new Map());
-    setFilePatches(new Map());
     setConnectionError(null);
   }, []);
 
@@ -164,7 +157,6 @@ function App() {
       project={project}
       files={files}
       fileContents={fileContents}
-      filePatches={filePatches}
       onDisconnect={handleDisconnect}
       onContentChange={handleContentChange}
     />

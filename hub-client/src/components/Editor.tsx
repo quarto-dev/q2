@@ -3,7 +3,6 @@ import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
 import { isBinaryExtension } from '../types/project';
-import type { Patch } from '../services/automergeSync';
 import {
   createFile,
   createBinaryFile,
@@ -18,7 +17,7 @@ import { postProcessIframe } from '../utils/iframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
 import { useScrollSync } from '../hooks/useScrollSync';
 import { usePreference } from '../hooks/usePreference';
-import { patchesToMonacoEdits } from '../utils/patchToMonacoEdits';
+import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
@@ -49,7 +48,6 @@ interface Props {
   project: ProjectEntry;
   files: FileEntry[];
   fileContents: Map<string, string>;
-  filePatches: Map<string, Patch[]>;
   onDisconnect: () => void;
   onContentChange: (path: string, content: string) => void;
 }
@@ -170,7 +168,7 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, filePatches, onDisconnect, onContentChange }: Props) {
+export default function Editor({ project, files, fileContents, onDisconnect, onContentChange }: Props) {
   const [currentFile, setCurrentFile] = useState<FileEntry | null>(selectDefaultFile(files));
 
   // Monaco editor instance ref
@@ -444,8 +442,6 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   const doRender = useCallback(async (qmdContent: string) => {
     lastContentRef.current = qmdContent;
 
-    console.log('[doRender] scrollSyncEnabled:', scrollSyncEnabled);
-
     if (!isWasmReady()) {
       // For initial load before WASM is ready, load into inactive iframe and swap
       setInactiveHtml(renderFallback(qmdContent, 'Loading WASM renderer...'));
@@ -456,7 +452,6 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
 
     try {
       // Enable source location tracking when scroll sync is enabled
-      console.log('[doRender] calling renderToHtml with sourceLocation:', scrollSyncEnabled);
       const result = await renderToHtml(qmdContent, {
         sourceLocation: scrollSyncEnabled,
       });
@@ -556,38 +551,52 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
     setUnlocatedErrors(unlocatedDiagnostics);
   }, [diagnostics]);
 
-  // Sync local content state with external Automerge state.
-  // Uses incremental edits when patches are available to preserve cursor position.
-  // Note: setState in effect is intentional here - we're syncing with external state (Automerge).
+  // Sync Monaco editor with external Automerge state using diff-based edits.
+  //
+  // This approach computes the diff between Monaco's current content and
+  // Automerge's content, then applies minimal edits to preserve cursor position.
+  // This is more robust than patch-based synchronization because:
+  // 1. It doesn't depend on timing assumptions about when patches were computed
+  // 2. It handles any divergence between Monaco and Automerge correctly
+  // 3. Automerge's merged content is the authoritative source of truth
+  //
+  // Monaco is configured as uncontrolled (defaultValue instead of value), so
+  // setContent() only updates React state for preview rendering - it won't
+  // cause the wrapper to call setValue() and reset cursor position.
+  //
+  // Note: setState in effect is intentional - we're syncing with external state.
   useEffect(() => {
     if (!currentFile) return;
 
-    const newContent = fileContents.get(currentFile.path);
-    if (newContent === undefined || newContent === content) return;
+    const automergeContent = fileContents.get(currentFile.path);
+    if (automergeContent === undefined) return;
 
-    const patches = filePatches.get(currentFile.path) ?? [];
+    // Get Monaco's actual model content
+    const model = editorRef.current?.getModel();
+    const monacoContent = model?.getValue();
 
-    // If we have patches and the editor is mounted, apply incremental edits
-    if (patches.length > 0 && editorRef.current) {
-      const edits = patchesToMonacoEdits(patches, content);
+    // If Monaco isn't ready yet, just sync React state for preview
+    if (monacoContent === undefined) {
+      setContent(automergeContent);
+      return;
+    }
 
-      if (edits.length > 0) {
+    // If Monaco content differs from Automerge, apply minimal edits
+    if (monacoContent !== automergeContent) {
+      const edits = diffToMonacoEdits(monacoContent, automergeContent);
+
+      if (edits.length > 0 && editorRef.current) {
         // Mark that we're applying remote changes to prevent echo
         applyingRemoteRef.current = true;
         editorRef.current.executeEdits('remote-sync', edits);
         applyingRemoteRef.current = false;
       }
-
-      // Sync local state with the new content
-      setContent(newContent);
-    } else {
-      // Fallback: full content replacement (initial load, file switch, no patches)
-      setContent(newContent);
     }
-    // Note: `content` is intentionally NOT in the dependency array.
-    // We only want to sync when external data changes, not on local edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFile, fileContents, filePatches]);
+
+    // Always update React state to keep preview in sync.
+    // Since Monaco is uncontrolled, this won't affect editor content or cursor.
+    setContent(automergeContent);
+  }, [currentFile, fileContents]);
 
   // Update currentFile when files list changes (e.g., on initial load)
   // Note: setState in effect is intentional - syncing with external file list
@@ -934,10 +943,15 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
         </SidebarTabs>
         <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
           <MonacoEditor
+            // Use key to force remount when switching files (resets editor state cleanly)
+            key={currentFile?.path ?? ''}
             height="100%"
             language="markdown"
             theme="vs-dark"
-            value={content}
+            // Use defaultValue instead of value to make Monaco uncontrolled.
+            // This prevents the wrapper from calling setValue() on re-renders,
+            // which would reset cursor position. We manage content via executeEdits().
+            defaultValue={content}
             onChange={handleEditorChange}
             onMount={handleEditorMount}
             options={{
