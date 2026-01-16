@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-16
 
+- [`45da7f5`](https://github.com/quarto-dev/kyoto/commits/45da7f5): Fix cursor jump bug during rapid typing by switching Monaco to uncontrolled mode
 - [`f371d82`](https://github.com/quarto-dev/kyoto/commits/f371d82): Fix preview link handling for external links and cross-document anchors
 - [`f447654`](https://github.com/quarto-dev/kyoto/commits/f447654): Add persistent user preferences with zod validation (scroll sync, error overlay)
 - [`4b9db07`](https://github.com/quarto-dev/kyoto/commits/4b9db07): Update browser tab title and favicon for Quarto Hub
