@@ -175,12 +175,21 @@ A React/TypeScript web application for collaborative editing of Quarto projects.
 - `src/hooks/` - React hooks for presence, scroll sync, etc.
 
 **Development:**
+
+This project uses npm workspaces. Always run `npm install` from the **repo root**, not from hub-client:
+
 ```bash
-cd hub-client
+# From repo root - install all workspace dependencies
 npm install
-npm run dev    # Start dev server with HMR
-npm run build  # Production build
+
+# Run dev server (from hub-client directory)
+cd hub-client
+npm run dev        # Start dev server with HMR
+npm run dev:fresh  # Clear cache and start fresh
+npm run build      # Production build
 ```
+
+**Important:** Never run `npm install` from hub-client directly - dependencies are hoisted to the root `node_modules/`.
 
 ## hub-client Commit Instructions
 
