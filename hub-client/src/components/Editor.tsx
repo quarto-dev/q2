@@ -325,6 +325,17 @@ export default function Editor({ project, files, fileContents, filePatches, onDi
   const renderTimeoutRef = useRef<number | null>(null);
   const lastContentRef = useRef<string>('');
 
+  // Update document title based on current file
+  useEffect(() => {
+    if (currentFile) {
+      // Extract just the filename from the path
+      const filename = currentFile.path.split('/').pop() || currentFile.path;
+      document.title = `${filename} — Quarto Hub`;
+    } else {
+      document.title = 'Quarto Hub';
+    }
+  }, [currentFile]);
+
   // Initialize WASM on mount
   useEffect(() => {
     let cancelled = false;
