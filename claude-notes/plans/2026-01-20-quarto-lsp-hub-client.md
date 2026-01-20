@@ -919,11 +919,12 @@ This phase restructures `quarto-lsp-core` to use a single-parse `analyze_documen
 
 ### Phase 6d: Outline Panel UI
 
-- [ ] Create `src/components/OutlinePanel.tsx`
-- [ ] Implement hierarchical symbol tree rendering
-- [ ] Add symbol kind icons
-- [ ] Add loading/empty states
-- [ ] Style to match existing sidebar sections
+- [x] Create `src/components/OutlinePanel.tsx`
+- [x] Implement hierarchical symbol tree rendering
+- [x] Add symbol kind icons
+- [x] Add loading/empty states
+- [x] Style to match existing sidebar sections
+- [x] Add 'outline' section to `SidebarTabs.tsx`
 
 ### Phase 6e: Editor Integration
 

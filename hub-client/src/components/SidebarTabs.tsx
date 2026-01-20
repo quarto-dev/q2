@@ -8,7 +8,7 @@
 import { useState, type ReactNode } from 'react';
 import './SidebarTabs.css';
 
-export type SectionId = 'files' | 'project' | 'status' | 'settings' | 'about';
+export type SectionId = 'files' | 'outline' | 'project' | 'status' | 'settings' | 'about';
 
 interface Section {
   id: SectionId;
@@ -18,6 +18,7 @@ interface Section {
 
 const SECTIONS: Section[] = [
   { id: 'files', label: 'FILES', defaultExpanded: true },
+  { id: 'outline', label: 'OUTLINE', defaultExpanded: true },
   { id: 'project', label: 'PROJECT', defaultExpanded: false },
   { id: 'status', label: 'STATUS', defaultExpanded: false },
   { id: 'settings', label: 'SETTINGS', defaultExpanded: false },
