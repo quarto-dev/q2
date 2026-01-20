@@ -19,7 +19,7 @@ export default function Toast({ message, visible, onHide, duration = 2000 }: Toa
   if (!visible) return null;
 
   return (
-    <div className="toast">
+    <div className="toast" role="status">
       {message}
     </div>
   );
