@@ -17,6 +17,7 @@ import { postProcessIframe } from '../utils/iframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
 import { useScrollSync } from '../hooks/useScrollSync';
 import { usePreference } from '../hooks/usePreference';
+import { useIntelligence } from '../hooks/useIntelligence';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import { stripAnsi } from '../utils/stripAnsi';
@@ -25,6 +26,7 @@ import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import MinimalHeader from './MinimalHeader';
 import SidebarTabs from './SidebarTabs';
+import OutlinePanel from './OutlinePanel';
 import ProjectTab from './tabs/ProjectTab';
 import StatusTab from './tabs/StatusTab';
 import SettingsTab from './tabs/SettingsTab';
@@ -179,6 +181,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   // Presence for collaborative cursors
   const { remoteUsers, userCount, onEditorMount: onPresenceEditorMount } = usePresence(currentFile?.path ?? null);
+
+  // Intelligence for document outline
+  const {
+    symbols,
+    loading: intelligenceLoading,
+    error: intelligenceError,
+    refresh: refreshIntelligence,
+  } = useIntelligence({
+    path: currentFile?.path ?? null,
+    enableSymbols: true,
+  });
 
   // Get content from fileContents map, or use default for new files
   const getContent = useCallback((file: FileEntry | null): string => {
@@ -535,6 +548,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     updatePreview(content);
   }, [content, updatePreview, wasmStatus, scrollSyncEnabled]);
 
+  // Refresh intelligence (outline) when content changes
+  // VFS is updated via Automerge callbacks, so we trigger refresh after content changes
+  useEffect(() => {
+    refreshIntelligence();
+  }, [content, refreshIntelligence]);
+
   // Apply Monaco markers when diagnostics change
   useEffect(() => {
     if (!editorRef.current || !monacoRef.current) {
@@ -642,6 +661,20 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // Signal that editor is ready for scroll sync
     setEditorReady(true);
   };
+
+  // Handle symbol click from outline panel - navigate editor to symbol location
+  const handleSymbolClick = useCallback((symbol: { range: { start: { line: number; character: number } } }) => {
+    if (!editorRef.current) return;
+
+    // Convert from 0-based LSP position to 1-based Monaco position
+    const lineNumber = symbol.range.start.line + 1;
+    const column = symbol.range.start.character + 1;
+
+    // Move cursor and reveal the line
+    editorRef.current.setPosition({ lineNumber, column });
+    editorRef.current.revealLineInCenter(lineNumber);
+    editorRef.current.focus();
+  }, []);
 
   // Handle file selection from sidebar
   const handleSelectFile = useCallback((file: FileEntry) => {
@@ -909,6 +942,15 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                     onUploadFiles={handleUploadFiles}
                     onDeleteFile={handleDeleteFile}
                     onRenameFile={handleRenameFile}
+                  />
+                );
+              case 'outline':
+                return (
+                  <OutlinePanel
+                    symbols={symbols}
+                    onSymbolClick={handleSymbolClick}
+                    loading={intelligenceLoading}
+                    error={intelligenceError}
                   />
                 );
               case 'project':

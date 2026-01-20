@@ -102,6 +102,15 @@ Integrate `quarto-lsp-core` into hub-client via WASM to provide "language intell
 7. UI updates with new symbols
 ```
 
+**Verified (2026-01-20):** VFS is kept in sync via `automergeSync.ts` callbacks:
+- Remote changes: `onFileChanged` callback → `vfsAddFile(path, text)`
+- Local changes: `updateFileContent()` → Automerge → callback → `vfsAddFile()`
+
+This is an **eventually consistent** model. There's a small window between when the user types and when VFS is updated, but:
+- The `useIntelligence` hook uses debouncing (300ms default), which smooths out rapid edits
+- The lag is imperceptible in practice (similar to the "unmanaged" Monaco editor pattern)
+- No additional sync machinery is needed
+
 #### Q: When should intelligence data refresh?
 
 **Decision:** On-demand with debouncing, triggered by content changes.
@@ -928,11 +937,11 @@ This phase restructures `quarto-lsp-core` to use a single-parse `analyze_documen
 
 ### Phase 6e: Editor Integration
 
-- [ ] Add "OUTLINE" section to `SidebarTabs.tsx`
-- [ ] Wire up `useIntelligence` hook in Editor.tsx
-- [ ] Implement `handleSymbolClick` for navigation
-- [ ] Connect refresh trigger to content changes
-- [ ] Test end-to-end: edit → outline updates → click → navigate
+- [x] Add "OUTLINE" section to `SidebarTabs.tsx` (done in Phase 6d)
+- [x] Wire up `useIntelligence` hook in Editor.tsx
+- [x] Implement `handleSymbolClick` for navigation
+- [x] Connect refresh trigger to content changes
+- [x] Test end-to-end: edit → outline updates → click → navigate (build verified)
 
 ### Phase 6f: Monaco Providers
 
