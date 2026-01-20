@@ -36,7 +36,49 @@ This applies even at the end of sessions. Prepare the commit but wait for approv
 We use bd (beads) for issue tracking instead of Markdown TODOs or external tools.
 We use plans for additional context and bookkeeping. Write plans to `claude-notes/plans/YYYY-MM-DD-<description>.md`, and reference the plan file in the issues.
 
-### Quick Reference
+### File Structure
+Plan files should include:
+
+1. **Overview**: Brief description of the plan's goals and context
+2. **Checklist**: A markdown checklist of all work items using `- [ ]` syntax
+3. **Details**: Additional context, design decisions, or implementation notes as needed
+
+### Maintaining Progress
+As you work through a plan:
+
+1. **Update the plan file** after completing each work item
+2. **Check off items** by changing `- [ ]` to `- [x]`
+3. **Keep the plan file current** - it serves as both a roadmap and progress tracker
+4. **Add new items** if you discover additional work during implementation
+
+### Excerpt from a simple Plan File
+
+```markdown
+...
+
+## Work Items
+
+- [x] Review current runtime service implementations
+- [x] Identify common patterns
+- [ ] Create shared base class in @databot/node
+- [ ] Update StandalonePlatform to use shared base
+- [ ] Update RStudioPlatform to use shared base
+- [ ] Update tests
+- [ ] Update documentation
+```
+
+### When to Use Plan Files
+
+Create plan files for:
+- Multi-step features spanning multiple packages
+- Complex refactoring that requires coordination
+- Tasks where tracking progress helps ensure nothing is missed
+
+Complex plans can have phases, and work items are then split into multiple lists, one for each phase.
+
+For simple tasks (single file changes, bug fixes), the TodoWrite tool is sufficient.
+
+### Beads Quick Reference
 
 ```bash
 # Find ready work (no blockers)
