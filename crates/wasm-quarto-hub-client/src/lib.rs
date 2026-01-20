@@ -1045,3 +1045,320 @@ pub async fn create_project(choice_id: &str, title: &str) -> String {
         Err(e) => CreateProjectResponse::error(&e.to_string()),
     }
 }
+
+// ============================================================================
+// LSP INTELLIGENCE API
+// ============================================================================
+//
+// These functions provide the WASM entry points for language intelligence
+// features (document symbols, diagnostics, folding ranges).
+//
+// They use quarto-lsp-core which is transport-agnostic and compiles to both
+// native and WASM targets.
+
+use quarto_lsp_core::{Document, DocumentAnalysisJson, analyze_document};
+
+/// Response for LSP analyze_document().
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LspAnalyzeResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    symbols: Option<Vec<quarto_lsp_core::Symbol>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    folding_ranges: Option<Vec<quarto_lsp_core::FoldingRange>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diagnostics: Option<Vec<quarto_lsp_core::Diagnostic>>,
+}
+
+impl LspAnalyzeResponse {
+    fn ok(analysis: DocumentAnalysisJson) -> String {
+        serde_json::to_string(&LspAnalyzeResponse {
+            success: true,
+            error: None,
+            symbols: Some(analysis.symbols),
+            folding_ranges: Some(analysis.folding_ranges),
+            diagnostics: Some(analysis.diagnostics),
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&LspAnalyzeResponse {
+            success: false,
+            error: Some(msg.to_string()),
+            symbols: None,
+            folding_ranges: None,
+            diagnostics: None,
+        })
+        .unwrap()
+    }
+}
+
+/// Response for LSP get_symbols().
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LspSymbolsResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    symbols: Option<Vec<quarto_lsp_core::Symbol>>,
+}
+
+impl LspSymbolsResponse {
+    fn ok(symbols: Vec<quarto_lsp_core::Symbol>) -> String {
+        serde_json::to_string(&LspSymbolsResponse {
+            success: true,
+            error: None,
+            symbols: Some(symbols),
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&LspSymbolsResponse {
+            success: false,
+            error: Some(msg.to_string()),
+            symbols: None,
+        })
+        .unwrap()
+    }
+}
+
+/// Response for LSP get_folding_ranges().
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LspFoldingRangesResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    folding_ranges: Option<Vec<quarto_lsp_core::FoldingRange>>,
+}
+
+impl LspFoldingRangesResponse {
+    fn ok(ranges: Vec<quarto_lsp_core::FoldingRange>) -> String {
+        serde_json::to_string(&LspFoldingRangesResponse {
+            success: true,
+            error: None,
+            folding_ranges: Some(ranges),
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&LspFoldingRangesResponse {
+            success: false,
+            error: Some(msg.to_string()),
+            folding_ranges: None,
+        })
+        .unwrap()
+    }
+}
+
+/// Response for LSP get_diagnostics().
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LspDiagnosticsResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diagnostics: Option<Vec<quarto_lsp_core::Diagnostic>>,
+}
+
+impl LspDiagnosticsResponse {
+    fn ok(diagnostics: Vec<quarto_lsp_core::Diagnostic>) -> String {
+        serde_json::to_string(&LspDiagnosticsResponse {
+            success: true,
+            error: None,
+            diagnostics: Some(diagnostics),
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&LspDiagnosticsResponse {
+            success: false,
+            error: Some(msg.to_string()),
+            diagnostics: None,
+        })
+        .unwrap()
+    }
+}
+
+/// Analyze a document in the VFS, returning all intelligence data.
+///
+/// This is the primary entry point for hub-client intelligence.
+/// Performs a single parse and extracts symbols, folding ranges, and diagnostics.
+///
+/// # Arguments
+/// * `path` - Path to the file in VFS (e.g., "index.qmd")
+///
+/// # Returns
+/// JSON: `{ "success": true, "symbols": [...], "foldingRanges": [...], "diagnostics": [...] }`
+/// or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(lsp_analyze_document("index.qmd"));
+/// if (result.success) {
+///     console.log("Symbols:", result.symbols);
+///     console.log("Folding ranges:", result.foldingRanges);
+///     console.log("Diagnostics:", result.diagnostics);
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn lsp_analyze_document(path: &str) -> String {
+    let runtime = get_runtime();
+    let file_path = Path::new(path);
+
+    // Read the file from VFS
+    let content = match runtime.file_read(file_path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(_) => return LspAnalyzeResponse::error("File is not valid UTF-8"),
+        },
+        Err(e) => return LspAnalyzeResponse::error(&format!("Failed to read file: {}", e)),
+    };
+
+    // Create document and analyze
+    let doc = Document::new(path, &content);
+    let analysis = analyze_document(&doc);
+
+    // Convert to JSON-serializable format
+    let json_analysis: DocumentAnalysisJson = analysis.into();
+    LspAnalyzeResponse::ok(json_analysis)
+}
+
+/// Get document symbols for a file in the VFS.
+///
+/// Convenience wrapper around lsp_analyze_document() for callers
+/// who only need symbols.
+///
+/// # Arguments
+/// * `path` - Path to the file in VFS (e.g., "index.qmd")
+///
+/// # Returns
+/// JSON: `{ "success": true, "symbols": [...] }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(lsp_get_symbols("index.qmd"));
+/// if (result.success) {
+///     for (const symbol of result.symbols) {
+///         console.log(symbol.name, symbol.kind);
+///     }
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn lsp_get_symbols(path: &str) -> String {
+    let runtime = get_runtime();
+    let file_path = Path::new(path);
+
+    // Read the file from VFS
+    let content = match runtime.file_read(file_path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(_) => return LspSymbolsResponse::error("File is not valid UTF-8"),
+        },
+        Err(e) => return LspSymbolsResponse::error(&format!("Failed to read file: {}", e)),
+    };
+
+    // Create document and analyze
+    let doc = Document::new(path, &content);
+    let analysis = analyze_document(&doc);
+
+    LspSymbolsResponse::ok(analysis.symbols)
+}
+
+/// Get folding ranges for a file in the VFS.
+///
+/// Folding ranges include:
+/// - YAML frontmatter (`---` to `---`)
+/// - Code cells (` ```{lang}` to ` ``` `)
+/// - Sections (header to next same-level-or-higher header)
+///
+/// # Arguments
+/// * `path` - Path to the file in VFS (e.g., "index.qmd")
+///
+/// # Returns
+/// JSON: `{ "success": true, "foldingRanges": [...] }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(lsp_get_folding_ranges("index.qmd"));
+/// if (result.success) {
+///     for (const range of result.foldingRanges) {
+///         console.log(`Fold: line ${range.startLine} to ${range.endLine}`);
+///     }
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn lsp_get_folding_ranges(path: &str) -> String {
+    let runtime = get_runtime();
+    let file_path = Path::new(path);
+
+    // Read the file from VFS
+    let content = match runtime.file_read(file_path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(_) => return LspFoldingRangesResponse::error("File is not valid UTF-8"),
+        },
+        Err(e) => return LspFoldingRangesResponse::error(&format!("Failed to read file: {}", e)),
+    };
+
+    // Create document and analyze
+    let doc = Document::new(path, &content);
+    let analysis = analyze_document(&doc);
+
+    LspFoldingRangesResponse::ok(analysis.folding_ranges)
+}
+
+/// Get diagnostics for a file in the VFS.
+///
+/// Returns rich diagnostics matching quarto-error-reporting::DiagnosticMessage
+/// structure, including title, problem, hints, and details.
+///
+/// # Arguments
+/// * `path` - Path to the file in VFS (e.g., "index.qmd")
+///
+/// # Returns
+/// JSON: `{ "success": true, "diagnostics": [...] }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(lsp_get_diagnostics("index.qmd"));
+/// if (result.success) {
+///     for (const diag of result.diagnostics) {
+///         console.log(`${diag.severity}: ${diag.title}`);
+///         if (diag.problem) console.log(`  Problem: ${diag.problem.content}`);
+///         for (const hint of diag.hints) {
+///             console.log(`  Hint: ${hint.content}`);
+///         }
+///     }
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn lsp_get_diagnostics(path: &str) -> String {
+    let runtime = get_runtime();
+    let file_path = Path::new(path);
+
+    // Read the file from VFS
+    let content = match runtime.file_read(file_path) {
+        Ok(bytes) => match String::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(_) => return LspDiagnosticsResponse::error("File is not valid UTF-8"),
+        },
+        Err(e) => return LspDiagnosticsResponse::error(&format!("Failed to read file: {}", e)),
+    };
+
+    // Create document and analyze
+    let doc = Document::new(path, &content);
+    let analysis = analyze_document(&doc);
+
+    LspDiagnosticsResponse::ok(analysis.diagnostics)
+}

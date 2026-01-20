@@ -13,6 +13,7 @@ crate-type = ["cdylib"]
 pampa = { path = "../pampa", default-features = false }
 quarto-core = { path = "../quarto-core" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }
+quarto-lsp-core = { path = "../quarto-lsp-core" }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }

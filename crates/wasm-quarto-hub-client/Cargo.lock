@@ -1639,6 +1639,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-lsp-core"
+version = "0.1.0"
+dependencies = [
+ "pampa",
+ "quarto-error-reporting",
+ "quarto-source-map",
+ "quarto-yaml",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "quarto-pandoc-types"
 version = "0.0.0"
 dependencies = [
@@ -2708,6 +2721,7 @@ dependencies = [
  "pampa",
  "quarto-core",
  "quarto-error-reporting",
+ "quarto-lsp-core",
  "quarto-pandoc-types",
  "quarto-project-create",
  "quarto-source-map",
