@@ -945,11 +945,11 @@ This phase restructures `quarto-lsp-core` to use a single-parse `analyze_documen
 
 ### Phase 6f: Monaco Providers
 
-- [ ] Create `src/services/monacoProviders.ts` with provider registration
-- [ ] Implement `DocumentSymbolProvider` for Cmd+Shift+O
-- [ ] Implement `FoldingRangeProvider` for code folding
-- [ ] Add conversion functions (LSP types → Monaco types)
-- [ ] Register providers on editor mount
+- [x] Create `src/services/monacoProviders.ts` with provider registration
+- [x] Implement `DocumentSymbolProvider` for Cmd+Shift+O
+- [x] Implement `FoldingRangeProvider` for code folding
+- [x] Add conversion functions (LSP types → Monaco types)
+- [x] Register providers on editor mount
 - [ ] Test Cmd+Shift+O shows document symbols
 - [ ] Test code folding works for frontmatter, code cells, sections
 

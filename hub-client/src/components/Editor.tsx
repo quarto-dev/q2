@@ -11,6 +11,7 @@ import {
 } from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
+import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
 import { postProcessIframe } from '../utils/iframePostProcessor';
@@ -176,6 +177,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Monaco editor instance ref
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
 
+  // Track current file path in a ref for Monaco providers (they need stable callbacks)
+  const currentFilePathRef = useRef<string | null>(currentFile?.path ?? null);
+
   // Flag to prevent local changes from echoing back during remote edits
   const applyingRemoteRef = useRef(false);
 
@@ -220,6 +224,11 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   useEffect(() => {
     activeIframeRef.current = activeIframe;
   }, [activeIframe]);
+
+  // Keep current file path ref in sync for Monaco providers
+  useEffect(() => {
+    currentFilePathRef.current = currentFile?.path ?? null;
+  }, [currentFile]);
 
   // Diagnostics state for Monaco markers
   const [diagnostics, setDiagnostics] = useState<Diagnostic[]>([]);
@@ -642,6 +651,10 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     monacoRef.current = monaco;
     onPresenceEditorMount(editor);
 
+    // Register intelligence providers (DocumentSymbolProvider, FoldingRangeProvider)
+    // The callback uses a ref so it always returns the current file path
+    registerIntelligenceProviders(monaco, () => currentFilePathRef.current);
+
     // Track editor focus state for scroll sync
     editor.onDidFocusEditorText(() => {
       editorHasFocusRef.current = true;
@@ -809,7 +822,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, [currentFile, onContentChange]);
 
-  // Cleanup editor drag-drop listeners on unmount
+  // Cleanup editor drag-drop listeners and Monaco providers on unmount
   useEffect(() => {
     return () => {
       const domNode = editorRef.current?.getDomNode();
@@ -818,6 +831,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         domNode.removeEventListener('dragleave', handleEditorDragLeave);
         domNode.removeEventListener('drop', handleEditorDrop);
       }
+      // Clean up Monaco intelligence providers
+      disposeIntelligenceProviders();
     };
   }, [handleEditorDragOver, handleEditorDragLeave, handleEditorDrop]);
 
