@@ -912,10 +912,10 @@ This phase restructures `quarto-lsp-core` to use a single-parse `analyze_documen
 
 ### Phase 6c: React Hook
 
-- [ ] Create `src/hooks/useIntelligence.ts`
-- [ ] Implement debounced refresh logic
-- [ ] Handle loading states
-- [ ] Handle error states gracefully
+- [x] Create `src/hooks/useIntelligence.ts`
+- [x] Implement debounced refresh logic
+- [x] Handle loading states
+- [x] Handle error states gracefully
 
 ### Phase 6d: Outline Panel UI
 
