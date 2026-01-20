@@ -1,0 +1,28 @@
+[package]
+name = "quarto-lsp-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Transport-agnostic language analysis for Quarto documents"
+
+[dependencies]
+# Serialization (for WASM JSON transport)
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# Workspace dependencies (all WASM-compatible)
+pampa = { workspace = true }
+quarto-yaml = { workspace = true }
+quarto-source-map = { workspace = true }
+quarto-error-reporting = { workspace = true }
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true

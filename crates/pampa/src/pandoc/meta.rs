@@ -355,10 +355,19 @@ pub fn rawblock_to_config_value(
     // Parse YAML with source tracking
     let yaml = match quarto_yaml::parse_with_parent(content, yaml_parent.clone()) {
         Ok(y) => y,
-        Err(e) => panic!(
-            "(unimplemented syntax error - this is a bug!) Failed to parse metadata block as YAML: {}",
-            e
-        ),
+        Err(e) => {
+            // Report the YAML parse error as a diagnostic
+            diagnostics.error_at(
+                format!("Failed to parse YAML frontmatter: {}", e),
+                yaml_parent,
+            );
+            // Return an empty map as the metadata
+            return ConfigValue {
+                value: ConfigValueKind::Map(Vec::new()),
+                source_info: block.source_info.clone(),
+                merge_op: MergeOp::default(),
+            };
+        }
     };
 
     // Transform YamlWithSourceInfo to ConfigValue using document metadata context

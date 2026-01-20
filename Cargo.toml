@@ -52,6 +52,10 @@ deno_webidl = "0.226"
 serde_v8 = "0.285"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
+# LSP server dependencies (native only)
+tower-lsp = "0.20"
+lsp-types = "0.97"
+
 [workspace.dependencies.proc-macro-error2]
 version = "2.0.1"
 default-features = false
@@ -121,6 +125,12 @@ path = "./crates/quarto-system-runtime"
 
 [workspace.dependencies.quarto-project-create]
 path = "./crates/quarto-project-create"
+
+[workspace.dependencies.quarto-lsp-core]
+path = "./crates/quarto-lsp-core"
+
+[workspace.dependencies.quarto-lsp]
+path = "./crates/quarto-lsp"
 
 [workspace.lints.rust]
 # coverage_nightly is used by pampa for code coverage instrumentation on nightly Rust

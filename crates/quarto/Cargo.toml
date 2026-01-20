@@ -18,11 +18,13 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 serde_json.workspace = true
 pollster.workspace = true
+tokio.workspace = true
 
 quarto-core.workspace = true
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
 quarto-doctemplate.workspace = true
+quarto-lsp = { workspace = true }
 
 [build-dependencies]
 

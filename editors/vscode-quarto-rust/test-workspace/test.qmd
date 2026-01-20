@@ -1,0 +1,22 @@
+---
+title: "Test Document"
+author: "Test Author"
+format: html
+---
+
+# Introduction
+
+This is a test document for the Quarto Rust LSP.
+
+## Section One
+
+Some content here.
+
+```{python}
+#| label: test-cell
+print("Hello from Python")
+```
+
+## Section Two
+
+More content.

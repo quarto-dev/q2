@@ -313,6 +313,9 @@ enum Commands {
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
     },
+
+    /// Start the Quarto Language Server Protocol server
+    Lsp,
 }
 
 fn main() -> Result<()> {
@@ -362,5 +365,6 @@ fn main() -> Result<()> {
         Commands::Publish { .. } => commands::publish::execute(),
         Commands::Check { .. } => commands::check::execute(),
         Commands::Call { .. } => commands::call::execute(),
+        Commands::Lsp => commands::lsp::execute(),
     }
 }

@@ -1,0 +1,95 @@
+{
+  "name": "quarto-rust-lsp",
+  "displayName": "Quarto (Rust LSP)",
+  "description": "Language support for Quarto documents using the Rust-based Quarto LSP",
+  "version": "0.1.0",
+  "publisher": "quarto-dev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quarto-dev/kyoto"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "quarto",
+    "qmd",
+    "markdown",
+    "literate programming"
+  ],
+  "activationEvents": [
+    "onLanguage:quarto",
+    "workspaceContains:**/*.qmd"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "quarto",
+        "aliases": [
+          "Quarto",
+          "qmd"
+        ],
+        "extensions": [
+          ".qmd"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "title": "Quarto Rust LSP",
+      "properties": {
+        "quartoRustLsp.path": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Path to the `quarto` binary. If not specified, the extension will search for `quarto` in PATH."
+        },
+        "quartoRustLsp.logLevel": {
+          "scope": "window",
+          "type": "string",
+          "default": "warn",
+          "enum": [
+            "trace",
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "markdownDescription": "Log level for the Quarto language server."
+        },
+        "quartoRustLsp.trace.server": {
+          "scope": "window",
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "test": "npm run compile && node ./out/test/runTest.js"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.3.0"
+  }
+}

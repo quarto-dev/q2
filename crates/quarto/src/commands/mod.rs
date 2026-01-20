@@ -10,6 +10,7 @@ pub mod convert;
 pub mod create;
 pub mod install;
 pub mod list;
+pub mod lsp;
 pub mod pandoc;
 pub mod preview;
 pub mod publish;

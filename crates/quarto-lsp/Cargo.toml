@@ -1,0 +1,39 @@
+[package]
+name = "quarto-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Language Server Protocol implementation for Quarto documents"
+
+[lib]
+name = "quarto_lsp"
+path = "src/lib.rs"
+
+[dependencies]
+# LSP dependencies
+# Note: We use the lsp-types re-exported by tower-lsp to avoid version conflicts
+tower-lsp.workspace = true
+tokio.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Logging
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+# Local crates
+quarto-lsp-core = { workspace = true }
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true
