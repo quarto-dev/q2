@@ -141,6 +141,14 @@ export function postProcessIframe(
       }
     });
   }
+
+  // Intercept Ctrl+S / Cmd+S in iframe and notify parent
+  doc.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      window.parent.postMessage({ type: 'hub-client-save' }, '*');
+    }
+  });
 }
 
 /** Resolve a relative path against the current file's directory */

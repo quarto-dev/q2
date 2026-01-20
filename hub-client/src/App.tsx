@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import type { ProjectEntry, FileEntry } from './types/project';
 import ProjectSelector from './components/ProjectSelector';
 import Editor from './components/Editor';
+import Toast from './components/Toast';
 import {
   connect,
   disconnect,
@@ -20,6 +21,31 @@ function App() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
+  const [showSaveToast, setShowSaveToast] = useState(false);
+
+  // Intercept Ctrl+S / Cmd+S to prevent browser save dialog
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        setShowSaveToast(true);
+      }
+    };
+
+    // Listen for save events from preview iframe
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'hub-client-save') {
+        setShowSaveToast(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('message', handleMessage);
+    };
+  }, []);
 
   // Set up sync handlers
   useEffect(() => {
@@ -141,25 +167,30 @@ function App() {
     }
   }, []);
 
-  if (!project) {
-    return (
-      <ProjectSelector
-        onSelectProject={handleSelectProject}
-        onProjectCreated={handleProjectCreated}
-        isConnecting={isConnecting}
-        error={connectionError}
-      />
-    );
-  }
-
   return (
-    <Editor
-      project={project}
-      files={files}
-      fileContents={fileContents}
-      onDisconnect={handleDisconnect}
-      onContentChange={handleContentChange}
-    />
+    <>
+      {!project ? (
+        <ProjectSelector
+          onSelectProject={handleSelectProject}
+          onProjectCreated={handleProjectCreated}
+          isConnecting={isConnecting}
+          error={connectionError}
+        />
+      ) : (
+        <Editor
+          project={project}
+          files={files}
+          fileContents={fileContents}
+          onDisconnect={handleDisconnect}
+          onContentChange={handleContentChange}
+        />
+      )}
+      <Toast
+        message="Auto-saved"
+        visible={showSaveToast}
+        onHide={() => setShowSaveToast(false)}
+      />
+    </>
   );
 }
 
