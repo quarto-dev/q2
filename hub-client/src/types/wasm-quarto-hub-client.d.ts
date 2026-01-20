@@ -28,6 +28,12 @@ declare module 'wasm-quarto-hub-client' {
   export function get_project_choices(): string;
   export function create_project(choice_id: string, title: string): Promise<string>;
 
+  // LSP intelligence functions
+  export function lsp_analyze_document(path: string): string;
+  export function lsp_get_symbols(path: string): string;
+  export function lsp_get_folding_ranges(path: string): string;
+  export function lsp_get_diagnostics(path: string): string;
+
   // Response types for project creation (for documentation/reference)
   export interface ProjectChoice {
     id: string;

@@ -1,8 +1,17 @@
 /**
  * Diagnostic types for structured error/warning information from WASM.
  *
- * These types match the JSON structure returned by wasm-quarto-hub-client.
- * Line and column numbers are 1-based to match Monaco's expectations.
+ * These types match the JSON structure returned by wasm-quarto-hub-client's
+ * render_qmd() function. Line and column numbers are 1-based to match Monaco.
+ *
+ * @deprecated These types are being phased out in favor of the LSP-style
+ * types in `types/intelligence.ts`. The new types use:
+ * - camelCase field names
+ * - Nested Range/Position objects
+ * - 0-based positions (LSP specification)
+ *
+ * Use `types/intelligence.ts` and `intelligenceService.ts` for new code.
+ * This file will be removed once render_qmd is updated to use the new format.
  */
 
 export type DiagnosticKind = 'error' | 'warning' | 'info' | 'note';
