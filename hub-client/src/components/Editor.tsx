@@ -961,6 +961,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
               wordWrap: 'on',
               padding: { top: 16 },
               scrollBeyondLastLine: false,
+              // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
+              // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
+              pasteAs: { enabled: false },
             }}
           />
         </div>
