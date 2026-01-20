@@ -3,8 +3,9 @@
 //! This module extracts document symbols (headers, code cells) from QMD documents
 //! by parsing them with `pampa` and walking the resulting Pandoc AST.
 
+use crate::analysis::analyze_document;
 use crate::document::Document;
-use crate::types::{Position, Range, Symbol, SymbolKind};
+use crate::types::{FoldingRange, Position, Range, Symbol, SymbolKind};
 use pampa::pandoc::{Block, CodeBlock, Header, Inline, Inlines, Pandoc};
 use quarto_source_map::SourceContext;
 
@@ -46,6 +47,26 @@ pub fn get_symbols(doc: &Document) -> Vec<Symbol> {
             Vec::new()
         }
     }
+}
+
+/// Get folding ranges for code folding.
+///
+/// This uses `analyze_document()` internally to extract folding ranges
+/// for YAML frontmatter, code cells, and sections.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use quarto_lsp_core::{Document, get_folding_ranges};
+///
+/// let doc = Document::new("test.qmd", content);
+/// let ranges = get_folding_ranges(&doc);
+/// for range in &ranges {
+///     println!("Fold lines {}-{}", range.start_line, range.end_line);
+/// }
+/// ```
+pub fn get_folding_ranges(doc: &Document) -> Vec<FoldingRange> {
+    analyze_document(doc).folding_ranges
 }
 
 /// Extract symbols from a parsed Pandoc document.

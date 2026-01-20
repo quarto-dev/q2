@@ -35,16 +35,45 @@ pub fn severity_to_lsp(severity: &DiagnosticSeverity) -> LspSeverity {
 }
 
 /// Convert a quarto-lsp-core Diagnostic to an lsp-types Diagnostic.
+///
+/// This performs a lossy conversion since the LSP protocol doesn't support
+/// all the rich information in our diagnostic format:
+/// - `title` + `problem` are combined into `message`
+/// - `hints` are appended to the message
+/// - `details` with ranges become `related_information`
+/// - `details` without ranges are appended to the message
 pub fn diagnostic_to_lsp(diag: &Diagnostic) -> LspDiagnostic {
+    // Build the message from title + problem + hints
+    let mut message = diag.combined_message();
+
+    // Append details without ranges to the message
+    for detail in &diag.details {
+        if detail.range.is_none() {
+            message.push_str("\n  • ");
+            message.push_str(detail.content.as_str());
+        }
+    }
+
+    // Append hints to the message
+    if !diag.hints.is_empty() {
+        message.push_str("\n\nHints:");
+        for hint in &diag.hints {
+            message.push_str("\n  → ");
+            message.push_str(hint.as_str());
+        }
+    }
+
+    // Note: related_information requires URIs which we don't have in the core type yet.
+    // For now, we skip related information. This can be enhanced in the future
+    // when we track document URIs in the diagnostic details.
+
     LspDiagnostic {
         range: range_to_lsp(&diag.range),
         severity: Some(severity_to_lsp(&diag.severity)),
         code: diag.code.clone().map(NumberOrString::String),
         code_description: None,
         source: diag.source.clone(),
-        message: diag.message.clone(),
-        // Related information requires URIs which we don't have in the core type yet
-        // For now, we skip related information. This can be enhanced in the future.
+        message,
         related_information: None,
         tags: None,
         data: None,
@@ -146,16 +175,53 @@ mod tests {
 
     #[test]
     fn test_diagnostic_conversion() {
+        // Test basic diagnostic conversion (title only)
         let core_diag = Diagnostic::new(
             Range::new(Position::new(0, 0), Position::new(0, 10)),
             DiagnosticSeverity::Error,
-            "Test error message",
+            "Test error",
         )
         .with_code("Q-1-1");
 
         let lsp_diag = diagnostic_to_lsp(&core_diag);
-        assert_eq!(lsp_diag.message, "Test error message");
+        assert_eq!(lsp_diag.message, "Test error");
         assert_eq!(lsp_diag.severity, Some(LspSeverity::ERROR));
         assert_eq!(lsp_diag.code, Some(NumberOrString::String("Q-1-1".into())));
+    }
+
+    #[test]
+    fn test_diagnostic_conversion_with_problem() {
+        use quarto_lsp_core::types::MessageContent;
+
+        // Test diagnostic with title + problem
+        let core_diag = Diagnostic::new(
+            Range::new(Position::new(0, 0), Position::new(0, 10)),
+            DiagnosticSeverity::Error,
+            "YAML parse error",
+        )
+        .with_problem(MessageContent::plain("Unexpected end of input"));
+
+        let lsp_diag = diagnostic_to_lsp(&core_diag);
+        assert_eq!(
+            lsp_diag.message,
+            "YAML parse error: Unexpected end of input"
+        );
+    }
+
+    #[test]
+    fn test_diagnostic_conversion_with_hints() {
+        use quarto_lsp_core::types::MessageContent;
+
+        // Test diagnostic with hints
+        let core_diag = Diagnostic::new(
+            Range::new(Position::new(0, 0), Position::new(0, 10)),
+            DiagnosticSeverity::Warning,
+            "Unknown option",
+        )
+        .with_hint(MessageContent::plain("Did you mean 'format'?"));
+
+        let lsp_diag = diagnostic_to_lsp(&core_diag);
+        assert!(lsp_diag.message.contains("Hints:"));
+        assert!(lsp_diag.message.contains("Did you mean 'format'?"));
     }
 }

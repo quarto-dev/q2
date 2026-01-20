@@ -368,17 +368,23 @@ Work items moved to subplan. Prerequisites:
 - Includes commands for restarting the server and showing output
 - Includes launch.json for debugging the extension in VS Code
 
-### Phase 6: Hub-Client WASM Integration
+### Phase 6: Hub-Client Intelligence Subsystem
 
-- [ ] Add `quarto-lsp-core` as dependency to `wasm-quarto-hub-client`
-- [ ] Export `lsp_get_diagnostics()` via wasm_bindgen
-- [ ] Export `lsp_get_symbols()` via wasm_bindgen
-- [ ] Export `lsp_get_hover()` via wasm_bindgen
-- [ ] Create `lspService.ts` in hub-client (mirrors wasmRenderer pattern)
-- [ ] Register Monaco `DocumentSymbolProvider` using WASM symbols
-- [ ] Register Monaco `HoverProvider` using WASM hover
-- [ ] Verify diagnostics work through new LSP path (in addition to render diagnostics)
-- [ ] Write hub-client integration tests
+**Subplan:** `claude-notes/plans/2026-01-20-quarto-lsp-hub-client.md`
+
+**Scope refined (2026-01-20):** Creates a new "intelligence subsystem" for hub-client that behaves like a local LSP. Features:
+- Document outline in sidebar accordion with navigate-on-click
+- Monaco DocumentSymbolProvider (Cmd+Shift+O)
+- Monaco FoldingRangeProvider (code folding for frontmatter, code cells, sections)
+
+Work items moved to subplan. Summary:
+- Phase 6a: WASM exports (`lsp_get_symbols`, `lsp_get_diagnostics`, `lsp_get_folding_ranges`)
+- Phase 6b: TypeScript service layer (`intelligenceService.ts`)
+- Phase 6c: React hook (`useIntelligence`)
+- Phase 6d: Outline panel UI
+- Phase 6e: Editor integration
+- Phase 6f: Monaco providers (DocumentSymbolProvider, FoldingRangeProvider)
+- Phase 6g: Polish
 
 ### Phase 7: Polish & Documentation
 

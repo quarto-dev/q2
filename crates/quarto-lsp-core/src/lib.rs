@@ -22,25 +22,35 @@
 //! # Usage
 //!
 //! ```rust,ignore
-//! use quarto_lsp_core::{Document, get_diagnostics, get_symbols};
+//! use quarto_lsp_core::{Document, analyze_document};
 //!
 //! // Create a document from content
 //! let doc = Document::new("example.qmd", content);
 //!
-//! // Get diagnostics
-//! let diagnostics = get_diagnostics(&doc);
+//! // Analyze the document (most efficient - single parse)
+//! let analysis = analyze_document(&doc);
+//! println!("Symbols: {}", analysis.symbols.len());
+//! println!("Folding ranges: {}", analysis.folding_ranges.len());
+//! println!("Diagnostics: {}", analysis.diagnostics.len());
 //!
-//! // Get document symbols (outline)
+//! // Or use convenience functions for individual data:
 //! let symbols = get_symbols(&doc);
+//! let diagnostics = get_diagnostics(&doc);
+//! let folding_ranges = get_folding_ranges(&doc);
 //! ```
 
+pub mod analysis;
 pub mod diagnostics;
 pub mod document;
 pub mod symbols;
 pub mod types;
 
-// Re-export main types for convenience
+// Re-export main types and functions for convenience
+pub use analysis::analyze_document;
 pub use diagnostics::get_diagnostics;
 pub use document::Document;
-pub use symbols::get_symbols;
-pub use types::{Diagnostic, DiagnosticSeverity, Position, Range, Symbol, SymbolKind};
+pub use symbols::{get_folding_ranges, get_symbols};
+pub use types::{
+    Diagnostic, DiagnosticSeverity, DocumentAnalysis, DocumentAnalysisJson, FoldingRange,
+    FoldingRangeKind, Position, Range, Symbol, SymbolKind,
+};

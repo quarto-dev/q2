@@ -4,7 +4,9 @@
 //! from QMD documents by parsing them with `pampa`.
 
 use crate::document::Document;
-use crate::types::{Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity, Position, Range};
+use crate::types::{
+    DetailKind, Diagnostic, DiagnosticDetail, DiagnosticSeverity, MessageContent, Position, Range,
+};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::SourceContext;
 
@@ -73,51 +75,17 @@ pub fn get_diagnostics(doc: &Document) -> DiagnosticResult {
 fn convert_diagnostic(msg: &DiagnosticMessage, ctx: &SourceContext) -> Option<Diagnostic> {
     // Get the range from the diagnostic location
     let range = if let Some(loc) = &msg.location {
-        // Map start position
-        let start_mapped = loc.map_offset(0, ctx);
-        // Map end position (use length of span, fallback to start if it fails)
-        let end_mapped = loc
-            .map_offset(loc.length(), ctx)
-            .or_else(|| {
-                if loc.length() > 0 {
-                    loc.map_offset(loc.length().saturating_sub(1), ctx)
-                } else {
-                    None
-                }
-            })
-            .or_else(|| start_mapped.clone());
-
-        match (start_mapped, end_mapped) {
-            (Some(start), Some(end)) => Range::new(
-                Position::new(start.location.row as u32, start.location.column as u32),
-                Position::new(end.location.row as u32, end.location.column as u32),
-            ),
-            (Some(start), None) => {
-                let pos = Position::new(start.location.row as u32, start.location.column as u32);
-                Range::point(pos)
-            }
-            _ => {
-                // No location available, use start of document
-                Range::default()
-            }
-        }
+        source_info_to_range(loc, ctx)
     } else {
         // No location, use start of document
         Range::default()
     };
 
-    // Build the message, including problem statement if available
-    let message = if let Some(problem) = &msg.problem {
-        format!("{}: {}", msg.title, problem.as_str())
-    } else {
-        msg.title.clone()
-    };
-
-    // Create the diagnostic
+    // Create the diagnostic with title
     let mut diagnostic = Diagnostic::new(
         range,
         DiagnosticSeverity::from_diagnostic_kind(msg.kind),
-        message,
+        msg.title.clone(),
     );
 
     // Set the error code if available
@@ -125,28 +93,72 @@ fn convert_diagnostic(msg: &DiagnosticMessage, ctx: &SourceContext) -> Option<Di
         diagnostic = diagnostic.with_code(code.clone());
     }
 
-    // Add related information from details
-    for detail in &msg.details {
-        if let Some(loc) = &detail.location {
-            let start_mapped = loc.map_offset(0, ctx);
-            let end_mapped = loc.map_offset(loc.length(), ctx).or(start_mapped.clone());
+    // Set the problem statement if available
+    if let Some(problem) = &msg.problem {
+        diagnostic = diagnostic.with_problem(MessageContent::from(problem));
+    }
 
-            if let (Some(start), Some(end)) = (start_mapped, end_mapped) {
-                let detail_range = Range::new(
-                    Position::new(start.location.row as u32, start.location.column as u32),
-                    Position::new(end.location.row as u32, end.location.column as u32),
-                );
-                diagnostic
-                    .related_information
-                    .push(DiagnosticRelatedInformation {
-                        range: detail_range,
-                        message: detail.content.as_str().to_string(),
-                    });
-            }
-        }
+    // Convert details
+    for detail in &msg.details {
+        let detail_range = detail
+            .location
+            .as_ref()
+            .map(|loc| source_info_to_range(loc, ctx));
+
+        let diag_detail = if let Some(r) = detail_range {
+            DiagnosticDetail::with_range(
+                DetailKind::from(detail.kind),
+                MessageContent::from(&detail.content),
+                r,
+            )
+        } else {
+            DiagnosticDetail::new(
+                DetailKind::from(detail.kind),
+                MessageContent::from(&detail.content),
+            )
+        };
+
+        diagnostic = diagnostic.with_detail(diag_detail);
+    }
+
+    // Convert hints
+    for hint in &msg.hints {
+        diagnostic = diagnostic.with_hint(MessageContent::from(hint));
     }
 
     Some(diagnostic)
+}
+
+/// Convert a SourceInfo to a Range using the SourceContext.
+fn source_info_to_range(loc: &quarto_source_map::SourceInfo, ctx: &SourceContext) -> Range {
+    // Map start position
+    let start_mapped = loc.map_offset(0, ctx);
+    // Map end position (use length of span, fallback to start if it fails)
+    let end_mapped = loc
+        .map_offset(loc.length(), ctx)
+        .or_else(|| {
+            if loc.length() > 0 {
+                loc.map_offset(loc.length().saturating_sub(1), ctx)
+            } else {
+                None
+            }
+        })
+        .or_else(|| start_mapped.clone());
+
+    match (start_mapped, end_mapped) {
+        (Some(start), Some(end)) => Range::new(
+            Position::new(start.location.row as u32, start.location.column as u32),
+            Position::new(end.location.row as u32, end.location.column as u32),
+        ),
+        (Some(start), None) => {
+            let pos = Position::new(start.location.row as u32, start.location.column as u32);
+            Range::point(pos)
+        }
+        _ => {
+            // No location available, use start of document
+            Range::default()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -234,14 +246,17 @@ missing_close: {
             "Invalid YAML should produce at least one error diagnostic"
         );
 
-        // The error message should mention YAML parsing
+        // The error message should mention YAML parsing (check title or combined message)
         let has_yaml_error = errors
             .iter()
-            .any(|d| d.message.to_lowercase().contains("yaml"));
+            .any(|d| d.combined_message().to_lowercase().contains("yaml"));
         assert!(
             has_yaml_error,
             "Error should mention YAML in message, got: {:?}",
-            errors.iter().map(|d| &d.message).collect::<Vec<_>>()
+            errors
+                .iter()
+                .map(|d| d.combined_message())
+                .collect::<Vec<_>>()
         );
     }
 }
