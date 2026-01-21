@@ -77,7 +77,7 @@ function SymbolTree({
                 <span className="outline-detail">{symbol.detail}</span>
               )}
             </button>
-            {symbol.children.length > 0 && (
+            {symbol.children && symbol.children.length > 0 && (
               <SymbolTree symbols={symbol.children} onSymbolClick={onSymbolClick} />
             )}
           </li>
@@ -99,7 +99,9 @@ export default function OutlinePanel({
   loading = false,
   error = null,
 }: OutlinePanelProps) {
-  if (loading) {
+  // Show loading only when we have no symbols yet.
+  // If we already have symbols, keep showing them during refresh to avoid flash.
+  if (loading && symbols.length === 0) {
     return (
       <div className="outline-panel">
         <div className="outline-loading">Loading outline</div>

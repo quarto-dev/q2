@@ -110,7 +110,7 @@ function toMonacoDocumentSymbol(
     kind: toMonacoSymbolKind(monaco, symbol.kind),
     range: toMonacoRange(symbol.range),
     selectionRange: toMonacoRange(symbol.selectionRange),
-    children: symbol.children.map((child) =>
+    children: (symbol.children ?? []).map((child) =>
       toMonacoDocumentSymbol(monaco, child)
     ),
     tags: [],
