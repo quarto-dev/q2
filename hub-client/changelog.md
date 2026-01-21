@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-20
+
+- [`2e73417`](https://github.com/quarto-dev/kyoto/commits/2e73417): Add LSP infrastructure and document outline panel
+
 ### 2026-01-16
 
 - [`45da7f5`](https://github.com/quarto-dev/kyoto/commits/45da7f5): Fix cursor jump bug during rapid typing by switching Monaco to uncontrolled mode
