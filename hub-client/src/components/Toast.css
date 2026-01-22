@@ -1,0 +1,34 @@
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #3a3a3a;
+  color: rgba(255, 255, 255, 0.87);
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: system-ui, -apple-system, sans-serif;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 10000;
+  animation: toast-fade-in 0.2s ease-out;
+}
+
+@media (prefers-color-scheme: light) {
+  .toast {
+    background: #213547;
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+@keyframes toast-fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
