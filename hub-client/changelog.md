@@ -13,8 +13,14 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-22
+
+- [`efb6ac6e`](https://github.com/quarto-dev/kyoto/commits/efb6ac6e): Divert ctrl/cmd+s to pop up a toast instead of triggering browser save dialog
+- [`ee0c6ce0`](https://github.com/quarto-dev/kyoto/commits/ee0c6ce0): Fix paste handling to prevent Monaco snippet expansion artifacts
+
 ### 2026-01-20
 
+- [`2977a1db`](https://github.com/quarto-dev/kyoto/commits/2977a1db): Fix OutlinePanel crashes and flash on refresh
 - [`2e73417`](https://github.com/quarto-dev/kyoto/commits/2e73417): Add LSP infrastructure and document outline panel
 
 ### 2026-01-16
