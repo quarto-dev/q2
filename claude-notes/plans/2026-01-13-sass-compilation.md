@@ -4,6 +4,70 @@
 **Created**: 2026-01-13
 **Status**: In Progress (Phase 3 implementation complete, needs browser testing)
 
+---
+
+## How to Resume This Work
+
+### Quick Start for New Session
+
+1. **Branch**: `feature/sass`
+2. **Current state**: Phases 1, 2a, 2b, and Phase 3 (implementation) are complete
+3. **Next task**: Phase 4 (VFS Resource Embedding) OR Phase 3 browser testing
+
+### Commits Made (3 total on this branch)
+
+```
+77561195 Add SASS WASM runtime (Phase 3)
+04dd0755 Add SASS parity testing infrastructure (Phase 2b)
+097baa0f Add SASS compilation infrastructure (Phase 1 & 2a)
+```
+
+### Key Files to Review
+
+**Core SASS types and parsing:**
+- `crates/quarto-sass/src/types.rs` - SassLayer, SassBundleLayers, SassBundle
+- `crates/quarto-sass/src/layer.rs` - Layer parsing with boundary markers
+
+**Native compilation (grass):**
+- `crates/quarto-system-runtime/src/sass_native.rs` - RuntimeFs adapter, compile_scss()
+- `crates/quarto-system-runtime/src/native.rs` - NativeRuntime SASS implementation
+
+**WASM compilation (dart-sass):**
+- `hub-client/src/wasm-js-bridge/sass.js` - JS bridge with lazy loading
+- `crates/quarto-system-runtime/src/wasm.rs` - WasmRuntime SASS implementation
+
+**Testing:**
+- `crates/quarto-sass/tests/parity_test.rs` - Parity tests (grass vs dart-sass)
+- `crates/quarto-sass/test-fixtures/dart-sass/` - Reference fixtures
+- `scripts/generate-sass-fixtures.mjs` - Fixture generation script
+
+### What's Working
+
+1. **Native (grass)**: Full SASS compilation for Bootstrap 5.3.1 + 18 Bootswatch themes
+2. **Parity**: grass output is within 0.5-1.5% of dart-sass, 0 missing selectors
+3. **WASM**: Implementation complete, needs browser testing
+
+### What's Next
+
+**Phase 4: VFS Resource Embedding** (Recommended next)
+- Embed Bootstrap 5.3.1 SCSS files into the WASM binary
+- Create `EmbeddedResources` type with include_dir!-like mechanism
+- Enable offline SASS compilation in hub-client
+
+**OR Phase 3 Browser Testing**
+- Test WASM compilation in hub-client
+- Verify lazy loading doesn't block startup
+- Compare WASM output to native output
+
+### Known Issues
+
+7 Bootswatch themes fail to compile with our simple assembly order:
+- cyborg, slate, superhero, lumen, simplex, sketchy, vapor
+- Requires TS Quarto's full layer assembly logic (Phase 6)
+- See `crates/quarto-sass/test-fixtures/KNOWN_DIFFERENCES.md`
+
+---
+
 **Revision History**:
 - 2026-01-13: Initial plan created
 - 2026-01-13: Added "Web API Strategy" section after discovering deno_web cannot be used
