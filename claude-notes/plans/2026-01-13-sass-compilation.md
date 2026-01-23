@@ -11,12 +11,13 @@
 ### Quick Start for New Session
 
 1. **Branch**: `feature/sass`
-2. **Current state**: Phases 1, 2a, 2b, 3 (impl), and Phase 4 (native) are complete
-3. **Next task**: Phase 4 WASM (VFS pre-population) OR Phase 3 browser testing
+2. **Current state**: Phases 1-4 complete, ready for Phase 5 (Hub-Client Caching)
+3. **Next task**: Phase 5 (Hub-Client Caching) then browser testing
 
-### Commits Made (4 total on this branch)
+### Commits Made (5 total on this branch)
 
 ```
+922ec9a3 Add embedded Bootstrap SCSS resources (Phase 4)
 81a1a2f7 Update SASS plan with session summary and resume instructions
 77561195 Add SASS WASM runtime (Phase 3)
 04dd0755 Add SASS parity testing infrastructure (Phase 2b)
@@ -51,18 +52,21 @@
 1. **Native (grass)**: Full SASS compilation for Bootstrap 5.3.1 + 18 Bootswatch themes
 2. **Parity**: grass output is within 0.5-1.5% of dart-sass, 0 missing selectors
 3. **WASM**: Implementation complete, needs browser testing
+4. **Embedded Resources**: Bootstrap SCSS embedded in both native and WASM binaries
+5. **VFS Pre-population**: WASM VFS automatically populated with Bootstrap SCSS on startup
 
 ### What's Next
 
-**Phase 4: VFS Resource Embedding** (Recommended next)
-- Embed Bootstrap 5.3.1 SCSS files into the WASM binary
-- Create `EmbeddedResources` type with include_dir!-like mechanism
-- Enable offline SASS compilation in hub-client
+**Phase 5: Hub-Client Caching** (Recommended next)
+- Add `sassCache` store to IndexedDB schema
+- Implement `SassCacheManager` with LRU eviction
+- Integrate with rendering pipeline
+- Test cache hit/miss scenarios
 
-**OR Phase 3 Browser Testing**
+**Then Browser Testing**
 - Test WASM compilation in hub-client
 - Verify lazy loading doesn't block startup
-- Compare WASM output to native output
+- Verify embedded Bootstrap SCSS is accessible in VFS
 
 ### Known Issues
 
