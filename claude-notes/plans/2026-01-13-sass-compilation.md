@@ -2,7 +2,7 @@
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13
-**Status**: In Progress (Phase 5 complete, browser testing pending)
+**Status**: In Progress (Phases 1-5 complete, browser testing + Phase 6 remaining)
 
 ---
 
@@ -10,20 +10,55 @@
 
 ### Quick Start for New Session
 
-1. **Branch**: `feature/sass`
-2. **Current state**: Phases 1-5 complete, ready for browser testing
+1. **Branch**: `feature/sass` (7 commits ahead of main, not pushed)
+2. **Current state**: Phases 1-5 complete with full unit test coverage
 3. **Next task**: Browser testing, then Phase 6 (Bootstrap Integration)
 
 ### Commits Made (on this branch)
 
 ```
-<pending>   Add hub-client SASS caching (Phase 5)
+6765199e Add hub-client SASS caching with LRU eviction (Phase 5)
 2d888781 Update SASS plan for Phase 5 session resume
 922ec9a3 Add embedded Bootstrap SCSS resources (Phase 4)
 81a1a2f7 Update SASS plan with session summary and resume instructions
 77561195 Add SASS WASM runtime (Phase 3)
 04dd0755 Add SASS parity testing infrastructure (Phase 2b)
 097baa0f Add SASS compilation infrastructure (Phase 1 & 2a)
+```
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Hub-Client (Browser)                      │
+├─────────────────────────────────────────────────────────────────┤
+│  wasmRenderer.ts                                                 │
+│  ├─ compileScss(scss, options) ──► checks cache first           │
+│  └─ compileScssWithBootstrap(scss) ──► includes Bootstrap paths │
+│                                                                  │
+│  sassCache.ts (SassCacheManager)                                │
+│  ├─ SassCacheStorage interface (testable abstraction)           │
+│  ├─ IndexedDBCacheStorage (production - persistent)             │
+│  └─ InMemoryCacheStorage (testing - 22 unit tests)              │
+├─────────────────────────────────────────────────────────────────┤
+│  WASM Module (wasm-quarto-hub-client)                           │
+│  ├─ compile_scss(scss, minified, load_paths_json)               │
+│  ├─ compile_scss_with_bootstrap(scss, minified)                 │
+│  └─ sass_available() / sass_compiler_name()                     │
+├─────────────────────────────────────────────────────────────────┤
+│  JS Bridge (sass.js)                                            │
+│  └─ Lazy-loads dart-sass, implements VFS importer               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                      Native Runtime (CLI)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  NativeRuntime::compile_sass()                                   │
+│  └─ Uses grass crate (pure Rust SASS compiler)                  │
+│                                                                  │
+│  Embedded Resources (BOOTSTRAP_RESOURCES)                        │
+│  └─ Bootstrap 5.3.1 SCSS (93 files, ~592KB) via include_dir!    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Files to Review
@@ -34,7 +69,7 @@
 
 **Embedded Resources:**
 - `crates/quarto-sass/src/resources.rs` - EmbeddedResources type, BOOTSTRAP_RESOURCES
-- `crates/quarto-system-runtime/src/sass_native.rs` - EmbeddedResourceProvider trait, compile_scss_with_embedded()
+- `crates/quarto-system-runtime/src/sass_native.rs` - EmbeddedResourceProvider trait
 
 **Native compilation (grass):**
 - `crates/quarto-system-runtime/src/sass_native.rs` - RuntimeFs adapter, compile_scss()
@@ -45,39 +80,51 @@
 - `crates/quarto-system-runtime/src/wasm.rs` - WasmRuntime SASS implementation
 - `crates/wasm-quarto-hub-client/src/lib.rs` - WASM exports (compile_scss, sass_available)
 
-**Hub-Client Caching (NEW in Phase 5):**
-- `hub-client/src/services/sassCache.ts` - SassCacheManager with LRU eviction
+**Hub-Client Caching:**
+- `hub-client/src/services/sassCache.ts` - SassCacheManager with storage abstraction
+- `hub-client/src/services/sassCache.test.ts` - 22 unit tests for caching logic
 - `hub-client/src/services/storage/types.ts` - SassCacheEntry type
 - `hub-client/src/services/storage/migrations.ts` - Migration v3 for sassCache store
 - `hub-client/src/services/wasmRenderer.ts` - compileScss, compileScssWithBootstrap
 
 **Testing:**
 - `crates/quarto-sass/tests/parity_test.rs` - Parity tests (grass vs dart-sass)
-- `crates/quarto-sass/test-fixtures/dart-sass/` - Reference fixtures
-- `scripts/generate-sass-fixtures.mjs` - Fixture generation script
+- `hub-client/src/services/sassCache.test.ts` - Cache unit tests (22 tests)
 
 ### What's Working
 
-1. **Native (grass)**: Full SASS compilation for Bootstrap 5.3.1 + 18 Bootswatch themes
-2. **Parity**: grass output is within 0.5-1.5% of dart-sass, 0 missing selectors
-3. **WASM**: Implementation complete, needs browser testing
-4. **Embedded Resources**: Bootstrap SCSS embedded in both native and WASM binaries
-5. **VFS Pre-population**: WASM VFS automatically populated with Bootstrap SCSS on startup
-6. **Hub-Client Caching**: IndexedDB cache with LRU eviction (50MB limit, 1000 entries)
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Native SASS (grass) | ✅ Complete | Compiles Bootstrap 5.3.1 + 18 Bootswatch themes |
+| Parity Testing | ✅ Complete | grass within 0.5-1.5% of dart-sass output |
+| WASM Runtime | ✅ Code complete | Needs browser testing |
+| Embedded Resources | ✅ Complete | Bootstrap SCSS in both native/WASM binaries |
+| VFS Pre-population | ✅ Code complete | Needs browser testing |
+| Hub-Client Caching | ✅ Complete | 22 unit tests pass, LRU eviction works |
 
 ### What's Next
 
-**Browser Testing** (Recommended next)
-- Test WASM compilation in hub-client
-- Verify lazy loading doesn't block startup
-- Verify embedded Bootstrap SCSS is accessible in VFS
-- Test cache hit/miss scenarios
-- Verify LRU eviction under size pressure
+**Browser Testing** (Recommended next step)
+```bash
+cd hub-client && npm run dev
+# Then in browser console:
+import { compileScss, sassAvailable } from './services/wasmRenderer';
+console.log(await sassAvailable());  // Should be true
+console.log(await compileScss('$color: blue; .test { color: $color; }'));
+```
+
+Test scenarios:
+- [ ] Verify WASM SASS compilation works
+- [ ] Verify lazy loading doesn't block startup
+- [ ] Verify Bootstrap SCSS accessible in VFS
+- [ ] Verify IndexedDB cache persists across page loads
+- [ ] Test cache statistics in DevTools
 
 **Phase 6: Bootstrap Integration**
 - Embed Bootswatch themes (24 themes)
-- Implement theme resolution
-- Port layer assembly logic from TS Quarto
+- Implement `BuiltInTheme` enum and `resolve_theme()` function
+- Port `layerQuartoScss` assembly logic from TS Quarto
+- Test all themes compile correctly
 
 ### Known Issues
 
