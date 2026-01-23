@@ -2,10 +2,11 @@
  * WASM Renderer Service
  *
  * Provides typed access to the wasm-quarto-hub-client module for
- * VFS operations and QMD rendering.
+ * VFS operations, QMD rendering, and SASS compilation.
  */
 
 import type { Diagnostic, RenderResponse } from '../types/diagnostic';
+import { getSassCache, computeHash } from './sassCache';
 
 // Response types from WASM module
 interface VfsResponse {
@@ -18,8 +19,36 @@ interface VfsResponse {
 // Re-export Diagnostic type for convenience
 export type { Diagnostic } from '../types/diagnostic';
 
+// Extended WASM module type with SASS compilation functions
+interface WasmModuleExtended {
+  // Existing functions
+  default: () => Promise<void>;
+  vfs_add_file: (path: string, content: string) => string;
+  vfs_add_binary_file: (path: string, content: Uint8Array) => string;
+  vfs_remove_file: (path: string) => string;
+  vfs_list_files: () => string;
+  vfs_clear: () => string;
+  vfs_read_file: (path: string) => string;
+  vfs_read_binary_file: (path: string) => string;
+  render_qmd: (path: string) => Promise<string>;
+  render_qmd_content: (content: string, templateBundle: string) => Promise<string>;
+  render_qmd_content_with_options: (content: string, templateBundle: string, options: string) => Promise<string>;
+  get_builtin_template: (name: string) => string;
+  get_project_choices: () => string;
+  create_project: (choiceId: string, title: string) => Promise<string>;
+  lsp_analyze_document: (path: string) => string;
+  lsp_get_symbols: (path: string) => string;
+  lsp_get_folding_ranges: (path: string) => string;
+  lsp_get_diagnostics: (path: string) => string;
+  // SASS compilation functions (new)
+  sass_available: () => boolean;
+  sass_compiler_name: () => string | undefined;
+  compile_scss: (scss: string, minified: boolean, loadPathsJson: string) => Promise<string>;
+  compile_scss_with_bootstrap: (scss: string, minified: boolean) => Promise<string>;
+}
+
 // WASM module state
-let wasmModule: typeof import('wasm-quarto-hub-client') | null = null;
+let wasmModule: WasmModuleExtended | null = null;
 let initPromise: Promise<void> | null = null;
 let htmlTemplateBundle: string | null = null;
 
@@ -39,7 +68,8 @@ export async function initWasm(): Promise<void> {
         // Initialize the module (loads the .wasm file)
         await wasm.default();
 
-        wasmModule = wasm;
+        // Cast to extended type (includes SASS compilation functions)
+        wasmModule = wasm as unknown as WasmModuleExtended;
 
         // Load the HTML template bundle
         htmlTemplateBundle = wasm.get_builtin_template('html');
@@ -335,4 +365,161 @@ export async function renderToHtml(
       error: err instanceof Error ? err.message : JSON.stringify(err),
     };
   }
+}
+
+// ============================================================================
+// SASS Compilation Operations
+// ============================================================================
+
+/**
+ * Response from SASS compilation.
+ */
+interface SassCompileResponse {
+  success: boolean;
+  css?: string;
+  error?: string;
+}
+
+/**
+ * Options for SASS compilation.
+ */
+export interface SassCompileOptions {
+  /** Whether to produce minified output */
+  minified?: boolean;
+  /** Additional load paths for @use/@import resolution */
+  loadPaths?: string[];
+  /** Whether to skip caching (for debugging) */
+  skipCache?: boolean;
+}
+
+/**
+ * Check if SASS compilation is available.
+ */
+export async function sassAvailable(): Promise<boolean> {
+  await initWasm();
+  const wasm = getWasm();
+  return wasm.sass_available();
+}
+
+/**
+ * Get the name of the SASS compiler being used.
+ */
+export async function sassCompilerName(): Promise<string | null> {
+  await initWasm();
+  const wasm = getWasm();
+  return wasm.sass_compiler_name() ?? null;
+}
+
+/**
+ * Compile SCSS to CSS with caching.
+ *
+ * Uses IndexedDB cache to avoid recompilation of unchanged SCSS.
+ * The cache key is based on the SCSS content and compilation options.
+ *
+ * @param scss - The SCSS source code to compile
+ * @param options - Compilation options (minified, loadPaths, etc.)
+ * @returns The compiled CSS
+ * @throws Error if compilation fails
+ *
+ * @example
+ * ```typescript
+ * const css = await compileScss('$primary: blue; .btn { color: $primary; }');
+ * console.log(css);
+ * // .btn { color: blue; }
+ * ```
+ */
+export async function compileScss(
+  scss: string,
+  options: SassCompileOptions = {}
+): Promise<string> {
+  await initWasm();
+  const wasm = getWasm();
+
+  const minified = options.minified ?? false;
+  const loadPaths = options.loadPaths ?? [];
+  const skipCache = options.skipCache ?? false;
+
+  // Compute cache key
+  const cache = getSassCache();
+  const cacheKey = await cache.computeKey(scss, minified);
+
+  // Check cache first (unless explicitly skipped)
+  if (!skipCache) {
+    const cached = await cache.get(cacheKey);
+    if (cached !== null) {
+      console.log('[compileScss] Cache hit');
+      return cached;
+    }
+    console.log('[compileScss] Cache miss');
+  }
+
+  // Compile via WASM
+  const loadPathsJson = JSON.stringify(loadPaths);
+  const result: SassCompileResponse = JSON.parse(
+    await wasm.compile_scss(scss, minified, loadPathsJson)
+  );
+
+  if (!result.success) {
+    throw new Error(result.error || 'SASS compilation failed');
+  }
+
+  const css = result.css || '';
+
+  // Cache the result
+  if (!skipCache) {
+    const sourceHash = await computeHash(scss);
+    await cache.set(cacheKey, css, sourceHash, minified);
+  }
+
+  return css;
+}
+
+/**
+ * Compile SCSS with Bootstrap included in load paths.
+ *
+ * Convenience function that automatically includes the embedded Bootstrap SCSS
+ * files in the load paths. Use this when compiling SCSS that depends on Bootstrap.
+ *
+ * @param scss - The SCSS source code to compile
+ * @param options - Additional compilation options
+ * @returns The compiled CSS
+ *
+ * @example
+ * ```typescript
+ * // Compile SCSS that uses Bootstrap variables
+ * const css = await compileScssWithBootstrap(`
+ *   @import "bootstrap";
+ *   .custom-btn { color: $primary; }
+ * `);
+ * ```
+ */
+export async function compileScssWithBootstrap(
+  scss: string,
+  options: Omit<SassCompileOptions, 'loadPaths'> = {}
+): Promise<string> {
+  // Include embedded Bootstrap SCSS in load paths
+  const bootstrapLoadPath = '/__quarto_resources__/bootstrap/scss';
+  return compileScss(scss, {
+    ...options,
+    loadPaths: [bootstrapLoadPath],
+  });
+}
+
+/**
+ * Clear the SASS compilation cache.
+ *
+ * Use this to force recompilation of all SCSS files.
+ */
+export async function clearSassCache(): Promise<void> {
+  const cache = getSassCache();
+  await cache.clear();
+  console.log('[clearSassCache] Cache cleared');
+}
+
+/**
+ * Get statistics about the SASS cache.
+ */
+export async function getSassCacheStats() {
+  const cache = getSassCache();
+  return cache.getStats();
 }

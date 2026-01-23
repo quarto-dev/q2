@@ -13,6 +13,7 @@ export const STORES = {
   META: '_meta',
   PROJECTS: 'projects',
   USER_SETTINGS: 'userSettings',
+  SASS_CACHE: 'sassCache',
 } as const;
 
 /**
@@ -111,6 +112,29 @@ export interface ProjectEntryV2 {
   description: string;
   createdAt: string;
   lastAccessed: string;
+}
+
+/**
+ * SASS compilation cache entry.
+ *
+ * Stores compiled CSS with metadata for cache management.
+ * Key is SHA-256 hash of (scss_content + options_hash).
+ */
+export interface SassCacheEntry {
+  /** Cache key: SHA-256 hash of SCSS content and compilation options */
+  key: string;
+  /** Compiled CSS output */
+  css: string;
+  /** Unix timestamp (ms) when entry was created */
+  created: number;
+  /** Unix timestamp (ms) when entry was last used (for LRU eviction) */
+  lastUsed: number;
+  /** Size of compiled CSS in bytes */
+  size: number;
+  /** SHA-256 hash of the source SCSS (for debugging) */
+  sourceHash: string;
+  /** Whether the output was minified */
+  minified: boolean;
 }
 
 /**

@@ -2,7 +2,7 @@
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13
-**Status**: In Progress (Phase 4 complete, browser testing pending)
+**Status**: In Progress (Phase 5 complete, browser testing pending)
 
 ---
 
@@ -11,12 +11,14 @@
 ### Quick Start for New Session
 
 1. **Branch**: `feature/sass`
-2. **Current state**: Phases 1-4 complete, ready for Phase 5 (Hub-Client Caching)
-3. **Next task**: Phase 5 (Hub-Client Caching) then browser testing
+2. **Current state**: Phases 1-5 complete, ready for browser testing
+3. **Next task**: Browser testing, then Phase 6 (Bootstrap Integration)
 
-### Commits Made (5 total on this branch)
+### Commits Made (on this branch)
 
 ```
+<pending>   Add hub-client SASS caching (Phase 5)
+2d888781 Update SASS plan for Phase 5 session resume
 922ec9a3 Add embedded Bootstrap SCSS resources (Phase 4)
 81a1a2f7 Update SASS plan with session summary and resume instructions
 77561195 Add SASS WASM runtime (Phase 3)
@@ -30,7 +32,7 @@
 - `crates/quarto-sass/src/types.rs` - SassLayer, SassBundleLayers, SassBundle
 - `crates/quarto-sass/src/layer.rs` - Layer parsing with boundary markers
 
-**Embedded Resources (NEW in Phase 4):**
+**Embedded Resources:**
 - `crates/quarto-sass/src/resources.rs` - EmbeddedResources type, BOOTSTRAP_RESOURCES
 - `crates/quarto-system-runtime/src/sass_native.rs` - EmbeddedResourceProvider trait, compile_scss_with_embedded()
 
@@ -41,6 +43,13 @@
 **WASM compilation (dart-sass):**
 - `hub-client/src/wasm-js-bridge/sass.js` - JS bridge with lazy loading
 - `crates/quarto-system-runtime/src/wasm.rs` - WasmRuntime SASS implementation
+- `crates/wasm-quarto-hub-client/src/lib.rs` - WASM exports (compile_scss, sass_available)
+
+**Hub-Client Caching (NEW in Phase 5):**
+- `hub-client/src/services/sassCache.ts` - SassCacheManager with LRU eviction
+- `hub-client/src/services/storage/types.ts` - SassCacheEntry type
+- `hub-client/src/services/storage/migrations.ts` - Migration v3 for sassCache store
+- `hub-client/src/services/wasmRenderer.ts` - compileScss, compileScssWithBootstrap
 
 **Testing:**
 - `crates/quarto-sass/tests/parity_test.rs` - Parity tests (grass vs dart-sass)
@@ -54,19 +63,21 @@
 3. **WASM**: Implementation complete, needs browser testing
 4. **Embedded Resources**: Bootstrap SCSS embedded in both native and WASM binaries
 5. **VFS Pre-population**: WASM VFS automatically populated with Bootstrap SCSS on startup
+6. **Hub-Client Caching**: IndexedDB cache with LRU eviction (50MB limit, 1000 entries)
 
 ### What's Next
 
-**Phase 5: Hub-Client Caching** (Recommended next)
-- Add `sassCache` store to IndexedDB schema
-- Implement `SassCacheManager` with LRU eviction
-- Integrate with rendering pipeline
-- Test cache hit/miss scenarios
-
-**Then Browser Testing**
+**Browser Testing** (Recommended next)
 - Test WASM compilation in hub-client
 - Verify lazy loading doesn't block startup
 - Verify embedded Bootstrap SCSS is accessible in VFS
+- Test cache hit/miss scenarios
+- Verify LRU eviction under size pressure
+
+**Phase 6: Bootstrap Integration**
+- Embed Bootswatch themes (24 themes)
+- Implement theme resolution
+- Port layer assembly logic from TS Quarto
 
 ### Known Issues
 
@@ -88,6 +99,88 @@
 - 2026-01-23: **Implementation session**: Completed Phase 1 (core types) and Phase 2a
   (native runtime with grass). Bootstrap 5.3.1 compiles successfully.
 - 2026-01-23: **Phase 4 session**: Completed embedded resources for native (Bootstrap SCSS).
+- 2026-01-23: **Phase 5 session**: Completed hub-client caching with LRU eviction.
+
+## Session Summary (2026-01-23 - Session 4: Phase 5 Hub-Client Caching)
+
+### Completed Work
+
+**Phase 5: Hub-Client Caching** - IMPLEMENTATION COMPLETE (browser testing pending)
+
+1. **Added `sassCache` store to IndexedDB schema**:
+   - Added `SASS_CACHE` to `STORES` constant in `types.ts`
+   - Created `SassCacheEntry` interface with key, css, created, lastUsed, size, sourceHash, minified fields
+   - Bumped `CURRENT_DB_VERSION` and `CURRENT_SCHEMA_VERSION` to 3
+
+2. **Created migration v3** in `migrations.ts`:
+   - Structural migration creates `sassCache` object store
+   - Added `lastUsed` index for LRU eviction
+   - Added `size` index for size-based queries
+
+3. **Implemented `SassCacheManager`** in `hub-client/src/services/sassCache.ts`:
+   - LRU eviction based on lastUsed timestamp
+   - Configurable maxSizeBytes (default: 50MB) and maxEntries (default: 1000)
+   - Methods: get, set, touch, prune, clear, getStats, has, delete
+   - Cache key computation using SHA-256 hash of SCSS content + options
+   - Singleton access via `getSassCache()`
+
+4. **Added WASM exports** in `wasm-quarto-hub-client/src/lib.rs`:
+   - `sass_available()` - Check if SASS compilation is available
+   - `sass_compiler_name()` - Get compiler name ("dart-sass")
+   - `compile_scss(scss, minified, load_paths_json)` - Compile SCSS to CSS
+   - `compile_scss_with_bootstrap(scss, minified)` - Compile with Bootstrap load paths
+
+5. **Integrated with rendering pipeline** in `wasmRenderer.ts`:
+   - Added `WasmModuleExtended` interface with SASS function types
+   - `compileScss(scss, options)` - Compile with caching
+   - `compileScssWithBootstrap(scss, options)` - Compile with Bootstrap included
+   - `sassAvailable()` - Check SASS availability
+   - `sassCompilerName()` - Get compiler name
+   - `clearSassCache()` - Clear the cache
+   - `getSassCacheStats()` - Get cache statistics
+
+6. **Refactored for testability**:
+   - Extracted `SassCacheStorage` interface for storage backend abstraction
+   - `IndexedDBCacheStorage` - production implementation using IndexedDB
+   - `InMemoryCacheStorage` - testing implementation using Map
+   - Added `computeHashSync()` for non-browser environments
+
+7. **Created unit tests** (`hub-client/src/services/sassCache.test.ts`):
+   - 22 tests covering cache operations, LRU eviction, statistics
+   - Tests cache hit/miss scenarios
+   - Tests eviction under both entry count and size limits
+   - Tests touch-on-read behavior
+   - Tests cache key computation
+
+### Files Created/Modified
+
+**New files:**
+- `hub-client/src/services/sassCache.ts` - SassCacheManager with storage abstraction
+- `hub-client/src/services/sassCache.test.ts` - Unit tests (22 tests)
+
+**Modified files:**
+- `hub-client/src/services/storage/types.ts` - Added SASS_CACHE store and SassCacheEntry
+- `hub-client/src/services/storage/index.ts` - Export SassCacheEntry
+- `hub-client/src/services/storage/migrations.ts` - Added migration v3
+- `hub-client/src/services/wasmRenderer.ts` - Added SASS compilation functions with caching
+- `crates/wasm-quarto-hub-client/src/lib.rs` - Added SASS compilation WASM exports
+
+### Test Results
+
+- TypeScript type check passes
+- All 5872 Rust tests pass
+- 46 hub-client tests pass (24 existing + 22 new SASS cache tests)
+- Hub-client build succeeds
+
+### Next Steps
+
+1. **Browser testing**: Run hub-client in browser and test SASS compilation
+   - Verify cache hit/miss scenarios work correctly
+   - Test LRU eviction under size pressure
+   - Verify lazy loading doesn't block startup
+2. **Phase 6**: Bootstrap integration with theme support
+
+---
 
 ## Session Summary (2026-01-23 - Session 3: Phase 4 Native Embedding)
 
@@ -1198,13 +1291,17 @@ pub fn compile_themed_bundle(
 
 ### Phase 5: Hub-Client Caching
 
-- [ ] Add `sassCache` store to IndexedDB schema
-- [ ] Create migration for new schema version
-- [ ] Implement `SassCacheManager` with LRU eviction
-- [ ] Add cache size configuration (default: 50MB)
-- [ ] Integrate with rendering pipeline
-- [ ] Test cache hit/miss scenarios
-- [ ] Test eviction under size pressure
+- [x] Add `sassCache` store to IndexedDB schema
+- [x] Create migration for new schema version (v3)
+- [x] Implement `SassCacheManager` with LRU eviction
+- [x] Add cache size configuration (default: 50MB, 1000 entries)
+- [x] Integrate with rendering pipeline (compileScss, compileScssWithBootstrap)
+- [x] Add WASM exports for SASS compilation (sass_available, compile_scss)
+- [x] Refactor with `SassCacheStorage` interface for testability
+- [x] Implement `InMemoryCacheStorage` for unit testing
+- [x] Test cache hit/miss scenarios (22 tests in sassCache.test.ts)
+- [x] Test eviction under size pressure (unit tests pass)
+- [ ] Browser integration testing (verify IndexedDB storage works end-to-end)
 
 ### Phase 6: Bootstrap Integration
 

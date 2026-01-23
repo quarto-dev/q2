@@ -1383,3 +1383,129 @@ pub fn lsp_get_diagnostics(path: &str) -> String {
 
     LspDiagnosticsResponse::ok(analysis.diagnostics)
 }
+
+// ============================================================================
+// SASS COMPILATION API
+// ============================================================================
+//
+// These functions provide direct access to SASS compilation for use with
+// JavaScript-side caching. The hub-client can call these functions and
+// implement LRU caching in IndexedDB around the compilation results.
+
+/// Response for SASS compilation.
+#[derive(Serialize)]
+struct SassCompileResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    css: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl SassCompileResponse {
+    fn ok(css: String) -> String {
+        serde_json::to_string(&SassCompileResponse {
+            success: true,
+            css: Some(css),
+            error: None,
+        })
+        .unwrap()
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&SassCompileResponse {
+            success: false,
+            css: None,
+            error: Some(msg.to_string()),
+        })
+        .unwrap()
+    }
+}
+
+/// Check if SASS compilation is available.
+///
+/// # Returns
+/// `true` if SASS compilation is available, `false` otherwise.
+#[wasm_bindgen]
+pub fn sass_available() -> bool {
+    get_runtime().sass_available()
+}
+
+/// Get the name of the SASS compiler being used.
+///
+/// # Returns
+/// The compiler name (e.g., "dart-sass") or null if not available.
+#[wasm_bindgen]
+pub fn sass_compiler_name() -> Option<String> {
+    get_runtime().sass_compiler_name().map(|s| s.to_string())
+}
+
+/// Compile SCSS to CSS.
+///
+/// This function compiles SCSS source code to CSS using dart-sass (via the JS bridge).
+/// The result can be cached by the JavaScript caller to avoid recompilation.
+///
+/// # Arguments
+/// * `scss` - The SCSS source code to compile
+/// * `minified` - Whether to produce minified output
+/// * `load_paths_json` - JSON array of additional load paths for @use/@import resolution
+///
+/// # Returns
+/// JSON: `{ "success": true, "css": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(await compile_scss(
+///     "$primary: blue; .btn { color: $primary; }",
+///     false,
+///     '["/__quarto_resources__/bootstrap/scss"]'
+/// ));
+/// if (result.success) {
+///     console.log("Compiled CSS:", result.css);
+/// } else {
+///     console.error("Compilation failed:", result.error);
+/// }
+/// ```
+#[wasm_bindgen]
+pub async fn compile_scss(scss: &str, minified: bool, load_paths_json: &str) -> String {
+    use std::path::PathBuf;
+
+    let runtime = get_runtime();
+
+    // Check if SASS is available
+    if !runtime.sass_available() {
+        return SassCompileResponse::error("SASS compilation is not available");
+    }
+
+    // Parse load paths from JSON
+    let load_paths: Vec<PathBuf> = match serde_json::from_str::<Vec<String>>(load_paths_json) {
+        Ok(paths) => paths.into_iter().map(PathBuf::from).collect(),
+        Err(e) => {
+            return SassCompileResponse::error(&format!("Invalid load_paths JSON: {}", e));
+        }
+    };
+
+    // Compile SCSS
+    match runtime.compile_sass(scss, &load_paths, minified).await {
+        Ok(css) => SassCompileResponse::ok(css),
+        Err(e) => SassCompileResponse::error(&format!("{}", e)),
+    }
+}
+
+/// Compile SCSS with default Bootstrap load paths.
+///
+/// Convenience function that automatically includes the embedded Bootstrap SCSS
+/// in the load paths. Use this when compiling SCSS that depends on Bootstrap.
+///
+/// # Arguments
+/// * `scss` - The SCSS source code to compile
+/// * `minified` - Whether to produce minified output
+///
+/// # Returns
+/// JSON: `{ "success": true, "css": "..." }` or `{ "success": false, "error": "..." }`
+#[wasm_bindgen]
+pub async fn compile_scss_with_bootstrap(scss: &str, minified: bool) -> String {
+    // Default load path includes embedded Bootstrap SCSS
+    let load_paths = format!("[\"{}/bootstrap/scss\"]", RESOURCE_PATH_PREFIX);
+    compile_scss(scss, minified, &load_paths).await
+}

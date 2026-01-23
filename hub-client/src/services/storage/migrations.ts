@@ -29,13 +29,13 @@ import { generateColorFromId, generateAnonymousName } from './utils';
  * Current IndexedDB version.
  * Increment this when adding/removing object stores or indexes.
  */
-export const CURRENT_DB_VERSION = 2;
+export const CURRENT_DB_VERSION = 3;
 
 /**
  * Current application schema version.
  * This is the version number after all migrations have been applied.
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 /**
  * Baseline schema version for databases that existed before the migration system.
@@ -87,14 +87,23 @@ export const migrations: Migration[] = [
       }
     },
   },
-  // Future migrations go here, e.g.:
-  // {
-  //   version: 3,
-  //   description: 'Add favorite flag to projects',
-  //   transform: async (db) => {
-  //     // Add isFavorite: false to all existing projects
-  //   },
-  // },
+  // Migration 2→3: Add SASS compilation cache
+  {
+    version: 3,
+    description: 'Add SASS compilation cache for faster subsequent renders',
+    structural: (db) => {
+      // Create sassCache store for caching compiled CSS
+      // Uses LRU eviction based on lastUsed timestamp
+      if (!db.objectStoreNames.contains(STORES.SASS_CACHE)) {
+        const store = db.createObjectStore(STORES.SASS_CACHE, { keyPath: 'key' });
+        // Index for LRU eviction (oldest entries first)
+        store.createIndex('lastUsed', 'lastUsed');
+        // Index for size-based queries during eviction
+        store.createIndex('size', 'size');
+      }
+    },
+    // No transform needed - cache starts empty
+  },
 ];
 
 /**
