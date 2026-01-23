@@ -2818,6 +2818,7 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "once_cell",
+ "quarto-system-runtime",
  "regex",
  "serde",
  "serde_json",

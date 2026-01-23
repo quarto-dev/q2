@@ -29,7 +29,7 @@ mod js_native;
 
 // SASS compilation for native targets
 #[cfg(not(target_arch = "wasm32"))]
-mod sass_native;
+pub mod sass_native;
 
 // WASM runtime is only compiled for WASM targets
 #[cfg(target_arch = "wasm32")]

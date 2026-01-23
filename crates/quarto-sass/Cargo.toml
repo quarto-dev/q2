@@ -16,6 +16,7 @@ once_cell.workspace = true
 [dev-dependencies]
 insta.workspace = true
 serde_json.workspace = true
+quarto-system-runtime.workspace = true
 
 [lints]
 workspace = true

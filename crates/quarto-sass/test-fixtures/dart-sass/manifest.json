@@ -1,0 +1,105 @@
+{
+  "dartsass_version": "dart-sass\t1.97.3\t(Sass Compiler)\t[Dart]\ndart2js\t3.10.7\t(Dart Compiler)\t[Dart]",
+  "generated_at": "2026-01-23T20:37:06.455Z",
+  "bootstrap": {
+    "expanded_size": 289469,
+    "minified_size": 243432,
+    "expanded_lines": 12412,
+    "minified_lines": 5
+  },
+  "themes": {
+    "cerulean": {
+      "expanded_size": 293253,
+      "minified_size": 246917
+    },
+    "cosmo": {
+      "expanded_size": 279038,
+      "minified_size": 234085
+    },
+    "cyborg": {
+      "error": "Undefined variable.\n    ╷\n154 │ @function color-contrast($background, $color-contrast-dark: $color-contrast-dark, $color-contrast-light: $color-contrast-light, $min-contrast-ratio: $min-contrast-ratio) {\n    │                                                             ^^^^^^^^^^^^^^^^^^^^\n    ╵\n  - 154:61  color-contrast()\n  - 359:15  root stylesheet"
+    },
+    "darkly": {
+      "expanded_size": 292398,
+      "minified_size": 246096
+    },
+    "flatly": {
+      "expanded_size": 291008,
+      "minified_size": 244803
+    },
+    "journal": {
+      "expanded_size": 289477,
+      "minified_size": 243364
+    },
+    "litera": {
+      "expanded_size": 292402,
+      "minified_size": 245873
+    },
+    "lumen": {
+      "error": "$color2: null is not a color.\n    ╷\n213 │   @return mix(black, $color, $weight);\n    │           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ╵\n  - 213:11   shade-color()\n  - 2250:17  root stylesheet"
+    },
+    "lux": {
+      "expanded_size": 280530,
+      "minified_size": 235334
+    },
+    "materia": {
+      "expanded_size": 317171,
+      "minified_size": 267544
+    },
+    "minty": {
+      "expanded_size": 290941,
+      "minified_size": 244719
+    },
+    "morph": {
+      "expanded_size": 317573,
+      "minified_size": 267877
+    },
+    "pulse": {
+      "expanded_size": 280414,
+      "minified_size": 235215
+    },
+    "quartz": {
+      "expanded_size": 307495,
+      "minified_size": 258991
+    },
+    "sandstone": {
+      "expanded_size": 292015,
+      "minified_size": 245652
+    },
+    "simplex": {
+      "error": "$color2: null is not a color.\n    ╷\n213 │   @return mix(black, $color, $weight);\n    │           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ╵\n  - 213:11   shade-color()\n  - 2259:17  root stylesheet"
+    },
+    "sketchy": {
+      "error": "Undefined variable.\n     ╷\n2455 │ [type=\"checkbox\"], #{$shiny-check} input, #{$shiny-check-inline} input {\n     │                      ^^^^^^^^^^^^\n     ╵\n  - 2455:22  root stylesheet"
+    },
+    "slate": {
+      "error": "Undefined variable.\n    ╷\n154 │ @function color-contrast($background, $color-contrast-dark: $color-contrast-dark, $color-contrast-light: $color-contrast-light, $min-contrast-ratio: $min-contrast-ratio) {\n    │                                                             ^^^^^^^^^^^^^^^^^^^^\n    ╵\n  - 154:61  color-contrast()\n  - 344:15  root stylesheet"
+    },
+    "solar": {
+      "expanded_size": 290763,
+      "minified_size": 244506
+    },
+    "spacelab": {
+      "expanded_size": 295678,
+      "minified_size": 248920
+    },
+    "superhero": {
+      "error": "Undefined variable.\n    ╷\n154 │ @function color-contrast($background, $color-contrast-dark: $color-contrast-dark, $color-contrast-light: $color-contrast-light, $min-contrast-ratio: $min-contrast-ratio) {\n    │                                                             ^^^^^^^^^^^^^^^^^^^^\n    ╵\n  - 154:61  color-contrast()\n  - 346:15  root stylesheet"
+    },
+    "united": {
+      "expanded_size": 289548,
+      "minified_size": 243499
+    },
+    "vapor": {
+      "error": "$color: (0 0.125rem 0.25rem rgba(0, 0, 0, 0.075)) is not a color.\n     ╷\n2328 │   box-shadow: 0 0 2px rgba($color, .9), 0 0 4px rgba($color, .4), 0 0 1rem rgba($color, .3), 0 0 4rem rgba($color, .1);\n     │                       ^^^^^^^^^^^^^^^^\n     ╵\n  - 2328:23          box-shadow()\n  _images.scss 19:3  @import\n  - 2652:9           root stylesheet"
+    },
+    "yeti": {
+      "expanded_size": 294942,
+      "minified_size": 248093
+    },
+    "zephyr": {
+      "expanded_size": 293506,
+      "minified_size": 246761
+    }
+  }
+}
