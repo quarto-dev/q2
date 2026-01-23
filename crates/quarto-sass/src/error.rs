@@ -15,6 +15,14 @@ pub enum SassError {
     #[error("SASS compilation failed: {message}")]
     CompilationFailed { message: String },
 
+    /// Unknown theme name
+    #[error("Unknown theme: {0}")]
+    UnknownTheme(String),
+
+    /// Theme file not found in embedded resources
+    #[error("Theme file not found: {0}")]
+    ThemeNotFound(String),
+
     /// File I/O error
     #[error("Failed to read SASS file: {0}")]
     Io(#[from] std::io::Error),

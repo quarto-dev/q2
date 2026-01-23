@@ -24,6 +24,7 @@ serde_json.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 quarto-system-runtime.workspace = true
+grass.workspace = true
 
 [lints]
 workspace = true

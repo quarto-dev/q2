@@ -33,6 +33,28 @@ static BOOTSTRAP_DIR: Dir<'static> = include_dir!(
     "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/scss"
 );
 
+/// Bootstrap sass-utils directory embedded at compile time.
+///
+/// Contains utility functions like color-contrast.scss that have inline fallback
+/// variable definitions, making them work even before Bootstrap variables are loaded.
+static SASS_UTILS_DIR: Dir<'static> = include_dir!(
+    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/sass-utils"
+);
+
+/// Bootswatch themes directory embedded at compile time.
+///
+/// Contains 25 Bootswatch theme files that customize Bootstrap's appearance.
+static THEMES_DIR: Dir<'static> = include_dir!(
+    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap/themes"
+);
+
+/// Quarto Bootstrap customization files embedded at compile time.
+///
+/// Contains Quarto's Bootstrap customization layer and additional functions.
+static QUARTO_BOOTSTRAP_DIR: Dir<'static> = include_dir!(
+    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap"
+);
+
 /// Virtual path prefix for embedded resources.
 ///
 /// Files embedded via `EmbeddedResources` are accessible under this prefix.
@@ -221,12 +243,54 @@ fn collect_directories(dir: &Dir<'static>, dirs: &mut HashSet<String>) {
 pub static BOOTSTRAP_RESOURCES: EmbeddedResources =
     EmbeddedResources::new(&BOOTSTRAP_DIR, "bootstrap/scss");
 
+/// Bootstrap sass-utils resources.
+///
+/// Contains utility functions like `color-contrast.scss` that have inline
+/// fallback variable definitions. This is critical for theme compatibility -
+/// the self-contained `color-contrast()` function works even before Bootstrap
+/// variables are loaded.
+pub static SASS_UTILS_RESOURCES: EmbeddedResources =
+    EmbeddedResources::new(&SASS_UTILS_DIR, "bootstrap/sass-utils");
+
+/// Bootswatch theme resources.
+///
+/// Contains 25 Bootswatch theme files (cerulean, cosmo, cyborg, darkly, etc.)
+/// that customize Bootstrap's appearance.
+pub static THEMES_RESOURCES: EmbeddedResources =
+    EmbeddedResources::new(&THEMES_DIR, "bootstrap/themes");
+
+/// Quarto Bootstrap customization resources.
+///
+/// Contains Quarto's Bootstrap customization files:
+/// - `_bootstrap-customize.scss` - Quarto defaults for heading sizes, etc.
+/// - `_bootstrap-functions.scss` - Quarto color functions (theme-contrast, etc.)
+/// - `_bootstrap-mixins.scss` - Quarto mixins
+/// - `_bootstrap-rules.scss` - Quarto CSS rules
+/// - `_bootstrap-variables.scss` - Quarto variables
+pub static QUARTO_BOOTSTRAP_RESOURCES: EmbeddedResources =
+    EmbeddedResources::new(&QUARTO_BOOTSTRAP_DIR, "bootstrap/quarto");
+
 /// Get the default load paths for SASS compilation.
 ///
 /// Returns paths that should be added to the SASS compiler's load paths
 /// for Bootstrap compilation to work correctly.
 pub fn default_load_paths() -> Vec<std::path::PathBuf> {
-    vec![std::path::PathBuf::from(BOOTSTRAP_RESOURCES.full_prefix())]
+    vec![
+        std::path::PathBuf::from(BOOTSTRAP_RESOURCES.full_prefix()),
+        std::path::PathBuf::from(SASS_UTILS_RESOURCES.full_prefix()),
+    ]
+}
+
+/// Get all embedded resource providers.
+///
+/// Returns references to all embedded resource collections for iteration.
+pub fn all_resources() -> [&'static EmbeddedResources; 4] {
+    [
+        &BOOTSTRAP_RESOURCES,
+        &SASS_UTILS_RESOURCES,
+        &THEMES_RESOURCES,
+        &QUARTO_BOOTSTRAP_RESOURCES,
+    ]
 }
 
 #[cfg(test)]
@@ -325,11 +389,117 @@ mod tests {
     #[test]
     fn test_default_load_paths() {
         let paths = default_load_paths();
-        assert_eq!(paths.len(), 1);
+        assert_eq!(paths.len(), 2);
         assert_eq!(
             paths[0].to_string_lossy(),
             "/__quarto_resources__/bootstrap/scss"
         );
+        assert_eq!(
+            paths[1].to_string_lossy(),
+            "/__quarto_resources__/bootstrap/sass-utils"
+        );
+    }
+
+    #[test]
+    fn test_sass_utils_resources() {
+        // Check color-contrast.scss exists (critical for theme compatibility)
+        assert!(
+            SASS_UTILS_RESOURCES.is_file(Path::new("color-contrast.scss")),
+            "color-contrast.scss should exist"
+        );
+
+        // Check it contains the self-contained color-contrast function
+        let content = SASS_UTILS_RESOURCES
+            .read_str(Path::new("color-contrast.scss"))
+            .unwrap();
+        assert!(
+            content.contains("@function color-contrast"),
+            "Should contain color-contrast function"
+        );
+        // The self-contained version has inline variable definitions
+        assert!(
+            content.contains("$color-contrast-dark: $black !default"),
+            "Should have inline fallback for $color-contrast-dark"
+        );
+    }
+
+    #[test]
+    fn test_themes_resources() {
+        // Should have 25 Bootswatch themes
+        let theme_count = THEMES_RESOURCES.file_count();
+        assert!(
+            theme_count >= 25,
+            "Should have at least 25 theme files, found {}",
+            theme_count
+        );
+
+        // Check some specific themes exist
+        let themes = ["cerulean", "darkly", "slate", "cyborg", "vapor"];
+        for theme in themes {
+            let path = format!("{}.scss", theme);
+            assert!(
+                THEMES_RESOURCES.is_file(Path::new(&path)),
+                "{} theme should exist",
+                theme
+            );
+        }
+    }
+
+    #[test]
+    fn test_theme_content_has_layer_markers() {
+        // Themes should have layer boundary markers
+        let content = THEMES_RESOURCES.read_str(Path::new("slate.scss")).unwrap();
+        assert!(
+            content.contains("/*-- scss:defaults --*/"),
+            "Theme should have defaults layer marker"
+        );
+    }
+
+    #[test]
+    fn test_quarto_bootstrap_resources() {
+        // Check Quarto Bootstrap customization files exist
+        assert!(
+            QUARTO_BOOTSTRAP_RESOURCES.is_file(Path::new("_bootstrap-customize.scss")),
+            "_bootstrap-customize.scss should exist"
+        );
+        assert!(
+            QUARTO_BOOTSTRAP_RESOURCES.is_file(Path::new("_bootstrap-functions.scss")),
+            "_bootstrap-functions.scss should exist"
+        );
+        assert!(
+            QUARTO_BOOTSTRAP_RESOURCES.is_file(Path::new("_bootstrap-mixins.scss")),
+            "_bootstrap-mixins.scss should exist"
+        );
+        assert!(
+            QUARTO_BOOTSTRAP_RESOURCES.is_file(Path::new("_bootstrap-rules.scss")),
+            "_bootstrap-rules.scss should exist"
+        );
+    }
+
+    #[test]
+    fn test_quarto_customize_layer() {
+        // The customize layer should have heading size customizations
+        let content = QUARTO_BOOTSTRAP_RESOURCES
+            .read_str(Path::new("_bootstrap-customize.scss"))
+            .unwrap();
+        assert!(
+            content.contains("$h1-font-size"),
+            "Should customize heading sizes"
+        );
+        assert!(
+            content.contains("/*-- scss:defaults --*/"),
+            "Should have layer boundary marker"
+        );
+    }
+
+    #[test]
+    fn test_all_resources() {
+        let resources = all_resources();
+        assert_eq!(resources.len(), 4);
+        // Verify all have some files
+        for res in resources {
+            assert!(res.file_count() > 0, "Resource should have files");
+        }
     }
 
     #[test]

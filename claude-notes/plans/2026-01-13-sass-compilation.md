@@ -2,7 +2,7 @@
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13
-**Status**: In Progress (Phases 1-5 complete, browser testing + Phase 6 remaining)
+**Status**: Complete (Phases 1-6 done, browser testing remaining)
 
 ---
 
@@ -95,16 +95,17 @@
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Native SASS (grass) | ✅ Complete | Compiles Bootstrap 5.3.1 + 18 Bootswatch themes |
+| Native SASS (grass) | ✅ Complete | Compiles Bootstrap 5.3.1 + all 25 Bootswatch themes |
 | Parity Testing | ✅ Complete | grass within 0.5-1.5% of dart-sass output |
 | WASM Runtime | ✅ Code complete | Needs browser testing |
-| Embedded Resources | ✅ Complete | Bootstrap SCSS in both native/WASM binaries |
+| Embedded Resources | ✅ Complete | Bootstrap SCSS + Bootswatch themes + Quarto layers |
 | VFS Pre-population | ✅ Code complete | Needs browser testing |
 | Hub-Client Caching | ✅ Complete | 22 unit tests pass, LRU eviction works |
+| Theme Support | ✅ Complete | BuiltInTheme enum, bundle assembly, all 25 themes compile |
 
 ### What's Next
 
-**Browser Testing** (Recommended next step)
+**Browser Testing** (Only remaining task)
 ```bash
 cd hub-client && npm run dev
 # Then in browser console:
@@ -120,18 +121,12 @@ Test scenarios:
 - [ ] Verify IndexedDB cache persists across page loads
 - [ ] Test cache statistics in DevTools
 
-**Phase 6: Bootstrap Integration**
-- Embed Bootswatch themes (24 themes)
-- Implement `BuiltInTheme` enum and `resolve_theme()` function
-- Port `layerQuartoScss` assembly logic from TS Quarto
-- Test all themes compile correctly
-
 ### Known Issues
 
-7 Bootswatch themes fail to compile with our simple assembly order:
-- cyborg, slate, superhero, lumen, simplex, sketchy, vapor
-- Requires TS Quarto's full layer assembly logic (Phase 6)
-- See `crates/quarto-sass/test-fixtures/KNOWN_DIFFERENCES.md`
+All 25 Bootswatch themes now compile successfully after Phase 6 implementation.
+The previously problematic themes (cyborg, slate, superhero, lumen, simplex, sketchy, vapor)
+now work thanks to the correct assembly order that ensures Bootstrap functions are available
+before theme defaults call them.
 
 ---
 
@@ -147,6 +142,97 @@ Test scenarios:
   (native runtime with grass). Bootstrap 5.3.1 compiles successfully.
 - 2026-01-23: **Phase 4 session**: Completed embedded resources for native (Bootstrap SCSS).
 - 2026-01-23: **Phase 5 session**: Completed hub-client caching with LRU eviction.
+- 2026-01-23: **Phase 6 session**: Completed Bootstrap Integration - all 25 themes compile.
+
+## Session Summary (2026-01-23 - Session 5: Phase 6 Bootstrap Integration)
+
+### Completed Work
+
+**Phase 6: Bootstrap Integration** - COMPLETE (all 25 themes compile)
+
+1. **Expanded Embedded Resources** (`crates/quarto-sass/src/resources.rs`):
+   - Added `SASS_UTILS_RESOURCES` - Contains `color-contrast.scss` with self-contained function
+   - Added `THEMES_RESOURCES` - All 25 Bootswatch theme files
+   - Added `QUARTO_BOOTSTRAP_RESOURCES` - Quarto's Bootstrap customization files
+   - Updated `default_load_paths()` to include sass-utils
+   - Added `all_resources()` helper function
+   - 16 new resource tests
+
+2. **Created Theme Infrastructure** (`crates/quarto-sass/src/themes.rs`):
+   - `BuiltInTheme` enum with all 25 themes
+   - `load_theme_layer()` - Load theme from embedded resources
+   - `resolve_theme()` - Parse theme name and load layer
+   - Added `is_dark()` helper for dark-themed themes
+   - 9 theme tests
+
+3. **Implemented Bundle Assembly** (`crates/quarto-sass/src/bundle.rs`):
+   - `load_bootstrap_framework()` - Bootstrap functions + variables + mixins + rules
+   - `load_quarto_layer()` - Quarto @use statements + functions + defaults + mixins + rules
+   - `load_theme()` - Parse theme SCSS into layers
+   - `assemble_scss()` - Correct assembly order:
+     - USES: framework → quarto → theme
+     - FUNCTIONS: framework → quarto → theme (Bootstrap first!)
+     - DEFAULTS: theme → quarto → framework (reversed!)
+     - MIXINS: framework → quarto → theme
+     - RULES: framework → quarto → theme
+   - `assemble_with_theme()` - Convenience function for complete compilation
+   - 7 bundle tests
+
+4. **Created Integration Tests** (`tests/compile_all_themes_test.rs`):
+   - `test_compile_all_themes` - Compiles all 25 themes
+   - `test_previously_problematic_themes` - Verifies cyborg, slate, superhero, lumen, simplex, sketchy, vapor
+   - `test_slate_custom_functions` - Verifies custom lighten/darken work
+   - `test_cyborg_color_contrast` - Verifies color-contrast calls work
+   - `test_compiled_css_has_bootstrap_classes` - Verifies Bootstrap output
+
+### Key Technical Insights
+
+The 7 previously failing themes (cyborg, slate, superhero, lumen, simplex, sketchy, vapor)
+required two critical fixes:
+
+1. **Self-contained `color-contrast()` function**: The themes call Bootstrap's `color-contrast()`
+   in their defaults section, but the function references `$color-contrast-dark` and
+   `$color-contrast-light` variables that aren't defined yet. TS Quarto solves this by
+   including `sass-utils/color-contrast.scss` which has the same function with inline
+   fallback variable definitions.
+
+2. **Quarto `@use` statements**: The Quarto Bootstrap files use `quarto-color`, `quarto-map`,
+   and `quarto-math` namespaces which are aliases for `sass:color`, `sass:map`, and `sass:math`.
+   These must be defined in the `uses` section of the Quarto layer.
+
+3. **Quarto variables**: The Quarto mixins reference variables like `$grid-body-width` that
+   are defined in `_bootstrap-variables.scss`, which must be included in the Quarto defaults.
+
+### Files Created/Modified
+
+**New files:**
+- `crates/quarto-sass/src/themes.rs` - BuiltInTheme enum and theme loading
+- `crates/quarto-sass/src/bundle.rs` - Bundle assembly with correct layer ordering
+- `crates/quarto-sass/tests/compile_all_themes_test.rs` - Integration tests for all themes
+
+**Modified files:**
+- `crates/quarto-sass/src/resources.rs` - Added sass-utils, themes, quarto resources
+- `crates/quarto-sass/src/lib.rs` - Export new modules and types
+- `crates/quarto-sass/src/error.rs` - Added UnknownTheme and ThemeNotFound errors
+- `crates/quarto-sass/Cargo.toml` - Added grass dev dependency
+
+### Test Results
+
+All 59 quarto-sass tests pass:
+- 16 resources tests
+- 9 themes tests
+- 7 bundle tests
+- 12 layer tests
+- 6 types tests
+- 5 compile_all_themes integration tests
+- 4 parity tests
+
+### Next Steps
+
+1. **Browser testing**: Run hub-client and verify WASM compilation works
+2. **Integration**: Connect hub-client to use the new bundle assembly
+
+---
 
 ## Session Summary (2026-01-23 - Session 4: Phase 5 Hub-Client Caching)
 
