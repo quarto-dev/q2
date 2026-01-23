@@ -23,6 +23,7 @@ use quarto_core::{
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
+use quarto_sass::{BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX};
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
 use serde::{Deserialize, Serialize};
@@ -32,7 +33,27 @@ use wasm_bindgen::prelude::*;
 static RUNTIME: OnceLock<WasmRuntime> = OnceLock::new();
 
 fn get_runtime() -> &'static WasmRuntime {
-    RUNTIME.get_or_init(WasmRuntime::new)
+    RUNTIME.get_or_init(|| {
+        let runtime = WasmRuntime::new();
+        // Populate VFS with embedded Bootstrap SCSS resources
+        populate_vfs_with_embedded_resources(&runtime);
+        runtime
+    })
+}
+
+/// Populate the VFS with embedded Bootstrap SCSS resources.
+///
+/// This makes Bootstrap 5.3.1 SCSS files available in the VFS under
+/// `/__quarto_resources__/bootstrap/scss/` for SASS compilation.
+fn populate_vfs_with_embedded_resources(runtime: &WasmRuntime) {
+    let prefix = format!("{}/bootstrap/scss", RESOURCE_PATH_PREFIX);
+
+    for file_path in BOOTSTRAP_RESOURCES.file_paths() {
+        let vfs_path = format!("{}/{}", prefix, file_path);
+        if let Some(content) = BOOTSTRAP_RESOURCES.read(Path::new(file_path)) {
+            runtime.add_file(Path::new(&vfs_path), content.to_vec());
+        }
+    }
 }
 
 #[wasm_bindgen(start)]

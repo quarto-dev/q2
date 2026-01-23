@@ -43,6 +43,7 @@ tokio-util = "0.7"
 pollster = "0.4"
 regex = "1.11"
 grass = "0.13.4"
+include_dir = "0.7"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 

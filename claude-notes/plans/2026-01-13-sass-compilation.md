@@ -2,7 +2,7 @@
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13
-**Status**: In Progress (Phase 3 implementation complete, needs browser testing)
+**Status**: In Progress (Phase 4 complete, browser testing pending)
 
 ---
 
@@ -11,12 +11,13 @@
 ### Quick Start for New Session
 
 1. **Branch**: `feature/sass`
-2. **Current state**: Phases 1, 2a, 2b, and Phase 3 (implementation) are complete
-3. **Next task**: Phase 4 (VFS Resource Embedding) OR Phase 3 browser testing
+2. **Current state**: Phases 1, 2a, 2b, 3 (impl), and Phase 4 (native) are complete
+3. **Next task**: Phase 4 WASM (VFS pre-population) OR Phase 3 browser testing
 
-### Commits Made (3 total on this branch)
+### Commits Made (4 total on this branch)
 
 ```
+81a1a2f7 Update SASS plan with session summary and resume instructions
 77561195 Add SASS WASM runtime (Phase 3)
 04dd0755 Add SASS parity testing infrastructure (Phase 2b)
 097baa0f Add SASS compilation infrastructure (Phase 1 & 2a)
@@ -27,6 +28,10 @@
 **Core SASS types and parsing:**
 - `crates/quarto-sass/src/types.rs` - SassLayer, SassBundleLayers, SassBundle
 - `crates/quarto-sass/src/layer.rs` - Layer parsing with boundary markers
+
+**Embedded Resources (NEW in Phase 4):**
+- `crates/quarto-sass/src/resources.rs` - EmbeddedResources type, BOOTSTRAP_RESOURCES
+- `crates/quarto-system-runtime/src/sass_native.rs` - EmbeddedResourceProvider trait, compile_scss_with_embedded()
 
 **Native compilation (grass):**
 - `crates/quarto-system-runtime/src/sass_native.rs` - RuntimeFs adapter, compile_scss()
@@ -78,6 +83,77 @@
   Removed deno_web/polyfill sections (no longer needed).
 - 2026-01-23: **Implementation session**: Completed Phase 1 (core types) and Phase 2a
   (native runtime with grass). Bootstrap 5.3.1 compiles successfully.
+- 2026-01-23: **Phase 4 session**: Completed embedded resources for native (Bootstrap SCSS).
+
+## Session Summary (2026-01-23 - Session 3: Phase 4 Native Embedding)
+
+### Completed Work
+
+**Phase 4: VFS Resource Embedding** - NATIVE COMPLETE (WASM VFS pre-population pending)
+
+1. **Created `EmbeddedResources` type** in `crates/quarto-sass/src/resources.rs`:
+   - Uses `include_dir!` to embed Bootstrap 5.3.1 SCSS (93 files, ~592KB)
+   - Provides `is_file()`, `is_dir()`, `read()` methods for file access
+   - Supports multiple path formats (relative, prefixed, absolute with `/__quarto_resources__/`)
+   - Lazy-initializes file/directory indexes via `OnceLock<HashSet<String>>`
+   - Automatically derives `Send + Sync` (no unsafe impl needed)
+
+2. **Created `EmbeddedResourceProvider` trait** in `quarto-system-runtime/src/sass_native.rs`:
+   - Abstraction for embedded resource access
+   - Implemented by `EmbeddedResources` on native targets
+
+3. **Updated `RuntimeFs`** to check embedded resources first:
+   - Added `with_embedded()` constructor
+   - `is_file()`, `is_dir()`, `read()` check embedded resources before runtime
+
+4. **Added `compile_scss_with_embedded()` function**:
+   - Takes embedded resources as parameter
+   - Enables Bootstrap compilation using embedded files
+
+5. **Added integration tests** in `tests/embedded_compile_test.rs`:
+   - `test_compile_bootstrap_from_embedded` - expanded compilation
+   - `test_compile_bootstrap_from_embedded_minified` - minified compilation
+   - `test_embedded_resource_path_resolution` - path format verification
+
+### Files Created/Modified
+
+**New files:**
+- `crates/quarto-sass/src/resources.rs` - EmbeddedResources type
+- `crates/quarto-sass/tests/embedded_compile_test.rs` - Integration tests
+
+**Modified files:**
+- `Cargo.toml` - Added include_dir workspace dependency
+- `crates/quarto-sass/Cargo.toml` - Added include_dir and native quarto-system-runtime deps
+- `crates/quarto-sass/src/lib.rs` - Export resources module
+- `crates/quarto-system-runtime/src/sass_native.rs` - Added EmbeddedResourceProvider trait
+- `crates/quarto-system-runtime/src/lib.rs` - Export new types
+- `crates/wasm-quarto-hub-client/Cargo.toml` - Added quarto-sass dependency
+- `crates/wasm-quarto-hub-client/src/lib.rs` - Added VFS pre-population
+
+### Test Results
+
+All 32 quarto-sass tests pass:
+- 10 resources tests (embedded file access)
+- 3 embedded compilation tests (Bootstrap compilation from embedded)
+- 15 layer/types tests
+- 4 parity tests (grass vs dart-sass)
+
+6. **Added VFS pre-population for WASM** in `wasm-quarto-hub-client/src/lib.rs`:
+   - Modified `get_runtime()` to populate VFS on first initialization
+   - Added `populate_vfs_with_embedded_resources()` function
+   - Bootstrap SCSS files are added under `/__quarto_resources__/bootstrap/scss/`
+
+### Remaining Phase 4 Work
+
+- [ ] Test embedded resource access in WASM runtime (requires browser testing with wasm-pack)
+
+### Next Steps
+
+1. **Browser testing**: Build with wasm-pack and verify WASM compilation works
+2. **Phase 5**: Hub-client caching
+3. **Phase 6**: Bootstrap integration with theme support
+
+---
 
 ## Session Summary (2026-01-23 - Session 2, continued)
 
@@ -1109,12 +1185,12 @@ pub fn compile_themed_bundle(
 
 ### Phase 4: VFS Resource Embedding
 
-- [ ] Create `EmbeddedResources` type
-- [ ] Set up build.rs to embed Bootstrap 5.3.1 SCSS
-- [ ] Implement VFS pre-population for WASM
-- [ ] Configure default load paths
-- [ ] Test embedded resource access in native runtime
-- [ ] Test embedded resource access in WASM runtime
+- [x] Create `EmbeddedResources` type
+- [x] Set up include_dir! to embed Bootstrap 5.3.1 SCSS (93 files, ~592KB)
+- [x] Implement VFS pre-population for WASM (code written, browser testing pending)
+- [x] Configure default load paths (`/__quarto_resources__/bootstrap/scss`)
+- [x] Test embedded resource access in native runtime
+- [ ] Test embedded resource access in WASM runtime (requires browser testing)
 
 ### Phase 5: Hub-Client Caching
 

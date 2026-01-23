@@ -2816,6 +2816,7 @@ dependencies = [
 name = "quarto-sass"
 version = "0.1.0"
 dependencies = [
+ "include_dir",
  "insta",
  "once_cell",
  "quarto-system-runtime",

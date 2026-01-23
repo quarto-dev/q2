@@ -15,6 +15,7 @@ quarto-core = { path = "../quarto-core" }
 quarto-error-reporting = { path = "../quarto-error-reporting" }
 quarto-lsp-core = { path = "../quarto-lsp-core" }
 quarto-pandoc-types = { path = "../quarto-pandoc-types" }
+quarto-sass = { path = "../quarto-sass" }
 quarto-source-map = { path = "../quarto-source-map" }
 quarto-system-runtime = { path = "../quarto-system-runtime" }
 quarto-project-create = { path = "../quarto-project-create" }

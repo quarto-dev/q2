@@ -8,6 +8,7 @@
 //! Key components:
 //! - `RuntimeFs`: Adapter implementing `grass::Fs` for our `SystemRuntime`
 //! - `compile_scss`: High-level function for SCSS compilation
+//! - Support for embedded resources (Bootstrap SCSS) via `EmbeddedResourceProvider`
 
 use std::fmt::Debug;
 use std::io;
@@ -17,22 +18,57 @@ use grass::{Options, OutputStyle};
 
 use crate::traits::{RuntimeError, RuntimeResult, SystemRuntime};
 
+/// Trait for providing embedded SCSS resources.
+///
+/// This trait allows the SASS compiler to access resources that are
+/// embedded at compile time, such as Bootstrap SCSS files.
+/// Resources are typically accessed via a virtual path prefix like
+/// `/__quarto_resources__/bootstrap/scss/`.
+pub trait EmbeddedResourceProvider: Send + Sync {
+    /// Check if a path exists as a file in the embedded resources.
+    fn is_file(&self, path: &Path) -> bool;
+
+    /// Check if a path exists as a directory in the embedded resources.
+    fn is_dir(&self, path: &Path) -> bool;
+
+    /// Read a file's contents from the embedded resources.
+    fn read(&self, path: &Path) -> Option<&'static [u8]>;
+}
+
 /// Adapter that implements `grass::Fs` using a `SystemRuntime`.
 ///
 /// This allows grass to read files through our runtime abstraction,
 /// enabling consistent behavior across different runtime configurations.
 ///
-/// The adapter first checks if a file exists via the runtime, then reads
-/// its contents. For canonicalization, it delegates to the runtime's
-/// canonicalize method.
+/// The adapter checks embedded resources first (if provided), then falls
+/// back to the runtime for file access.
 pub struct RuntimeFs<'a> {
     runtime: &'a dyn SystemRuntime,
+    /// Optional embedded resources (e.g., Bootstrap SCSS)
+    embedded: Option<&'a dyn EmbeddedResourceProvider>,
 }
 
 impl<'a> RuntimeFs<'a> {
     /// Create a new RuntimeFs adapter wrapping the given runtime.
     pub fn new(runtime: &'a dyn SystemRuntime) -> Self {
-        Self { runtime }
+        Self {
+            runtime,
+            embedded: None,
+        }
+    }
+
+    /// Create a new RuntimeFs with embedded resources.
+    ///
+    /// The embedded resources are checked first when resolving files,
+    /// before falling back to the runtime.
+    pub fn with_embedded(
+        runtime: &'a dyn SystemRuntime,
+        embedded: &'a dyn EmbeddedResourceProvider,
+    ) -> Self {
+        Self {
+            runtime,
+            embedded: Some(embedded),
+        }
     }
 }
 
@@ -40,20 +76,42 @@ impl Debug for RuntimeFs<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RuntimeFs")
             .field("runtime", &"<SystemRuntime>")
+            .field("embedded", &self.embedded.is_some())
             .finish()
     }
 }
 
 impl grass::Fs for RuntimeFs<'_> {
     fn is_dir(&self, path: &Path) -> bool {
+        // Check embedded resources first
+        if let Some(embedded) = self.embedded {
+            if embedded.is_dir(path) {
+                return true;
+            }
+        }
+        // Fall back to runtime
         self.runtime.is_dir(path).unwrap_or(false)
     }
 
     fn is_file(&self, path: &Path) -> bool {
+        // Check embedded resources first
+        if let Some(embedded) = self.embedded {
+            if embedded.is_file(path) {
+                return true;
+            }
+        }
+        // Fall back to runtime
         self.runtime.is_file(path).unwrap_or(false)
     }
 
     fn read(&self, path: &Path) -> io::Result<Vec<u8>> {
+        // Check embedded resources first
+        if let Some(embedded) = self.embedded {
+            if let Some(content) = embedded.read(path) {
+                return Ok(content.to_vec());
+            }
+        }
+        // Fall back to runtime
         self.runtime
             .file_read(path)
             .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
@@ -79,6 +137,45 @@ pub fn compile_scss(
     minified: bool,
 ) -> RuntimeResult<String> {
     let fs = RuntimeFs::new(runtime);
+
+    let style = if minified {
+        OutputStyle::Compressed
+    } else {
+        OutputStyle::Expanded
+    };
+
+    let options = Options::default()
+        .fs(&fs)
+        .load_paths(load_paths)
+        .style(style);
+
+    grass::from_string(scss, &options).map_err(|e| RuntimeError::SassError(e.to_string()))
+}
+
+/// Compile SCSS source to CSS using grass with embedded resources.
+///
+/// This is similar to `compile_scss` but also checks embedded resources
+/// (such as Bootstrap SCSS) before falling back to the runtime's file system.
+///
+/// # Arguments
+///
+/// * `runtime` - The runtime to use for file system access
+/// * `embedded` - Embedded resources provider (e.g., Bootstrap SCSS)
+/// * `scss` - The SCSS source code to compile
+/// * `load_paths` - Directories to search for @use/@import resolution
+/// * `minified` - Whether to produce compressed output
+///
+/// # Returns
+///
+/// Compiled CSS string on success, `RuntimeError::SassError` on failure.
+pub fn compile_scss_with_embedded(
+    runtime: &dyn SystemRuntime,
+    embedded: &dyn EmbeddedResourceProvider,
+    scss: &str,
+    load_paths: &[PathBuf],
+    minified: bool,
+) -> RuntimeResult<String> {
+    let fs = RuntimeFs::with_embedded(runtime, embedded);
 
     let style = if minified {
         OutputStyle::Compressed

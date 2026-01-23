@@ -1793,6 +1793,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-sass"
+version = "0.1.0"
+dependencies = [
+ "include_dir",
+ "once_cell",
+ "quarto-system-runtime",
+ "regex",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "quarto-source-map"
 version = "0.1.0"
 dependencies = [
@@ -2837,6 +2849,7 @@ dependencies = [
  "quarto-lsp-core",
  "quarto-pandoc-types",
  "quarto-project-create",
+ "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",
  "serde",

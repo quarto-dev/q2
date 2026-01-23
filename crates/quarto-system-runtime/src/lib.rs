@@ -30,6 +30,10 @@ mod js_native;
 // SASS compilation for native targets
 #[cfg(not(target_arch = "wasm32"))]
 pub mod sass_native;
+#[cfg(not(target_arch = "wasm32"))]
+pub use sass_native::{
+    EmbeddedResourceProvider, RuntimeFs, compile_scss, compile_scss_with_embedded,
+};
 
 // WASM runtime is only compiled for WASM targets
 #[cfg(target_arch = "wasm32")]
