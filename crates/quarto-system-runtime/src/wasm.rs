@@ -79,6 +79,46 @@ extern "C" {
     fn js_template_available_impl() -> bool;
 }
 
+// =============================================================================
+// JavaScript Interop for SASS Compilation
+// =============================================================================
+//
+// These extern declarations define the JavaScript functions for SASS compilation.
+// The functions use dart-sass (reference implementation) via lazy loading.
+//
+// The functions are expected to be provided via a module at the path specified.
+// In hub-client, this is at: /src/wasm-js-bridge/sass.js
+
+#[wasm_bindgen(raw_module = "/src/wasm-js-bridge/sass.js")]
+extern "C" {
+    /// Check if SASS compilation is available.
+    ///
+    /// Always returns true when the JS module is loaded, since dart-sass
+    /// can always be lazy-loaded.
+    #[wasm_bindgen(js_name = "jsSassAvailable")]
+    fn js_sass_available_impl() -> bool;
+
+    /// Get the SASS compiler name for diagnostics.
+    #[wasm_bindgen(js_name = "jsSassCompilerName")]
+    fn js_sass_compiler_name_impl() -> String;
+
+    /// Compile SCSS to CSS.
+    ///
+    /// # Arguments
+    /// * `scss` - The SCSS source code
+    /// * `style` - Output style: "expanded" or "compressed"
+    /// * `load_paths_json` - JSON-encoded array of load paths
+    ///
+    /// # Returns
+    /// A Promise that resolves to the compiled CSS, or rejects with an error.
+    #[wasm_bindgen(js_name = "jsCompileSass", catch)]
+    fn js_compile_sass_impl(
+        scss: &str,
+        style: &str,
+        load_paths_json: &str,
+    ) -> Result<JsValue, JsValue>;
+}
+
 /// Counter for generating unique temp directory names in WASM.
 /// SystemTime::now() is not available in WASM, so we use a simple counter.
 static TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -639,6 +679,60 @@ impl SystemRuntime for WasmRuntime {
         result
             .as_string()
             .ok_or_else(|| RuntimeError::NotSupported("Result was not a string".to_string()))
+    }
+
+    // =========================================================================
+    // SASS Compilation
+    // =========================================================================
+    //
+    // These methods call out to browser JavaScript (dart-sass) via wasm-bindgen.
+    // The JavaScript implementation is provided by hub-client at:
+    // /src/wasm-js-bridge/sass.js
+    //
+    // dart-sass is lazy-loaded on first use to avoid blocking hub-client startup.
+
+    fn sass_available(&self) -> bool {
+        // Check if the SASS JS bridge is available
+        js_sass_available_impl()
+    }
+
+    fn sass_compiler_name(&self) -> Option<&'static str> {
+        // dart-sass is the compiler used in WASM
+        Some("dart-sass")
+    }
+
+    async fn compile_sass(
+        &self,
+        scss: &str,
+        load_paths: &[PathBuf],
+        minified: bool,
+    ) -> RuntimeResult<String> {
+        // Convert load paths to JSON array of strings
+        let load_paths_vec: Vec<String> = load_paths
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect();
+        let load_paths_json = serde_json::to_string(&load_paths_vec).map_err(|e| {
+            RuntimeError::SassError(format!("Failed to serialize load paths: {}", e))
+        })?;
+
+        // Determine output style
+        let style = if minified { "compressed" } else { "expanded" };
+
+        // Call the JavaScript function which returns a Promise
+        let promise = js_compile_sass_impl(scss, style, &load_paths_json).map_err(|e| {
+            RuntimeError::SassError(format!("Failed to call jsCompileSass: {:?}", e))
+        })?;
+
+        // Await the Promise
+        let result = JsFuture::from(js_sys::Promise::from(promise))
+            .await
+            .map_err(|e| RuntimeError::SassError(format!("SASS compilation failed: {:?}", e)))?;
+
+        // Convert result to String
+        result
+            .as_string()
+            .ok_or_else(|| RuntimeError::SassError("Result was not a string".to_string()))
     }
 }
 

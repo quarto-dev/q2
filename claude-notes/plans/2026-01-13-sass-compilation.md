@@ -2,7 +2,7 @@
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13
-**Status**: In Progress (Phase 2b complete)
+**Status**: In Progress (Phase 3 implementation complete, needs browser testing)
 
 **Revision History**:
 - 2026-01-13: Initial plan created
@@ -14,6 +14,44 @@
   Removed deno_web/polyfill sections (no longer needed).
 - 2026-01-23: **Implementation session**: Completed Phase 1 (core types) and Phase 2a
   (native runtime with grass). Bootstrap 5.3.1 compiles successfully.
+
+## Session Summary (2026-01-23 - Session 2, continued)
+
+### Completed Work
+
+**Phase 3: WASM Runtime** - IMPLEMENTATION COMPLETE (needs browser testing)
+- Created JS bridge: `hub-client/src/wasm-js-bridge/sass.js`
+  - Lazy-loads dart-sass (~5MB) on first compilation to avoid blocking startup
+  - Implements custom VFS importer for reading files from the virtual filesystem
+  - Handles SCSS partial resolution (_prefix, .scss extension, index files)
+  - Suppresses deprecation warnings (same as TS Quarto)
+- Added `sass` npm dependency to hub-client (^1.77.0)
+- Implemented `WasmRuntime::compile_sass()` in `crates/quarto-system-runtime/src/wasm.rs`
+  - Calls JavaScript via wasm-bindgen
+  - Converts load paths to JSON for JS bridge
+  - Returns compiled CSS or error
+
+### Files Created/Modified
+
+**New files:**
+- `hub-client/src/wasm-js-bridge/sass.js` - dart-sass bridge with VFS importer
+
+**Modified files:**
+- `hub-client/package.json` - Added sass dependency
+- `crates/quarto-system-runtime/src/wasm.rs` - Added SASS extern declarations and implementation
+
+### Remaining Phase 3 Tasks
+
+Browser testing is needed to verify:
+1. WASM compilation produces same output as native for simple cases
+2. Lazy loading doesn't block hub-client startup
+
+### Next Steps
+
+1. **Phase 4: VFS Resource Embedding** - Embed Bootstrap SCSS for offline compilation
+2. Complete Phase 3 browser testing when hub-client is deployed
+
+---
 
 ## Session Summary (2026-01-23 - Session 2)
 
@@ -997,11 +1035,11 @@ pub fn compile_themed_bundle(
 
 ### Phase 3: WASM Runtime (dart-sass via JS)
 
-- [ ] Create `hub-client/src/wasm-js-bridge/sass.js` bridge
-- [ ] Add `sass` npm dependency to hub-client
-- [ ] Implement lazy loading for sass module
-- [ ] Implement custom VFS importer
-- [ ] Implement `WasmRuntime::compile_sass()` with JS bridge
+- [x] Create `hub-client/src/wasm-js-bridge/sass.js` bridge
+- [x] Add `sass` npm dependency to hub-client
+- [x] Implement lazy loading for sass module
+- [x] Implement custom VFS importer
+- [x] Implement `WasmRuntime::compile_sass()` with JS bridge
 - [ ] Test WASM compilation produces same output as native for simple cases
 - [ ] Verify lazy loading doesn't block hub-client startup
 
