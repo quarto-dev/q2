@@ -2,6 +2,7 @@
 //!
 //! Copyright (c) 2025 Posit, PBC
 
+use std::path::PathBuf;
 use thiserror::Error;
 
 /// Errors that can occur during SASS operations
@@ -22,6 +23,14 @@ pub enum SassError {
     /// Theme file not found in embedded resources
     #[error("Theme file not found: {0}")]
     ThemeNotFound(String),
+
+    /// Custom theme file not found on filesystem
+    #[error("Custom theme file not found: {path}")]
+    CustomThemeNotFound { path: PathBuf },
+
+    /// Custom SCSS file doesn't have layer boundary markers
+    #[error("Custom SCSS file doesn't have layer boundary markers: {path}")]
+    InvalidScssFile { path: PathBuf },
 
     /// File I/O error
     #[error("Failed to read SASS file: {0}")]

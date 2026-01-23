@@ -23,7 +23,7 @@ use crate::layer::parse_layer;
 use crate::resources::{
     BOOTSTRAP_RESOURCES, QUARTO_BOOTSTRAP_RESOURCES, SASS_UTILS_RESOURCES, THEMES_RESOURCES,
 };
-use crate::themes::BuiltInTheme;
+use crate::themes::{BuiltInTheme, ThemeContext, ThemeSpec};
 use crate::types::SassLayer;
 
 /// Quarto's SASS module imports.
@@ -290,6 +290,111 @@ pub fn assemble_bootstrap() -> Result<String, SassError> {
     Ok(assemble_scss(&framework, &quarto, None))
 }
 
+/// Assemble SCSS with multiple user layers.
+///
+/// This function is designed to work with the output of [`process_theme_specs()`],
+/// which returns layers with customization already injected at the correct positions.
+///
+/// The user layers are merged using [`merge_layers()`], which:
+/// - Concatenates `uses`, `functions`, `mixins`, `rules` in order
+/// - **Reverses** `defaults` so later layers take precedence
+///
+/// # Assembly Order
+///
+/// 1. **USES**: framework → quarto → merged_user
+/// 2. **FUNCTIONS**: framework → quarto → merged_user
+/// 3. **DEFAULTS**: merged_user → quarto → framework (reversed in assemble_scss)
+/// 4. **MIXINS**: framework → quarto → merged_user
+/// 5. **RULES**: framework → quarto → merged_user
+///
+/// # Arguments
+///
+/// * `user_layers` - The layers from [`process_theme_specs()`], with customization
+///   already injected at the appropriate positions.
+///
+/// # Example
+///
+/// ```
+/// use quarto_sass::{ThemeSpec, ThemeContext, process_theme_specs, assemble_with_user_layers};
+/// use std::path::PathBuf;
+///
+/// let context = ThemeContext::native(PathBuf::from("/doc"));
+/// let specs = vec![ThemeSpec::parse("cosmo").unwrap()];
+/// let result = process_theme_specs(&specs, &context).unwrap();
+/// let scss = assemble_with_user_layers(&result.layers).unwrap();
+/// ```
+pub fn assemble_with_user_layers(user_layers: &[SassLayer]) -> Result<String, SassError> {
+    use crate::layer::merge_layers;
+
+    let framework = load_bootstrap_framework()?;
+    let quarto = load_quarto_layer()?;
+
+    if user_layers.is_empty() {
+        // No user layers - assemble without theme
+        return Ok(assemble_scss(&framework, &quarto, None));
+    }
+
+    // Merge user layers - merge_layers() reverses defaults automatically
+    let merged_user = merge_layers(user_layers);
+
+    Ok(assemble_scss(&framework, &quarto, Some(&merged_user)))
+}
+
+/// High-level function to compile themes from specifications.
+///
+/// This is the main entry point for compiling custom themes. It:
+/// 1. Processes theme specs into layers (with customization injection)
+/// 2. Assembles the SCSS bundle
+/// 3. Returns the assembled SCSS string ready for compilation
+///
+/// Note: This function does NOT compile the SCSS - it only assembles it.
+/// The actual compilation is performed by grass (or dart-sass for WASM).
+///
+/// # Arguments
+///
+/// * `specs` - Theme specifications to process.
+/// * `context` - Theme context for path resolution.
+///
+/// # Returns
+///
+/// Returns a tuple of `(scss_string, load_paths)`:
+/// - `scss_string`: The assembled SCSS ready for compilation
+/// - `load_paths`: Additional load paths collected from custom themes
+///
+/// # Errors
+///
+/// Returns an error if any theme cannot be loaded or the bundle cannot be assembled.
+///
+/// # Example
+///
+/// ```no_run
+/// use quarto_sass::{ThemeSpec, ThemeContext, assemble_themes};
+/// use std::path::PathBuf;
+///
+/// let context = ThemeContext::new(PathBuf::from("/project/doc"));
+/// let specs = vec![
+///     ThemeSpec::parse("cosmo").unwrap(),
+///     ThemeSpec::parse("custom.scss").unwrap(),
+/// ];
+///
+/// let (scss, load_paths) = assemble_themes(&specs, &context).unwrap();
+/// // Now compile with grass or dart-sass, adding load_paths to the compiler
+/// ```
+pub fn assemble_themes(
+    specs: &[ThemeSpec],
+    context: &ThemeContext<'_>,
+) -> Result<(String, Vec<std::path::PathBuf>), SassError> {
+    use crate::themes::process_theme_specs;
+
+    // Process specs into layers (with customization injection)
+    let result = process_theme_specs(specs, context)?;
+
+    // Assemble SCSS
+    let scss = assemble_with_user_layers(&result.layers)?;
+
+    Ok((scss, result.load_paths))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -430,5 +535,148 @@ mod tests {
             color_contrast_pos < slate_lighten_pos,
             "color-contrast() must be defined before theme functions"
         );
+    }
+
+    // assemble_with_user_layers tests
+
+    #[test]
+    fn test_assemble_with_user_layers_empty() {
+        // Empty layers should produce base Bootstrap + Quarto
+        let scss = assemble_with_user_layers(&[]).unwrap();
+
+        // Should contain Bootstrap
+        assert!(scss.contains("@function"));
+        assert!(scss.contains("$primary"));
+    }
+
+    #[test]
+    fn test_assemble_with_user_layers_single() {
+        use crate::themes::load_theme_layer;
+
+        let cosmo_layer = load_theme_layer(BuiltInTheme::Cosmo).unwrap();
+        let scss = assemble_with_user_layers(&[cosmo_layer]).unwrap();
+
+        // Should contain theme
+        assert!(scss.contains("$theme: \"cosmo\""));
+        // Should contain Bootstrap
+        assert!(scss.contains("@function"));
+    }
+
+    #[test]
+    fn test_assemble_with_user_layers_multiple() {
+        use crate::layer::parse_layer_from_parts;
+        use crate::themes::load_theme_layer;
+
+        let cosmo_layer = load_theme_layer(BuiltInTheme::Cosmo).unwrap();
+
+        // Create a custom layer with a test variable
+        let custom_layer = parse_layer_from_parts(
+            "",
+            "$test-custom-var: \"custom-value\" !default;",
+            "",
+            "",
+            ".custom-rule { content: \"test\"; }",
+        );
+
+        let scss = assemble_with_user_layers(&[cosmo_layer, custom_layer]).unwrap();
+
+        // Should contain both theme and custom
+        assert!(scss.contains("$theme: \"cosmo\""));
+        assert!(scss.contains("$test-custom-var"));
+        assert!(scss.contains(".custom-rule"));
+    }
+
+    #[test]
+    fn test_assemble_with_user_layers_defaults_reversed() {
+        use crate::layer::parse_layer_from_parts;
+
+        // Create two layers with the same variable
+        let layer1 = parse_layer_from_parts("", "$myvar: layer1 !default;", "", "", ".layer1 {}");
+        let layer2 = parse_layer_from_parts("", "$myvar: layer2 !default;", "", "", ".layer2 {}");
+
+        // Assemble [layer1, layer2]
+        let scss = assemble_with_user_layers(&[layer1, layer2]).unwrap();
+
+        // Due to merge_layers reversing defaults, layer2's defaults should come
+        // BEFORE layer1's defaults in the merged user layer. Then assemble_scss
+        // reverses again (user → quarto → framework), so layer2's $myvar should
+        // appear before layer1's in the final output.
+        //
+        // This means layer2's !default value wins (first definition wins with !default)
+        let pos1 = scss.find("$myvar: layer1").unwrap();
+        let pos2 = scss.find("$myvar: layer2").unwrap();
+
+        // layer2's default should come first (win)
+        assert!(
+            pos2 < pos1,
+            "layer2's defaults should come before layer1's (layer2 wins with !default)"
+        );
+
+        // Rules should be in original order: layer1 then layer2
+        let rule1 = scss.find(".layer1").unwrap();
+        let rule2 = scss.find(".layer2").unwrap();
+        assert!(rule1 < rule2, "Rules should be in original order");
+    }
+
+    // assemble_themes tests
+
+    #[test]
+    fn test_assemble_themes_builtin() {
+        use std::path::PathBuf;
+
+        let context = ThemeContext::native(PathBuf::from("/doc"));
+        let specs = vec![ThemeSpec::parse("cosmo").unwrap()];
+
+        let (scss, load_paths) = assemble_themes(&specs, &context).unwrap();
+
+        // Should contain theme
+        assert!(scss.contains("$theme: \"cosmo\""));
+        // Should contain Quarto customization (heading sizes)
+        assert!(scss.contains("$h1-font-size"));
+        // No load paths for built-in themes
+        assert!(load_paths.is_empty());
+    }
+
+    #[test]
+    fn test_assemble_themes_custom() {
+        use std::path::PathBuf;
+
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
+        let context = ThemeContext::native(fixture_dir);
+
+        let specs = vec![ThemeSpec::parse("override.scss").unwrap()];
+        let (scss, load_paths) = assemble_themes(&specs, &context).unwrap();
+
+        // Should contain custom theme
+        assert!(scss.contains("$test-custom-var"));
+        // Should contain Quarto customization
+        assert!(scss.contains("$h1-font-size"));
+        // Should have load paths
+        assert_eq!(load_paths.len(), 1);
+    }
+
+    #[test]
+    fn test_assemble_themes_builtin_and_custom() {
+        use std::path::PathBuf;
+
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let fixture_dir = PathBuf::from(manifest_dir).join("test-fixtures/custom");
+        let context = ThemeContext::native(fixture_dir);
+
+        let specs = vec![
+            ThemeSpec::parse("cosmo").unwrap(),
+            ThemeSpec::parse("override.scss").unwrap(),
+        ];
+
+        let (scss, load_paths) = assemble_themes(&specs, &context).unwrap();
+
+        // Should contain both
+        assert!(scss.contains("$theme: \"cosmo\""));
+        assert!(scss.contains("$test-custom-var"));
+        // Should contain Quarto customization
+        assert!(scss.contains("$h1-font-size"));
+        // Should have load paths from custom
+        assert_eq!(load_paths.len(), 1);
     }
 }

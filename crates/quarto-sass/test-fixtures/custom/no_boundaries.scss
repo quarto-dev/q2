@@ -1,0 +1,8 @@
+// Test SCSS file without layer boundaries
+// This should produce an InvalidScssFile error when loaded
+
+$primary: #ff0000;
+
+.some-rule {
+  color: $primary;
+}

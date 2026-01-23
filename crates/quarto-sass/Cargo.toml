@@ -13,9 +13,7 @@ thiserror.workspace = true
 regex.workspace = true
 once_cell.workspace = true
 include_dir.workspace = true
-
-# Native-only: for EmbeddedResourceProvider trait implementation
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Runtime abstraction for cross-platform file access (WASM + native)
 quarto-system-runtime.workspace = true
 
 [dev-dependencies]
@@ -23,7 +21,6 @@ insta.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-quarto-system-runtime.workspace = true
 grass.workspace = true
 
 [lints]

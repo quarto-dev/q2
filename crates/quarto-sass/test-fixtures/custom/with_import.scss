@@ -1,0 +1,13 @@
+// Test custom theme that uses @import from its directory
+// This tests that load paths are correctly set up for custom themes.
+
+/*-- scss:defaults --*/
+@import "partials";
+
+$with-import-var: "imported" !default;
+
+/*-- scss:rules --*/
+.with-import-rule {
+  @include partial-mixin;
+  content: $with-import-var;
+}

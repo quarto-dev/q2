@@ -1,0 +1,11 @@
+// Test custom theme that overrides default variables
+// This file is used for testing custom theme loading.
+
+/*-- scss:defaults --*/
+$test-custom-var: "from-custom" !default;
+$primary: #ff6600 !default;
+
+/*-- scss:rules --*/
+.custom-rule {
+  content: "custom";
+}
