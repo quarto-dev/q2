@@ -17,6 +17,8 @@ serde_json.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # For binary lookup on PATH
 which = "7.0"
+# SASS compilation (pure Rust, ~2x faster than dart-sass)
+grass.workspace = true
 
 # JavaScript runtime (for EJS template rendering)
 # Note: These types MUST NOT leak into the public trait API

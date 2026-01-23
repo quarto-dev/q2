@@ -1,0 +1,21 @@
+[package]
+name = "quarto-sass"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "SASS compilation infrastructure for Quarto"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

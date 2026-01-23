@@ -44,6 +44,9 @@ pub enum RuntimeError {
         /// Error message (usually from stderr)
         message: String,
     },
+
+    /// SASS compilation failed
+    SassError(String),
 }
 
 impl std::fmt::Display for RuntimeError {
@@ -59,6 +62,7 @@ impl std::fmt::Display for RuntimeError {
             RuntimeError::ProcessFailed { code, message } => {
                 write!(f, "Process execution failed (exit {}): {}", code, message)
             }
+            RuntimeError::SassError(msg) => write!(f, "SASS compilation error: {}", msg),
         }
     }
 }
@@ -555,6 +559,68 @@ pub trait SystemRuntime: Send + Sync {
         let _ = (template, data);
         Err(RuntimeError::NotSupported(
             "EJS rendering is not available on this runtime".to_string(),
+        ))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SASS COMPILATION
+    //
+    // These methods provide SASS/SCSS compilation capability.
+    // - Native: Uses the grass crate (pure Rust, ~2x faster than dart-sass)
+    // - WASM: Uses dart-sass via JavaScript bridge (lazy-loaded)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Check if SASS compilation is available on this runtime.
+    ///
+    /// Returns `true` if the runtime supports SASS compilation,
+    /// `false` otherwise.
+    ///
+    /// Default: returns `false` (SASS not available).
+    fn sass_available(&self) -> bool {
+        false
+    }
+
+    /// Get the SASS compiler backend name (for diagnostics).
+    ///
+    /// Returns the name of the SASS compiler being used, or `None` if
+    /// SASS compilation is not available.
+    ///
+    /// Possible values:
+    /// - `"grass"` - Pure Rust compiler (native)
+    /// - `"dart-sass"` - Reference implementation via JS (WASM)
+    fn sass_compiler_name(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Compile SCSS source to CSS.
+    ///
+    /// # Arguments
+    ///
+    /// * `scss` - The SCSS source code to compile
+    /// * `load_paths` - Directories to search for @use/@import resolution
+    /// * `minified` - Whether to produce compressed output
+    ///
+    /// # Returns
+    ///
+    /// Compiled CSS string on success, `RuntimeError::SassError` on compilation failure,
+    /// or `RuntimeError::NotSupported` if SASS compilation is not available.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let scss = "$primary: blue; .btn { color: $primary; }";
+    /// let css = runtime.compile_sass(scss, &[], false).await?;
+    /// assert!(css.contains(".btn"));
+    /// ```
+    async fn compile_sass(
+        &self,
+        scss: &str,
+        load_paths: &[PathBuf],
+        minified: bool,
+    ) -> RuntimeResult<String> {
+        let _ = (scss, load_paths, minified);
+        Err(RuntimeError::NotSupported(
+            "SASS compilation is not available on this runtime".to_string(),
         ))
     }
 }

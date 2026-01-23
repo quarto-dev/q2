@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::js_native::JsEngine;
+use crate::sass_native;
 use crate::traits::{
     CommandOutput, PathKind, PathMetadata, RuntimeError, RuntimeResult, SystemRuntime, TempDir,
     XdgDirKind,
@@ -409,6 +410,30 @@ impl SystemRuntime for NativeRuntime {
         // V8's JsRuntime is not Send+Sync, so we can't store it.
         let mut engine = JsEngine::new()?;
         engine.render_ejs(template, data)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SASS COMPILATION
+    //
+    // Uses the grass crate for pure Rust SASS compilation.
+    // grass targets dart-sass 1.54.3 and is ~2x faster.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    fn sass_available(&self) -> bool {
+        true // grass is always available on native
+    }
+
+    fn sass_compiler_name(&self) -> Option<&'static str> {
+        Some("grass")
+    }
+
+    async fn compile_sass(
+        &self,
+        scss: &str,
+        load_paths: &[PathBuf],
+        minified: bool,
+    ) -> RuntimeResult<String> {
+        sass_native::compile_scss(self, scss, load_paths, minified)
     }
 }
 
@@ -893,5 +918,44 @@ mod tests {
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "Yes");
+    }
+
+    // SASS compilation tests (via trait methods)
+    #[test]
+    fn test_sass_available() {
+        let rt = runtime();
+        assert!(rt.sass_available());
+    }
+
+    #[test]
+    fn test_sass_compiler_name() {
+        let rt = runtime();
+        assert_eq!(rt.sass_compiler_name(), Some("grass"));
+    }
+
+    #[test]
+    fn test_compile_sass_via_trait() {
+        let rt = runtime();
+        let scss = "$color: #333; body { color: $color; }";
+
+        let result = pollster::block_on(rt.compile_sass(scss, &[], false));
+
+        assert!(result.is_ok());
+        let css = result.unwrap();
+        assert!(css.contains("body"));
+        assert!(css.contains("#333"));
+    }
+
+    #[test]
+    fn test_compile_sass_minified_via_trait() {
+        let rt = runtime();
+        let scss = ".container { margin: 0 auto; }";
+
+        let result = pollster::block_on(rt.compile_sass(scss, &[], true));
+
+        assert!(result.is_ok());
+        let css = result.unwrap();
+        // Minified output should not have newlines between selectors and braces
+        assert!(css.contains(".container{") || css.contains(".container {"));
     }
 }

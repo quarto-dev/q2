@@ -41,6 +41,8 @@ yaml-rust2 = "0.10"
 async-trait = "0.1"
 tokio-util = "0.7"
 pollster = "0.4"
+regex = "1.11"
+grass = "0.13.4"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 
@@ -131,6 +133,9 @@ path = "./crates/quarto-lsp-core"
 
 [workspace.dependencies.quarto-lsp]
 path = "./crates/quarto-lsp"
+
+[workspace.dependencies.quarto-sass]
+path = "./crates/quarto-sass"
 
 [workspace.lints.rust]
 # coverage_nightly is used by pampa for code coverage instrumentation on nightly Rust
