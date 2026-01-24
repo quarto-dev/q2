@@ -286,11 +286,32 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
 // ============================================================================
 // Theme Support
 // ============================================================================
+//
+// TODO(ConfigValue): This section manually parses YAML frontmatter to extract
+// theme configuration. When the render pipeline adopts ConfigValue-based
+// configuration (merged project + document config), replace:
+//
+// 1. `extract_theme_config()` - Use `ThemeConfig::from_config_value(&merged_config)`
+//    instead of manual YAML parsing
+//
+// 2. `theme_value_to_config()` - No longer needed; ThemeConfig::from_config_value
+//    handles all the conversion logic
+//
+// 3. The `input_str` parameter to `write_themed_resources()` - Replace with
+//    a reference to the merged ConfigValue from RenderContext
+//
+// See: quarto-sass/src/config.rs for the ConfigValue-based API
+// Plan: claude-notes/plans/2026-01-24-phase7-sass-render-integration.md
+// ============================================================================
 
 /// Write HTML resources with theme support.
 ///
 /// Extracts theme configuration from frontmatter and compiles SASS accordingly.
 /// Falls back to default CSS if no theme is specified or if compilation fails.
+///
+/// TODO(ConfigValue): Replace `content` parameter with `config: &ConfigValue`
+/// from merged project/document configuration, then use
+/// `ThemeConfig::from_config_value(config)` instead of `extract_theme_config()`.
 fn write_themed_resources(
     content: &str,
     input_path: &Path,
@@ -358,6 +379,13 @@ fn write_themed_resources(
 ///
 /// Parses the YAML frontmatter and extracts the `format.html.theme` value.
 /// Returns `Ok(None)` if no theme is specified.
+///
+/// TODO(ConfigValue): DELETE THIS FUNCTION. Replace all calls with:
+/// ```ignore
+/// let theme_config = ThemeConfig::from_config_value(&merged_config)?;
+/// ```
+/// The merged ConfigValue from RenderContext already has the parsed and
+/// merged configuration from both project (_quarto.yml) and document frontmatter.
 fn extract_theme_config(content: &str) -> Result<Option<ThemeConfig>> {
     // Find YAML frontmatter
     let trimmed = content.trim_start();
@@ -394,6 +422,9 @@ fn extract_theme_config(content: &str) -> Result<Option<ThemeConfig>> {
 }
 
 /// Convert a serde_yaml::Value theme specification to ThemeConfig.
+///
+/// TODO(ConfigValue): DELETE THIS FUNCTION. This duplicates logic already in
+/// `ThemeConfig::from_config_value()` in quarto-sass/src/config.rs.
 fn theme_value_to_config(value: &serde_yaml::Value) -> Result<ThemeConfig> {
     match value {
         serde_yaml::Value::String(s) => {
