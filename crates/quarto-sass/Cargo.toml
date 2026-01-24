@@ -15,10 +15,14 @@ once_cell.workspace = true
 include_dir.workspace = true
 # Runtime abstraction for cross-platform file access (WASM + native)
 quarto-system-runtime.workspace = true
+# ConfigValue for theme config extraction
+quarto-pandoc-types.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
 serde_json.workspace = true
+quarto-source-map.workspace = true
+yaml-rust2.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 grass.workspace = true

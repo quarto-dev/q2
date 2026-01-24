@@ -45,6 +45,10 @@ interface WasmModuleExtended {
   sass_compiler_name: () => string | undefined;
   compile_scss: (scss: string, minified: boolean, loadPathsJson: string) => Promise<string>;
   compile_scss_with_bootstrap: (scss: string, minified: boolean) => Promise<string>;
+  // Theme-aware CSS compilation (extracts theme from frontmatter)
+  compile_document_css: (content: string) => Promise<string>;
+  compile_theme_css_by_name: (themeName: string, minified: boolean) => Promise<string>;
+  compile_default_bootstrap_css: (minified: boolean) => Promise<string>;
 }
 
 // WASM module state
@@ -340,6 +344,13 @@ export async function renderToHtml(
     console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
 
     if (result.success) {
+      // Compile theme CSS and update VFS (non-blocking, errors are logged but don't fail render)
+      try {
+        await compileAndInjectThemeCss(qmdContent);
+      } catch (cssErr) {
+        console.warn('[renderToHtml] Theme CSS compilation failed, using default CSS:', cssErr);
+      }
+
       return {
         html: result.html || '',
         success: true,
@@ -365,6 +376,32 @@ export async function renderToHtml(
       error: err instanceof Error ? err.message : JSON.stringify(err),
     };
   }
+}
+
+/**
+ * Compile theme CSS from document content and inject into VFS.
+ *
+ * This replaces the default static CSS at /.quarto/project-artifacts/styles.css
+ * with compiled theme CSS based on the document's frontmatter.
+ *
+ * @internal
+ */
+async function compileAndInjectThemeCss(qmdContent: string): Promise<void> {
+  const wasm = getWasm();
+
+  // Check if SASS is available
+  if (!wasm.sass_available()) {
+    console.log('[compileAndInjectThemeCss] SASS not available, keeping default CSS');
+    return;
+  }
+
+  // Compile CSS with caching
+  const css = await compileDocumentCss(qmdContent, { minified: true });
+
+  // Update VFS with compiled CSS
+  const cssPath = '/.quarto/project-artifacts/styles.css';
+  vfsAddFile(cssPath, css);
+  console.log('[compileAndInjectThemeCss] Updated VFS with compiled theme CSS');
 }
 
 // ============================================================================
@@ -522,4 +559,257 @@ export async function clearSassCache(): Promise<void> {
 export async function getSassCacheStats() {
   const cache = getSassCache();
   return cache.getStats();
+}
+
+// ============================================================================
+// Theme CSS Compilation
+// ============================================================================
+
+/**
+ * Response from theme CSS compilation.
+ */
+interface ThemeCssResponse {
+  success: boolean;
+  css?: string;
+  error?: string;
+}
+
+/**
+ * Extract theme configuration string from QMD frontmatter for cache key computation.
+ *
+ * Returns a normalized string representation of the theme config that can be
+ * used as part of a cache key. Returns 'default' if no theme is specified.
+ *
+ * @param content - QMD document content with YAML frontmatter
+ * @returns Normalized theme config string for cache key
+ */
+function extractThemeConfigForCacheKey(content: string): string {
+  // Find YAML frontmatter
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith('---')) {
+    return 'default';
+  }
+
+  // Find closing ---
+  const afterFirst = trimmed.slice(3);
+  const endPos = afterFirst.indexOf('\n---');
+  if (endPos === -1) {
+    return 'default';
+  }
+
+  const yaml = afterFirst.slice(0, endPos);
+
+  // Simple regex to extract theme value from format.html.theme
+  // This handles:
+  // - theme: cosmo
+  // - theme: [cosmo, custom.scss]
+  // - theme:
+  //     - cosmo
+  //     - custom.scss
+  const themeMatch = yaml.match(/^\s*theme:\s*(.+?)(?:\n(?=\s*\w+:)|\n(?=---)|\n*$)/ms);
+  if (!themeMatch) {
+    // Check if there's a format.html section
+    const formatMatch = yaml.match(/format:\s*\n\s+html:\s*\n([\s\S]*?)(?:\n(?=\s*\w+:)|\n(?=---)|\n*$)/m);
+    if (formatMatch) {
+      const htmlSection = formatMatch[1];
+      const innerThemeMatch = htmlSection.match(/^\s*theme:\s*(.+?)(?:\n(?=\s{2,}\w+:)|\n(?=---)|\n*$)/ms);
+      if (innerThemeMatch) {
+        return innerThemeMatch[1].trim();
+      }
+    }
+    return 'default';
+  }
+
+  return themeMatch[1].trim();
+}
+
+/**
+ * Compile CSS for a QMD document's theme configuration with caching.
+ *
+ * Extracts the theme from the document's YAML frontmatter and compiles
+ * the appropriate Bootstrap/Bootswatch CSS. Results are cached in IndexedDB
+ * based on the theme configuration and minification setting.
+ *
+ * @param content - The QMD document content (must include YAML frontmatter)
+ * @param options - Compilation options
+ * @returns The compiled CSS
+ * @throws Error if compilation fails
+ *
+ * @example
+ * ```typescript
+ * const qmd = `---
+ * title: My Document
+ * format:
+ *   html:
+ *     theme: cosmo
+ * ---
+ *
+ * # Hello World
+ * `;
+ * const css = await compileDocumentCss(qmd);
+ * ```
+ */
+export async function compileDocumentCss(
+  content: string,
+  options: { minified?: boolean; skipCache?: boolean } = {}
+): Promise<string> {
+  await initWasm();
+  const wasm = getWasm();
+
+  // Check if SASS is available
+  if (!wasm.sass_available()) {
+    throw new Error('SASS compilation is not available');
+  }
+
+  const minified = options.minified ?? true;
+  const skipCache = options.skipCache ?? false;
+
+  // Extract theme config for cache key
+  const themeConfig = extractThemeConfigForCacheKey(content);
+  const cacheInput = `theme:${themeConfig}:minified=${minified}`;
+
+  // Check cache first (unless explicitly skipped)
+  const cache = getSassCache();
+  const cacheKey = await cache.computeKey(cacheInput, minified);
+
+  if (!skipCache) {
+    const cached = await cache.get(cacheKey);
+    if (cached !== null) {
+      console.log('[compileDocumentCss] Cache hit for theme:', themeConfig);
+      return cached;
+    }
+    console.log('[compileDocumentCss] Cache miss for theme:', themeConfig);
+  }
+
+  // Compile via WASM (extracts theme from frontmatter and compiles)
+  const result: ThemeCssResponse = JSON.parse(
+    await wasm.compile_document_css(content)
+  );
+
+  if (!result.success) {
+    throw new Error(result.error || 'Theme CSS compilation failed');
+  }
+
+  const css = result.css || '';
+
+  // Cache the result
+  if (!skipCache) {
+    const sourceHash = await computeHash(cacheInput);
+    await cache.set(cacheKey, css, sourceHash, minified);
+  }
+
+  return css;
+}
+
+/**
+ * Compile CSS for a specific Bootswatch theme by name with caching.
+ *
+ * @param themeName - The theme name (e.g., "cosmo", "darkly", "flatly")
+ * @param options - Compilation options
+ * @returns The compiled CSS
+ * @throws Error if compilation fails
+ *
+ * @example
+ * ```typescript
+ * const css = await compileThemeCssByName('cosmo');
+ * ```
+ */
+export async function compileThemeCssByName(
+  themeName: string,
+  options: { minified?: boolean; skipCache?: boolean } = {}
+): Promise<string> {
+  await initWasm();
+  const wasm = getWasm();
+
+  if (!wasm.sass_available()) {
+    throw new Error('SASS compilation is not available');
+  }
+
+  const minified = options.minified ?? true;
+  const skipCache = options.skipCache ?? false;
+
+  // Cache key based on theme name and minification
+  const cacheInput = `theme:${themeName}:minified=${minified}`;
+  const cache = getSassCache();
+  const cacheKey = await cache.computeKey(cacheInput, minified);
+
+  if (!skipCache) {
+    const cached = await cache.get(cacheKey);
+    if (cached !== null) {
+      console.log('[compileThemeCssByName] Cache hit for:', themeName);
+      return cached;
+    }
+    console.log('[compileThemeCssByName] Cache miss for:', themeName);
+  }
+
+  // Compile via WASM
+  const result: ThemeCssResponse = JSON.parse(
+    await wasm.compile_theme_css_by_name(themeName, minified)
+  );
+
+  if (!result.success) {
+    throw new Error(result.error || `Failed to compile theme: ${themeName}`);
+  }
+
+  const css = result.css || '';
+
+  if (!skipCache) {
+    const sourceHash = await computeHash(cacheInput);
+    await cache.set(cacheKey, css, sourceHash, minified);
+  }
+
+  return css;
+}
+
+/**
+ * Compile default Bootstrap CSS (no theme customization) with caching.
+ *
+ * @param options - Compilation options
+ * @returns The compiled CSS
+ * @throws Error if compilation fails
+ */
+export async function compileDefaultBootstrapCss(
+  options: { minified?: boolean; skipCache?: boolean } = {}
+): Promise<string> {
+  await initWasm();
+  const wasm = getWasm();
+
+  if (!wasm.sass_available()) {
+    throw new Error('SASS compilation is not available');
+  }
+
+  const minified = options.minified ?? true;
+  const skipCache = options.skipCache ?? false;
+
+  // Cache key for default Bootstrap
+  const cacheInput = `theme:default-bootstrap:minified=${minified}`;
+  const cache = getSassCache();
+  const cacheKey = await cache.computeKey(cacheInput, minified);
+
+  if (!skipCache) {
+    const cached = await cache.get(cacheKey);
+    if (cached !== null) {
+      console.log('[compileDefaultBootstrapCss] Cache hit');
+      return cached;
+    }
+    console.log('[compileDefaultBootstrapCss] Cache miss');
+  }
+
+  // Compile via WASM
+  const result: ThemeCssResponse = JSON.parse(
+    await wasm.compile_default_bootstrap_css(minified)
+  );
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to compile default Bootstrap CSS');
+  }
+
+  const css = result.css || '';
+
+  if (!skipCache) {
+    const sourceHash = await computeHash(cacheInput);
+    await cache.set(cacheKey, css, sourceHash, minified);
+  }
+
+  return css;
 }

@@ -228,4 +228,187 @@ mod tests {
         let parsed: SassLayer = serde_json::from_str(&json).unwrap();
         assert_eq!(layer, parsed);
     }
+
+    #[test]
+    fn test_sass_layer_new() {
+        let layer = SassLayer::new();
+        assert!(layer.is_empty());
+        assert_eq!(layer.uses, "");
+        assert_eq!(layer.defaults, "");
+        assert_eq!(layer.functions, "");
+        assert_eq!(layer.mixins, "");
+        assert_eq!(layer.rules, "");
+    }
+
+    #[test]
+    fn test_sass_bundle_into_layers() {
+        let bundle = SassBundle {
+            key: "test-bundle".to_string(),
+            dependency: "bootstrap".to_string(),
+            framework: Some(SassLayer {
+                defaults: "$fw: 1;".to_string(),
+                ..Default::default()
+            }),
+            quarto: Some(SassLayer {
+                defaults: "$q: 2;".to_string(),
+                ..Default::default()
+            }),
+            user: vec![SassLayer {
+                rules: ".user { color: red; }".to_string(),
+                ..Default::default()
+            }],
+            load_paths: vec![PathBuf::from("/path/to/scss")],
+            dark: Some(SassBundleDark::default()),
+            attribs: HashMap::from([("data-theme".to_string(), "custom".to_string())]),
+        };
+
+        let layers = bundle.into_layers();
+
+        assert_eq!(layers.key, "test-bundle");
+        assert!(layers.framework.is_some());
+        assert!(layers.quarto.is_some());
+        assert_eq!(layers.user.len(), 1);
+        assert_eq!(layers.load_paths.len(), 1);
+        // Note: dependency, dark, and attribs are lost in conversion
+    }
+
+    #[test]
+    fn test_sass_bundle_layers_serde_roundtrip() {
+        let layers = SassBundleLayers {
+            key: "layers-test".to_string(),
+            framework: Some(SassLayer {
+                functions: "@function fw() { @return 1; }".to_string(),
+                ..Default::default()
+            }),
+            quarto: None,
+            user: vec![
+                SassLayer {
+                    defaults: "$user1: 1;".to_string(),
+                    ..Default::default()
+                },
+                SassLayer {
+                    defaults: "$user2: 2;".to_string(),
+                    ..Default::default()
+                },
+            ],
+            load_paths: vec![PathBuf::from("/scss"), PathBuf::from("/bootstrap")],
+        };
+
+        let json = serde_json::to_string(&layers).unwrap();
+        let parsed: SassBundleLayers = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.key, "layers-test");
+        assert!(parsed.framework.is_some());
+        assert!(parsed.quarto.is_none());
+        assert_eq!(parsed.user.len(), 2);
+        assert_eq!(parsed.load_paths.len(), 2);
+    }
+
+    #[test]
+    fn test_sass_bundle_dark_serde_roundtrip() {
+        let dark = SassBundleDark {
+            framework: Some(SassLayer {
+                defaults: "$dark-bg: #222;".to_string(),
+                ..Default::default()
+            }),
+            quarto: None,
+            user: vec![SassLayer {
+                rules: ".dark { background: black; }".to_string(),
+                ..Default::default()
+            }],
+            default: true,
+        };
+
+        let json = serde_json::to_string(&dark).unwrap();
+        let parsed: SassBundleDark = serde_json::from_str(&json).unwrap();
+
+        assert!(parsed.framework.is_some());
+        assert!(parsed.quarto.is_none());
+        assert_eq!(parsed.user.len(), 1);
+        assert!(parsed.default);
+    }
+
+    #[test]
+    fn test_sass_bundle_full_serde_roundtrip() {
+        let bundle = SassBundle {
+            key: "full-bundle".to_string(),
+            dependency: "bootstrap".to_string(),
+            framework: Some(SassLayer {
+                uses: "@use 'sass:color';".to_string(),
+                defaults: "$primary: blue;".to_string(),
+                functions: "@function f() { @return 1; }".to_string(),
+                mixins: "@mixin m() { color: red; }".to_string(),
+                rules: ".fw { display: block; }".to_string(),
+            }),
+            quarto: Some(SassLayer {
+                defaults: "$quarto-var: 1;".to_string(),
+                ..Default::default()
+            }),
+            user: vec![SassLayer {
+                rules: ".custom { margin: 0; }".to_string(),
+                ..Default::default()
+            }],
+            load_paths: vec![PathBuf::from("/scss")],
+            dark: Some(SassBundleDark {
+                framework: None,
+                quarto: None,
+                user: vec![],
+                default: false,
+            }),
+            attribs: HashMap::from([
+                ("data-theme".to_string(), "custom".to_string()),
+                ("id".to_string(), "main-styles".to_string()),
+            ]),
+        };
+
+        let json = serde_json::to_string_pretty(&bundle).unwrap();
+        let parsed: SassBundle = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.key, "full-bundle");
+        assert_eq!(parsed.dependency, "bootstrap");
+        assert!(parsed.framework.is_some());
+        assert!(parsed.quarto.is_some());
+        assert_eq!(parsed.user.len(), 1);
+        assert_eq!(parsed.load_paths.len(), 1);
+        assert!(parsed.dark.is_some());
+        assert_eq!(parsed.attribs.len(), 2);
+    }
+
+    #[test]
+    fn test_serde_skip_empty_fields() {
+        // Empty bundle should serialize without optional fields
+        let bundle = SassBundle::new("minimal", "bootstrap");
+        let json = serde_json::to_string(&bundle).unwrap();
+
+        // These fields should be absent due to skip_serializing_if
+        assert!(!json.contains("framework"));
+        assert!(!json.contains("quarto"));
+        assert!(!json.contains("user"));
+        assert!(!json.contains("load_paths"));
+        assert!(!json.contains("dark"));
+        assert!(!json.contains("attribs"));
+
+        // These required fields should be present
+        assert!(json.contains("key"));
+        assert!(json.contains("dependency"));
+    }
+
+    #[test]
+    fn test_sass_bundle_layers_default() {
+        let layers = SassBundleLayers::default();
+        assert_eq!(layers.key, "");
+        assert!(layers.framework.is_none());
+        assert!(layers.quarto.is_none());
+        assert!(layers.user.is_empty());
+        assert!(layers.load_paths.is_empty());
+    }
+
+    #[test]
+    fn test_sass_bundle_dark_default() {
+        let dark = SassBundleDark::default();
+        assert!(dark.framework.is_none());
+        assert!(dark.quarto.is_none());
+        assert!(dark.user.is_empty());
+        assert!(!dark.default);
+    }
 }

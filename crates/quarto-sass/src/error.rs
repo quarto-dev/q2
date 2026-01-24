@@ -32,6 +32,10 @@ pub enum SassError {
     #[error("Custom SCSS file doesn't have layer boundary markers: {path}")]
     InvalidScssFile { path: PathBuf },
 
+    /// Invalid theme configuration in document/project config
+    #[error("Invalid theme configuration: {message}")]
+    InvalidThemeConfig { message: String },
+
     /// File I/O error
     #[error("Failed to read SASS file: {0}")]
     Io(#[from] std::io::Error),

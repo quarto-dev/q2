@@ -284,13 +284,46 @@ pub fn default_load_paths() -> Vec<std::path::PathBuf> {
 /// Get all embedded resource providers.
 ///
 /// Returns references to all embedded resource collections for iteration.
-pub fn all_resources() -> [&'static EmbeddedResources; 4] {
-    [
+pub fn all_resources() -> CombinedResources {
+    CombinedResources::new([
         &BOOTSTRAP_RESOURCES,
         &SASS_UTILS_RESOURCES,
         &THEMES_RESOURCES,
         &QUARTO_BOOTSTRAP_RESOURCES,
-    ]
+    ])
+}
+
+/// Combined resource provider that checks multiple embedded resources in sequence.
+///
+/// This implements `EmbeddedResourceProvider` by trying each resource in order
+/// until one succeeds.
+pub struct CombinedResources {
+    // Only used by native `EmbeddedResourceProvider` impl
+    #[allow(dead_code)]
+    resources: [&'static EmbeddedResources; 4],
+}
+
+impl CombinedResources {
+    /// Create a new CombinedResources from an array of providers.
+    pub fn new(resources: [&'static EmbeddedResources; 4]) -> Self {
+        Self { resources }
+    }
+}
+
+// Implement EmbeddedResourceProvider for CombinedResources on native targets
+#[cfg(not(target_arch = "wasm32"))]
+impl quarto_system_runtime::EmbeddedResourceProvider for CombinedResources {
+    fn is_file(&self, path: &Path) -> bool {
+        self.resources.iter().any(|r| r.is_file(path))
+    }
+
+    fn is_dir(&self, path: &Path) -> bool {
+        self.resources.iter().any(|r| r.is_dir(path))
+    }
+
+    fn read(&self, path: &Path) -> Option<&'static [u8]> {
+        self.resources.iter().find_map(|r| r.read(path))
+    }
 }
 
 #[cfg(test)]
@@ -495,11 +528,21 @@ mod tests {
     #[test]
     fn test_all_resources() {
         let resources = all_resources();
-        assert_eq!(resources.len(), 4);
-        // Verify all have some files
-        for res in resources {
-            assert!(res.file_count() > 0, "Resource should have files");
-        }
+        // Combined resources should be able to find files from any source
+        let bootstrap_path = Path::new("/__quarto_resources__/bootstrap/scss/_variables.scss");
+        let theme_path = Path::new("/__quarto_resources__/bootstrap/themes/cosmo.scss");
+
+        assert!(
+            resources
+                .resources
+                .iter()
+                .any(|r| r.is_file(bootstrap_path)),
+            "Should find Bootstrap file"
+        );
+        assert!(
+            resources.resources.iter().any(|r| r.is_file(theme_path)),
+            "Should find theme file"
+        );
     }
 
     #[test]

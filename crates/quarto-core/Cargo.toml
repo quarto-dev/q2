@@ -35,6 +35,7 @@ tempfile = "3"
 include_dir = "0.7"
 which = "7"
 regex = "1.10"
+quarto-sass.workspace = true
 
 # Jupyter engine dependencies (native only)
 runtimelib = { version = "0.30", features = ["tokio-runtime"] }

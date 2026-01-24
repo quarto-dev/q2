@@ -2649,6 +2649,7 @@ dependencies = [
  "quarto-doctemplate",
  "quarto-error-reporting",
  "quarto-pandoc-types",
+ "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-util",
@@ -2820,11 +2821,14 @@ dependencies = [
  "include_dir",
  "insta",
  "once_cell",
+ "quarto-pandoc-types",
+ "quarto-source-map",
  "quarto-system-runtime",
  "regex",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "yaml-rust2",
 ]
 
 [[package]]

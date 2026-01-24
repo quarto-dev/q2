@@ -1678,6 +1678,7 @@ dependencies = [
  "quarto-doctemplate",
  "quarto-error-reporting",
  "quarto-pandoc-types",
+ "quarto-sass",
  "quarto-source-map",
  "quarto-system-runtime",
  "quarto-util",
@@ -1798,6 +1799,7 @@ version = "0.1.0"
 dependencies = [
  "include_dir",
  "once_cell",
+ "quarto-pandoc-types",
  "quarto-system-runtime",
  "regex",
  "serde",
@@ -2854,9 +2856,11 @@ dependencies = [
  "quarto-system-runtime",
  "serde",
  "serde_json",
+ "serde_yaml",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "yaml-rust2",
 ]
 
 [[package]]

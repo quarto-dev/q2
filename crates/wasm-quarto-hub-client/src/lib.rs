@@ -23,7 +23,9 @@ use quarto_core::{
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
-use quarto_sass::{BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX};
+use quarto_sass::{
+    BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX, ThemeConfig, ThemeContext, compile_theme_css,
+};
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
 use serde::{Deserialize, Serialize};
@@ -1508,4 +1510,240 @@ pub async fn compile_scss_with_bootstrap(scss: &str, minified: bool) -> String {
     // Default load path includes embedded Bootstrap SCSS
     let load_paths = format!("[\"{}/bootstrap/scss\"]", RESOURCE_PATH_PREFIX);
     compile_scss(scss, minified, &load_paths).await
+}
+
+/// Compile CSS for a document's theme configuration.
+///
+/// Extracts the theme from the document's YAML frontmatter and compiles
+/// the appropriate CSS. Supports:
+/// - Single theme: `theme: cosmo`
+/// - Multiple themes: `theme: [cosmo, custom.scss]`
+/// - No theme: uses default Bootstrap
+///
+/// # Arguments
+/// * `content` - The QMD document content (must include YAML frontmatter)
+///
+/// # Returns
+/// JSON: `{ "success": true, "css": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const qmd = `---
+/// title: My Document
+/// format:
+///   html:
+///     theme: cosmo
+/// ---
+///
+/// # Hello World
+/// `;
+/// const result = JSON.parse(await compile_document_css(qmd));
+/// if (result.success) {
+///     document.querySelector('style').textContent = result.css;
+/// }
+/// ```
+#[wasm_bindgen]
+pub async fn compile_document_css(content: &str) -> String {
+    let runtime = get_runtime();
+
+    // Check if SASS is available
+    if !runtime.sass_available() {
+        return SassCompileResponse::error("SASS compilation is not available");
+    }
+
+    // Extract YAML frontmatter and parse it
+    let config = match extract_frontmatter_config(content) {
+        Ok(config) => config,
+        Err(e) => return SassCompileResponse::error(&e),
+    };
+
+    // Extract theme configuration
+    let theme_config = match ThemeConfig::from_config_value(&config) {
+        Ok(config) => config,
+        Err(e) => return SassCompileResponse::error(&format!("Invalid theme config: {}", e)),
+    };
+
+    // Create theme context (using root as document dir since VFS is flat)
+    let context = ThemeContext::new(std::path::PathBuf::from("/"), runtime);
+
+    // Compile CSS
+    match compile_theme_css(&theme_config, &context).await {
+        Ok(css) => SassCompileResponse::ok(css),
+        Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
+    }
+}
+
+/// Compile CSS for a specific theme name.
+///
+/// Convenience function for compiling a single built-in Bootswatch theme.
+/// Use this when you know the exact theme name (e.g., from a UI selection).
+///
+/// # Arguments
+/// * `theme_name` - The Bootswatch theme name (e.g., "cosmo", "darkly", "flatly")
+/// * `minified` - Whether to produce minified output
+///
+/// # Returns
+/// JSON: `{ "success": true, "css": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(await compile_theme_css_by_name("cosmo", true));
+/// if (result.success) {
+///     applyThemeCSS(result.css);
+/// }
+/// ```
+#[wasm_bindgen]
+pub async fn compile_theme_css_by_name(theme_name: &str, minified: bool) -> String {
+    use quarto_sass::themes::ThemeSpec;
+
+    let runtime = get_runtime();
+
+    // Check if SASS is available
+    if !runtime.sass_available() {
+        return SassCompileResponse::error("SASS compilation is not available");
+    }
+
+    // Parse theme spec
+    let theme_spec = match ThemeSpec::parse(theme_name) {
+        Ok(spec) => spec,
+        Err(e) => return SassCompileResponse::error(&format!("Invalid theme: {}", e)),
+    };
+
+    // Create theme config
+    let theme_config = ThemeConfig::new(vec![theme_spec], minified);
+
+    // Create theme context
+    let context = ThemeContext::new(std::path::PathBuf::from("/"), runtime);
+
+    // Compile CSS
+    match compile_theme_css(&theme_config, &context).await {
+        Ok(css) => SassCompileResponse::ok(css),
+        Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
+    }
+}
+
+/// Compile default Bootstrap CSS (no theme customization).
+///
+/// Use this when you need basic Bootstrap styling without any Bootswatch theme.
+/// This is what gets used when no theme is specified in the document.
+///
+/// # Arguments
+/// * `minified` - Whether to produce minified output
+///
+/// # Returns
+/// JSON: `{ "success": true, "css": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const result = JSON.parse(await compile_default_bootstrap_css(true));
+/// if (result.success) {
+///     applyThemeCSS(result.css);
+/// }
+/// ```
+#[wasm_bindgen]
+pub async fn compile_default_bootstrap_css(minified: bool) -> String {
+    let runtime = get_runtime();
+
+    // Check if SASS is available
+    if !runtime.sass_available() {
+        return SassCompileResponse::error("SASS compilation is not available");
+    }
+
+    // Create default theme config (no themes, just Bootstrap)
+    let theme_config = ThemeConfig::default_bootstrap();
+    let theme_config = ThemeConfig::new(theme_config.themes, minified);
+
+    // Create theme context
+    let context = ThemeContext::new(std::path::PathBuf::from("/"), runtime);
+
+    // Compile CSS
+    match compile_theme_css(&theme_config, &context).await {
+        Ok(css) => SassCompileResponse::ok(css),
+        Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
+    }
+}
+
+// =============================================================================
+// Helper Functions for Theme Compilation
+// =============================================================================
+
+/// Extract YAML frontmatter from QMD content and parse to ConfigValue.
+///
+/// Looks for content between `---` markers at the start of the document.
+fn extract_frontmatter_config(content: &str) -> Result<ConfigValue, String> {
+    use quarto_pandoc_types::{ConfigValueKind, MergeOp};
+    use quarto_source_map::SourceInfo;
+
+    // Find YAML frontmatter boundaries
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        // No frontmatter - return empty config
+        return Ok(ConfigValue {
+            value: ConfigValueKind::Map(vec![]),
+            source_info: SourceInfo::default(),
+            merge_op: MergeOp::default(),
+        });
+    }
+
+    // Find the closing `---`
+    let after_first = &trimmed[3..];
+    let end_pos = after_first
+        .find("\n---")
+        .ok_or_else(|| "Unclosed YAML frontmatter".to_string())?;
+
+    // Extract YAML content
+    let yaml_str = &after_first[..end_pos].trim();
+
+    // Parse YAML to serde_json::Value first
+    let yaml_value: serde_json::Value = serde_yaml::from_str(yaml_str)
+        .map_err(|e| format!("Failed to parse YAML frontmatter: {}", e))?;
+
+    // Convert to ConfigValue
+    Ok(json_to_config_value(&yaml_value))
+}
+
+/// Convert a serde_json::Value to ConfigValue.
+///
+/// This is a simplified conversion that preserves the structure needed
+/// for theme configuration extraction.
+fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
+    use quarto_pandoc_types::{ConfigMapEntry, ConfigValueKind, MergeOp};
+    use quarto_source_map::SourceInfo;
+    use yaml_rust2::Yaml;
+
+    let kind = match value {
+        serde_json::Value::Null => ConfigValueKind::Scalar(Yaml::Null),
+        serde_json::Value::Bool(b) => ConfigValueKind::Scalar(Yaml::Boolean(*b)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                ConfigValueKind::Scalar(Yaml::Integer(i))
+            } else if let Some(f) = n.as_f64() {
+                ConfigValueKind::Scalar(Yaml::Real(f.to_string()))
+            } else {
+                ConfigValueKind::Scalar(Yaml::String(n.to_string()))
+            }
+        }
+        serde_json::Value::String(s) => ConfigValueKind::Scalar(Yaml::String(s.clone())),
+        serde_json::Value::Array(arr) => {
+            let items: Vec<ConfigValue> = arr.iter().map(json_to_config_value).collect();
+            ConfigValueKind::Array(items)
+        }
+        serde_json::Value::Object(obj) => {
+            let entries: Vec<ConfigMapEntry> = obj
+                .iter()
+                .map(|(k, v)| ConfigMapEntry {
+                    key: k.clone(),
+                    key_source: SourceInfo::default(),
+                    value: json_to_config_value(v),
+                })
+                .collect();
+            ConfigValueKind::Map(entries)
+        }
+    };
+
+    ConfigValue {
+        value: kind,
+        source_info: SourceInfo::default(),
+        merge_op: MergeOp::default(),
+    }
 }

@@ -2,7 +2,7 @@
 
 **Beads Issue**: k-685
 **Created**: 2026-01-13
-**Status**: Complete (Phases 1-6 done, browser testing remaining)
+**Status**: In Progress (Phases 1-6 complete, Phase 7 in planning)
 
 ---
 
@@ -1436,17 +1436,45 @@ pub fn compile_themed_bundle(
 - [x] Test eviction under size pressure (unit tests pass)
 - [ ] Browser integration testing (verify IndexedDB storage works end-to-end)
 
-### Phase 6: Bootstrap Integration
+### Phase 6: Bootstrap Integration ✅
 
-- [ ] Embed Bootswatch themes (24 themes)
-- [ ] Implement `BuiltInTheme` enum
-- [ ] Implement `resolve_theme()` function
-- [ ] Port `layerQuartoScss` assembly function
-- [ ] Port `pandocVariablesToThemeScss` mapping
-- [ ] Test all 24 Bootswatch themes compile correctly
-- [ ] Integration test with Quarto HTML format
+- [x] Embed Bootswatch themes (25 themes)
+- [x] Implement `BuiltInTheme` enum
+- [x] Implement `resolve_theme()` function
+- [x] Port `layerQuartoScss` assembly function (as `assemble_with_theme()`)
+- [x] Test all 25 Bootswatch themes compile correctly
+- [x] Custom SCSS theme support (Phase 6b subplan)
 
-### Phase 7: Brand System
+**Note (2026-01-23):** Phase 6 completed. All 25 Bootswatch themes compile successfully.
+See session summaries above and subplans:
+- `2026-01-23-phase6b-custom-scss.md`
+- `2026-01-23-phase6b-wasm-support.md`
+
+**Deferred:**
+- `pandocVariablesToThemeScss` mapping (will be part of render integration)
+- Light/dark theme pairs (Phase 6b.6)
+
+### Phase 7: SASS Render Integration - IN PROGRESS
+
+**Subplan:** `2026-01-24-phase7-sass-render-integration.md`
+
+Integrate SASS compilation with the `quarto render` pipeline.
+
+- [x] Theme configuration extraction from `ConfigValue` (ThemeConfig in config.rs)
+- [x] High-level compilation API for render pipeline (compile.rs module)
+- [x] Native render integration (write_html_resources_with_sass in quarto-core)
+- [ ] WASM render integration (wasm-quarto-hub-client)
+- [ ] Hub-client UI integration
+
+**Session 2026-01-24:**
+- Created `quarto-sass/src/config.rs` with `ThemeConfig::from_config_value()`
+- Created `quarto-sass/src/compile.rs` with `compile_theme_css()`, `compile_default_css()`
+- Created `CombinedResources` provider in resources.rs
+- Added `write_html_resources_with_sass()` to quarto-core/resources.rs
+- Added quarto-sass as native dependency to quarto-core
+- Total: 145 tests passing across quarto-sass and quarto-core
+
+### Phase 8: Brand System
 
 - [ ] Implement `Brand` configuration parsing (`_brand.yml`)
 - [ ] Implement `brand_color_layer()` - color palette to SASS
@@ -1456,7 +1484,7 @@ pub fn compile_themed_bundle(
 - [ ] CSS custom properties (--brand-* variables)
 - [ ] Integration test with `_brand.yml` examples
 
-### Phase 8: End-to-End Testing
+### Phase 9: End-to-End Testing
 
 - [ ] Full pipeline test: QMD → HTML with custom SASS
 - [ ] Hub-client preview with themed styling
