@@ -77,6 +77,11 @@ export async function initWasm(): Promise<void> {
 
         // Load the HTML template bundle
         htmlTemplateBundle = wasm.get_builtin_template('html');
+
+        // Set up VFS callbacks for SASS importer
+        // This allows dart-sass to read Bootstrap SCSS files from the VFS
+        await setupSassVfsCallbacks();
+
         console.log('WASM module initialized successfully, template loaded');
       } catch (err) {
         initPromise = null;
@@ -86,6 +91,40 @@ export async function initWasm(): Promise<void> {
   }
 
   return initPromise;
+}
+
+/**
+ * Set up VFS callbacks for the SASS importer.
+ *
+ * The dart-sass compiler needs to read Bootstrap SCSS files from the VFS.
+ * This connects the JS sass importer to the WASM VFS operations.
+ */
+async function setupSassVfsCallbacks(): Promise<void> {
+  try {
+    // Import the sass bridge module
+    const sassModule = await import('../wasm-js-bridge/sass.js');
+
+    // Create VFS read callback
+    const readFn = (path: string): string | null => {
+      const result = vfsReadFile(path);
+      if (result.success && result.content !== undefined) {
+        return result.content;
+      }
+      return null;
+    };
+
+    // Create VFS file check callback
+    const isFileFn = (path: string): boolean => {
+      const result = vfsReadFile(path);
+      return result.success && result.content !== undefined;
+    };
+
+    // Register callbacks with the SASS importer
+    sassModule.setVfsCallbacks(readFn, isFileFn);
+    console.log('[initWasm] SASS VFS callbacks registered');
+  } catch (err) {
+    console.warn('[initWasm] Failed to set up SASS VFS callbacks:', err);
+  }
 }
 
 /**
