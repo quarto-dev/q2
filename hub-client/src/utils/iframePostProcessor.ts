@@ -60,8 +60,8 @@ export function postProcessIframe(
     if (href?.startsWith('/.quarto/')) {
       const result = vfsReadFile(href);
       if (result.success && result.content) {
-        // btoa is safe here since CSS is UTF-8 text
-        const dataUri = `data:text/css;base64,${btoa(result.content)}`;
+        // Use UTF-8 safe base64 encoding (btoa only handles Latin1)
+        const dataUri = `data:text/css;base64,${utf8ToBase64(result.content)}`;
         link.setAttribute('href', dataUri);
       }
     }
@@ -192,4 +192,22 @@ function guessMimeType(path: string): string {
     js: 'text/javascript',
   };
   return mimeTypes[ext || ''] || 'application/octet-stream';
+}
+
+/**
+ * Encode a UTF-8 string to base64.
+ *
+ * Unlike btoa(), this handles characters outside the Latin1 range
+ * by first encoding to UTF-8 bytes.
+ */
+function utf8ToBase64(str: string): string {
+  // Encode string to UTF-8 bytes
+  const bytes = new TextEncoder().encode(str);
+  // Convert bytes to binary string
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  // Encode binary string to base64
+  return btoa(binary);
 }
