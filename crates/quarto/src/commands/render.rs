@@ -16,24 +16,25 @@
 //! - Single file rendering
 //! - HTML output (native Rust pipeline, no Pandoc)
 //! - Basic document structure
+//! - SASS theme compilation (Bootstrap/Bootswatch themes)
 //!
 //! Not yet supported:
 //! - Code execution
-//! - SASS compilation (uses pre-compiled CSS)
 //! - Navigation (navbar, sidebar, footer)
 //! - Multi-file projects
 //! - Non-HTML formats
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, FormatIdentifier, HtmlRenderConfig, ProjectContext,
     QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
 };
+use quarto_sass::{ThemeConfig, ThemeContext, ThemeSpec};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
 
 /// Arguments for the render command
@@ -185,19 +186,28 @@ fn render_document(
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow::anyhow!("Could not determine output filename stem"))?;
 
-    // Write static resources (CSS, JS) to output directory
-    let resource_paths =
-        quarto_core::resources::write_html_resources(output_dir, output_stem, runtime)
-            .context("Failed to write HTML resources")?;
-
-    // Read input file
-    let input_content = runtime.file_read(&doc_info.input).map_err(|e| {
+    // Read input file (we need it for both theme extraction and rendering)
+    let input_bytes = runtime.file_read(&doc_info.input).map_err(|e| {
         anyhow::anyhow!(
             "Failed to read input file {}: {}",
             doc_info.input.display(),
             e
         )
     })?;
+
+    // Convert to string for theme extraction (needed for YAML parsing)
+    let input_str =
+        std::str::from_utf8(&input_bytes).context("Input file contains invalid UTF-8")?;
+
+    // Extract theme configuration from frontmatter and write resources
+    let resource_paths = write_themed_resources(
+        input_str,
+        &doc_info.input,
+        output_dir,
+        output_stem,
+        runtime,
+        args.quiet,
+    )?;
 
     // Use the unified pipeline to render
     let input_path_str = doc_info.input.to_string_lossy();
@@ -209,9 +219,9 @@ fn render_document(
     // Create Arc runtime for the async pipeline
     let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(NativeRuntime::new());
 
-    // Use pollster to run the async pipeline synchronously
+    // Use pollster to run the async pipeline synchronously (expects bytes)
     let output = match pollster::block_on(render_qmd_to_html(
-        &input_content,
+        &input_bytes,
         &input_path_str,
         &mut ctx,
         &config,
@@ -271,6 +281,150 @@ fn determine_output_path(ctx: &RenderContext, args: &RenderArgs) -> Result<PathB
     }
 
     Ok(base_output)
+}
+
+// ============================================================================
+// Theme Support
+// ============================================================================
+
+/// Write HTML resources with theme support.
+///
+/// Extracts theme configuration from frontmatter and compiles SASS accordingly.
+/// Falls back to default CSS if no theme is specified or if compilation fails.
+fn write_themed_resources(
+    content: &str,
+    input_path: &Path,
+    output_dir: &Path,
+    stem: &str,
+    runtime: &dyn SystemRuntime,
+    quiet: bool,
+) -> Result<quarto_core::resources::HtmlResourcePaths> {
+    // Try to extract theme config from frontmatter
+    let theme_config = match extract_theme_config(content) {
+        Ok(Some(config)) => {
+            if !quiet {
+                debug!("Theme configuration found: {:?}", config);
+            }
+            config
+        }
+        Ok(None) => {
+            // No theme specified - use default static CSS
+            debug!("No theme specified, using default CSS");
+            return quarto_core::resources::write_html_resources(output_dir, stem, runtime)
+                .context("Failed to write default HTML resources");
+        }
+        Err(e) => {
+            // Failed to parse - warn and fall back to default
+            warn!(
+                "Failed to parse theme configuration: {}. Using default CSS.",
+                e
+            );
+            return quarto_core::resources::write_html_resources(output_dir, stem, runtime)
+                .context("Failed to write default HTML resources");
+        }
+    };
+
+    // Create theme context with the document's directory
+    let document_dir = input_path
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
+    let context = ThemeContext::new(document_dir, runtime);
+
+    // Try to compile themed CSS
+    match quarto_core::resources::write_html_resources_with_sass(
+        output_dir,
+        stem,
+        &theme_config,
+        &context,
+        runtime,
+    ) {
+        Ok(paths) => {
+            if !quiet {
+                info!("Compiled theme CSS successfully");
+            }
+            Ok(paths)
+        }
+        Err(e) => {
+            // Compilation failed - warn and fall back to default
+            warn!("Theme CSS compilation failed: {}. Using default CSS.", e);
+            quarto_core::resources::write_html_resources(output_dir, stem, runtime)
+                .context("Failed to write fallback HTML resources")
+        }
+    }
+}
+
+/// Extract theme configuration from QMD frontmatter.
+///
+/// Parses the YAML frontmatter and extracts the `format.html.theme` value.
+/// Returns `Ok(None)` if no theme is specified.
+fn extract_theme_config(content: &str) -> Result<Option<ThemeConfig>> {
+    // Find YAML frontmatter
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return Ok(None);
+    }
+
+    // Find closing ---
+    let after_first = &trimmed[3..];
+    let end_pos = match after_first.find("\n---") {
+        Some(pos) => pos,
+        None => return Ok(None), // Unclosed frontmatter
+    };
+
+    // Parse YAML
+    let yaml_str = &after_first[..end_pos].trim();
+    let yaml_value: serde_yaml::Value =
+        serde_yaml::from_str(yaml_str).context("Failed to parse YAML frontmatter")?;
+
+    // Navigate to format.html.theme
+    let theme_value = yaml_value
+        .get("format")
+        .and_then(|f| f.get("html"))
+        .and_then(|h| h.get("theme"));
+
+    let theme_value = match theme_value {
+        Some(v) => v,
+        None => return Ok(None), // No theme specified
+    };
+
+    // Convert to ThemeConfig
+    let config = theme_value_to_config(theme_value)?;
+    Ok(Some(config))
+}
+
+/// Convert a serde_yaml::Value theme specification to ThemeConfig.
+fn theme_value_to_config(value: &serde_yaml::Value) -> Result<ThemeConfig> {
+    match value {
+        serde_yaml::Value::String(s) => {
+            // Single theme name: "darkly"
+            let spec =
+                ThemeSpec::parse(s).map_err(|e| anyhow::anyhow!("Invalid theme '{}': {}", s, e))?;
+            Ok(ThemeConfig::new(vec![spec], true))
+        }
+        serde_yaml::Value::Sequence(arr) => {
+            // Array of themes: ["darkly", "custom.scss"]
+            let mut themes = Vec::new();
+            for v in arr {
+                if let Some(s) = v.as_str() {
+                    let spec = ThemeSpec::parse(s)
+                        .map_err(|e| anyhow::anyhow!("Invalid theme '{}': {}", s, e))?;
+                    themes.push(spec);
+                }
+            }
+            if themes.is_empty() {
+                anyhow::bail!("Empty theme array");
+            }
+            Ok(ThemeConfig::new(themes, true))
+        }
+        serde_yaml::Value::Null => {
+            // Explicit null - use default Bootstrap
+            Ok(ThemeConfig::default_bootstrap())
+        }
+        _ => {
+            anyhow::bail!("Invalid theme value: expected string, array, or null");
+        }
+    }
 }
 
 /// Escape HTML special characters

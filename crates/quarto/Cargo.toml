@@ -25,6 +25,8 @@ quarto-util.workspace = true
 quarto-system-runtime.workspace = true
 quarto-doctemplate.workspace = true
 quarto-lsp = { workspace = true }
+quarto-sass.workspace = true
+serde_yaml.workspace = true
 
 [build-dependencies]
 

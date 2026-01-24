@@ -19,9 +19,17 @@
 - WASM build successful
 
 ### Remaining Work
-- Manual testing with various theme configurations (requires running dev server)
-- Verify cache behavior in browser
 - Consider optimizations for first-load experience
+- Epic for HTML structure compatibility with TypeScript Quarto (Bootstrap container classes, sections, etc.)
+
+### Additional Work Done (Later in Session)
+- Fixed SASS VFS callbacks not being initialized (hub-client couldn't read Bootstrap SCSS files)
+- Fixed UTF-8 base64 encoding error in iframePostProcessor
+- Implemented native render theme support:
+  - Added `quarto-sass` dependency to quarto binary
+  - Created `extract_theme_config()` to parse YAML frontmatter
+  - Created `write_themed_resources()` to use SASS compilation
+  - `quarto render` now compiles theme CSS (e.g., `theme: darkly` produces full Bootstrap+Darkly CSS)
 
 ---
 
@@ -286,10 +294,12 @@ pub fn write_html_resources_with_sass(
 - [x] Create `write_html_resources_with_sass()` in resources.rs
 - [x] Add tests for compiled CSS output (2 tests)
 - [x] Verify all existing tests still pass (495 tests pass)
-- [ ] Implement `extract_theme_config()` from RenderContext (future: when render pipeline uses ConfigValue)
-- [ ] Update `render_document()` in render.rs (future: when render pipeline is ready)
+- [x] Implement `extract_theme_config()` from frontmatter in render.rs
+- [x] Update `render_document()` to call `write_html_resources_with_sass()`
+- [x] Test with various theme configurations
 
-**Note**: The core SASS compilation infrastructure is now in place. The remaining items require the render pipeline to use the new ConfigValue-based configuration system, which is tracked separately.
+**Note**: Implemented frontmatter parsing directly rather than waiting for full ConfigValue system.
+Theme compilation now works in native `quarto render` command - CSS file contains full Bootstrap with theme colors.
 
 ### Phase 7.4: WASM Render Integration
 
