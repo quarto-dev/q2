@@ -978,12 +978,18 @@ fn write_block<W: Write>(block: &Block, ctx: &mut HtmlWriterContext<'_, W>) -> s
             writeln!(ctx, "</figure>")?;
         }
         Block::Div(div) => {
-            write!(ctx, "<div")?;
+            // Use <section> tag for Divs with "section" class (from sectionize transform)
+            let tag = if div.attr.1.contains(&"section".to_string()) {
+                "section"
+            } else {
+                "div"
+            };
+            write!(ctx, "<{}", tag)?;
             write_attr(&div.attr, ctx)?;
             write_block_source_attrs(block, ctx)?;
             writeln!(ctx, ">")?;
             write_blocks(&div.content, ctx)?;
-            writeln!(ctx, "</div>")?;
+            writeln!(ctx, "</{}>", tag)?;
         }
         // Quarto extensions
         Block::BlockMetadata(_) => {
@@ -1520,5 +1526,121 @@ mod tests {
         assert!(html.contains("Hello"));
         // With source-location: full, we should have source tracking attributes
         // (The actual presence depends on whether the parallel walk found matches)
+    }
+
+    // =========================================================================
+    // Section Div tests (from sectionize transform)
+    // =========================================================================
+
+    #[test]
+    fn test_div_with_section_class_renders_as_section_tag() {
+        use crate::pandoc::ASTContext;
+        use crate::pandoc::block::Div;
+        use hashlink::LinkedHashMap;
+        use quarto_pandoc_types::attr::AttrSourceInfo;
+
+        let ctx = ASTContext::anonymous();
+        let div = Block::Div(Div {
+            attr: (
+                "my-section".to_string(),
+                vec!["section".to_string(), "level2".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Content".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let pandoc = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![div],
+        };
+
+        let mut output = Vec::new();
+        write(&pandoc, &ctx, &mut output).unwrap();
+        let html = String::from_utf8(output).unwrap();
+
+        // Should use <section> tag
+        assert!(
+            html.contains("<section"),
+            "Expected <section> tag, got: {}",
+            html
+        );
+        assert!(
+            html.contains("</section>"),
+            "Expected </section> tag, got: {}",
+            html
+        );
+        // Should NOT have <div> tag (except maybe in nested content)
+        assert!(
+            !html.contains("<div"),
+            "Should not have <div> tag, got: {}",
+            html
+        );
+        // Should have the ID
+        assert!(
+            html.contains("id=\"my-section\""),
+            "Expected id attribute, got: {}",
+            html
+        );
+        // Should have the classes
+        assert!(
+            html.contains("class=\"section level2\""),
+            "Expected class attribute, got: {}",
+            html
+        );
+    }
+
+    #[test]
+    fn test_div_without_section_class_renders_as_div_tag() {
+        use crate::pandoc::ASTContext;
+        use crate::pandoc::block::Div;
+        use hashlink::LinkedHashMap;
+        use quarto_pandoc_types::attr::AttrSourceInfo;
+
+        let ctx = ASTContext::anonymous();
+        let div = Block::Div(Div {
+            attr: (
+                "my-div".to_string(),
+                vec!["callout".to_string(), "warning".to_string()],
+                LinkedHashMap::new(),
+            ),
+            content: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Content".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+            source_info: dummy_source_info(),
+            attr_source: AttrSourceInfo::empty(),
+        });
+        let pandoc = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![div],
+        };
+
+        let mut output = Vec::new();
+        write(&pandoc, &ctx, &mut output).unwrap();
+        let html = String::from_utf8(output).unwrap();
+
+        // Should use <div> tag
+        assert!(html.contains("<div"), "Expected <div> tag, got: {}", html);
+        assert!(
+            html.contains("</div>"),
+            "Expected </div> tag, got: {}",
+            html
+        );
+        // Should NOT have <section> tag
+        assert!(
+            !html.contains("<section"),
+            "Should not have <section> tag, got: {}",
+            html
+        );
     }
 }

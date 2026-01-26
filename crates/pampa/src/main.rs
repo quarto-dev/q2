@@ -22,6 +22,7 @@ mod options;
 mod pandoc;
 mod readers;
 mod template;
+mod transforms;
 mod traversals;
 mod unified_filter;
 mod utils;
@@ -104,6 +105,47 @@ fn print_whole_tree<T: Write>(cursor: &mut tree_sitter_qmd::MarkdownCursor, buf:
         }
         true // continue traversing
     });
+}
+
+/// Check if section-divs is enabled in the document metadata.
+///
+/// Looks for `format: html: section-divs: true` in the metadata.
+fn should_sectionize(meta: &quarto_pandoc_types::ConfigValue) -> bool {
+    use quarto_pandoc_types::ConfigValueKind;
+
+    // Navigate: meta -> format -> html -> section-divs
+    let ConfigValueKind::Map(entries) = &meta.value else {
+        return false;
+    };
+
+    // Find "format" key
+    let format_entry = entries.iter().find(|e| e.key == "format");
+    let Some(format_entry) = format_entry else {
+        return false;
+    };
+
+    let ConfigValueKind::Map(format_entries) = &format_entry.value.value else {
+        return false;
+    };
+
+    // Find "html" key
+    let html_entry = format_entries.iter().find(|e| e.key == "html");
+    let Some(html_entry) = html_entry else {
+        return false;
+    };
+
+    let ConfigValueKind::Map(html_entries) = &html_entry.value.value else {
+        return false;
+    };
+
+    // Find "section-divs" key
+    let section_divs_entry = html_entries.iter().find(|e| e.key == "section-divs");
+    let Some(section_divs_entry) = section_divs_entry else {
+        return false;
+    };
+
+    // Check if it's true
+    section_divs_entry.value.as_bool().unwrap_or(false)
 }
 
 fn main() {
@@ -403,16 +445,28 @@ fn main() {
             }
             "native" => writers::native::write(&pandoc, &context, &mut buf),
             "markdown" | "qmd" => writers::qmd::write(&pandoc, &mut buf),
-            "html" => writers::html::write(&pandoc, &context, &mut buf).map_err(|e| {
-                vec![
-                    quarto_error_reporting::DiagnosticMessageBuilder::error(
-                        "IO error during write",
-                    )
-                    .with_code("Q-3-1")
-                    .problem(format!("Failed to write HTML output: {}", e))
-                    .build(),
-                ]
-            }),
+            "html" => {
+                // Check for section-divs: true in format.html.section-divs
+                let section_divs_enabled = should_sectionize(&pandoc.meta);
+                let pandoc_to_write = if section_divs_enabled {
+                    // Apply sectionize transform
+                    let mut transformed = pandoc.clone();
+                    transformed.blocks = transforms::sectionize_blocks(transformed.blocks);
+                    transformed
+                } else {
+                    pandoc.clone()
+                };
+                writers::html::write(&pandoc_to_write, &context, &mut buf).map_err(|e| {
+                    vec![
+                        quarto_error_reporting::DiagnosticMessageBuilder::error(
+                            "IO error during write",
+                        )
+                        .with_code("Q-3-1")
+                        .problem(format!("Failed to write HTML output: {}", e))
+                        .build(),
+                    ]
+                })
+            }
             "plaintext" | "plain" => {
                 let (output, diagnostics) = writers::plaintext::blocks_to_string(&pandoc.blocks);
                 buf.extend_from_slice(output.as_bytes());
