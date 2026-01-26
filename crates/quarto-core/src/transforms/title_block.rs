@@ -11,6 +11,19 @@
 //! 1. Checking if there's an existing level-1 header in the document
 //! 2. If not, prepending a level-1 header from the `title` metadata
 //!
+//! ## Template Mode Behavior
+//!
+//! The transform behavior depends on which HTML template mode is being used:
+//!
+//! - **Minimal mode** (`minimal: true` or `theme: none/pandoc`):
+//!   The transform adds an h1 header to the AST body if title metadata exists.
+//!   This is necessary because the minimal template renders `$body$` directly.
+//!
+//! - **Full mode** (default):
+//!   The transform does NOT add an h1 header because the full template generates
+//!   a structured `<header id="title-block-header">` from metadata variables.
+//!   Adding an h1 here would result in duplicate titles.
+//!
 //! This is a simplified version of Quarto's title block handling for
 //! prototyping purposes.
 
@@ -29,12 +42,34 @@ use crate::transform::AstTransform;
 ///
 /// If the document has no level-1 header but has a `title` in metadata,
 /// this transform prepends a level-1 header with the title text.
+///
+/// ## Mode-Aware Behavior
+///
+/// This transform only adds the h1 header in **minimal mode** (`minimal: true`,
+/// `theme: none`, or `theme: pandoc`). In **full mode** (default), the template
+/// generates a structured title block header, so we don't add an h1 here.
 pub struct TitleBlockTransform;
 
 impl TitleBlockTransform {
     /// Create a new title block transform.
     pub fn new() -> Self {
         Self
+    }
+
+    /// Check if we should add an h1 header based on template mode.
+    ///
+    /// Returns true only for minimal mode where the template doesn't
+    /// generate a title block.
+    fn should_add_h1(&self, ctx: &RenderContext) -> bool {
+        // For HTML formats, check if using minimal template
+        // (where we need to add h1 to the body)
+        if ctx.format.is_html() {
+            ctx.format.use_minimal_html()
+        } else {
+            // For non-HTML formats (PDF, DOCX, etc.), always add the h1
+            // since there's no template-based title block
+            true
+        }
     }
 }
 
@@ -49,7 +84,13 @@ impl AstTransform for TitleBlockTransform {
         "title-block"
     }
 
-    fn transform(&self, ast: &mut Pandoc, _ctx: &mut RenderContext) -> Result<()> {
+    fn transform(&self, ast: &mut Pandoc, ctx: &mut RenderContext) -> Result<()> {
+        // In full template mode (default for HTML), the template generates
+        // the title block header. Skip adding h1 to avoid duplication.
+        if !self.should_add_h1(ctx) {
+            return Ok(());
+        }
+
         // Check if there's already a level-1 header
         if has_level1_header(&ast.blocks) {
             return Ok(());
@@ -184,8 +225,15 @@ mod tests {
         }
     }
 
+    // Helper to create a minimal HTML format
+    fn minimal_html_format() -> Format {
+        Format::html().with_metadata(serde_json::json!({"minimal": true}))
+    }
+
+    // === Minimal mode tests (h1 SHOULD be added) ===
+
     #[test]
-    fn test_adds_title_header_when_missing() {
+    fn test_minimal_mode_adds_title_header_when_missing() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![ConfigMapEntry {
@@ -206,7 +254,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html();
+        let format = minimal_html_format();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -230,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn test_does_not_add_when_h1_exists() {
+    fn test_minimal_mode_does_not_add_when_h1_exists() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(
                 vec![ConfigMapEntry {
@@ -263,7 +311,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html();
+        let format = minimal_html_format();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -284,7 +332,7 @@ mod tests {
     }
 
     #[test]
-    fn test_does_nothing_without_title_metadata() {
+    fn test_minimal_mode_does_nothing_without_title_metadata() {
         let mut ast = Pandoc {
             meta: ConfigValue::new_map(vec![], dummy_source_info()),
             blocks: vec![Block::Paragraph(Paragraph {
@@ -298,7 +346,7 @@ mod tests {
 
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/doc.qmd");
-        let format = Format::html();
+        let format = minimal_html_format();
         let binaries = BinaryDependencies::new();
         let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
 
@@ -307,6 +355,118 @@ mod tests {
 
         // Should still have 1 block (no header added)
         assert_eq!(ast.blocks.len(), 1);
+    }
+
+    // === Full mode tests (h1 should NOT be added, template handles it) ===
+
+    #[test]
+    fn test_full_mode_does_not_add_title_header() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("My Document", dummy_source_info()),
+                }],
+                dummy_source_info(),
+            ),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Content".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        // Default HTML format is full mode
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TitleBlockTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Should still have 1 block - no header added in full mode
+        // because the template will render the title block
+        assert_eq!(ast.blocks.len(), 1);
+
+        // The only block should be the paragraph
+        match &ast.blocks[0] {
+            Block::Paragraph(_) => {}
+            _ => panic!("Expected Paragraph block, no Header"),
+        }
+    }
+
+    #[test]
+    fn test_full_mode_theme_cosmo_does_not_add_header() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("My Document", dummy_source_info()),
+                }],
+                dummy_source_info(),
+            ),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Content".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        // Bootstrap theme = full mode
+        let format = Format::html().with_metadata(serde_json::json!({"theme": "cosmo"}));
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TitleBlockTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // No header added - template handles title
+        assert_eq!(ast.blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_theme_none_adds_header() {
+        let mut ast = Pandoc {
+            meta: ConfigValue::new_map(
+                vec![ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("My Document", dummy_source_info()),
+                }],
+                dummy_source_info(),
+            ),
+            blocks: vec![Block::Paragraph(Paragraph {
+                content: vec![Inline::Str(Str {
+                    text: "Content".to_string(),
+                    source_info: dummy_source_info(),
+                })],
+                source_info: dummy_source_info(),
+            })],
+        };
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        // theme: none = minimal mode
+        let format = Format::html().with_metadata(serde_json::json!({"theme": "none"}));
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TitleBlockTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Header should be added in minimal mode
+        assert_eq!(ast.blocks.len(), 2);
+        assert!(matches!(&ast.blocks[0], Block::Header(_)));
     }
 
     #[test]

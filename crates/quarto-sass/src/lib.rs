@@ -23,6 +23,7 @@ mod types;
 pub use bundle::{
     assemble_bootstrap, assemble_scss, assemble_themes, assemble_with_theme,
     assemble_with_user_layers, load_bootstrap_framework, load_quarto_layer, load_theme,
+    load_title_block_layer,
 };
 pub use compile::{compile_css_from_config, compile_default_css, compile_theme_css};
 pub use config::ThemeConfig;
@@ -30,8 +31,8 @@ pub use error::SassError;
 pub use layer::{merge_layers, parse_layer, parse_layer_from_parts};
 pub use resources::{
     BOOTSTRAP_RESOURCES, CombinedResources, EmbeddedResources, QUARTO_BOOTSTRAP_RESOURCES,
-    RESOURCE_PATH_PREFIX, SASS_UTILS_RESOURCES, THEMES_RESOURCES, all_resources,
-    default_load_paths,
+    RESOURCE_PATH_PREFIX, SASS_UTILS_RESOURCES, TEMPLATES_RESOURCES, THEMES_RESOURCES,
+    all_resources, default_load_paths,
 };
 pub use themes::{
     BuiltInTheme, ResolvedTheme, ThemeContext, ThemeLayerResult, ThemeSpec, load_custom_theme,

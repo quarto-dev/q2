@@ -148,6 +148,7 @@ impl PipelineStage for ApplyTemplateStage {
         // Apply template
         let html = match &self.config.template {
             Some(template) => {
+                // Use custom template if provided
                 template::render_with_custom_template(template, &rendered.content, &metadata)
                     .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
@@ -159,8 +160,14 @@ impl PipelineStage for ApplyTemplateStage {
                     self.config.css_paths.clone()
                 };
 
-                template::render_with_resources(&rendered.content, &metadata, &css_paths)
-                    .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
+                // Use format-based template selection (minimal vs full)
+                template::render_with_format(
+                    &rendered.content,
+                    &metadata,
+                    &rendered.format,
+                    &css_paths,
+                )
+                .map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?
             }
         };
 

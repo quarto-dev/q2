@@ -24,15 +24,24 @@ use quarto_doctemplate::{Template, TemplateContext, TemplateValue};
 use quarto_pandoc_types::{ConfigValue, ConfigValueKind};
 
 use crate::Result;
+use crate::format::Format;
 
-/// Default HTML5 template for standalone documents.
+// =============================================================================
+// Template Definitions
+// =============================================================================
+
+/// Minimal HTML5 template for `minimal: true` or `theme: none/pandoc` documents.
 ///
-/// This template is compatible with Pandoc's variable conventions:
+/// This template produces plain HTML without Bootstrap structure. It matches
+/// TypeScript Quarto's output for `minimal: true`.
+///
+/// Template variables:
 /// - `$pagetitle$` / `$title$` - document title
 /// - `$body$` - rendered body content
 /// - `$css$` - CSS stylesheets (external files)
+/// - `$lang$` - document language
 /// - `$header-includes$` - additional header content
-const DEFAULT_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
+const MINIMAL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
 <meta charset="utf-8">
@@ -53,10 +62,132 @@ $body$
 </html>
 "#;
 
-/// Compile the default HTML template.
-pub fn default_html_template() -> Result<Template> {
-    Template::compile(DEFAULT_HTML_TEMPLATE)
+/// Full HTML5 template with Bootstrap-compatible structure.
+///
+/// This template produces semantic HTML with:
+/// - `<header id="title-block-header">` for document metadata
+/// - `<main class="content">` wrapper for body content
+/// - `<div id="quarto-content">` for layout structure
+///
+/// Template variables (in addition to minimal):
+/// - `$title$` - document title (for title block)
+/// - `$subtitle$` - document subtitle
+/// - `$author$` - document author(s)
+/// - `$date$` - publication date
+/// - `$abstract$` - document abstract
+/// - `$body-classes$` - CSS classes for body element
+/// - `$page-layout$` - page layout type (article, full, etc.)
+/// - `$version$` - Quarto version for generator meta tag
+const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
+<html$if(lang)$ lang="$lang$"$endif$>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="generator" content="quarto-rust-$version$">
+$if(author)$
+<meta name="author" content="$author$">
+$endif$
+$if(date)$
+<meta name="dcterms.date" content="$date$">
+$endif$
+$if(keywords)$
+<meta name="keywords" content="$keywords$">
+$endif$
+$if(description)$
+<meta name="description" content="$description$">
+$endif$
+$if(canonical-url)$
+<link rel="canonical" href="$canonical-url$">
+$endif$
+$if(pagetitle)$
+<title>$pagetitle$</title>
+$endif$
+$for(css)$
+<link rel="stylesheet" href="$css$">
+$endfor$
+$if(header-includes)$
+$header-includes$
+$endif$
+</head>
+<body class="fullcontent$if(body-classes)$ $body-classes$$endif$">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-$page-layout$">
+
+<main class="content" id="quarto-document-content">
+
+$if(title)$
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">$title$</h1>
+$if(subtitle)$
+<p class="subtitle">$subtitle$</p>
+$endif$
+</div>
+$if(author)$
+<div class="quarto-title-meta">
+<div class="quarto-title-meta-author">
+<div class="quarto-title-meta-heading">Author</div>
+<div class="quarto-title-meta-contents">$author$</div>
+</div>
+$if(date)$
+<div class="quarto-title-meta-date">
+<div class="quarto-title-meta-heading">Published</div>
+<div class="quarto-title-meta-contents">$date$</div>
+</div>
+$endif$
+</div>
+$endif$
+$if(abstract)$
+<div class="abstract">
+<div class="abstract-title">Abstract</div>
+$abstract$
+</div>
+$endif$
+</header>
+$endif$
+
+$body$
+</main>
+</div>
+</body>
+</html>
+"#;
+
+// =============================================================================
+// Template Compilation
+// =============================================================================
+
+/// Compile the minimal HTML template.
+pub fn minimal_html_template() -> Result<Template> {
+    Template::compile(MINIMAL_HTML_TEMPLATE)
         .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Compile the full HTML template.
+pub fn full_html_template() -> Result<Template> {
+    Template::compile(FULL_HTML_TEMPLATE)
+        .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Compile the default HTML template (minimal template for backwards compatibility).
+pub fn default_html_template() -> Result<Template> {
+    minimal_html_template()
+}
+
+/// Select and compile the appropriate template based on format configuration.
+///
+/// Returns the minimal template when:
+/// - `minimal: true` is set in format metadata
+/// - `theme: none` is set
+/// - `theme: pandoc` is set
+///
+/// Otherwise returns the full template with Bootstrap-compatible structure.
+pub fn select_template(format: &Format) -> Result<Template> {
+    if format.use_minimal_html() {
+        minimal_html_template()
+    } else {
+        full_html_template()
+    }
 }
 
 /// Render a document to HTML using the template engine.
@@ -146,6 +277,66 @@ pub fn render_with_resources(
     }
 
     ctx.insert("css", TemplateValue::List(css_list));
+
+    template
+        .render(&ctx)
+        .map_err(|e| crate::error::QuartoError::other(e.to_string()))
+}
+
+/// Render a document with format-based template selection.
+///
+/// This function selects the appropriate template (minimal or full) based on
+/// the format configuration, and adds CSS resource paths to the context.
+///
+/// # Arguments
+/// * `body` - The rendered body content (HTML)
+/// * `meta` - Document metadata from the Pandoc AST (as ConfigValue)
+/// * `format` - The output format configuration
+/// * `css_paths` - Paths to CSS files (relative to output HTML)
+///
+/// # Returns
+/// The complete HTML document as a string.
+pub fn render_with_format(
+    body: &str,
+    meta: &ConfigValue,
+    format: &Format,
+    css_paths: &[String],
+) -> Result<String> {
+    let template = select_template(format)?;
+    let use_full_template = !format.use_minimal_html();
+
+    let mut ctx = TemplateContext::new();
+    ctx.insert("body", TemplateValue::String(body.to_string()));
+
+    // Add metadata, but we'll handle css specially
+    add_metadata_to_context_except(meta, &mut ctx, &["css"]);
+
+    // Build combined CSS list: default resources first, then user-specified
+    let mut css_list: Vec<TemplateValue> = css_paths
+        .iter()
+        .map(|p| TemplateValue::String(p.clone()))
+        .collect();
+
+    // Add any user-specified CSS from metadata
+    if let Some(user_css) = extract_css_from_meta(meta) {
+        css_list.extend(user_css);
+    }
+
+    ctx.insert("css", TemplateValue::List(css_list));
+
+    // Add full template specific variables
+    if use_full_template {
+        // Add version for generator meta tag
+        ctx.insert(
+            "version",
+            TemplateValue::String(env!("CARGO_PKG_VERSION").to_string()),
+        );
+
+        // Add page-layout with default if not already set
+        if ctx.get("page-layout").is_none() {
+            ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        }
+    }
 
     template
         .render(&ctx)
@@ -1105,5 +1296,281 @@ mod tests {
         assert!(text.contains("Para 2"));
         // Should have newline between blocks
         assert!(text.contains('\n'));
+    }
+
+    // === Template compilation tests ===
+
+    #[test]
+    fn test_minimal_template_compiles() {
+        let template = minimal_html_template();
+        assert!(template.is_ok());
+    }
+
+    #[test]
+    fn test_full_template_compiles() {
+        let template = full_html_template();
+        assert!(template.is_ok());
+    }
+
+    // === Template selection tests ===
+
+    #[test]
+    fn test_select_template_default_is_full() {
+        use crate::format::Format;
+        let format = Format::html();
+        let template = select_template(&format).unwrap();
+
+        // Render with minimal context to verify it's the full template
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        let html = template.render(&ctx).unwrap();
+
+        // Full template has quarto-content and main wrapper
+        assert!(html.contains("quarto-content"));
+        assert!(html.contains("<main class=\"content\""));
+    }
+
+    #[test]
+    fn test_select_template_minimal_true() {
+        use crate::format::Format;
+        let format = Format::html().with_metadata(serde_json::json!({"minimal": true}));
+        let template = select_template(&format).unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
+        let html = template.render(&ctx).unwrap();
+
+        // Minimal template does NOT have quarto-content
+        assert!(!html.contains("quarto-content"));
+        assert!(!html.contains("<main class=\"content\""));
+        // But does have body
+        assert!(html.contains("<body>"));
+        assert!(html.contains("<p>Hello</p>"));
+    }
+
+    #[test]
+    fn test_select_template_theme_none() {
+        use crate::format::Format;
+        let format = Format::html().with_metadata(serde_json::json!({"theme": "none"}));
+        let template = select_template(&format).unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
+        let html = template.render(&ctx).unwrap();
+
+        // theme: none uses minimal template
+        assert!(!html.contains("quarto-content"));
+    }
+
+    #[test]
+    fn test_select_template_theme_pandoc() {
+        use crate::format::Format;
+        let format = Format::html().with_metadata(serde_json::json!({"theme": "pandoc"}));
+        let template = select_template(&format).unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
+        let html = template.render(&ctx).unwrap();
+
+        // theme: pandoc uses minimal template
+        assert!(!html.contains("quarto-content"));
+    }
+
+    #[test]
+    fn test_select_template_bootstrap_theme() {
+        use crate::format::Format;
+        let format = Format::html().with_metadata(serde_json::json!({"theme": "cosmo"}));
+        let template = select_template(&format).unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Hello</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        let html = template.render(&ctx).unwrap();
+
+        // Bootstrap theme uses full template
+        assert!(html.contains("quarto-content"));
+    }
+
+    // === Full template structure tests ===
+
+    #[test]
+    fn test_full_template_title_block() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("title", TemplateValue::String("My Document".to_string()));
+        ctx.insert("subtitle", TemplateValue::String("A Subtitle".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(html.contains("<header id=\"title-block-header\""));
+        assert!(html.contains("<h1 class=\"title\">My Document</h1>"));
+        assert!(html.contains("<p class=\"subtitle\">A Subtitle</p>"));
+    }
+
+    #[test]
+    fn test_full_template_no_title_block_without_title() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+        // No title set
+
+        let html = template.render(&ctx).unwrap();
+
+        // No title block header without title
+        assert!(!html.contains("<header id=\"title-block-header\""));
+        // But still has quarto-content wrapper
+        assert!(html.contains("quarto-content"));
+    }
+
+    #[test]
+    fn test_full_template_metadata() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("author", TemplateValue::String("Jane Doe".to_string()));
+        ctx.insert("date", TemplateValue::String("2024-01-15".to_string()));
+        ctx.insert(
+            "keywords",
+            TemplateValue::String("rust, quarto".to_string()),
+        );
+        ctx.insert(
+            "description",
+            TemplateValue::String("A sample document".to_string()),
+        );
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(html.contains("<meta name=\"author\" content=\"Jane Doe\">"));
+        assert!(html.contains("<meta name=\"dcterms.date\" content=\"2024-01-15\">"));
+        assert!(html.contains("<meta name=\"keywords\" content=\"rust, quarto\">"));
+        assert!(html.contains("<meta name=\"description\" content=\"A sample document\">"));
+    }
+
+    #[test]
+    fn test_full_template_generator_meta() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("version", TemplateValue::String("1.2.3".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(html.contains("<meta name=\"generator\" content=\"quarto-rust-1.2.3\">"));
+    }
+
+    #[test]
+    fn test_full_template_page_layout_class() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert("page-layout", TemplateValue::String("full".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(html.contains("page-layout-full"));
+    }
+
+    #[test]
+    fn test_full_template_body_classes() {
+        let template = full_html_template().unwrap();
+
+        let mut ctx = TemplateContext::new();
+        ctx.insert("body", TemplateValue::String("<p>Content</p>".to_string()));
+        ctx.insert(
+            "body-classes",
+            TemplateValue::String("my-class another-class".to_string()),
+        );
+        ctx.insert("page-layout", TemplateValue::String("article".to_string()));
+        ctx.insert("version", TemplateValue::String("0.1.0".to_string()));
+
+        let html = template.render(&ctx).unwrap();
+
+        assert!(html.contains("<body class=\"fullcontent my-class another-class\">"));
+    }
+
+    // === render_with_format tests ===
+
+    #[test]
+    fn test_render_with_format_minimal() {
+        use crate::format::Format;
+
+        let format = Format::html().with_metadata(serde_json::json!({"minimal": true}));
+        let meta = ConfigValue::null(dummy_source_info());
+        let css_paths = vec!["styles.css".to_string()];
+
+        let html = render_with_format("<p>Hello</p>", &meta, &format, &css_paths).unwrap();
+
+        // Should be minimal template
+        assert!(!html.contains("quarto-content"));
+        assert!(html.contains("<p>Hello</p>"));
+        assert!(html.contains("styles.css"));
+    }
+
+    #[test]
+    fn test_render_with_format_full() {
+        use crate::format::Format;
+
+        let format = Format::html(); // Default is full
+        let meta = ConfigValue::null(dummy_source_info());
+        let css_paths = vec!["styles.css".to_string()];
+
+        let html = render_with_format("<p>Hello</p>", &meta, &format, &css_paths).unwrap();
+
+        // Should be full template
+        assert!(html.contains("quarto-content"));
+        assert!(html.contains("<main class=\"content\""));
+        assert!(html.contains("<p>Hello</p>"));
+        // Should have version from env
+        assert!(html.contains("quarto-rust-"));
+        // Should have default page-layout
+        assert!(html.contains("page-layout-article"));
+    }
+
+    #[test]
+    fn test_render_with_format_full_with_metadata() {
+        use crate::format::Format;
+
+        let format = Format::html();
+        let meta = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("My Title", dummy_source_info()),
+                },
+                ConfigMapEntry {
+                    key: "author".to_string(),
+                    key_source: dummy_source_info(),
+                    value: ConfigValue::new_string("Jane Doe", dummy_source_info()),
+                },
+            ],
+            dummy_source_info(),
+        );
+        let css_paths = vec![];
+
+        let html = render_with_format("<p>Content</p>", &meta, &format, &css_paths).unwrap();
+
+        // Should have title block
+        assert!(html.contains("<header id=\"title-block-header\""));
+        assert!(html.contains("My Title"));
+        // Should have author meta
+        assert!(html.contains("<meta name=\"author\" content=\"Jane Doe\">"));
     }
 }

@@ -59,8 +59,9 @@ use crate::stage::{
 };
 use crate::transform::TransformPipeline;
 use crate::transforms::{
-    CalloutResolveTransform, CalloutTransform, MetadataNormalizeTransform,
-    ResourceCollectorTransform, SectionizeTransform, TitleBlockTransform,
+    AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, FootnotesTransform,
+    MetadataNormalizeTransform, ResourceCollectorTransform, SectionizeTransform,
+    TitleBlockTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -263,20 +264,31 @@ pub async fn render_qmd_to_html(
 /// Build the standard transform pipeline.
 ///
 /// The transforms are applied in this order:
+///
+/// ## Normalization Phase
 /// 1. `CalloutTransform` - Convert callout Divs to CustomNodes
 /// 2. `CalloutResolveTransform` - Resolve CustomNodes to structured Divs
 /// 3. `MetadataNormalizeTransform` - Add derived metadata (pagetitle, etc.)
 /// 4. `TitleBlockTransform` - Add title header from metadata if not present
 /// 5. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
-/// 6. `ResourceCollectorTransform` - Collect image dependencies
+/// 6. `FootnotesTransform` - Extract footnotes and create footnotes section
+///
+/// ## Finalization Phase
+/// 7. `AppendixStructureTransform` - Consolidate appendix content into container
+/// 8. `ResourceCollectorTransform` - Collect image dependencies
 pub fn build_transform_pipeline() -> TransformPipeline {
     let mut pipeline = TransformPipeline::new();
 
+    // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));
+    pipeline.push(Box::new(FootnotesTransform::new()));
+
+    // === FINALIZATION PHASE ===
+    pipeline.push(Box::new(AppendixStructureTransform::new()));
     pipeline.push(Box::new(ResourceCollectorTransform::new()));
 
     pipeline

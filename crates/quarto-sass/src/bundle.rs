@@ -162,6 +162,51 @@ pub fn load_theme(theme: BuiltInTheme) -> Result<SassLayer, SassError> {
     parse_layer(content, Some(&filename))
 }
 
+/// Load the title block SCSS layer.
+///
+/// This loads `title-block.scss` from the templates directory and parses it
+/// into a `SassLayer`. The title block layer provides styling for:
+/// - `.quarto-title-meta` - metadata grid layout
+/// - `.quarto-title-meta-heading` - metadata labels
+/// - `#title-block-header.quarto-title-block` - overall title block layout
+/// - `.abstract`, `.description`, `.keywords` - special sections
+///
+/// In TS Quarto, this layer is added as a "user" layer that comes after the
+/// quarto layer but before any custom user SCSS. This ensures the title block
+/// styles can use Bootstrap variables and mixins while still being overridable.
+///
+/// # Known Issue
+///
+/// The `title-block.scss` file uses non-standard layer boundary markers that
+/// don't match TS Quarto's regex. Specifically:
+/// - `/*-- scss: functions --*/` has a space after the colon (not recognized)
+/// - `/*-- scss:variables --*/` uses "variables" which isn't a valid layer name
+///
+/// This means the functions and variables in the file end up in the `defaults`
+/// section rather than their intended sections. We match this behavior for
+/// parity with TS Quarto.
+///
+/// See: <https://github.com/quarto-dev/quarto-cli/issues/13960>
+///
+/// # Returns
+///
+/// A `SassLayer` with the title block SCSS organized by section.
+///
+/// # Errors
+///
+/// Returns an error if `title-block.scss` cannot be found or parsed.
+pub fn load_title_block_layer() -> Result<SassLayer, SassError> {
+    use crate::resources::TEMPLATES_RESOURCES;
+
+    let content = TEMPLATES_RESOURCES
+        .read_str(Path::new("title-block.scss"))
+        .ok_or_else(|| SassError::CompilationFailed {
+            message: "title-block.scss not found in templates resources".to_string(),
+        })?;
+
+    parse_layer(content, Some("title-block.scss"))
+}
+
 /// Assemble a complete SCSS string for compilation.
 ///
 /// This function implements the correct assembly order from TypeScript Quarto:
@@ -678,5 +723,64 @@ mod tests {
         assert!(scss.contains("$h1-font-size"));
         // Should have load paths from custom
         assert_eq!(load_paths.len(), 1);
+    }
+
+    // Title block layer tests
+
+    #[test]
+    fn test_load_title_block_layer() {
+        let layer = load_title_block_layer().unwrap();
+
+        // NOTE: The title-block.scss file uses non-standard markers:
+        // - `/*-- scss: functions --*/` (space after colon - not recognized)
+        // - `/*-- scss:variables --*/` ("variables" not a valid layer name)
+        // - `/*-- scss:rules --*/` (valid!)
+        //
+        // This matches TS Quarto's behavior where only /*-- scss:rules --*/
+        // is recognized, so everything before it goes into defaults.
+        //
+        // See: https://github.com/quarto-dev/quarto-cli/issues/13960
+
+        // The functions and variables end up in defaults (before the rules marker)
+        assert!(
+            layer.defaults.contains("@function bannerColor"),
+            "Functions should be in defaults (non-standard marker)"
+        );
+        assert!(
+            layer.defaults.contains("$title-banner-color"),
+            "Variables should be in defaults (non-standard marker)"
+        );
+
+        // Rules are correctly parsed
+        assert!(
+            layer.rules.contains(".quarto-title-meta"),
+            "Should contain .quarto-title-meta rules"
+        );
+        assert!(
+            layer.rules.contains("#title-block-header"),
+            "Should contain #title-block-header rules"
+        );
+
+        // Functions section should be empty (marker not recognized)
+        assert!(
+            layer.functions.is_empty(),
+            "Functions section should be empty (non-standard marker not recognized)"
+        );
+    }
+
+    #[test]
+    fn test_title_block_layer_in_scss_assembly() {
+        let title_block_layer = load_title_block_layer().unwrap();
+        let scss = assemble_with_user_layers(&[title_block_layer]).unwrap();
+
+        // Should contain title block rules
+        assert!(
+            scss.contains(".quarto-title-meta"),
+            "Assembled SCSS should contain .quarto-title-meta"
+        );
+        assert!(
+            scss.contains(".quarto-title-meta-heading"),
+            "Assembled SCSS should contain .quarto-title-meta-heading"
+        );
     }
 }

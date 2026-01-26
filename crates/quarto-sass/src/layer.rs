@@ -37,7 +37,14 @@ use crate::types::SassLayer;
 /// - `/*-- scss:mixins --*/`
 /// - `/*-- scss:rules --*/`
 ///
-/// The pattern allows optional whitespace (spaces/tabs) around the layer name.
+/// NOTE: This intentionally matches TS Quarto's regex which does NOT allow
+/// space after the colon (e.g., `/*-- scss: functions --*/` won't match).
+/// This means files like title-block.scss which use non-standard markers
+/// will have their content parsed into the default section until a valid
+/// marker is found.
+///
+/// The pattern allows optional whitespace (spaces/tabs) before and after
+/// the layer name, but NOT after the colon.
 /// Captures the layer type in group 1.
 static LAYER_BOUNDARY_LINE: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"^/\*--[ \t]*scss:(uses|functions|rules|defaults|mixins)[ \t]*--\*/$").unwrap()

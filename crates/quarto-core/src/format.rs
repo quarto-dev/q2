@@ -158,6 +158,49 @@ impl Format {
         self.identifier.is_multi_file()
     }
 
+    /// Get a metadata value from the format configuration.
+    pub fn get_metadata(&self, key: &str) -> Option<&serde_json::Value> {
+        if self.metadata.is_null() {
+            return None;
+        }
+        self.metadata.get(key)
+    }
+
+    /// Get a string metadata value.
+    pub fn get_metadata_string(&self, key: &str) -> Option<&str> {
+        self.get_metadata(key).and_then(|v| v.as_str())
+    }
+
+    /// Get a boolean metadata value.
+    pub fn get_metadata_bool(&self, key: &str) -> Option<bool> {
+        self.get_metadata(key).and_then(|v| v.as_bool())
+    }
+
+    /// Check if this format should use minimal HTML output.
+    ///
+    /// Minimal HTML is used when:
+    /// - `minimal: true` is set
+    /// - `theme: none` is set
+    /// - `theme: pandoc` is set
+    ///
+    /// This matches TypeScript Quarto's behavior where minimal mode produces
+    /// plain HTML without Bootstrap structure (`<main>`, `<div id="quarto-content">`, etc.)
+    pub fn use_minimal_html(&self) -> bool {
+        // Check explicit minimal flag
+        if self.get_metadata_bool("minimal").unwrap_or(false) {
+            return true;
+        }
+
+        // Check theme - "none" or "pandoc" implies minimal structure
+        if let Some(theme) = self.get_metadata_string("theme") {
+            if theme == "none" || theme == "pandoc" {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Get the output file path for an input file
     pub fn output_path(&self, input: &std::path::Path) -> PathBuf {
         let mut output = input.to_path_buf();
@@ -489,5 +532,124 @@ mod tests {
         assert_eq!(original.output_extension, cloned.output_extension);
         assert_eq!(original.native_pipeline, cloned.native_pipeline);
         assert_eq!(original.metadata, cloned.metadata);
+    }
+
+    // === Format metadata helper tests ===
+
+    #[test]
+    fn test_format_get_metadata() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "minimal": true,
+            "theme": "cosmo"
+        }));
+
+        assert_eq!(
+            format.get_metadata("minimal"),
+            Some(&serde_json::json!(true))
+        );
+        assert_eq!(
+            format.get_metadata("theme"),
+            Some(&serde_json::json!("cosmo"))
+        );
+        assert_eq!(format.get_metadata("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_format_get_metadata_null() {
+        let format = Format::html(); // metadata is Null by default
+        assert_eq!(format.get_metadata("anything"), None);
+    }
+
+    #[test]
+    fn test_format_get_metadata_string() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "theme": "cosmo",
+            "number": 42
+        }));
+
+        assert_eq!(format.get_metadata_string("theme"), Some("cosmo"));
+        assert_eq!(format.get_metadata_string("number"), None); // not a string
+        assert_eq!(format.get_metadata_string("nonexistent"), None);
+    }
+
+    #[test]
+    fn test_format_get_metadata_bool() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "minimal": true,
+            "toc": false,
+            "theme": "cosmo"
+        }));
+
+        assert_eq!(format.get_metadata_bool("minimal"), Some(true));
+        assert_eq!(format.get_metadata_bool("toc"), Some(false));
+        assert_eq!(format.get_metadata_bool("theme"), None); // not a bool
+        assert_eq!(format.get_metadata_bool("nonexistent"), None);
+    }
+
+    // === use_minimal_html tests ===
+
+    #[test]
+    fn test_use_minimal_html_default() {
+        let format = Format::html();
+        assert!(!format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_explicit_true() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "minimal": true
+        }));
+        assert!(format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_explicit_false() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "minimal": false
+        }));
+        assert!(!format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_theme_none() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "theme": "none"
+        }));
+        assert!(format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_theme_pandoc() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "theme": "pandoc"
+        }));
+        assert!(format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_theme_bootstrap() {
+        let format = Format::html().with_metadata(serde_json::json!({
+            "theme": "cosmo"
+        }));
+        assert!(!format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_theme_default() {
+        // theme: default should use full HTML
+        let format = Format::html().with_metadata(serde_json::json!({
+            "theme": "default"
+        }));
+        assert!(!format.use_minimal_html());
+    }
+
+    #[test]
+    fn test_use_minimal_html_minimal_overrides_theme() {
+        // minimal: true should override any theme setting
+        let format = Format::html().with_metadata(serde_json::json!({
+            "minimal": true,
+            "theme": "cosmo"
+        }));
+        assert!(format.use_minimal_html());
     }
 }

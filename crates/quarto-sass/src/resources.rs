@@ -55,6 +55,14 @@ static QUARTO_BOOTSTRAP_DIR: Dir<'static> = include_dir!(
     "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap"
 );
 
+/// HTML templates directory embedded at compile time.
+///
+/// Contains SCSS files for HTML output styling, including title-block.scss
+/// which provides styling for the document title block.
+static TEMPLATES_DIR: Dir<'static> = include_dir!(
+    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/templates"
+);
+
 /// Virtual path prefix for embedded resources.
 ///
 /// Files embedded via `EmbeddedResources` are accessible under this prefix.
@@ -270,6 +278,13 @@ pub static THEMES_RESOURCES: EmbeddedResources =
 pub static QUARTO_BOOTSTRAP_RESOURCES: EmbeddedResources =
     EmbeddedResources::new(&QUARTO_BOOTSTRAP_DIR, "bootstrap/quarto");
 
+/// HTML templates resources.
+///
+/// Contains SCSS files for HTML output styling:
+/// - `title-block.scss` - Styling for document title block, metadata, abstract
+pub static TEMPLATES_RESOURCES: EmbeddedResources =
+    EmbeddedResources::new(&TEMPLATES_DIR, "html/templates");
+
 /// Get the default load paths for SASS compilation.
 ///
 /// Returns paths that should be added to the SASS compiler's load paths
@@ -290,6 +305,7 @@ pub fn all_resources() -> CombinedResources {
         &SASS_UTILS_RESOURCES,
         &THEMES_RESOURCES,
         &QUARTO_BOOTSTRAP_RESOURCES,
+        &TEMPLATES_RESOURCES,
     ])
 }
 
@@ -300,12 +316,12 @@ pub fn all_resources() -> CombinedResources {
 pub struct CombinedResources {
     // Only used by native `EmbeddedResourceProvider` impl
     #[allow(dead_code)]
-    resources: [&'static EmbeddedResources; 4],
+    resources: [&'static EmbeddedResources; 5],
 }
 
 impl CombinedResources {
     /// Create a new CombinedResources from an array of providers.
-    pub fn new(resources: [&'static EmbeddedResources; 4]) -> Self {
+    pub fn new(resources: [&'static EmbeddedResources; 5]) -> Self {
         Self { resources }
     }
 }
@@ -571,6 +587,41 @@ mod tests {
         assert!(
             BOOTSTRAP_RESOURCES.is_file(Path::new("forms/_form-control.scss")),
             "File should exist at forms/_form-control.scss"
+        );
+    }
+
+    #[test]
+    fn test_templates_resources() {
+        // Check title-block.scss exists (critical for title block styling)
+        assert!(
+            TEMPLATES_RESOURCES.is_file(Path::new("title-block.scss")),
+            "title-block.scss should exist"
+        );
+
+        // Check it contains title block styling
+        let content = TEMPLATES_RESOURCES
+            .read_str(Path::new("title-block.scss"))
+            .unwrap();
+        assert!(
+            content.contains(".quarto-title-meta"),
+            "Should contain .quarto-title-meta styling"
+        );
+        assert!(
+            content.contains("#title-block-header"),
+            "Should contain #title-block-header styling"
+        );
+        // Should have layer boundary markers
+        assert!(
+            content.contains("/*-- scss:"),
+            "Should have layer boundary markers"
+        );
+    }
+
+    #[test]
+    fn test_templates_resources_full_prefix() {
+        assert_eq!(
+            TEMPLATES_RESOURCES.full_prefix(),
+            "/__quarto_resources__/html/templates"
         );
     }
 }

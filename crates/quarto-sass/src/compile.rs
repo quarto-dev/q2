@@ -36,7 +36,7 @@ use std::path::Path;
 use quarto_pandoc_types::ConfigValue;
 use quarto_system_runtime::SystemRuntime;
 
-use crate::bundle::{assemble_bootstrap, assemble_with_user_layers};
+use crate::bundle::assemble_with_user_layers;
 use crate::config::ThemeConfig;
 use crate::error::SassError;
 use crate::resources::default_load_paths;
@@ -90,6 +90,7 @@ pub fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<String, SassError> {
+    use crate::bundle::load_title_block_layer;
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     if !config.has_themes() {
@@ -100,8 +101,14 @@ pub fn compile_theme_css(
     // Process theme specs into layers
     let result = process_theme_specs(&config.themes, context)?;
 
+    // Build user layers: title block layer comes first (like TS Quarto),
+    // then any theme layers
+    let title_block_layer = load_title_block_layer()?;
+    let mut user_layers = vec![title_block_layer];
+    user_layers.extend(result.layers);
+
     // Assemble SCSS
-    let scss = assemble_with_user_layers(&result.layers)?;
+    let scss = assemble_with_user_layers(&user_layers)?;
 
     // Build load paths: default paths + custom theme directories
     let mut load_paths = default_load_paths();
@@ -210,6 +217,7 @@ pub fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
+    use crate::bundle::load_title_block_layer;
     use quarto_system_runtime::sass_native::compile_scss_with_embedded;
 
     // Return cached version if available (only for minified)
@@ -219,8 +227,12 @@ pub fn compile_default_css(
         }
     }
 
-    // Assemble default Bootstrap SCSS
-    let scss = assemble_bootstrap()?;
+    // Load title block layer - this provides styling for title block elements
+    // In TS Quarto, this is always included as a user layer
+    let title_block_layer = load_title_block_layer()?;
+
+    // Assemble SCSS: Bootstrap + Quarto + title block layer
+    let scss = assemble_with_user_layers(&[title_block_layer])?;
 
     // Get load paths and resources
     let load_paths = default_load_paths();
@@ -276,6 +288,8 @@ pub async fn compile_theme_css(
     config: &ThemeConfig,
     context: &ThemeContext<'_>,
 ) -> Result<String, SassError> {
+    use crate::bundle::load_title_block_layer;
+
     if !config.has_themes() {
         // No custom themes - use default Bootstrap
         return compile_default_css(context.runtime(), config.minified).await;
@@ -284,8 +298,14 @@ pub async fn compile_theme_css(
     // Process theme specs into layers
     let result = process_theme_specs(&config.themes, context)?;
 
+    // Build user layers: title block layer comes first (like TS Quarto),
+    // then any theme layers
+    let title_block_layer = load_title_block_layer()?;
+    let mut user_layers = vec![title_block_layer];
+    user_layers.extend(result.layers);
+
     // Assemble SCSS
-    let scss = assemble_with_user_layers(&result.layers)?;
+    let scss = assemble_with_user_layers(&user_layers)?;
 
     // Build load paths: default paths + custom theme directories
     let mut load_paths = default_load_paths();
@@ -335,8 +355,14 @@ pub async fn compile_default_css(
     runtime: &dyn SystemRuntime,
     minified: bool,
 ) -> Result<String, SassError> {
-    // Assemble default Bootstrap SCSS
-    let scss = assemble_bootstrap()?;
+    use crate::bundle::load_title_block_layer;
+
+    // Load title block layer - this provides styling for title block elements
+    // In TS Quarto, this is always included as a user layer
+    let title_block_layer = load_title_block_layer()?;
+
+    // Assemble SCSS: Bootstrap + Quarto + title block layer
+    let scss = assemble_with_user_layers(&[title_block_layer])?;
 
     // Get load paths (these point to VFS paths populated by wasm-quarto-hub-client)
     let load_paths = default_load_paths();
@@ -367,6 +393,12 @@ mod tests {
         assert!(
             css.contains(".container"),
             "Should contain .container class"
+        );
+
+        // Should have title block styles
+        assert!(
+            css.contains(".quarto-title-meta"),
+            "Should contain .quarto-title-meta class from title-block.scss"
         );
 
         // Should be minified (few newlines)
