@@ -13,6 +13,7 @@
 //! - [`CalloutResolveTransform`] - Resolves Callout CustomNodes to standard Div structure
 //! - [`MetadataNormalizeTransform`] - Normalizes document metadata (adds pagetitle, etc.)
 //! - [`ResourceCollectorTransform`] - Collects resource dependencies (images, etc.)
+//! - [`SectionizeTransform`] - Wraps headers in section Divs (analogous to Pandoc's --section-divs)
 //! - [`TitleBlockTransform`] - Adds title header from metadata if not present
 //!
 //! These transforms implement [`AstTransform`](crate::transform::AstTransform) and
@@ -22,10 +23,12 @@ mod callout;
 mod callout_resolve;
 mod metadata_normalize;
 mod resource_collector;
+mod sectionize;
 mod title_block;
 
 pub use callout::CalloutTransform;
 pub use callout_resolve::CalloutResolveTransform;
 pub use metadata_normalize::MetadataNormalizeTransform;
 pub use resource_collector::ResourceCollectorTransform;
+pub use sectionize::SectionizeTransform;
 pub use title_block::TitleBlockTransform;
