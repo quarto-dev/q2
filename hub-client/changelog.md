@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-26
+
+- [`fe5d0523`](https://github.com/quarto-dev/kyoto/commits/fe5d0523): Add support for SCSS compilation
+
 ### 2026-01-22
 
 - [`efb6ac6e`](https://github.com/quarto-dev/kyoto/commits/efb6ac6e): Divert ctrl/cmd+s to pop up a toast instead of triggering browser save dialog
