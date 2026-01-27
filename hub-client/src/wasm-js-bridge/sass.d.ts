@@ -17,10 +17,12 @@ export function jsSassCompilerName(): string;
  *
  * @param readFn - Function to read file contents from VFS
  * @param isFileFn - Function to check if path is a file in VFS
+ * @param listFn - Optional function to list all files in VFS
  */
 export function setVfsCallbacks(
   readFn: (path: string) => string | null,
-  isFileFn: (path: string) => boolean
+  isFileFn: (path: string) => boolean,
+  listFn?: () => string[]
 ): void;
 
 /**

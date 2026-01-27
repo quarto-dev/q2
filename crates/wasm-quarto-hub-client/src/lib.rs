@@ -183,13 +183,16 @@ pub fn vfs_list_files() -> String {
     VfsResponse::with_files(paths)
 }
 
-/// Clear all files from the virtual filesystem.
+/// Clear user files from the virtual filesystem.
+///
+/// This clears project files while preserving embedded resources
+/// (Bootstrap SCSS files under `/__quarto_resources__/`).
 ///
 /// # Returns
 /// JSON: `{ "success": true }`
 #[wasm_bindgen]
 pub fn vfs_clear() -> String {
-    get_runtime().clear_files();
+    get_runtime().clear_user_files(RESOURCE_PATH_PREFIX);
     VfsResponse::ok()
 }
 

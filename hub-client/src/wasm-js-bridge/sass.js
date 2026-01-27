@@ -79,6 +79,12 @@ let vfsReadFile = null;
 let vfsIsFile = null;
 
 /**
+ * Callback to list all VFS files.
+ * @type {(() => string[]) | null}
+ */
+let vfsListFiles = null;
+
+/**
  * Set the VFS file reading callback.
  *
  * This must be called by the WASM runtime initialization before
@@ -86,10 +92,12 @@ let vfsIsFile = null;
  *
  * @param {(path: string) => string | null} readFn - Function to read file contents
  * @param {(path: string) => boolean} isFileFn - Function to check if path is a file
+ * @param {() => string[]} [listFn] - Optional function to list all files
  */
-export function setVfsCallbacks(readFn, isFileFn) {
+export function setVfsCallbacks(readFn, isFileFn, listFn) {
   vfsReadFile = readFn;
   vfsIsFile = isFileFn;
+  vfsListFiles = listFn || null;
 }
 
 /**

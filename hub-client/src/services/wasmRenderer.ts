@@ -119,9 +119,17 @@ async function setupSassVfsCallbacks(): Promise<void> {
       return result.success && result.content !== undefined;
     };
 
+    // Create VFS list callback
+    const listFn = (): string[] => {
+      const result = vfsListFiles();
+      if (result.success && result.files) {
+        return result.files;
+      }
+      return [];
+    };
+
     // Register callbacks with the SASS importer
-    sassModule.setVfsCallbacks(readFn, isFileFn);
-    console.log('[initWasm] SASS VFS callbacks registered');
+    sassModule.setVfsCallbacks(readFn, isFileFn, listFn);
   } catch (err) {
     console.warn('[initWasm] Failed to set up SASS VFS callbacks:', err);
   }

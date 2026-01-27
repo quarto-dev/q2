@@ -301,6 +301,29 @@ impl VirtualFileSystem {
         self.directories.insert(self.project_root.clone());
     }
 
+    /// Clear user files from the virtual filesystem, preserving files under the given prefix.
+    ///
+    /// This is used to clear project files while preserving embedded resources
+    /// (like Bootstrap SCSS files under `/__quarto_resources__/`).
+    pub fn clear_preserving_prefix(&mut self, preserved_prefix: &str) {
+        // Retain files that start with the preserved prefix
+        self.files
+            .retain(|path, _| path.to_string_lossy().starts_with(preserved_prefix));
+
+        // Retain directories that start with the preserved prefix
+        // Also always keep root "/" and project root
+        let project_root = self.project_root.clone();
+        self.directories.retain(|path| {
+            path == Path::new("/")
+                || path == &project_root
+                || path.to_string_lossy().starts_with(preserved_prefix)
+        });
+
+        // Re-add root and project root in case they were removed
+        self.directories.insert(PathBuf::from("/"));
+        self.directories.insert(self.project_root.clone());
+    }
+
     /// Check if a path exists (as file or directory).
     pub fn exists(&self, path: &Path) -> bool {
         let normalized = self.normalize_path(path);
@@ -439,6 +462,17 @@ impl WasmRuntime {
     /// Clear all files from the virtual filesystem.
     pub fn clear_files(&self) {
         self.vfs.write().unwrap().clear();
+    }
+
+    /// Clear user files from the virtual filesystem, preserving files under the given prefix.
+    ///
+    /// This is typically used to clear project files while preserving embedded resources
+    /// (like Bootstrap SCSS files under `/__quarto_resources__/`).
+    pub fn clear_user_files(&self, preserved_prefix: &str) {
+        self.vfs
+            .write()
+            .unwrap()
+            .clear_preserving_prefix(preserved_prefix);
     }
 }
 
@@ -806,6 +840,59 @@ mod tests {
         // Root directories should still exist
         assert!(vfs.is_directory(Path::new("/")));
         assert!(vfs.is_directory(Path::new("/project")));
+    }
+
+    #[test]
+    fn test_vfs_clear_preserving_prefix() {
+        let mut vfs = VirtualFileSystem::new();
+
+        // Add embedded resource files (should be preserved)
+        vfs.add_file(
+            Path::new("/__quarto_resources__/bootstrap/scss/_variables.scss"),
+            b"$primary: blue;".to_vec(),
+        );
+        vfs.add_file(
+            Path::new("/__quarto_resources__/bootstrap/scss/_mixins.scss"),
+            b"@mixin foo {}".to_vec(),
+        );
+
+        // Add project files (should be cleared)
+        vfs.add_file(Path::new("/project/index.qmd"), b"# Hello".to_vec());
+        vfs.add_file(Path::new("/project/styles.scss"), b"body {}".to_vec());
+
+        // Verify all files exist before clear
+        assert!(vfs.is_file(Path::new(
+            "/__quarto_resources__/bootstrap/scss/_variables.scss"
+        )));
+        assert!(vfs.is_file(Path::new(
+            "/__quarto_resources__/bootstrap/scss/_mixins.scss"
+        )));
+        assert!(vfs.is_file(Path::new("/project/index.qmd")));
+        assert!(vfs.is_file(Path::new("/project/styles.scss")));
+
+        // Clear user files, preserving embedded resources
+        vfs.clear_preserving_prefix("/__quarto_resources__");
+
+        // Embedded resources should still exist
+        assert!(vfs.is_file(Path::new(
+            "/__quarto_resources__/bootstrap/scss/_variables.scss"
+        )));
+        assert!(vfs.is_file(Path::new(
+            "/__quarto_resources__/bootstrap/scss/_mixins.scss"
+        )));
+
+        // Project files should be cleared
+        assert!(!vfs.is_file(Path::new("/project/index.qmd")));
+        assert!(!vfs.is_file(Path::new("/project/styles.scss")));
+
+        // Root directories should still exist
+        assert!(vfs.is_directory(Path::new("/")));
+        assert!(vfs.is_directory(Path::new("/project")));
+
+        // Embedded resource directories should still exist
+        assert!(vfs.is_directory(Path::new("/__quarto_resources__")));
+        assert!(vfs.is_directory(Path::new("/__quarto_resources__/bootstrap")));
+        assert!(vfs.is_directory(Path::new("/__quarto_resources__/bootstrap/scss")));
     }
 
     #[test]
