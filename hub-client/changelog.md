@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-27
 
+- [`7053e539`](https://github.com/quarto-dev/kyoto/commits/7053e539): Add bootstrap-test-fixtures command and generate initial E2E fixtures
 - [`d470b1b3`](https://github.com/quarto-dev/kyoto/commits/d470b1b3): Add utility tests (stripAnsi, diagnosticToMonaco) and E2E fixture script
 - [`d7e55db9`](https://github.com/quarto-dev/kyoto/commits/d7e55db9): Add testing infrastructure with mock utilities and Playwright E2E setup
 
