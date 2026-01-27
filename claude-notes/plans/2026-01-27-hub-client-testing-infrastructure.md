@@ -7,18 +7,35 @@
 
 ---
 
-## Session Notes (2026-01-27)
+## Session Notes (2026-01-27, Session 2)
+
+**Progress Made:**
+- Phase 4: Added tests for `stripAnsi.ts` (18 tests) and `diagnosticToMonaco.ts` (36 tests)
+- Phase 3: Created `e2e/scripts/regenerate-fixtures.ts` script
+- Fixed flaky test in `projectStorage.test.ts` (timing issue in ordering test)
+- Added `tsx` dev dependency for running fixture scripts
+- Test count: 102 → 156 tests (7 test files)
+- All tests passing
+
+**New Files Created:**
+- `hub-client/src/utils/stripAnsi.test.ts` - 18 tests for ANSI code stripping
+- `hub-client/src/utils/diagnosticToMonaco.test.ts` - 36 tests for diagnostic conversion
+- `hub-client/e2e/scripts/regenerate-fixtures.ts` - Script to create E2E test fixtures
+- `hub-client/e2e/fixtures/fixture-manifest.json` - Placeholder manifest
+
+**To Resume:**
+1. Phase 3: Generate actual fixture data (requires running sync server)
+2. Phase 6: E2E tests with Playwright
+3. Phase 5: Component integration tests (deferred per plan)
+
+---
+
+## Session Notes (2026-01-27, Session 1)
 
 **Progress Made:**
 - Phases 1, 2, and partial Phase 4 complete
 - Test count: 46 → 102 tests (5 test files)
 - All tests passing, type checking passing
-
-**To Resume:**
-1. Continue with Phase 4: Add tests for remaining utilities (if desired)
-2. Phase 3: E2E Fixture Infrastructure needs `regenerate-fixtures.ts` script
-3. Phase 5: Component integration tests (deferred per plan)
-4. Phase 6: E2E tests with Playwright
 
 **Key Files Created:**
 - `hub-client/src/test-utils/` - Mock utilities and setup
@@ -113,12 +130,12 @@ This plan outlines a comprehensive testing infrastructure for hub-client, addres
 ### Phase 3: E2E Fixture Infrastructure
 
 - [x] Create `e2e/fixtures/` directory structure
-- [ ] Write `regenerate-fixtures.ts` script to create test projects
-- [ ] Generate initial fixture set with known document IDs
-- [ ] Create `fixture-manifest.json` mapping test names to document IDs
+- [x] Write `regenerate-fixtures.ts` script to create test projects
+- [ ] Generate initial fixture set with known document IDs (requires sync server)
+- [x] Create `fixture-manifest.json` mapping test names to document IDs
 - [x] Write `fixtureSetup.ts` helpers (copy to temp, cleanup)
 - [x] Write `syncServer.ts` helpers (start/stop local automerge-sync-server)
-- [ ] Check in `automerge-data/` as binary assets
+- [ ] Check in `automerge-data/` as binary assets (requires sync server)
 
 ### Phase 4: Unit Tests
 
@@ -126,7 +143,9 @@ This plan outlines a comprehensive testing infrastructure for hub-client, addres
 - [x] Add tests for `automergeSync.ts` service
 - [x] Add tests for `presenceService.ts`
 - [x] Add tests for `projectStorage.ts`
-- [ ] Add tests for remaining utilities
+- [x] Add tests for `stripAnsi.ts` utility (18 tests)
+- [x] Add tests for `diagnosticToMonaco.ts` utility (36 tests)
+- [ ] Add tests for `iframePostProcessor.ts` (deferred - requires DOM/iframe mocking)
 
 ### Phase 5: Component Integration Tests (Deferred)
 

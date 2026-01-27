@@ -256,6 +256,9 @@ describe('projectStorage', () => {
       await new Promise((r) => setTimeout(r, 10));
       await addProject('automerge:newer', 'ws://test', 'Newer');
 
+      // Wait to ensure the touch will have a later timestamp
+      await new Promise((r) => setTimeout(r, 10));
+
       // Touch the old project to make it most recent
       await touchProject(oldProject.id);
 
