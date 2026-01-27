@@ -210,3 +210,40 @@ export function getFileHandle(path: string) {
 export function getFilePaths(): string[] {
   return ensureClient().getFilePaths();
 }
+
+// ============================================================================
+// Testing Utilities
+// ============================================================================
+
+/**
+ * Reset the sync service state for testing.
+ *
+ * This function resets all module-level state to initial values,
+ * ensuring test isolation. Call this in beforeEach() to prevent
+ * state leakage between tests.
+ *
+ * @internal For testing only - not part of the public API
+ */
+export function _resetForTesting(): void {
+  // Clear the client instance (will be recreated on next ensureClient() call)
+  client = null;
+
+  // Clear all event handlers
+  onFilesChange = null;
+  onFileContent = null;
+  onBinaryContent = null;
+  onConnectionChange = null;
+  onError = null;
+}
+
+/**
+ * Inject a mock sync client for testing.
+ *
+ * This allows tests to provide a mock implementation of the SyncClient
+ * instead of using the real createSyncClient function.
+ *
+ * @internal For testing only - not part of the public API
+ */
+export function _setClientForTesting(mockClient: SyncClient | null): void {
+  client = mockClient;
+}

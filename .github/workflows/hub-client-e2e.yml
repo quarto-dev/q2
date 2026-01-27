@@ -1,0 +1,96 @@
+name: Hub-Client E2E Tests
+
+on:
+  workflow_dispatch: # Manual trigger initially
+  # Later: enable on push when stable
+  # push:
+  #   branches: [main, kyoto]
+  #   paths:
+  #     - 'hub-client/**'
+  #     - 'crates/wasm-qmd-parser/**'
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest-8x
+    name: Hub-Client E2E Tests
+    if: github.repository == 'quarto-dev/kyoto'
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      # Fix mtimes for build caching
+      - name: Restore file modification times
+        shell: bash
+        run: |
+          git ls-files | while read file; do
+            time=$(git log -1 --format='@%ct' -- "$file" 2>/dev/null || echo '@0')
+            [ "$time" != "@0" ] && touch -d "$time" "$file" 2>/dev/null || true
+          done
+
+      # Rust toolchain for WASM build
+      - name: Set up Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Set up Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      # tree-sitter for grammar builds
+      - name: Set up tree-sitter CLI
+        run: |
+          curl -LO https://github.com/tree-sitter/tree-sitter/releases/download/v0.25.8/tree-sitter-linux-x86.gz
+          gunzip tree-sitter-linux-x86.gz
+          chmod +x tree-sitter-linux-x86
+          sudo mv tree-sitter-linux-x86 /usr/local/bin/tree-sitter
+
+      # Node.js and dependencies
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build TypeScript packages
+        run: npm run build
+
+      # Build WASM module
+      - name: Build WASM
+        run: |
+          cd hub-client
+          npm run build:wasm
+
+      # Install Playwright browsers
+      - name: Install Playwright
+        run: |
+          cd hub-client
+          npx playwright install --with-deps chromium
+
+      # Run E2E tests
+      - name: Run E2E tests
+        run: |
+          cd hub-client
+          npx playwright test
+
+      # Upload test artifacts on failure
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: hub-client/playwright-report/
+          retention-days: 7

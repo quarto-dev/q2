@@ -123,3 +123,9 @@ jobs:
       - name: Test Rust code
         shell: bash
         run: cargo nextest run
+
+      - name: Run hub-client tests
+        shell: bash
+        run: |
+          cd hub-client
+          npm run test:ci

@@ -1,13 +1,20 @@
 import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  plugins: [react()],
   test: {
-    // Use node environment for unit tests (fast, no DOM)
-    environment: 'node',
-    // Include unit test files, exclude integration tests
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    exclude: ['src/**/*.integration.test.ts', 'src/**/*.integration.test.tsx'],
-    // Pass even when no test files are found
+    // Use jsdom for DOM APIs and React component testing
+    environment: 'jsdom',
+    // Only include integration test files
+    include: ['src/**/*.integration.test.ts', 'src/**/*.integration.test.tsx'],
+    // Setup file for DOM polyfills and test utilities
+    setupFiles: ['./src/test-utils/setup.ts'],
+    // Inline problematic dependencies
+    deps: {
+      inline: ['@monaco-editor/react'],
+    },
+    // Pass even when no test files are found (initially)
     passWithNoTests: true,
     // Coverage configuration
     coverage: {

@@ -425,3 +425,45 @@ function notifySubscribers(): void {
     callback(presences);
   }
 }
+
+// ============================================================================
+// Testing Utilities
+// ============================================================================
+
+/**
+ * Reset the presence service state for testing.
+ *
+ * This function resets all module-level state to initial values,
+ * ensuring test isolation. Call this in beforeEach() to prevent
+ * state leakage between tests.
+ *
+ * @internal For testing only - not part of the public API
+ */
+export function _resetForTesting(): void {
+  // Clean up any active subscriptions
+  cleanupPresence();
+
+  // Reset state to initial values
+  state.peerId = crypto.randomUUID();
+  state.identity = null;
+  state.currentFilePath = null;
+  state.currentHandle = null;
+  state.remotePresences = new Map();
+  state.localCursor = null;
+  state.localSelection = null;
+  state.lastBroadcastTime = 0;
+  state.pendingBroadcast = null;
+  state.cleanupInterval = null;
+  state.subscribers = new Set();
+  state.messageHandler = null;
+  state.config = { ...DEFAULT_CONFIG };
+}
+
+/**
+ * Get the internal state for test assertions.
+ *
+ * @internal For testing only - not part of the public API
+ */
+export function _getStateForTesting(): Readonly<PresenceServiceState> {
+  return state;
+}

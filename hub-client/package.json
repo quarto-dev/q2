@@ -15,7 +15,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "test:e2e": "npm run build:wasm && playwright test",
+    "test:e2e:ui": "npm run build:wasm && playwright test --ui",
+    "test:ci": "npm run test && npm run test:integration",
+    "test:all": "npm run build:wasm && npm run test && npm run test:integration && npm run test:e2e",
+    "e2e:regenerate-fixtures": "npx tsx e2e/scripts/regenerate-fixtures.ts"
   },
   "dependencies": {
     "@automerge/automerge-repo": "^2.5.1",
@@ -33,6 +40,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.50.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
     "@types/ejs": "^3.1.5",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
@@ -42,7 +52,9 @@
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
+    "fake-indexeddb": "^6.0.0",
     "globals": "^16.5.0",
+    "jsdom": "^26.0.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4",
