@@ -13,6 +13,11 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-27
+
+- [`d470b1b3`](https://github.com/quarto-dev/kyoto/commits/d470b1b3): Add utility tests (stripAnsi, diagnosticToMonaco) and E2E fixture script
+- [`d7e55db9`](https://github.com/quarto-dev/kyoto/commits/d7e55db9): Add testing infrastructure with mock utilities and Playwright E2E setup
+
 ### 2026-01-26
 
 - [`fe5d0523`](https://github.com/quarto-dev/kyoto/commits/fe5d0523): Add support for SCSS compilation
