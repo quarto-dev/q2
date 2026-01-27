@@ -26,6 +26,9 @@ export default defineConfig({
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   resolve: {
+    // Prefer 'source' condition for workspace packages - allows Vite to transpile
+    // TypeScript directly without requiring a pre-build step
+    conditions: ['source', 'import', 'module', 'browser', 'default'],
     alias: {
       'wasm-quarto-hub-client': path.resolve(__dirname, 'wasm-quarto-hub-client/wasm_quarto_hub_client.js'),
     },

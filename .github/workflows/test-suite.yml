@@ -94,6 +94,21 @@ jobs:
         shell: bash
         run: cargo xtask lint
 
+      # TypeScript workspace build
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        shell: bash
+        run: npm ci
+
+      - name: Build TypeScript packages
+        shell: bash
+        run: npm run build
+
       # Build and test
       - name: Build
         shell: bash

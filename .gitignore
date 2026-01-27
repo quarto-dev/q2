@@ -38,3 +38,4 @@ resources/basic-quarto-website-compiled/
 claude-notes/plans/CURRENT.md
 node_modules/
 ts-packages/*/dist/
+ts-packages/*/*.tsbuildinfo
