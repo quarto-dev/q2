@@ -1,0 +1,6 @@
+# Cargo configuration for the Quarto Rust workspace
+
+[alias]
+# Run project-specific tasks via: cargo xtask <command>
+# See crates/xtask/src/main.rs for available commands
+xtask = "run --package xtask --"

@@ -263,6 +263,27 @@ The changelog is rendered in the About section of the hub-client UI.
 - **CRITICAL**: Do NOT pipe `cargo nextest run` through `tail` or other commands - it causes hangs. Run it directly.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
 
+## Custom Lint Checks
+
+Run project-specific lint checks with:
+
+```bash
+cargo xtask lint           # Run all lint checks
+cargo xtask lint --verbose # Show all files being checked
+cargo xtask lint --quiet   # Only show errors
+```
+
+### Current Lint Rules
+
+- **external-sources-in-macro**: Detects references to `external-sources/` in compile-time macros like `include_dir!`, `include_str!`, `include_bytes!`. These break builds because `external-sources/` is not version-controlled.
+
+### Adding New Lint Rules
+
+Add new rules in `crates/xtask/src/lint/`. Each rule should:
+1. Implement a `check(path: &Path, content: &str) -> Result<Vec<Violation>>` function
+2. Be called from `lint/mod.rs::check_file()`
+3. Include unit tests
+
 ## Coding instructions
 
 - **CRITICAL** If you'll be writing code, read the special instructions on file claude-notes/instructions/coding.md

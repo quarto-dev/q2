@@ -89,6 +89,11 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install tree-sitter-cli
 
+      # Custom lint checks (before build to fail fast)
+      - name: Run custom lints
+        shell: bash
+        run: cargo xtask lint
+
       # Build and test
       - name: Build
         shell: bash

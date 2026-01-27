@@ -1,0 +1,21 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Project-specific automation tasks for Quarto Rust"
+
+# This crate is for development tasks only, not part of the library API
+[[bin]]
+name = "xtask"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+proc-macro2 = { workspace = true }
+syn = { workspace = true }
+walkdir = { workspace = true }
+
+[lints]
+workspace = true
