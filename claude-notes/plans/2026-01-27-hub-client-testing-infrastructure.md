@@ -7,11 +7,32 @@
 
 ---
 
+## Session Notes (2026-01-27, Session 3)
+
+**Progress Made:**
+- Phase 3: Complete! Created `npm run bootstrap-test-fixtures` command
+- Rewrote regenerate-fixtures.ts to create documents directly on a local Repo
+  (no sync server needed - much simpler approach)
+- Added dependencies: @automerge/automerge-repo-storage-nodefs, ws, @types/ws
+- Generated and checked in initial fixture set (14 documents, 4 projects)
+- Test count: 156 tests (7 test files) - all passing
+
+**New Files/Changes:**
+- `hub-client/e2e/scripts/regenerate-fixtures.ts` - Rewritten for local document creation
+- `hub-client/e2e/fixtures/automerge-data/` - Binary Automerge fixtures (15 files)
+- `hub-client/e2e/fixtures/fixture-manifest.json` - Document IDs for test projects
+
+**To Resume:**
+1. Phase 6: E2E tests with Playwright (use fixtures to load test projects)
+2. Phase 5: Component integration tests (deferred per plan)
+
+---
+
 ## Session Notes (2026-01-27, Session 2)
 
 **Progress Made:**
 - Phase 4: Added tests for `stripAnsi.ts` (18 tests) and `diagnosticToMonaco.ts` (36 tests)
-- Phase 3: Created `e2e/scripts/regenerate-fixtures.ts` script
+- Phase 3: Created initial `e2e/scripts/regenerate-fixtures.ts` script
 - Fixed flaky test in `projectStorage.test.ts` (timing issue in ordering test)
 - Added `tsx` dev dependency for running fixture scripts
 - Test count: 102 → 156 tests (7 test files)
@@ -20,13 +41,6 @@
 **New Files Created:**
 - `hub-client/src/utils/stripAnsi.test.ts` - 18 tests for ANSI code stripping
 - `hub-client/src/utils/diagnosticToMonaco.test.ts` - 36 tests for diagnostic conversion
-- `hub-client/e2e/scripts/regenerate-fixtures.ts` - Script to create E2E test fixtures
-- `hub-client/e2e/fixtures/fixture-manifest.json` - Placeholder manifest
-
-**To Resume:**
-1. Phase 3: Generate actual fixture data (requires running sync server)
-2. Phase 6: E2E tests with Playwright
-3. Phase 5: Component integration tests (deferred per plan)
 
 ---
 
@@ -131,11 +145,11 @@ This plan outlines a comprehensive testing infrastructure for hub-client, addres
 
 - [x] Create `e2e/fixtures/` directory structure
 - [x] Write `regenerate-fixtures.ts` script to create test projects
-- [ ] Generate initial fixture set with known document IDs (requires sync server)
+- [x] Generate initial fixture set with known document IDs
 - [x] Create `fixture-manifest.json` mapping test names to document IDs
 - [x] Write `fixtureSetup.ts` helpers (copy to temp, cleanup)
 - [x] Write `syncServer.ts` helpers (start/stop local automerge-sync-server)
-- [ ] Check in `automerge-data/` as binary assets (requires sync server)
+- [x] Check in `automerge-data/` as binary assets
 
 ### Phase 4: Unit Tests
 
