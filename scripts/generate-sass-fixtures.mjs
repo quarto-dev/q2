@@ -27,9 +27,9 @@ const __dirname = path.dirname(__filename);
 
 // Paths
 const ROOT_DIR = path.resolve(__dirname, '..');
-const EXTERNAL_SOURCES = path.join(ROOT_DIR, 'external-sources/quarto-cli/src/resources/formats/html/bootstrap');
-const BOOTSTRAP_SCSS_DIR = path.join(EXTERNAL_SOURCES, 'dist/scss');
-const THEMES_DIR = path.join(EXTERNAL_SOURCES, 'themes');
+const RESOURCES_DIR = path.join(ROOT_DIR, 'resources/scss/bootstrap');
+const BOOTSTRAP_SCSS_DIR = path.join(RESOURCES_DIR, 'dist/scss');
+const THEMES_DIR = path.join(RESOURCES_DIR, 'themes');
 const FIXTURES_DIR = path.join(ROOT_DIR, 'crates/quarto-sass/test-fixtures/dart-sass');
 
 // Bootswatch themes
@@ -181,10 +181,10 @@ function compileSass(scss, loadPaths, minified = false) {
 async function main() {
   console.log('Generating dart-sass reference fixtures...\n');
 
-  // Check if external-sources exists
+  // Check if resources/scss exists
   if (!fs.existsSync(BOOTSTRAP_SCSS_DIR)) {
     console.error(`Error: Bootstrap SCSS not found at ${BOOTSTRAP_SCSS_DIR}`);
-    console.error('Make sure external-sources is checked out.');
+    console.error('Make sure resources/scss/bootstrap is present.');
     process.exit(1);
   }
 

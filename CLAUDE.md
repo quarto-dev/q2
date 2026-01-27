@@ -296,3 +296,44 @@ This repository has Claude Code hooks configured in `.claude/settings.json`.
 - When using `echo` on Bash, be careful about escaping. `!` requires you to use single quotes. BAD, DO NOT USE: echo "![](hello)". GOOD, DO USE: '![](hello)'.
 - The documentation in docs/ is a user-facing Quarto website. There, you should document usage and not technical details.
 - **CRITICALLY IMPORTANT**. IF YOU EVER FIND YOURSELF WANTING TO WRITE A HACKY SOLUTION (OR A "TODO" THAT UNDOES EXISTING WORK), STOP AND ASK THE USER. THAT MEANS YOUR PLAN IS NOT GOOD ENOUGH
+
+## External Sources Policy
+
+**NEVER reference `external-sources/` directly in compiled code, build scripts, or embedded resources.**
+
+The `external-sources/` directory contains reference implementations (like `quarto-cli`) that are useful for:
+- Understanding how features work in TypeScript Quarto
+- Copying resources that need to be maintained locally
+- Analysis and documentation (claude-notes/)
+
+However, any resources that are needed at compile time or runtime **must be copied to a local directory** within the repository. This ensures:
+1. **Build reproducibility**: Builds work without `external-sources/` being checked out
+2. **Version control**: Changes to resources are tracked in the repository
+3. **CI/CD compatibility**: CI builds don't need to check out quarto-cli
+
+### Current Local Resource Directories
+
+- `resources/scss/` - SCSS resources (Bootstrap, themes, templates) - see `resources/scss/README.md`
+- `resources/` (future) - Other resources as needed
+
+### Updating Local Resources
+
+When TypeScript Quarto updates resources (e.g., Bootstrap version bump):
+1. Copy updated files from `external-sources/` to the appropriate local directory
+2. Update any related documentation (README.md files)
+3. Run relevant tests to verify compatibility
+4. Commit the updated resources
+
+### Acceptable Uses of external-sources/
+
+- Reading files for analysis or understanding
+- Referencing in documentation and claude-notes/
+- One-time copying of files to local directories
+- Running TypeScript Quarto for comparison testing
+
+### Prohibited Uses of external-sources/
+
+- `include_dir!()` or similar macros pointing to external-sources/
+- Build scripts that read from external-sources/
+- Test fixtures that depend on external-sources/ (copy them locally)
+- Runtime file paths referencing external-sources/

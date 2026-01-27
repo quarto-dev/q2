@@ -26,23 +26,23 @@ use std::path::{Path, PathBuf};
 use quarto_system_runtime::NativeRuntime;
 use quarto_system_runtime::sass_native::compile_scss;
 
-/// Find the workspace root directory (contains Cargo.toml with [workspace])
+/// Find the workspace root directory (contains resources/scss)
 fn find_workspace_root() -> Option<PathBuf> {
     std::env::current_dir()
         .ok()?
         .ancestors()
-        .find(|p| p.join("external-sources").exists())
+        .find(|p| p.join("resources/scss").exists())
         .map(|p| p.to_path_buf())
 }
 
 /// Path to Bootstrap SCSS directory
 fn bootstrap_scss_dir(root: &Path) -> PathBuf {
-    root.join("external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/scss")
+    root.join("resources/scss/bootstrap/dist/scss")
 }
 
 /// Path to Bootswatch themes directory
 fn themes_dir(root: &Path) -> PathBuf {
-    root.join("external-sources/quarto-cli/src/resources/formats/html/bootstrap/themes")
+    root.join("resources/scss/bootstrap/themes")
 }
 
 /// Path to dart-sass fixtures directory

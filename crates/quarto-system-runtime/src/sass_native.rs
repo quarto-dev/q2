@@ -304,12 +304,12 @@ mod tests {
         assert!(debug_str.contains("RuntimeFs"));
     }
 
-    /// Helper to find the workspace root with external-sources
+    /// Helper to find the workspace root with resources/scss
     fn find_workspace_root() -> Option<PathBuf> {
         std::env::current_dir()
             .unwrap()
             .ancestors()
-            .find(|p| p.join("external-sources").exists())
+            .find(|p| p.join("resources/scss").exists())
             .map(|p| p.to_path_buf())
     }
 
@@ -356,12 +356,11 @@ mod tests {
         let runtime = NativeRuntime::new();
 
         let Some(root) = find_workspace_root() else {
-            eprintln!("Skipping Bootstrap test: external-sources not found");
+            eprintln!("Skipping Bootstrap test: resources/scss not found");
             return;
         };
 
-        let bootstrap_dir =
-            root.join("external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/scss");
+        let bootstrap_dir = root.join("resources/scss/bootstrap/dist/scss");
 
         if !bootstrap_dir.exists() {
             eprintln!(
@@ -406,12 +405,11 @@ mod tests {
         let runtime = NativeRuntime::new();
 
         let Some(root) = find_workspace_root() else {
-            eprintln!("Skipping Bootstrap minified test: external-sources not found");
+            eprintln!("Skipping Bootstrap minified test: resources/scss not found");
             return;
         };
 
-        let bootstrap_dir =
-            root.join("external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/scss");
+        let bootstrap_dir = root.join("resources/scss/bootstrap/dist/scss");
 
         if !bootstrap_dir.exists() {
             eprintln!("Skipping Bootstrap minified test: Bootstrap SCSS not found");

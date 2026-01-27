@@ -29,39 +29,35 @@ use include_dir::{Dir, include_dir};
 /// Bootstrap 5.3.1 SCSS directory embedded at compile time.
 ///
 /// This includes all SCSS files from the Bootstrap distribution used by TS Quarto.
-static BOOTSTRAP_DIR: Dir<'static> = include_dir!(
-    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/scss"
-);
+/// These files are maintained locally in resources/scss/ (copied from quarto-cli).
+static BOOTSTRAP_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/bootstrap/dist/scss");
 
 /// Bootstrap sass-utils directory embedded at compile time.
 ///
 /// Contains utility functions like color-contrast.scss that have inline fallback
 /// variable definitions, making them work even before Bootstrap variables are loaded.
-static SASS_UTILS_DIR: Dir<'static> = include_dir!(
-    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap/dist/sass-utils"
-);
+static SASS_UTILS_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/bootstrap/dist/sass-utils");
 
 /// Bootswatch themes directory embedded at compile time.
 ///
 /// Contains 25 Bootswatch theme files that customize Bootstrap's appearance.
-static THEMES_DIR: Dir<'static> = include_dir!(
-    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap/themes"
-);
+static THEMES_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/bootstrap/themes");
 
 /// Quarto Bootstrap customization files embedded at compile time.
 ///
 /// Contains Quarto's Bootstrap customization layer and additional functions.
-static QUARTO_BOOTSTRAP_DIR: Dir<'static> = include_dir!(
-    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/bootstrap"
-);
+static QUARTO_BOOTSTRAP_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/bootstrap");
 
 /// HTML templates directory embedded at compile time.
 ///
 /// Contains SCSS files for HTML output styling, including title-block.scss
 /// which provides styling for the document title block.
-static TEMPLATES_DIR: Dir<'static> = include_dir!(
-    "$CARGO_MANIFEST_DIR/../../external-sources/quarto-cli/src/resources/formats/html/templates"
-);
+static TEMPLATES_DIR: Dir<'static> =
+    include_dir!("$CARGO_MANIFEST_DIR/../../resources/scss/html/templates");
 
 /// Virtual path prefix for embedded resources.
 ///
