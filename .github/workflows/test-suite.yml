@@ -119,9 +119,8 @@ jobs:
         shell: bash
 
       - name: Install wasm-pack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-pack
+        shell: bash
+        run: cargo install wasm-pack
 
       - name: Build WASM module
         shell: bash
