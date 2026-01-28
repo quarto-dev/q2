@@ -6,7 +6,6 @@
  * but is not as feature-complete as the Rust implementation.
  */
 
-import React from 'react';
 import type { ReactNode } from 'react';
 
 // ============================================================================
@@ -290,7 +289,6 @@ interface ReactAstRendererProps {
  */
 export function ReactAstRenderer({ ast, className }: ReactAstRendererProps) {
   if (typeof ast === 'string' && ast.trim().length === 0) return <div></div>
-  console.log('ast', ast)
   const parsedAst = typeof ast === 'string' ? JSON.parse(ast) : ast;
 
   return <div className={className}>{renderBlocks(parsedAst.blocks)}</div>;

@@ -5,7 +5,7 @@
  * VFS operations, QMD rendering, and SASS compilation.
  */
 
-import type { Diagnostic, RenderResponse } from '../types/diagnostic';
+import type { Diagnostic, RenderResponse, ParseAstResponse } from '../types/diagnostic';
 import { getSassCache, computeHash } from './sassCache';
 
 // Response types from WASM module
@@ -290,12 +290,26 @@ export function getBuiltinTemplate(name: string): string {
  *
  * @param content - QMD source text to parse
  * @returns Pandoc AST as a JSON string
+ * @throws Error if parsing fails (with diagnostics attached as `error.diagnostics`)
  */
 export async function parseQmdToAst(content: string): Promise<string> {
   await initWasm();
   const wasm = getWasm();
   // @ts-expect-error - parse_qmd_to_ast may not be in cached types yet
-  return wasm.parse_qmd_to_ast(content);
+  const responseJson = wasm.parse_qmd_to_ast(content);
+  const response: ParseAstResponse = JSON.parse(responseJson);
+
+  if (!response.success) {
+    const error = new Error(response.error || 'Failed to parse QMD content') as Error & {
+      diagnostics?: Diagnostic[];
+    };
+    if (response.diagnostics) {
+      error.diagnostics = response.diagnostics;
+    }
+    throw error;
+  }
+
+  return response.ast!;
 }
 
 // ============================================================================

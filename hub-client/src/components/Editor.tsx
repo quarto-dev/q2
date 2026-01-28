@@ -13,15 +13,11 @@ import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady, parseQmdToAst } from '../services/wasmRenderer';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
-import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
-import { postProcessIframe } from '../utils/iframePostProcessor';
 import { usePresence } from '../hooks/usePresence';
-import { useScrollSync } from '../hooks/useScrollSync';
 import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
-import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
@@ -56,107 +52,6 @@ interface Props {
   onDisconnect: () => void;
   onContentChange: (path: string, content: string) => void;
 }
-
-// Fallback for when WASM isn't ready yet
-function renderFallback(content: string, message: string): string {
-  return `
-    <html>
-      <head>
-        <style>
-          body {
-            font-family: system-ui, -apple-system, sans-serif;
-            padding: 24px;
-            max-width: 800px;
-            margin: 0 auto;
-            line-height: 1.6;
-            color: #333;
-          }
-          pre {
-            background: #f4f4f4;
-            padding: 16px;
-            border-radius: 4px;
-            overflow-x: auto;
-          }
-          code { font-family: 'SF Mono', Monaco, monospace; }
-          .notice {
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 16px;
-          }
-          .loading { background: #e3f2fd; }
-          .error { background: #ffebee; color: #c62828; }
-        </style>
-      </head>
-      <body>
-        <div class="notice loading">
-          ${message}
-        </div>
-        <pre><code>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
-      </body>
-    </html>
-  `;
-}
-
-// Error display HTML
-function renderError(content: string, error: string, diagnostics?: string[]): string {
-  // Strip ANSI codes and escape HTML
-  const cleanError = stripAnsi(error)
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-  const diagHtml = diagnostics?.length
-    ? `<ul>${diagnostics.map(d => `<li>${stripAnsi(d).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</li>`).join('')}</ul>`
-    : '';
-
-  return `
-    <html>
-      <head>
-        <style>
-          body {
-            font-family: system-ui, -apple-system, sans-serif;
-            padding: 24px;
-            max-width: 800px;
-            margin: 0 auto;
-            line-height: 1.6;
-            color: #333;
-          }
-          pre {
-            background: #f4f4f4;
-            padding: 16px;
-            border-radius: 4px;
-            overflow-x: auto;
-          }
-          code { font-family: 'SF Mono', Monaco, monospace; }
-          .error {
-            background: #ffebee;
-            color: #c62828;
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 16px;
-          }
-          .error-message {
-            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
-            font-size: 13px;
-            line-height: 1.4;
-            white-space: pre;
-            overflow-x: auto;
-            margin-top: 8px;
-          }
-          .error ul { margin: 8px 0 0 0; padding-left: 20px; }
-        </style>
-      </head>
-      <body>
-        <div class="error">
-          <strong>Render Error</strong>
-          <div class="error-message">${cleanError}</div>
-          ${diagHtml}
-        </div>
-        <pre><code>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
-      </body>
-    </html>
-  `;
-}
-
 // Select the best default file: prefer index.qmd, then first .qmd, then first file
 function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   if (files.length === 0) return null;
@@ -209,24 +104,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
 
-  // Double-buffered iframes to prevent flash during updates
-  const iframeARef = useRef<HTMLIFrameElement>(null);
-  const iframeBRef = useRef<HTMLIFrameElement>(null);
-  const [activeIframe, setActiveIframe] = useState<'A' | 'B'>('A');
-  const activeIframeRef = useRef<'A' | 'B'>('A'); // Ref for use in callbacks
-  const [iframeAHtml, setIframeAHtml] = useState<string>('');
-  const [iframeBHtml, setIframeBHtml] = useState<string>('');
   const [ast, setAst] = useState<string>('');
-  // Track if we're waiting for inactive iframe to load before swapping
-  const [swapPending, setSwapPending] = useState(false);
-  // iframeRef points to the currently active iframe (for scroll sync and post-processing)
-  const iframeRef = activeIframe === 'A' ? iframeARef : iframeBRef;
-  const inactiveIframeRef = activeIframe === 'A' ? iframeBRef : iframeARef;
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    activeIframeRef.current = activeIframe;
-  }, [activeIframe]);
 
   // Keep current file path ref in sync for Monaco providers
   useEffect(() => {
@@ -250,9 +128,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [scrollSyncEnabled, setScrollSyncEnabled] = usePreference('scrollSyncEnabled');
   // Track if editor has focus (to prevent scroll feedback loop)
   const editorHasFocusRef = useRef(false);
-  // Track when editor is mounted (for scroll sync initialization)
-  const [editorReady, setEditorReady] = useState(false);
-  const [iframeLoadCount, setIframeLoadCount] = useState(0);
+
 
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);
@@ -263,154 +139,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
   const [newFileInitialName, setNewFileInitialName] = useState<string>('');
 
-  // Pending anchor state for cross-document navigation
-  // When navigating to another file with an anchor, we store the anchor and
-  // the iframeLoadCount at the time of setting. We only scroll when the load
-  // count increases (indicating the new content has loaded).
-  const [pendingAnchor, setPendingAnchor] = useState<{
-    anchor: string;
-    loadCountAtSet: number;
-  } | null>(null);
-
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
-
-  // Scroll the preview to an anchor element
-  // Note: We find the active iframe via DOM query instead of using activeIframe state
-  // to avoid timing issues where the effect runs before activeIframe is updated
-  const scrollToAnchor = useCallback((anchor: string) => {
-    // Find the active iframe by its class rather than relying on state
-    const activeIframeEl = document.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
-    const doc = activeIframeEl?.contentDocument;
-    if (!doc) return;
-
-    const element = doc.getElementById(anchor);
-    if (element) {
-      element.scrollIntoView({ behavior: 'instant', block: 'start' });
-      // Scroll sync will automatically update the editor via scroll event listener
-    }
-    // If element doesn't exist, do nothing (no-op as specified)
-  }, []);
-
-  // Handler for .qmd link clicks and anchor clicks in the preview
-  const handleQmdLinkClick = useCallback(
-    (targetPath: string | null, anchor: string | null) => {
-      // Case 1: Same-document anchor only (e.g., #section)
-      if (!targetPath && anchor) {
-        scrollToAnchor(anchor);
-        return;
-      }
-
-      // Case 2: Link to a different document (with or without anchor)
-      if (targetPath) {
-        const file = files.find(
-          (f) => f.path === targetPath || '/' + f.path === targetPath
-        );
-
-        if (file) {
-          // Existing file - switch to it
-          setCurrentFile(file);
-          if (anchor) {
-            // Store anchor and current load count to apply after new content loads
-            setPendingAnchor({ anchor, loadCountAtSet: iframeLoadCount });
-          }
-        } else {
-          // Non-existent file - open create dialog with pre-filled name
-          // Strip leading slash for the dialog
-          const filename = targetPath.startsWith('/') ? targetPath.slice(1) : targetPath;
-          setNewFileInitialName(filename);
-          setShowNewFileDialog(true);
-        }
-      }
-    },
-    [files, scrollToAnchor, iframeLoadCount]
-  );
-
-  // Post-process iframe content after render (replace CSS links with data URIs)
-  // Note: We pass the active iframeRef here, but we'll also process inactive iframe manually
-  const { handleLoad: handlePostProcess } = useIframePostProcessor(iframeRef, {
-    currentFilePath: currentFile?.path ?? '',
-    onQmdLinkClick: handleQmdLinkClick,
-  });
-
-  // Handler for when the inactive iframe finishes loading new content
-  const handleInactiveIframeLoad = useCallback(() => {
-    // Only process if we're waiting for a swap
-    if (!swapPending) return;
-
-    const activeIframeEl = iframeRef.current;
-    const inactiveIframeEl = inactiveIframeRef.current;
-
-    // Save scroll position from currently active iframe
-    let scrollPos: { x: number; y: number } | null = null;
-    if (activeIframeEl?.contentWindow) {
-      scrollPos = {
-        x: activeIframeEl.contentWindow.scrollX,
-        y: activeIframeEl.contentWindow.scrollY,
-      };
-    }
-
-    // Post-process the inactive iframe (CSS, images, link handlers)
-    // This must happen BEFORE the swap to prevent layout shifts from image loading
-    // on the visible iframe, which would cause scroll sync issues.
-    if (inactiveIframeEl) {
-      postProcessIframe(inactiveIframeEl, {
-        currentFilePath: currentFile?.path ?? '',
-        onQmdLinkClick: handleQmdLinkClick,
-      });
-    }
-
-    // Swap: make inactive become active
-    setActiveIframe((prev) => (prev === 'A' ? 'B' : 'A'));
-    setSwapPending(false);
-    setIframeLoadCount((n) => n + 1);
-
-    // Restore scroll position to the now-active iframe (after swap, inactiveIframeRef is now the visible one)
-    // We need to do this after React re-renders, so use setTimeout
-    if (scrollPos) {
-      setTimeout(() => {
-        // After swap, the previously inactive iframe is now active
-        const nowActiveIframe = inactiveIframeEl;
-        if (nowActiveIframe?.contentWindow) {
-          nowActiveIframe.contentWindow.scrollTo(scrollPos!.x, scrollPos!.y);
-        }
-      }, 0);
-    }
-  }, [swapPending, iframeRef, inactiveIframeRef, currentFile, handleQmdLinkClick]);
-
-  // Handler for active iframe load (used for initial load and post-processing)
-  const handleActiveIframeLoad = useCallback(() => {
-    handlePostProcess();
-    setIframeLoadCount((n) => n + 1);
-  }, [handlePostProcess]);
-
-  // Scroll synchronization between editor and preview
-  useScrollSync({
-    editorRef,
-    iframeRef,
-    enabled: scrollSyncEnabled && editorReady,
-    iframeLoadCount,
-    editorHasFocusRef,
-  });
-
-  // Apply pending anchor after iframe loads new content (for cross-document navigation with anchors)
-  useEffect(() => {
-    // Only scroll when the load count has increased since the anchor was set
-    // This ensures we wait for the new document to actually load
-    if (pendingAnchor && iframeLoadCount > pendingAnchor.loadCountAtSet) {
-      // Small delay to ensure content is fully rendered
-      const timer = setTimeout(() => {
-        scrollToAnchor(pendingAnchor.anchor);
-        setPendingAnchor(null);
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [pendingAnchor, iframeLoadCount, scrollToAnchor]);
-
-  // Debounce rendering
-  const renderTimeoutRef = useRef<number | null>(null);
-  const lastContentRef = useRef<string>('');
 
   // Update document title based on current file
   useEffect(() => {
@@ -446,31 +177,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     return () => { cancelled = true; };
   }, []);
 
-  // Helper to set HTML on the inactive iframe (uses ref for current active state)
-  // We add a unique timestamp comment to ensure srcDoc always changes, forcing onLoad to fire.
-  // Without this, if the rendered HTML matches what's already in the inactive iframe
-  // (e.g., after undo), React won't update the DOM and onLoad won't fire, breaking the swap.
-  const setInactiveHtml = useCallback((html: string) => {
-    const uniqueHtml = html + `<!-- render-${Date.now()} -->`;
-    if (activeIframeRef.current === 'A') {
-      setIframeBHtml(uniqueHtml);
-    } else {
-      setIframeAHtml(uniqueHtml);
-    }
-  }, []);
-
   // Render function that uses WASM when available
   // Implements state machine transitions for error handling:
   // - On success: always transition to GOOD, swap to new content
   // - On error from START/ERROR_AT_START: show full error page
   // - On error from GOOD/ERROR_FROM_GOOD: keep last good HTML, show overlay
   const doRender = useCallback(async (qmdContent: string) => {
-    lastContentRef.current = qmdContent;
-
     if (!isWasmReady()) {
-      // For initial load before WASM is ready, load into inactive iframe and swap
-      setInactiveHtml(renderFallback(qmdContent, 'Loading WASM renderer...'));
-      setSwapPending(true);
       setDiagnostics([]);
       return;
     }
@@ -482,17 +195,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       });
       const ast = await parseQmdToAst(qmdContent)
       setAst(ast)
-      console.log('extractHeadings', await extractHeadings(qmdContent))
+      // console.log('extractHeadings', await extractHeadings(qmdContent))
       // todo: 
       // - simplify AST to be readable
       // - make astWithSections function
       // - make css nicer
       // - make slide preview
-
-      // Check if content changed while we were rendering
-      if (qmdContent !== lastContentRef.current) {
-        return;
-      }
 
       // Collect all diagnostics from both success and error paths
       const allDiagnostics: Diagnostic[] = [
@@ -505,9 +213,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         // Success: transition to GOOD state from any state
         setCurrentError(null);
         setPreviewState('GOOD');
-        // Load new content into inactive iframe (will swap on load)
-        setInactiveHtml(result.html);
-        setSwapPending(true);
       } else {
         const errorMsg =
           typeof result.error === 'string'
@@ -524,8 +229,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         if (currentState === 'START' || currentState === 'ERROR_AT_START') {
           // No good render yet - show full error page
           setPreviewState('ERROR_AT_START');
-          setInactiveHtml(renderError(qmdContent, errorMsg));
-          setSwapPending(true);
         } else {
           // Was GOOD or ERROR_FROM_GOOD - keep last good HTML, show overlay
           // DON'T swap iframes, DON'T change HTML content
@@ -544,29 +247,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       const currentState = previewStateRef.current;
       if (currentState === 'START' || currentState === 'ERROR_AT_START') {
         setPreviewState('ERROR_AT_START');
-        setInactiveHtml(renderError(qmdContent, errorMsg));
-        setSwapPending(true);
       } else {
         setPreviewState('ERROR_FROM_GOOD');
       }
       setDiagnostics([]);
     }
-  }, [scrollSyncEnabled, setInactiveHtml]);
-
-  // Debounced render update
-  const updatePreview = useCallback((newContent: string) => {
-    if (renderTimeoutRef.current) {
-      clearTimeout(renderTimeoutRef.current);
-    }
-    renderTimeoutRef.current = window.setTimeout(() => {
-      doRender(newContent);
-    }, 30);
-  }, [doRender]);
+  }, [scrollSyncEnabled]);
 
   // Re-render when content changes, WASM becomes ready, or scroll sync is toggled
   useEffect(() => {
-    updatePreview(content);
-  }, [content, updatePreview, wasmStatus, scrollSyncEnabled]);
+    doRender(content);
+  }, [content, doRender, wasmStatus, scrollSyncEnabled]);
 
   // Refresh intelligence (outline) when content changes
   // VFS is updated via Automerge callbacks, so we trigger refresh after content changes
@@ -681,9 +372,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       domNode.addEventListener('dragleave', handleEditorDragLeave);
       domNode.addEventListener('drop', handleEditorDrop);
     }
-
-    // Signal that editor is ready for scroll sync
-    setEditorReady(true);
   };
 
   // Handle symbol click from outline panel - navigate editor to symbol location

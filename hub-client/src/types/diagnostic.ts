@@ -50,3 +50,14 @@ export interface RenderResponse {
   /** Structured warnings with line/column information for Monaco. */
   warnings?: Diagnostic[];
 }
+
+/**
+ * AST parse response from WASM with structured diagnostics.
+ */
+export interface ParseAstResponse {
+  success: boolean;
+  error?: string;
+  ast?: string;
+  /** Structured diagnostics (errors) with line/column information for Monaco. */
+  diagnostics?: Diagnostic[];
+}

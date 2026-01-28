@@ -767,10 +767,67 @@ pub fn get_builtin_template(name: &str) -> String {
 /// * `content` - QMD source text
 ///
 /// # Returns
-/// JSON string containing the Pandoc AST representation
+/// JSON: `{ "success": true, "ast": "..." }` or `{ "success": false, "error": "...", "diagnostics": [...] }`
 #[wasm_bindgen]
 pub fn parse_qmd_to_ast(content: &str) -> String {
-    pampa::wasm_entry_points::parse_qmd(content.as_bytes(), false)
+    use pampa::readers;
+    use pampa::utils::output::VerboseOutput;
+    use pampa::wasm_entry_points::pandoc_to_json;
+    use std::io;
+
+    let mut output = VerboseOutput::Sink(io::sink());
+    match readers::qmd::read(
+        content.as_bytes(),
+        false,
+        "<input>",
+        &mut output,
+        true,
+        None,
+    ) {
+        Ok((pandoc, context, _warnings)) => {
+            match pandoc_to_json(&pandoc, &context, false) {
+                Ok(ast_json) => {
+                    // Return success response with AST
+                    serde_json::json!({
+                        "success": true,
+                        "ast": ast_json
+                    })
+                    .to_string()
+                }
+                Err(e) => {
+                    // Error converting to JSON
+                    serde_json::json!({
+                        "success": false,
+                        "error": e
+                    })
+                    .to_string()
+                }
+            }
+        }
+        Err(diagnostics) => {
+            // Parse error with structured diagnostics
+            let mut source_context = SourceContext::new();
+            source_context.add_file("<input>".to_string(), Some(content.to_string()));
+
+            // Convert diagnostics to JSON format (same as render_qmd_content)
+            let json_diagnostics = diagnostics_to_json(&diagnostics, &source_context);
+
+            // Format the main error message
+            let error_msg = if diagnostics.is_empty() {
+                "Parse error".to_string()
+            } else {
+                // Use the first diagnostic's message as the main error
+                diagnostics[0].to_text(None)
+            };
+
+            serde_json::json!({
+                "success": false,
+                "error": error_msg,
+                "diagnostics": json_diagnostics
+            })
+            .to_string()
+        }
+    }
 }
 
 // ============================================================================

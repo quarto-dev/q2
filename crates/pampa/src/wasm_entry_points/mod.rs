@@ -8,7 +8,7 @@ use crate::utils::output::VerboseOutput;
 use crate::writers::json::JsonConfig;
 use std::io;
 
-fn pandoc_to_json(
+pub fn pandoc_to_json(
     doc: &crate::pandoc::Pandoc,
     context: &crate::pandoc::ast_context::ASTContext,
     include_resolved_locations: bool,
