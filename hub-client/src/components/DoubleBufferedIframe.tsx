@@ -1,5 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useImperativeHandle } from 'react';
+import type { Ref } from 'react';
 import { postProcessIframe } from '../utils/iframePostProcessor';
+
+// Methods exposed via ref
+export interface DoubleBufferedIframeHandle {
+  scrollToLine: (line: number) => void;
+  getScrollRatio: () => number | null;
+}
 
 interface DoubleBufferedIframeProps {
   // HTML content to render - component handles buffering automatically
@@ -9,8 +16,84 @@ interface DoubleBufferedIframeProps {
   // Callback when user navigates to a different document (with optional anchor)
   // Parent (Preview) handles file lookup and switching
   onNavigateToDocument: (targetPath: string, anchor: string | null) => void;
-  // Called AFTER swap completes (for tracking load count, etc.)
-  onAfterSwap: () => void;
+  // Optional callback when preview is scrolled
+  onScroll?: () => void;
+  // Optional callback when preview is clicked
+  onClick?: () => void;
+  // Ref to expose imperative methods
+  ref: Ref<DoubleBufferedIframeHandle>;
+}
+
+/**
+ * Parsed source location from data-loc attribute.
+ * Format: "fileId:startLine:startCol-endLine:endCol" (1-based)
+ */
+interface SourceLocation {
+  fileId: number;
+  startLine: number;
+  startCol: number;
+  endLine: number;
+  endCol: number;
+}
+
+/**
+ * Parse a data-loc attribute string into a SourceLocation object.
+ * Returns null if the format is invalid.
+ */
+function parseDataLoc(dataLoc: string): SourceLocation | null {
+  const match = dataLoc.match(/^(\d+):(\d+):(\d+)-(\d+):(\d+)$/);
+  if (!match) return null;
+  return {
+    fileId: parseInt(match[1], 10),
+    startLine: parseInt(match[2], 10),
+    startCol: parseInt(match[3], 10),
+    endLine: parseInt(match[4], 10),
+    endCol: parseInt(match[5], 10),
+  };
+}
+
+/**
+ * Find the best matching element for a given line number.
+ * Prefers the most specific (smallest range) match.
+ */
+function findElementForLine(
+  doc: Document,
+  line: number
+): HTMLElement | null {
+  const elements = doc.querySelectorAll('[data-loc]');
+  let bestMatch: HTMLElement | null = null;
+  let bestRangeSize = Infinity;
+
+  for (const element of elements) {
+    const dataLoc = element.getAttribute('data-loc');
+    if (!dataLoc) continue;
+
+    const loc = parseDataLoc(dataLoc);
+    if (!loc) continue;
+
+    // Check if line is within this element's range
+    if (line >= loc.startLine && line <= loc.endLine) {
+      const rangeSize = loc.endLine - loc.startLine;
+      // Prefer smaller (more specific) ranges
+      if (rangeSize < bestRangeSize) {
+        bestMatch = element as HTMLElement;
+        bestRangeSize = rangeSize;
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
+/**
+ * Check if an element is fully visible in the viewport.
+ */
+function isElementVisible(element: HTMLElement): boolean {
+  const rect = element.getBoundingClientRect();
+  const viewportHeight = window.innerHeight;
+
+  // Element is visible if it's within the viewport bounds
+  return rect.top >= 0 && rect.bottom <= viewportHeight;
 }
 
 /**
@@ -25,11 +108,13 @@ interface DoubleBufferedIframeProps {
  *
  * This prevents the visible iframe from flickering during updates.
  */
-export default function DoubleBufferedIframe({
+function DoubleBufferedIframe({
   html,
   currentFilePath,
   onNavigateToDocument,
-  onAfterSwap,
+  onScroll,
+  onClick,
+  ref,
 }: DoubleBufferedIframeProps) {
   const iframeARef = useRef<HTMLIFrameElement>(null);
   const iframeBRef = useRef<HTMLIFrameElement>(null);
@@ -124,10 +209,7 @@ export default function DoubleBufferedIframe({
         }
       }, 0);
     }
-
-    // Notify parent that swap completed
-    onAfterSwap();
-  }, [swapPending, getIframeRefs, internalPostProcess, onAfterSwap]);
+  }, [swapPending, getIframeRefs, internalPostProcess]);
 
   // Handler for when active iframe loads (initial load only)
   const handleActiveLoad = useCallback(() => {
@@ -136,8 +218,68 @@ export default function DoubleBufferedIframe({
     if (active.current) {
       internalPostProcess(active.current);
     }
-    onAfterSwap?.();
-  }, [getIframeRefs, internalPostProcess, onAfterSwap]);
+  }, [getIframeRefs, internalPostProcess]);
+
+  // Expose methods via ref
+  useImperativeHandle(ref, () => ({
+    scrollToLine: (line: number) => {
+      const { active } = getIframeRefs();
+      const doc = active.current?.contentDocument;
+      if (!doc) return;
+
+      const element = findElementForLine(doc, line);
+      if (!element) return;
+
+      // Only scroll if element is not already visible
+      if (!isElementVisible(element)) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    },
+    getScrollRatio: () => {
+      const { active } = getIframeRefs();
+      const iframe = active.current;
+      if (!iframe?.contentWindow || !iframe?.contentDocument) return null;
+
+      const iframeWindow = iframe.contentWindow;
+      const iframeDoc = iframe.contentDocument;
+
+      // Calculate preview scroll ratio (0 = top, 1 = bottom)
+      const previewScrollY = iframeWindow.scrollY;
+      const previewScrollHeight = iframeDoc.documentElement.scrollHeight;
+      const previewViewportHeight = iframeWindow.innerHeight;
+      const previewMaxScroll = previewScrollHeight - previewViewportHeight;
+
+      // Avoid division by zero for short documents
+      if (previewMaxScroll <= 0) return 0;
+
+      return previewScrollY / previewMaxScroll;
+    },
+  }), [getIframeRefs]);
+
+  // Set up event listeners on active iframe
+  useEffect(() => {
+    const { active } = getIframeRefs();
+    const iframe = active.current;
+    if (!iframe?.contentWindow || !iframe?.contentDocument) return;
+
+    const handleScroll = () => {
+      onScroll?.();
+    };
+
+    const handleClick = () => {
+      onClick?.();
+    };
+
+    // Listen to scroll on the iframe's content window
+    iframe.contentWindow.addEventListener('scroll', handleScroll, { passive: true });
+    // Listen to click on the iframe's document
+    iframe.contentDocument.addEventListener('click', handleClick);
+
+    return () => {
+      iframe.contentWindow?.removeEventListener('scroll', handleScroll);
+      iframe.contentDocument?.removeEventListener('click', handleClick);
+    };
+  }, [activeIframe, onScroll, onClick, getIframeRefs]);
 
   return (
     <>
@@ -160,3 +302,5 @@ export default function DoubleBufferedIframe({
     </>
   );
 }
+
+export default DoubleBufferedIframe;

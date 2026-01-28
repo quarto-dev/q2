@@ -6,7 +6,7 @@ import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { useScrollSync } from '../hooks/useScrollSync';
 import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
-import DoubleBufferedIframe from './DoubleBufferedIframe';
+import DoubleBufferedIframe, { type DoubleBufferedIframeHandle } from './DoubleBufferedIframe';
 
 // Preview pane state machine:
 // START: Initial blank page
@@ -233,19 +233,8 @@ export default function Preview({
     previewStateRef.current = previewState;
   }, [previewState]);
 
-  // Track when iframe loads (for scroll sync initialization)
-  const [iframeLoadCount, setIframeLoadCount] = useState(0);
-
-  // Container ref to access the active iframe
-  const iframeContainerRef = useRef<HTMLDivElement>(null);
-
-  // Create a stable ref that always points to the current active iframe
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
-
-  // Update iframeRef when iframe loads (after swap completes)
-  useEffect(() => {
-    iframeRef.current = iframeContainerRef.current?.querySelector('iframe.preview-active') as HTMLIFrameElement | null;
-  }, [iframeLoadCount]);
+  // Ref to DoubleBufferedIframe to access its imperative methods
+  const doubleBufferedIframeRef = useRef<DoubleBufferedIframeHandle>(null);
 
   // Rendered HTML to display in iframe
   const [renderedHtml, setRenderedHtml] = useState<string>('');
@@ -298,17 +287,16 @@ export default function Preview({
     [files, onFileChange, onOpenNewFileDialog]
   );
 
-  // Handler called AFTER iframe swap - for tracking load count
-  const handleAfterSwap = useCallback(() => {
-    setIframeLoadCount((n) => n + 1);
-  }, []);
-
   // Scroll synchronization between editor and preview
-  useScrollSync({
+  const { handlePreviewScroll, handlePreviewClick } = useScrollSync({
     editorRef,
-    iframeRef,
+    scrollPreviewToLine: (line: number) => {
+      doubleBufferedIframeRef.current?.scrollToLine(line);
+    },
+    getPreviewScrollRatio: () => {
+      return doubleBufferedIframeRef.current?.getScrollRatio() ?? null;
+    },
     enabled: scrollSyncEnabled && editorReady,
-    iframeLoadCount,
     editorHasFocusRef,
   });
 
@@ -378,12 +366,14 @@ export default function Preview({
           Failed to load WASM: {wasmError}
         </div>
       )}
-      <div ref={iframeContainerRef} className="pane preview-pane">
+      <div className="pane preview-pane">
         <DoubleBufferedIframe
+          ref={doubleBufferedIframeRef}
           html={renderedHtml}
           currentFilePath={currentFile?.path ?? ''}
           onNavigateToDocument={handleNavigateToDocument}
-          onAfterSwap={handleAfterSwap}
+          onScroll={handlePreviewScroll}
+          onClick={handlePreviewClick}
         />
         {/* Error overlay shown when error occurs after successful render */}
         <PreviewErrorOverlay
