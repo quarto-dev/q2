@@ -12,11 +12,11 @@ export interface PostProcessOptions {
   /** Current file path for resolving relative links */
   currentFilePath: string;
   /**
-   * Callback when user clicks a .qmd link or anchor link.
-   * @param targetPath - The resolved path to the target file, or null for same-document anchors
-   * @param anchor - The anchor/fragment identifier (without #), or null if no anchor
-   */
-  onQmdLinkClick?: (targetPath: string | null, anchor: string | null) => void;
+  * Callback when user clicks a .qmd link or anchor link.
+  * - targetPath - The resolved path to the target file
+  * - anchor - The anchor/fragment identifier (without #)
+  */
+  onQmdLinkClick?: (arg: { path: string, anchor: string | null } | { anchor: string }) => void;
 }
 
 /** Parsed components of a link href */
@@ -118,10 +118,10 @@ export function postProcessIframe(
         const parsed = parseLink(href);
         // Only process if the path ends with .qmd (handles "file.qmd" and "file.qmd#section")
         if (parsed.path && parsed.path.endsWith('.qmd')) {
-          const targetPath = resolveRelativePath(options.currentFilePath, parsed.path);
+          const path = resolveRelativePath(options.currentFilePath, parsed.path);
           anchor.addEventListener('click', (e) => {
             e.preventDefault();
-            options.onQmdLinkClick!(targetPath, parsed.anchor);
+            options.onQmdLinkClick!({ path, anchor: parsed.anchor });
           });
           // Visual hint that it's an internal link
           anchor.setAttribute('data-internal-link', 'true');
@@ -136,7 +136,9 @@ export function postProcessIframe(
         const parsed = parseLink(href);
         anchor.addEventListener('click', (e) => {
           e.preventDefault();
-          options.onQmdLinkClick!(null, parsed.anchor);
+          if (parsed.anchor) {
+            options.onQmdLinkClick!({ anchor: parsed.anchor });
+          }
         });
       }
     });

@@ -8,9 +8,9 @@ interface DoubleBufferedIframeProps {
   currentFilePath: string;
   // Callback when user navigates to a different document (with optional anchor)
   // Parent (Preview) handles file lookup and switching
-  onNavigateToDocument?: (targetPath: string, anchor: string | null) => void;
+  onNavigateToDocument: (targetPath: string, anchor: string | null) => void;
   // Called AFTER swap completes (for tracking load count, etc.)
-  onAfterSwap?: () => void;
+  onAfterSwap: () => void;
 }
 
 /**
@@ -38,12 +38,6 @@ export default function DoubleBufferedIframe({
   const [iframeBHtml, setIframeBHtml] = useState<string>('');
   const [swapPending, setSwapPending] = useState(false);
 
-  // Track which iframe is active in a ref for use in callbacks
-  const activeIframeRef = useRef<'A' | 'B'>('A');
-  useEffect(() => {
-    activeIframeRef.current = activeIframe;
-  }, [activeIframe]);
-
   // Get refs for currently active and inactive iframes
   const getIframeRefs = useCallback(() => {
     const active = activeIframe === 'A' ? iframeARef : iframeBRef;
@@ -51,35 +45,25 @@ export default function DoubleBufferedIframe({
     return { active, inactive };
   }, [activeIframe]);
 
-  // Get the currently active iframe element
-  const getActiveIframe = useCallback(() => {
-    return activeIframe === 'A' ? iframeARef.current : iframeBRef.current;
-  }, [activeIframe]);
-
   // Scroll the preview to an anchor element
   const scrollToAnchor = useCallback((anchor: string) => {
-    const activeIframeEl = getActiveIframe();
-    const doc = activeIframeEl?.contentDocument;
+    const { active } = getIframeRefs();
+    const doc = active.current?.contentDocument;
     if (!doc) return;
 
     const element = doc.getElementById(anchor);
     if (element) {
       element.scrollIntoView({ behavior: 'instant', block: 'start' });
     }
-  }, [getActiveIframe]);
+  }, [getIframeRefs]);
 
   // Handler for .qmd link clicks and anchor clicks in the preview
   const handleQmdLinkClick = useCallback(
-    (targetPath: string | null, anchor: string | null) => {
-      // Case 1: Same-document anchor only (e.g., #section)
-      if (!targetPath && anchor) {
-        scrollToAnchor(anchor);
-        return;
-      }
-
-      // Case 2: Link to a different document (with or without anchor)
-      if (targetPath) {
-        onNavigateToDocument?.(targetPath, anchor);
+    (arg: { path: string, anchor: string | null } | { anchor: string }) => {
+      if ('path' in arg) {
+        onNavigateToDocument(arg.path, arg.anchor);
+      } else {
+        scrollToAnchor(arg.anchor);
       }
     },
     [scrollToAnchor, onNavigateToDocument]
@@ -99,7 +83,7 @@ export default function DoubleBufferedIframe({
     // the DOM and onLoad won't fire, breaking the swap mechanism
     const uniqueHtml = html + `<!-- render-${Date.now()} -->`;
 
-    if (activeIframeRef.current === 'A') {
+    if (activeIframe === 'A') {
       setIframeBHtml(uniqueHtml);
     } else {
       setIframeAHtml(uniqueHtml);
@@ -142,7 +126,7 @@ export default function DoubleBufferedIframe({
     }
 
     // Notify parent that swap completed
-    onAfterSwap?.();
+    onAfterSwap();
   }, [swapPending, getIframeRefs, internalPostProcess, onAfterSwap]);
 
   // Handler for when active iframe loads (initial load only)
