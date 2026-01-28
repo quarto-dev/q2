@@ -120,8 +120,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     Ok(())
 }
 
-/// Resolve format string to Format
+/// Resolve format string to Format (without metadata)
 fn resolve_format(format_str: &str) -> Result<Format> {
+    resolve_format_with_metadata(format_str, serde_json::Value::Null)
+}
+
+/// Resolve format string to Format with metadata
+fn resolve_format_with_metadata(format_str: &str, metadata: serde_json::Value) -> Result<Format> {
     let identifier =
         FormatIdentifier::try_from(format_str).map_err(|e| anyhow::anyhow!("{}", e))?;
 
@@ -140,7 +145,7 @@ fn resolve_format(format_str: &str) -> Result<Format> {
         }
         .to_string(),
         native_pipeline: identifier.is_native(),
-        metadata: serde_json::Value::Null,
+        metadata,
     })
 }
 
@@ -155,7 +160,34 @@ fn render_document(
 ) -> Result<()> {
     debug!("Rendering: {}", doc_info.input.display());
 
-    // Create render context
+    // Read input file early (we need it for format metadata extraction)
+    let input_bytes = runtime.file_read(&doc_info.input).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read input file {}: {}",
+            doc_info.input.display(),
+            e
+        )
+    })?;
+
+    // Convert to string for metadata extraction (needed for YAML parsing)
+    let input_str =
+        std::str::from_utf8(&input_bytes).context("Input file contains invalid UTF-8")?;
+
+    // Extract format-specific metadata from frontmatter (e.g., toc, toc-depth)
+    let format_metadata = extract_format_metadata(input_str, "html").unwrap_or_else(|e| {
+        warn!("Failed to extract format metadata: {}. Using defaults.", e);
+        serde_json::Value::Null
+    });
+
+    // Create format with the extracted metadata
+    let format_with_metadata = Format {
+        identifier: format.identifier.clone(),
+        output_extension: format.output_extension.clone(),
+        native_pipeline: format.native_pipeline,
+        metadata: format_metadata,
+    };
+
+    // Create render context with the format that has metadata
     let options = RenderOptions {
         verbose: !args.quiet,
         execute: false, // MVP: no code execution
@@ -163,7 +195,8 @@ fn render_document(
         output_path: args.output.as_ref().map(PathBuf::from),
     };
 
-    let mut ctx = RenderContext::new(project, doc_info, format, binaries).with_options(options);
+    let mut ctx = RenderContext::new(project, doc_info, &format_with_metadata, binaries)
+        .with_options(options);
 
     // Determine output path (needed before rendering for CSS resource paths)
     let output_path = determine_output_path(&ctx, args)?;
@@ -185,19 +218,6 @@ fn render_document(
         .file_stem()
         .and_then(|s| s.to_str())
         .ok_or_else(|| anyhow::anyhow!("Could not determine output filename stem"))?;
-
-    // Read input file (we need it for both theme extraction and rendering)
-    let input_bytes = runtime.file_read(&doc_info.input).map_err(|e| {
-        anyhow::anyhow!(
-            "Failed to read input file {}: {}",
-            doc_info.input.display(),
-            e
-        )
-    })?;
-
-    // Convert to string for theme extraction (needed for YAML parsing)
-    let input_str =
-        std::str::from_utf8(&input_bytes).context("Input file contains invalid UTF-8")?;
 
     // Extract theme configuration from frontmatter and write resources
     let resource_paths = write_themed_resources(
@@ -419,6 +439,44 @@ fn extract_theme_config(content: &str) -> Result<Option<ThemeConfig>> {
     // Convert to ThemeConfig
     let config = theme_value_to_config(theme_value)?;
     Ok(Some(config))
+}
+
+/// Extract format-specific metadata from QMD frontmatter.
+///
+/// Parses the YAML frontmatter and extracts the `format.html` section.
+/// Returns `Ok(Null)` if no format metadata is specified.
+///
+/// TODO(ConfigValue): DELETE THIS FUNCTION. Replace with merged ConfigValue
+/// from RenderContext.
+fn extract_format_metadata(content: &str, format_name: &str) -> Result<serde_json::Value> {
+    // Find YAML frontmatter
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return Ok(serde_json::Value::Null);
+    }
+
+    // Find closing ---
+    let after_first = &trimmed[3..];
+    let end_pos = match after_first.find("\n---") {
+        Some(pos) => pos,
+        None => return Ok(serde_json::Value::Null), // Unclosed frontmatter
+    };
+
+    // Parse YAML
+    let yaml_str = &after_first[..end_pos].trim();
+    let yaml_value: serde_yaml::Value =
+        serde_yaml::from_str(yaml_str).context("Failed to parse YAML frontmatter")?;
+
+    // Navigate to format.<format_name>
+    let format_value = yaml_value.get("format").and_then(|f| f.get(format_name));
+
+    match format_value {
+        Some(v) => {
+            // Convert serde_yaml::Value to serde_json::Value via Serialize trait
+            serde_json::to_value(v).context("Failed to convert YAML to JSON")
+        }
+        None => Ok(serde_json::Value::Null),
+    }
 }
 
 /// Convert a serde_yaml::Value theme specification to ThemeConfig.

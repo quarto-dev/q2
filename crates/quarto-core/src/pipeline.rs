@@ -61,7 +61,7 @@ use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, FootnotesTransform,
     MetadataNormalizeTransform, ResourceCollectorTransform, SectionizeTransform,
-    TitleBlockTransform,
+    TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -273,9 +273,13 @@ pub async fn render_qmd_to_html(
 /// 5. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
 /// 6. `FootnotesTransform` - Extract footnotes and create footnotes section
 ///
+/// ## TOC Phase
+/// 7. `TocGenerateTransform` - Generate TOC from headers (if toc: true)
+/// 8. `TocRenderTransform` - Render TOC to HTML for template insertion
+///
 /// ## Finalization Phase
-/// 7. `AppendixStructureTransform` - Consolidate appendix content into container
-/// 8. `ResourceCollectorTransform` - Collect image dependencies
+/// 9. `AppendixStructureTransform` - Consolidate appendix content into container
+/// 10. `ResourceCollectorTransform` - Collect image dependencies
 pub fn build_transform_pipeline() -> TransformPipeline {
     let mut pipeline = TransformPipeline::new();
 
@@ -286,6 +290,11 @@ pub fn build_transform_pipeline() -> TransformPipeline {
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));
     pipeline.push(Box::new(FootnotesTransform::new()));
+
+    // === TOC PHASE ===
+    // Must run after SectionizeTransform so section IDs are available
+    pipeline.push(Box::new(TocGenerateTransform::new()));
+    pipeline.push(Box::new(TocRenderTransform::new()));
 
     // === FINALIZATION PHASE ===
     pipeline.push(Box::new(AppendixStructureTransform::new()));
