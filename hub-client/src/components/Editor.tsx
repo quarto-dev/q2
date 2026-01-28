@@ -10,7 +10,7 @@ import {
   renameFile,
 } from '../services/automergeSync';
 import type { Diagnostic } from '../types/diagnostic';
-import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
+import { initWasm, renderToHtml, isWasmReady, parseQmdToAst } from '../services/wasmRenderer';
 import { registerIntelligenceProviders, disposeIntelligenceProviders } from '../services/monacoProviders';
 import { processFileForUpload } from '../services/resourceService';
 import { useIframePostProcessor } from '../hooks/useIframePostProcessor';
@@ -33,6 +33,8 @@ import StatusTab from './tabs/StatusTab';
 import SettingsTab from './tabs/SettingsTab';
 import AboutTab from './tabs/AboutTab';
 import './Editor.css';
+import { extractHeadings } from './example-ast-usage';
+import ReactAstRenderer from './ReactAstRenderer';
 
 // Preview pane state machine:
 // START: Initial blank page
@@ -214,6 +216,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const activeIframeRef = useRef<'A' | 'B'>('A'); // Ref for use in callbacks
   const [iframeAHtml, setIframeAHtml] = useState<string>('');
   const [iframeBHtml, setIframeBHtml] = useState<string>('');
+  const [ast, setAst] = useState<string>('');
   // Track if we're waiting for inactive iframe to load before swapping
   const [swapPending, setSwapPending] = useState(false);
   // iframeRef points to the currently active iframe (for scroll sync and post-processing)
@@ -477,6 +480,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       const result = await renderToHtml(qmdContent, {
         sourceLocation: scrollSyncEnabled,
       });
+      const ast = await parseQmdToAst(qmdContent)
+      setAst(ast)
+      console.log('extractHeadings', await extractHeadings(qmdContent))
+      // todo: 
+      // - simplify AST to be readable
+      // - make astWithSections function
+      // - make css nicer
+      // - make slide preview
 
       // Check if content changed while we were rendering
       if (qmdContent !== lastContentRef.current) {
@@ -549,7 +560,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
     renderTimeoutRef.current = window.setTimeout(() => {
       doRender(newContent);
-    }, 300);
+    }, 30);
   }, [doRender]);
 
   // Re-render when content changes, WASM becomes ready, or scroll sync is toggled
@@ -630,7 +641,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Note: setState in effect is intentional - syncing with external file list
   useEffect(() => {
     if (!currentFile && files.length > 0) {
-       
+
       setCurrentFile(selectDefaultFile(files));
     }
   }, [files, currentFile]);
@@ -1025,23 +1036,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
           />
         </div>
         <div className="pane preview-pane">
-          {/* Double-buffered iframes: one visible, one loading in background */}
-          <iframe
-            ref={iframeARef}
-            srcDoc={iframeAHtml}
-            title="Preview A"
-            sandbox="allow-same-origin allow-popups"
-            onLoad={activeIframe === 'A' ? handleActiveIframeLoad : handleInactiveIframeLoad}
-            className={activeIframe === 'A' ? 'preview-active' : 'preview-hidden'}
-          />
-          <iframe
-            ref={iframeBRef}
-            srcDoc={iframeBHtml}
-            title="Preview B"
-            sandbox="allow-same-origin allow-popups"
-            onLoad={activeIframe === 'B' ? handleActiveIframeLoad : handleInactiveIframeLoad}
-            className={activeIframe === 'B' ? 'preview-active' : 'preview-hidden'}
-          />
+          <ReactAstRenderer ast={ast} className="react-ast-renderer" />
+
           {/* Error overlay shown when error occurs after successful render */}
           <PreviewErrorOverlay
             error={currentError}

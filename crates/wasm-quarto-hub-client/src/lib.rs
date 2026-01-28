@@ -761,6 +761,18 @@ pub fn get_builtin_template(name: &str) -> String {
     pampa::wasm_entry_points::get_builtin_template_json(name)
 }
 
+/// Parse QMD content to Pandoc AST JSON.
+///
+/// # Arguments
+/// * `content` - QMD source text
+///
+/// # Returns
+/// JSON string containing the Pandoc AST representation
+#[wasm_bindgen]
+pub fn parse_qmd_to_ast(content: &str) -> String {
+    pampa::wasm_entry_points::parse_qmd(content.as_bytes(), false)
+}
+
 // ============================================================================
 // JAVASCRIPT EXECUTION TEST API
 // ============================================================================

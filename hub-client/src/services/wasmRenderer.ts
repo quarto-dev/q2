@@ -268,6 +268,36 @@ export function getBuiltinTemplate(name: string): string {
   return wasm.get_builtin_template(name);
 }
 
+/**
+ * Parse QMD content to Pandoc AST JSON.
+ * **Example AST Structure:**
+ * ```json
+ * {
+ * "pandoc-api-version": [1, 23, 1],
+ * "meta": {},
+ * "blocks": [
+ *   {
+ *     "t": "Header",
+ *     "c": [1, ["id", ["class"], [["key", "value"]]], [{"t": "Str", "c": "text"}]]
+ *   },
+ *   {
+ *     "t": "Para",
+ *     "c": [{"t": "Str", "c": "Paragraph text."}]
+ *   }
+ * ]
+ * }
+ *```
+ *
+ * @param content - QMD source text to parse
+ * @returns Pandoc AST as a JSON string
+ */
+export async function parseQmdToAst(content: string): Promise<string> {
+  await initWasm();
+  const wasm = getWasm();
+  // @ts-expect-error - parse_qmd_to_ast may not be in cached types yet
+  return wasm.parse_qmd_to_ast(content);
+}
+
 // ============================================================================
 // High-Level API
 // ============================================================================
@@ -384,8 +414,8 @@ export async function renderToHtml(
     // Use the options-aware render function if options are specified
     const result: RenderResponse = options.sourceLocation
       ? await renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
-          sourceLocation: options.sourceLocation,
-        })
+        sourceLocation: options.sourceLocation,
+      })
       : await renderQmdContent(qmdContent, htmlTemplateBundle || '');
 
     console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
@@ -399,7 +429,7 @@ export async function renderToHtml(
       }
 
       return {
-        html: result.html || '',
+        html: '<h1>YOOOO</h1>',
         success: true,
         warnings: result.warnings,
       };
