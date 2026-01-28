@@ -9,8 +9,6 @@ interface DoubleBufferedIframeProps {
   // Callback when user navigates to a different document (with optional anchor)
   // Parent (Preview) handles file lookup and switching
   onNavigateToDocument?: (targetPath: string, anchor: string | null) => void;
-  // Called BEFORE swapping to new content (for post-processing the inactive iframe)
-  onBeforeSwap?: (inactiveIframe: HTMLIFrameElement) => void;
   // Called AFTER swap completes (for tracking load count, etc.)
   onAfterSwap?: () => void;
 }
@@ -31,7 +29,6 @@ export default function DoubleBufferedIframe({
   html,
   currentFilePath,
   onNavigateToDocument,
-  onBeforeSwap,
   onAfterSwap,
 }: DoubleBufferedIframeProps) {
   const iframeARef = useRef<HTMLIFrameElement>(null);
@@ -88,17 +85,12 @@ export default function DoubleBufferedIframe({
     [scrollToAnchor, onNavigateToDocument]
   );
 
-  // Internal post-processing that combines custom onBeforeSwap with built-in link handling
   const internalPostProcess = useCallback((iframe: HTMLIFrameElement) => {
-    // First, run built-in post-processing (CSS, images, link handlers)
     postProcessIframe(iframe, {
       currentFilePath,
       onQmdLinkClick: handleQmdLinkClick,
     });
-
-    // Then call custom post-processing from parent (if any)
-    onBeforeSwap?.(iframe);
-  }, [currentFilePath, handleQmdLinkClick, onBeforeSwap]);
+  }, [currentFilePath, handleQmdLinkClick]);
 
   // When new HTML arrives, load it into the inactive iframe and mark swap as pending
   useEffect(() => {
