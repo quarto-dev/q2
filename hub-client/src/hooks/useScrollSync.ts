@@ -12,101 +12,38 @@ import { useEffect, useRef, useCallback } from 'react';
 import type { RefObject } from 'react';
 import type * as Monaco from 'monaco-editor';
 
-/**
- * Parsed source location from data-loc attribute.
- * Format: "fileId:startLine:startCol-endLine:endCol" (1-based)
- */
-interface SourceLocation {
-  fileId: number;
-  startLine: number;
-  startCol: number;
-  endLine: number;
-  endCol: number;
-}
-
-/**
- * Parse a data-loc attribute string into a SourceLocation object.
- * Returns null if the format is invalid.
- */
-function parseDataLoc(dataLoc: string): SourceLocation | null {
-  const match = dataLoc.match(/^(\d+):(\d+):(\d+)-(\d+):(\d+)$/);
-  if (!match) return null;
-  return {
-    fileId: parseInt(match[1], 10),
-    startLine: parseInt(match[2], 10),
-    startCol: parseInt(match[3], 10),
-    endLine: parseInt(match[4], 10),
-    endCol: parseInt(match[5], 10),
-  };
-}
-
-/**
- * Find the best matching element for a given line number.
- * Prefers the most specific (smallest range) match.
- */
-function findElementForLine(
-  doc: Document,
-  line: number
-): HTMLElement | null {
-  const elements = doc.querySelectorAll('[data-loc]');
-  let bestMatch: HTMLElement | null = null;
-  let bestRangeSize = Infinity;
-
-  for (const element of elements) {
-    const dataLoc = element.getAttribute('data-loc');
-    if (!dataLoc) continue;
-
-    const loc = parseDataLoc(dataLoc);
-    if (!loc) continue;
-
-    // Check if line is within this element's range
-    if (line >= loc.startLine && line <= loc.endLine) {
-      const rangeSize = loc.endLine - loc.startLine;
-      // Prefer smaller (more specific) ranges
-      if (rangeSize < bestRangeSize) {
-        bestMatch = element as HTMLElement;
-        bestRangeSize = rangeSize;
-      }
-    }
-  }
-
-  return bestMatch;
-}
-
-/**
- * Check if an element is fully visible in the viewport.
- */
-function isElementVisible(element: HTMLElement): boolean {
-  const rect = element.getBoundingClientRect();
-  const viewportHeight = window.innerHeight;
-
-  // Element is visible if it's within the viewport bounds
-  return rect.top >= 0 && rect.bottom <= viewportHeight;
-}
-
 interface UseScrollSyncOptions {
   /** Reference to Monaco editor instance */
   editorRef: RefObject<Monaco.editor.IStandaloneCodeEditor | null>;
-  /** Reference to preview iframe element */
-  iframeRef: RefObject<HTMLIFrameElement | null>;
+  /** Function to scroll preview to a specific line (provided by DoubleBufferedIframe) */
+  scrollPreviewToLine: (line: number) => void;
+  /** Function to get the preview's scroll ratio (provided by DoubleBufferedIframe) */
+  getPreviewScrollRatio: () => number | null;
   /** Whether scroll sync is enabled */
   enabled: boolean;
-  /** Called when iframe content is loaded/updated (increments to trigger re-indexing) */
-  iframeLoadCount: number;
   /** Reference tracking whether editor has focus (to prevent feedback loop) */
   editorHasFocusRef: RefObject<boolean>;
 }
 
 /**
+ * Return type: callbacks for preview to call when scrolled or clicked
+ */
+interface UseScrollSyncReturn {
+  handlePreviewScroll: () => void;
+  handlePreviewClick: () => void;
+}
+
+/**
  * Hook for bidirectional scroll synchronization between Monaco editor and preview iframe.
+ * Returns callbacks that should be passed to the preview component.
  */
 export function useScrollSync({
   editorRef,
-  iframeRef,
+  scrollPreviewToLine,
+  getPreviewScrollRatio,
   enabled,
-  iframeLoadCount,
   editorHasFocusRef,
-}: UseScrollSyncOptions): void {
+}: UseScrollSyncOptions): UseScrollSyncReturn {
   // Track if we're currently syncing to prevent feedback loops
   const isSyncingRef = useRef(false);
 
@@ -119,28 +56,20 @@ export function useScrollSync({
     if (!enabled || isSyncingRef.current) return;
 
     const editor = editorRef.current;
-    const iframe = iframeRef.current;
-    if (!editor || !iframe?.contentDocument) return;
+    if (!editor) return;
 
     const position = editor.getPosition();
     if (!position) return;
 
     const line = position.lineNumber;
-    const doc = iframe.contentDocument;
 
-    const element = findElementForLine(doc, line);
-    if (!element) return;
-
-    // Only scroll if element is not already visible
-    if (!isElementVisible(element)) {
-      isSyncingRef.current = true;
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Reset syncing flag after animation completes
-      setTimeout(() => {
-        isSyncingRef.current = false;
-      }, 300);
-    }
-  }, [enabled, editorRef, iframeRef]);
+    isSyncingRef.current = true;
+    scrollPreviewToLine(line);
+    // Reset syncing flag after animation completes
+    setTimeout(() => {
+      isSyncingRef.current = false;
+    }, 300);
+  }, [enabled, editorRef, scrollPreviewToLine]);
 
   // Preview → Editor sync (using scroll ratio matching)
   const syncPreviewToEditor = useCallback(() => {
@@ -148,22 +77,10 @@ export function useScrollSync({
     if (!enabled || isSyncingRef.current || editorHasFocusRef.current) return;
 
     const editor = editorRef.current;
-    const iframe = iframeRef.current;
-    if (!editor || !iframe?.contentWindow || !iframe?.contentDocument) return;
+    if (!editor) return;
 
-    const iframeWindow = iframe.contentWindow;
-    const iframeDoc = iframe.contentDocument;
-
-    // Calculate preview scroll ratio (0 = top, 1 = bottom)
-    const previewScrollY = iframeWindow.scrollY;
-    const previewScrollHeight = iframeDoc.documentElement.scrollHeight;
-    const previewViewportHeight = iframeWindow.innerHeight;
-    const previewMaxScroll = previewScrollHeight - previewViewportHeight;
-
-    // Avoid division by zero for short documents
-    if (previewMaxScroll <= 0) return;
-
-    const scrollRatio = previewScrollY / previewMaxScroll;
+    const scrollRatio = getPreviewScrollRatio();
+    if (scrollRatio === null) return;
 
     // Apply same ratio to editor
     const editorScrollHeight = editor.getScrollHeight();
@@ -178,7 +95,7 @@ export function useScrollSync({
     setTimeout(() => {
       isSyncingRef.current = false;
     }, 300); // Longer timeout to account for smooth animation
-  }, [enabled, editorRef, iframeRef, editorHasFocusRef]);
+  }, [enabled, editorRef, getPreviewScrollRatio, editorHasFocusRef]);
 
   // Set up editor cursor position listener
   useEffect(() => {
@@ -205,39 +122,33 @@ export function useScrollSync({
     };
   }, [enabled, editorRef, syncEditorToPreview]);
 
-  // Set up preview scroll and click listeners
-  useEffect(() => {
-    if (!enabled) return;
-
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow || !iframe?.contentDocument) return;
-
-    const handleScroll = () => {
-      // Debounce
-      if (previewDebounceRef.current) {
-        clearTimeout(previewDebounceRef.current);
-      }
-      previewDebounceRef.current = window.setTimeout(() => {
-        syncPreviewToEditor();
-      }, 50);
-    };
-
-    const handleClick = () => {
-      // Sync immediately on click (no debounce needed)
+  // Debounced preview scroll handler
+  const handlePreviewScroll = useCallback(() => {
+    // Debounce
+    if (previewDebounceRef.current) {
+      clearTimeout(previewDebounceRef.current);
+    }
+    previewDebounceRef.current = window.setTimeout(() => {
       syncPreviewToEditor();
-    };
+    }, 50);
+  }, [syncPreviewToEditor]);
 
-    // Listen to scroll on the iframe's content window
-    iframe.contentWindow.addEventListener('scroll', handleScroll, { passive: true });
-    // Listen to click on the iframe's document to sync when user clicks on preview
-    iframe.contentDocument.addEventListener('click', handleClick);
+  // Preview click handler (sync immediately, no debounce)
+  const handlePreviewClick = useCallback(() => {
+    syncPreviewToEditor();
+  }, [syncPreviewToEditor]);
 
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
     return () => {
-      iframe.contentWindow?.removeEventListener('scroll', handleScroll);
-      iframe.contentDocument?.removeEventListener('click', handleClick);
       if (previewDebounceRef.current) {
         clearTimeout(previewDebounceRef.current);
       }
     };
-  }, [enabled, iframeRef, iframeLoadCount, syncPreviewToEditor]);
+  }, []);
+
+  return {
+    handlePreviewScroll,
+    handlePreviewClick,
+  };
 }
