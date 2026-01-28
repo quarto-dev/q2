@@ -105,6 +105,34 @@ jobs:
         shell: bash
         run: npm ci
 
+      # WASM build for hub-client (must happen before TypeScript build)
+      - name: Set up Clang (Linux)
+        if: runner.os == 'Linux'
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+          platform: x64
+
+      - name: Set up LLVM (macOS)
+        if: runner.os == 'macOS'
+        run: brew install llvm
+        shell: bash
+
+      - name: Install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
+
+      - name: Build WASM module
+        shell: bash
+        run: |
+          cd crates/wasm-quarto-hub-client
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            export PATH="/opt/homebrew/opt/llvm/bin:/usr/local/opt/llvm/bin:$PATH"
+          fi
+          export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
+          wasm-pack build --target web
+
       - name: Build TypeScript packages
         shell: bash
         run: npm run build
