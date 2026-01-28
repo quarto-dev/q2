@@ -15,6 +15,46 @@ use quarto_source_map::SourceInfo;
 use serde::{Deserialize, Serialize};
 use yaml_rust2::Yaml;
 
+/// Convert Pandoc inlines to plain text.
+///
+/// Extracts and concatenates text from Str and Space nodes, recursively
+/// handling formatting nodes (Emph, Strong, etc.).
+fn inlines_to_plain_text(inlines: &[Inline]) -> String {
+    let mut text = String::new();
+    for inline in inlines {
+        match inline {
+            Inline::Str(s) => text.push_str(&s.text),
+            Inline::Space(_) => text.push(' '),
+            Inline::SoftBreak(_) | Inline::LineBreak(_) => text.push(' '),
+            Inline::Code(c) => text.push_str(&c.text),
+            Inline::Emph(e) => text.push_str(&inlines_to_plain_text(&e.content)),
+            Inline::Underline(u) => text.push_str(&inlines_to_plain_text(&u.content)),
+            Inline::Strong(s) => text.push_str(&inlines_to_plain_text(&s.content)),
+            Inline::Strikeout(s) => text.push_str(&inlines_to_plain_text(&s.content)),
+            Inline::Superscript(s) => text.push_str(&inlines_to_plain_text(&s.content)),
+            Inline::Subscript(s) => text.push_str(&inlines_to_plain_text(&s.content)),
+            Inline::SmallCaps(s) => text.push_str(&inlines_to_plain_text(&s.content)),
+            Inline::Quoted(q) => text.push_str(&inlines_to_plain_text(&q.content)),
+            Inline::Cite(c) => text.push_str(&inlines_to_plain_text(&c.content)),
+            Inline::Link(l) => text.push_str(&inlines_to_plain_text(&l.content)),
+            Inline::Image(i) => text.push_str(&inlines_to_plain_text(&i.content)),
+            Inline::Note(_) => {}          // Skip footnotes
+            Inline::NoteReference(_) => {} // Skip note references
+            Inline::Span(s) => text.push_str(&inlines_to_plain_text(&s.content)),
+            Inline::Math(m) => text.push_str(&m.text),
+            Inline::RawInline(_) => {} // Skip raw content
+            Inline::Shortcode(_) => {} // Skip shortcodes
+            Inline::Attr(_, _) => {}   // Skip attribute nodes
+            Inline::Insert(i) => text.push_str(&inlines_to_plain_text(&i.content)),
+            Inline::Delete(_) => {} // Skip deleted content
+            Inline::Highlight(h) => text.push_str(&inlines_to_plain_text(&h.content)),
+            Inline::EditComment(_) => {} // Skip edit comments
+            Inline::Custom(_) => {}      // Skip custom nodes
+        }
+    }
+    text
+}
+
 /// Merge operation for a value.
 ///
 /// Controls how values from different configuration layers are combined.
@@ -620,6 +660,25 @@ impl ConfigValue {
     pub fn as_int(&self) -> Option<i64> {
         match &self.value {
             ConfigValueKind::Scalar(Yaml::Integer(i)) => Some(*i),
+            _ => None,
+        }
+    }
+
+    /// Extract plain text from this value.
+    ///
+    /// Works for:
+    /// - Scalar(String), Path, Glob, Expr → returns the string directly
+    /// - PandocInlines → extracts and concatenates text from all Str nodes
+    ///
+    /// This is useful when YAML strings may be parsed as markdown and stored
+    /// as PandocInlines rather than plain scalars.
+    pub fn as_plain_text(&self) -> Option<String> {
+        match &self.value {
+            ConfigValueKind::Scalar(Yaml::String(s)) => Some(s.clone()),
+            ConfigValueKind::Path(s) => Some(s.clone()),
+            ConfigValueKind::Glob(s) => Some(s.clone()),
+            ConfigValueKind::Expr(s) => Some(s.clone()),
+            ConfigValueKind::PandocInlines(inlines) => Some(inlines_to_plain_text(inlines)),
             _ => None,
         }
     }

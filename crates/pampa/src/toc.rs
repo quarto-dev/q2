@@ -140,10 +140,18 @@ impl TocEntry {
 
     /// Create a TocEntry from a ConfigValue.
     pub fn from_config_value(cv: &ConfigValue) -> Option<Self> {
-        let id = cv.get("id")?.as_str()?.to_string();
-        let title = cv.get("title")?.as_str()?.to_string();
-        let level = cv.get("level")?.as_int()? as i32;
-        let number = cv.get("number").and_then(|v| v.as_str().map(String::from));
+        // Use as_plain_text() to handle both scalar strings and PandocInlines
+        // (YAML values like `id: "tldr"` may be parsed as MetaInlines in document frontmatter)
+        let id = cv.get("id")?.as_plain_text()?;
+        let title = cv.get("title")?.as_plain_text()?;
+        // Accept both integer and string-encoded integer for level
+        // (YAML parsing may convert integers to strings in some contexts)
+        let level_cv = cv.get("level")?;
+        let level = level_cv
+            .as_int()
+            .map(|i| i as i32)
+            .or_else(|| level_cv.as_plain_text().and_then(|s| s.parse::<i32>().ok()))?;
+        let number = cv.get("number").and_then(|v| v.as_plain_text());
 
         let children = if let Some(children_cv) = cv.get("children") {
             if let Some(arr) = children_cv.as_array() {

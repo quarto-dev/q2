@@ -472,4 +472,398 @@ mod tests {
     fn test_default_trait() {
         let _transform: TocRenderTransform = Default::default();
     }
+
+    // === Tests for user-provided metadata in YAML-parsed format ===
+    //
+    // These tests verify that TOC metadata provided by users in document
+    // frontmatter is correctly parsed, even when YAML parsing converts
+    // values to PandocInlines or string-encoded integers.
+
+    use quarto_pandoc_types::config_value::ConfigMapEntry;
+    use quarto_pandoc_types::inline::{Inline, Space, Str};
+
+    /// Create a ConfigValue containing PandocInlines with a single Str.
+    /// This simulates how YAML strings are parsed in document frontmatter.
+    fn yaml_string_value(s: &str) -> ConfigValue {
+        ConfigValue::new_inlines(
+            vec![Inline::Str(Str {
+                text: s.to_string(),
+                source_info: SourceInfo::default(),
+            })],
+            SourceInfo::default(),
+        )
+    }
+
+    /// Create a ConfigValue containing PandocInlines with multiple words.
+    /// This simulates YAML strings with spaces like "The Details".
+    fn yaml_multiword_string(words: &[&str]) -> ConfigValue {
+        let mut inlines = Vec::new();
+        for (i, word) in words.iter().enumerate() {
+            if i > 0 {
+                inlines.push(Inline::Space(Space {
+                    source_info: SourceInfo::default(),
+                }));
+            }
+            inlines.push(Inline::Str(Str {
+                text: word.to_string(),
+                source_info: SourceInfo::default(),
+            }));
+        }
+        ConfigValue::new_inlines(inlines, SourceInfo::default())
+    }
+
+    /// Create a ConfigValue for a string-encoded integer.
+    /// This simulates how YAML integers are sometimes parsed as strings.
+    fn yaml_int_as_string(n: i32) -> ConfigValue {
+        ConfigValue::new_string(&n.to_string(), SourceInfo::default())
+    }
+
+    /// Create a TOC entry ConfigValue in YAML-parsed format.
+    fn yaml_toc_entry(id: &str, title: &str, level: i32) -> ConfigValue {
+        ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "id".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_string_value(id),
+                },
+                ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_string_value(title),
+                },
+                ConfigMapEntry {
+                    key: "level".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_int_as_string(level),
+                },
+            ],
+            SourceInfo::default(),
+        )
+    }
+
+    /// Create a TOC entry with multiword title in YAML-parsed format.
+    fn yaml_toc_entry_multiword(id: &str, title_words: &[&str], level: i32) -> ConfigValue {
+        ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "id".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_string_value(id),
+                },
+                ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_multiword_string(title_words),
+                },
+                ConfigMapEntry {
+                    key: "level".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_int_as_string(level),
+                },
+            ],
+            SourceInfo::default(),
+        )
+    }
+
+    /// Create a TOC entry with children in YAML-parsed format.
+    fn yaml_toc_entry_with_children(
+        id: &str,
+        title_words: &[&str],
+        level: i32,
+        children: Vec<ConfigValue>,
+    ) -> ConfigValue {
+        ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "id".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_string_value(id),
+                },
+                ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_multiword_string(title_words),
+                },
+                ConfigMapEntry {
+                    key: "level".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_int_as_string(level),
+                },
+                ConfigMapEntry {
+                    key: "children".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: ConfigValue::new_array(children, SourceInfo::default()),
+                },
+            ],
+            SourceInfo::default(),
+        )
+    }
+
+    #[test]
+    fn test_renders_yaml_parsed_toc_simple() {
+        // Simulates user-provided YAML:
+        // navigation:
+        //   toc:
+        //     entries:
+        //       - id: "tldr"
+        //         title: "TL;DR"
+        //         level: 1
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+
+        let toc_value = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "entries".to_string(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue::new_array(
+                    vec![yaml_toc_entry("tldr", "TL;DR", 1)],
+                    SourceInfo::default(),
+                ),
+            }],
+            SourceInfo::default(),
+        );
+        ast.meta.insert_path(&["navigation", "toc"], toc_value);
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocRenderTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Should have rendered TOC
+        assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));
+
+        let rendered = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap();
+        let html = rendered.as_str().unwrap();
+
+        assert!(html.contains("href=\"#tldr\""));
+        assert!(html.contains("TL;DR"));
+        assert!(html.contains("data-scroll-target=\"#tldr\""));
+    }
+
+    #[test]
+    fn test_renders_yaml_parsed_toc_with_multiword_titles() {
+        // Simulates user-provided YAML with multi-word titles:
+        // navigation:
+        //   toc:
+        //     entries:
+        //       - id: "details"
+        //         title: "The Details"
+        //         level: 1
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+
+        let toc_value = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "entries".to_string(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue::new_array(
+                    vec![yaml_toc_entry_multiword("details", &["The", "Details"], 1)],
+                    SourceInfo::default(),
+                ),
+            }],
+            SourceInfo::default(),
+        );
+        ast.meta.insert_path(&["navigation", "toc"], toc_value);
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocRenderTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        let rendered = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap();
+        let html = rendered.as_str().unwrap();
+
+        assert!(html.contains("href=\"#details\""));
+        assert!(html.contains("The Details"));
+    }
+
+    #[test]
+    fn test_renders_yaml_parsed_toc_with_nested_children() {
+        // Simulates user-provided YAML with nested structure:
+        // navigation:
+        //   toc:
+        //     entries:
+        //       - id: "details"
+        //         title: "The Details"
+        //         level: 1
+        //         children:
+        //           - id: "part-a"
+        //             title: "Part A"
+        //             level: 2
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+
+        let child_entry = yaml_toc_entry_multiword("part-a", &["Part", "A"], 2);
+        let parent_entry =
+            yaml_toc_entry_with_children("details", &["The", "Details"], 1, vec![child_entry]);
+
+        let toc_value = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "entries".to_string(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue::new_array(vec![parent_entry], SourceInfo::default()),
+            }],
+            SourceInfo::default(),
+        );
+        ast.meta.insert_path(&["navigation", "toc"], toc_value);
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocRenderTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        let rendered = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap();
+        let html = rendered.as_str().unwrap();
+
+        // Check parent entry
+        assert!(html.contains("href=\"#details\""));
+        assert!(html.contains("The Details"));
+
+        // Check child entry
+        assert!(html.contains("href=\"#part-a\""));
+        assert!(html.contains("Part A"));
+
+        // Verify nested structure (two ul elements)
+        let ul_count = html.matches("<ul>").count();
+        assert!(
+            ul_count >= 2,
+            "Expected nested <ul> tags, found {}",
+            ul_count
+        );
+    }
+
+    #[test]
+    fn test_user_provided_rendered_toc_used_directly() {
+        // Simulates user providing pre-rendered HTML:
+        // rendered:
+        //   navigation:
+        //     toc: "<ul><li>My Custom TOC</li></ul>"
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+
+        let custom_html = "<ul><li><a href=\"#custom\">My Custom TOC</a></li></ul>";
+        ast.meta.insert_path(
+            &["rendered", "navigation", "toc"],
+            ConfigValue::new_string(custom_html, SourceInfo::default()),
+        );
+
+        // Also add navigation.toc that would normally be rendered
+        let toc_value = ConfigValue::new_map(
+            vec![ConfigMapEntry {
+                key: "entries".to_string(),
+                key_source: SourceInfo::default(),
+                value: ConfigValue::new_array(
+                    vec![yaml_toc_entry("intro", "Introduction", 1)],
+                    SourceInfo::default(),
+                ),
+            }],
+            SourceInfo::default(),
+        );
+        ast.meta.insert_path(&["navigation", "toc"], toc_value);
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocRenderTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Should use user-provided HTML, not render from navigation.toc
+        let rendered = ast
+            .meta
+            .get_path(&["rendered", "navigation", "toc"])
+            .unwrap();
+        assert_eq!(rendered.as_str(), Some(custom_html));
+
+        // Verify it contains user content, not auto-rendered content
+        let html = rendered.as_str().unwrap();
+        assert!(html.contains("My Custom TOC"));
+        assert!(!html.contains("Introduction")); // The navigation.toc entry should NOT appear
+    }
+
+    #[test]
+    fn test_yaml_parsed_toc_with_title() {
+        // Simulates user-provided YAML with TOC title:
+        // navigation:
+        //   toc:
+        //     title: "Quick Links"
+        //     entries:
+        //       - id: "intro"
+        //         title: "Introduction"
+        //         level: 1
+        let mut ast = Pandoc {
+            meta: ConfigValue::default(),
+            blocks: vec![],
+        };
+
+        let toc_value = ConfigValue::new_map(
+            vec![
+                ConfigMapEntry {
+                    key: "title".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: yaml_multiword_string(&["Quick", "Links"]),
+                },
+                ConfigMapEntry {
+                    key: "entries".to_string(),
+                    key_source: SourceInfo::default(),
+                    value: ConfigValue::new_array(
+                        vec![yaml_toc_entry("intro", "Introduction", 1)],
+                        SourceInfo::default(),
+                    ),
+                },
+            ],
+            SourceInfo::default(),
+        );
+        ast.meta.insert_path(&["navigation", "toc"], toc_value);
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let transform = TocRenderTransform::new();
+        transform.transform(&mut ast, &mut ctx).unwrap();
+
+        // Should have rendered TOC
+        assert!(ast.meta.contains_path(&["rendered", "navigation", "toc"]));
+
+        // The title is stored in navigation.toc.title for the template to use
+        // (the render transform doesn't include it in the HTML output)
+        let toc = ast.meta.get_path(&["navigation", "toc"]).unwrap();
+        let title = toc.get("title").unwrap().as_plain_text().unwrap();
+        assert_eq!(title, "Quick Links");
+    }
 }
