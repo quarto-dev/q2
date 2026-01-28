@@ -16,6 +16,7 @@ pub mod options;
 pub mod pandoc;
 pub mod readers;
 pub mod template;
+pub mod toc;
 pub mod transforms;
 pub mod traversals;
 pub mod utils;

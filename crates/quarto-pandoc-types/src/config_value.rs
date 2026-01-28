@@ -629,6 +629,128 @@ impl ConfigValue {
         matches!(&self.value, ConfigValueKind::Scalar(Yaml::Null))
     }
 
+    /// Get a value by path (e.g., `["format", "html", "toc"]`).
+    ///
+    /// Navigates through nested maps to find the value at the given path.
+    /// Returns `None` if any key in the path doesn't exist or if
+    /// an intermediate value is not a Map.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let config = ...; // { format: { html: { toc: true } } }
+    /// let toc = config.get_path(&["format", "html", "toc"]);
+    /// assert_eq!(toc.unwrap().as_bool(), Some(true));
+    /// ```
+    pub fn get_path(&self, path: &[&str]) -> Option<&ConfigValue> {
+        let mut current = self;
+        for key in path {
+            current = current.get(key)?;
+        }
+        Some(current)
+    }
+
+    /// Check if a path exists in the nested structure.
+    ///
+    /// Returns `true` if the path can be fully traversed through nested maps.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let config = ...; // { format: { html: { toc: true } } }
+    /// assert!(config.contains_path(&["format", "html", "toc"]));
+    /// assert!(!config.contains_path(&["format", "html", "sidebar"]));
+    /// ```
+    pub fn contains_path(&self, path: &[&str]) -> bool {
+        self.get_path(path).is_some()
+    }
+
+    /// Get a mutable reference to a value by path.
+    ///
+    /// Navigates through nested maps to find the value at the given path.
+    /// Returns `None` if any key in the path doesn't exist or if
+    /// an intermediate value is not a Map.
+    pub fn get_path_mut(&mut self, path: &[&str]) -> Option<&mut ConfigValue> {
+        let mut current = self;
+        for key in path {
+            current = current.get_mut(key)?;
+        }
+        Some(current)
+    }
+
+    /// Get a mutable reference to a value by key if this is a Map.
+    pub fn get_mut(&mut self, key: &str) -> Option<&mut ConfigValue> {
+        match &mut self.value {
+            ConfigValueKind::Map(entries) => entries
+                .iter_mut()
+                .find(|e| e.key == key)
+                .map(|e| &mut e.value),
+            _ => None,
+        }
+    }
+
+    /// Insert a value at a path, creating intermediate maps as needed.
+    ///
+    /// This will create any missing intermediate map entries along the path.
+    /// If an intermediate value exists but is not a Map, it will be replaced
+    /// with a Map.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let mut config = ConfigValue::default();
+    /// config.insert_path(
+    ///     &["navigation", "toc", "title"],
+    ///     ConfigValue::new_string("Contents", SourceInfo::default()),
+    /// );
+    /// // config is now: { navigation: { toc: { title: "Contents" } } }
+    /// ```
+    pub fn insert_path(&mut self, path: &[&str], value: ConfigValue) {
+        if path.is_empty() {
+            // Replace self with value
+            *self = value;
+            return;
+        }
+
+        let first_key = path[0];
+        let rest = &path[1..];
+
+        // Ensure self is a Map
+        if !self.is_map() {
+            *self = ConfigValue::new_map(vec![], self.source_info.clone());
+        }
+
+        if let ConfigValueKind::Map(entries) = &mut self.value {
+            if rest.is_empty() {
+                // This is the final key - insert or update
+                if let Some(entry) = entries.iter_mut().find(|e| e.key == first_key) {
+                    entry.value = value;
+                } else {
+                    entries.push(ConfigMapEntry {
+                        key: first_key.to_string(),
+                        key_source: value.source_info.clone(),
+                        value,
+                    });
+                }
+            } else {
+                // Need to recurse
+                if let Some(entry) = entries.iter_mut().find(|e| e.key == first_key) {
+                    // Entry exists - recurse into it
+                    entry.value.insert_path(rest, value);
+                } else {
+                    // Entry doesn't exist - create an empty map and recurse
+                    let mut new_map = ConfigValue::new_map(vec![], SourceInfo::default());
+                    new_map.insert_path(rest, value);
+                    entries.push(ConfigMapEntry {
+                        key: first_key.to_string(),
+                        key_source: SourceInfo::default(),
+                        value: new_map,
+                    });
+                }
+            }
+        }
+    }
+
     /// Check if this ConfigValue represents a string with a specific value.
     ///
     /// This handles:
@@ -1332,5 +1454,234 @@ mod tests {
         // These should not be scalar
         assert!(!ConfigValue::new_array(vec![], SourceInfo::default()).is_scalar());
         assert!(!ConfigValue::new_map(vec![], SourceInfo::default()).is_scalar());
+    }
+
+    // === Tests for path-based navigation methods ===
+
+    #[test]
+    fn test_get_path_empty() {
+        let value = ConfigValue::new_string("hello", SourceInfo::default());
+        // Empty path returns self
+        let result = value.get_path(&[]);
+        assert_eq!(result.unwrap().as_str(), Some("hello"));
+    }
+
+    #[test]
+    fn test_get_path_single_key() {
+        let value = ConfigValue::from_path(&["title"], "My Title");
+        let result = value.get_path(&["title"]);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_str(), Some("My Title"));
+    }
+
+    #[test]
+    fn test_get_path_nested() {
+        let value = ConfigValue::from_path(&["format", "html", "toc"], "true");
+
+        // Full path
+        let result = value.get_path(&["format", "html", "toc"]);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().as_str(), Some("true"));
+
+        // Partial path
+        let result = value.get_path(&["format", "html"]);
+        assert!(result.is_some());
+        assert!(result.unwrap().is_map());
+
+        // Root path
+        let result = value.get_path(&["format"]);
+        assert!(result.is_some());
+        assert!(result.unwrap().is_map());
+    }
+
+    #[test]
+    fn test_get_path_missing_key() {
+        let value = ConfigValue::from_path(&["format", "html"], "test");
+
+        // Missing intermediate key
+        assert!(value.get_path(&["format", "pdf"]).is_none());
+
+        // Missing root key
+        assert!(value.get_path(&["other"]).is_none());
+
+        // Path too deep
+        assert!(value.get_path(&["format", "html", "extra"]).is_none());
+    }
+
+    #[test]
+    fn test_get_path_non_map_intermediate() {
+        // Create a structure where an intermediate value is not a map
+        let value = ConfigValue::from_path(&["format"], "not-a-map");
+
+        // Can't traverse through a non-map
+        assert!(value.get_path(&["format", "html"]).is_none());
+    }
+
+    #[test]
+    fn test_contains_path() {
+        let value = ConfigValue::from_path(&["format", "html", "toc"], "true");
+
+        assert!(value.contains_path(&["format"]));
+        assert!(value.contains_path(&["format", "html"]));
+        assert!(value.contains_path(&["format", "html", "toc"]));
+        assert!(!value.contains_path(&["format", "pdf"]));
+        assert!(!value.contains_path(&["other"]));
+    }
+
+    #[test]
+    fn test_contains_path_empty() {
+        let value = ConfigValue::new_string("hello", SourceInfo::default());
+        // Empty path always exists (returns self)
+        assert!(value.contains_path(&[]));
+    }
+
+    #[test]
+    fn test_insert_path_empty() {
+        let mut value = ConfigValue::new_string("old", SourceInfo::default());
+        value.insert_path(&[], ConfigValue::new_string("new", SourceInfo::default()));
+        assert_eq!(value.as_str(), Some("new"));
+    }
+
+    #[test]
+    fn test_insert_path_single_key() {
+        let mut value = ConfigValue::default(); // Empty map
+        value.insert_path(
+            &["title"],
+            ConfigValue::new_string("My Title", SourceInfo::default()),
+        );
+
+        assert!(value.contains_path(&["title"]));
+        assert_eq!(
+            value.get_path(&["title"]).unwrap().as_str(),
+            Some("My Title")
+        );
+    }
+
+    #[test]
+    fn test_insert_path_nested_creates_intermediates() {
+        let mut value = ConfigValue::default(); // Empty map
+        value.insert_path(
+            &["navigation", "toc", "title"],
+            ConfigValue::new_string("Contents", SourceInfo::default()),
+        );
+
+        // Verify intermediate maps were created
+        assert!(value.contains_path(&["navigation"]));
+        assert!(value.contains_path(&["navigation", "toc"]));
+        assert!(value.contains_path(&["navigation", "toc", "title"]));
+        assert_eq!(
+            value
+                .get_path(&["navigation", "toc", "title"])
+                .unwrap()
+                .as_str(),
+            Some("Contents")
+        );
+    }
+
+    #[test]
+    fn test_insert_path_overwrites_existing() {
+        let mut value = ConfigValue::from_path(&["format", "html", "toc"], "old");
+
+        value.insert_path(
+            &["format", "html", "toc"],
+            ConfigValue::new_string("new", SourceInfo::default()),
+        );
+
+        assert_eq!(
+            value.get_path(&["format", "html", "toc"]).unwrap().as_str(),
+            Some("new")
+        );
+    }
+
+    #[test]
+    fn test_insert_path_adds_sibling() {
+        let mut value = ConfigValue::from_path(&["format", "html", "toc"], "true");
+
+        value.insert_path(
+            &["format", "html", "toc-depth"],
+            ConfigValue::new_scalar(Yaml::Integer(3), SourceInfo::default()),
+        );
+
+        // Original still exists
+        assert!(value.contains_path(&["format", "html", "toc"]));
+        assert_eq!(
+            value.get_path(&["format", "html", "toc"]).unwrap().as_str(),
+            Some("true")
+        );
+
+        // New sibling exists
+        assert!(value.contains_path(&["format", "html", "toc-depth"]));
+        assert_eq!(
+            value
+                .get_path(&["format", "html", "toc-depth"])
+                .unwrap()
+                .as_int(),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn test_insert_path_replaces_non_map_intermediate() {
+        let mut value = ConfigValue::from_path(&["format"], "scalar-value");
+
+        // Insert at a path that goes through the scalar - it should replace it with a map
+        value.insert_path(
+            &["format", "html", "toc"],
+            ConfigValue::new_bool(true, SourceInfo::default()),
+        );
+
+        // format is now a map, not a scalar
+        assert!(value.get_path(&["format"]).unwrap().is_map());
+        assert!(value.contains_path(&["format", "html", "toc"]));
+        assert_eq!(
+            value
+                .get_path(&["format", "html", "toc"])
+                .unwrap()
+                .as_bool(),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_get_mut() {
+        let mut value = ConfigValue::from_path(&["title"], "Old Title");
+
+        if let Some(title) = value.get_mut("title") {
+            *title = ConfigValue::new_string("New Title", SourceInfo::default());
+        }
+
+        assert_eq!(
+            value.get_path(&["title"]).unwrap().as_str(),
+            Some("New Title")
+        );
+    }
+
+    #[test]
+    fn test_get_mut_non_map() {
+        let mut value = ConfigValue::new_string("hello", SourceInfo::default());
+        assert!(value.get_mut("key").is_none());
+    }
+
+    #[test]
+    fn test_get_path_mut() {
+        let mut value = ConfigValue::from_path(&["format", "html", "toc"], "false");
+
+        if let Some(toc) = value.get_path_mut(&["format", "html", "toc"]) {
+            *toc = ConfigValue::new_bool(true, SourceInfo::default());
+        }
+
+        assert_eq!(
+            value
+                .get_path(&["format", "html", "toc"])
+                .unwrap()
+                .as_bool(),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn test_get_path_mut_missing() {
+        let mut value = ConfigValue::from_path(&["format", "html"], "test");
+        assert!(value.get_path_mut(&["format", "pdf"]).is_none());
     }
 }

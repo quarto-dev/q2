@@ -17,6 +17,8 @@
 //! - [`ResourceCollectorTransform`] - Collects resource dependencies (images, etc.)
 //! - [`SectionizeTransform`] - Wraps headers in section Divs (analogous to Pandoc's --section-divs)
 //! - [`TitleBlockTransform`] - Adds title header from metadata if not present
+//! - [`TocGenerateTransform`] - Generates TOC from document headings
+//! - [`TocRenderTransform`] - Renders TOC metadata to HTML
 //!
 //! These transforms implement [`AstTransform`](crate::transform::AstTransform) and
 //! can be added to a [`TransformPipeline`](crate::transform::TransformPipeline).
@@ -30,6 +32,8 @@ mod metadata_normalize;
 mod resource_collector;
 mod sectionize;
 mod title_block;
+mod toc_generate;
+mod toc_render;
 
 pub use appendix::AppendixStructureTransform;
 pub use callout::CalloutTransform;
@@ -40,3 +44,5 @@ pub use metadata_normalize::MetadataNormalizeTransform;
 pub use resource_collector::ResourceCollectorTransform;
 pub use sectionize::SectionizeTransform;
 pub use title_block::TitleBlockTransform;
+pub use toc_generate::TocGenerateTransform;
+pub use toc_render::TocRenderTransform;

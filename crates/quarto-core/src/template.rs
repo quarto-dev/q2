@@ -68,6 +68,7 @@ $body$
 /// - `<header id="title-block-header">` for document metadata
 /// - `<main class="content">` wrapper for body content
 /// - `<div id="quarto-content">` for layout structure
+/// - Optional Table of Contents sidebar
 ///
 /// Template variables (in addition to minimal):
 /// - `$title$` - document title (for title block)
@@ -78,6 +79,8 @@ $body$
 /// - `$body-classes$` - CSS classes for body element
 /// - `$page-layout$` - page layout type (article, full, etc.)
 /// - `$version$` - Quarto version for generator meta tag
+/// - `$rendered.navigation.toc$` - Rendered TOC HTML (if toc: true)
+/// - `$navigation.toc.title$` - TOC title (if set)
 const FULL_HTML_TEMPLATE: &str = r#"<!DOCTYPE html>
 <html$if(lang)$ lang="$lang$"$endif$>
 <head>
@@ -112,6 +115,16 @@ $endif$
 <body class="fullcontent$if(body-classes)$ $body-classes$$endif$">
 
 <div id="quarto-content" class="page-columns page-rows-contents page-layout-$page-layout$">
+$if(rendered.navigation.toc)$
+<div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+<nav id="TOC" role="doc-toc" class="toc-active">
+$if(navigation.toc.title)$
+<h2 id="toc-title">$navigation.toc.title$</h2>
+$endif$
+$rendered.navigation.toc$
+</nav>
+</div>
+$endif$
 
 <main class="content" id="quarto-document-content">
 
