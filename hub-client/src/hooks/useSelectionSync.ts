@@ -87,14 +87,36 @@ export function useSelectionSync({
     const preview = previewRef.current;
     if (!editor || !preview) return;
 
+    // Clear preview selection when editor content changes
+    const contentDisposable = editor.onDidChangeModelContent(() => {
+      // Clear the preview selection to prevent stale selections from syncing back
+      preview.clearSelection();
+    });
+
     // Listen for selection changes in the editor
-    const disposable = editor.onDidChangeCursorSelection((e) => {
+    const selectionDisposable = editor.onDidChangeCursorSelection((e) => {
+      const selection = e.selection;
+
+      // Only sync if there's an actual selection (not just a cursor)
+      // A collapsed selection means start === end (just a cursor, no selection)
+      const isCollapsed = selection.startLineNumber === selection.endLineNumber &&
+        selection.startColumn === selection.endColumn;
+
+      if (isCollapsed) return;
+
+      // Only sync if the selection change was user-initiated (mouse or keyboard navigation)
+      // Don't sync if it was from typing, deleting, pasting, etc.
+      // source can be: 'keyboard', 'mouse', 'api', 'modelChange'
+      if (e.source !== 'mouse' && e.source !== 'keyboard') return;
+
+      // For keyboard source, only sync if it's not from editing
+      // Check the reason - we want explicit selection changes, not edits
+      if (e.source === 'keyboard' && e.reason !== 3) return; // 3 = CursorChangeReason.Explicit
+
       // Prevent feedback loop: if we're already syncing, don't sync again
       if (isSyncingRef.current) return;
 
       isSyncingRef.current = true;
-
-      const selection = e.selection;
 
       // Convert Monaco selection to SourceLocation format
       // Assuming fileId 0 for the current file (we don't track multiple files in selection)
@@ -123,7 +145,8 @@ export function useSelectionSync({
     });
 
     return () => {
-      disposable.dispose();
+      contentDisposable.dispose();
+      selectionDisposable.dispose();
     };
   }, [enabled, editorRef, previewRef]);
 

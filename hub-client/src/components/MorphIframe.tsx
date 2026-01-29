@@ -8,6 +8,7 @@ export interface MorphIframeHandle {
   scrollToLine: (line: number) => void;
   getScrollRatio: () => number | null;
   setSelection: (startPos: SourceLocation, endPos: SourceLocation) => void;
+  clearSelection: () => void;
 }
 
 interface MorphIframeProps {
@@ -129,6 +130,92 @@ function getLastTextNode(element: Node): Text | null {
   for (let i = children.length - 1; i >= 0; i--) {
     const textNode = getLastTextNode(children[i]);
     if (textNode) return textNode;
+  }
+
+  return null;
+}
+
+/**
+ * Check if a position (line, col) is within or after the start of a data-loc range.
+ */
+function isPositionAfterOrAt(
+  targetLine: number,
+  targetCol: number,
+  startLine: number,
+  startCol: number
+): boolean {
+  if (targetLine > startLine) return true;
+  if (targetLine === startLine && targetCol >= startCol) return true;
+  return false;
+}
+
+/**
+ * Check if a position (line, col) is within or before the end of a data-loc range.
+ */
+function isPositionBeforeOrAt(
+  targetLine: number,
+  targetCol: number,
+  endLine: number,
+  endCol: number
+): boolean {
+  if (targetLine < endLine) return true;
+  if (targetLine === endLine && targetCol <= endCol) return true;
+  return false;
+}
+
+/**
+ * Calculate approximate text offset within an element for a given source position.
+ * This is a heuristic that assumes uniform character distribution.
+ */
+function calculateOffsetInElement(
+  targetLine: number,
+  targetCol: number,
+  element: HTMLElement,
+  loc: SourceLocation
+): { textNode: Text, offset: number } | null {
+  // Get all text content from the element
+  const textContent = element.textContent || '';
+  const textLength = textContent.length;
+
+  if (textLength === 0) return null;
+
+  // Calculate the "progress" through the source range
+  // This is a simplified heuristic that doesn't account for markdown syntax removal
+  const sourceStartOffset = (loc.startLine - 1) * 1000 + loc.startCol; // Arbitrary line length
+  const sourceEndOffset = (loc.endLine - 1) * 1000 + loc.endCol;
+  const targetOffset = (targetLine - 1) * 1000 + targetCol;
+
+  const sourceLength = sourceEndOffset - sourceStartOffset;
+  const relativeOffset = targetOffset - sourceStartOffset;
+
+  // Calculate the approximate character offset in the rendered text
+  const progress = Math.max(0, Math.min(1, relativeOffset / sourceLength));
+  const approximateOffset = Math.floor(progress * textLength);
+
+  // Find the text node at this offset
+  let currentOffset = 0;
+  const walker = document.createTreeWalker(
+    element,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let textNode: Text | null = null;
+  let offsetInNode = 0;
+
+  while (textNode = walker.nextNode() as Text) {
+    const nodeLength = textNode.textContent?.length || 0;
+    if (currentOffset + nodeLength >= approximateOffset) {
+      offsetInNode = approximateOffset - currentOffset;
+      return { textNode, offset: Math.max(0, Math.min(nodeLength, offsetInNode)) };
+    }
+    currentOffset += nodeLength;
+  }
+
+  // Fallback: return the last text node with offset at the end
+  const lastTextNode = getLastTextNode(element);
+  if (lastTextNode) {
+    return { textNode: lastTextNode, offset: lastTextNode.textContent?.length || 0 };
   }
 
   return null;
@@ -280,10 +367,13 @@ function MorphIframe({
       if (!doc) return;
 
       // Find the most specific (smallest range) elements for start and end positions
+      // Now considering both line AND column for position matching
       const elements = doc.querySelectorAll('[data-loc]');
       let startElement: HTMLElement | null = null;
+      let startLoc: SourceLocation | null = null;
       let startRangeSize = Infinity;
       let endElement: HTMLElement | null = null;
+      let endLoc: SourceLocation | null = null;
       let endRangeSize = Infinity;
 
       for (const element of elements) {
@@ -293,29 +383,33 @@ function MorphIframe({
         const loc = parseDataLoc(dataLoc);
         if (!loc) continue;
 
-        // Check if this element contains the start position
-        if (startPos.startLine >= loc.startLine && startPos.startLine <= loc.endLine) {
+        // Check if this element contains the start position (considering both line and column)
+        if (isPositionAfterOrAt(startPos.startLine, startPos.startCol, loc.startLine, loc.startCol) &&
+            isPositionBeforeOrAt(startPos.startLine, startPos.startCol, loc.endLine, loc.endCol)) {
           const rangeSize = loc.endLine - loc.startLine;
           // Prefer smaller (more specific) ranges
           if (rangeSize < startRangeSize) {
             startElement = element as HTMLElement;
+            startLoc = loc;
             startRangeSize = rangeSize;
           }
         }
 
-        // Check if this element contains the end position
-        if (endPos.endLine >= loc.startLine && endPos.endLine <= loc.endLine) {
+        // Check if this element contains the end position (considering both line and column)
+        if (isPositionAfterOrAt(endPos.endLine, endPos.endCol, loc.startLine, loc.startCol) &&
+            isPositionBeforeOrAt(endPos.endLine, endPos.endCol, loc.endLine, loc.endCol)) {
           const rangeSize = loc.endLine - loc.startLine;
           // Prefer smaller (more specific) ranges
           if (rangeSize < endRangeSize) {
             endElement = element as HTMLElement;
+            endLoc = loc;
             endRangeSize = rangeSize;
           }
         }
       }
 
       // If we couldn't find matching elements, return
-      if (!startElement || !endElement) {
+      if (!startElement || !endElement || !startLoc || !endLoc) {
         console.log('Could not find elements for selection', { startPos, endPos });
         return;
       }
@@ -326,22 +420,45 @@ function MorphIframe({
 
       const range = doc.createRange();
 
-      // Try to set the range to the first text node in startElement
-      // and the last text node in endElement for more precise selection
-      const startTextNode = getFirstTextNode(startElement);
-      const endTextNode = getLastTextNode(endElement);
+      // Calculate the approximate text offsets within the elements
+      const startInfo = calculateOffsetInElement(startPos.startLine, startPos.startCol, startElement, startLoc);
+      const endInfo = calculateOffsetInElement(endPos.endLine, endPos.endCol, endElement, endLoc);
 
-      if (startTextNode && endTextNode) {
-        range.setStart(startTextNode, 0);
-        range.setEnd(endTextNode, endTextNode.textContent?.length || 0);
+      if (startInfo && endInfo) {
+        try {
+          range.setStart(startInfo.textNode, startInfo.offset);
+          range.setEnd(endInfo.textNode, endInfo.offset);
+        } catch (e) {
+          console.error('Error setting selection range:', e);
+          return;
+        }
       } else {
-        // Fallback to selecting the entire elements
-        range.setStart(startElement, 0);
-        range.setEnd(endElement, endElement.childNodes.length);
+        // Fallback to selecting from the first text node to the last text node
+        const startTextNode = getFirstTextNode(startElement);
+        const endTextNode = getLastTextNode(endElement);
+
+        if (startTextNode && endTextNode) {
+          range.setStart(startTextNode, 0);
+          range.setEnd(endTextNode, endTextNode.textContent?.length || 0);
+        } else {
+          // Final fallback to selecting the entire elements
+          range.setStart(startElement, 0);
+          range.setEnd(endElement, endElement.childNodes.length);
+        }
       }
 
       selection.removeAllRanges();
       selection.addRange(range);
+    },
+    clearSelection: () => {
+      const iframe = iframeRef.current;
+      const doc = iframe?.contentDocument;
+      if (!doc) return;
+
+      const selection = doc.getSelection();
+      if (!selection) return;
+
+      selection.removeAllRanges();
     },
   }), []);
 
