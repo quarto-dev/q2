@@ -20,6 +20,8 @@ interface DoubleBufferedIframeProps {
   onScroll?: () => void;
   // Optional callback when preview is clicked
   onClick?: () => void;
+  // Optional callback when selection changes in preview
+  onSelectionChange?: (startPos: SourceLocation | null, endPos: SourceLocation | null) => void;
   // Ref to expose imperative methods
   ref: Ref<DoubleBufferedIframeHandle>;
 }
@@ -28,7 +30,7 @@ interface DoubleBufferedIframeProps {
  * Parsed source location from data-loc attribute.
  * Format: "fileId:startLine:startCol-endLine:endCol" (1-based)
  */
-interface SourceLocation {
+export interface SourceLocation {
   fileId: number;
   startLine: number;
   startCol: number;
@@ -114,6 +116,7 @@ function DoubleBufferedIframe({
   onNavigateToDocument,
   onScroll,
   onClick,
+  onSelectionChange,
   ref,
 }: DoubleBufferedIframeProps) {
   const iframeARef = useRef<HTMLIFrameElement>(null);
@@ -275,16 +278,58 @@ function DoubleBufferedIframe({
       onClick?.();
     };
 
+    const handleSelectionChange = () => {
+      if (!onSelectionChange) return;
+
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+
+      const selection = doc.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+
+      // Get anchor and focus nodes
+      const anchorNode = selection.anchorNode;
+      const focusNode = selection.focusNode;
+
+      if (!anchorNode || !focusNode) return;
+
+      // Find closest element with data-loc for anchor (start of selection)
+      const anchorElement = anchorNode.nodeType === Node.ELEMENT_NODE
+        ? (anchorNode as Element).closest('[data-loc]')
+        : anchorNode.parentElement?.closest('[data-loc]');
+
+      // Find closest element with data-loc for focus (end of selection)
+      const focusElement = focusNode.nodeType === Node.ELEMENT_NODE
+        ? (focusNode as Element).closest('[data-loc]')
+        : focusNode.parentElement?.closest('[data-loc]');
+
+      if (!anchorElement || !focusElement) return;
+
+      // Parse data-loc attributes
+      const anchorDataLoc = anchorElement.getAttribute('data-loc');
+      const focusDataLoc = focusElement.getAttribute('data-loc');
+
+      if (!anchorDataLoc || !focusDataLoc) return;
+
+      const startPos = parseDataLoc(anchorDataLoc);
+      const endPos = parseDataLoc(focusDataLoc);
+
+      onSelectionChange(startPos, endPos);
+    };
+
     // Listen to scroll on the iframe's content window
     iframe.contentWindow.addEventListener('scroll', handleScroll, { passive: true });
     // Listen to click on the iframe's document
     iframe.contentDocument.addEventListener('click', handleClick);
+    // Listen to selectionchange on the iframe's document
+    iframe.contentDocument.addEventListener('selectionchange', handleSelectionChange);
 
     return () => {
       iframe.contentWindow?.removeEventListener('scroll', handleScroll);
       iframe.contentDocument?.removeEventListener('click', handleClick);
+      iframe.contentDocument?.removeEventListener('selectionchange', handleSelectionChange);
     };
-  }, [activeIframe, onScroll, onClick, getIframeRefs]);
+  }, [activeIframe, onScroll, onClick, onSelectionChange, getIframeRefs]);
 
   return (
     <>

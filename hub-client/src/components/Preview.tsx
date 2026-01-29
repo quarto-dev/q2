@@ -4,6 +4,7 @@ import type { FileEntry } from '../types/project';
 import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { useScrollSync } from '../hooks/useScrollSync';
+import { useSelectionSync } from '../hooks/useSelectionSync';
 import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
 import DoubleBufferedIframe, { type DoubleBufferedIframeHandle } from './DoubleBufferedIframe';
@@ -302,6 +303,11 @@ export default function Preview({
     editorHasFocusRef,
   });
 
+  // Selection synchronization from preview to editor
+  const { handlePreviewSelection } = useSelectionSync({
+    editorRef,
+  });
+
   // Render function that uses WASM when available
   // Implements state machine transitions for error handling:
   // - On success: always transition to GOOD, swap to new content
@@ -378,6 +384,7 @@ export default function Preview({
           onNavigateToDocument={handleNavigateToDocument}
           onScroll={handlePreviewScroll}
           onClick={handlePreviewClick}
+          onSelectionChange={handlePreviewSelection}
         />
         {/* Error overlay shown when error occurs after successful render */}
         <PreviewErrorOverlay
