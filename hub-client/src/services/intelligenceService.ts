@@ -20,6 +20,7 @@ import type {
   LspDiagnosticsResponse,
 } from '../types/intelligence';
 import { initWasm } from './wasmRenderer';
+import { isQmdFile } from '../types/project';
 
 // Re-export types for convenience
 export type { Symbol, Diagnostic, FoldingRange, DocumentAnalysis } from '../types/intelligence';
@@ -52,6 +53,11 @@ async function getWasm(): Promise<typeof import('wasm-quarto-hub-client')> {
  * @returns Complete analysis (symbols, folding ranges, diagnostics)
  */
 export async function analyzeDocument(path: string): Promise<DocumentAnalysis> {
+  // Only QMD files have intelligence data
+  if (!isQmdFile(path)) {
+    return { symbols: [], foldingRanges: [], diagnostics: [] };
+  }
+
   const wasm = await getWasm();
   const result: LspAnalyzeResponse = JSON.parse(wasm.lsp_analyze_document(path));
 
@@ -77,6 +83,11 @@ export async function analyzeDocument(path: string): Promise<DocumentAnalysis> {
  * @returns Hierarchical symbols for document outline
  */
 export async function getSymbols(path: string): Promise<Symbol[]> {
+  // Only QMD files have symbols
+  if (!isQmdFile(path)) {
+    return [];
+  }
+
   const wasm = await getWasm();
   const result: LspSymbolsResponse = JSON.parse(wasm.lsp_get_symbols(path));
 
@@ -100,6 +111,11 @@ export async function getSymbols(path: string): Promise<Symbol[]> {
  * @returns Folding ranges for code folding
  */
 export async function getFoldingRanges(path: string): Promise<FoldingRange[]> {
+  // Only QMD files have folding ranges
+  if (!isQmdFile(path)) {
+    return [];
+  }
+
   const wasm = await getWasm();
   const result: LspFoldingRangesResponse = JSON.parse(wasm.lsp_get_folding_ranges(path));
 
@@ -121,6 +137,11 @@ export async function getFoldingRanges(path: string): Promise<FoldingRange[]> {
  * @returns Rich diagnostics array
  */
 export async function getDiagnostics(path: string): Promise<Diagnostic[]> {
+  // Only QMD files have diagnostics
+  if (!isQmdFile(path)) {
+    return [];
+  }
+
   const wasm = await getWasm();
   const result: LspDiagnosticsResponse = JSON.parse(wasm.lsp_get_diagnostics(path));
 
