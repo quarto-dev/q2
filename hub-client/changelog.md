@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-29
 
+- [`03fa5765`](https://github.com/quarto-dev/kyoto/commits/03fa5765): Add collapsible nested folder tree to FileSidebar
 - [`0c6ed3e6`](https://github.com/quarto-dev/kyoto/commits/0c6ed3e6): Restrict preview and QMD features to .qmd files only
 - [`56e61953`](https://github.com/quarto-dev/kyoto/commits/56e61953): Add deep linking support with URL-based file navigation and multi-tab support
 - [`1dcd6bae`](https://github.com/quarto-dev/kyoto/commits/1dcd6bae): Add WASM end-to-end tests for compute_theme_content_hash
