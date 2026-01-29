@@ -15,6 +15,8 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-29
 
+- [`f80ccc58`](https://github.com/quarto-dev/kyoto/commits/f80ccc58): Add SCSS resources versioning for cache invalidation
+- [`976c4a9b`](https://github.com/quarto-dev/kyoto/commits/976c4a9b): Add SCSS styling for editorial marks
 - [`dfcb6b90`](https://github.com/quarto-dev/kyoto/commits/dfcb6b90): Add collapsible sections to OutlinePanel
 - [`03fa5765`](https://github.com/quarto-dev/kyoto/commits/03fa5765): Add collapsible nested folder tree to FileSidebar
 - [`0c6ed3e6`](https://github.com/quarto-dev/kyoto/commits/0c6ed3e6): Restrict preview and QMD features to .qmd files only
