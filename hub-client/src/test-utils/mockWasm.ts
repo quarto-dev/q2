@@ -74,12 +74,12 @@ export interface MockWasmRenderer {
   // Rendering operations
   renderQmd(path: string): Promise<RenderResponse>;
   renderQmdContent(content: string, templateBundle?: string): Promise<RenderResponse>;
-  renderToHtml(content: string, options?: { sourceLocation?: boolean }): Promise<RenderResult>;
+  renderToHtml(content: string, options?: { sourceLocation?: boolean; documentPath?: string }): Promise<RenderResult>;
 
   // SASS operations
   sassAvailable(): Promise<boolean>;
   compileScss(scss: string, options?: { minified?: boolean }): Promise<string>;
-  compileDocumentCss(content: string, options?: { minified?: boolean }): Promise<string>;
+  compileDocumentCss(content: string, options?: { minified?: boolean; documentPath?: string }): Promise<string>;
 
   // Test helpers
   _getVfs(): Map<string, string | Uint8Array>;
@@ -228,7 +228,7 @@ export function createMockWasmRenderer(options: MockWasmOptions = {}): MockWasmR
 
     async renderToHtml(
       _content: string,
-      _options?: { sourceLocation?: boolean },
+      _options?: { sourceLocation?: boolean; documentPath?: string },
     ): Promise<RenderResult> {
       if (renderError) {
         return {
@@ -264,7 +264,7 @@ export function createMockWasmRenderer(options: MockWasmOptions = {}): MockWasmR
 
     async compileDocumentCss(
       _content: string,
-      _options?: { minified?: boolean },
+      _options?: { minified?: boolean; documentPath?: string },
     ): Promise<string> {
       if (sassError) {
         throw sassError;

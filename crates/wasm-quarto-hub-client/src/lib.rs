@@ -1550,9 +1550,16 @@ pub async fn compile_scss_with_bootstrap(scss: &str, minified: bool) -> String {
 ///
 /// # Arguments
 /// * `content` - The QMD document content (must include YAML frontmatter)
+/// * `document_path` - Path to the document in the VFS (e.g., "/docs/index.qmd")
 ///
 /// # Returns
 /// JSON: `{ "success": true, "css": "..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Path Resolution
+///
+/// The `document_path` is used to resolve relative paths in custom theme specifications.
+/// For example, if a document at `/docs/index.qmd` references `editorial_marks.scss`,
+/// the theme file will be looked up at `/docs/editorial_marks.scss`.
 ///
 /// # Example
 /// ```javascript
@@ -1565,13 +1572,13 @@ pub async fn compile_scss_with_bootstrap(scss: &str, minified: bool) -> String {
 ///
 /// # Hello World
 /// `;
-/// const result = JSON.parse(await compile_document_css(qmd));
+/// const result = JSON.parse(await compile_document_css(qmd, "/index.qmd"));
 /// if (result.success) {
 ///     document.querySelector('style').textContent = result.css;
 /// }
 /// ```
 #[wasm_bindgen]
-pub async fn compile_document_css(content: &str) -> String {
+pub async fn compile_document_css(content: &str, document_path: &str) -> String {
     let runtime = get_runtime();
 
     // Check if SASS is available
@@ -1591,8 +1598,33 @@ pub async fn compile_document_css(content: &str) -> String {
         Err(e) => return SassCompileResponse::error(&format!("Invalid theme config: {}", e)),
     };
 
-    // Create theme context (using root as document dir since VFS is flat)
-    let context = ThemeContext::new(std::path::PathBuf::from("/"), runtime);
+    // Extract document directory from path
+    // First, normalize the path using VFS conventions so that relative paths
+    // like "index.qmd" become "/project/index.qmd" (VFS's default project root).
+    // This ensures theme resolution looks in the same directories where files are stored.
+    //
+    // Examples (assuming VFS project root is /project):
+    //   "index.qmd" -> canonicalize -> "/project/index.qmd" -> parent -> "/project"
+    //   "docs/index.qmd" -> canonicalize -> "/project/docs/index.qmd" -> parent -> "/project/docs"
+    //   "/custom/index.qmd" -> canonicalize -> "/custom/index.qmd" -> parent -> "/custom"
+    let doc_path = Path::new(document_path);
+    let normalized_path = runtime
+        .canonicalize(doc_path)
+        .unwrap_or_else(|_| doc_path.to_path_buf());
+    let doc_dir = normalized_path
+        .parent()
+        .map(|p| {
+            if p.as_os_str().is_empty() {
+                // Parent is empty (shouldn't happen after canonicalize), use root
+                std::path::PathBuf::from("/")
+            } else {
+                p.to_path_buf()
+            }
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("/"));
+
+    // Create theme context with the correct document directory
+    let context = ThemeContext::new(doc_dir, runtime);
 
     // Compile CSS
     match compile_theme_css(&theme_config, &context).await {

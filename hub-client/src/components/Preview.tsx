@@ -149,7 +149,7 @@ type RenderResult = {
 // Returns diagnostics and HTML string or error message
 async function doRender(
   qmdContent: string,
-  options: { scrollSyncEnabled: boolean }
+  options: { scrollSyncEnabled: boolean; documentPath?: string }
 ): Promise<RenderResult> {
   if (!isWasmReady()) {
     return {
@@ -161,8 +161,10 @@ async function doRender(
 
   try {
     // Enable source location tracking when scroll sync is enabled
+    // Pass document path for resolving relative theme file paths
     const result = await renderToHtml(qmdContent, {
       sourceLocation: options.scrollSyncEnabled,
+      documentPath: options.documentPath,
     });
 
     // Collect all diagnostics from both success and error paths
@@ -305,10 +307,10 @@ export default function Preview({
   // - On success: always transition to GOOD, swap to new content
   // - On error from START/ERROR_AT_START: show full error page
   // - On error from GOOD/ERROR_FROM_GOOD: keep last good HTML, show overlay
-  const doRenderWithStateManagement = useCallback(async (qmdContent: string) => {
+  const doRenderWithStateManagement = useCallback(async (qmdContent: string, documentPath?: string) => {
     lastContentRef.current = qmdContent;
 
-    const result = await doRender(qmdContent, { scrollSyncEnabled });
+    const result = await doRender(qmdContent, { scrollSyncEnabled, documentPath });
     if (qmdContent !== lastContentRef.current) return;
 
     // Update diagnostics
@@ -339,19 +341,21 @@ export default function Preview({
   }, [scrollSyncEnabled, onDiagnosticsChange]);
 
   // Debounced render update
-  const updatePreview = useCallback((newContent: string) => {
+  const updatePreview = useCallback((newContent: string, documentPath?: string) => {
     if (renderTimeoutRef.current) {
       clearTimeout(renderTimeoutRef.current);
     }
     renderTimeoutRef.current = window.setTimeout(() => {
-      doRenderWithStateManagement(newContent);
+      doRenderWithStateManagement(newContent, documentPath);
     }, 20);
   }, [doRenderWithStateManagement]);
 
   // Re-render when content changes, WASM becomes ready, or scroll sync is toggled
   useEffect(() => {
-    updatePreview(content);
-  }, [content, updatePreview, wasmStatus, scrollSyncEnabled]);
+    // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
+    // The WASM layer will use VFS path normalization to resolve relative paths correctly.
+    updatePreview(content, currentFile?.path);
+  }, [content, updatePreview, wasmStatus, scrollSyncEnabled, currentFile?.path]);
 
   // Reset preview state when file changes
   useEffect(() => {

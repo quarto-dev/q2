@@ -46,7 +46,7 @@ interface WasmModuleExtended {
   compile_scss: (scss: string, minified: boolean, loadPathsJson: string) => Promise<string>;
   compile_scss_with_bootstrap: (scss: string, minified: boolean) => Promise<string>;
   // Theme-aware CSS compilation (extracts theme from frontmatter)
-  compile_document_css: (content: string) => Promise<string>;
+  compile_document_css: (content: string, documentPath: string) => Promise<string>;
   compile_theme_css_by_name: (themeName: string, minified: boolean) => Promise<string>;
   compile_default_bootstrap_css: (minified: boolean) => Promise<string>;
 }
@@ -296,6 +296,17 @@ export interface RenderToHtmlOptions {
    * Default: false
    */
   sourceLocation?: boolean;
+
+  /**
+   * Path to the document being rendered in the VFS.
+   *
+   * Used to resolve relative paths in theme specifications. For example,
+   * if a document at `docs/index.qmd` references `editorial_marks.scss`,
+   * the theme file will be looked up at `/project/docs/editorial_marks.scss`.
+   *
+   * Default: "input.qmd" (VFS normalizes to "/project/input.qmd")
+   */
+  documentPath?: string;
 }
 
 // ============================================================================
@@ -395,8 +406,10 @@ export async function renderToHtml(
       // The cssVersion changes when CSS content changes, ensuring HTML differs
       // even when document structure is the same (e.g., only theme name changed)
       let cssVersion = 'default';
+      // Use relative path as default so VFS normalizes it correctly (e.g., "input.qmd" -> "/project/input.qmd")
+      const documentPath = options.documentPath ?? 'input.qmd';
       try {
-        cssVersion = await compileAndInjectThemeCss(qmdContent);
+        cssVersion = await compileAndInjectThemeCss(qmdContent, documentPath);
       } catch (cssErr) {
         console.warn('[renderToHtml] Theme CSS compilation failed, using default CSS:', cssErr);
       }
@@ -439,10 +452,12 @@ export async function renderToHtml(
  * This replaces the default static CSS at /.quarto/project-artifacts/styles.css
  * with compiled theme CSS based on the document's frontmatter.
  *
+ * @param qmdContent - The QMD document content
+ * @param documentPath - Path to the document in VFS (e.g., "/docs/index.qmd")
  * @returns A version string that changes when CSS content changes (for cache busting)
  * @internal
  */
-async function compileAndInjectThemeCss(qmdContent: string): Promise<string> {
+async function compileAndInjectThemeCss(qmdContent: string, documentPath: string): Promise<string> {
   const wasm = getWasm();
 
   // Check if SASS is available
@@ -454,8 +469,9 @@ async function compileAndInjectThemeCss(qmdContent: string): Promise<string> {
   // Extract theme config for versioning - this determines the CSS output
   const themeConfig = extractThemeConfigForCacheKey(qmdContent);
 
-  // Compile CSS with caching
-  const css = await compileDocumentCss(qmdContent, { minified: true });
+  // Compile CSS with caching, passing the document path for relative theme resolution
+  console.log('[compileAndInjectThemeCss] documentPath:', documentPath);
+  const css = await compileDocumentCss(qmdContent, { minified: true, documentPath });
 
   // Update VFS with compiled CSS
   const cssPath = '/.quarto/project-artifacts/styles.css';
@@ -708,12 +724,12 @@ export function extractThemeConfigForCacheKey(content: string): string {
  *
  * # Hello World
  * `;
- * const css = await compileDocumentCss(qmd);
+ * const css = await compileDocumentCss(qmd, { documentPath: '/index.qmd' });
  * ```
  */
 export async function compileDocumentCss(
   content: string,
-  options: { minified?: boolean; skipCache?: boolean } = {}
+  options: { minified?: boolean; skipCache?: boolean; documentPath?: string } = {}
 ): Promise<string> {
   await initWasm();
   const wasm = getWasm();
@@ -725,6 +741,8 @@ export async function compileDocumentCss(
 
   const minified = options.minified ?? true;
   const skipCache = options.skipCache ?? false;
+  // Use relative path as default so VFS normalizes it correctly (e.g., "input.qmd" -> "/project/input.qmd")
+  const documentPath = options.documentPath ?? 'input.qmd';
 
   // Extract theme config for cache key
   const themeConfig = extractThemeConfigForCacheKey(content);
@@ -744,8 +762,9 @@ export async function compileDocumentCss(
   }
 
   // Compile via WASM (extracts theme from frontmatter and compiles)
+  // Pass document path for resolving relative theme file paths
   const result: ThemeCssResponse = JSON.parse(
-    await wasm.compile_document_css(content)
+    await wasm.compile_document_css(content, documentPath)
   );
 
   if (!result.success) {
