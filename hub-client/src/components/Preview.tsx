@@ -303,9 +303,11 @@ export default function Preview({
     editorHasFocusRef,
   });
 
-  // Selection synchronization from preview to editor
+  // Selection synchronization between preview and editor
   const { handlePreviewSelection } = useSelectionSync({
     editorRef,
+    previewRef: doubleBufferedIframeRef,
+    enabled: scrollSyncEnabled && editorReady,
   });
 
   // Render function that uses WASM when available

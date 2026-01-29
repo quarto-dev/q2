@@ -7,6 +7,7 @@ import { postProcessIframe } from '../utils/iframePostProcessor';
 export interface MorphIframeHandle {
   scrollToLine: (line: number) => void;
   getScrollRatio: () => number | null;
+  setSelection: (startPos: SourceLocation, endPos: SourceLocation) => void;
 }
 
 interface MorphIframeProps {
@@ -97,6 +98,40 @@ function isElementVisible(element: HTMLElement): boolean {
 
   // Element is visible if it's within the viewport bounds
   return rect.top >= 0 && rect.bottom <= viewportHeight;
+}
+
+/**
+ * Get the first text node within an element (depth-first search).
+ */
+function getFirstTextNode(element: Node): Text | null {
+  if (element.nodeType === Node.TEXT_NODE) {
+    return element as Text;
+  }
+
+  for (const child of element.childNodes) {
+    const textNode = getFirstTextNode(child);
+    if (textNode) return textNode;
+  }
+
+  return null;
+}
+
+/**
+ * Get the last text node within an element (depth-first search, reverse order).
+ */
+function getLastTextNode(element: Node): Text | null {
+  if (element.nodeType === Node.TEXT_NODE) {
+    return element as Text;
+  }
+
+  // Traverse children in reverse order
+  const children = Array.from(element.childNodes);
+  for (let i = children.length - 1; i >= 0; i--) {
+    const textNode = getLastTextNode(children[i]);
+    if (textNode) return textNode;
+  }
+
+  return null;
 }
 
 /**
@@ -238,6 +273,75 @@ function MorphIframe({
       if (previewMaxScroll <= 0) return 0;
 
       return previewScrollY / previewMaxScroll;
+    },
+    setSelection: (startPos: SourceLocation, endPos: SourceLocation) => {
+      const iframe = iframeRef.current;
+      const doc = iframe?.contentDocument;
+      if (!doc) return;
+
+      // Find the most specific (smallest range) elements for start and end positions
+      const elements = doc.querySelectorAll('[data-loc]');
+      let startElement: HTMLElement | null = null;
+      let startRangeSize = Infinity;
+      let endElement: HTMLElement | null = null;
+      let endRangeSize = Infinity;
+
+      for (const element of elements) {
+        const dataLoc = element.getAttribute('data-loc');
+        if (!dataLoc) continue;
+
+        const loc = parseDataLoc(dataLoc);
+        if (!loc) continue;
+
+        // Check if this element contains the start position
+        if (startPos.startLine >= loc.startLine && startPos.startLine <= loc.endLine) {
+          const rangeSize = loc.endLine - loc.startLine;
+          // Prefer smaller (more specific) ranges
+          if (rangeSize < startRangeSize) {
+            startElement = element as HTMLElement;
+            startRangeSize = rangeSize;
+          }
+        }
+
+        // Check if this element contains the end position
+        if (endPos.endLine >= loc.startLine && endPos.endLine <= loc.endLine) {
+          const rangeSize = loc.endLine - loc.startLine;
+          // Prefer smaller (more specific) ranges
+          if (rangeSize < endRangeSize) {
+            endElement = element as HTMLElement;
+            endRangeSize = rangeSize;
+          }
+        }
+      }
+
+      // If we couldn't find matching elements, return
+      if (!startElement || !endElement) {
+        console.log('Could not find elements for selection', { startPos, endPos });
+        return;
+      }
+
+      // Create a range and set it as the document selection
+      const selection = doc.getSelection();
+      if (!selection) return;
+
+      const range = doc.createRange();
+
+      // Try to set the range to the first text node in startElement
+      // and the last text node in endElement for more precise selection
+      const startTextNode = getFirstTextNode(startElement);
+      const endTextNode = getLastTextNode(endElement);
+
+      if (startTextNode && endTextNode) {
+        range.setStart(startTextNode, 0);
+        range.setEnd(endTextNode, endTextNode.textContent?.length || 0);
+      } else {
+        // Fallback to selecting the entire elements
+        range.setStart(startElement, 0);
+        range.setEnd(endElement, endElement.childNodes.length);
+      }
+
+      selection.removeAllRanges();
+      selection.addRange(range);
     },
   }), []);
 
