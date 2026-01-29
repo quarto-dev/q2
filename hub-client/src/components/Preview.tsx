@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type * as Monaco from 'monaco-editor';
 import type { FileEntry } from '../types/project';
+import { isQmdFile } from '../types/project';
 import type { Diagnostic } from '../types/diagnostic';
 import { initWasm, renderToHtml, isWasmReady } from '../services/wasmRenderer';
 import { useScrollSync } from '../hooks/useScrollSync';
@@ -131,6 +132,60 @@ function renderError(content: string, error: string, diagnostics?: string[]): st
           ${diagHtml}
         </div>
         <pre><code>${content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>
+      </body>
+    </html>
+  `;
+}
+
+// Placeholder HTML for non-QMD files
+function renderNonQmdPlaceholder(filename: string): string {
+  const extension = filename.split('.').pop() || 'file';
+  return `
+    <html>
+      <head>
+        <style>
+          body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f5f5f5;
+            color: #666;
+          }
+          .placeholder {
+            text-align: center;
+            padding: 24px;
+          }
+          .placeholder-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+          }
+          .placeholder-text {
+            font-size: 14px;
+            line-height: 1.6;
+          }
+          .placeholder-extension {
+            font-family: 'SF Mono', Monaco, monospace;
+            background: #e0e0e0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="placeholder">
+          <div class="placeholder-icon">&#128196;</div>
+          <div class="placeholder-text">
+            Preview is available for <span class="placeholder-extension">.qmd</span> files<br>
+            <span style="opacity: 0.7; font-size: 13px;">
+              This <span class="placeholder-extension">.${extension}</span> file can be edited in the editor
+            </span>
+          </div>
+        </div>
       </body>
     </html>
   `;
@@ -360,10 +415,21 @@ export default function Preview({
 
   // Re-render when content changes, WASM becomes ready, or scroll sync is toggled
   useEffect(() => {
+    const filePath = currentFile?.path;
+
+    // For non-QMD files, show a placeholder and clear diagnostics
+    if (!isQmdFile(filePath)) {
+      onDiagnosticsChange([]);
+      setCurrentError(null);
+      setPreviewState('START');
+      setRenderedHtml(renderNonQmdPlaceholder(filePath ?? 'file'));
+      return;
+    }
+
     // Pass document path as-is from Automerge (e.g., "index.qmd" or "docs/index.qmd").
     // The WASM layer will use VFS path normalization to resolve relative paths correctly.
-    updatePreview(content, currentFile?.path);
-  }, [content, updatePreview, wasmStatus, scrollSyncEnabled, currentFile?.path]);
+    updatePreview(content, filePath);
+  }, [content, updatePreview, wasmStatus, scrollSyncEnabled, currentFile?.path, onDiagnosticsChange]);
 
   // Reset preview state when file changes
   useEffect(() => {

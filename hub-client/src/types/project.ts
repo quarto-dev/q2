@@ -26,6 +26,26 @@ export {
 } from '@quarto/quarto-automerge-schema';
 
 // ============================================================================
+// File Type Helpers
+// ============================================================================
+
+/**
+ * Check if a file path represents a QMD (Quarto Markdown) file.
+ *
+ * QMD files receive special treatment in hub-client:
+ * - Live preview rendering via WASM
+ * - Document outline (symbols)
+ * - Code folding for frontmatter, code cells, and sections
+ * - Diagnostics from the Quarto parser
+ *
+ * @param path - File path to check (can be null/undefined)
+ * @returns true if the path ends with .qmd (case-insensitive)
+ */
+export function isQmdFile(path: string | null | undefined): boolean {
+  return path?.toLowerCase().endsWith('.qmd') ?? false;
+}
+
+// ============================================================================
 // Application-Specific Types
 // ============================================================================
 

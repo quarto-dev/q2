@@ -14,6 +14,7 @@ import {
   type FoldingRange,
   type DocumentAnalysis,
 } from '../services/intelligenceService';
+import { isQmdFile } from '../types/project';
 
 /**
  * Options for the useIntelligence hook.
@@ -102,6 +103,16 @@ export function useIntelligence(
       setDiagnostics([]);
       setFoldingRanges([]);
       setError(null);
+      return;
+    }
+
+    // Only analyze QMD files - other file types don't have symbols/diagnostics/folding
+    if (!isQmdFile(path)) {
+      setSymbols([]);
+      setDiagnostics([]);
+      setFoldingRanges([]);
+      setError(null);
+      setLoading(false);
       return;
     }
 
