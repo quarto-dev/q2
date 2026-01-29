@@ -52,7 +52,7 @@ pub mod transforms;
 // Re-export commonly used types
 pub use artifact::{Artifact, ArtifactStore};
 pub use error::{ParseError, QuartoError, Result};
-pub use format::{Format, FormatIdentifier};
+pub use format::{Format, FormatIdentifier, extract_format_metadata};
 pub use pipeline::{
     DEFAULT_CSS_ARTIFACT_PATH, HtmlRenderConfig, RenderOutput, build_html_pipeline,
     build_html_pipeline_stages, build_html_pipeline_with_stages, build_wasm_html_pipeline,

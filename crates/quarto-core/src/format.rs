@@ -215,6 +215,79 @@ impl Default for Format {
     }
 }
 
+// ============================================================================
+// Format Metadata Extraction
+// ============================================================================
+//
+// TODO(ConfigValue): DELETE THIS FUNCTION. Replace with merged ConfigValue
+// from RenderContext. When the pipeline adopts ConfigValue-based configuration,
+// format metadata will be extracted during config merging, not separately.
+
+/// Extract format-specific metadata from QMD frontmatter.
+///
+/// Parses the YAML frontmatter and extracts the `format.<format_name>` section.
+/// Returns `Ok(Null)` if no format metadata is specified.
+///
+/// This function is used by both the native CLI and WASM client to ensure
+/// consistent format metadata handling.
+///
+/// # Arguments
+/// * `content` - The QMD source content as a string
+/// * `format_name` - The format to extract (e.g., "html", "pdf")
+///
+/// # Example
+/// ```
+/// use quarto_core::extract_format_metadata;
+///
+/// let qmd = r#"---
+/// title: My Document
+/// format:
+///   html:
+///     toc: true
+///     toc-depth: 2
+/// ---
+///
+/// # Hello
+/// "#;
+///
+/// let metadata = extract_format_metadata(qmd, "html").unwrap();
+/// assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
+/// assert_eq!(metadata.get("toc-depth"), Some(&serde_json::json!(2)));
+/// ```
+pub fn extract_format_metadata(
+    content: &str,
+    format_name: &str,
+) -> Result<serde_json::Value, String> {
+    // Find YAML frontmatter
+    let trimmed = content.trim_start();
+    if !trimmed.starts_with("---") {
+        return Ok(serde_json::Value::Null);
+    }
+
+    // Find closing ---
+    let after_first = &trimmed[3..];
+    let end_pos = match after_first.find("\n---") {
+        Some(pos) => pos,
+        None => return Ok(serde_json::Value::Null), // Unclosed frontmatter
+    };
+
+    // Parse YAML
+    let yaml_str = &after_first[..end_pos].trim();
+    let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str)
+        .map_err(|e| format!("Failed to parse YAML frontmatter: {}", e))?;
+
+    // Navigate to format.<format_name>
+    let format_value = yaml_value.get("format").and_then(|f| f.get(format_name));
+
+    match format_value {
+        Some(v) => {
+            // Convert serde_yaml::Value to serde_json::Value via Serialize trait
+            serde_json::to_value(v).map_err(|e| format!("Failed to convert YAML to JSON: {}", e))
+        }
+        None => Ok(serde_json::Value::Null),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -651,5 +724,123 @@ mod tests {
             "theme": "cosmo"
         }));
         assert!(format.use_minimal_html());
+    }
+
+    // === extract_format_metadata tests ===
+
+    #[test]
+    fn test_extract_format_metadata_basic() {
+        let content = r#"---
+title: Test
+format:
+  html:
+    toc: true
+    toc-depth: 2
+---
+
+# Hello
+"#;
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
+        assert_eq!(metadata.get("toc-depth"), Some(&serde_json::json!(2)));
+    }
+
+    #[test]
+    fn test_extract_format_metadata_no_frontmatter() {
+        let content = "# Hello World\n\nSome content.";
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(metadata, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_extract_format_metadata_no_format_section() {
+        let content = r#"---
+title: Test
+author: John
+---
+
+# Hello
+"#;
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(metadata, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_extract_format_metadata_different_format() {
+        let content = r#"---
+format:
+  pdf:
+    toc: true
+---
+
+# Hello
+"#;
+        // Asking for html should return Null when only pdf is specified
+        let html_metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(html_metadata, serde_json::Value::Null);
+
+        // Asking for pdf should return the metadata
+        let pdf_metadata = extract_format_metadata(content, "pdf").unwrap();
+        assert_eq!(pdf_metadata.get("toc"), Some(&serde_json::json!(true)));
+    }
+
+    #[test]
+    fn test_extract_format_metadata_unclosed_frontmatter() {
+        let content = r#"---
+title: Test
+format:
+  html:
+    toc: true
+"#;
+        // Unclosed frontmatter should return Null (not an error)
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(metadata, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn test_extract_format_metadata_all_toc_options() {
+        let content = r#"---
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Contents"
+    toc-location: left
+---
+"#;
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
+        assert_eq!(metadata.get("toc-depth"), Some(&serde_json::json!(3)));
+        assert_eq!(
+            metadata.get("toc-title"),
+            Some(&serde_json::json!("Contents"))
+        );
+        assert_eq!(
+            metadata.get("toc-location"),
+            Some(&serde_json::json!("left"))
+        );
+    }
+
+    #[test]
+    fn test_extract_format_metadata_leading_whitespace() {
+        // Content with leading whitespace before frontmatter
+        let content = "   \n\n---\nformat:\n  html:\n    toc: true\n---\n";
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        assert_eq!(metadata.get("toc"), Some(&serde_json::json!(true)));
+    }
+
+    #[test]
+    fn test_extract_format_metadata_empty_format_section() {
+        let content = r#"---
+title: Test
+format:
+  html:
+---
+
+# Hello
+"#;
+        let metadata = extract_format_metadata(content, "html").unwrap();
+        // An empty format.html section should return Null (the YAML null value)
+        assert_eq!(metadata, serde_json::Value::Null);
     }
 }

@@ -32,7 +32,7 @@ use tracing::{debug, info, warn};
 
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, FormatIdentifier, HtmlRenderConfig, ProjectContext,
-    QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
+    QuartoError, RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
 };
 use quarto_sass::{ThemeConfig, ThemeContext, ThemeSpec};
 use quarto_system_runtime::{NativeRuntime, SystemRuntime};
@@ -439,44 +439,6 @@ fn extract_theme_config(content: &str) -> Result<Option<ThemeConfig>> {
     // Convert to ThemeConfig
     let config = theme_value_to_config(theme_value)?;
     Ok(Some(config))
-}
-
-/// Extract format-specific metadata from QMD frontmatter.
-///
-/// Parses the YAML frontmatter and extracts the `format.html` section.
-/// Returns `Ok(Null)` if no format metadata is specified.
-///
-/// TODO(ConfigValue): DELETE THIS FUNCTION. Replace with merged ConfigValue
-/// from RenderContext.
-fn extract_format_metadata(content: &str, format_name: &str) -> Result<serde_json::Value> {
-    // Find YAML frontmatter
-    let trimmed = content.trim_start();
-    if !trimmed.starts_with("---") {
-        return Ok(serde_json::Value::Null);
-    }
-
-    // Find closing ---
-    let after_first = &trimmed[3..];
-    let end_pos = match after_first.find("\n---") {
-        Some(pos) => pos,
-        None => return Ok(serde_json::Value::Null), // Unclosed frontmatter
-    };
-
-    // Parse YAML
-    let yaml_str = &after_first[..end_pos].trim();
-    let yaml_value: serde_yaml::Value =
-        serde_yaml::from_str(yaml_str).context("Failed to parse YAML frontmatter")?;
-
-    // Navigate to format.<format_name>
-    let format_value = yaml_value.get("format").and_then(|f| f.get(format_name));
-
-    match format_value {
-        Some(v) => {
-            // Convert serde_yaml::Value to serde_json::Value via Serialize trait
-            serde_json::to_value(v).context("Failed to convert YAML to JSON")
-        }
-        None => Ok(serde_json::Value::Null),
-    }
 }
 
 /// Convert a serde_yaml::Value theme specification to ThemeConfig.

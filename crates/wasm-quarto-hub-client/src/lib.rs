@@ -19,7 +19,7 @@ use std::sync::{Arc, OnceLock};
 
 use quarto_core::{
     BinaryDependencies, DocumentInfo, Format, HtmlRenderConfig, ProjectConfig, ProjectContext,
-    QuartoError, RenderContext, RenderOptions, render_qmd_to_html,
+    QuartoError, RenderContext, RenderOptions, extract_format_metadata, render_qmd_to_html,
 };
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
@@ -459,8 +459,25 @@ pub async fn render_qmd(path: &str) -> String {
     // Create minimal project context for WASM
     let project = create_wasm_project_context(path);
     let doc = DocumentInfo::from_path(path);
-    let format = Format::html();
     let binaries = BinaryDependencies::new();
+
+    // Extract format metadata from frontmatter (e.g., toc, toc-depth)
+    // This matches the native CLI behavior for feature parity.
+    let content_str = match std::str::from_utf8(&content) {
+        Ok(s) => s,
+        Err(_) => {
+            return serde_json::to_string(&RenderResponse {
+                success: false,
+                error: Some("Content is not valid UTF-8".to_string()),
+                html: None,
+                diagnostics: None,
+                warnings: None,
+            })
+            .unwrap();
+        }
+    };
+    let format_metadata = extract_format_metadata(content_str, "html").unwrap_or_default();
+    let format = Format::html().with_metadata(format_metadata);
 
     let options = RenderOptions {
         verbose: false,
@@ -542,8 +559,12 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
     // Create minimal project context for WASM
     let project = create_wasm_project_context(path);
     let doc = DocumentInfo::from_path(path);
-    let format = Format::html();
     let binaries = BinaryDependencies::new();
+
+    // Extract format metadata from frontmatter (e.g., toc, toc-depth)
+    // This matches the native CLI behavior for feature parity.
+    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
+    let format = Format::html().with_metadata(format_metadata);
 
     let options = RenderOptions {
         verbose: false,
@@ -674,8 +695,12 @@ pub async fn render_qmd_content_with_options(
     };
 
     let doc = DocumentInfo::from_path(path);
-    let format = Format::html();
     let binaries = BinaryDependencies::new();
+
+    // Extract format metadata from frontmatter (e.g., toc, toc-depth)
+    // This matches the native CLI behavior for feature parity.
+    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
+    let format = Format::html().with_metadata(format_metadata);
 
     let options = RenderOptions {
         verbose: false,
