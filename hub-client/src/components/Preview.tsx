@@ -7,7 +7,7 @@ import { useScrollSync } from '../hooks/useScrollSync';
 import { useSelectionSync } from '../hooks/useSelectionSync';
 import { stripAnsi } from '../utils/stripAnsi';
 import { PreviewErrorOverlay } from './PreviewErrorOverlay';
-import DoubleBufferedIframe, { type DoubleBufferedIframeHandle } from './DoubleBufferedIframe';
+import MorphIframe, { type MorphIframeHandle } from './MorphIframe';
 
 // Preview pane state machine:
 // START: Initial blank page
@@ -236,8 +236,8 @@ export default function Preview({
     previewStateRef.current = previewState;
   }, [previewState]);
 
-  // Ref to DoubleBufferedIframe to access its imperative methods
-  const doubleBufferedIframeRef = useRef<DoubleBufferedIframeHandle>(null);
+  // Ref to MorphIframe to access its imperative methods
+  const doubleBufferedIframeRef = useRef<MorphIframeHandle>(null);
 
   // Rendered HTML to display in iframe
   const [renderedHtml, setRenderedHtml] = useState<string>('');
@@ -377,7 +377,7 @@ export default function Preview({
         </div>
       )}
       <div className="pane preview-pane">
-        <DoubleBufferedIframe
+        <MorphIframe
           ref={doubleBufferedIframeRef}
           html={renderedHtml}
           currentFilePath={currentFile?.path ?? ''}

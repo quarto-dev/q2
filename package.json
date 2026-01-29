@@ -9,5 +9,9 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "dependencies": {
+    "@types/morphdom": "^2.3.0",
+    "morphdom": "^2.7.8"
   }
 }
