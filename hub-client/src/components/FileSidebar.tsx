@@ -8,9 +8,14 @@
  * - Context menu for file operations
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { FileEntry } from '../types/project';
 import { isBinaryExtension } from '../types/project';
+import {
+  buildFileTree,
+  computeExpandedFolders,
+  type FileTreeNode,
+} from '../utils/fileTree';
 import './FileSidebar.css';
 
 export interface FileSidebarProps {
@@ -69,31 +74,6 @@ function getFileIcon(path: string): string {
   return '📄';
 }
 
-/** Group files by directory for tree display */
-function groupFilesByDirectory(files: FileEntry[]): Map<string, FileEntry[]> {
-  const groups = new Map<string, FileEntry[]>();
-
-  for (const file of files) {
-    const lastSlash = file.path.lastIndexOf('/');
-    const dir = lastSlash >= 0 ? file.path.slice(0, lastSlash) : '';
-
-    if (!groups.has(dir)) {
-      groups.set(dir, []);
-    }
-    groups.get(dir)!.push(file);
-  }
-
-  // Sort files within each group
-  for (const [, groupFiles] of groups) {
-    groupFiles.sort((a, b) => {
-      const aName = a.path.split('/').pop() || '';
-      const bName = b.path.split('/').pop() || '';
-      return aName.localeCompare(bName);
-    });
-  }
-
-  return groups;
-}
 
 export default function FileSidebar({
   files,
@@ -115,11 +95,36 @@ export default function FileSidebar({
   });
   const [renamingFile, setRenamingFile] = useState<FileEntry | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
+    new Set()
+  );
   const renameInputRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
 
-  // Group files for display
-  const fileGroups = groupFilesByDirectory(files);
+  // Build file tree from flat file list
+  const fileTree = useMemo(() => buildFileTree(files), [files]);
+
+  // Toggle a folder's expanded state
+  const toggleFolder = useCallback((path: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  // Auto-expand folders when selected file changes
+  useEffect(() => {
+    if (currentFile) {
+      setExpandedFolders((prev) =>
+        computeExpandedFolders(prev, currentFile.path)
+      );
+    }
+  }, [currentFile?.path]);
 
   // Drag and drop handlers
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -260,24 +265,32 @@ export default function FileSidebar({
     e.dataTransfer.effectAllowed = 'copy';
   }, []);
 
-  // Render a file item
-  const renderFileItem = (file: FileEntry) => {
+  // Render a file item with depth-based indentation
+  const renderFileItem = (file: FileEntry, depth: number) => {
     const fileName = file.path.split('/').pop() || file.path;
     const isActive = currentFile?.path === file.path;
     const isBinary = isBinaryExtension(file.path);
     const isRenaming = renamingFile?.path === file.path;
     // Only make images and qmd files draggable (for editor insertion)
-    const isDraggable = !isRenaming && (isImageFile(file.path) || isQmdFile(file.path));
+    const isDraggable =
+      !isRenaming && (isImageFile(file.path) || isQmdFile(file.path));
 
     return (
       <div
         key={file.path}
         className={`file-item ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
+        style={{ paddingLeft: `${12 + depth * 16}px` }}
         onClick={(e) => !isRenaming && handleFileClick(e, file)}
         onContextMenu={(e) => handleContextMenu(e, file)}
         draggable={isDraggable}
-        onDragStart={isDraggable ? (e) => handleFileDragStart(e, file) : undefined}
-        title={onOpenInNewTab ? `${file.path}\nCtrl/Cmd+click to open in new tab` : file.path}
+        onDragStart={
+          isDraggable ? (e) => handleFileDragStart(e, file) : undefined
+        }
+        title={
+          onOpenInNewTab
+            ? `${file.path}\nCtrl/Cmd+click to open in new tab`
+            : file.path
+        }
       >
         <span className="file-icon">{getFileIcon(file.path)}</span>
         {isRenaming ? (
@@ -297,22 +310,36 @@ export default function FileSidebar({
     );
   };
 
-  // Render directory group
-  const renderDirectory = (dir: string, dirFiles: FileEntry[]) => {
-    if (dir === '') {
-      // Root files
-      return dirFiles.map(renderFileItem);
+  // Recursively render a tree node (folder or file)
+  const renderTreeNode = (node: FileTreeNode, depth: number = 0): React.ReactNode => {
+    if (node.type === 'file' && node.file) {
+      return renderFileItem(node.file, depth);
+    }
+
+    // For folders
+    const isExpanded = expandedFolders.has(node.path);
+
+    // Special case: root node renders children directly without a folder header
+    if (node.path === '') {
+      return node.children.map((child) => renderTreeNode(child, depth));
     }
 
     return (
-      <div key={dir} className="directory-group">
-        <div className="directory-header">
-          <span className="directory-icon">📁</span>
-          <span className="directory-name">{dir}/</span>
+      <div key={node.path} className="tree-folder">
+        <div
+          className="folder-header"
+          style={{ paddingLeft: `${12 + depth * 16}px` }}
+          onClick={() => toggleFolder(node.path)}
+        >
+          <span className="folder-chevron">{isExpanded ? '▼' : '▶'}</span>
+          <span className="folder-icon">📁</span>
+          <span className="folder-name">{node.name}</span>
         </div>
-        <div className="directory-files">
-          {dirFiles.map(renderFileItem)}
-        </div>
+        {isExpanded && (
+          <div className="folder-children">
+            {node.children.map((child) => renderTreeNode(child, depth + 1))}
+          </div>
+        )}
       </div>
     );
   };
@@ -339,9 +366,7 @@ export default function FileSidebar({
             <p className="hint">Drop files here or click + to create</p>
           </div>
         ) : (
-          Array.from(fileGroups.entries())
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([dir, dirFiles]) => renderDirectory(dir, dirFiles))
+          renderTreeNode(fileTree)
         )}
       </div>
 

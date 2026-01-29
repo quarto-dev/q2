@@ -57,7 +57,7 @@
   color: #555;
 }
 
-/* File items */
+/* File items - paddingLeft is set inline based on depth */
 .file-item {
   display: flex;
   align-items: center;
@@ -74,7 +74,8 @@
 .file-item.active {
   background: #0f3460;
   border-left: 2px solid #646cff;
-  padding-left: 10px;
+  /* Reduce paddingLeft by 2px to account for border */
+  margin-left: -2px;
 }
 
 .file-item.binary {
@@ -98,30 +99,48 @@
   color: #fff;
 }
 
-/* Directory groups */
-.directory-group {
-  margin-top: 8px;
+/* Tree folder structure */
+.tree-folder {
+  /* Container for a folder and its children */
 }
 
-.directory-header {
+.folder-header {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
   color: #888;
   font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
-.directory-icon {
+.folder-header:hover {
+  background: #1f3460;
+}
+
+.folder-chevron {
+  font-size: 8px;
+  width: 10px;
+  text-align: center;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.folder-icon {
   font-size: 12px;
+  flex-shrink: 0;
 }
 
-.directory-name {
+.folder-name {
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.directory-files {
-  padding-left: 8px;
+.folder-children {
+  /* Children are indented via inline paddingLeft on items */
 }
 
 /* Rename input */
