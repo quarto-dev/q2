@@ -24,7 +24,8 @@ use quarto_core::{
 use quarto_error_reporting::{DiagnosticKind, DiagnosticMessage};
 use quarto_pandoc_types::ConfigValue;
 use quarto_sass::{
-    BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX, ThemeConfig, ThemeContext, compile_theme_css,
+    BOOTSTRAP_RESOURCES, RESOURCE_PATH_PREFIX, THEMES_RESOURCES, ThemeConfig, ThemeContext,
+    compile_theme_css, themes::ThemeSpec,
 };
 use quarto_source_map::SourceContext;
 use quarto_system_runtime::{SystemRuntime, WasmRuntime};
@@ -1630,6 +1631,180 @@ pub async fn compile_document_css(content: &str, document_path: &str) -> String 
     match compile_theme_css(&theme_config, &context).await {
         Ok(css) => SassCompileResponse::ok(css),
         Err(e) => SassCompileResponse::error(&format!("SASS compilation failed: {}", e)),
+    }
+}
+
+/// Compute a content-based hash for a document's theme configuration.
+///
+/// This function computes a merkle-tree-inspired hash of all theme content that
+/// would be used when compiling the document's CSS. The hash changes when any
+/// source file changes, making it suitable as a cache key.
+///
+/// # Algorithm
+///
+/// 1. Parse the theme configuration from YAML frontmatter
+/// 2. For each theme component:
+///    - Built-in themes: read content from embedded resources
+///    - Custom SCSS files: read content from VFS
+/// 3. Compute SHA-256 hash of each file's content
+/// 4. Sort hashes lexicographically (for determinism)
+/// 5. Compute SHA-256 of the concatenated sorted hashes
+///
+/// # Arguments
+/// * `content` - The QMD document content (must include YAML frontmatter)
+/// * `document_path` - Path to the document in the VFS (e.g., "docs/index.qmd")
+///
+/// # Returns
+/// JSON: `{ "success": true, "hash": "abc123..." }` or `{ "success": false, "error": "..." }`
+///
+/// # Example
+/// ```javascript
+/// const qmd = `---
+/// format:
+///   html:
+///     theme: [cosmo, custom.scss]
+/// ---
+/// # Hello
+/// `;
+/// const result = JSON.parse(await compute_theme_content_hash(qmd, "index.qmd"));
+/// if (result.success) {
+///     const cacheKey = `theme:${result.hash}:minified=true`;
+///     // Use cacheKey for IndexedDB lookup
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn compute_theme_content_hash(content: &str, document_path: &str) -> String {
+    use sha2::{Digest, Sha256};
+
+    let runtime = get_runtime();
+
+    // Extract YAML frontmatter and parse it
+    let config = match extract_frontmatter_config(content) {
+        Ok(config) => config,
+        Err(e) => return ThemeHashResponse::error(&e),
+    };
+
+    // Extract theme configuration
+    let theme_config = match ThemeConfig::from_config_value(&config) {
+        Ok(config) => config,
+        Err(e) => return ThemeHashResponse::error(&format!("Invalid theme config: {}", e)),
+    };
+
+    // Normalize document path using VFS conventions
+    let doc_path = Path::new(document_path);
+    let normalized_path = runtime
+        .canonicalize(doc_path)
+        .unwrap_or_else(|_| doc_path.to_path_buf());
+    let doc_dir = normalized_path
+        .parent()
+        .map(|p| {
+            if p.as_os_str().is_empty() {
+                std::path::PathBuf::from("/")
+            } else {
+                p.to_path_buf()
+            }
+        })
+        .unwrap_or_else(|| std::path::PathBuf::from("/"));
+
+    // Collect content hashes for all theme components
+    let mut content_hashes: Vec<String> = Vec::new();
+
+    // If no themes specified, hash an empty marker for "default bootstrap"
+    if theme_config.themes.is_empty() {
+        let mut hasher = Sha256::new();
+        hasher.update(b"__default_bootstrap__");
+        let hash = format!("{:x}", hasher.finalize());
+        content_hashes.push(hash);
+    }
+
+    for theme_spec in &theme_config.themes {
+        match theme_spec {
+            ThemeSpec::BuiltIn(builtin) => {
+                // Read built-in theme content from embedded resources
+                let filename = builtin.filename();
+                match THEMES_RESOURCES.read_str(Path::new(&filename)) {
+                    Some(theme_content) => {
+                        let mut hasher = Sha256::new();
+                        hasher.update(theme_content.as_bytes());
+                        let hash = format!("{:x}", hasher.finalize());
+                        content_hashes.push(hash);
+                    }
+                    None => {
+                        return ThemeHashResponse::error(&format!(
+                            "Built-in theme not found: {}",
+                            builtin.name()
+                        ));
+                    }
+                }
+            }
+            ThemeSpec::Custom(path) => {
+                // Resolve custom theme path relative to document directory
+                let resolved_path = if path.is_absolute() {
+                    path.clone()
+                } else {
+                    doc_dir.join(path)
+                };
+
+                // Read custom theme content from VFS
+                match runtime.file_read_string(&resolved_path) {
+                    Ok(theme_content) => {
+                        let mut hasher = Sha256::new();
+                        hasher.update(theme_content.as_bytes());
+                        let hash = format!("{:x}", hasher.finalize());
+                        content_hashes.push(hash);
+                    }
+                    Err(e) => {
+                        return ThemeHashResponse::error(&format!(
+                            "Failed to read custom theme '{}': {}",
+                            resolved_path.display(),
+                            e
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort hashes lexicographically for determinism
+    content_hashes.sort();
+
+    // Compute final hash of concatenated sorted hashes
+    let mut final_hasher = Sha256::new();
+    for hash in &content_hashes {
+        final_hasher.update(hash.as_bytes());
+    }
+    let final_hash = format!("{:x}", final_hasher.finalize());
+
+    ThemeHashResponse::ok(final_hash)
+}
+
+/// Response type for theme content hash computation.
+#[derive(Serialize)]
+struct ThemeHashResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hash: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+impl ThemeHashResponse {
+    fn ok(hash: String) -> String {
+        serde_json::to_string(&ThemeHashResponse {
+            success: true,
+            hash: Some(hash),
+            error: None,
+        })
+        .unwrap_or_else(|_| r#"{"success":false,"error":"JSON serialization failed"}"#.to_string())
+    }
+
+    fn error(msg: &str) -> String {
+        serde_json::to_string(&ThemeHashResponse {
+            success: false,
+            hash: None,
+            error: Some(msg.to_string()),
+        })
+        .unwrap_or_else(|_| r#"{"success":false,"error":"JSON serialization failed"}"#.to_string())
     }
 }
 

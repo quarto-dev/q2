@@ -49,6 +49,8 @@ interface WasmModuleExtended {
   compile_document_css: (content: string, documentPath: string) => Promise<string>;
   compile_theme_css_by_name: (themeName: string, minified: boolean) => Promise<string>;
   compile_default_bootstrap_css: (minified: boolean) => Promise<string>;
+  // Content-based hash for cache keys
+  compute_theme_content_hash: (content: string, documentPath: string) => string;
 }
 
 // WASM module state
@@ -653,6 +655,15 @@ interface ThemeCssResponse {
 }
 
 /**
+ * Response from theme content hash computation.
+ */
+interface ThemeHashResponse {
+  success: boolean;
+  hash?: string;
+  error?: string;
+}
+
+/**
  * Extract theme configuration string from QMD frontmatter for cache key computation.
  *
  * Returns a normalized string representation of the theme config that can be
@@ -744,21 +755,30 @@ export async function compileDocumentCss(
   // Use relative path as default so VFS normalizes it correctly (e.g., "input.qmd" -> "/project/input.qmd")
   const documentPath = options.documentPath ?? 'input.qmd';
 
-  // Extract theme config for cache key
-  const themeConfig = extractThemeConfigForCacheKey(content);
-  const cacheInput = `theme:${themeConfig}:minified=${minified}`;
+  // Compute content-based hash for cache key
+  // This hash changes when any source file (built-in or custom SCSS) changes
+  const hashResult: ThemeHashResponse = JSON.parse(
+    wasm.compute_theme_content_hash(content, documentPath)
+  );
+
+  if (!hashResult.success) {
+    throw new Error(hashResult.error || 'Failed to compute theme content hash');
+  }
+
+  const contentHash = hashResult.hash!;
+  // Use "theme-v2" prefix to avoid conflicts with old filename-based cache entries
+  const cacheKey = `theme-v2:${contentHash}:minified=${minified}`;
 
   // Check cache first (unless explicitly skipped)
   const cache = getSassCache();
-  const cacheKey = await cache.computeKey(cacheInput, minified);
 
   if (!skipCache) {
     const cached = await cache.get(cacheKey);
     if (cached !== null) {
-      console.log('[compileDocumentCss] Cache hit for theme:', themeConfig);
+      console.log('[compileDocumentCss] Cache hit for hash:', contentHash.slice(0, 8));
       return cached;
     }
-    console.log('[compileDocumentCss] Cache miss for theme:', themeConfig);
+    console.log('[compileDocumentCss] Cache miss for hash:', contentHash.slice(0, 8));
   }
 
   // Compile via WASM (extracts theme from frontmatter and compiles)
@@ -773,10 +793,9 @@ export async function compileDocumentCss(
 
   const css = result.css || '';
 
-  // Cache the result
+  // Cache the result using the content hash as source identifier
   if (!skipCache) {
-    const sourceHash = await computeHash(cacheInput);
-    await cache.set(cacheKey, css, sourceHash, minified);
+    await cache.set(cacheKey, css, contentHash, minified);
   }
 
   return css;

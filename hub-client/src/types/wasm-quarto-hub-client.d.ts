@@ -34,6 +34,15 @@ declare module 'wasm-quarto-hub-client' {
   export function lsp_get_folding_ranges(path: string): string;
   export function lsp_get_diagnostics(path: string): string;
 
+  // SASS compilation functions
+  export function sass_available(): boolean;
+  export function compile_scss(scss: string, minified: boolean, load_paths_json: string): Promise<string>;
+  export function compile_scss_with_bootstrap(scss: string, minified: boolean): Promise<string>;
+  export function compile_document_css(content: string, document_path: string): Promise<string>;
+  export function compile_theme_css_by_name(theme_name: string, minified: boolean): Promise<string>;
+  export function compile_default_bootstrap_css(minified: boolean): Promise<string>;
+  export function compute_theme_content_hash(content: string, document_path: string): string;
+
   // Response types for project creation (for documentation/reference)
   export interface ProjectChoice {
     id: string;
