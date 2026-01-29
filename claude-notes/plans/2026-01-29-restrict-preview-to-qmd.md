@@ -46,7 +46,7 @@ Add `isQmdFile(path: string): boolean` to `src/types/project.ts` for consistency
 - [x] Update `useIntelligence.ts` to skip analysis for non-qmd files
 - [x] Update `intelligenceService.ts` to guard against non-qmd files (defense in depth)
 - [x] Test behavior with various file types (.qmd, .css, .json, .yml, .md, .tsx)
-- [ ] Update hub-client changelog
+- [x] Update hub-client changelog
 
 ## Implementation Details
 
