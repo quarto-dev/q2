@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-28
 
+- [`bad2aab6`](https://github.com/quarto-dev/kyoto/commits/bad2aab6): Add TOC rendering support to hub-client
 - [`8867e5dc`](https://github.com/quarto-dev/kyoto/commits/8867e5dc): Fix theme changes not updating preview and reduce flash of unstyled content
 
 ### 2026-01-27
