@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-29
+
+- [`9715102c`](https://github.com/quarto-dev/kyoto/commits/9715102c): Fix custom SCSS theme file resolution by passing document path through rendering pipeline
+
 ### 2026-01-28
 
 - [`bad2aab6`](https://github.com/quarto-dev/kyoto/commits/bad2aab6): Add TOC rendering support to hub-client
