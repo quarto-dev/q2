@@ -2857,6 +2857,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
