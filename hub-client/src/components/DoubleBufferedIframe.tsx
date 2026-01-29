@@ -196,19 +196,24 @@ function DoubleBufferedIframe({
       internalPostProcess(inactive.current);
     }
 
-    // Swap: make inactive become active
-    setActiveIframe((prev) => (prev === 'A' ? 'B' : 'A'));
-    setSwapPending(false);
+    // Use requestAnimationFrame to ensure the browser has processed the CSS
+    // before swapping iframes. This prevents flash of unstyled content (FOUC)
+    // that can occur when CSS is applied via data URI but hasn't been parsed yet.
+    requestAnimationFrame(() => {
+      // Swap: make inactive become active
+      setActiveIframe((prev) => (prev === 'A' ? 'B' : 'A'));
+      setSwapPending(false);
 
-    // Restore scroll position after swap (with slight delay for React to re-render)
-    if (scrollPos) {
-      setTimeout(() => {
-        const nowActive = inactive.current;
-        if (nowActive?.contentWindow) {
-          nowActive.contentWindow.scrollTo(scrollPos!.x, scrollPos!.y);
-        }
-      }, 0);
-    }
+      // Restore scroll position after swap (with slight delay for React to re-render)
+      if (scrollPos) {
+        setTimeout(() => {
+          const nowActive = inactive.current;
+          if (nowActive?.contentWindow) {
+            nowActive.contentWindow.scrollTo(scrollPos!.x, scrollPos!.y);
+          }
+        }, 0);
+      }
+    });
   }, [swapPending, getIframeRefs, internalPostProcess]);
 
   // Handler for when active iframe loads (initial load only)

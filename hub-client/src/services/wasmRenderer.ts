@@ -391,15 +391,23 @@ export async function renderToHtml(
     console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));
 
     if (result.success) {
-      // Compile theme CSS and update VFS (non-blocking, errors are logged but don't fail render)
+      // Compile theme CSS and update VFS
+      // The cssVersion changes when CSS content changes, ensuring HTML differs
+      // even when document structure is the same (e.g., only theme name changed)
+      let cssVersion = 'default';
       try {
-        await compileAndInjectThemeCss(qmdContent);
+        cssVersion = await compileAndInjectThemeCss(qmdContent);
       } catch (cssErr) {
         console.warn('[renderToHtml] Theme CSS compilation failed, using default CSS:', cssErr);
       }
 
+      // Append CSS version as HTML comment to ensure HTML changes when CSS changes
+      // This forces DoubleBufferedIframe to swap and re-apply CSS even when
+      // only the theme changed (document structure unchanged)
+      const htmlWithCssVersion = (result.html || '') + `<!-- css-version: ${cssVersion} -->`;
+
       return {
-        html: result.html || '',
+        html: htmlWithCssVersion,
         success: true,
         warnings: result.warnings,
       };
@@ -431,16 +439,20 @@ export async function renderToHtml(
  * This replaces the default static CSS at /.quarto/project-artifacts/styles.css
  * with compiled theme CSS based on the document's frontmatter.
  *
+ * @returns A version string that changes when CSS content changes (for cache busting)
  * @internal
  */
-async function compileAndInjectThemeCss(qmdContent: string): Promise<void> {
+async function compileAndInjectThemeCss(qmdContent: string): Promise<string> {
   const wasm = getWasm();
 
   // Check if SASS is available
   if (!wasm.sass_available()) {
     console.log('[compileAndInjectThemeCss] SASS not available, keeping default CSS');
-    return;
+    return 'no-sass';
   }
+
+  // Extract theme config for versioning - this determines the CSS output
+  const themeConfig = extractThemeConfigForCacheKey(qmdContent);
 
   // Compile CSS with caching
   const css = await compileDocumentCss(qmdContent, { minified: true });
@@ -448,7 +460,10 @@ async function compileAndInjectThemeCss(qmdContent: string): Promise<void> {
   // Update VFS with compiled CSS
   const cssPath = '/.quarto/project-artifacts/styles.css';
   vfsAddFile(cssPath, css);
-  console.log('[compileAndInjectThemeCss] Updated VFS with compiled theme CSS');
+  console.log('[compileAndInjectThemeCss] Updated VFS with compiled theme CSS, theme:', themeConfig);
+
+  // Return the theme config as the version - this changes exactly when the theme changes
+  return themeConfig;
 }
 
 // ============================================================================
@@ -630,7 +645,7 @@ interface ThemeCssResponse {
  * @param content - QMD document content with YAML frontmatter
  * @returns Normalized theme config string for cache key
  */
-function extractThemeConfigForCacheKey(content: string): string {
+export function extractThemeConfigForCacheKey(content: string): string {
   // Find YAML frontmatter
   const trimmed = content.trimStart();
   if (!trimmed.startsWith('---')) {
