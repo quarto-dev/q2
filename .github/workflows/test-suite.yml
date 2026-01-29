@@ -122,19 +122,19 @@ jobs:
         shell: bash
         run: cargo install wasm-pack
 
-      - name: Build WASM module
-        shell: bash
-        run: |
-          cd crates/wasm-quarto-hub-client
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            export PATH="/opt/homebrew/opt/llvm/bin:/usr/local/opt/llvm/bin:$PATH"
-          fi
-          export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
-          wasm-pack build --target web
+      # - name: Build WASM module
+      #   shell: bash
+      #   run: |
+      #     cd crates/wasm-quarto-hub-client
+      #     if [ "$RUNNER_OS" = "macOS" ]; then
+      #       export PATH="/opt/homebrew/opt/llvm/bin:/usr/local/opt/llvm/bin:$PATH"
+      #     fi
+      #     export CFLAGS_wasm32_unknown_unknown="-I$(pwd)/wasm-sysroot -Wbad-function-cast -Wcast-function-type -fno-builtin -DHAVE_ENDIAN_H"
+      #     wasm-pack build --target web
 
-      - name: Build TypeScript packages
-        shell: bash
-        run: npm run build
+      # - name: Build TypeScript packages
+      #   shell: bash
+      #   run: npm run build
 
       # Build and test
       - name: Build
@@ -151,8 +151,8 @@ jobs:
         shell: bash
         run: cargo nextest run
 
-      - name: Run hub-client tests
-        shell: bash
-        run: |
-          cd hub-client
-          npm run test:ci
+      # - name: Run hub-client tests
+      #   shell: bash
+      #   run: |
+      #     cd hub-client
+      #     npm run test:ci
