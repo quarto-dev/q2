@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-01-29
 
+- [`1dcd6bae`](https://github.com/quarto-dev/kyoto/commits/1dcd6bae): Add WASM end-to-end tests for compute_theme_content_hash
 - [`d4160a0c`](https://github.com/quarto-dev/kyoto/commits/d4160a0c): Implement content-based merkle hash for SASS cache keys to fix stale CSS when editing custom themes
 - [`9715102c`](https://github.com/quarto-dev/kyoto/commits/9715102c): Fix custom SCSS theme file resolution by passing document path through rendering pipeline
 
