@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-01-28
+
+- [`8867e5dc`](https://github.com/quarto-dev/kyoto/commits/8867e5dc): Fix theme changes not updating preview and reduce flash of unstyled content
+
 ### 2026-01-27
 
 - [`7053e539`](https://github.com/quarto-dev/kyoto/commits/7053e539): Add bootstrap-test-fixtures command and generate initial E2E fixtures
