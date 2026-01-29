@@ -53,7 +53,11 @@ pub mod transforms;
 pub use artifact::{Artifact, ArtifactStore};
 pub use error::{ParseError, QuartoError, Result};
 pub use format::{Format, FormatIdentifier};
-pub use pipeline::{DEFAULT_CSS_ARTIFACT_PATH, HtmlRenderConfig, RenderOutput, render_qmd_to_html};
+pub use pipeline::{
+    DEFAULT_CSS_ARTIFACT_PATH, HtmlRenderConfig, RenderOutput, build_html_pipeline,
+    build_html_pipeline_stages, build_html_pipeline_with_stages, build_wasm_html_pipeline,
+    render_qmd_to_html,
+};
 pub use project::{DocumentInfo, ProjectConfig, ProjectContext, ProjectType};
 pub use render::{BinaryDependencies, RenderContext, RenderOptions, RenderResult};
 pub use transform::{AstTransform, TransformPipeline};

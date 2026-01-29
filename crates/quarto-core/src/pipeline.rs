@@ -110,6 +110,27 @@ pub struct RenderOutput {
     pub source_context: SourceContext,
 }
 
+/// Build the standard HTML pipeline stages.
+///
+/// Returns the stages as a vector, allowing callers to customize before
+/// creating the pipeline. For most uses, prefer [`build_html_pipeline`].
+///
+/// This creates stages for:
+/// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
+/// 2. `EngineExecutionStage` - Execute code cells (jupyter, knitr, or markdown passthrough)
+/// 3. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, etc.)
+/// 4. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 5. `ApplyTemplateStage` - Apply HTML template
+pub fn build_html_pipeline_stages() -> Vec<Box<dyn PipelineStage>> {
+    vec![
+        Box::new(ParseDocumentStage::new()),
+        Box::new(EngineExecutionStage::new()),
+        Box::new(AstTransformsStage::new()),
+        Box::new(RenderHtmlBodyStage::new()),
+        Box::new(ApplyTemplateStage::new()),
+    ]
+}
+
 /// Build the standard HTML pipeline.
 ///
 /// This creates a pipeline with the following stages:
@@ -128,15 +149,74 @@ pub struct RenderOutput {
 /// Panics if the pipeline stages have incompatible types (should never happen
 /// with the standard stages).
 pub fn build_html_pipeline() -> Pipeline {
+    Pipeline::new(build_html_pipeline_stages()).expect("HTML pipeline stages should be compatible")
+}
+
+/// Build a WASM-compatible HTML pipeline (no engine execution).
+///
+/// This creates a pipeline suitable for browser environments where code
+/// execution is not available. It includes all AST transforms for feature
+/// parity with native rendering (callouts, TOC, sectionize, etc.), but
+/// skips the engine execution stage.
+///
+/// Stages:
+/// 1. `ParseDocumentStage` - Parse QMD to Pandoc AST
+/// 2. `AstTransformsStage` - Run Quarto transforms (callouts, metadata, TOC, etc.)
+/// 3. `RenderHtmlBodyStage` - Render AST to HTML body
+/// 4. `ApplyTemplateStage` - Apply HTML template
+///
+/// # Returns
+///
+/// A validated `Pipeline` ready for execution.
+///
+/// # Panics
+///
+/// Panics if the pipeline stages have incompatible types (should never happen
+/// with the standard stages).
+pub fn build_wasm_html_pipeline() -> Pipeline {
     let stages: Vec<Box<dyn PipelineStage>> = vec![
         Box::new(ParseDocumentStage::new()),
-        Box::new(EngineExecutionStage::new()),
+        // No EngineExecutionStage - code cells pass through as-is
         Box::new(AstTransformsStage::new()),
         Box::new(RenderHtmlBodyStage::new()),
         Box::new(ApplyTemplateStage::new()),
     ];
 
-    Pipeline::new(stages).expect("HTML pipeline stages should be compatible")
+    Pipeline::new(stages).expect("WASM HTML pipeline stages should be compatible")
+}
+
+/// Build an HTML pipeline from custom stages.
+///
+/// This allows full control over which stages are included in the pipeline.
+/// Use this when you need a specialized pipeline configuration.
+///
+/// # Arguments
+///
+/// * `stages` - The stages to include in the pipeline
+///
+/// # Returns
+///
+/// A `Result` containing the validated `Pipeline`, or an error if the
+/// stages have incompatible input/output types.
+///
+/// # Example
+///
+/// ```ignore
+/// use quarto_core::pipeline::build_html_pipeline_with_stages;
+/// use quarto_core::stage::{ParseDocumentStage, AstTransformsStage, RenderHtmlBodyStage};
+///
+/// // Build a minimal pipeline without template application
+/// let stages: Vec<Box<dyn PipelineStage>> = vec![
+///     Box::new(ParseDocumentStage::new()),
+///     Box::new(AstTransformsStage::new()),
+///     Box::new(RenderHtmlBodyStage::new()),
+/// ];
+/// let pipeline = build_html_pipeline_with_stages(stages)?;
+/// ```
+pub fn build_html_pipeline_with_stages(
+    stages: Vec<Box<dyn PipelineStage>>,
+) -> std::result::Result<Pipeline, crate::stage::PipelineValidationError> {
+    Pipeline::new(stages)
 }
 
 /// Render QMD content to HTML.
@@ -432,5 +512,63 @@ mod tests {
         } else {
             panic!("Expected QuartoError::Parse, got {:?}", result);
         }
+    }
+
+    // === Pipeline builder tests ===
+
+    #[test]
+    fn test_build_html_pipeline_stages() {
+        let stages = build_html_pipeline_stages();
+        assert_eq!(stages.len(), 5);
+        assert_eq!(stages[0].name(), "parse-document");
+        assert_eq!(stages[1].name(), "engine-execution");
+        assert_eq!(stages[2].name(), "ast-transforms");
+        assert_eq!(stages[3].name(), "render-html-body");
+        assert_eq!(stages[4].name(), "apply-template");
+    }
+
+    #[test]
+    fn test_build_html_pipeline() {
+        let pipeline = build_html_pipeline();
+        assert_eq!(pipeline.len(), 5);
+    }
+
+    #[test]
+    fn test_build_wasm_html_pipeline() {
+        let pipeline = build_wasm_html_pipeline();
+        // WASM pipeline has 4 stages (no engine execution)
+        assert_eq!(pipeline.len(), 4);
+    }
+
+    #[test]
+    fn test_build_html_pipeline_with_stages() {
+        use crate::stage::PipelineDataKind;
+
+        let stages: Vec<Box<dyn PipelineStage>> = vec![
+            Box::new(ParseDocumentStage::new()),
+            Box::new(AstTransformsStage::new()),
+            Box::new(RenderHtmlBodyStage::new()),
+        ];
+
+        let result = build_html_pipeline_with_stages(stages);
+        assert!(result.is_ok());
+
+        let pipeline = result.unwrap();
+        assert_eq!(pipeline.len(), 3);
+        assert_eq!(pipeline.expected_input(), PipelineDataKind::LoadedSource);
+        assert_eq!(pipeline.expected_output(), PipelineDataKind::RenderedOutput);
+    }
+
+    #[test]
+    fn test_build_html_pipeline_with_stages_invalid() {
+        // Try to create a pipeline with incompatible consecutive stages
+        // ParseDocumentStage outputs DocumentAst, but ApplyTemplateStage expects RenderedOutput
+        let stages: Vec<Box<dyn PipelineStage>> = vec![
+            Box::new(ParseDocumentStage::new()),
+            Box::new(ApplyTemplateStage::new()), // Expects RenderedOutput, not DocumentAst
+        ];
+
+        let result = build_html_pipeline_with_stages(stages);
+        assert!(result.is_err());
     }
 }
