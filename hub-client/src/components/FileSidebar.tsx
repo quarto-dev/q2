@@ -21,6 +21,10 @@ export interface FileSidebarProps {
   onUploadFiles: (files: File[]) => void;
   onDeleteFile?: (file: FileEntry) => void;
   onRenameFile?: (file: FileEntry, newPath: string) => void;
+  /** Open a file in a new browser tab */
+  onOpenInNewTab?: (file: FileEntry) => void;
+  /** Copy a link to a file to clipboard */
+  onCopyLink?: (file: FileEntry) => void;
 }
 
 interface ContextMenuState {
@@ -99,6 +103,8 @@ export default function FileSidebar({
   onUploadFiles,
   onDeleteFile,
   onRenameFile,
+  onOpenInNewTab,
+  onCopyLink,
 }: FileSidebarProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -204,6 +210,38 @@ export default function FileSidebar({
     [onDeleteFile, closeContextMenu]
   );
 
+  // Open in new tab handler
+  const handleOpenInNewTab = useCallback(
+    (file: FileEntry) => {
+      closeContextMenu();
+      onOpenInNewTab?.(file);
+    },
+    [onOpenInNewTab, closeContextMenu]
+  );
+
+  // Copy link handler
+  const handleCopyLink = useCallback(
+    (file: FileEntry) => {
+      closeContextMenu();
+      onCopyLink?.(file);
+    },
+    [onCopyLink, closeContextMenu]
+  );
+
+  // File click handler - supports Ctrl/Cmd+click for new tab
+  const handleFileClick = useCallback(
+    (e: React.MouseEvent, file: FileEntry) => {
+      // Ctrl/Cmd+click opens in new tab
+      if ((e.ctrlKey || e.metaKey) && onOpenInNewTab) {
+        e.preventDefault();
+        onOpenInNewTab(file);
+      } else {
+        onSelectFile(file);
+      }
+    },
+    [onSelectFile, onOpenInNewTab]
+  );
+
   // Drag start handler for file items (for dragging to editor)
   const handleFileDragStart = useCallback((e: React.DragEvent, file: FileEntry) => {
     // Determine the type of file for markdown insertion
@@ -235,11 +273,11 @@ export default function FileSidebar({
       <div
         key={file.path}
         className={`file-item ${isActive ? 'active' : ''} ${isBinary ? 'binary' : ''}`}
-        onClick={() => !isRenaming && onSelectFile(file)}
+        onClick={(e) => !isRenaming && handleFileClick(e, file)}
         onContextMenu={(e) => handleContextMenu(e, file)}
         draggable={isDraggable}
         onDragStart={isDraggable ? (e) => handleFileDragStart(e, file) : undefined}
-        title={file.path}
+        title={onOpenInNewTab ? `${file.path}\nCtrl/Cmd+click to open in new tab` : file.path}
       >
         <span className="file-icon">{getFileIcon(file.path)}</span>
         {isRenaming ? (
@@ -322,6 +360,16 @@ export default function FileSidebar({
           className="context-menu"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
+          {onOpenInNewTab && (
+            <button onClick={() => handleOpenInNewTab(contextMenu.file!)}>
+              Open in New Tab
+            </button>
+          )}
+          {onCopyLink && (
+            <button onClick={() => handleCopyLink(contextMenu.file!)}>
+              Copy Link
+            </button>
+          )}
           {onRenameFile && (
             <button onClick={() => startRename(contextMenu.file!)}>
               Rename

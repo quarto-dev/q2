@@ -3,6 +3,8 @@ import MonacoEditor from '@monaco-editor/react';
 import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
 import { isBinaryExtension } from '../types/project';
+import type { Route } from '../utils/routing';
+import { buildFullUrl } from '../utils/routing';
 import {
   createFile,
   createBinaryFile,
@@ -35,6 +37,10 @@ interface Props {
   fileContents: Map<string, string>;
   onDisconnect: () => void;
   onContentChange: (path: string, content: string) => void;
+  /** Current route from URL */
+  route: Route;
+  /** Callback to update URL when file changes */
+  onNavigateToFile: (filePath: string, options?: { anchor?: string; replace?: boolean }) => void;
 }
 
 // Select the best default file: prefer index.qmd, then first .qmd, then first file
@@ -53,8 +59,33 @@ function selectDefaultFile(files: FileEntry[]): FileEntry | null {
   return files[0];
 }
 
-export default function Editor({ project, files, fileContents, onDisconnect, onContentChange }: Props) {
-  const [currentFile, setCurrentFile] = useState<FileEntry | null>(selectDefaultFile(files));
+export default function Editor({ project, files, fileContents, onDisconnect, onContentChange, route, onNavigateToFile }: Props) {
+  // Select initial file based on URL route or default
+  const getInitialFile = useCallback((): FileEntry | null => {
+    if (route.type === 'file' && route.filePath) {
+      const fileFromRoute = files.find(f => f.path === route.filePath);
+      if (fileFromRoute) {
+        return fileFromRoute;
+      }
+      // File not found - fall back to default
+    }
+    return selectDefaultFile(files);
+  }, [files, route]);
+
+  const [currentFile, setCurrentFile] = useState<FileEntry | null>(getInitialFile);
+
+  // Ensure URL includes the current file path on initial render
+  // This handles the case where the URL is just #/project/<id> and we select a default file
+  const initialUrlSyncRef = useRef(false);
+  useEffect(() => {
+    if (initialUrlSyncRef.current) return;
+    initialUrlSyncRef.current = true;
+
+    // If route doesn't include a file but we have a currentFile, update the URL
+    if (route.type === 'project' && currentFile) {
+      onNavigateToFile(currentFile.path, { replace: true });
+    }
+  }, [route, currentFile, onNavigateToFile]);
 
   // Monaco editor instance ref
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -120,15 +151,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
 
-  // Callback for when preview wants to change file
-  const handlePreviewFileChange = useCallback((file: FileEntry) => {
+  // Callback for when preview wants to change file (via link click - adds history)
+  const handlePreviewFileChange = useCallback((file: FileEntry, anchor?: string) => {
     setCurrentFile(file);
     const fileContent = fileContents.get(file.path);
     setContent(fileContent ?? '');
     // Clear diagnostics when switching files
     setDiagnostics([]);
     setUnlocatedErrors([]);
-  }, [fileContents]);
+    // Update URL with history entry (link navigation)
+    onNavigateToFile(file.path, { anchor, replace: false });
+  }, [fileContents, onNavigateToFile]);
 
   // Callback for when preview wants to open new file dialog
   const handlePreviewOpenNewFileDialog = useCallback((initialFilename: string) => {
@@ -147,16 +180,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     setWasmError(error);
   }, []);
 
-  // Update document title based on current file
+  // Update document title based on current file and project
   useEffect(() => {
     if (currentFile) {
       // Extract just the filename from the path
       const filename = currentFile.path.split('/').pop() || currentFile.path;
-      document.title = `${filename} — Quarto Hub`;
+      document.title = `${filename} — ${project.description} — Quarto Hub`;
     } else {
-      document.title = 'Quarto Hub';
+      document.title = `${project.description} — Quarto Hub`;
     }
-  }, [currentFile]);
+  }, [currentFile, project.description]);
 
   // Refresh intelligence (outline) when content changes
   // VFS is updated via Automerge callbacks, so we trigger refresh after content changes
@@ -236,6 +269,32 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, [files, currentFile]);
 
+  // Handle browser back/forward navigation for file changes
+  // Note: setState in effect is intentional - syncing with external route state
+  const prevRouteFilePathRef = useRef<string | undefined>(
+    route.type === 'file' ? route.filePath : undefined
+  );
+  useEffect(() => {
+    const prevFilePath = prevRouteFilePathRef.current;
+    const newFilePath = route.type === 'file' ? route.filePath : undefined;
+    prevRouteFilePathRef.current = newFilePath;
+
+    // Only handle if file path actually changed (browser navigation)
+    if (newFilePath && newFilePath !== prevFilePath) {
+      const targetFile = files.find(f => f.path === newFilePath);
+      if (targetFile && targetFile.path !== currentFile?.path) {
+        // Don't switch to binary files
+        if (!isBinaryExtension(targetFile.path)) {
+          setCurrentFile(targetFile);
+          const fileContent = fileContents.get(targetFile.path);
+          setContent(fileContent ?? '');
+          setDiagnostics([]);
+          setUnlocatedErrors([]);
+        }
+      }
+    }
+  }, [route, files, fileContents, currentFile]);
+
   const handleEditorChange = (value: string | undefined) => {
     // Skip echo when applying remote changes
     if (applyingRemoteRef.current) return;
@@ -290,7 +349,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     editorRef.current.focus();
   }, []);
 
-  // Handle file selection from sidebar
+  // Handle file selection from sidebar (uses replaceState - no history entry)
   const handleSelectFile = useCallback((file: FileEntry) => {
     // Don't switch to binary files in the editor
     if (isBinaryExtension(file.path)) {
@@ -305,7 +364,34 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // Clear diagnostics when switching files
     setDiagnostics([]);
     setUnlocatedErrors([]);
-  }, [fileContents]);
+    // Update URL without adding history entry (sidebar navigation)
+    onNavigateToFile(file.path, { replace: true });
+  }, [fileContents, onNavigateToFile]);
+
+  // Handle opening a file in a new browser tab
+  const handleOpenInNewTab = useCallback((file: FileEntry) => {
+    const url = buildFullUrl({
+      type: 'file',
+      projectId: project.id,
+      filePath: file.path,
+    });
+    window.open(url, '_blank');
+  }, [project.id]);
+
+  // Handle copying a file link to clipboard
+  const handleCopyLink = useCallback(async (file: FileEntry) => {
+    const url = buildFullUrl({
+      type: 'file',
+      projectId: project.id,
+      filePath: file.path,
+    });
+    try {
+      await navigator.clipboard.writeText(url);
+      // Could show a toast notification here in the future
+    } catch (err) {
+      console.error('Failed to copy link:', err);
+    }
+  }, [project.id]);
 
   // Handle opening new file dialog
   const handleNewFile = useCallback(() => {
@@ -549,6 +635,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                     onUploadFiles={handleUploadFiles}
                     onDeleteFile={handleDeleteFile}
                     onRenameFile={handleRenameFile}
+                    onOpenInNewTab={handleOpenInNewTab}
+                    onCopyLink={handleCopyLink}
                   />
                 );
               case 'outline':

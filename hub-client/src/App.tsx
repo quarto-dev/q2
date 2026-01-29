@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { ProjectEntry, FileEntry } from './types/project';
 import ProjectSelector from './components/ProjectSelector';
 import Editor from './components/Editor';
@@ -13,6 +13,8 @@ import {
 } from './services/automergeSync';
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
+import { useRouting } from './hooks/useRouting';
+import type { Route } from './utils/routing';
 import './App.css';
 
 function App() {
@@ -22,6 +24,133 @@ function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
+
+  // Track if we've done the initial URL-based navigation
+  const initialLoadRef = useRef(false);
+
+  // URL-based routing
+  const {
+    route,
+    navigateToProjectSelector,
+    navigateToProject,
+    navigateToFile,
+  } = useRouting();
+
+  // Handle browser back/forward navigation
+  // We use a separate effect instead of the onRouteChange callback to avoid
+  // circular dependencies (the callback would need navigateToProjectSelector
+  // which isn't defined until after useRouting returns).
+  const prevRouteRef = useRef<Route>(route);
+  useEffect(() => {
+    const prevRoute = prevRouteRef.current;
+    prevRouteRef.current = route;
+
+    // Skip if route hasn't changed (this effect also runs on initial mount)
+    if (
+      prevRoute.type === route.type &&
+      (route.type === 'project-selector' ||
+        ((route.type === 'project' || route.type === 'file') &&
+          (prevRoute.type === 'project' || prevRoute.type === 'file') &&
+          route.projectId === prevRoute.projectId))
+    ) {
+      return;
+    }
+
+    // Handle route change (browser back/forward)
+    const handleRouteChange = async () => {
+      if (route.type === 'project-selector') {
+        // Navigating back to project selector
+        await disconnect();
+        setProject(null);
+        setFiles([]);
+        setFileContents(new Map());
+        setConnectionError(null);
+      } else if (route.type === 'project' || route.type === 'file') {
+        // Navigating to a project (possibly different from current)
+        const currentProjectId = project?.id;
+        if (route.projectId !== currentProjectId) {
+          // Different project - need to load it
+          const targetProject = await projectStorage.getProject(route.projectId);
+          if (targetProject) {
+            // Connect to the project
+            setIsConnecting(true);
+            setConnectionError(null);
+            try {
+              const loadedFiles = await connect(targetProject.syncServer, targetProject.indexDocId);
+              setProject(targetProject);
+              setFiles(loadedFiles);
+
+              const contents = new Map<string, string>();
+              for (const file of loadedFiles) {
+                const content = getFileContent(file.path);
+                if (content !== null) {
+                  contents.set(file.path, content);
+                }
+              }
+              setFileContents(contents);
+            } catch (err) {
+              setConnectionError(err instanceof Error ? err.message : String(err));
+              // Navigate back to project selector on error
+              navigateToProjectSelector({ replace: true });
+            } finally {
+              setIsConnecting(false);
+            }
+          } else {
+            // Project not found in IndexedDB
+            setConnectionError(`Project not found. It may have been deleted.`);
+            navigateToProjectSelector({ replace: true });
+          }
+        }
+        // If same project, file navigation will be handled by Editor (Phase 2)
+      }
+    };
+
+    handleRouteChange();
+  }, [route, project, navigateToProjectSelector]);
+
+  // Handle initial URL-based navigation
+  useEffect(() => {
+    if (initialLoadRef.current) return;
+    initialLoadRef.current = true;
+
+    const loadFromUrl = async () => {
+      if (route.type === 'project' || route.type === 'file') {
+        // URL specifies a project - try to load it
+        const targetProject = await projectStorage.getProject(route.projectId);
+        if (targetProject) {
+          setIsConnecting(true);
+          setConnectionError(null);
+          try {
+            const loadedFiles = await connect(targetProject.syncServer, targetProject.indexDocId);
+            setProject(targetProject);
+            setFiles(loadedFiles);
+
+            const contents = new Map<string, string>();
+            for (const file of loadedFiles) {
+              const content = getFileContent(file.path);
+              if (content !== null) {
+                contents.set(file.path, content);
+              }
+            }
+            setFileContents(contents);
+          } catch (err) {
+            setConnectionError(err instanceof Error ? err.message : String(err));
+            // Navigate to project selector on error
+            navigateToProjectSelector({ replace: true });
+          } finally {
+            setIsConnecting(false);
+          }
+        } else {
+          // Project not found - show error and stay on project selector
+          setConnectionError(`Project not found. It may have been deleted.`);
+          navigateToProjectSelector({ replace: true });
+        }
+      }
+      // If route is 'project-selector', do nothing - we're already there
+    };
+
+    loadFromUrl();
+  }, [route, navigateToProjectSelector]);
 
   // Intercept Ctrl+S / Cmd+S to prevent browser save dialog
   useEffect(() => {
@@ -91,12 +220,15 @@ function App() {
         }
       }
       setFileContents(contents);
+
+      // Update URL to reflect the selected project
+      navigateToProject(selectedProject.id, { replace: true });
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsConnecting(false);
     }
-  }, []);
+  }, [navigateToProject]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -104,7 +236,9 @@ function App() {
     setFiles([]);
     setFileContents(new Map());
     setConnectionError(null);
-  }, []);
+    // Update URL to show project selector
+    navigateToProjectSelector({ replace: true });
+  }, [navigateToProjectSelector]);
 
   const handleContentChange = useCallback((path: string, content: string) => {
     updateFileContent(path, content);
@@ -159,13 +293,16 @@ function App() {
       }
       setFileContents(contents);
 
+      // Update URL to reflect the new project
+      navigateToProject(projectEntry.id, { replace: true });
+
       console.log('Project created successfully:', result.indexDocId);
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsConnecting(false);
     }
-  }, []);
+  }, [navigateToProject]);
 
   return (
     <>
@@ -183,6 +320,10 @@ function App() {
           fileContents={fileContents}
           onDisconnect={handleDisconnect}
           onContentChange={handleContentChange}
+          route={route}
+          onNavigateToFile={(filePath, options) => {
+            navigateToFile(project.id, filePath, options);
+          }}
         />
       )}
       <Toast

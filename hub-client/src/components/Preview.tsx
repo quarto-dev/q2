@@ -30,7 +30,7 @@ interface PreviewProps {
   editorRef: React.RefObject<Monaco.editor.IStandaloneCodeEditor | null>;
   editorReady: boolean;
   editorHasFocusRef: React.RefObject<boolean>;
-  onFileChange: (file: FileEntry) => void;
+  onFileChange: (file: FileEntry, anchor?: string) => void;
   onOpenNewFileDialog: (initialFilename: string) => void;
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
   onWasmStatusChange?: (status: 'loading' | 'ready' | 'error', error: string | null) => void;
@@ -271,7 +271,7 @@ export default function Preview({
 
   // Handler for cross-document navigation from DoubleBufferedIframe
   const handleNavigateToDocument = useCallback(
-    (targetPath: string, _anchor: string | null) => {
+    (targetPath: string, anchor: string | null) => {
       const file = files.find(
         (f) => f.path === targetPath || '/' + f.path === targetPath
       );
@@ -279,7 +279,7 @@ export default function Preview({
       if (file) {
         // Existing file - switch to it
         // DoubleBufferedIframe will handle the anchor scrolling after swap
-        onFileChange(file);
+        onFileChange(file, anchor ?? undefined);
       } else {
         // Non-existent file - open create dialog with pre-filled name
         // Strip leading slash for the dialog
