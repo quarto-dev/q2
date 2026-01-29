@@ -147,3 +147,67 @@ fn test_compiled_css_has_bootstrap_classes() {
     assert!(css.contains(".nav"), "Should have nav classes");
     assert!(css.contains(".form-control"), "Should have form classes");
 }
+
+/// Test compiled CSS contains editorial mark styling.
+///
+/// Editorial marks syntax:
+/// [++ text] -> <span class="quarto-insert">
+/// [-- text] -> <span class="quarto-delete">
+/// [!! text] -> <span class="quarto-highlight">
+/// [>> text] -> <span class="quarto-edit-comment">
+#[test]
+fn test_compiled_css_has_editorial_marks() {
+    let css = compile_theme(BuiltInTheme::Cosmo).expect("Cosmo should compile");
+
+    // Should contain editorial mark rules
+    assert!(
+        css.contains(".quarto-insert {"),
+        "Should have .quarto-insert rule"
+    );
+    assert!(
+        css.contains(".quarto-delete {"),
+        "Should have .quarto-delete rule"
+    );
+    assert!(
+        css.contains(".quarto-highlight {"),
+        "Should have .quarto-highlight rule"
+    );
+    assert!(
+        css.contains(".quarto-edit-comment {"),
+        "Should have .quarto-edit-comment rule"
+    );
+
+    // Check .quarto-insert has expected properties (background color and no underline)
+    let ins_section = css
+        .split(".quarto-insert {")
+        .nth(1)
+        .expect("quarto-insert section should exist");
+    assert!(
+        ins_section.contains("background-color:"),
+        ".quarto-insert should have background-color"
+    );
+    assert!(
+        ins_section.contains("text-decoration: none"),
+        ".quarto-insert should have text-decoration: none"
+    );
+
+    // Check .quarto-delete has strikethrough
+    let del_section = css
+        .split(".quarto-delete {")
+        .nth(1)
+        .expect("quarto-delete section should exist");
+    assert!(
+        del_section.contains("text-decoration: line-through"),
+        ".quarto-delete should have line-through"
+    );
+
+    // Check .quarto-edit-comment has italic
+    let comment_section = css
+        .split(".quarto-edit-comment {")
+        .nth(1)
+        .expect("quarto-edit-comment section should exist");
+    assert!(
+        comment_section.contains("font-style: italic"),
+        ".quarto-edit-comment should have italic style"
+    );
+}

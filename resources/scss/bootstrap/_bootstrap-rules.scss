@@ -667,8 +667,49 @@ h6 {
   color: inherit;
 }
 
+// Editorial marks styling
+// These elements are generated from editorial mark syntax:
+// [++ text] -> <span class="quarto-insert">
+// [-- text] -> <span class="quarto-delete">
+// [!! text] -> <span class="quarto-highlight">
+// [>> text] -> <span class="quarto-edit-comment">
+
+.quarto-insert {
+  @if $editorial-ins-bg {
+    background-color: $editorial-ins-bg;
+  }
+  @if $editorial-ins-color {
+    color: $editorial-ins-color;
+  }
+  text-decoration: $editorial-ins-decoration;
+}
+
+.quarto-delete {
+  @if $editorial-del-bg {
+    background-color: $editorial-del-bg;
+  }
+  @if $editorial-del-color {
+    color: $editorial-del-color;
+  }
+  text-decoration: $editorial-del-decoration;
+}
+
+.quarto-highlight {
+  background-color: $editorial-mark-bg;
+  padding: $editorial-mark-padding;
+}
+
+// Keep minimal mark styling for native <mark> elements
 mark {
   padding: 0em;
+}
+
+.quarto-edit-comment {
+  color: $editorial-comment-color;
+  font-style: $editorial-comment-style;
+  @if $editorial-comment-bg {
+    background-color: $editorial-comment-bg;
+  }
 }
 
 // The 1.4 figcaption classes are

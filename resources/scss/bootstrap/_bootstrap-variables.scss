@@ -235,6 +235,26 @@ $grid-column-gutter-width: 1.5em !default;
 $code-annotation-higlight-color: #aaaaaa44 !default;
 $code-annotation-higlight-bg: #aaaaaa22 !default;
 
+/* EDITORIAL MARKS */
+// Insertion marks ([++ text])
+$editorial-ins-color: null !default;
+$editorial-ins-bg: rgba(0, 128, 0, 0.15) !default;
+$editorial-ins-decoration: none !default;
+
+// Deletion marks ([-- text])
+$editorial-del-color: null !default;
+$editorial-del-bg: rgba(255, 0, 0, 0.15) !default;
+$editorial-del-decoration: line-through !default;
+
+// Highlight marks ([!! text])
+$editorial-mark-bg: rgba(255, 255, 0, 0.4) !default;
+$editorial-mark-padding: 0.1em 0.2em !default;
+
+// Comment marks ([>> text])
+$editorial-comment-color: if(variable-exists(text-muted), $text-muted, #6c757d) !default;
+$editorial-comment-style: italic !default;
+$editorial-comment-bg: null !default;
+
 $breadcrumb-divider: quote(">") !default;
 
 // table variable overrides
