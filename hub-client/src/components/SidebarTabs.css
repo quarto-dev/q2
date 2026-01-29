@@ -65,12 +65,5 @@
 .sidebar-section.expanded:first-child .section-content {
   flex: 1;
   min-height: 150px;
-  max-height: 50vh;
   overflow: hidden;
-}
-
-/* Other expanded sections have max height */
-.sidebar-section.expanded:not(:first-child) .section-content {
-  max-height: 300px;
-  overflow-y: auto;
 }
