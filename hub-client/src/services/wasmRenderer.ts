@@ -43,6 +43,8 @@ interface WasmModuleExtended {
   // SASS compilation functions (new)
   sass_available: () => boolean;
   sass_compiler_name: () => string | undefined;
+  // Hash of embedded SCSS resources (for cache invalidation)
+  get_scss_resources_version: () => string;
   compile_scss: (scss: string, minified: boolean, loadPathsJson: string) => Promise<string>;
   compile_scss_with_bootstrap: (scss: string, minified: boolean) => Promise<string>;
   // Theme-aware CSS compilation (extracts theme from frontmatter)
@@ -84,6 +86,9 @@ export async function initWasm(): Promise<void> {
         // This allows dart-sass to read Bootstrap SCSS files from the VFS
         await setupSassVfsCallbacks();
 
+        // Check if embedded SCSS resources changed and invalidate cache if needed
+        await checkAndInvalidateSassCache();
+
         console.log('WASM module initialized successfully, template loaded');
       } catch (err) {
         initPromise = null;
@@ -93,6 +98,47 @@ export async function initWasm(): Promise<void> {
   }
 
   return initPromise;
+}
+
+// Key for storing SCSS resources version in localStorage
+const SCSS_VERSION_STORAGE_KEY = 'quarto-scss-resources-version';
+
+/**
+ * Check if the embedded SCSS resources have changed and invalidate cache if needed.
+ *
+ * This compares the current SCSS resources hash (computed at WASM build time)
+ * against the stored version. If they differ, the SASS cache is cleared.
+ * This ensures that when hub-client is updated with new SCSS files, users
+ * don't see stale cached CSS.
+ */
+async function checkAndInvalidateSassCache(): Promise<void> {
+  const wasm = getWasm();
+
+  try {
+    const currentVersion = wasm.get_scss_resources_version();
+    const storedVersion = localStorage.getItem(SCSS_VERSION_STORAGE_KEY);
+
+    if (storedVersion !== currentVersion) {
+      console.log(
+        '[SASS Cache] SCSS resources version changed:',
+        storedVersion,
+        '->',
+        currentVersion
+      );
+
+      // Clear the SASS cache
+      const cache = getSassCache();
+      await cache.clear();
+      console.log('[SASS Cache] Cache cleared due to SCSS resources update');
+
+      // Store the new version
+      localStorage.setItem(SCSS_VERSION_STORAGE_KEY, currentVersion);
+    } else {
+      console.log('[SASS Cache] SCSS resources version unchanged:', currentVersion);
+    }
+  } catch (err) {
+    console.warn('[SASS Cache] Failed to check SCSS resources version:', err);
+  }
 }
 
 /**

@@ -9,6 +9,9 @@ description = "WASM client for quarto-hub web frontend"
 [lib]
 crate-type = ["cdylib"]
 
+[build-dependencies]
+sha2 = "0.10"
+
 [dependencies]
 pampa = { path = "../pampa", default-features = false }
 quarto-core = { path = "../quarto-core" }

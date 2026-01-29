@@ -1471,6 +1471,35 @@ pub fn sass_compiler_name() -> Option<String> {
     get_runtime().sass_compiler_name().map(|s| s.to_string())
 }
 
+/// Hash of embedded SCSS resources, computed at build time.
+///
+/// This changes whenever any SCSS file in `resources/scss/` is modified.
+/// Used by hub-client to invalidate the SASS cache when embedded resources change.
+const SCSS_RESOURCES_HASH: &str = include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
+
+/// Get the version hash of embedded SCSS resources.
+///
+/// This returns a hash that changes whenever the embedded SCSS files change.
+/// Hub-client uses this to invalidate its SASS cache when the WASM module
+/// is updated with new SCSS resources.
+///
+/// # Returns
+/// A 16-character hex string (first 64 bits of SHA-256 hash).
+///
+/// # Example
+/// ```javascript
+/// const version = get_scss_resources_version();
+/// const storedVersion = localStorage.getItem('scss-version');
+/// if (version !== storedVersion) {
+///     await sassCache.clear();
+///     localStorage.setItem('scss-version', version);
+/// }
+/// ```
+#[wasm_bindgen]
+pub fn get_scss_resources_version() -> String {
+    SCSS_RESOURCES_HASH.to_string()
+}
+
 /// Compile SCSS to CSS.
 ///
 /// This function compiles SCSS source code to CSS using dart-sass (via the JS bridge).
