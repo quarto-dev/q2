@@ -32,12 +32,44 @@
   padding: 0;
 }
 
+.outline-row {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+}
+
+/* Chevron toggle button */
+.outline-chevron {
+  width: 16px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.outline-chevron:hover {
+  color: #999;
+}
+
+/* Indent items without chevrons to align with those that have them */
+.outline-item:not(.has-children) > .outline-row {
+  padding-left: 28px; /* 12px base + 16px chevron width */
+}
+
 .outline-button {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
-  padding: 5px 12px;
+  flex: 1;
+  min-width: 0;
+  padding: 5px 12px 5px 0;
   background: none;
   border: none;
   text-align: left;
@@ -47,30 +79,45 @@
   font-size: 13px;
 }
 
-.outline-button:hover {
+.outline-row:hover {
   background: #1f3460;
 }
 
 .outline-button:focus {
   outline: none;
-  background: #1f3460;
 }
 
 /* Indentation for nested items */
-.outline-list .outline-list .outline-button {
+.outline-list .outline-list .outline-row {
   padding-left: 24px;
 }
 
-.outline-list .outline-list .outline-list .outline-button {
+.outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
+  padding-left: 40px; /* 24px + 16px */
+}
+
+.outline-list .outline-list .outline-list .outline-row {
   padding-left: 36px;
 }
 
-.outline-list .outline-list .outline-list .outline-list .outline-button {
+.outline-list .outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
+  padding-left: 52px; /* 36px + 16px */
+}
+
+.outline-list .outline-list .outline-list .outline-list .outline-row {
   padding-left: 48px;
 }
 
-.outline-list .outline-list .outline-list .outline-list .outline-list .outline-button {
+.outline-list .outline-list .outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
+  padding-left: 64px; /* 48px + 16px */
+}
+
+.outline-list .outline-list .outline-list .outline-list .outline-list .outline-row {
   padding-left: 60px;
+}
+
+.outline-list .outline-list .outline-list .outline-list .outline-list .outline-item:not(.has-children) > .outline-row {
+  padding-left: 76px; /* 60px + 16px */
 }
 
 .outline-icon {
