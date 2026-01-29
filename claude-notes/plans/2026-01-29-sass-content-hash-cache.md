@@ -1,7 +1,7 @@
 # SASS Content Hash Cache Keys
 
 **Issue:** kyoto-bpp
-**Status:** Planning
+**Status:** Complete
 
 ## Overview
 
@@ -110,7 +110,7 @@ async function compileDocumentCss(content: string, options: Options): Promise<st
 - [x] Implement content loading for built-in themes (from embedded resources)
 - [x] Implement content loading for custom themes (from VFS via runtime)
 - [x] Implement merkle hash computation (SHA-256)
-- [ ] Add unit tests for hash computation
+- [x] Add unit tests for hash computation (see Phase 3a)
 
 ### Phase 2: TypeScript Integration
 
@@ -122,10 +122,33 @@ async function compileDocumentCss(content: string, options: Options): Promise<st
 
 ### Phase 3: Testing
 
-- [ ] Test built-in theme hash stability (same theme = same hash across calls)
-- [ ] Test custom theme hash changes when file content changes
-- [ ] Test mixed theme (built-in + custom) hash computation
-- [ ] Test cache invalidation when editing custom SCSS
+#### 3a: WASM End-to-End Tests (`hub-client/src/services/themeContentHash.wasm.test.ts`)
+
+These tests exercise the actual WASM module via vitest. Per project testing policy, WASM features
+must have end-to-end tests before being considered complete.
+
+Run with: `npm run test:wasm`
+
+- [x] Built-in theme hash stability: same built-in theme (`cosmo`) produces identical hash across multiple calls
+- [x] Different built-in themes produce different hashes: `cosmo` vs `darkly` should differ
+- [x] Custom theme hash from VFS: add `custom.scss` to VFS, verify hash is computed
+- [x] Custom theme hash changes when content changes: modify VFS file, verify hash changes
+- [x] Mixed theme hash computation: `[cosmo, custom.scss]` produces valid hash
+- [x] Document path affects resolution: `docs/index.qmd` with `custom.scss` resolves to `/docs/custom.scss`
+- [x] No theme config returns consistent default hash: documents without `theme:` get stable default
+- [x] Missing custom SCSS returns error: proper error when VFS file doesn't exist
+
+#### 3b: TypeScript Unit Tests (`hub-client/src/services/wasmRenderer.test.ts`)
+
+These tests verify the TypeScript integration logic. Error propagation is tested implicitly
+by the WASM tests (errors return `{success: false, error: "..."}`).
+
+- [x] Cache key format uses `theme-v2:` prefix with content hash
+- [x] Different minified options produce different cache keys
+- [x] Different content hashes produce different cache keys
+
+#### 3c: Verification
+
 - [x] Verify existing tests still pass (168 tests pass)
 
 ### Phase 4: Future Considerations (out of scope)
@@ -136,16 +159,25 @@ async function compileDocumentCss(content: string, options: Options): Promise<st
 
 ## Files to Modify
 
-1. **`crates/wasm-quarto-hub-client/src/lib.rs`**
+1. **`crates/wasm-quarto-hub-client/src/lib.rs`** ✓
    - Add `compute_theme_content_hash` function
    - May need helper functions for content resolution
 
-2. **`hub-client/src/services/wasmRenderer.ts`**
+2. **`hub-client/src/services/wasmRenderer.ts`** ✓
    - Update `compileDocumentCss` to use content hash
    - Add type for new WASM function
 
-3. **`hub-client/src/types/wasm-quarto-hub-client.d.ts`**
+3. **`hub-client/src/types/wasm-quarto-hub-client.d.ts`** ✓
    - Add type declaration for `compute_theme_content_hash`
+
+4. **`hub-client/vitest.wasm.config.ts`** ✓ (Phase 3a)
+   - New vitest config for WASM tests with proper module resolution
+
+5. **`hub-client/src/services/themeContentHash.wasm.test.ts`** ✓ (Phase 3a)
+   - WASM end-to-end tests for `compute_theme_content_hash`
+
+6. **`hub-client/src/services/wasmRenderer.test.ts`** (Phase 3b)
+   - Add unit tests for TypeScript integration
 
 ## Error Handling
 

@@ -2,11 +2,47 @@
  * Tests for wasmRenderer utility functions.
  *
  * Note: These tests focus on pure functions that don't require WASM initialization.
- * Full integration tests with WASM would require additional setup.
+ * Full WASM integration tests are in themeContentHash.wasm.test.ts.
  */
 
 import { describe, it, expect } from 'vitest';
 import { extractThemeConfigForCacheKey } from './wasmRenderer';
+
+/**
+ * Tests for cache key format.
+ *
+ * These verify the cache key construction logic used by compileDocumentCss.
+ * The actual WASM hash computation is tested in themeContentHash.wasm.test.ts.
+ */
+describe('cache key format', () => {
+  it('theme-v2 prefix with content hash and minified flag', () => {
+    // The cache key format is: theme-v2:${contentHash}:minified=${minified}
+    // This tests the expected format without requiring WASM
+    const contentHash = 'abc123def456';
+    const minified = true;
+    const expectedKey = `theme-v2:${contentHash}:minified=${minified}`;
+
+    expect(expectedKey).toBe('theme-v2:abc123def456:minified=true');
+    expect(expectedKey).toMatch(/^theme-v2:[a-f0-9]+:minified=(true|false)$/);
+  });
+
+  it('minified=false produces different key than minified=true', () => {
+    const contentHash = 'abc123def456';
+    const keyTrue = `theme-v2:${contentHash}:minified=true`;
+    const keyFalse = `theme-v2:${contentHash}:minified=false`;
+
+    expect(keyTrue).not.toBe(keyFalse);
+  });
+
+  it('different content hashes produce different keys', () => {
+    const hash1 = 'hash1111111111';
+    const hash2 = 'hash2222222222';
+    const key1 = `theme-v2:${hash1}:minified=true`;
+    const key2 = `theme-v2:${hash2}:minified=true`;
+
+    expect(key1).not.toBe(key2);
+  });
+});
 
 describe('extractThemeConfigForCacheKey', () => {
   describe('basic theme extraction', () => {

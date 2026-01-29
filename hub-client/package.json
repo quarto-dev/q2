@@ -18,10 +18,12 @@
     "test:coverage": "vitest run --coverage",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "test:wasm": "vitest run --config vitest.wasm.config.ts",
+    "test:wasm:watch": "vitest --config vitest.wasm.config.ts",
     "test:e2e": "npm run build:wasm && playwright test",
     "test:e2e:ui": "npm run build:wasm && playwright test --ui",
-    "test:ci": "npm run test && npm run test:integration",
-    "test:all": "npm run build:wasm && npm run test && npm run test:integration && npm run test:e2e",
+    "test:ci": "npm run test && npm run test:integration && npm run test:wasm",
+    "test:all": "npm run build:wasm && npm run test && npm run test:integration && npm run test:wasm && npm run test:e2e",
     "bootstrap-test-fixtures": "npx tsx e2e/scripts/regenerate-fixtures.ts"
   },
   "dependencies": {
