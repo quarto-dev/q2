@@ -418,6 +418,22 @@ struct RenderResponse {
     warnings: Option<Vec<JsonDiagnostic>>,
 }
 
+/// Response for AST parsing operations.
+#[derive(Serialize)]
+struct AstResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ast: Option<String>,
+    /// Structured diagnostics (errors) with line/column information for Monaco.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diagnostics: Option<Vec<JsonDiagnostic>>,
+    /// Structured warnings with line/column information for Monaco.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    warnings: Option<Vec<JsonDiagnostic>>,
+}
+
 /// Create a minimal project context for WASM rendering.
 fn create_wasm_project_context(path: &Path) -> ProjectContext {
     let dir = path.parent().unwrap_or(Path::new("/")).to_path_buf();
@@ -787,16 +803,142 @@ pub fn get_builtin_template(name: &str) -> String {
     pampa::wasm_entry_points::get_builtin_template_json(name)
 }
 
-/// Parse QMD content to Pandoc AST JSON.
+/// Parse QMD content to Pandoc AST JSON using the unified pipeline.
+///
+/// This function uses the same pipeline infrastructure as `render_qmd_to_html`,
+/// ensuring feature parity. It runs through:
+/// 1. ParseDocumentStage - Parse QMD to Pandoc AST
+/// 2. EngineExecutionStage - Execute code cells (passes through in WASM)
+/// 3. AstTransformsStage - Apply Quarto transforms (callouts, metadata, etc.)
 ///
 /// # Arguments
 /// * `content` - QMD source text
 ///
 /// # Returns
-/// JSON string containing the Pandoc AST representation
+/// JSON string containing:
+/// - `success`: true/false
+/// - `ast`: Serialized Pandoc AST (on success)
+/// - `error`: Error message (on failure)
+/// - `diagnostics`: Structured error diagnostics with line/column info
+/// - `warnings`: Structured warning diagnostics with line/column info
 #[wasm_bindgen]
-pub fn parse_qmd_to_ast(content: &str) -> String {
-    pampa::wasm_entry_points::parse_qmd(content.as_bytes(), false)
+pub async fn parse_qmd_to_ast(content: &str) -> String {
+    // Create a virtual path for this content
+    let path = Path::new("/input.qmd");
+
+    // Create project context
+    let project = create_wasm_project_context(path);
+    let doc = DocumentInfo::from_path(path);
+    let binaries = BinaryDependencies::new();
+
+    // Extract format metadata from frontmatter
+    let format_metadata = extract_format_metadata(content, "html").unwrap_or_default();
+    let format = Format::html().with_metadata(format_metadata);
+
+    let options = RenderOptions {
+        verbose: false,
+        execute: false,
+        use_freeze: false,
+        output_path: None,
+    };
+
+    let mut ctx = RenderContext::new(&project, &doc, &format, &binaries).with_options(options);
+
+    // Create Arc runtime for the async pipeline
+    let runtime_arc: Arc<dyn SystemRuntime> = Arc::new(WasmRuntime::new());
+
+    let result = quarto_core::pipeline::parse_qmd_to_ast(
+        content.as_bytes(),
+        "/input.qmd",
+        &mut ctx,
+        runtime_arc,
+    )
+    .await;
+
+    match result {
+        Ok(output) => {
+            // Create an ASTContext from the SourceContext returned by the pipeline
+            // This is needed for pampa's JSON writer which tracks source locations
+            let ast_context = pampa::pandoc::ASTContext {
+                filenames: vec!["/input.qmd".to_string()],
+                example_list_counter: std::cell::Cell::new(1),
+                source_context: output.source_context.clone(),
+                parent_source_info: None,
+            };
+
+            // Serialize the AST to JSON using pampa's writer
+            let mut buf = Vec::new();
+            let json_config = pampa::writers::json::JsonConfig {
+                include_inline_locations: false,
+            };
+
+            let ast_json = match pampa::writers::json::write_with_config(
+                &output.ast,
+                &ast_context,
+                &mut buf,
+                &json_config,
+            ) {
+                Ok(_) => match String::from_utf8(buf) {
+                    Ok(json) => json,
+                    Err(e) => {
+                        return serde_json::to_string(&AstResponse {
+                            success: false,
+                            error: Some(format!("Failed to convert AST JSON to string: {}", e)),
+                            ast: None,
+                            diagnostics: None,
+                            warnings: None,
+                        })
+                        .unwrap();
+                    }
+                },
+                Err(e) => {
+                    return serde_json::to_string(&AstResponse {
+                        success: false,
+                        error: Some(format!("Failed to serialize AST: {:?}", e)),
+                        ast: None,
+                        diagnostics: None,
+                        warnings: None,
+                    })
+                    .unwrap();
+                }
+            };
+
+            // Convert warnings to structured JSON with line/column info
+            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
+            serde_json::to_string(&AstResponse {
+                success: true,
+                error: None,
+                ast: Some(ast_json),
+                diagnostics: None,
+                warnings: if warnings.is_empty() {
+                    None
+                } else {
+                    Some(warnings)
+                },
+            })
+            .unwrap()
+        }
+        Err(e) => {
+            // Extract structured diagnostics from parse errors
+            let (error_msg, diagnostics) = match &e {
+                QuartoError::Parse(parse_error) => {
+                    let diags =
+                        diagnostics_to_json(&parse_error.diagnostics, &parse_error.source_context);
+                    (e.to_string(), Some(diags))
+                }
+                _ => (e.to_string(), None),
+            };
+
+            serde_json::to_string(&AstResponse {
+                success: false,
+                error: Some(error_msg),
+                ast: None,
+                diagnostics,
+                warnings: None,
+            })
+            .unwrap()
+        }
+    }
 }
 
 // ============================================================================

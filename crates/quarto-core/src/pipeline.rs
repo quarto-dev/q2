@@ -48,6 +48,7 @@ use std::sync::Arc;
 
 use quarto_doctemplate::Template;
 use quarto_error_reporting::DiagnosticMessage;
+use quarto_pandoc_types::Pandoc;
 use quarto_source_map::SourceContext;
 
 use crate::Result;
@@ -104,6 +105,15 @@ impl<'a> HtmlRenderConfig<'a> {
 pub struct RenderOutput {
     /// The rendered HTML content.
     pub html: String,
+    /// Non-fatal warnings collected during rendering.
+    pub warnings: Vec<DiagnosticMessage>,
+    /// Source context for mapping locations in diagnostics.
+    pub source_context: SourceContext,
+}
+
+pub struct AstOutput {
+    /// The AST serialized as JSON.
+    pub ast: Pandoc,
     /// Non-fatal warnings collected during rendering.
     pub warnings: Vec<DiagnosticMessage>,
     /// Source context for mapping locations in diagnostics.
@@ -219,7 +229,7 @@ pub fn build_html_pipeline_with_stages(
     Pipeline::new(stages)
 }
 
-pub async fn render_pipeline(
+pub async fn run_pipeline(
     content: &[u8],
     source_name: &str,
     ctx: &mut RenderContext<'_>,
@@ -268,6 +278,38 @@ pub async fn render_pipeline(
             other => crate::error::QuartoError::Other(other.to_string()),
         })
         .map(|d| (d, stage_ctx.warnings))
+}
+
+pub async fn parse_qmd_to_ast(
+    content: &[u8],
+    source_name: &str,
+    ctx: &mut RenderContext<'_>,
+    runtime: Arc<dyn quarto_system_runtime::SystemRuntime>,
+) -> Result<AstOutput> {
+    // Build pipeline based on config
+    // If custom CSS or template is specified, use a customized ApplyTemplateStage
+    let stages: Vec<Box<dyn PipelineStage>> = vec![
+        Box::new(ParseDocumentStage::new()),
+        Box::new(EngineExecutionStage::new()),
+        Box::new(AstTransformsStage::new()),
+    ];
+
+    let (output, warnings) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
+    // Extract the rendered output
+    let ast = output.into_document_ast().ok_or_else(|| {
+        crate::error::QuartoError::Other("Pipeline did not produce ast".to_string())
+    })?;
+
+    // Create source context for the output
+    let mut source_context = SourceContext::new();
+    let content_str = String::from_utf8_lossy(content).to_string();
+    source_context.add_file(source_name.to_string(), Some(content_str));
+
+    Ok(AstOutput {
+        ast: ast.ast,
+        warnings,
+        source_context,
+    })
 }
 
 /// Render QMD content to HTML.
@@ -333,14 +375,11 @@ pub async fn render_qmd_to_html(
         build_html_pipeline_stages()
     };
 
-    let (output, warnings) = render_pipeline(content, source_name, ctx, runtime, stages).await?;
+    let (output, warnings) = run_pipeline(content, source_name, ctx, runtime, stages).await?;
     // Extract the rendered output
     let rendered = output.into_rendered_output().ok_or_else(|| {
         crate::error::QuartoError::Other("Pipeline did not produce RenderedOutput".to_string())
     })?;
-
-    // Collect warnings from the pipeline
-    // let warnings = stage_ctx.warnings;
 
     // Create source context for the output
     let mut source_context = SourceContext::new();

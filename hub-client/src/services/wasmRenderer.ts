@@ -36,7 +36,7 @@ interface WasmModuleExtended {
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
-  parse_qmd_to_ast: (content: string) => string;
+  parse_qmd_to_ast: (content: string) => Promise<string>;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
   lsp_get_folding_ranges: (path: string) => string;
@@ -318,11 +318,27 @@ export function getBuiltinTemplate(name: string): string {
 }
 
 /**
- * Parse QMD content to Pandoc AST JSON.
+ * Result of parsing QMD content to AST.
+ */
+export interface ParseResult {
+  success: boolean;
+  ast: string;
+  error?: string;
+  /** Structured error diagnostics with line/column information for Monaco. */
+  diagnostics?: Diagnostic[];
+  /** Structured warning diagnostics with line/column information for Monaco. */
+  warnings?: Diagnostic[];
+}
+
+/**
+ * Parse QMD content to Pandoc AST JSON, handling errors gracefully.
  *
  * This function parses QMD markdown into a Pandoc AST representation,
  * which can be used for programmatic manipulation, analysis, or rendering
  * with custom React components.
+ *
+ * Returns structured diagnostics with source locations that can be
+ * converted to Monaco editor markers using diagnosticsToMarkers().
  *
  * **Example AST Structure:**
  * ```json
@@ -342,38 +358,45 @@ export function getBuiltinTemplate(name: string): string {
  * }
  * ```
  *
- * @param content - QMD source text to parse
- * @returns Pandoc AST as a JSON string
- * @throws Error with diagnostic information if parsing fails
+ * @param qmdContent - QMD source text to parse
+ * @returns Parse result with AST JSON string or error information
  */
 export async function parseQmdToAst(
-  content: string
-): Promise<string> {
-  await initWasm();
-  const wasm = getWasm();
-  const responseJson = wasm.parse_qmd_to_ast(content);
+  qmdContent: string
+): Promise<ParseResult> {
+  try {
+    await initWasm();
+    const wasm = getWasm();
+    const responseJson = await wasm.parse_qmd_to_ast(qmdContent);
 
-  // Parse the response to check for errors
-  interface ParseResponse {
-    success: boolean;
-    ast?: string;
-    error?: string;
-    diagnostics?: Array<{ message: string }>;
-  }
+    const response: ParseResult = JSON.parse(responseJson);
 
-  const response: ParseResponse = JSON.parse(responseJson);
+    if (response.success) {
+      return {
+        ast: response.ast || '{}',
+        success: true,
+        warnings: response.warnings,
+      };
+    } else {
+      // Extract error message
+      const errorMsg = response.error || 'Unknown parse error';
 
-  if (!response.success) {
-    // Construct error message with diagnostics
-    let errorMsg = response.error || 'Failed to parse QMD content';
-    if (response.diagnostics && response.diagnostics.length > 0) {
-      const diagMessages = response.diagnostics.map(d => d.message).join('\n\n');
-      errorMsg = `${errorMsg}\n\n${diagMessages}`;
+      return {
+        ast: '',
+        success: false,
+        error: errorMsg,
+        diagnostics: response.diagnostics,
+        warnings: response.warnings,
+      };
     }
-    throw new Error(errorMsg);
+  } catch (err) {
+    console.error('Parse error:', err);
+    return {
+      ast: '',
+      success: false,
+      error: err instanceof Error ? err.message : JSON.stringify(err),
+    };
   }
-
-  return response.ast || '{}';
 }
 
 // ============================================================================
@@ -503,8 +526,8 @@ export async function renderToHtml(
     // Use the options-aware render function if options are specified
     const result: RenderResponse = options.sourceLocation
       ? await renderQmdContentWithOptions(qmdContent, htmlTemplateBundle || '', {
-          sourceLocation: options.sourceLocation,
-        })
+        sourceLocation: options.sourceLocation,
+      })
       : await renderQmdContent(qmdContent, htmlTemplateBundle || '');
 
     console.log('[renderToHtml] HTML has data-loc:', result.html?.includes('data-loc'));

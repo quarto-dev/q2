@@ -60,22 +60,30 @@ async function doRender(
     };
   }
 
-  try {
-    // Parse to AST
-    const astJson = await parseQmdToAst(qmdContent);
+  // Parse to AST
+  const result = await parseQmdToAst(qmdContent);
 
+  // Collect all diagnostics from both success and error paths
+  const allDiagnostics: Diagnostic[] = [
+    ...(result.diagnostics ?? []),
+    ...(result.warnings ?? []),
+  ];
+
+  if (result.success) {
     return {
       success: true,
-      astJson,
-      diagnostics: [],
+      astJson: result.ast,
+      diagnostics: allDiagnostics,
     };
-  } catch (err) {
+  } else {
     const errorMsg =
-      err instanceof Error ? err.message : JSON.stringify(err, null, 2);
+      typeof result.error === 'string'
+        ? result.error
+        : JSON.stringify(result.error, null, 2) || 'Unknown error';
 
     return {
       success: false,
-      diagnostics: [],
+      diagnostics: allDiagnostics,
       error: errorMsg,
     };
   }
