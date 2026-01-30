@@ -787,6 +787,18 @@ pub fn get_builtin_template(name: &str) -> String {
     pampa::wasm_entry_points::get_builtin_template_json(name)
 }
 
+/// Parse QMD content to Pandoc AST JSON.
+///
+/// # Arguments
+/// * `content` - QMD source text
+///
+/// # Returns
+/// JSON string containing the Pandoc AST representation
+#[wasm_bindgen]
+pub fn parse_qmd_to_ast(content: &str) -> String {
+    pampa::wasm_entry_points::parse_qmd(content.as_bytes(), false)
+}
+
 // ============================================================================
 // JAVASCRIPT EXECUTION TEST API
 // ============================================================================
@@ -1475,7 +1487,8 @@ pub fn sass_compiler_name() -> Option<String> {
 ///
 /// This changes whenever any SCSS file in `resources/scss/` is modified.
 /// Used by hub-client to invalidate the SASS cache when embedded resources change.
-const SCSS_RESOURCES_HASH: &str = include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
+const SCSS_RESOURCES_HASH: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
 
 /// Get the version hash of embedded SCSS resources.
 ///

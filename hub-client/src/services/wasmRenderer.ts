@@ -36,6 +36,7 @@ interface WasmModuleExtended {
   get_builtin_template: (name: string) => string;
   get_project_choices: () => string;
   create_project: (choiceId: string, title: string) => Promise<string>;
+  parse_qmd_to_ast: (content: string) => string;
   lsp_analyze_document: (path: string) => string;
   lsp_get_symbols: (path: string) => string;
   lsp_get_folding_ranges: (path: string) => string;
@@ -314,6 +315,65 @@ export async function renderQmdContentWithOptions(
 export function getBuiltinTemplate(name: string): string {
   const wasm = getWasm();
   return wasm.get_builtin_template(name);
+}
+
+/**
+ * Parse QMD content to Pandoc AST JSON.
+ *
+ * This function parses QMD markdown into a Pandoc AST representation,
+ * which can be used for programmatic manipulation, analysis, or rendering
+ * with custom React components.
+ *
+ * **Example AST Structure:**
+ * ```json
+ * {
+ *   "pandoc-api-version": [1, 23, 1],
+ *   "meta": {},
+ *   "blocks": [
+ *     {
+ *       "t": "Header",
+ *       "c": [1, ["id", ["class"], [["key", "value"]]], [{"t": "Str", "c": "text"}]]
+ *     },
+ *     {
+ *       "t": "Para",
+ *       "c": [{"t": "Str", "c": "Paragraph text."}]
+ *     }
+ *   ]
+ * }
+ * ```
+ *
+ * @param content - QMD source text to parse
+ * @returns Pandoc AST as a JSON string
+ * @throws Error with diagnostic information if parsing fails
+ */
+export async function parseQmdToAst(
+  content: string
+): Promise<string> {
+  await initWasm();
+  const wasm = getWasm();
+  const responseJson = wasm.parse_qmd_to_ast(content);
+
+  // Parse the response to check for errors
+  interface ParseResponse {
+    success: boolean;
+    ast?: string;
+    error?: string;
+    diagnostics?: Array<{ message: string }>;
+  }
+
+  const response: ParseResponse = JSON.parse(responseJson);
+
+  if (!response.success) {
+    // Construct error message with diagnostics
+    let errorMsg = response.error || 'Failed to parse QMD content';
+    if (response.diagnostics && response.diagnostics.length > 0) {
+      const diagMessages = response.diagnostics.map(d => d.message).join('\n\n');
+      errorMsg = `${errorMsg}\n\n${diagMessages}`;
+    }
+    throw new Error(errorMsg);
+  }
+
+  return response.ast || '{}';
 }
 
 // ============================================================================

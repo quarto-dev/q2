@@ -19,7 +19,6 @@ import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
-import Preview from './Preview';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
 import MinimalHeader from './MinimalHeader';
@@ -30,6 +29,7 @@ import StatusTab from './tabs/StatusTab';
 import SettingsTab from './tabs/SettingsTab';
 import AboutTab from './tabs/AboutTab';
 import './Editor.css';
+import ReactPreview from './ReactPreview';
 
 interface Props {
   project: ProjectEntry;
@@ -704,7 +704,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             }}
           />
         </div>
-        <Preview
+        <ReactPreview
           content={content}
           currentFile={currentFile}
           files={files}
