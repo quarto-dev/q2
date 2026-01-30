@@ -222,6 +222,63 @@ function calculateOffsetInElement(
 }
 
 /**
+ * Calculate approximate source position for a given text node and offset within it.
+ * This is the reverse of calculateOffsetInElement - it maps from rendered DOM position
+ * back to source position. Uses the same heuristic assumption of uniform character distribution.
+ */
+function calculateSourcePositionFromOffset(
+  textNode: Node,
+  offsetInTextNode: number,
+  element: HTMLElement,
+  loc: SourceLocation
+): { line: number, col: number } | null {
+  // Get all text content from the element
+  const textContent = element.textContent || '';
+  const textLength = textContent.length;
+
+  if (textLength === 0) return null;
+
+  // Find the absolute offset of the text node within the element
+  let absoluteOffset = 0;
+  const walker = document.createTreeWalker(
+    element,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+
+  let currentNode: Text | null = null;
+  let found = false;
+
+  while (currentNode = walker.nextNode() as Text) {
+    if (currentNode === textNode) {
+      absoluteOffset += offsetInTextNode;
+      found = true;
+      break;
+    }
+    absoluteOffset += currentNode.textContent?.length || 0;
+  }
+
+  if (!found) return null;
+
+  // Calculate the progress through the rendered text
+  const progress = textLength > 0 ? absoluteOffset / textLength : 0;
+
+  // Map this progress back to the source range
+  // This is the inverse of the calculation in calculateOffsetInElement
+  const sourceStartOffset = (loc.startLine - 1) * 1000 + loc.startCol;
+  const sourceEndOffset = (loc.endLine - 1) * 1000 + loc.endCol;
+  const sourceLength = sourceEndOffset - sourceStartOffset;
+
+  const targetSourceOffset = sourceStartOffset + Math.floor(progress * sourceLength);
+
+  // Convert back to line and column
+  const line = Math.floor(targetSourceOffset / 1000) + 1;
+  const col = (targetSourceOffset % 1000);
+
+  return { line, col };
+}
+
+/**
  * Morph-based iframe component for seamless updates.
  *
  * Uses morphdom to update the iframe's content in-place, preserving:
@@ -385,7 +442,7 @@ function MorphIframe({
 
         // Check if this element contains the start position (considering both line and column)
         if (isPositionAfterOrAt(startPos.startLine, startPos.startCol, loc.startLine, loc.startCol) &&
-            isPositionBeforeOrAt(startPos.startLine, startPos.startCol, loc.endLine, loc.endCol)) {
+          isPositionBeforeOrAt(startPos.startLine, startPos.startCol, loc.endLine, loc.endCol)) {
           const rangeSize = loc.endLine - loc.startLine;
           // Prefer smaller (more specific) ranges
           if (rangeSize < startRangeSize) {
@@ -397,7 +454,7 @@ function MorphIframe({
 
         // Check if this element contains the end position (considering both line and column)
         if (isPositionAfterOrAt(endPos.endLine, endPos.endCol, loc.startLine, loc.startCol) &&
-            isPositionBeforeOrAt(endPos.endLine, endPos.endCol, loc.endLine, loc.endCol)) {
+          isPositionBeforeOrAt(endPos.endLine, endPos.endCol, loc.endLine, loc.endCol)) {
           const rangeSize = loc.endLine - loc.startLine;
           // Prefer smaller (more specific) ranges
           if (rangeSize < endRangeSize) {
@@ -484,9 +541,11 @@ function MorphIframe({
       const selection = doc.getSelection();
       if (!selection || selection.rangeCount === 0) return;
 
-      // Get anchor and focus nodes
+      // Get anchor and focus nodes with their offsets
       const anchorNode = selection.anchorNode;
       const focusNode = selection.focusNode;
+      const anchorOffset = selection.anchorOffset;
+      const focusOffset = selection.focusOffset;
 
       if (!anchorNode || !focusNode) return;
 
@@ -508,8 +567,52 @@ function MorphIframe({
 
       if (!anchorDataLoc || !focusDataLoc) return;
 
-      const startPos = parseDataLoc(anchorDataLoc);
-      const endPos = parseDataLoc(focusDataLoc);
+      const anchorLoc = parseDataLoc(anchorDataLoc);
+      const focusLoc = parseDataLoc(focusDataLoc);
+
+      if (!anchorLoc || !focusLoc) return;
+
+      // Calculate more precise positions based on the text offset within the nodes
+      let startPos: SourceLocation | null = anchorLoc;
+      let endPos: SourceLocation | null = focusLoc;
+
+      // Try to refine the anchor position using the text offset
+      if (anchorNode.nodeType === Node.TEXT_NODE && anchorOffset !== focusOffset) {
+        const refinedAnchor = calculateSourcePositionFromOffset(
+          anchorNode,
+          anchorOffset,
+          anchorElement as HTMLElement,
+          anchorLoc
+        );
+        if (refinedAnchor) {
+          startPos = {
+            ...anchorLoc,
+            startLine: refinedAnchor.line,
+            startCol: refinedAnchor.col,
+            endLine: refinedAnchor.line,
+            endCol: refinedAnchor.col,
+          };
+        }
+      }
+
+      // Try to refine the focus position using the text offset
+      if (focusNode.nodeType === Node.TEXT_NODE) {
+        const refinedFocus = calculateSourcePositionFromOffset(
+          focusNode,
+          focusOffset,
+          focusElement as HTMLElement,
+          focusLoc
+        );
+        if (refinedFocus) {
+          endPos = {
+            ...focusLoc,
+            startLine: refinedFocus.line,
+            startCol: refinedFocus.col,
+            endLine: refinedFocus.line,
+            endCol: refinedFocus.col,
+          };
+        }
+      }
 
       onSelectionChange(startPos, endPos);
     };
