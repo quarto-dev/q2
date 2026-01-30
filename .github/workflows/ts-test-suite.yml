@@ -120,7 +120,7 @@ jobs:
       - name: Build WASM module
         shell: bash
         run: |
-          cd crates/hub-client
+          cd hub-client
           npm run build:all
 
       # - name: Run hub-client tests
