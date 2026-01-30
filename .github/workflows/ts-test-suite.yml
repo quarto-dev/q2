@@ -45,11 +45,11 @@ jobs:
         shell: bash
         run: rustup --version
 
-      # Cache Rust AFTER toolchain is set up
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
+    #   # Cache Rust AFTER toolchain is set up
+    #   - name: Cache Rust dependencies
+    #     uses: Swatinem/rust-cache@v2
+    #     with:
+    #       cache-on-failure: true
 
       # Cache cargo-nextest and insta separately to avoid reinstalling
       - name: Install nextest
