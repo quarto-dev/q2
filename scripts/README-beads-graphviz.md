@@ -61,7 +61,7 @@ python3 scripts/beads-to-graphviz.py | tee beads-graph.dot | dot -Tsvg -o beads-
 
 ## Notes
 
-- The graph includes all issues from `bd list --json`
-- Dependencies are fetched using `bd show <id> --json` for each issue
+- The graph includes all issues from `br list --json`
+- Dependencies are fetched using `br show <id> --json` for each issue
 - Large graphs may need scaling (GraphViz will warn and auto-scale)
 - For very large graphs, consider filtering by status or priority before visualization
