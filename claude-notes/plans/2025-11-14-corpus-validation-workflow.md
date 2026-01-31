@@ -371,7 +371,7 @@ Error has code starting with "E"?
 
 1. **Grammar bugs** (discovered during validation)
    ```bash
-   bd create "Fix grammar: [construct] not parsing" \
+   br create "Fix grammar: [construct] not parsing" \
      -t bug -p 1 \
      -d "Found in: <file>
          Minimal repro: <example>
@@ -381,7 +381,7 @@ Error has code starting with "E"?
 
 2. **New error codes needed**
    ```bash
-   bd create "Add error code for [construct]" \
+   br create "Add error code for [construct]" \
      -t task -p 1 \
      -d "Pattern: <description>
          Example files: <list>
@@ -391,7 +391,7 @@ Error has code starting with "E"?
 
 3. **Conversion rules for qmd-syntax-helper**
    ```bash
-   bd create "Add conversion rule: [pattern]" \
+   br create "Add conversion rule: [pattern]" \
      -t feature -p 2 \
      -d "Error code: E0XXX
          Auto-fix: <strategy>

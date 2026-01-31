@@ -55,7 +55,7 @@ Run the HTML report and look for:
 ### 3. Create a Tracking Issue
 
 ```bash
-bd create "Improve coverage: <target description>" \
+br create "Improve coverage: <target description>" \
   -t task -p 2 \
   --deps parent-child:k-uoc5 \
   -d "Session baseline: X.XX% line coverage. Target: beat baseline."
@@ -290,10 +290,10 @@ Consider:
 ### 3. Create Tracking Issue
 
 ```bash
-bd create "Improve coverage: <target>" -t task -p 2 \
+br create "Improve coverage: <target>" -t task -p 2 \
   --deps parent-child:k-uoc5 \
   -d "Session baseline: XX.XX%"
-bd update <issue-id> --status in_progress
+br update <issue-id> --status in_progress
 ```
 
 ### 4. Understand the Code
@@ -325,7 +325,7 @@ If the code is hard to test:
 ### 7. Complete Session
 
 ```bash
-bd close <issue-id> --reason "Coverage: XX.XX% -> YY.YY%"
+br close <issue-id> --reason "Coverage: XX.XX% -> YY.YY%"
 ```
 
 ## Common Patterns in This Codebase
@@ -550,7 +550,7 @@ When you find dead code:
 
 1. **Create a beads issue** documenting the finding:
    ```bash
-   bd create "Remove dead code: <filename>" -t task -p 3 \
+   br create "Remove dead code: <filename>" -t task -p 3 \
      -d "File is never imported or used. [Reason it's dead, e.g., 'Superseded by foo_helpers.rs']"
    ```
 

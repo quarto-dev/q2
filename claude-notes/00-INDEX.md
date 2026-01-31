@@ -4,7 +4,9 @@
 
 This directory contains notes about the Kyoto project - exploring a Rust port of Quarto CLI.
 
-We track work in Beads instead of Markdown. Run `bd quickstart` to see how. Keep using markdown files to provide information to the user, but use Beads to track your own work, project dependencies, etc.
+We track work in Beads instead of Markdown. Run `br quickstart` to see how. Keep using markdown files to provide information to the user, but use Beads to track your own work, project dependencies, etc.
+
+**Note:** `br` is non-invasive and never executes git commands. After `br sync --flush-only`, you must manually run `git add .beads/ && git commit`.
 
 ## Project Overview
 

@@ -232,7 +232,7 @@ Do NOT use `#[coverage(off)]` for:
 If you discover code that is never called:
 1. Verify it's truly dead (search for usages)
 2. Do NOT write tests for dead code
-3. Create a beads issue for removal: `bd create "Remove dead code: <file/function>" -t task -p 3`
+3. Create a beads issue for removal: `br create "Remove dead code: <file/function>" -t task -p 3`
 4. Note in checklist as "dead code - removal issue created"
 
 ## Binary and CLI Code

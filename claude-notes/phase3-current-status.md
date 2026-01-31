@@ -91,7 +91,7 @@ After completing production code fixes, discovered 13 missing fields in test cod
 ```bash
 cd /Users/cscheid/repos/github/cscheid/kyoto
 git checkout kyoto-source-map-migration
-bd update k-69 --status in_progress
+br update k-69 --status in_progress
 ```
 
 The final switchover involves:

@@ -52,7 +52,7 @@ cargo nextest run -p quarto-citeproc
 
 ```bash
 # Check beads for assigned tasks
-bd ready
+br ready
 
 # See test breakdown by category (focus on "Unknown" counts)
 python3 scripts/csl-test-helper.py status
@@ -457,8 +457,8 @@ Only revisit deferred tests when:
 
 Check beads for current tasks:
 ```bash
-bd ready
-bd show k-422  # Parent issue for CSL conformance
+br ready
+br show k-422  # Parent issue for CSL conformance
 ```
 
 Major remaining areas:

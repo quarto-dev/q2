@@ -330,7 +330,7 @@ assert.strictEqual(result.source.value, qmdContent, 'Document source is full con
 // Document spans entire file (file ID 0 is main document)
 ```
 
-**Close:** bd close k-211 with comprehensive summary
+**Close:** br close k-211 with comprehensive summary
 
 ---
 

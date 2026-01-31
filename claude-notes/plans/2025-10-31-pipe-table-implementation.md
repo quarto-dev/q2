@@ -136,7 +136,7 @@ pipe_table
 ### Phase 4: Cleanup
 17. **Run full test suite**: Ensure all 166+ tests pass
 18. **Format code**: `cargo fmt`
-19. **Close issue**: `bd close k-303`
+19. **Close issue**: `br close k-303`
 
 ## Expected Test Results
 

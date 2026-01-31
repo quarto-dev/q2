@@ -138,6 +138,6 @@ python3 scripts/csl-test-helper.py quick-wins
 # 2. Run: UPDATE_CSL_LOCKFILE=1 cargo nextest run -p quarto-citeproc csl_validate_manifest
 
 # View beads issues
-bd ready --json
-bd show k-459 --json
+br ready --json
+br show k-459 --json
 ```

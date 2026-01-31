@@ -176,7 +176,7 @@ Is the tree-sitter parse tree structure correct?
 - Whether fix is needed or if it's expected behavior
 
 **Where to document**:
-- For bugs to fix: Create beads issue with `bd create`
+- For bugs to fix: Create beads issue with `br create`
 - For investigation notes: `claude-notes/investigations/YYYY-MM-DD-<topic>.md`
 
 ### 8. Fix Strategy (if needed)

@@ -125,19 +125,19 @@ echo "test input" | cargo run --bin quarto-markdown-pandoc -- --verbose 2>&1 | g
 ### Commands for Beads
 ```bash
 # See ready work
-bd ready --json
+br ready --json
 
 # Create next task (when ready)
-bd create "Implement <node_name> handler" -t task -p 0 --deps parent-child:k-274 --json
+br create "Implement <node_name> handler" -t task -p 0 --deps parent-child:k-274 --json
 
 # Update status
-bd update <id> --status in_progress --json
+br update <id> --status in_progress --json
 
 # Close when done
-bd close <id> --reason "Description of completion" --json
+br close <id> --reason "Description of completion" --json
 
 # View epic tree
-bd dep tree k-274
+br dep tree k-274
 ```
 
 ## Next Steps (Priority Order from Plan)
@@ -231,11 +231,11 @@ echo "input" | cargo run --bin quarto-markdown-pandoc -- --verbose 2>&1 | grep M
 echo "input" | pandoc -f markdown -t json
 
 # Beads commands
-bd ready --json
-bd create "Title" -t task -p 0 --deps parent-child:k-274 --json
-bd update <id> --status in_progress --json
-bd close <id> --reason "Done" --json
-bd dep tree k-274
+br ready --json
+br create "Title" -t task -p 0 --deps parent-child:k-274 --json
+br update <id> --status in_progress --json
+br close <id> --reason "Done" --json
+br dep tree k-274
 ```
 
 ## Success Metrics

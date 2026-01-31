@@ -252,4 +252,4 @@ Complex multi-phase algorithm. Requires sorting to work first.
 - Design document: `claude-notes/plans/2025-11-26-citeproc-rust-port-design.md`
 - Pandoc citeproc source: `external-sources/citeproc/src/Citeproc/`
 - CSL spec analysis: `claude-notes/research/2025-11-26-citeproc-output-architecture.md`
-- Issue tracker: `bd show k-422`
+- Issue tracker: `br show k-422`

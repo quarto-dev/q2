@@ -692,7 +692,7 @@ When issues are found, create beads issues:
 
 ```bash
 # For missing catalog entries
-bd create "Add error catalog entry for Q-3-38" \
+br create "Add error catalog entry for Q-3-38" \
   -t task -p 1 \
   -d "Error code Q-3-38 is used in source but missing from error_catalog.json
 
@@ -708,7 +708,7 @@ bd create "Add error catalog entry for Q-3-38" \
   --json
 
 # For orphaned codes
-bd create "Investigate orphaned error code Q-2-99" \
+br create "Investigate orphaned error code Q-2-99" \
   -t task -p 2 \
   -d "Error code Q-2-99 exists in catalog but is not referenced in source.
 
