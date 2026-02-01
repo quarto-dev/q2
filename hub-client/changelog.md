@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-02-01
 
+- [`a5261499`](https://github.com/quarto-dev/kyoto/commits/a5261499): Resolve meta shortcodes in document outline (headers like `# {{< meta title >}}` now show resolved values)
 - [`6c300f58`](https://github.com/quarto-dev/kyoto/commits/6c300f58): Add meta shortcode resolution to rendering pipeline
 
 ### 2026-01-29
