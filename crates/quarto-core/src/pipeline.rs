@@ -61,7 +61,7 @@ use crate::transform::TransformPipeline;
 use crate::transforms::{
     AppendixStructureTransform, CalloutResolveTransform, CalloutTransform, FootnotesTransform,
     MetadataNormalizeTransform, ResourceCollectorTransform, SectionizeTransform,
-    TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
+    ShortcodeResolveTransform, TitleBlockTransform, TocGenerateTransform, TocRenderTransform,
 };
 
 /// Well-known path for the default CSS artifact in WASM context.
@@ -348,24 +348,26 @@ pub async fn render_qmd_to_html(
 /// ## Normalization Phase
 /// 1. `CalloutTransform` - Convert callout Divs to CustomNodes
 /// 2. `CalloutResolveTransform` - Resolve CustomNodes to structured Divs
-/// 3. `MetadataNormalizeTransform` - Add derived metadata (pagetitle, etc.)
-/// 4. `TitleBlockTransform` - Add title header from metadata if not present
-/// 5. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
-/// 6. `FootnotesTransform` - Extract footnotes and create footnotes section
+/// 3. `ShortcodeResolveTransform` - Resolve shortcodes (e.g., `{{< meta title >}}`)
+/// 4. `MetadataNormalizeTransform` - Add derived metadata (pagetitle, etc.)
+/// 5. `TitleBlockTransform` - Add title header from metadata if not present
+/// 6. `SectionizeTransform` - Wrap headers in section Divs (for HTML semantic structure)
+/// 7. `FootnotesTransform` - Extract footnotes and create footnotes section
 ///
 /// ## TOC Phase
-/// 7. `TocGenerateTransform` - Generate TOC from headers (if toc: true)
-/// 8. `TocRenderTransform` - Render TOC to HTML for template insertion
+/// 8. `TocGenerateTransform` - Generate TOC from headers (if toc: true)
+/// 9. `TocRenderTransform` - Render TOC to HTML for template insertion
 ///
 /// ## Finalization Phase
-/// 9. `AppendixStructureTransform` - Consolidate appendix content into container
-/// 10. `ResourceCollectorTransform` - Collect image dependencies
+/// 10. `AppendixStructureTransform` - Consolidate appendix content into container
+/// 11. `ResourceCollectorTransform` - Collect image dependencies
 pub fn build_transform_pipeline() -> TransformPipeline {
     let mut pipeline = TransformPipeline::new();
 
     // === NORMALIZATION PHASE ===
     pipeline.push(Box::new(CalloutTransform::new()));
     pipeline.push(Box::new(CalloutResolveTransform::new()));
+    pipeline.push(Box::new(ShortcodeResolveTransform::new()));
     pipeline.push(Box::new(MetadataNormalizeTransform::new()));
     pipeline.push(Box::new(TitleBlockTransform::new()));
     pipeline.push(Box::new(SectionizeTransform::new()));
@@ -450,6 +452,98 @@ mod tests {
         assert!(output.html.contains("callout-warning"));
         assert!(output.html.contains("Watch Out"));
         assert!(output.html.contains("Be careful!"));
+    }
+
+    #[test]
+    fn test_render_with_meta_shortcode() {
+        let content = b"---\ntitle: My Document Title\nauthor: Jane Doe\n---\n\nThe title is {{< meta title >}} by {{< meta author >}}.";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        // Verify shortcodes were resolved
+        assert!(output.html.contains("My Document Title"));
+        assert!(output.html.contains("Jane Doe"));
+        // Shortcode syntax should not appear in output
+        assert!(!output.html.contains("{{<"));
+        assert!(!output.html.contains(">}}"));
+    }
+
+    #[test]
+    fn test_render_with_nested_meta_shortcode() {
+        // Use simple text without @ symbols to avoid citation parsing
+        let content = b"---\ntitle: Test\nauthor:\n  name: John Smith\n  location: New York\n---\n\nContact: {{< meta author.name >}} in {{< meta author.location >}}.";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        // Verify nested metadata was resolved
+        assert!(output.html.contains("John Smith"));
+        assert!(output.html.contains("New York"));
+    }
+
+    #[test]
+    fn test_render_with_missing_meta_key() {
+        let content = b"---\ntitle: Test\n---\n\nMissing: {{< meta nonexistent >}}.";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        // Verify error output is visible (TS Quarto style: "?meta:key" in bold)
+        assert!(output.html.contains("?meta:nonexistent"));
+        // Should have a warning diagnostic
+        assert!(!output.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_render_with_escaped_shortcode() {
+        let content = b"---\ntitle: Test\n---\n\nShow literal: {{{< meta title >}}}.";
+
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/test.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+
+        let config = HtmlRenderConfig::default();
+        let runtime = make_test_runtime();
+        let output = pollster::block_on(render_qmd_to_html(
+            content, "test.qmd", &mut ctx, &config, runtime,
+        ))
+        .unwrap();
+
+        // Escaped shortcode should render as literal text (without the extra braces)
+        assert!(output.html.contains("{{&lt; meta title &gt;}}"));
     }
 
     #[test]

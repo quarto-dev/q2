@@ -787,6 +787,7 @@ mod tests {
                 is_escaped: false,
                 positional_args: vec![],
                 keyword_args: std::collections::HashMap::new(),
+                source_info: dummy_source_info(),
             }),
             Inline::Str(Str {
                 text: "after".to_string(),

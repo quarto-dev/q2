@@ -16,6 +16,7 @@
 //! - [`MetadataNormalizeTransform`] - Normalizes document metadata (adds pagetitle, etc.)
 //! - [`ResourceCollectorTransform`] - Collects resource dependencies (images, etc.)
 //! - [`SectionizeTransform`] - Wraps headers in section Divs (analogous to Pandoc's --section-divs)
+//! - [`ShortcodeResolveTransform`] - Resolves shortcodes to their content
 //! - [`TitleBlockTransform`] - Adds title header from metadata if not present
 //! - [`TocGenerateTransform`] - Generates TOC from document headings
 //! - [`TocRenderTransform`] - Renders TOC metadata to HTML
@@ -31,6 +32,7 @@ mod footnotes;
 mod metadata_normalize;
 mod resource_collector;
 mod sectionize;
+mod shortcode_resolve;
 mod title_block;
 mod toc_generate;
 mod toc_render;
@@ -43,6 +45,7 @@ pub use footnotes::FootnotesTransform;
 pub use metadata_normalize::MetadataNormalizeTransform;
 pub use resource_collector::ResourceCollectorTransform;
 pub use sectionize::SectionizeTransform;
+pub use shortcode_resolve::ShortcodeResolveTransform;
 pub use title_block::TitleBlockTransform;
 pub use toc_generate::TocGenerateTransform;
 pub use toc_render::TocRenderTransform;

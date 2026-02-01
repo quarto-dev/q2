@@ -152,6 +152,9 @@ impl PipelineStage for AstTransformsStage {
         // Transfer artifacts back to StageContext
         ctx.artifacts = render_ctx.artifacts;
 
+        // Transfer any warnings collected during transforms
+        ctx.warnings.extend(render_ctx.warnings);
+
         // Handle result
         result.map_err(|e| PipelineError::stage_error(self.name(), e.to_string()))?;
 

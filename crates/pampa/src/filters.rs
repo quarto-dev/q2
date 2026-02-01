@@ -1395,6 +1395,7 @@ mod tests {
             name: "test".to_string(),
             positional_args: vec![],
             keyword_args: std::collections::HashMap::new(),
+            source_info: si(),
         });
         let result = topdown_traverse_inline(inline, &mut filter, &mut ctx);
         assert_eq!(result.len(), 1);

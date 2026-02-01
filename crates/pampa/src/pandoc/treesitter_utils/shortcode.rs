@@ -8,7 +8,8 @@
 
 use crate::pandoc::ast_context::ASTContext;
 use crate::pandoc::location::node_source_info_with_context;
-use crate::pandoc::{Inline, Shortcode, ShortcodeArg};
+use crate::pandoc::{Inline, Shortcode, ShortcodeArg, Space};
+use quarto_source_map::SourceInfo;
 use std::collections::HashMap;
 
 use super::pandocnativeintermediate::PandocNativeIntermediate;
@@ -47,14 +48,45 @@ pub fn process_shortcode_string(
 pub fn process_shortcode(
     node: &tree_sitter::Node,
     children: Vec<(String, PandocNativeIntermediate)>,
-    _context: &ASTContext,
+    input_bytes: &[u8],
+    context: &ASTContext,
 ) -> PandocNativeIntermediate {
     let is_escaped = node.kind() == "shortcode_escaped";
+
+    // Check for leading whitespace (tree-sitter scanner may include it in the node)
+    let text = node.utf8_text(input_bytes).unwrap();
+    let has_leading_space = text.starts_with(char::is_whitespace);
+
+    // Calculate the number of leading whitespace bytes
+    let leading_space_len = text.len() - text.trim_start().len();
+
+    // Calculate source info for the shortcode (excluding leading space if present)
+    let source_info = if has_leading_space {
+        let shortcode_start_byte = node.start_byte() + leading_space_len;
+        let shortcode_start_pos = node.start_position();
+
+        let shortcode_range = quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: shortcode_start_byte,
+                row: shortcode_start_pos.row,
+                column: shortcode_start_pos.column + leading_space_len,
+            },
+            end: quarto_source_map::Location {
+                offset: node.end_byte(),
+                row: node.end_position().row,
+                column: node.end_position().column,
+            },
+        };
+        SourceInfo::from_range(context.current_file_id(), shortcode_range)
+    } else {
+        node_source_info_with_context(node, context)
+    };
+
     let mut name = String::new();
     let mut positional_args: Vec<ShortcodeArg> = Vec::new();
     let mut keyword_args: HashMap<String, ShortcodeArg> = HashMap::new();
-    for (node, child) in children {
-        match (node.as_str(), child) {
+    for (child_node, child) in children {
+        match (child_node.as_str(), child) {
             (
                 "shortcode_naked_string" | "shortcode_name" | "shortcode_string",
                 PandocNativeIntermediate::IntermediateShortcodeArg(ShortcodeArg::String(text), _),
@@ -85,12 +117,38 @@ pub fn process_shortcode(
             }
         }
     }
-    PandocNativeIntermediate::IntermediateInline(Inline::Shortcode(Shortcode {
+
+    let shortcode = Inline::Shortcode(Shortcode {
         is_escaped,
         name,
         positional_args,
         keyword_args,
-    }))
+        source_info,
+    });
+
+    // Return with leading Space if the scanner included whitespace in the node
+    if has_leading_space {
+        let space_range = quarto_source_map::Range {
+            start: quarto_source_map::Location {
+                offset: node.start_byte(),
+                row: node.start_position().row,
+                column: node.start_position().column,
+            },
+            end: quarto_source_map::Location {
+                offset: node.start_byte() + leading_space_len,
+                row: node.start_position().row,
+                column: node.start_position().column + leading_space_len,
+            },
+        };
+        PandocNativeIntermediate::IntermediateInlines(vec![
+            Inline::Space(Space {
+                source_info: SourceInfo::from_range(context.current_file_id(), space_range),
+            }),
+            shortcode,
+        ])
+    } else {
+        PandocNativeIntermediate::IntermediateInline(shortcode)
+    }
 }
 
 pub fn process_shortcode_number(

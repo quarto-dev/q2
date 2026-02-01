@@ -183,6 +183,7 @@ mod tests {
             name: "meta".to_string(),
             positional_args: vec![],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -201,6 +202,7 @@ mod tests {
             name: "meta".to_string(),
             positional_args: vec![ShortcodeArg::String("title".to_string())],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -218,6 +220,7 @@ mod tests {
             name: "index".to_string(),
             positional_args: vec![ShortcodeArg::Number(42.5)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -234,6 +237,7 @@ mod tests {
             name: "flag".to_string(),
             positional_args: vec![ShortcodeArg::Boolean(true)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -250,6 +254,7 @@ mod tests {
             name: "flag".to_string(),
             positional_args: vec![ShortcodeArg::Boolean(false)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -266,6 +271,7 @@ mod tests {
             name: "inner".to_string(),
             positional_args: vec![],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let outer = Shortcode {
@@ -273,6 +279,7 @@ mod tests {
             name: "outer".to_string(),
             positional_args: vec![ShortcodeArg::Shortcode(inner)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(outer);
@@ -305,6 +312,7 @@ mod tests {
             name: "embed".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -326,6 +334,7 @@ mod tests {
             name: "image".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -346,6 +355,7 @@ mod tests {
             name: "feature".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -366,6 +376,7 @@ mod tests {
             name: "feature".to_string(),
             positional_args: vec![ShortcodeArg::KeyValue(kv)],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -389,6 +400,7 @@ mod tests {
             name: "export".to_string(),
             positional_args: vec![],
             keyword_args: kwargs,
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -409,6 +421,7 @@ mod tests {
             name: "render".to_string(),
             positional_args: vec![],
             keyword_args: kwargs,
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -428,6 +441,7 @@ mod tests {
             name: "run".to_string(),
             positional_args: vec![],
             keyword_args: kwargs,
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -448,6 +462,7 @@ mod tests {
             name: "run".to_string(),
             positional_args: vec![],
             keyword_args: kwargs,
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -474,6 +489,7 @@ mod tests {
                 ShortcodeArg::Boolean(true),
             ],
             keyword_args: kwargs,
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);
@@ -495,6 +511,7 @@ mod tests {
             name: "raw".to_string(),
             positional_args: vec![],
             keyword_args: HashMap::new(),
+            source_info: si(),
         };
 
         let span = shortcode_to_span(sc);

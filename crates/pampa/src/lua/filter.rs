@@ -2054,7 +2054,8 @@ mod unit_tests {
                     is_escaped: false,
                     name: String::new(),
                     positional_args: vec![],
-                    keyword_args: HashMap::new()
+                    keyword_args: HashMap::new(),
+                    source_info: source_info.clone()
                 }
             )),
             "Shortcode"

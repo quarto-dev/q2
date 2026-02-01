@@ -14,6 +14,7 @@
 
 use std::path::PathBuf;
 
+use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 
 use crate::artifact::ArtifactStore;
@@ -89,6 +90,9 @@ pub struct RenderContext<'a> {
 
     /// Render options
     pub options: RenderOptions,
+
+    /// Non-fatal warnings collected during transforms
+    pub warnings: Vec<DiagnosticMessage>,
 }
 
 /// Options for rendering
@@ -122,7 +126,16 @@ impl<'a> RenderContext<'a> {
             format,
             binaries,
             options: RenderOptions::default(),
+            warnings: Vec::new(),
         }
+    }
+
+    /// Add a non-fatal warning diagnostic.
+    ///
+    /// Warnings are collected during transforms and can be displayed
+    /// to the user after rendering completes. They don't stop rendering.
+    pub fn add_warning(&mut self, warning: DiagnosticMessage) {
+        self.warnings.push(warning);
     }
 
     /// Create with custom options

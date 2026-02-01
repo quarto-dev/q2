@@ -4,6 +4,7 @@
  */
 
 use crate::pandoc::attr::{AttrSourceInfo, TargetSourceInfo};
+use crate::pandoc::shortcode::shortcode_to_span;
 use crate::pandoc::{
     ASTContext, Attr, Block, Caption, CitationMode, Inline, Inlines, ListAttributes, Pandoc,
 };
@@ -949,19 +950,15 @@ fn write_inline(inline: &Inline, ctx: &mut JsonWriterContext) -> Value {
             ctx,
         ),
         Inline::Shortcode(shortcode) => {
-            // Defensive: Shortcodes should not reach JSON writer
-            ctx.errors.push(
-                DiagnosticMessageBuilder::error("Shortcode not supported in JSON format")
-                    .with_code("Q-3-30")
-                    .problem(format!("Cannot render shortcode `{{{{< {} >}}}}` in JSON format", shortcode.name))
-                    .add_detail("Shortcodes are Quarto-specific and not representable in Pandoc JSON")
-                    .add_hint("Use native format or process shortcodes before writing JSON")
-                    .build()
-            );
-            let mut attr_hash = LinkedHashMap::new();
-            attr_hash.insert("data-shortcode".to_string(), shortcode.name.clone());
-            let attr = (String::new(), vec!["shortcode".to_string()], attr_hash);
-            node_with_source("Span", Some(json!([write_attr(&attr), []])), &SourceInfo::default(), ctx)
+            // Convert shortcode to span representation for JSON format output
+            let span = shortcode_to_span(shortcode.clone());
+            let attr = (span.attr.0.clone(), span.attr.1.clone(), span.attr.2.clone());
+            node_with_source(
+                "Span",
+                Some(json!([write_attr(&attr), write_inlines(&span.content, ctx)])),
+                &shortcode.source_info,
+                ctx,
+            )
         }
         Inline::NoteReference(note_ref) => {
             // Defensive: Should be converted to Span in postprocessing

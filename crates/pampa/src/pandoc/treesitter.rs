@@ -661,7 +661,9 @@ fn native_visitor<T: Write>(
             process_shortcode_string(&extract_quoted_text, node, context)
         }
         "shortcode_number" => process_shortcode_number(node, input_bytes, context),
-        "shortcode" | "shortcode_escaped" => process_shortcode(node, children, context),
+        "shortcode" | "shortcode_escaped" => {
+            process_shortcode(node, children, input_bytes, context)
+        }
         // Citation nodes
         "citation_delimiter" => PandocNativeIntermediate::IntermediateUnknown(node_location(node)),
         "citation_id_author_in_text" => {

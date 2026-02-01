@@ -625,6 +625,7 @@ fn gen_shortcode_inner(depth: usize) -> impl Strategy<Value = Shortcode> {
             name,
             positional_args,
             keyword_args,
+            source_info: quarto_source_map::SourceInfo::default(),
         },
     )
 }

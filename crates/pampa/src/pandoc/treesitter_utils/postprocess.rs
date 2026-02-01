@@ -8,7 +8,6 @@ use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
 };
 use crate::pandoc::location::empty_source_info;
-use crate::pandoc::shortcode::shortcode_to_span;
 use crate::pandoc::{
     Attr, Block, Blocks, Caption, DefinitionList, Div, Figure, Inline, Inlines, Pandoc, Plain,
     Space, Span, Str, Superscript, is_empty_attr,
@@ -1076,9 +1075,10 @@ pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Re
                 // Return the transformed table
                 FilterResult(vec![Block::Table(table)], false)
             })
-            .with_shortcode(|shortcode, _ctx| {
-                FilterResult(vec![Inline::Span(shortcode_to_span(shortcode))], false)
-            })
+            // NOTE: We intentionally do NOT convert shortcodes to spans here.
+            // Shortcodes remain as Inline::Shortcode so that ShortcodeResolveTransform
+            // in quarto-core can resolve them. The shortcode_to_span conversion is only
+            // needed for Lua filter compatibility, which happens separately if needed.
             .with_note_reference(|note_ref, _ctx| {
                 let mut kv = LinkedHashMap::new();
                 kv.insert("reference-id".to_string(), note_ref.id.clone());

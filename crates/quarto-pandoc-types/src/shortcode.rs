@@ -21,4 +21,5 @@ pub struct Shortcode {
     pub name: String,
     pub positional_args: Vec<ShortcodeArg>,
     pub keyword_args: HashMap<String, ShortcodeArg>,
+    pub source_info: quarto_source_map::SourceInfo,
 }

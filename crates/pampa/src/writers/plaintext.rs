@@ -859,6 +859,7 @@ mod tests {
                 name: "include".to_string(),
                 positional_args: vec![],
                 keyword_args: HashMap::new(),
+                source_info: dummy_source_info(),
             }),
             make_str("after"),
         ];

@@ -1958,6 +1958,7 @@ mod tests {
             name: "test".into(),
             positional_args: vec![],
             keyword_args: HashMap::new(),
+            source_info: si(),
         });
         assert_eq!(LuaInline(inline).tag_name(), "Shortcode");
     }

@@ -1323,7 +1323,10 @@ mod tests {
             name: "test".to_string(),
             positional_args: vec![],
             keyword_args: HashMap::new(),
+            source_info: quarto_source_map::SourceInfo::default(),
         });
+        // Shortcode now has source_info, but we return None for now
+        // (this may change when shortcode resolution is implemented)
         assert_eq!(get_inline_source_info(&shortcode), None);
     }
 
@@ -1777,12 +1780,14 @@ mod tests {
         let lua = Lua::new();
         register_quarto_namespace(&lua).unwrap();
 
-        // Shortcode doesn't have source_info, so it should fall back to stack location
+        // Shortcode has source_info but get_inline_source_info returns None for it,
+        // so this test verifies fallback to stack location
         let shortcode = Inline::Shortcode(Shortcode {
             is_escaped: false,
             name: "test".to_string(),
             positional_args: vec![],
             keyword_args: HashMap::new(),
+            source_info: quarto_source_map::SourceInfo::default(),
         });
         let lua_inline = LuaInline(shortcode);
         lua.globals()

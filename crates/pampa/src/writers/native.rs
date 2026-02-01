@@ -3,6 +3,7 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+use crate::pandoc::shortcode::shortcode_to_span;
 use crate::pandoc::{
     Attr, Block, Citation, CitationMode, Inline, ListNumberDelim, MathType, Pandoc, QuoteType,
 };
@@ -352,18 +353,12 @@ fn write_inline<T: std::io::Write>(
             write_inlines(&cite_struct.content, context, buf, errors)?;
         }
         Inline::Shortcode(shortcode) => {
-            // Extension error - Quarto shortcodes not supported in native format
-            errors.push(
-                quarto_error_reporting::DiagnosticMessageBuilder::error(
-                    "Shortcodes not supported in native format",
-                )
-                .with_code("Q-3-30")
-                .problem(format!("Cannot render shortcode `{{{{< {} >}}}}` in native format", shortcode.name))
-                .add_detail("Shortcodes are Quarto-specific syntax not represented in Pandoc's native format")
-                .add_hint("Use JSON output format to see shortcode details")
-                .build(),
-            );
-            // Skip this inline
+            // Convert shortcode to span representation for native format output
+            let span = shortcode_to_span(shortcode.clone());
+            write!(buf, "Span ")?;
+            write_native_attr(&span.attr, buf)?;
+            write!(buf, " ")?;
+            write_inlines(&span.content, context, buf, errors)?;
         }
         Inline::NoteReference(note_ref) => {
             // Defensive error - should be converted to Span in postprocess
