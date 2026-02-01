@@ -2,17 +2,25 @@
 //!
 //! This module extracts document symbols (headers, code cells) from QMD documents
 //! by parsing them with `pampa` and walking the resulting Pandoc AST.
+//!
+//! Analysis transforms from `quarto-analysis` are run before extracting symbols
+//! to resolve shortcodes and other constructs that affect the document outline.
 
 use crate::analysis::analyze_document;
 use crate::document::Document;
 use crate::types::{FoldingRange, Position, Range, Symbol, SymbolKind};
 use pampa::pandoc::{Block, CodeBlock, Header, Inline, Inlines, Pandoc};
+use quarto_analysis::DocumentAnalysisContext;
+use quarto_analysis::transforms::{
+    AnalysisTransform, MetaShortcodeTransform, run_analysis_transforms,
+};
 use quarto_source_map::SourceContext;
 
 /// Get document symbols for outline/navigation.
 ///
 /// This parses the document and extracts a hierarchical list of symbols
-/// representing headers and code cells.
+/// representing headers and code cells. Analysis transforms are run to
+/// resolve shortcodes before symbol extraction.
 ///
 /// # Example
 ///
@@ -39,7 +47,12 @@ pub fn get_symbols(doc: &Document) -> Vec<Symbol> {
     );
 
     match result {
-        Ok((pandoc, _ast_context, _warnings)) => {
+        Ok((mut pandoc, _ast_context, _warnings)) => {
+            // Run analysis transforms to resolve shortcodes
+            let mut analysis_ctx = DocumentAnalysisContext::new(source_context.clone());
+            let transforms: Vec<&dyn AnalysisTransform> = vec![&MetaShortcodeTransform];
+            let _ = run_analysis_transforms(&mut pandoc, &mut analysis_ctx, &transforms);
+
             extract_symbols(&pandoc, &source_context, doc.content())
         }
         Err(_) => {

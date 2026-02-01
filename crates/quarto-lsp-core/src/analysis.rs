@@ -4,6 +4,15 @@
 //! and extracts symbols, folding ranges, and diagnostics together.
 //! This is more efficient than calling separate functions when you need
 //! multiple pieces of data.
+//!
+//! ## Analysis Transforms
+//!
+//! Before extracting symbols, this module runs analysis transforms from
+//! `quarto-analysis` that can run at "LSP speed" (no I/O, no code execution).
+//! Currently this includes:
+//!
+//! - `MetaShortcodeTransform` - Resolves `{{< meta key >}}` shortcodes so that
+//!   headers like `# {{< meta title >}}` appear correctly in the outline.
 
 use crate::document::Document;
 use crate::types::{
@@ -11,6 +20,10 @@ use crate::types::{
     FoldingRangeKind, MessageContent, Position, Range, Symbol, SymbolKind,
 };
 use pampa::pandoc::{Block, CodeBlock, Header, Inline, Inlines, Pandoc};
+use quarto_analysis::DocumentAnalysisContext;
+use quarto_analysis::transforms::{
+    AnalysisTransform, MetaShortcodeTransform, run_analysis_transforms,
+};
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_source_map::SourceContext;
 
@@ -20,6 +33,9 @@ use quarto_source_map::SourceContext;
 /// - Symbols for document outline and navigation
 /// - Folding ranges for code folding
 /// - Diagnostics for errors and warnings
+///
+/// Before extracting symbols, this function runs analysis transforms to resolve
+/// shortcodes and other constructs that affect the document outline.
 ///
 /// # Example
 ///
@@ -47,14 +63,28 @@ pub fn analyze_document(doc: &Document) -> DocumentAnalysis {
     );
 
     match result {
-        Ok((pandoc, _ast_context, warnings)) => {
-            // Extract all data from the successful parse
+        Ok((mut pandoc, _ast_context, warnings)) => {
+            // Run analysis transforms to resolve shortcodes, etc.
+            let mut analysis_ctx = DocumentAnalysisContext::new(source_context.clone());
+            let transforms: Vec<&dyn AnalysisTransform> = vec![&MetaShortcodeTransform];
+            let _ = run_analysis_transforms(&mut pandoc, &mut analysis_ctx, &transforms);
+
+            // Extract all data from the transformed AST
             let symbols = extract_symbols(&pandoc, &source_context, doc.content());
             let folding_ranges = extract_folding_ranges(&pandoc, &source_context, doc.content());
-            let diagnostics = warnings
+
+            // Collect diagnostics from both parsing and analysis transforms
+            let mut diagnostics: Vec<Diagnostic> = warnings
                 .iter()
                 .filter_map(|msg| convert_diagnostic(msg, &source_context))
                 .collect();
+
+            // Add diagnostics from analysis transforms
+            for diag in analysis_ctx.diagnostics() {
+                if let Some(d) = convert_diagnostic(diag, &source_context) {
+                    diagnostics.push(d);
+                }
+            }
 
             DocumentAnalysis::with_data(symbols, folding_ranges, diagnostics, source_context)
         }
@@ -682,5 +712,84 @@ author: "Author"
         let content = "# Just a header\n\nSome content.";
         let range = extract_yaml_frontmatter_range(content);
         assert!(range.is_none(), "Should not detect YAML without ---");
+    }
+
+    #[test]
+    fn meta_shortcode_resolved_in_outline() {
+        // Test that meta shortcodes are resolved in header symbols
+        let doc = Document::new(
+            "test.qmd",
+            r#"---
+title: "My Document Title"
+author: "Alice"
+---
+
+# {{< meta title >}}
+
+Some content.
+
+## Written by {{< meta author >}}
+
+More content.
+"#,
+        );
+
+        let analysis = analyze_document(&doc);
+
+        // Should have 2 top-level symbols
+        assert_eq!(analysis.symbols.len(), 1, "Should have 1 top-level section");
+
+        // First header should have resolved title
+        assert_eq!(
+            analysis.symbols[0].name, "My Document Title",
+            "Meta shortcode should be resolved to 'My Document Title'"
+        );
+
+        // Second header should be a child and have resolved author
+        assert_eq!(
+            analysis.symbols[0].children.len(),
+            1,
+            "Should have 1 child section"
+        );
+        assert_eq!(
+            analysis.symbols[0].children[0].name, "Written by Alice",
+            "Meta shortcode should be resolved to 'Alice'"
+        );
+    }
+
+    #[test]
+    fn meta_shortcode_missing_key_graceful() {
+        // Test that missing meta keys produce diagnostics but don't break the outline
+        let doc = Document::new(
+            "test.qmd",
+            r#"---
+title: "Test"
+---
+
+# {{< meta nonexistent >}}
+
+Content.
+"#,
+        );
+
+        let analysis = analyze_document(&doc);
+
+        // Should still have a symbol (with error placeholder)
+        assert_eq!(analysis.symbols.len(), 1, "Should have 1 symbol");
+
+        // The symbol should contain the error placeholder
+        assert!(
+            analysis.symbols[0].name.contains("?meta:nonexistent"),
+            "Missing key should produce error placeholder, got: {}",
+            analysis.symbols[0].name
+        );
+
+        // Should have a warning diagnostic
+        let warnings: Vec<_> = analysis
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == DiagnosticSeverity::Warning)
+            .collect();
+        assert!(!warnings.is_empty(), "Should have warning for missing key");
     }
 }

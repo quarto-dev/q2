@@ -2589,6 +2589,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-analysis"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "quarto-error-reporting",
+ "quarto-pandoc-types",
+ "quarto-source-map",
+ "thiserror 1.0.69",
+ "yaml-rust2",
+]
+
+[[package]]
 name = "quarto-ast-reconcile"
 version = "0.0.0"
 dependencies = [
@@ -2646,6 +2658,7 @@ dependencies = [
  "jupyter-protocol",
  "pampa",
  "pollster",
+ "quarto-analysis",
  "quarto-ast-reconcile",
  "quarto-config",
  "quarto-doctemplate",
@@ -2771,6 +2784,7 @@ version = "0.1.0"
 dependencies = [
  "insta",
  "pampa",
+ "quarto-analysis",
  "quarto-error-reporting",
  "quarto-source-map",
  "quarto-yaml",

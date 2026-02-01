@@ -1,0 +1,24 @@
+[package]
+name = "quarto-analysis"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Document analysis infrastructure for Quarto (shared between LSP and render pipeline)"
+
+[dependencies]
+# Error handling
+thiserror.workspace = true
+
+# Workspace dependencies
+quarto-pandoc-types.workspace = true
+quarto-source-map.workspace = true
+quarto-error-reporting.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+yaml-rust2.workspace = true
+
+[lints]
+workspace = true

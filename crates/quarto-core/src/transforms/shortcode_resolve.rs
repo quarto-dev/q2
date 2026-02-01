@@ -114,8 +114,8 @@ impl ShortcodeHandler for MetaShortcodeHandler {
             }
         };
 
-        // Look up value in metadata (supports dot notation)
-        match get_nested_metadata(ctx.metadata, &key) {
+        // Look up value in metadata (supports dot notation via ConfigValue::get_nested)
+        match ctx.metadata.get_nested(&key) {
             Some(value) => ShortcodeResult::Inlines(config_value_to_inlines(value)),
             None => {
                 let diagnostic = DiagnosticMessageBuilder::warning("Unknown metadata key")
@@ -130,34 +130,6 @@ impl ShortcodeHandler for MetaShortcodeHandler {
             }
         }
     }
-}
-
-/// Navigate nested metadata using dot notation.
-///
-/// # Example
-///
-/// For metadata `{ author: { name: "Alice" } }`:
-/// - `get_nested_metadata(meta, "author.name")` returns `Some("Alice")`
-/// - `get_nested_metadata(meta, "author.email")` returns `None`
-fn get_nested_metadata<'a>(meta: &'a ConfigValue, key: &str) -> Option<&'a ConfigValue> {
-    let parts: Vec<&str> = key.split('.').collect();
-    let mut current = meta;
-
-    for part in parts {
-        match &current.value {
-            ConfigValueKind::Map(entries) => {
-                // Find the entry with matching key
-                let found = entries.iter().find(|e| e.key == part);
-                match found {
-                    Some(entry) => current = &entry.value,
-                    None => return None,
-                }
-            }
-            _ => return None,
-        }
-    }
-
-    Some(current)
 }
 
 /// Convert a ConfigValue to inline content.
@@ -722,57 +694,8 @@ mod tests {
         assert_eq!(transform.name(), "shortcode-resolve");
     }
 
-    #[test]
-    fn test_get_nested_metadata_simple() {
-        let meta = ConfigValue::new_map(
-            vec![make_map_entry(
-                "title",
-                ConfigValue::new_string("My Doc", dummy_source_info()),
-            )],
-            dummy_source_info(),
-        );
-
-        let result = get_nested_metadata(&meta, "title");
-        assert!(result.is_some());
-        if let Some(cv) = result {
-            assert_eq!(cv.as_str(), Some("My Doc"));
-        }
-    }
-
-    #[test]
-    fn test_get_nested_metadata_dot_notation() {
-        let author_map = ConfigValue::new_map(
-            vec![make_map_entry(
-                "name",
-                ConfigValue::new_string("Alice", dummy_source_info()),
-            )],
-            dummy_source_info(),
-        );
-        let meta = ConfigValue::new_map(
-            vec![make_map_entry("author", author_map)],
-            dummy_source_info(),
-        );
-
-        let result = get_nested_metadata(&meta, "author.name");
-        assert!(result.is_some());
-        if let Some(cv) = result {
-            assert_eq!(cv.as_str(), Some("Alice"));
-        }
-    }
-
-    #[test]
-    fn test_get_nested_metadata_missing() {
-        let meta = ConfigValue::new_map(
-            vec![make_map_entry(
-                "title",
-                ConfigValue::new_string("My Doc", dummy_source_info()),
-            )],
-            dummy_source_info(),
-        );
-
-        let result = get_nested_metadata(&meta, "author");
-        assert!(result.is_none());
-    }
+    // Note: Tests for get_nested metadata lookup are in quarto-pandoc-types
+    // (ConfigValue::get_nested), so we don't duplicate them here.
 
     #[test]
     fn test_config_value_to_inlines_string() {

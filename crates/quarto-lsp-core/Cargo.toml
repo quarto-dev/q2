@@ -17,6 +17,7 @@ thiserror.workspace = true
 
 # Workspace dependencies (all WASM-compatible)
 pampa = { workspace = true }
+quarto-analysis = { workspace = true }
 quarto-yaml = { workspace = true }
 quarto-source-map = { workspace = true }
 quarto-error-reporting = { workspace = true }

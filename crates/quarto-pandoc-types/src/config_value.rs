@@ -724,6 +724,27 @@ impl ConfigValue {
         self.get_path(path).is_some()
     }
 
+    /// Get a value by dot-separated key path (e.g., `"author.name"`).
+    ///
+    /// This is a convenience wrapper around `get_path` that splits the key
+    /// on `.` characters. Useful for shortcode resolution where keys are
+    /// specified as `{{< meta author.name >}}`.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let config = ...; // { author: { name: "Alice" } }
+    /// let name = config.get_nested("author.name");
+    /// assert_eq!(name.unwrap().as_str(), Some("Alice"));
+    ///
+    /// // Simple keys work too
+    /// let title = config.get_nested("title");
+    /// ```
+    pub fn get_nested(&self, key: &str) -> Option<&ConfigValue> {
+        let parts: Vec<&str> = key.split('.').collect();
+        self.get_path(&parts)
+    }
+
     /// Get a mutable reference to a value by path.
     ///
     /// Navigates through nested maps to find the value at the given path.
