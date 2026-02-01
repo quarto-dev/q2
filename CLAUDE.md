@@ -26,8 +26,9 @@ When the user asks you to "reset the terminal", run this command.
 1. Stage and commit changes as needed
 2. **Verify the full workspace compiles cleanly** (`cargo build --workspace`)
 3. **Verify the full workspace tests pass** (`cargo nextest run --workspace`)
-4. Ask the user for permission before pushing
-5. Only push after receiving explicit approval
+4. **For changes to quarto-core or quarto-pandoc-types**: Run `cargo xtask verify` to ensure hub-client/WASM builds work
+5. Ask the user for permission before pushing
+6. Only push after receiving explicit approval
 
 This applies even at the end of sessions. Prepare the commit but wait for approval to push.
 
@@ -265,6 +266,30 @@ The changelog is rendered in the About section of the hub-client UI.
 - **CRITICAL**: Use `cargo nextest run` instead of `cargo test`.
 - **CRITICAL**: Do NOT pipe `cargo nextest run` through `tail` or other commands - it causes hangs. Run it directly.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
+
+## Full Project Verification
+
+**IMPORTANT**: Before committing changes that affect `quarto-core`, `quarto-pandoc-types`, or other crates used by `wasm-quarto-hub-client`, run full verification:
+
+```bash
+cargo xtask verify           # Full verification (Rust + hub-client builds + tests)
+```
+
+This runs:
+1. `cargo build --workspace` - Build all Rust crates
+2. `cargo nextest run --workspace` - Run all Rust tests
+3. `cd hub-client && npm run build:all` - Build hub-client (includes WASM)
+4. `cd hub-client && npm run test:ci` - Run hub-client tests
+
+**Skip options** (for faster iteration):
+```bash
+cargo xtask verify --skip-rust-tests    # Skip Rust tests
+cargo xtask verify --skip-hub-tests     # Skip hub-client tests
+cargo xtask verify --skip-hub-build     # Skip hub-client build entirely
+cargo xtask verify --e2e                # Include slower e2e browser tests
+```
+
+**Why this matters**: The `wasm-quarto-hub-client` crate depends on `quarto-core` types like `RenderOutput`. Changes to these types will break the WASM build even if `cargo build --workspace` succeeds (WASM uses a separate build target).
 
 ## Custom Lint Checks
 

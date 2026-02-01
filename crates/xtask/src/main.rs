@@ -7,8 +7,10 @@
 //!
 //! Available commands:
 //! - `lint`: Run custom lint checks on the codebase
+//! - `verify`: Run full project verification (build + tests for Rust and hub-client)
 
 mod lint;
+mod verify;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -37,6 +39,37 @@ enum Command {
         #[arg(short, long)]
         quiet: bool,
     },
+
+    /// Run full project verification.
+    ///
+    /// This runs all build and test steps to ensure the entire project is healthy:
+    /// 1. Build all Rust crates (cargo build --workspace)
+    /// 2. Run all Rust tests (cargo nextest run --workspace)
+    /// 3. Build hub-client including WASM (npm run build:all)
+    /// 4. Run hub-client tests (npm run test:ci)
+    ///
+    /// Use this before committing to ensure nothing is broken.
+    Verify {
+        /// Skip Rust build step.
+        #[arg(long)]
+        skip_rust_build: bool,
+
+        /// Skip Rust tests.
+        #[arg(long)]
+        skip_rust_tests: bool,
+
+        /// Skip hub-client build.
+        #[arg(long)]
+        skip_hub_build: bool,
+
+        /// Skip hub-client tests.
+        #[arg(long)]
+        skip_hub_tests: bool,
+
+        /// Include hub-client e2e tests (slower, requires browser).
+        #[arg(long)]
+        e2e: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -46,6 +79,22 @@ fn main() -> Result<()> {
         Command::Lint { verbose, quiet } => {
             let config = lint::LintConfig { verbose, quiet };
             lint::run(&config)
+        }
+        Command::Verify {
+            skip_rust_build,
+            skip_rust_tests,
+            skip_hub_build,
+            skip_hub_tests,
+            e2e,
+        } => {
+            let config = verify::VerifyConfig {
+                skip_rust_build,
+                skip_rust_tests,
+                skip_hub_build,
+                skip_hub_tests,
+                include_e2e: e2e,
+            };
+            verify::run(&config)
         }
     }
 }
