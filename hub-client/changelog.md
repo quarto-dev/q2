@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-01
+
+- [`6c300f58`](https://github.com/quarto-dev/kyoto/commits/6c300f58): Add meta shortcode resolution to rendering pipeline
+
 ### 2026-01-29
 
 - [`f80ccc58`](https://github.com/quarto-dev/kyoto/commits/f80ccc58): Add SCSS resources versioning for cache invalidation
