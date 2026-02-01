@@ -65,7 +65,7 @@ pub fn analyze_document(doc: &Document) -> DocumentAnalysis {
     match result {
         Ok((mut pandoc, _ast_context, warnings)) => {
             // Run analysis transforms to resolve shortcodes, etc.
-            let mut analysis_ctx = DocumentAnalysisContext::new(source_context.clone());
+            let mut analysis_ctx = DocumentAnalysisContext::new();
             let transforms: Vec<&dyn AnalysisTransform> = vec![&MetaShortcodeTransform];
             let _ = run_analysis_transforms(&mut pandoc, &mut analysis_ctx, &transforms);
 

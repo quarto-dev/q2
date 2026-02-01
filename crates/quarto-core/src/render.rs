@@ -14,6 +14,7 @@
 
 use std::path::PathBuf;
 
+use quarto_analysis::AnalysisContext;
 use quarto_error_reporting::DiagnosticMessage;
 use quarto_system_runtime::SystemRuntime;
 
@@ -72,6 +73,9 @@ impl BinaryDependencies {
 /// - The artifact store (mutable, for collecting dependencies and intermediates)
 /// - The target format
 /// - Binary dependencies
+///
+/// `RenderContext` implements [`AnalysisContext`], allowing analysis transforms
+/// from `quarto-analysis` to be used directly in the render pipeline.
 pub struct RenderContext<'a> {
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
@@ -91,8 +95,8 @@ pub struct RenderContext<'a> {
     /// Render options
     pub options: RenderOptions,
 
-    /// Non-fatal warnings collected during transforms
-    pub warnings: Vec<DiagnosticMessage>,
+    /// Diagnostics (warnings, errors, info) collected during transforms
+    pub diagnostics: Vec<DiagnosticMessage>,
 }
 
 /// Options for rendering
@@ -126,16 +130,8 @@ impl<'a> RenderContext<'a> {
             format,
             binaries,
             options: RenderOptions::default(),
-            warnings: Vec::new(),
+            diagnostics: Vec::new(),
         }
-    }
-
-    /// Add a non-fatal warning diagnostic.
-    ///
-    /// Warnings are collected during transforms and can be displayed
-    /// to the user after rendering completes. They don't stop rendering.
-    pub fn add_warning(&mut self, warning: DiagnosticMessage) {
-        self.warnings.push(warning);
     }
 
     /// Create with custom options
@@ -185,6 +181,12 @@ impl<'a> RenderContext<'a> {
     /// Check if this is a native Rust pipeline render
     pub fn is_native(&self) -> bool {
         self.format.native_pipeline
+    }
+}
+
+impl AnalysisContext for RenderContext<'_> {
+    fn add_diagnostic(&mut self, msg: DiagnosticMessage) {
+        self.diagnostics.push(msg);
     }
 }
 
@@ -412,6 +414,20 @@ mod tests {
         assert!(ctx.format_metadata("toc").is_some());
         assert_eq!(ctx.format_metadata("toc"), Some(&serde_json::json!(true)));
         assert!(ctx.format_metadata("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_render_context_add_diagnostic() {
+        let project = make_test_project();
+        let doc = DocumentInfo::from_path("/project/doc.qmd");
+        let format = Format::html();
+        let binaries = BinaryDependencies::new();
+
+        let mut ctx = RenderContext::new(&project, &doc, &format, &binaries);
+        assert!(ctx.diagnostics.is_empty());
+
+        ctx.add_diagnostic(DiagnosticMessage::warning("Test warning".to_string()));
+        assert_eq!(ctx.diagnostics.len(), 1);
     }
 
     // === RenderResult tests ===

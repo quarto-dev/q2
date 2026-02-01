@@ -507,7 +507,7 @@ pub async fn render_qmd(path: &str) -> String {
             }
 
             // Convert warnings to structured JSON with line/column info
-            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
+            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
             serde_json::to_string(&RenderResponse {
                 success: true,
                 error: None,
@@ -604,7 +604,7 @@ pub async fn render_qmd_content(content: &str, _template_bundle: &str) -> String
             }
 
             // Convert warnings to structured JSON with line/column info
-            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
+            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
             serde_json::to_string(&RenderResponse {
                 success: true,
                 error: None,
@@ -738,7 +738,7 @@ pub async fn render_qmd_content_with_options(
             }
 
             // Convert warnings to structured JSON with line/column info
-            let warnings = diagnostics_to_json(&output.warnings, &output.source_context);
+            let warnings = diagnostics_to_json(&output.diagnostics, &output.source_context);
             serde_json::to_string(&RenderResponse {
                 success: true,
                 error: None,
@@ -1475,7 +1475,8 @@ pub fn sass_compiler_name() -> Option<String> {
 ///
 /// This changes whenever any SCSS file in `resources/scss/` is modified.
 /// Used by hub-client to invalidate the SASS cache when embedded resources change.
-const SCSS_RESOURCES_HASH: &str = include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
+const SCSS_RESOURCES_HASH: &str =
+    include_str!(concat!(env!("OUT_DIR"), "/scss_resources_hash.txt"));
 
 /// Get the version hash of embedded SCSS resources.
 ///

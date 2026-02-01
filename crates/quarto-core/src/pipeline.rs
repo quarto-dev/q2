@@ -104,8 +104,8 @@ impl<'a> HtmlRenderConfig<'a> {
 pub struct RenderOutput {
     /// The rendered HTML content.
     pub html: String,
-    /// Non-fatal warnings collected during rendering.
-    pub warnings: Vec<DiagnosticMessage>,
+    /// Diagnostics (warnings, errors, info) collected during rendering.
+    pub diagnostics: Vec<DiagnosticMessage>,
     /// Source context for mapping locations in diagnostics.
     pub source_context: SourceContext,
 }
@@ -326,8 +326,8 @@ pub async fn render_qmd_to_html(
         crate::error::QuartoError::Other("Pipeline did not produce RenderedOutput".to_string())
     })?;
 
-    // Collect warnings from the pipeline
-    let warnings = stage_ctx.warnings;
+    // Collect diagnostics from the pipeline
+    let diagnostics = stage_ctx.diagnostics;
 
     // Create source context for the output
     let mut source_context = SourceContext::new();
@@ -336,7 +336,7 @@ pub async fn render_qmd_to_html(
 
     Ok(RenderOutput {
         html: rendered.content,
-        warnings,
+        diagnostics,
         source_context,
     })
 }
@@ -521,8 +521,8 @@ mod tests {
 
         // Verify error output is visible (TS Quarto style: "?meta:key" in bold)
         assert!(output.html.contains("?meta:nonexistent"));
-        // Should have a warning diagnostic
-        assert!(!output.warnings.is_empty());
+        // Should have a diagnostic
+        assert!(!output.diagnostics.is_empty());
     }
 
     #[test]

@@ -373,7 +373,7 @@ mod tests {
     fn test_integration_stage_context() {
         let ctx = make_test_context();
         assert!(!ctx.is_cancelled());
-        assert!(ctx.warnings.is_empty());
+        assert!(ctx.diagnostics.is_empty());
     }
 
     #[test]

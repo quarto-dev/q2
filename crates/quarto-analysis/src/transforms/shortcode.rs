@@ -408,8 +408,7 @@ mod tests {
     #[test]
     fn test_resolve_meta_shortcode_in_header() {
         let metadata = make_metadata(vec![("title", "My Document")]);
-        let source_context = quarto_source_map::SourceContext::default();
-        let mut ctx = DocumentAnalysisContext::new(source_context);
+        let mut ctx = DocumentAnalysisContext::new();
 
         let mut pandoc = Pandoc {
             meta: metadata,
@@ -445,8 +444,7 @@ mod tests {
     #[test]
     fn test_resolve_missing_key() {
         let metadata = make_metadata(vec![("title", "My Document")]);
-        let source_context = quarto_source_map::SourceContext::default();
-        let mut ctx = DocumentAnalysisContext::new(source_context);
+        let mut ctx = DocumentAnalysisContext::new();
 
         let mut pandoc = Pandoc {
             meta: metadata,
@@ -484,8 +482,7 @@ mod tests {
     #[test]
     fn test_resolve_mixed_content() {
         let metadata = make_metadata(vec![("author", "Alice")]);
-        let source_context = quarto_source_map::SourceContext::default();
-        let mut ctx = DocumentAnalysisContext::new(source_context);
+        let mut ctx = DocumentAnalysisContext::new();
 
         let mut pandoc = Pandoc {
             meta: metadata,

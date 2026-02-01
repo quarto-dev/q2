@@ -116,8 +116,8 @@ impl PipelineStage for ParseDocumentStage {
                         "parsing produced {} warnings",
                         warnings.len()
                     );
-                    // Also add warnings to context for pipeline-level collection
-                    ctx.add_warnings(warnings.clone());
+                    // Also add diagnostics to context for pipeline-level collection
+                    ctx.add_diagnostics(warnings.clone());
                 }
 
                 Ok(PipelineData::DocumentAst(DocumentAst {

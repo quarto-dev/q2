@@ -39,7 +39,7 @@ use crate::project::{DocumentInfo, ProjectContext};
 ///
 /// The context is designed to be:
 /// - **Owned**: No lifetime parameters, all data is either owned or `Arc`
-/// - **Mutable**: Stages can modify artifacts and warnings
+/// - **Mutable**: Stages can modify artifacts and diagnostics
 /// - **Observable**: Stages can emit events through the observer
 /// - **Cancellable**: Long-running stages can check for cancellation
 pub struct StageContext {
@@ -66,8 +66,8 @@ pub struct StageContext {
     /// Artifact store for dependencies and intermediates
     pub artifacts: ArtifactStore,
 
-    /// Non-fatal warnings collected during execution
-    pub warnings: Vec<DiagnosticMessage>,
+    /// Diagnostics (warnings, errors, info) collected during execution
+    pub diagnostics: Vec<DiagnosticMessage>,
 
     // === Observation & Control ===
     /// Observer for tracing, progress reporting, and WASM callbacks
@@ -103,7 +103,7 @@ impl StageContext {
             document,
             temp_dir,
             artifacts: ArtifactStore::new(),
-            warnings: Vec::new(),
+            diagnostics: Vec::new(),
             observer: Arc::new(NoopObserver),
             cancellation: Cancellation::new(),
         })
@@ -135,16 +135,16 @@ impl StageContext {
         self.cancellation.is_cancelled()
     }
 
-    /// Add a warning to the context.
+    /// Add a diagnostic to the context.
     ///
-    /// Warnings are non-fatal issues discovered during stage execution.
-    pub fn add_warning(&mut self, warning: DiagnosticMessage) {
-        self.warnings.push(warning);
+    /// Diagnostics are issues (warnings, errors, info) discovered during stage execution.
+    pub fn add_diagnostic(&mut self, diagnostic: DiagnosticMessage) {
+        self.diagnostics.push(diagnostic);
     }
 
-    /// Add multiple warnings to the context.
-    pub fn add_warnings(&mut self, warnings: impl IntoIterator<Item = DiagnosticMessage>) {
-        self.warnings.extend(warnings);
+    /// Add multiple diagnostics to the context.
+    pub fn add_diagnostics(&mut self, diagnostics: impl IntoIterator<Item = DiagnosticMessage>) {
+        self.diagnostics.extend(diagnostics);
     }
 
     /// Get the output path for this render.
@@ -194,7 +194,7 @@ impl std::fmt::Debug for StageContext {
             .field("document", &self.document.input)
             .field("temp_dir", &self.temp_dir)
             .field("artifacts_count", &self.artifacts.len())
-            .field("warnings_count", &self.warnings.len())
+            .field("diagnostics_count", &self.diagnostics.len())
             .field("is_cancelled", &self.is_cancelled())
             .finish()
     }
@@ -400,7 +400,7 @@ mod tests {
 
         assert_eq!(ctx.document.input, PathBuf::from("/project/test.qmd"));
         assert!(!ctx.is_cancelled());
-        assert!(ctx.warnings.is_empty());
+        assert!(ctx.diagnostics.is_empty());
         assert!(ctx.artifacts.is_empty());
     }
 
@@ -441,7 +441,7 @@ mod tests {
     }
 
     #[test]
-    fn test_context_warnings() {
+    fn test_context_diagnostics() {
         let runtime = Arc::new(MockRuntime::new());
         let project = make_test_project();
         let doc = DocumentInfo::from_path("/project/test.qmd");
@@ -449,16 +449,16 @@ mod tests {
 
         let mut ctx = StageContext::new(runtime, format, project, doc).unwrap();
 
-        assert!(ctx.warnings.is_empty());
+        assert!(ctx.diagnostics.is_empty());
 
-        ctx.add_warning(DiagnosticMessage::warning("Test warning".to_string()));
-        assert_eq!(ctx.warnings.len(), 1);
+        ctx.add_diagnostic(DiagnosticMessage::warning("Test warning".to_string()));
+        assert_eq!(ctx.diagnostics.len(), 1);
 
-        ctx.add_warnings([
+        ctx.add_diagnostics([
             DiagnosticMessage::warning("Warning 2".to_string()),
             DiagnosticMessage::warning("Warning 3".to_string()),
         ]);
-        assert_eq!(ctx.warnings.len(), 3);
+        assert_eq!(ctx.diagnostics.len(), 3);
     }
 
     #[test]

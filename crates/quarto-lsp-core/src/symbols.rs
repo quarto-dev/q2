@@ -49,7 +49,7 @@ pub fn get_symbols(doc: &Document) -> Vec<Symbol> {
     match result {
         Ok((mut pandoc, _ast_context, _warnings)) => {
             // Run analysis transforms to resolve shortcodes
-            let mut analysis_ctx = DocumentAnalysisContext::new(source_context.clone());
+            let mut analysis_ctx = DocumentAnalysisContext::new();
             let transforms: Vec<&dyn AnalysisTransform> = vec![&MetaShortcodeTransform];
             let _ = run_analysis_transforms(&mut pandoc, &mut analysis_ctx, &transforms);
 

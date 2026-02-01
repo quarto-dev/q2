@@ -170,9 +170,9 @@ impl PipelineStage for EngineExecutionStage {
         let mut engine_warnings = Vec::new();
         let engine = self.get_engine_with_fallback(&detected.name, &mut engine_warnings);
 
-        // Add any engine lookup warnings to context
+        // Add any engine lookup diagnostics to context
         if !engine_warnings.is_empty() {
-            ctx.add_warnings(engine_warnings);
+            ctx.add_diagnostics(engine_warnings);
         }
 
         trace_event!(ctx, EventLevel::Debug, "using engine: {}", engine.name());
@@ -504,7 +504,7 @@ mod tests {
 
         // Markdown engine should pass through unchanged
         assert_eq!(result.ast.blocks.len(), original_block_count);
-        assert!(ctx.warnings.is_empty());
+        assert!(ctx.diagnostics.is_empty());
     }
 
     #[tokio::test]
@@ -523,7 +523,7 @@ mod tests {
 
         // Should pass through unchanged
         assert!(!result.ast.blocks.is_empty());
-        assert!(ctx.warnings.is_empty());
+        assert!(ctx.diagnostics.is_empty());
     }
 
     #[tokio::test]
@@ -542,8 +542,8 @@ mod tests {
 
         // Should fall back to markdown and produce a warning
         assert!(!result.ast.blocks.is_empty());
-        assert!(!ctx.warnings.is_empty());
-        assert!(ctx.warnings[0].title.contains("not available"));
+        assert!(!ctx.diagnostics.is_empty());
+        assert!(ctx.diagnostics[0].title.contains("not available"));
     }
 
     #[tokio::test]

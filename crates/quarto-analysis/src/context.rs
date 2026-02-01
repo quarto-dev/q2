@@ -1,15 +1,13 @@
 //! Analysis context trait and implementations.
 //!
 //! The [`AnalysisContext`] trait defines the interface for document analysis operations.
-//! It provides source tracking and diagnostic reporting without requiring the full
-//! rendering infrastructure.
+//! It provides diagnostic reporting without requiring the full rendering infrastructure.
 //!
 //! Note: Document metadata is accessed directly from the `Pandoc` AST passed to transforms,
 //! not from the context. This avoids duplication and ensures transforms always see
 //! the current metadata state.
 
 use quarto_error_reporting::DiagnosticMessage;
-use quarto_source_map::SourceContext;
 
 /// Trait for contexts that support document analysis operations.
 ///
@@ -24,11 +22,9 @@ use quarto_source_map::SourceContext;
 /// # Implementations
 ///
 /// - [`DocumentAnalysisContext`] - Lightweight implementation for LSP
+/// - `RenderContext` (in quarto-core) - Full implementation for rendering
 pub trait AnalysisContext {
-    /// Access source context for location mapping.
-    fn source_context(&self) -> &SourceContext;
-
-    /// Report a diagnostic (warning or error) during analysis.
+    /// Report a diagnostic (warning, error, or info) during analysis.
     fn add_diagnostic(&mut self, msg: DiagnosticMessage);
 }
 
@@ -43,20 +39,18 @@ pub trait AnalysisContext {
 /// ```rust,ignore
 /// use quarto_analysis::DocumentAnalysisContext;
 ///
-/// let ctx = DocumentAnalysisContext::new(source_context);
+/// let ctx = DocumentAnalysisContext::new();
 /// // ... run analysis transforms (they access pandoc.meta directly) ...
 /// let diagnostics = ctx.into_diagnostics();
 /// ```
 pub struct DocumentAnalysisContext {
-    source_context: SourceContext,
     diagnostics: Vec<DiagnosticMessage>,
 }
 
 impl DocumentAnalysisContext {
     /// Create a new analysis context.
-    pub fn new(source_context: SourceContext) -> Self {
+    pub fn new() -> Self {
         Self {
-            source_context,
             diagnostics: Vec::new(),
         }
     }
@@ -72,11 +66,13 @@ impl DocumentAnalysisContext {
     }
 }
 
-impl AnalysisContext for DocumentAnalysisContext {
-    fn source_context(&self) -> &SourceContext {
-        &self.source_context
+impl Default for DocumentAnalysisContext {
+    fn default() -> Self {
+        Self::new()
     }
+}
 
+impl AnalysisContext for DocumentAnalysisContext {
     fn add_diagnostic(&mut self, msg: DiagnosticMessage) {
         self.diagnostics.push(msg);
     }
@@ -88,9 +84,7 @@ mod tests {
 
     #[test]
     fn test_document_analysis_context_basic() {
-        let source_context = SourceContext::default();
-
-        let mut ctx = DocumentAnalysisContext::new(source_context);
+        let mut ctx = DocumentAnalysisContext::new();
 
         // Initially no diagnostics
         assert!(ctx.diagnostics().is_empty());

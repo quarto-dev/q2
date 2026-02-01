@@ -257,11 +257,11 @@ fn render_document(
         Err(e) => return Err(anyhow::anyhow!("{}", e)),
     };
 
-    // Report warnings with full ariadne-style source context
-    if !args.quiet && !output.warnings.is_empty() {
-        for warning in &output.warnings {
+    // Report diagnostics with full ariadne-style source context
+    if !args.quiet && !output.diagnostics.is_empty() {
+        for diagnostic in &output.diagnostics {
             // Use the source context for rich error rendering with source snippets
-            eprintln!("{}", warning.to_text(Some(&output.source_context)));
+            eprintln!("{}", diagnostic.to_text(Some(&output.source_context)));
         }
     }
 

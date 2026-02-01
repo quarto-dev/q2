@@ -1619,6 +1619,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "quarto-analysis"
+version = "0.1.0"
+dependencies = [
+ "quarto-error-reporting",
+ "quarto-pandoc-types",
+ "quarto-source-map",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "quarto-ast-reconcile"
 version = "0.0.0"
 dependencies = [
@@ -1673,6 +1683,7 @@ dependencies = [
  "jupyter-protocol",
  "pampa",
  "pollster",
+ "quarto-analysis",
  "quarto-ast-reconcile",
  "quarto-config",
  "quarto-doctemplate",
@@ -1750,6 +1761,7 @@ name = "quarto-lsp-core"
 version = "0.1.0"
 dependencies = [
  "pampa",
+ "quarto-analysis",
  "quarto-error-reporting",
  "quarto-source-map",
  "quarto-yaml",

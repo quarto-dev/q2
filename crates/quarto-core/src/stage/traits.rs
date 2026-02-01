@@ -121,9 +121,9 @@ pub trait PipelineStage: Send + Sync {
     /// Long-running stages should periodically check `ctx.is_cancelled()`
     /// and return `Err(PipelineError::Cancelled)` if true.
     ///
-    /// # Warnings
+    /// # Diagnostics
     ///
-    /// Non-fatal issues should be added to `ctx.warnings` rather than
+    /// Non-fatal issues should be added to `ctx.diagnostics` rather than
     /// returning an error.
     ///
     /// # Note on Naming

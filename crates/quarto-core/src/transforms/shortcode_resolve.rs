@@ -43,6 +43,8 @@ use quarto_pandoc_types::shortcode::{Shortcode, ShortcodeArg};
 use quarto_pandoc_types::table::Table;
 use quarto_source_map::SourceInfo;
 
+use quarto_analysis::AnalysisContext;
+
 use crate::Result;
 use crate::render::RenderContext;
 use crate::transform::AstTransform;
@@ -278,7 +280,7 @@ impl AstTransform for ShortcodeResolveTransform {
 
         // Add any diagnostics to the render context
         for diagnostic in diagnostics {
-            ctx.add_warning(diagnostic);
+            ctx.add_diagnostic(diagnostic);
         }
 
         Ok(())
@@ -915,7 +917,7 @@ mod tests {
         }
 
         // Verify no warnings were emitted
-        assert!(ctx.warnings.is_empty());
+        assert!(ctx.diagnostics.is_empty());
     }
 
     #[test]
@@ -962,6 +964,6 @@ mod tests {
         }
 
         // Verify warning was emitted
-        assert_eq!(ctx.warnings.len(), 1);
+        assert_eq!(ctx.diagnostics.len(), 1);
     }
 }
