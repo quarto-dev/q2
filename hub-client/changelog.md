@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-02
+
+- [`e9bb9c16`](https://github.com/quarto-dev/kyoto/commits/e9bb9c16): Fix vitest tests failing on fresh clone by resolving workspace packages to source
+
 ### 2026-02-01
 
 - [`a5261499`](https://github.com/quarto-dev/kyoto/commits/a5261499): Resolve meta shortcodes in document outline (headers like `# {{< meta title >}}` now show resolved values)
