@@ -1,8 +1,8 @@
-# Quarto Rust
+# Quarto 2
 
-> **Experimental** - This project is under active development and not yet ready for production use.
+> **Experimental** - This project is under active development. It's not yet ready for production use, and will not be for a while.
 
-This repository is an experimental Rust port of core [Quarto](https://quarto.org) tooling. The goal is to replace parts of the TypeScript/Deno runtime with a unified Rust implementation, enabling:
+This repository is a Rust implementation of the next version of [Quarto](https://quarto.org). The goal is to replace parts of the TypeScript/Deno runtime with a unified Rust implementation, enabling:
 
 - Shared validation logic between CLI and Language Server Protocol (LSP)
 - Improved performance, particularly for LSP operations
@@ -43,7 +43,6 @@ cargo run -p pampa -- input.qmd -t json -v
 - Multiple output formats: JSON, HTML, ANSI, Markdown, plaintext
 - Lua filter support (Pandoc-compatible)
 - Source location tracking through all transformations
-- WASM build available (`wasm-qmd-parser`)
 
 ### Supporting Infrastructure
 
@@ -111,11 +110,13 @@ cd crates/wasm-qmd-parser && wasm-pack build
 
 ## Contributing
 
-We welcome discussions about the project via GitHub issues. However, the Quarto team will be working on this codebase internally before we're ready to accept outside contributions. Please feel free to open issues for questions, suggestions, or bug reports.
+We welcome discussions about the project via GitHub issues.
+However, the Quarto team will be working on this codebase internally before we're ready to accept outside contributions or make public binary releases/announcements.
+Please feel free to open issues for questions, suggestions, or bug reports.
 
 ## Status
 
-This is experimental software. The API is unstable and may change significantly.
+This is experimental software. All API should be considered unstable and may completely change.
 
 ## License
 
