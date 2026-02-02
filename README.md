@@ -98,14 +98,11 @@ Error: [Q-2-5] Unclosed Underscore Emphasis
 Requires Rust nightly (edition 2024).
 
 ```bash
-# Build all crates
-cargo build
+# Build all Rust crates and binaries; build hub-client and its TS test suite
+cargo xtask verify
 
 # Run tests (uses nextest)
 cargo nextest run
-
-# Build WASM module
-cd crates/wasm-qmd-parser && wasm-pack build
 ```
 
 ## Contributing
