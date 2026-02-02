@@ -6,7 +6,12 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+
+/// Binary path is built once and cached for all tests.
+/// This avoids file lock contention when tests run in parallel.
+static BINARY_PATH: OnceLock<PathBuf> = OnceLock::new();
 
 /// Create a JSON-RPC request with the given method and params.
 fn make_request(id: i32, method: &str, params: serde_json::Value) -> String {
@@ -73,13 +78,16 @@ struct LspTestHarness {
 impl LspTestHarness {
     /// Create a new test harness by spawning the LSP server.
     fn new() -> Self {
-        let binary_path = Self::build_and_get_binary_path();
+        let binary_path = Self::get_binary_path();
 
-        let mut child = Command::new(&binary_path)
+        let mut child = Command::new(binary_path)
             .arg("lsp")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            // Use null for stderr to avoid deadlock: if stderr pipe buffer fills
+            // (e.g., during first-time tree-sitter compilation), the subprocess
+            // blocks and never sends LSP responses, causing test hangs.
+            .stderr(Stdio::null())
             .spawn()
             .expect("Failed to spawn quarto lsp");
 
@@ -95,34 +103,39 @@ impl LspTestHarness {
         }
     }
 
-    /// Build the quarto binary and return its path.
-    fn build_and_get_binary_path() -> PathBuf {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let workspace_root = std::path::Path::new(manifest_dir)
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap();
+    /// Get the quarto binary path, building it once if needed.
+    /// Uses OnceLock to ensure the build only happens once even when
+    /// tests run in parallel, avoiding file lock contention.
+    fn get_binary_path() -> &'static PathBuf {
+        BINARY_PATH.get_or_init(|| {
+            let manifest_dir = env!("CARGO_MANIFEST_DIR");
+            let workspace_root = std::path::Path::new(manifest_dir)
+                .parent()
+                .unwrap()
+                .parent()
+                .unwrap();
 
-        // Run cargo build first to ensure the binary exists
-        let status = Command::new("cargo")
-            .args(["build", "-p", "quarto"])
-            .current_dir(workspace_root)
-            .status()
-            .expect("Failed to build quarto");
-        assert!(status.success(), "Failed to build quarto binary");
+            // Run cargo build first to ensure the binary exists
+            let status = Command::new("cargo")
+                .args(["build", "-p", "quarto"])
+                .current_dir(workspace_root)
+                .status()
+                .expect("Failed to build quarto");
+            assert!(status.success(), "Failed to build quarto binary");
 
-        let binary_path = workspace_root.join("target").join("debug").join("quarto");
-        assert!(
-            binary_path.exists(),
-            "quarto binary not found at {:?}",
+            let binary_path = workspace_root.join("target").join("debug").join("quarto");
+            assert!(
+                binary_path.exists(),
+                "quarto binary not found at {:?}",
+                binary_path
+            );
+
             binary_path
-        );
-
-        binary_path
+        })
     }
 
     /// Send a request and return the response.
+    /// Times out after 30 seconds to prevent infinite hangs.
     fn request(&mut self, method: &str, params: serde_json::Value) -> serde_json::Value {
         let id = self.next_request_id;
         self.next_request_id += 1;
@@ -133,8 +146,16 @@ impl LspTestHarness {
             .expect("Failed to write request");
         self.stdin.flush().expect("Failed to flush stdin");
 
-        // Read responses until we find one with our id
+        // Read responses until we find one with our id, with timeout
+        let timeout = Duration::from_secs(30);
+        let start = Instant::now();
         loop {
+            if start.elapsed() > timeout {
+                panic!(
+                    "Timed out after {:?} waiting for response to '{}' (id={})",
+                    timeout, method, id
+                );
+            }
             let response = read_message(&mut self.reader);
             if response.get("id").and_then(|i| i.as_i64()) == Some(id as i64) {
                 return response;
