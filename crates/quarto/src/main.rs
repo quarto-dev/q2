@@ -1,5 +1,7 @@
 //! Quarto CLI - Main entry point
 
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -316,6 +318,41 @@ enum Commands {
 
     /// Start the Quarto Language Server Protocol server
     Lsp,
+
+    /// Start collaborative hub server for real-time editing
+    Hub {
+        /// Project root directory (defaults to current directory)
+        #[arg(short, long)]
+        project: Option<PathBuf>,
+
+        /// Port to listen on
+        #[arg(short = 'P', long, default_value = "3000")]
+        port: u16,
+
+        /// Host to bind to
+        #[arg(short = 'H', long, default_value = "127.0.0.1")]
+        host: String,
+
+        /// Sync server URL to peer with (can be specified multiple times).
+        /// Example: --peer wss://sync.automerge.org
+        /// Peers are persisted to hub.json and used on subsequent runs.
+        #[arg(long = "peer", value_name = "URL")]
+        peers: Vec<String>,
+
+        /// Periodic filesystem sync interval in seconds.
+        /// Set to 0 to disable periodic sync.
+        #[arg(long, default_value = "30")]
+        sync_interval: u64,
+
+        /// Disable filesystem watching.
+        /// When disabled, file changes won't be detected until periodic sync runs.
+        #[arg(long)]
+        no_watch: bool,
+
+        /// Debounce duration for filesystem events in milliseconds.
+        #[arg(long, default_value = "500")]
+        watch_debounce: u64,
+    },
 }
 
 fn main() -> Result<()> {
@@ -366,5 +403,22 @@ fn main() -> Result<()> {
         Commands::Check { .. } => commands::check::execute(),
         Commands::Call { .. } => commands::call::execute(),
         Commands::Lsp => commands::lsp::execute(),
+        Commands::Hub {
+            project,
+            port,
+            host,
+            peers,
+            sync_interval,
+            no_watch,
+            watch_debounce,
+        } => commands::hub::execute(commands::hub::HubArgs {
+            project,
+            port,
+            host,
+            peers,
+            sync_interval,
+            no_watch,
+            watch_debounce,
+        }),
     }
 }

@@ -63,9 +63,7 @@ As you work through a plan:
 
 - [x] Review current runtime service implementations
 - [x] Identify common patterns
-- [ ] Create shared base class in @databot/node
 - [ ] Update StandalonePlatform to use shared base
-- [ ] Update RStudioPlatform to use shared base
 - [ ] Update tests
 - [ ] Update documentation
 ```
@@ -180,7 +178,8 @@ When fixing ANY bug:
 ### `crates/` - all Rust crates in the workspace
 
 **Binaries:**
-- `quarto`: main entry point for the `quarto` command line binary
+- `quarto`: main entry point for the `quarto` command line binary (includes `quarto hub` subcommand)
+- `hub`: collaborative editing server for Quarto projects (also available as `quarto hub`)
 - `pampa`: parse qmd text and produce Pandoc AST and other formats
 - `qmd-syntax-helper`: help users convert qmd files to the new syntax
 - `validate-yaml`: exercise `quarto-yaml-validation`

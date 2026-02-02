@@ -2576,6 +2576,7 @@ dependencies = [
  "pollster",
  "quarto-core",
  "quarto-doctemplate",
+ "quarto-hub",
  "quarto-lsp",
  "quarto-sass",
  "quarto-system-runtime",

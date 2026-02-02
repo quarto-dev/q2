@@ -8,6 +8,7 @@ pub mod call;
 pub mod check;
 pub mod convert;
 pub mod create;
+pub mod hub;
 pub mod install;
 pub mod list;
 pub mod lsp;
