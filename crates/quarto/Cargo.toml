@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Quarto command-line interface (Development Build)"
 
 [[bin]]
-name = "quarto"
+name = "q2"
 path = "src/main.rs"
 
 [dependencies]
