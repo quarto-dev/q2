@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ProjectEntry } from '../types/project';
 import type { UserSettings } from '../services/storage/types';
+import type { PendingShareData } from '../App';
 import * as projectStorage from '../services/projectStorage';
 import * as userSettingsService from '../services/userSettings';
 import {
@@ -12,11 +13,16 @@ import {
 import './ProjectSelector.css';
 
 interface Props {
-  onSelectProject: (project: ProjectEntry) => void;
+  /** Called when a project is selected, with optional file path override from share link */
+  onSelectProject: (project: ProjectEntry, filePathOverride?: string) => void;
   isConnecting?: boolean;
   error?: string | null;
   /** Called when a new project is created with scaffold files */
   onProjectCreated?: (files: ProjectFile[], title: string, projectType: string, syncServer: string) => void;
+  /** Pre-filled data from a shareable link (indexDocId, syncServer, optional filePath) */
+  pendingShareData?: PendingShareData | null;
+  /** Called when pending share data should be cleared (e.g., user cancels) */
+  onClearPendingShare?: () => void;
 }
 
 // Curated color palette for user selection
@@ -26,7 +32,14 @@ const COLOR_PALETTE = [
   '#8BC34A', '#FF9800', '#FF5722', '#795548',
 ];
 
-export default function ProjectSelector({ onSelectProject, isConnecting, error: connectionError, onProjectCreated }: Props) {
+export default function ProjectSelector({
+  onSelectProject,
+  isConnecting,
+  error: connectionError,
+  onProjectCreated,
+  pendingShareData,
+  onClearPendingShare,
+}: Props) {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showConnectForm, setShowConnectForm] = useState(false);
@@ -37,6 +50,8 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
   const [syncServer, setSyncServer] = useState('wss://sync.automerge.org');
   const [description, setDescription] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+  // Track file path from share link (to navigate after connect)
+  const [shareFilePath, setShareFilePath] = useState<string | undefined>(undefined);
 
   // Create form state
   const [createProjectType, setCreateProjectType] = useState('');
@@ -94,6 +109,19 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
     loadUserSettings();
     loadProjectChoices();
   }, [loadProjects, loadUserSettings, loadProjectChoices]);
+
+  // Handle pending share data (from shareable URL)
+  useEffect(() => {
+    if (pendingShareData) {
+      // Pre-fill the connect form with share data
+      setIndexDocId(pendingShareData.indexDocId);
+      setSyncServer(pendingShareData.syncServer);
+      setShareFilePath(pendingShareData.filePath);
+      // Auto-show the connect form
+      setShowConnectForm(true);
+      setShowCreateForm(false);
+    }
+  }, [pendingShareData]);
 
   const handleStartEditName = () => {
     if (userSettings) {
@@ -175,15 +203,30 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
         syncServer.trim(),
         description.trim() || undefined
       );
+
+      // Capture file path before clearing state
+      const filePathToNavigate = shareFilePath;
+
       setIndexDocId('');
       setDescription('');
+      setShareFilePath(undefined);
       setShowConnectForm(false);
       await loadProjects();
-      onSelectProject(project);
+
+      // Pass the file path from share link (if any) to parent
+      onSelectProject(project, filePathToNavigate);
     } catch (err) {
       console.error('Failed to add project:', err);
       setFormError('Failed to add project. The document ID may already exist.');
     }
+  };
+
+  const handleCancelConnect = () => {
+    setShowConnectForm(false);
+    setIndexDocId('');
+    setShareFilePath(undefined);
+    // Clear pending share data if user explicitly cancels
+    onClearPendingShare?.();
   };
 
   const handleCreateProject = async (e: React.FormEvent) => {
@@ -422,8 +465,12 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
         {/* Connect to Project form */}
         {showConnectForm && (
           <form className="add-form" onSubmit={handleConnectProject}>
-            <h2>Connect to Project</h2>
-            <p className="form-hint">Enter the document ID of an existing Automerge project</p>
+            <h2>{pendingShareData ? 'Connect to Shared Project' : 'Connect to Project'}</h2>
+            <p className="form-hint">
+              {pendingShareData
+                ? 'Someone shared this project with you. Add a name and connect.'
+                : 'Enter the document ID of an existing Automerge project'}
+            </p>
             <div className="form-group">
               <label htmlFor="indexDocId">Index Document ID</label>
               <input
@@ -455,7 +502,7 @@ export default function ProjectSelector({ onSelectProject, isConnecting, error: 
               />
             </div>
             <div className="form-actions">
-              <button type="button" onClick={() => setShowConnectForm(false)}>Cancel</button>
+              <button type="button" onClick={handleCancelConnect}>Cancel</button>
               <button type="submit" className="primary">Connect</button>
             </div>
           </form>

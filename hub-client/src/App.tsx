@@ -14,8 +14,20 @@ import {
 import type { ProjectFile } from './services/wasmRenderer';
 import * as projectStorage from './services/projectStorage';
 import { useRouting } from './hooks/useRouting';
-import type { Route } from './utils/routing';
+import type { Route, ShareRoute } from './utils/routing';
 import './App.css';
+
+/**
+ * Data extracted from a shareable link, used to pre-fill the connect dialog.
+ */
+export interface PendingShareData {
+  /** The Automerge index document ID (without 'automerge:' prefix) */
+  indexDocId: string;
+  /** The sync server URL */
+  syncServer: string;
+  /** Optional file path to open after connecting */
+  filePath?: string;
+}
 
 function App() {
   const [project, setProject] = useState<ProjectEntry | null>(null);
@@ -24,6 +36,9 @@ function App() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [fileContents, setFileContents] = useState<Map<string, string>>(new Map());
   const [showSaveToast, setShowSaveToast] = useState(false);
+
+  // Pending share link data (when user visits a shareable URL for a project they don't have)
+  const [pendingShareData, setPendingShareData] = useState<PendingShareData | null>(null);
 
   // Track if we've done the initial URL-based navigation
   const initialLoadRef = useRef(false);
@@ -114,6 +129,61 @@ function App() {
     initialLoadRef.current = true;
 
     const loadFromUrl = async () => {
+      // Handle shareable link URLs
+      if (route.type === 'share') {
+        // SECURITY: Immediately clear the URL to prevent indexDocId from appearing
+        // in browser history, bookmarks, or being accidentally shared.
+        navigateToProjectSelector({ replace: true });
+
+        const shareRoute = route as ShareRoute;
+        // Normalize the indexDocId (add 'automerge:' prefix if not present)
+        const normalizedIndexDocId = shareRoute.indexDocId.startsWith('automerge:')
+          ? shareRoute.indexDocId
+          : `automerge:${shareRoute.indexDocId}`;
+
+        // Check if we already have this project locally
+        const existingProject = await projectStorage.getProjectByIndexDocId(normalizedIndexDocId);
+
+        if (existingProject) {
+          // Project exists locally - connect to it
+          setIsConnecting(true);
+          setConnectionError(null);
+          try {
+            const loadedFiles = await connect(existingProject.syncServer, existingProject.indexDocId);
+            setProject(existingProject);
+            setFiles(loadedFiles);
+
+            const contents = new Map<string, string>();
+            for (const file of loadedFiles) {
+              const content = getFileContent(file.path);
+              if (content !== null) {
+                contents.set(file.path, content);
+              }
+            }
+            setFileContents(contents);
+
+            // Navigate to the project (and optionally file) using local ID
+            if (shareRoute.filePath) {
+              navigateToFile(existingProject.id, shareRoute.filePath, { replace: true });
+            } else {
+              navigateToProject(existingProject.id, { replace: true });
+            }
+          } catch (err) {
+            setConnectionError(err instanceof Error ? err.message : String(err));
+          } finally {
+            setIsConnecting(false);
+          }
+        } else {
+          // Project doesn't exist locally - show connect dialog with pre-filled data
+          setPendingShareData({
+            indexDocId: shareRoute.indexDocId,
+            syncServer: shareRoute.syncServer,
+            filePath: shareRoute.filePath,
+          });
+        }
+        return;
+      }
+
       if (route.type === 'project' || route.type === 'file') {
         // URL specifies a project - try to load it
         const targetProject = await projectStorage.getProject(route.projectId);
@@ -150,7 +220,7 @@ function App() {
     };
 
     loadFromUrl();
-  }, [route, navigateToProjectSelector]);
+  }, [route, navigateToProjectSelector, navigateToProject, navigateToFile]);
 
   // Intercept Ctrl+S / Cmd+S to prevent browser save dialog
   useEffect(() => {
@@ -202,7 +272,10 @@ function App() {
     });
   }, [project]);
 
-  const handleSelectProject = useCallback(async (selectedProject: ProjectEntry) => {
+  const handleSelectProject = useCallback(async (selectedProject: ProjectEntry, filePathOverride?: string) => {
+    // Clear any pending share data
+    setPendingShareData(null);
+
     setIsConnecting(true);
     setConnectionError(null);
 
@@ -221,14 +294,18 @@ function App() {
       }
       setFileContents(contents);
 
-      // Update URL to reflect the selected project
-      navigateToProject(selectedProject.id, { replace: true });
+      // Update URL to reflect the selected project (and optionally a specific file)
+      if (filePathOverride) {
+        navigateToFile(selectedProject.id, filePathOverride, { replace: true });
+      } else {
+        navigateToProject(selectedProject.id, { replace: true });
+      }
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsConnecting(false);
     }
-  }, [navigateToProject]);
+  }, [navigateToProject, navigateToFile]);
 
   const handleDisconnect = useCallback(async () => {
     await disconnect();
@@ -295,14 +372,16 @@ function App() {
 
       // Update URL to reflect the new project
       navigateToProject(projectEntry.id, { replace: true });
-
-      console.log('Project created successfully:', result.indexDocId);
     } catch (err) {
       setConnectionError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsConnecting(false);
     }
   }, [navigateToProject]);
+
+  const handleClearPendingShare = useCallback(() => {
+    setPendingShareData(null);
+  }, []);
 
   return (
     <>
@@ -312,6 +391,8 @@ function App() {
           onProjectCreated={handleProjectCreated}
           isConnecting={isConnecting}
           error={connectionError}
+          pendingShareData={pendingShareData}
+          onClearPendingShare={handleClearPendingShare}
         />
       ) : (
         <Editor

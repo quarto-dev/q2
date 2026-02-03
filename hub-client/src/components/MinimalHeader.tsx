@@ -11,12 +11,15 @@ interface MinimalHeaderProps {
   currentFilePath: string | null;
   projectName: string;
   onChooseNewProject: () => void;
+  /** Called when user wants to share the project */
+  onShare?: () => void;
 }
 
 export default function MinimalHeader({
   currentFilePath,
   projectName,
   onChooseNewProject,
+  onShare,
 }: MinimalHeaderProps) {
   return (
     <header className="minimal-header">
@@ -29,6 +32,11 @@ export default function MinimalHeader({
       </div>
       <div className="header-right">
         <span className="project-name">{projectName}</span>
+        {onShare && (
+          <button className="share-btn" onClick={onShare} title="Share this project">
+            Share
+          </button>
+        )}
         <button className="choose-project-btn" onClick={onChooseNewProject}>
           Switch
         </button>

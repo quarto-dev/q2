@@ -59,3 +59,19 @@
   border-color: #646cff;
   color: #646cff;
 }
+
+.header-right .share-btn {
+  padding: 4px 10px;
+  background: #646cff;
+  border: 1px solid #646cff;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.header-right .share-btn:hover {
+  background: #5558dd;
+  border-color: #5558dd;
+}

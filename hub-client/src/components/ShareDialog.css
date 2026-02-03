@@ -1,0 +1,152 @@
+/* Share Dialog - uses common dialog-overlay from NewFileDialog.css */
+
+.share-dialog {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 520px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.share-dialog .dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #333;
+}
+
+.share-dialog .dialog-header h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.share-dialog .close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.share-dialog .close-btn:hover {
+  color: #fff;
+}
+
+.share-dialog .dialog-content {
+  padding: 20px;
+}
+
+/* Warning box */
+.warning-box {
+  background: #3d3020;
+  border: 1px solid #5a4520;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.warning-box .warning-icon {
+  display: inline-block;
+  font-size: 24px;
+  margin-bottom: 8px;
+  color: #f59e0b;
+}
+
+.warning-box p {
+  margin: 0 0 8px;
+  color: #fbbf24;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.warning-box p:last-child {
+  margin-bottom: 0;
+}
+
+.warning-box .warning-detail {
+  color: #d4a644;
+  font-size: 13px;
+}
+
+/* URL field */
+.url-field {
+  margin-top: 16px;
+}
+
+.url-field label {
+  display: block;
+  margin-bottom: 8px;
+  color: #ccc;
+  font-size: 14px;
+}
+
+.url-field input {
+  width: 100%;
+  padding: 12px;
+  background: #2d2d2d;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #888;
+  font-size: 13px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  box-sizing: border-box;
+  cursor: text;
+}
+
+.url-field input:focus {
+  outline: none;
+  border-color: #646cff;
+  color: #ccc;
+}
+
+/* Actions */
+.share-dialog .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #333;
+}
+
+.share-dialog .cancel-btn {
+  padding: 10px 20px;
+  background: none;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #888;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.share-dialog .cancel-btn:hover {
+  border-color: #666;
+  color: #ccc;
+}
+
+.share-dialog .copy-btn {
+  padding: 10px 24px;
+  background: #646cff;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.share-dialog .copy-btn:hover {
+  background: #5558dd;
+}
+
+.share-dialog .copy-btn.copied {
+  background: #22c55e;
+}
