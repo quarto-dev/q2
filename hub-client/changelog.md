@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-03
+
+- [`d3a33885`](https://github.com/quarto-dev/kyoto/commits/d3a33885): Add shareable project URLs with security warnings for cross-device collaboration
+
 ### 2026-02-02
 
 - [`e9bb9c16`](https://github.com/quarto-dev/kyoto/commits/e9bb9c16): Fix vitest tests failing on fresh clone by resolving workspace packages to source
