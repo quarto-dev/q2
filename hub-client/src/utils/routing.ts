@@ -6,6 +6,7 @@
  *   #/project/<local-id>                  → Project with default file
  *   #/project/<local-id>/file/<path>      → Specific file
  *   #/project/<local-id>/file/<path>#<a>  → Specific file + anchor
+ *   #/share/<indexDocId>?server=<url>&file=<path>  → Shareable link (temporary)
  *
  * Security: We use the local IndexedDB project ID (a UUID) instead of
  * the indexDocId (Automerge DocumentId). The indexDocId acts like a bearer
@@ -13,8 +14,14 @@
  *
  * The local ID is only meaningful on the same browser/device, which means
  * URLs are not shareable across devices. This is intentional - sharing a
- * project would require an explicit "share" flow with proper authorization.
+ * project requires an explicit "share" flow that generates a temporary
+ * shareable URL containing the indexDocId. When such a URL is visited,
+ * it should be immediately replaced with a local URL to prevent the
+ * sensitive indexDocId from appearing in browser history or bookmarks.
  */
+
+/** Default sync server URL used when not specified in shareable URLs */
+export const DEFAULT_SYNC_SERVER = 'wss://sync.automerge.org';
 
 // ============================================================================
 // Types
@@ -46,9 +53,30 @@ export interface FileRoute {
 }
 
 /**
+ * Route from a shareable link containing an Automerge document ID.
+ *
+ * SECURITY: This route type should only exist transiently during URL resolution.
+ * The URL should be immediately replaced with a local URL (project-selector,
+ * project, or file) to prevent the sensitive indexDocId from appearing in
+ * browser history or bookmarks.
+ *
+ * The indexDocId is stored WITHOUT the 'automerge:' prefix for URL brevity.
+ * It should be normalized (prefix added) before use with Automerge APIs.
+ */
+export interface ShareRoute {
+  type: 'share';
+  /** bs58-encoded Automerge document ID (without 'automerge:' prefix) */
+  indexDocId: string;
+  /** Sync server URL (defaults to DEFAULT_SYNC_SERVER if not in URL) */
+  syncServer: string;
+  /** Optional file path to open after connecting */
+  filePath?: string;
+}
+
+/**
  * Union of all possible routes.
  */
-export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute;
+export type Route = ProjectSelectorRoute | ProjectRoute | FileRoute | ShareRoute;
 
 // ============================================================================
 // URL Parsing
@@ -77,6 +105,14 @@ export function parseHashRoute(hash: string): Route {
   // Remove leading # if present
   let path = hash.startsWith('#') ? hash.slice(1) : hash;
 
+  // Extract query parameters (for share URLs)
+  let queryParams = new URLSearchParams();
+  const queryIndex = path.indexOf('?');
+  if (queryIndex !== -1) {
+    queryParams = new URLSearchParams(path.slice(queryIndex + 1));
+    path = path.slice(0, queryIndex);
+  }
+
   // Extract anchor (everything after the last # in the path portion)
   // Note: The anchor is after the hash fragment marker in the URL
   let anchor: string | undefined;
@@ -93,6 +129,21 @@ export function parseHashRoute(hash: string): Route {
 
   // Split into segments
   const segments = path.split('/');
+
+  // Parse share route: /share/<indexDocId>
+  if (segments[0] === 'share' && segments[1]) {
+    const indexDocId = decodeURIComponent(segments[1]);
+    const syncServer = queryParams.get('server') || DEFAULT_SYNC_SERVER;
+    const fileParam = queryParams.get('file');
+    const filePath = fileParam ? decodeURIComponent(fileParam) : undefined;
+
+    return {
+      type: 'share',
+      indexDocId,
+      syncServer,
+      ...(filePath && { filePath }),
+    };
+  }
 
   // Parse route based on segments
   if (segments[0] === 'project' && segments[1]) {
@@ -159,6 +210,16 @@ export function buildHashRoute(route: Route): string {
       const base = `#/project/${route.projectId}/file/${encodedPath}`;
       return route.anchor ? `${base}#${route.anchor}` : base;
     }
+
+    case 'share': {
+      // Build shareable URL with query parameters
+      const params = new URLSearchParams();
+      params.set('server', route.syncServer);
+      if (route.filePath) {
+        params.set('file', route.filePath);
+      }
+      return `#/share/${encodeURIComponent(route.indexDocId)}?${params.toString()}`;
+    }
   }
 }
 
@@ -175,6 +236,41 @@ export function buildHashRoute(route: Route): string {
 export function buildFullUrl(route: Route): string {
   const hash = buildHashRoute(route);
   return `${window.location.origin}${window.location.pathname}${hash}`;
+}
+
+/**
+ * Build a shareable URL for a project.
+ *
+ * This URL contains the Automerge indexDocId and should be treated as sensitive.
+ * The recipient can use this URL to connect to the project. When they visit it,
+ * the app should immediately replace the URL with a local URL to prevent the
+ * sensitive data from appearing in browser history.
+ *
+ * @param indexDocId - The Automerge document ID (without 'automerge:' prefix)
+ * @param syncServer - The sync server URL
+ * @param filePath - Optional file path to open after connecting
+ * @returns Full shareable URL
+ *
+ * @example
+ * buildShareableUrl('4XyZabc123', 'wss://sync.automerge.org', 'docs/intro.qmd')
+ *   // 'https://example.com/hub/#/share/4XyZabc123?server=wss%3A%2F%2Fsync.automerge.org&file=docs%2Fintro.qmd'
+ */
+export function buildShareableUrl(
+  indexDocId: string,
+  syncServer: string,
+  filePath?: string
+): string {
+  // Remove 'automerge:' prefix if present (we store it without prefix in URLs)
+  const cleanIndexDocId = indexDocId.replace(/^automerge:/, '');
+
+  const route: ShareRoute = {
+    type: 'share',
+    indexDocId: cleanIndexDocId,
+    syncServer,
+    ...(filePath && { filePath }),
+  };
+
+  return buildFullUrl(route);
 }
 
 /**
@@ -232,6 +328,15 @@ export function routesEqual(a: Route, b: Route): boolean {
         a.projectId === bFile.projectId &&
         a.filePath === bFile.filePath &&
         a.anchor === bFile.anchor
+      );
+    }
+
+    case 'share': {
+      const bShare = b as ShareRoute;
+      return (
+        a.indexDocId === bShare.indexDocId &&
+        a.syncServer === bShare.syncServer &&
+        a.filePath === bShare.filePath
       );
     }
   }

@@ -4,7 +4,7 @@ import type * as Monaco from 'monaco-editor';
 import type { ProjectEntry, FileEntry } from '../types/project';
 import { isBinaryExtension } from '../types/project';
 import type { Route } from '../utils/routing';
-import { buildFullUrl } from '../utils/routing';
+import { buildFullUrl, buildShareableUrl } from '../utils/routing';
 import {
   createFile,
   createBinaryFile,
@@ -22,6 +22,7 @@ import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import Preview from './Preview';
 import FileSidebar from './FileSidebar';
 import NewFileDialog from './NewFileDialog';
+import ShareDialog from './ShareDialog';
 import MinimalHeader from './MinimalHeader';
 import SidebarTabs from './SidebarTabs';
 import OutlinePanel from './OutlinePanel';
@@ -146,6 +147,9 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
   // Initial filename for new file dialog (e.g., from clicking a link to a non-existent file)
   const [newFileInitialName, setNewFileInitialName] = useState<string>('');
+
+  // Share dialog state
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
   // Editor drag-drop state for image insertion
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
@@ -393,6 +397,18 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     }
   }, [project.id]);
 
+  // Handle opening share dialog
+  const handleShare = useCallback(() => {
+    setShowShareDialog(true);
+  }, []);
+
+  // Build shareable URL for the current file
+  const shareableUrl = buildShareableUrl(
+    project.indexDocId,
+    project.syncServer,
+    currentFile?.path
+  );
+
   // Handle opening new file dialog
   const handleNewFile = useCallback(() => {
     setPendingUploadFiles([]);
@@ -607,6 +623,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         currentFilePath={currentFile?.path ?? null}
         projectName={project.description}
         onChooseNewProject={onDisconnect}
+        onShare={handleShare}
       />
 
       {unlocatedErrors.length > 0 && (
@@ -731,6 +748,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
         onUploadBinaryFile={handleUploadBinaryFile}
         initialFiles={pendingUploadFiles}
         initialFilename={newFileInitialName}
+      />
+
+      {/* Share project dialog */}
+      <ShareDialog
+        isOpen={showShareDialog}
+        shareableUrl={shareableUrl}
+        onClose={() => setShowShareDialog(false)}
       />
     </div>
   );
