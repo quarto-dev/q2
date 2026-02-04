@@ -10,6 +10,7 @@ import {
   type ProjectChoice,
   type ProjectFile,
 } from '../services/wasmRenderer';
+import { DEFAULT_SYNC_SERVER } from '../utils/routing';
 import './ProjectSelector.css';
 
 interface Props {
@@ -47,7 +48,7 @@ export default function ProjectSelector({
 
   // Connect form state
   const [indexDocId, setIndexDocId] = useState('');
-  const [syncServer, setSyncServer] = useState('wss://sync.automerge.org');
+  const [syncServer, setSyncServer] = useState(DEFAULT_SYNC_SERVER);
   const [description, setDescription] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   // Track file path from share link (to navigate after connect)

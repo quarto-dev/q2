@@ -20,8 +20,10 @@
  * sensitive indexDocId from appearing in browser history or bookmarks.
  */
 
-/** Default sync server URL used when not specified in shareable URLs */
-export const DEFAULT_SYNC_SERVER = 'wss://sync.automerge.org';
+/** Default sync server URL used when not specified in shareable URLs.
+ * Can be overridden at build time via the VITE_DEFAULT_SYNC_SERVER environment variable. */
+export const DEFAULT_SYNC_SERVER =
+  import.meta.env.VITE_DEFAULT_SYNC_SERVER || 'wss://sync.automerge.org';
 
 // ============================================================================
 // Types
