@@ -13,6 +13,10 @@ be in reverse chronological order (latest first).
 
 -->
 
+### 2026-02-04
+
+- [`bd2580a2`](https://github.com/quarto-dev/kyoto/commits/bd2580a2): Pre-fill new file dialog with current file's directory path
+
 ### 2026-02-03
 
 - [`d3a33885`](https://github.com/quarto-dev/kyoto/commits/d3a33885): Add shareable project URLs with security warnings for cross-device collaboration
