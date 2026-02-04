@@ -46,22 +46,22 @@
 
 .header-right .preview-btn {
   padding: 6px 16px;
-  background: #646cff;
-  border: 2px solid #646cff;
+  background: #ffffff;
+  border: 2px solid #ffffff;
   border-radius: 6px;
-  color: #fff;
+  color: #1e3a8a;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
-  box-shadow: 0 2px 8px rgba(100, 108, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(255, 255, 255, 0.3);
 }
 
 .header-right .preview-btn:hover {
-  background: #535ac8;
-  border-color: #535ac8;
+  background: #f0f0f0;
+  border-color: #f0f0f0;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(100, 108, 255, 0.4);
+  box-shadow: 0 4px 12px rgba(255, 255, 255, 0.4);
 }
 
 .header-right .preview-btn:active {
