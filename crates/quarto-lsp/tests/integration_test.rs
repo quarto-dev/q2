@@ -123,10 +123,10 @@ impl LspTestHarness {
                 .expect("Failed to build quarto");
             assert!(status.success(), "Failed to build quarto binary");
 
-            let binary_path = workspace_root.join("target").join("debug").join("quarto");
+            let binary_path = workspace_root.join("target").join("debug").join("q2");
             assert!(
                 binary_path.exists(),
-                "quarto binary not found at {:?}",
+                "q2 binary not found at {:?}",
                 binary_path
             );
 
