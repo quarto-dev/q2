@@ -6,33 +6,7 @@
 
 import { useMemo } from 'react';
 import type { Symbol } from '../types/intelligence';
-import { parseSlides, type PandocAST, type Slide } from '../components/ReactAstSlideRenderer';
-
-/**
- * Extract header text from a slide for matching with symbols.
- */
-function getSlideHeaderText(slide: Slide): string | null {
-  if (slide.type === 'title' && slide.title) {
-    return slide.title;
-  }
-
-  // For content slides, find the first header block
-  for (const block of slide.blocks) {
-    if (block.t === 'Header') {
-      const [, , inlines] = block.c as [number, [string, string[], [string, string][]], any[]];
-      return inlines
-        .map((inline: any) => {
-          if (inline.t === 'Str') return inline.c;
-          if (inline.t === 'Space') return ' ';
-          return '';
-        })
-        .join('')
-        .trim();
-    }
-  }
-
-  return null;
-}
+import { parseSlides, type PandocAST } from '../components/ReactAstSlideRenderer';
 
 interface SlideMapping {
   /** The starting line (0-based) where this slide begins. */
@@ -62,7 +36,13 @@ export function useCursorToSlide(
       const slides = parseSlides(ast);
       const mappings: SlideMapping[] = [];
 
-      // For each slide, find its corresponding symbol and line number
+      // Filter symbols to only headers (those that create slides)
+      // Headers use SymbolKind 'string' in our LSP
+      // The symbols array contains top-level symbols only (h1/h2), with h3+ nested as children
+      const slideHeaders = symbols.filter(s => s.kind === 'string');
+
+      // Match slides to headers by index (structural position)
+      let headerIndex = 0;
       for (let slideIndex = 0; slideIndex < slides.length; slideIndex++) {
         const slide = slides[slideIndex];
 
@@ -72,22 +52,18 @@ export function useCursorToSlide(
           continue;
         }
 
-        // Get the header text from this slide
-        const headerText = getSlideHeaderText(slide);
-        if (!headerText) continue;
-
-        // Find the matching symbol
-        const matchingSymbol = symbols.find((s) => s.name === headerText);
-        if (!matchingSymbol) continue;
-
-        // Add mapping from symbol's line to this slide
-        mappings.push({
-          startLine: matchingSymbol.range.start.line,
-          slideIndex,
-        });
+        // Match this content slide to the next header by index
+        if (headerIndex < slideHeaders.length) {
+          const header = slideHeaders[headerIndex];
+          mappings.push({
+            startLine: header.range.start.line,
+            slideIndex,
+          });
+          headerIndex++;
+        }
       }
 
-      // Sort by line number (ascending)
+      // Sort by line number (ascending) - should already be sorted, but just in case
       mappings.sort((a, b) => a.startLine - b.startLine);
 
       return mappings;

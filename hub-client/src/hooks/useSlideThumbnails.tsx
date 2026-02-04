@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import html2canvas from 'html2canvas';
 import type { Symbol } from '../types/intelligence';
-import { parseSlides, renderSlide, type PandocAST, type Slide } from '../components/ReactAstSlideRenderer';
+import { parseSlides, renderSlide, type PandocAST } from '../components/ReactAstSlideRenderer';
 
 /**
  * Map from symbol line number to thumbnail data URL.
@@ -27,31 +27,6 @@ interface UseSlideThumbnailsOptions {
   contentVersion: number;
 }
 
-/**
- * Extract header text from a slide for matching with symbols.
- */
-function getSlideHeaderText(slide: Slide): string | null {
-  if (slide.type === 'title' && slide.title) {
-    return slide.title;
-  }
-
-  // For content slides, find the first header block
-  for (const block of slide.blocks) {
-    if (block.t === 'Header') {
-      const [, , inlines] = block.c as [number, [string, string[], [string, string][]], any[]];
-      return inlines
-        .map((inline: any) => {
-          if (inline.t === 'Str') return inline.c;
-          if (inline.t === 'Space') return ' ';
-          return '';
-        })
-        .join('')
-        .trim();
-    }
-  }
-
-  return null;
-}
 
 /**
  * Generate thumbnails for presentation slides.
@@ -67,6 +42,7 @@ export function useSlideThumbnails({
 }: UseSlideThumbnailsOptions): ThumbnailMap {
   const [thumbnails, setThumbnails] = useState<ThumbnailMap>(new Map());
   const captureInProgressRef = useRef(false);
+  const debounceTimeoutRef = useRef<number | null>(null);
 
   const captureThumbnails = useCallback(async () => {
     // Avoid overlapping capture operations
@@ -91,18 +67,28 @@ export function useSlideThumbnails({
 
       const slides = parseSlides(ast);
 
-      // For each slide, render it and capture a thumbnail
-      for (const slide of slides) {
+      // Filter symbols to only headers (those that create slides)
+      // Headers use SymbolKind 'string' in our LSP
+      // The symbols array contains top-level symbols only (h1/h2), with h3+ nested as children
+      const slideHeaders = symbols.filter(s => s.kind === 'string');
+
+      // Match slides to headers by index (structural position)
+      let headerIndex = 0;
+      for (let slideIndex = 0; slideIndex < slides.length; slideIndex++) {
+        const slide = slides[slideIndex];
+
         // Skip title slides (they don't correspond to document sections)
-        if (slide.type === 'title') continue;
+        if (slide.type === 'title') {
+          continue;
+        }
 
-        // Get the header text from this slide
-        const headerText = getSlideHeaderText(slide);
-        if (!headerText) continue;
+        // Match this content slide to the next header by index
+        if (headerIndex >= slideHeaders.length) {
+          continue;
+        }
 
-        // Find the matching symbol
-        const matchingSymbol = symbols.find((s) => s.name === headerText);
-        if (!matchingSymbol) continue;
+        const matchingSymbol = slideHeaders[headerIndex];
+        headerIndex++;
 
         // Create a temporary container for rendering this slide
         const container = document.createElement('div');
@@ -147,7 +133,7 @@ export function useSlideThumbnails({
                   newThumbnails.set(matchingSymbol.range.start.line, dataUrl);
                 }
               } catch (error) {
-                console.error(`Failed to capture thumbnail for "${headerText}":`, error);
+                console.error(`Failed to capture thumbnail for slide ${slideIndex} ("${matchingSymbol.name}"):`, error);
               } finally {
                 root.unmount();
                 resolve();
@@ -166,9 +152,21 @@ export function useSlideThumbnails({
     }
   }, [astJson, symbols, previewReady]);
 
-  // Capture thumbnails when content changes
+  // Debounced capture thumbnails when content changes
   useEffect(() => {
-    captureThumbnails();
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = window.setTimeout(() => {
+      captureThumbnails();
+    }, 100);
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
   }, [contentVersion, captureThumbnails]);
 
   return thumbnails;

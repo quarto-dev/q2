@@ -306,8 +306,6 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // Always update React state to keep preview in sync.
     // Since Monaco is uncontrolled, this won't affect editor content or cursor.
     setContent(automergeContent);
-    // Trigger thumbnail regeneration
-    setContentVersion((v) => v + 1);
   }, [currentFile, fileContents]);
 
   // Update currentFile when files list changes (e.g., on initial load)
@@ -352,8 +350,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     if (value !== undefined && currentFile) {
       setContent(value);
       onContentChange(currentFile.path, value);
-      // Trigger thumbnail regeneration
-      setContentVersion((v) => v + 1);
+      // Thumbnail regeneration will be triggered by handleAstChange when preview finishes
     }
   };
 

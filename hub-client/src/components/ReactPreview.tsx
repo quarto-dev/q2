@@ -213,14 +213,12 @@ export default function ReactPreview({
     }
   }, [scrollSyncEnabled, onDiagnosticsChange]);
 
-  // Debounced render update
+  // Immediate render update (no debounce)
   const updatePreview = useCallback((newContent: string, documentPath?: string) => {
     if (renderTimeoutRef.current) {
       clearTimeout(renderTimeoutRef.current);
     }
-    renderTimeoutRef.current = window.setTimeout(() => {
-      doRenderWithStateManagement(newContent, documentPath);
-    }, 20);
+    doRenderWithStateManagement(newContent, documentPath);
   }, [doRenderWithStateManagement]);
 
   // Re-render when content changes, WASM becomes ready, or scroll sync is toggled

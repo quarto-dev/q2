@@ -117,10 +117,12 @@ export function SlideAst({ astJson, onNavigateToDocument, currentSlide: controll
   // Parse blocks into slides
   const slides = parseSlides(ast);
 
-  // Reset to first slide when AST changes (new document loaded)
+  // Clamp slide index if it's out of bounds (e.g., slides were removed during editing)
   useEffect(() => {
-    setCurrentSlide(0);
-  }, [astJson]);
+    if (currentSlide >= slides.length && slides.length > 0) {
+      setCurrentSlide(slides.length - 1);
+    }
+  }, [slides.length, currentSlide]);
 
   // Keyboard navigation
   useEffect(() => {
