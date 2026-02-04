@@ -1,4 +1,4 @@
-import { PandocAstRenderer } from './PandocAstRenderer';
+import { Ast } from './ReactAstRenderer';
 
 interface ReactRendererProps {
   // Pandoc AST as JSON string
@@ -21,7 +21,7 @@ function ReactRenderer({
   onNavigateToDocument,
 }: ReactRendererProps) {
   return (
-    <PandocAstRenderer
+    <Ast
       astJson={astJson}
       onNavigateToDocument={onNavigateToDocument}
     />

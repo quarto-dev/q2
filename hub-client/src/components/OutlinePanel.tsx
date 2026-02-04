@@ -9,6 +9,7 @@
 
 import { useState, useCallback } from 'react';
 import type { Symbol, SymbolKind } from '../types/intelligence';
+import type { ThumbnailMap } from '../hooks/useSectionThumbnails';
 import './OutlinePanel.css';
 
 /**
@@ -28,6 +29,8 @@ export interface OutlinePanelProps {
   loading?: boolean;
   /** Error message to display. */
   error?: string | null;
+  /** Thumbnail images for sections (keyed by line number). */
+  thumbnails?: ThumbnailMap;
 }
 
 /**
@@ -64,11 +67,13 @@ function SymbolTree({
   onSymbolClick,
   collapsedSymbols,
   onToggleSymbol,
+  thumbnails,
 }: {
   symbols: Symbol[];
   onSymbolClick: (symbol: Symbol) => void;
   collapsedSymbols: Set<string>;
   onToggleSymbol: (symbolId: string) => void;
+  thumbnails?: ThumbnailMap;
 }) {
   if (symbols.length === 0) {
     return null;
@@ -81,6 +86,7 @@ function SymbolTree({
         const hasChildren = symbol.children && symbol.children.length > 0;
         const isCollapsed = collapsedSymbols.has(symbolId);
         const { icon, className } = getSymbolIcon(symbol.kind);
+        const thumbnail = thumbnails?.get(symbol.range.start.line);
 
         return (
           <li
@@ -111,6 +117,21 @@ function SymbolTree({
                   <span className="outline-detail">{symbol.detail}</span>
                 )}
               </button>
+              {thumbnail && (
+                <img
+                  src={thumbnail}
+                  alt={`Thumbnail for ${symbol.name}`}
+                  className="outline-thumbnail"
+                  style={{
+                    width: '128px',
+                    height: '64px',
+                    marginLeft: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    objectFit: 'cover',
+                  }}
+                />
+              )}
             </div>
             {hasChildren && !isCollapsed && (
               <SymbolTree
@@ -118,6 +139,7 @@ function SymbolTree({
                 onSymbolClick={onSymbolClick}
                 collapsedSymbols={collapsedSymbols}
                 onToggleSymbol={onToggleSymbol}
+                thumbnails={thumbnails}
               />
             )}
           </li>
@@ -139,6 +161,7 @@ export default function OutlinePanel({
   onSymbolClick,
   loading = false,
   error = null,
+  thumbnails,
 }: OutlinePanelProps) {
   // Track collapsed symbols (inverted logic: store collapsed, not expanded)
   // This means new symbols are expanded by default
@@ -192,6 +215,7 @@ export default function OutlinePanel({
         onSymbolClick={onSymbolClick}
         collapsedSymbols={collapsedSymbols}
         onToggleSymbol={toggleSymbol}
+        thumbnails={thumbnails}
       />
     </div>
   );

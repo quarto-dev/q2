@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@types/morphdom": "^2.3.0",
+    "html2canvas": "^1.4.1",
     "morphdom": "^2.7.8"
   }
 }

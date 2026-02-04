@@ -17,6 +17,7 @@ import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';
 import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
+import { useSectionThumbnails } from '../hooks/useSectionThumbnails';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
@@ -141,6 +142,16 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Monaco instance ref for setting markers
   const monacoRef = useRef<typeof Monaco | null>(null);
 
+  // Content version for triggering thumbnail regeneration
+  const [contentVersion, setContentVersion] = useState(0);
+
+  // Generate thumbnails for sections
+  const thumbnails = useSectionThumbnails({
+    symbols,
+    previewReady: wasmStatus === 'ready' && editorReady,
+    contentVersion,
+  });
+
   // New file dialog state
   const [showNewFileDialog, setShowNewFileDialog] = useState(false);
   const [pendingUploadFiles, setPendingUploadFiles] = useState<File[]>([]);
@@ -258,6 +269,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     // Always update React state to keep preview in sync.
     // Since Monaco is uncontrolled, this won't affect editor content or cursor.
     setContent(automergeContent);
+    // Trigger thumbnail regeneration
+    setContentVersion((v) => v + 1);
   }, [currentFile, fileContents]);
 
   // Update currentFile when files list changes (e.g., on initial load)
@@ -302,6 +315,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     if (value !== undefined && currentFile) {
       setContent(value);
       onContentChange(currentFile.path, value);
+      // Trigger thumbnail regeneration
+      setContentVersion((v) => v + 1);
     }
   };
 
@@ -646,6 +661,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
                     onSymbolClick={handleSymbolClick}
                     loading={intelligenceLoading}
                     error={intelligenceError}
+                    thumbnails={thumbnails}
                   />
                 );
               case 'project':

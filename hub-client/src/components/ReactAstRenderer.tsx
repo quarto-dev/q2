@@ -19,6 +19,7 @@ type BlockQuoteBlock = { t: 'BlockQuote'; c: Block[] };
 type DivBlock = { t: 'Div'; c: [[string, string[], [string, string][]], Block[]] };
 type HorizontalRuleBlock = { t: 'HorizontalRule' };
 type RawBlock = { t: 'RawBlock'; c: [string, string] };
+type FigureBlock = { t: 'Figure'; c: [[string, string[], [string, string][]], [Inline[] | null, Block[]], Block[]] };
 type UnknownBlock = { t: string; c?: unknown };
 
 type Block =
@@ -32,6 +33,7 @@ type Block =
   | DivBlock
   | HorizontalRuleBlock
   | RawBlock
+  | FigureBlock
   | UnknownBlock;
 
 type StrInline = { t: 'Str'; c: string };
@@ -67,7 +69,7 @@ interface PandocAstRendererProps {
 /**
  * Component that renders Pandoc AST as React elements
  */
-export function PandocAstRenderer({ astJson, onNavigateToDocument }: PandocAstRendererProps) {
+export function Ast({ astJson, onNavigateToDocument }: PandocAstRendererProps) {
   let ast: PandocAST;
 
   try {
@@ -190,6 +192,22 @@ function renderBlock(
         return <div key={key} dangerouslySetInnerHTML={{ __html: content }} />;
       }
       return null;
+    }
+
+    case 'Figure': {
+      const figureBlock = block as FigureBlock;
+      const [[id, classes, attrs], [caption, _blocks], content] = figureBlock.c;
+      const className = classes.join(' ');
+      const attrObj = Object.fromEntries(attrs);
+
+      return (
+        <figure key={key} id={id} className={className} {...attrObj}>
+          {content.map((b, i) => renderBlock(b, i, onNavigateToDocument))}
+          {caption && caption.length > 0 && (
+            <figcaption>{renderInlines(caption, onNavigateToDocument)}</figcaption>
+          )}
+        </figure>
+      );
     }
 
     default:
