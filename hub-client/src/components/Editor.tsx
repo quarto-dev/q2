@@ -162,6 +162,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const [isEditorDragOver, setIsEditorDragOver] = useState(false);
   const pendingDropPositionRef = useRef<Monaco.IPosition | null>(null);
 
+  // Fullscreen preview mode
+  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+
+  // Toggle fullscreen preview mode
+  const handleToggleFullscreenPreview = useCallback(() => {
+    setIsFullscreenPreview(prev => !prev);
+  }, []);
+
   // Callback for when preview wants to change file (via link click - adds history)
   const handlePreviewFileChange = useCallback((file: FileEntry, anchor?: string) => {
     setCurrentFile(file);
@@ -618,13 +626,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   return (
     <div className="editor-container">
-      <MinimalHeader
-        currentFilePath={currentFile?.path ?? null}
-        projectName={project.description}
-        onChooseNewProject={onDisconnect}
-      />
+      {!isFullscreenPreview && (
+        <MinimalHeader
+          currentFilePath={currentFile?.path ?? null}
+          projectName={project.description}
+          onChooseNewProject={onDisconnect}
+          onToggleFullscreenPreview={handleToggleFullscreenPreview}
+          isFullscreenPreview={isFullscreenPreview}
+        />
+      )}
 
-      {unlocatedErrors.length > 0 && (
+      {!isFullscreenPreview && unlocatedErrors.length > 0 && (
         <div className="diagnostics-banner">
           {unlocatedErrors.map((diag, i) => (
             <div key={i} className={`diagnostic-item diagnostic-${diag.kind}`}>
@@ -637,102 +649,117 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
       )}
 
       <main className="editor-main">
-        <SidebarTabs>
-          {(activeTab) => {
-            switch (activeTab) {
-              case 'files':
-                return (
-                  <FileSidebar
-                    files={files}
-                    currentFile={currentFile}
-                    onSelectFile={handleSelectFile}
-                    onNewFile={handleNewFile}
-                    onUploadFiles={handleUploadFiles}
-                    onDeleteFile={handleDeleteFile}
-                    onRenameFile={handleRenameFile}
-                    onOpenInNewTab={handleOpenInNewTab}
-                    onCopyLink={handleCopyLink}
-                  />
-                );
-              case 'outline':
-                return (
-                  <OutlinePanel
-                    symbols={symbols}
-                    onSymbolClick={handleSymbolClick}
-                    loading={intelligenceLoading}
-                    error={intelligenceError}
-                    thumbnails={thumbnails}
-                  />
-                );
-              case 'project':
-                return (
-                  <ProjectTab
-                    project={project}
-                    onChooseNewProject={onDisconnect}
-                  />
-                );
-              case 'status':
-                return (
-                  <StatusTab
-                    wasmStatus={wasmStatus}
-                    wasmError={wasmError}
-                    userCount={userCount}
-                    remoteUsers={remoteUsers}
-                  />
-                );
-              case 'settings':
-                return (
-                  <SettingsTab
-                    scrollSyncEnabled={scrollSyncEnabled}
-                    onScrollSyncChange={setScrollSyncEnabled}
-                  />
-                );
-              case 'about':
-                return <AboutTab wasmStatus={wasmStatus} />;
-              default:
-                return null;
-            }
-          }}
-        </SidebarTabs>
-        <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
-          <MonacoEditor
-            // Use key to force remount when switching files (resets editor state cleanly)
-            key={currentFile?.path ?? ''}
-            height="100%"
-            language="markdown"
-            theme="vs-dark"
-            // Use defaultValue instead of value to make Monaco uncontrolled.
-            // This prevents the wrapper from calling setValue() on re-renders,
-            // which would reset cursor position. We manage content via executeEdits().
-            defaultValue={content}
-            onChange={handleEditorChange}
-            onMount={handleEditorMount}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              lineNumbers: 'on',
-              wordWrap: 'on',
-              padding: { top: 16 },
-              scrollBeyondLastLine: false,
-              // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
-              // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
-              pasteAs: { enabled: false },
+        {!isFullscreenPreview && (
+          <SidebarTabs>
+            {(activeTab) => {
+              switch (activeTab) {
+                case 'files':
+                  return (
+                    <FileSidebar
+                      files={files}
+                      currentFile={currentFile}
+                      onSelectFile={handleSelectFile}
+                      onNewFile={handleNewFile}
+                      onUploadFiles={handleUploadFiles}
+                      onDeleteFile={handleDeleteFile}
+                      onRenameFile={handleRenameFile}
+                      onOpenInNewTab={handleOpenInNewTab}
+                      onCopyLink={handleCopyLink}
+                    />
+                  );
+                case 'outline':
+                  return (
+                    <OutlinePanel
+                      symbols={symbols}
+                      onSymbolClick={handleSymbolClick}
+                      loading={intelligenceLoading}
+                      error={intelligenceError}
+                      thumbnails={thumbnails}
+                    />
+                  );
+                case 'project':
+                  return (
+                    <ProjectTab
+                      project={project}
+                      onChooseNewProject={onDisconnect}
+                    />
+                  );
+                case 'status':
+                  return (
+                    <StatusTab
+                      wasmStatus={wasmStatus}
+                      wasmError={wasmError}
+                      userCount={userCount}
+                      remoteUsers={remoteUsers}
+                    />
+                  );
+                case 'settings':
+                  return (
+                    <SettingsTab
+                      scrollSyncEnabled={scrollSyncEnabled}
+                      onScrollSyncChange={setScrollSyncEnabled}
+                    />
+                  );
+                case 'about':
+                  return <AboutTab wasmStatus={wasmStatus} />;
+                default:
+                  return null;
+              }
             }}
+          </SidebarTabs>
+        )}
+        {!isFullscreenPreview && (
+          <div className={`pane editor-pane${isEditorDragOver ? ' drag-over' : ''}`}>
+            <MonacoEditor
+              // Use key to force remount when switching files (resets editor state cleanly)
+              key={currentFile?.path ?? ''}
+              height="100%"
+              language="markdown"
+              theme="vs-dark"
+              // Use defaultValue instead of value to make Monaco uncontrolled.
+              // This prevents the wrapper from calling setValue() on re-renders,
+              // which would reset cursor position. We manage content via executeEdits().
+              defaultValue={content}
+              onChange={handleEditorChange}
+              onMount={handleEditorMount}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                wordWrap: 'on',
+                padding: { top: 16 },
+                scrollBeyondLastLine: false,
+                // Disable paste-as to prevent snippet expansion (e.g., URLs from browser
+                // address bar being pasted with $0 appended). See quarto-dev/kyoto#3.
+                pasteAs: { enabled: false },
+              }}
+            />
+          </div>
+        )}
+        <div className={`pane preview-pane${isFullscreenPreview ? ' fullscreen' : ''}`}>
+          {isFullscreenPreview && (
+            <button
+              className="fullscreen-close-btn"
+              onClick={handleToggleFullscreenPreview}
+              aria-label="Exit fullscreen preview"
+            >
+              ✕
+            </button>
+          )}
+          <ReactPreview
+            content={content}
+            currentFile={currentFile}
+            files={files}
+            scrollSyncEnabled={scrollSyncEnabled}
+            editorRef={editorRef}
+            editorReady={editorReady}
+            editorHasFocusRef={editorHasFocusRef}
+            onFileChange={handlePreviewFileChange}
+            onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
+            onDiagnosticsChange={handleDiagnosticsChange}
+            onWasmStatusChange={handleWasmStatusChange}
           />
         </div>
-        <ReactPreview
-          content={content}
-          currentFile={currentFile}
-          files={files}
-          scrollSyncEnabled={scrollSyncEnabled}
-          editorRef={editorRef}
-          editorReady={editorReady}
-          editorHasFocusRef={editorHasFocusRef}
-          onFileChange={handlePreviewFileChange}
-          onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
-          onDiagnosticsChange={handleDiagnosticsChange}
-          onWasmStatusChange={handleWasmStatusChange}
-        />
       </main>
 
       {/* New file dialog */}

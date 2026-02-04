@@ -214,6 +214,48 @@
 .preview-pane {
   background: #fff;
   position: relative;
+  overflow: scroll;
+}
+
+.preview-pane.fullscreen {
+  flex: 1;
+  width: 100%;
+}
+
+.fullscreen-close-btn {
+  position: fixed;
+  top: 20px;
+  right: 35px;
+  width: 50px;
+  height: 50px;
+  min-width: 50px;
+  min-height: 50px;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  backdrop-filter: blur(8px);
+}
+
+.fullscreen-close-btn:hover {
+  background: rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.9);
+  transform: scale(1.25);
+}
+
+.fullscreen-close-btn:active {
+  transform: scale(0.9);
+  transition: all 0.1s;
 }
 
 .preview-pane iframe {

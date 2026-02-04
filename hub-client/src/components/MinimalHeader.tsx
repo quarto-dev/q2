@@ -11,12 +11,16 @@ interface MinimalHeaderProps {
   currentFilePath: string | null;
   projectName: string;
   onChooseNewProject: () => void;
+  onToggleFullscreenPreview?: () => void;
+  isFullscreenPreview?: boolean;
 }
 
 export default function MinimalHeader({
   currentFilePath,
   projectName,
   onChooseNewProject,
+  onToggleFullscreenPreview,
+  isFullscreenPreview = false,
 }: MinimalHeaderProps) {
   return (
     <header className="minimal-header">
@@ -29,6 +33,11 @@ export default function MinimalHeader({
       </div>
       <div className="header-right">
         <span className="project-name">{projectName}</span>
+        {onToggleFullscreenPreview && !isFullscreenPreview && (
+          <button className="preview-btn" onClick={onToggleFullscreenPreview}>
+            Preview
+          </button>
+        )}
         <button className="choose-project-btn" onClick={onChooseNewProject}>
           Switch
         </button>
