@@ -1,4 +1,4 @@
-import { Ast } from './ReactAstRenderer';
+import { SlideAst } from './ReactAstSlideRenderer';
 
 interface ReactRendererProps {
   // Pandoc AST as JSON string
@@ -21,10 +21,20 @@ function ReactRenderer({
   onNavigateToDocument,
 }: ReactRendererProps) {
   return (
-    <Ast
-      astJson={astJson}
-      onNavigateToDocument={onNavigateToDocument}
-    />
+    <div style={{
+      width: '100%',
+      height: '100%',
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0
+    }}>
+      <SlideAst
+        astJson={astJson}
+        onNavigateToDocument={onNavigateToDocument}
+      />
+    </div>
   );
 }
 

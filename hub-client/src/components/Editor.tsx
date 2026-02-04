@@ -17,7 +17,7 @@ import { processFileForUpload } from '../services/resourceService';
 import { usePresence } from '../hooks/usePresence';
 import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
-import { useSectionThumbnails } from '../hooks/useSectionThumbnails';
+import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
@@ -145,8 +145,12 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Content version for triggering thumbnail regeneration
   const [contentVersion, setContentVersion] = useState(0);
 
-  // Generate thumbnails for sections
-  const thumbnails = useSectionThumbnails({
+  // AST JSON for slide thumbnails
+  const [astJson, setAstJson] = useState<string | null>(null);
+
+  // Generate thumbnails for slides
+  const thumbnails = useSlideThumbnails({
+    astJson,
     symbols,
     previewReady: wasmStatus === 'ready' && editorReady,
     contentVersion,
@@ -197,6 +201,13 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   const handleWasmStatusChange = useCallback((status: 'loading' | 'ready' | 'error', error: string | null) => {
     setWasmStatus(status);
     setWasmError(error);
+  }, []);
+
+  // Callback for when preview AST changes
+  const handleAstChange = useCallback((newAstJson: string | null) => {
+    setAstJson(newAstJson);
+    // Increment content version to trigger thumbnail regeneration
+    setContentVersion(prev => prev + 1);
   }, []);
 
   // Update document title based on current file and project
@@ -758,6 +769,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onOpenNewFileDialog={handlePreviewOpenNewFileDialog}
             onDiagnosticsChange={handleDiagnosticsChange}
             onWasmStatusChange={handleWasmStatusChange}
+            onAstChange={handleAstChange}
           />
         </div>
       </main>

@@ -33,6 +33,7 @@ interface PreviewProps {
   onOpenNewFileDialog: (initialFilename: string) => void;
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
   onWasmStatusChange?: (status: 'loading' | 'ready' | 'error', error: string | null) => void;
+  onAstChange?: (astJson: string | null) => void;
 }
 
 // Result of rendering QMD content to AST
@@ -98,6 +99,7 @@ export default function ReactPreview({
   onOpenNewFileDialog,
   onDiagnosticsChange,
   onWasmStatusChange,
+  onAstChange,
 }: PreviewProps) {
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -189,6 +191,8 @@ export default function ReactPreview({
       setPreviewState('GOOD');
       // Update rendered AST
       setAst(result.astJson);
+      // Notify parent of AST change
+      onAstChange?.(result.astJson);
     } else {
       // Set current error for overlay
       const currentState = previewStateRef.current;
@@ -196,6 +200,7 @@ export default function ReactPreview({
         // No good render yet - show full error page
         setPreviewState('ERROR_AT_START');
         setAst(''); // Clear AST on error
+        onAstChange?.(null);
       } else {
         // Was GOOD or ERROR_FROM_GOOD - keep last good AST, show overlay
         // DON'T update AST content
@@ -224,6 +229,7 @@ export default function ReactPreview({
       setCurrentError(null);
       setPreviewState('START');
       setAst('');
+      onAstChange?.(null);
       return;
     }
 
