@@ -410,10 +410,17 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   );
 
   // Handle opening new file dialog
+  // Pre-fill the filename with the current file's directory path
   const handleNewFile = useCallback(() => {
     setPendingUploadFiles([]);
+    if (currentFile) {
+      const lastSlash = currentFile.path.lastIndexOf('/');
+      if (lastSlash >= 0) {
+        setNewFileInitialName(currentFile.path.substring(0, lastSlash + 1));
+      }
+    }
     setShowNewFileDialog(true);
-  }, []);
+  }, [currentFile]);
 
   // Handle closing the new file dialog
   // Note: We don't clear pendingDropPositionRef here because the upload
