@@ -15,6 +15,7 @@ be in reverse chronological order (latest first).
 
 ### 2026-02-04
 
+- [`3ed1c1bf`](https://github.com/quarto-dev/kyoto/commits/3ed1c1bf): Make default sync server configurable via VITE_DEFAULT_SYNC_SERVER env var
 - [`bd2580a2`](https://github.com/quarto-dev/kyoto/commits/bd2580a2): Pre-fill new file dialog with current file's directory path
 
 ### 2026-02-03
