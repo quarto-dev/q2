@@ -18,6 +18,7 @@ import { usePresence } from '../hooks/usePresence';
 import { usePreference } from '../hooks/usePreference';
 import { useIntelligence } from '../hooks/useIntelligence';
 import { useSlideThumbnails } from '../hooks/useSlideThumbnails';
+import { useCursorToSlide } from '../hooks/useCursorToSlide';
 import { diffToMonacoEdits } from '../utils/diffToMonacoEdits';
 import { diagnosticsToMarkers } from '../utils/diagnosticToMonaco';
 import FileSidebar from './FileSidebar';
@@ -168,6 +169,23 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
 
   // Fullscreen preview mode
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+
+  // Current slide index (for cursor-driven slide navigation)
+  const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
+
+  // Map cursor position to slide index
+  const getSlideForLine = useCursorToSlide(astJson, symbols);
+
+  // Keep getSlideForLine in a ref so the cursor listener always has the latest version
+  const getSlideForLineRef = useRef(getSlideForLine);
+  useEffect(() => {
+    getSlideForLineRef.current = getSlideForLine;
+  }, [getSlideForLine]);
+
+  // Handle manual slide changes (from arrow keys or buttons in preview)
+  const handleSlideChange = useCallback((slideIndex: number) => {
+    setCurrentSlideIndex(slideIndex);
+  }, []);
 
   // Toggle fullscreen preview mode
   const handleToggleFullscreenPreview = useCallback(() => {
@@ -355,6 +373,14 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
     });
     editor.onDidBlurEditorText(() => {
       editorHasFocusRef.current = false;
+    });
+
+    // Track cursor position changes for slide navigation
+    editor.onDidChangeCursorPosition((e) => {
+      // Get the cursor line (0-based in Monaco)
+      const line = e.position.lineNumber - 1; // Convert to 0-based for our mapping
+      const slideIndex = getSlideForLineRef.current(line);
+      setCurrentSlideIndex(slideIndex);
     });
 
     // Attach drag-drop handlers to editor container
@@ -770,6 +796,8 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
             onDiagnosticsChange={handleDiagnosticsChange}
             onWasmStatusChange={handleWasmStatusChange}
             onAstChange={handleAstChange}
+            currentSlideIndex={currentSlideIndex}
+            onSlideChange={handleSlideChange}
           />
         </div>
       </main>

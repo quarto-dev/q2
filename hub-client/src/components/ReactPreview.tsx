@@ -34,6 +34,8 @@ interface PreviewProps {
   onDiagnosticsChange: (diagnostics: Diagnostic[]) => void;
   onWasmStatusChange?: (status: 'loading' | 'ready' | 'error', error: string | null) => void;
   onAstChange?: (astJson: string | null) => void;
+  currentSlideIndex?: number;
+  onSlideChange?: (slideIndex: number) => void;
 }
 
 // Result of rendering QMD content to AST
@@ -100,6 +102,8 @@ export default function ReactPreview({
   onDiagnosticsChange,
   onWasmStatusChange,
   onAstChange,
+  currentSlideIndex,
+  onSlideChange,
 }: PreviewProps) {
   const [wasmStatus, setWasmStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [wasmError, setWasmError] = useState<string | null>(null);
@@ -255,6 +259,8 @@ export default function ReactPreview({
           astJson={ast}
           currentFilePath={currentFile?.path ?? ''}
           onNavigateToDocument={handleNavigateToDocument}
+          currentSlideIndex={currentSlideIndex}
+          onSlideChange={onSlideChange}
         />
       ) : previewState === 'ERROR_AT_START' && currentError ? (
         <div style={{ padding: '20px', color: 'red' }}>

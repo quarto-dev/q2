@@ -7,6 +7,10 @@ interface ReactRendererProps {
   currentFilePath: string;
   // Callback when user navigates to a different document (with optional anchor)
   onNavigateToDocument: (targetPath: string, anchor: string | null) => void;
+  // Optional controlled current slide index
+  currentSlideIndex?: number;
+  // Callback when slide changes (for manual navigation via arrows/buttons)
+  onSlideChange?: (slideIndex: number) => void;
 }
 
 /**
@@ -19,6 +23,8 @@ interface ReactRendererProps {
 function ReactRenderer({
   astJson,
   onNavigateToDocument,
+  currentSlideIndex,
+  onSlideChange,
 }: ReactRendererProps) {
   return (
     <div style={{
@@ -33,6 +39,8 @@ function ReactRenderer({
       <SlideAst
         astJson={astJson}
         onNavigateToDocument={onNavigateToDocument}
+        currentSlide={currentSlideIndex}
+        onSlideChange={onSlideChange}
       />
     </div>
   );

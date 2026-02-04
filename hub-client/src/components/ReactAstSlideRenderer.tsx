@@ -77,13 +77,30 @@ type Inline =
 interface PandocAstSlideRendererProps {
   astJson: string;
   onNavigateToDocument?: (path: string, anchor: string | null) => void;
+  /** Optional controlled current slide index. If provided, component uses this instead of internal state. */
+  currentSlide?: number;
+  /** Callback when current slide changes (for controlled mode). */
+  onSlideChange?: (slideIndex: number) => void;
 }
 
 /**
  * Component that renders Pandoc AST as React elements for slides
  */
-export function SlideAst({ astJson, onNavigateToDocument }: PandocAstSlideRendererProps) {
-  const [currentSlide, setCurrentSlide] = useState(0);
+export function SlideAst({ astJson, onNavigateToDocument, currentSlide: controlledSlide, onSlideChange }: PandocAstSlideRendererProps) {
+  const [internalSlide, setInternalSlide] = useState(0);
+
+  // Use controlled slide if provided, otherwise use internal state
+  const currentSlide = controlledSlide !== undefined ? controlledSlide : internalSlide;
+  const setCurrentSlide = (value: number | ((prev: number) => number)) => {
+    const newValue = typeof value === 'function' ? value(currentSlide) : value;
+    if (controlledSlide !== undefined) {
+      // Controlled mode - notify parent
+      onSlideChange?.(newValue);
+    } else {
+      // Uncontrolled mode - update internal state
+      setInternalSlide(newValue);
+    }
+  };
 
   let ast: PandocAST;
 
@@ -99,6 +116,11 @@ export function SlideAst({ astJson, onNavigateToDocument }: PandocAstSlideRender
 
   // Parse blocks into slides
   const slides = parseSlides(ast);
+
+  // Reset to first slide when AST changes (new document loaded)
+  useEffect(() => {
+    setCurrentSlide(0);
+  }, [astJson]);
 
   // Keyboard navigation
   useEffect(() => {
