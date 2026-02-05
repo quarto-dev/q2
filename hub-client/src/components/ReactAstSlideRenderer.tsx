@@ -136,7 +136,7 @@ export function SlideAst({ astJson, onNavigateToDocument, currentSlide: controll
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [slides.length]);
+  }, [slides.length, setCurrentSlide]);
 
   const goToPrevSlide = () => setCurrentSlide(prev => Math.max(0, prev - 1));
   const goToNextSlide = () => setCurrentSlide(prev => Math.min(slides.length - 1, prev + 1));
