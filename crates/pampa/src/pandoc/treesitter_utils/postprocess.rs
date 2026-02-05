@@ -749,6 +749,49 @@ fn transform_definition_list_div(div: Div) -> Block {
     })
 }
 
+/// Transform special divs (definition-list, list-table) into their proper AST representations.
+///
+/// This function applies div transforms that convert divs with specific classes into
+/// DefinitionList and Table blocks. It can be called independently from `postprocess()`
+/// to apply these transforms to AST from any source (qmd parsing or JSON input).
+///
+/// Transforms applied:
+/// - `definition-list` class divs → DefinitionList blocks
+/// - `list-table` class divs → Table blocks
+pub fn transform_divs(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Pandoc {
+    let error_collector_ref = RefCell::new(error_collector);
+
+    let mut filter = Filter::new().with_div(|div, _ctx| {
+        // First check for list-table
+        match validate_list_table_div(&div) {
+            ListTableValidation::Valid => FilterResult(vec![transform_list_table_div(div)], false),
+            ListTableValidation::Invalid { reason, location } => {
+                // Emit warning for malformed list-table div
+                error_collector_ref.borrow_mut().add(
+                    DiagnosticMessageBuilder::warning("Invalid List-Table Structure")
+                        .with_code("Q-2-35")
+                        .with_location(location)
+                        .problem(reason)
+                        .add_hint("Check the list-table documentation for the correct structure?")
+                        .build(),
+                );
+                Unchanged(div) // Leave as-is
+            }
+            ListTableValidation::NotListTable => {
+                // Not a list-table, check for definition-list
+                if is_valid_definition_list_div(&div) {
+                    FilterResult(vec![transform_definition_list_div(div)], false)
+                } else {
+                    Unchanged(div)
+                }
+            }
+        }
+    });
+
+    let mut ctx = FilterContext::new();
+    topdown_traverse(doc, &mut filter, &mut ctx)
+}
+
 /// Apply post-processing transformations to the Pandoc AST
 pub fn postprocess(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Result<Pandoc, ()> {
     let result = {

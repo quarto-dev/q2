@@ -271,7 +271,17 @@ fn main() {
         "json" => {
             let result = readers::json::read(&mut input.as_bytes());
             match result {
-                Ok(p) => p,
+                Ok((pandoc, context)) => {
+                    // Apply div transforms (definition-list, list-table) to JSON input
+                    // so they get the same treatment as qmd input.
+                    let mut error_collector =
+                        utils::diagnostic_collector::DiagnosticCollector::new();
+                    let pandoc = pandoc::treesitter_utils::postprocess::transform_divs(
+                        pandoc,
+                        &mut error_collector,
+                    );
+                    (pandoc, context)
+                }
                 Err(e) => {
                     eprintln!("Error reading JSON: {}", e);
                     std::process::exit(1);

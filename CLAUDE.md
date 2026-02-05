@@ -168,6 +168,9 @@ When fixing ANY bug:
 2. **SECOND**: Run the test and verify it fails as expected
 3. **THIRD**: Implement the fix
 4. **FOURTH**: Run the test and verify it passes
+5. **FIFTH**: Run the full workspace test suite (`cargo nextest run --workspace`) to verify no regressions in other crates
+
+**Step 5 is critical because this is a monorepo — changes in one crate (e.g. `pampa`) can break downstream crates (e.g. `qmd-syntax-helper`) that depend on it. Running only the modified crate's tests is NOT sufficient.**
 
 **This is non-negotiable. Never implement a fix before verifying the test fails. Stop and ask the user if you cannot think of a way to mechanically test the bad behavior. Only deviate if writing new features.**
 
