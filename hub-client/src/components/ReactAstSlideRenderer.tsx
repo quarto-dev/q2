@@ -456,6 +456,81 @@ export function renderSlide(
 }
 
 // ============================================================================
+// Attribute Helpers
+// ============================================================================
+
+/**
+ * Convert Pandoc attributes to React-compatible props.
+ * Handles the special case where 'style' might be a string and needs to be parsed.
+ */
+function attributesToProps(
+  id: string,
+  classes: string[],
+  attrs: [string, string][],
+  additionalStyle?: React.CSSProperties
+): {
+  id?: string;
+  className?: string;
+  style?: React.CSSProperties;
+  [key: string]: any;
+} {
+  const className = classes.join(' ');
+  const attrObj: { [key: string]: any } = {};
+  let styleString: string | undefined;
+
+  // Separate style from other attributes
+  for (const [key, value] of attrs) {
+    if (key === 'style') {
+      styleString = value;
+    } else {
+      attrObj[key] = value;
+    }
+  }
+
+  // Parse style string into style object
+  let parsedStyle: React.CSSProperties = {};
+  if (styleString) {
+    parsedStyle = parseStyleString(styleString);
+  }
+
+  // Merge with additional styles
+  const style = { ...parsedStyle, ...additionalStyle };
+
+  return {
+    ...(id ? { id } : {}),
+    ...(className ? { className } : {}),
+    ...(Object.keys(style).length > 0 ? { style } : {}),
+    ...attrObj
+  };
+}
+
+/**
+ * Parse a CSS style string (e.g., "color: red; font-size: 14px") into a React style object.
+ */
+function parseStyleString(styleString: string): React.CSSProperties {
+  const style: React.CSSProperties = {};
+
+  // Split by semicolon and process each declaration
+  const declarations = styleString.split(';').map(s => s.trim()).filter(Boolean);
+
+  for (const declaration of declarations) {
+    const colonIndex = declaration.indexOf(':');
+    if (colonIndex === -1) continue;
+
+    const property = declaration.slice(0, colonIndex).trim();
+    const value = declaration.slice(colonIndex + 1).trim();
+
+    // Convert CSS property names to camelCase (e.g., "font-size" -> "fontSize")
+    const camelCaseProperty = property.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+
+    // @ts-ignore - Dynamic property assignment
+    style[camelCaseProperty] = value;
+  }
+
+  return style;
+}
+
+// ============================================================================
 // Block Rendering
 // ============================================================================
 
@@ -487,8 +562,6 @@ function renderBlock(
       const headerBlock = block as HeaderBlock;
       const [level, [id, classes, attrs], inlines] = headerBlock.c;
       const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
 
       // Slide-appropriate header styles
       const headerStyles: React.CSSProperties = {
@@ -506,8 +579,10 @@ function renderBlock(
         headerStyles.fontSize = '40px';
       }
 
+      const props = attributesToProps(id, classes, attrs, headerStyles);
+
       return (
-        <Tag key={key} id={id} className={className} {...attrObj} style={headerStyles}>
+        <Tag key={key} {...props}>
           {renderInlines(inlines, onNavigateToDocument)}
         </Tag>
       );
@@ -516,24 +591,18 @@ function renderBlock(
     case 'CodeBlock': {
       const codeBlock = block as CodeBlock;
       const [[id, classes, attrs], code] = codeBlock.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const codeBlockStyle: React.CSSProperties = {
+        background: '#f5f5f5',
+        padding: '20px',
+        borderRadius: '8px',
+        overflow: 'auto',
+        fontSize: '20px',
+        marginTop: '0.5em',
+        marginBottom: '0.5em'
+      };
+      const props = attributesToProps(id, classes, attrs, codeBlockStyle);
       return (
-        <pre
-          key={key}
-          id={id}
-          className={className}
-          {...attrObj}
-          style={{
-            background: '#f5f5f5',
-            padding: '20px',
-            borderRadius: '8px',
-            overflow: 'auto',
-            fontSize: '20px',
-            marginTop: '0.5em',
-            marginBottom: '0.5em'
-          }}
-        >
+        <pre key={key} {...props}>
           <code>{code}</code>
         </pre>
       );
@@ -589,10 +658,9 @@ function renderBlock(
     case 'Div': {
       const divBlock = block as DivBlock;
       const [[id, classes, attrs], blocks] = divBlock.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const props = attributesToProps(id, classes, attrs);
       return (
-        <div key={key} id={id} className={className} {...attrObj}>
+        <div key={key} {...props}>
           {blocks.map((b, i) => renderBlock(b, i, onNavigateToDocument))}
         </div>
       );
@@ -613,11 +681,10 @@ function renderBlock(
     case 'Figure': {
       const figureBlock = block as FigureBlock;
       const [[id, classes, attrs], [caption, _blocks], content] = figureBlock.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const props = attributesToProps(id, classes, attrs);
 
       return (
-        <figure key={key} id={id} className={className} {...attrObj}>
+        <figure key={key} {...props}>
           {content.map((b, i) => renderBlock(b, i, onNavigateToDocument))}
           {caption && caption.length > 0 && (
             <figcaption>{renderInlines(caption, onNavigateToDocument)}</figcaption>
@@ -676,10 +743,9 @@ function renderInline(
     case 'Code': {
       const codeInline = inline as CodeInline;
       const [[id, classes, attrs], code] = codeInline.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const props = attributesToProps(id, classes, attrs);
       return (
-        <code key={key} id={id} className={className} {...attrObj}>
+        <code key={key} {...props}>
           {code}
         </code>
       );
@@ -688,8 +754,7 @@ function renderInline(
     case 'Link': {
       const linkInline = inline as LinkInline;
       const [[id, classes, attrs], inlines, [url, title]] = linkInline.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const props = attributesToProps(id, classes, attrs);
 
       // Handle .qmd links
       if (url.endsWith('.qmd') && onNavigateToDocument) {
@@ -697,9 +762,7 @@ function renderInline(
         return (
           <a
             key={key}
-            id={id}
-            className={className}
-            {...attrObj}
+            {...props}
             href={url}
             title={title}
             onClick={(e) => {
@@ -713,7 +776,7 @@ function renderInline(
       }
 
       return (
-        <a key={key} id={id} className={className} {...attrObj} href={url} title={title}>
+        <a key={key} {...props} href={url} title={title}>
           {renderInlines(inlines, onNavigateToDocument)}
         </a>
       );
@@ -722,25 +785,23 @@ function renderInline(
     case 'Image': {
       const imageInline = inline as ImageInline;
       const [[id, classes, attrs], inlines, [url, title]] = imageInline.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const props = attributesToProps(id, classes, attrs);
       const alt = inlines.map(i => {
         if ('c' in i && typeof i.c === 'string') return i.c;
         return '';
       }).join('');
 
       return (
-        <img key={key} id={id} className={className} {...attrObj} src={url} alt={alt} title={title} />
+        <img key={key} {...props} src={url} alt={alt} title={title} />
       );
     }
 
     case 'Span': {
       const spanInline = inline as SpanInline;
       const [[id, classes, attrs], inlines] = spanInline.c;
-      const className = classes.join(' ');
-      const attrObj = Object.fromEntries(attrs);
+      const props = attributesToProps(id, classes, attrs);
       return (
-        <span key={key} id={id} className={className} {...attrObj}>
+        <span key={key} {...props}>
           {renderInlines(inlines, onNavigateToDocument)}
         </span>
       );
