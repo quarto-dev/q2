@@ -8,6 +8,7 @@ target
 .beads/daemon.lock
 .beads/daemon-error
 .beads/bd.sock
+.beads/beads.db
 .beads/.exclusive-lock
 
 # .beads directory files (keep JSONL only)
