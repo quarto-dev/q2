@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AspectRatioScaler } from './AspectRatioScaler';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 
 /**
  * Simplified Pandoc AST types for rendering
@@ -59,6 +61,7 @@ type CodeInline = { t: 'Code'; c: [[string, string[], [string, string][]], strin
 type LinkInline = { t: 'Link'; c: [[string, string[], [string, string][]], Inline[], [string, string]] };
 type ImageInline = { t: 'Image'; c: [[string, string[], [string, string][]], Inline[], [string, string]] };
 type SpanInline = { t: 'Span'; c: [[string, string[], [string, string][]], Inline[]] };
+type MathInline = { t: 'Math'; c: [{ t: string }, string] };
 type UnknownInline = { t: string; c?: unknown };
 
 type Inline =
@@ -72,6 +75,7 @@ type Inline =
   | LinkInline
   | ImageInline
   | SpanInline
+  | MathInline
   | UnknownInline;
 
 interface PandocAstSlideRendererProps {
@@ -805,6 +809,34 @@ function renderInline(
           {renderInlines(inlines, onNavigateToDocument)}
         </span>
       );
+    }
+
+    case 'Math': {
+      const mathInline = inline as MathInline;
+      const [mathType, latex] = mathInline.c;
+      const isDisplayMath = mathType.t === 'DisplayMath';
+
+      try {
+        const html = katex.renderToString(latex, {
+          displayMode: isDisplayMath,
+          throwOnError: false,
+          output: 'html'
+        });
+
+        return (
+          <span
+            key={key}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        );
+      } catch (err) {
+        console.error('KaTeX rendering error:', err);
+        return (
+          <span key={key} style={{ color: 'red', fontSize: '0.9em' }}>
+            [Math Error: {latex}]
+          </span>
+        );
+      }
     }
 
     default:

@@ -11,8 +11,10 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "dependencies": {
+    "@types/katex": "^0.16.8",
     "@types/morphdom": "^2.3.0",
     "html2canvas": "^1.4.1",
+    "katex": "^0.16.28",
     "morphdom": "^2.7.8"
   }
 }
