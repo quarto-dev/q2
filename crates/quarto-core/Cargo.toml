@@ -39,8 +39,8 @@ regex = "1.12"
 quarto-sass.workspace = true
 
 # Jupyter engine dependencies (native only)
-runtimelib = { version = "0.30", features = ["tokio-runtime"] }
-jupyter-protocol = "0.11"
+runtimelib = { version = "1.0", features = ["tokio-runtime"] }
+jupyter-protocol = "1.0"
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "process", "fs", "net", "io-util"] }
 uuid.workspace = true
 base64.workspace = true

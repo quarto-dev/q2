@@ -297,62 +297,26 @@ fn media_type_to_mime_entry(media_type: &MediaType) -> (String, serde_json::Valu
             "image/gif".to_string(),
             serde_json::Value::String(s.clone()),
         ),
-        MediaType::Json(v) => (
-            "application/json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::GeoJson(v) => (
-            "application/geo+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::Plotly(v) => (
-            "application/vnd.plotly.v1+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
+        MediaType::Json(v) => ("application/json".to_string(), v.clone()),
+        MediaType::GeoJson(v) => ("application/geo+json".to_string(), v.clone()),
+        MediaType::Plotly(v) => ("application/vnd.plotly.v1+json".to_string(), v.clone()),
         MediaType::WidgetView(v) => (
             "application/vnd.jupyter.widget-view+json".to_string(),
-            serde_json::Value::Object(v.clone()),
+            v.clone(),
         ),
         MediaType::WidgetState(v) => (
             "application/vnd.jupyter.widget-state+json".to_string(),
-            serde_json::Value::Object(v.clone()),
+            v.clone(),
         ),
-        MediaType::VegaLiteV2(v) => (
-            "application/vnd.vegalite.v2+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaLiteV3(v) => (
-            "application/vnd.vegalite.v3+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaLiteV4(v) => (
-            "application/vnd.vegalite.v4+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaLiteV5(v) => (
-            "application/vnd.vegalite.v5+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaLiteV6(v) => (
-            "application/vnd.vegalite.v6+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaV3(v) => (
-            "application/vnd.vega.v3+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaV4(v) => (
-            "application/vnd.vega.v4+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::VegaV5(v) => (
-            "application/vnd.vega.v5+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
-        MediaType::Vdom(v) => (
-            "application/vdom.v1+json".to_string(),
-            serde_json::Value::Object(v.clone()),
-        ),
+        MediaType::VegaLiteV2(v) => ("application/vnd.vegalite.v2+json".to_string(), v.clone()),
+        MediaType::VegaLiteV3(v) => ("application/vnd.vegalite.v3+json".to_string(), v.clone()),
+        MediaType::VegaLiteV4(v) => ("application/vnd.vegalite.v4+json".to_string(), v.clone()),
+        MediaType::VegaLiteV5(v) => ("application/vnd.vegalite.v5+json".to_string(), v.clone()),
+        MediaType::VegaLiteV6(v) => ("application/vnd.vegalite.v6+json".to_string(), v.clone()),
+        MediaType::VegaV3(v) => ("application/vnd.vega.v3+json".to_string(), v.clone()),
+        MediaType::VegaV4(v) => ("application/vnd.vega.v4+json".to_string(), v.clone()),
+        MediaType::VegaV5(v) => ("application/vnd.vega.v5+json".to_string(), v.clone()),
+        MediaType::Vdom(v) => ("application/vdom.v1+json".to_string(), v.clone()),
         MediaType::DataTable(table) => (
             "application/vnd.dataresource+json".to_string(),
             serde_json::to_value(table.as_ref()).unwrap_or(serde_json::Value::Null),
