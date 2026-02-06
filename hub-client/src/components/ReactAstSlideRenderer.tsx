@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AspectRatioScaler } from './AspectRatioScaler';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
+import { vfsReadFile, vfsReadBinaryFile } from '../services/wasmRenderer';
 
 /**
  * Simplified Pandoc AST types for rendering
@@ -80,6 +81,8 @@ type Inline =
 
 interface PandocAstSlideRendererProps {
   astJson: string;
+  /** Current file path for resolving relative image paths */
+  currentFilePath: string;
   onNavigateToDocument?: (path: string, anchor: string | null) => void;
   /** Optional controlled current slide index. If provided, component uses this instead of internal state. */
   currentSlide?: number;
@@ -90,7 +93,7 @@ interface PandocAstSlideRendererProps {
 /**
  * Component that renders Pandoc AST as React elements for slides
  */
-export function SlideAst({ astJson, onNavigateToDocument, currentSlide: controlledSlide, onSlideChange }: PandocAstSlideRendererProps) {
+export function SlideAst({ astJson, currentFilePath, onNavigateToDocument, currentSlide: controlledSlide, onSlideChange }: PandocAstSlideRendererProps) {
   const [internalSlide, setInternalSlide] = useState(0);
 
   // Use controlled slide if provided, otherwise use internal state
@@ -168,7 +171,7 @@ export function SlideAst({ astJson, onNavigateToDocument, currentSlide: controll
             overflow: 'hidden'
           }}
         >
-          {renderSlide(slides[currentSlide], onNavigateToDocument)}
+          {renderSlide(slides[currentSlide], currentFilePath, onNavigateToDocument)}
         </div>
       </AspectRatioScaler>
 
@@ -406,6 +409,7 @@ function extractMetaString(meta: unknown): string | undefined {
  */
 export function renderSlide(
   slide: Slide,
+  currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
 ): React.ReactNode {
   if (slide.type === 'title') {
@@ -454,7 +458,7 @@ export function renderSlide(
       fontSize: '28px',
       boxSizing: 'border-box'
     }}>
-      {slide.blocks.map((block, i) => renderBlock(block, i, onNavigateToDocument))}
+      {slide.blocks.map((block, i) => renderBlock(block, i, currentFilePath, onNavigateToDocument))}
     </div>
   );
 }
@@ -541,6 +545,7 @@ function parseStyleString(styleString: string): React.CSSProperties {
 function renderBlock(
   block: Block,
   key: number,
+  currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
 ): React.ReactNode {
   switch (block.t) {
@@ -548,7 +553,7 @@ function renderBlock(
       const paraBlock = block as ParaBlock;
       return (
         <p key={key} style={{ marginTop: '0.5em', marginBottom: '0.5em', lineHeight: '1.4' }}>
-          {renderInlines(paraBlock.c, onNavigateToDocument)}
+          {renderInlines(paraBlock.c, currentFilePath, onNavigateToDocument)}
         </p>
       );
     }
@@ -557,7 +562,7 @@ function renderBlock(
       const plainBlock = block as PlainBlock;
       return (
         <div key={key} style={{ marginTop: '0.5em', marginBottom: '0.5em', lineHeight: '1.4' }}>
-          {renderInlines(plainBlock.c, onNavigateToDocument)}
+          {renderInlines(plainBlock.c, currentFilePath, onNavigateToDocument)}
         </div>
       );
     }
@@ -587,7 +592,7 @@ function renderBlock(
 
       return (
         <Tag key={key} {...props}>
-          {renderInlines(inlines, onNavigateToDocument)}
+          {renderInlines(inlines, currentFilePath, onNavigateToDocument)}
         </Tag>
       );
     }
@@ -618,7 +623,7 @@ function renderBlock(
         <ul key={key} style={{ marginTop: '0.5em', marginBottom: '0.5em', lineHeight: '1.6' }}>
           {bulletList.c.map((item, i) => (
             <li key={i} style={{ marginTop: '0.3em', marginBottom: '0.3em' }}>
-              {item.map((b, j) => renderBlock(b, j, onNavigateToDocument))}
+              {item.map((b, j) => renderBlock(b, j, currentFilePath, onNavigateToDocument))}
             </li>
           ))}
         </ul>
@@ -632,7 +637,7 @@ function renderBlock(
         <ol key={key} start={start} style={{ marginTop: '0.5em', marginBottom: '0.5em', lineHeight: '1.6' }}>
           {items.map((item, i) => (
             <li key={i} style={{ marginTop: '0.3em', marginBottom: '0.3em' }}>
-              {item.map((b, j) => renderBlock(b, j, onNavigateToDocument))}
+              {item.map((b, j) => renderBlock(b, j, currentFilePath, onNavigateToDocument))}
             </li>
           ))}
         </ol>
@@ -654,7 +659,7 @@ function renderBlock(
             fontStyle: 'italic'
           }}
         >
-          {blockQuote.c.map((b, i) => renderBlock(b, i, onNavigateToDocument))}
+          {blockQuote.c.map((b, i) => renderBlock(b, i, currentFilePath, onNavigateToDocument))}
         </blockquote>
       );
     }
@@ -665,7 +670,7 @@ function renderBlock(
       const props = attributesToProps(id, classes, attrs);
       return (
         <div key={key} {...props}>
-          {blocks.map((b, i) => renderBlock(b, i, onNavigateToDocument))}
+          {blocks.map((b, i) => renderBlock(b, i, currentFilePath, onNavigateToDocument))}
         </div>
       );
     }
@@ -685,13 +690,16 @@ function renderBlock(
     case 'Figure': {
       const figureBlock = block as FigureBlock;
       const [[id, classes, attrs], [caption, _blocks], content] = figureBlock.c;
-      const props = attributesToProps(id, classes, attrs);
+      const figureStyle: React.CSSProperties = {
+        margin: 0,
+      };
+      const props = attributesToProps(id, classes, attrs, figureStyle);
 
       return (
         <figure key={key} {...props}>
-          {content.map((b, i) => renderBlock(b, i, onNavigateToDocument))}
+          {content.map((b, i) => renderBlock(b, i, currentFilePath, onNavigateToDocument))}
           {caption && caption.length > 0 && (
-            <figcaption>{renderInlines(caption, onNavigateToDocument)}</figcaption>
+            <figcaption>{renderInlines(caption, currentFilePath, onNavigateToDocument)}</figcaption>
           )}
         </figure>
       );
@@ -709,14 +717,16 @@ function renderBlock(
 
 function renderInlines(
   inlines: Inline[],
+  currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
 ): React.ReactNode[] {
-  return inlines.map((inline, i) => renderInline(inline, i, onNavigateToDocument));
+  return inlines.map((inline, i) => renderInline(inline, i, currentFilePath, onNavigateToDocument));
 }
 
 function renderInline(
   inline: Inline,
   key: number,
+  currentFilePath: string,
   onNavigateToDocument?: (path: string, anchor: string | null) => void
 ): React.ReactNode {
   switch (inline.t) {
@@ -736,12 +746,12 @@ function renderInline(
 
     case 'Emph': {
       const emphInline = inline as EmphInline;
-      return <em key={key}>{renderInlines(emphInline.c, onNavigateToDocument)}</em>;
+      return <em key={key}>{renderInlines(emphInline.c, currentFilePath, onNavigateToDocument)}</em>;
     }
 
     case 'Strong': {
       const strongInline = inline as StrongInline;
-      return <strong key={key}>{renderInlines(strongInline.c, onNavigateToDocument)}</strong>;
+      return <strong key={key}>{renderInlines(strongInline.c, currentFilePath, onNavigateToDocument)}</strong>;
     }
 
     case 'Code': {
@@ -774,14 +784,14 @@ function renderInline(
               onNavigateToDocument(path, anchor || null);
             }}
           >
-            {renderInlines(inlines, onNavigateToDocument)}
+            {renderInlines(inlines, currentFilePath, onNavigateToDocument)}
           </a>
         );
       }
 
       return (
         <a key={key} {...props} href={url} title={title}>
-          {renderInlines(inlines, onNavigateToDocument)}
+          {renderInlines(inlines, currentFilePath, onNavigateToDocument)}
         </a>
       );
     }
@@ -795,8 +805,51 @@ function renderInline(
         return '';
       }).join('');
 
+      // Resolve image source from VFS
+      let resolvedSrc = url;
+
+      // Skip external URLs and data URIs
+      if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
+        // Handle /.quarto/ paths (built-in resources)
+        if (url.startsWith('/.quarto/')) {
+          const result = vfsReadFile(url);
+          if (result.success && result.content) {
+            const mimeType = guessMimeType(url);
+            resolvedSrc = `data:${mimeType};base64,${result.content}`;
+          }
+        } else {
+          // Handle project-relative paths (images uploaded to project)
+          const resolvedPath = resolveRelativePath(currentFilePath, url);
+          // Remove leading slash for VFS path (VFS stores as "images/foo.png" not "/images/foo.png")
+          const vfsPath = resolvedPath.startsWith('/') ? resolvedPath.slice(1) : resolvedPath;
+
+          const result = vfsReadBinaryFile(vfsPath);
+          if (result.success && result.content) {
+            const mimeType = guessMimeType(url);
+            // vfsReadBinaryFile returns base64-encoded content
+            resolvedSrc = `data:${mimeType};base64,${result.content}`;
+          }
+        }
+      }
+
+      // Add styles to constrain image size
+      const imageStyle: React.CSSProperties = {
+        maxWidth: '100%',
+        maxHeight: '500px',
+        objectFit: 'contain',
+        display: 'block',
+        margin: '0 auto',
+      };
+
       return (
-        <img key={key} {...props} src={url} alt={alt} title={title} />
+        <img
+          key={key}
+          {...props}
+          src={resolvedSrc}
+          alt={alt}
+          title={title}
+          style={{ ...imageStyle, ...(props.style || {}) }}
+        />
       );
     }
 
@@ -806,7 +859,7 @@ function renderInline(
       const props = attributesToProps(id, classes, attrs);
       return (
         <span key={key} {...props}>
-          {renderInlines(inlines, onNavigateToDocument)}
+          {renderInlines(inlines, currentFilePath, onNavigateToDocument)}
         </span>
       );
     }
@@ -843,4 +896,49 @@ function renderInline(
       console.warn('Unhandled inline type:', inline.t);
       return <span key={key} style={{ color: 'gray', fontSize: '0.9em' }}>[{inline.t}]</span>;
   }
+}
+
+// ============================================================================
+// Helper Functions
+// ============================================================================
+
+/** Resolve a relative path against the current file's directory */
+function resolveRelativePath(
+  currentFile: string,
+  relativePath: string
+): string {
+  if (relativePath.startsWith('/')) {
+    return relativePath; // Already absolute
+  }
+  // Get directory of current file
+  const lastSlash = currentFile.lastIndexOf('/');
+  const currentDir =
+    lastSlash >= 0 ? currentFile.substring(0, lastSlash + 1) : '/';
+  return normalizePath(currentDir + relativePath);
+}
+
+function normalizePath(path: string): string {
+  const parts = path.split('/').filter((p) => p !== '.');
+  const result: string[] = [];
+  for (const part of parts) {
+    if (part === '..') {
+      result.pop();
+    } else if (part) {
+      result.push(part);
+    }
+  }
+  return '/' + result.join('/');
+}
+
+function guessMimeType(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    webp: 'image/webp',
+  };
+  return mimeTypes[ext || ''] || 'application/octet-stream';
 }

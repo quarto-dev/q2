@@ -152,6 +152,7 @@ export default function Editor({ project, files, fileContents, onDisconnect, onC
   // Generate thumbnails for slides
   const thumbnails = useSlideThumbnails({
     astJson,
+    currentFilePath: currentFile?.path ?? '',
     symbols,
     previewReady: wasmStatus === 'ready' && editorReady,
     contentVersion,

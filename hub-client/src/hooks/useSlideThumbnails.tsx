@@ -19,6 +19,8 @@ export type ThumbnailMap = Map<number, string>;
 interface UseSlideThumbnailsOptions {
   /** Pandoc AST JSON string. */
   astJson: string | null;
+  /** Current file path for resolving relative image paths. */
+  currentFilePath: string;
   /** Document symbols (headers) to generate thumbnails for. */
   symbols: Symbol[];
   /** Whether the preview is ready for thumbnail capture. */
@@ -36,6 +38,7 @@ interface UseSlideThumbnailsOptions {
  */
 export function useSlideThumbnails({
   astJson,
+  currentFilePath,
   symbols,
   previewReady,
   contentVersion,
@@ -107,7 +110,7 @@ export function useSlideThumbnails({
 
           // Wait for rendering and capture
           await new Promise<void>((resolve) => {
-            root.render(<div>{renderSlide(slide)}</div>);
+            root.render(<div>{renderSlide(slide, currentFilePath)}</div>);
 
             // Give React time to render
             setTimeout(async () => {
@@ -150,7 +153,7 @@ export function useSlideThumbnails({
     } finally {
       captureInProgressRef.current = false;
     }
-  }, [astJson, symbols, previewReady]);
+  }, [astJson, currentFilePath, symbols, previewReady]);
 
   // Debounced capture thumbnails when content changes
   useEffect(() => {

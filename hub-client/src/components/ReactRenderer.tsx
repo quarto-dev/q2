@@ -22,6 +22,7 @@ interface ReactRendererProps {
  */
 function ReactRenderer({
   astJson,
+  currentFilePath,
   onNavigateToDocument,
   currentSlideIndex,
   onSlideChange,
@@ -38,6 +39,7 @@ function ReactRenderer({
     }}>
       <SlideAst
         astJson={astJson}
+        currentFilePath={currentFilePath}
         onNavigateToDocument={onNavigateToDocument}
         currentSlide={currentSlideIndex}
         onSlideChange={onSlideChange}
