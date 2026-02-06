@@ -63,7 +63,7 @@ quarto-error-message-macros = { path = "../quarto-parse-errors/error-message-mac
 ariadne = "0.6"
 crossterm = { version = "0.29", optional = true }
 supports-hyperlinks = { version = "3.2", optional = true }
-mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"], optional = true }
+mlua = { version = "0.11", features = ["lua54", "vendored", "serialize"], optional = true }
 sha1 = "0.10"
 base64 = "0.22"
 

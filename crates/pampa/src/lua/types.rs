@@ -1396,8 +1396,8 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
     // Level 0 is this function itself (inside mlua), so we start at level 1
     // We look up to level 5 to find a filter function (not a C function)
     for level in 1..=5 {
-        if let Some(debug) = lua.inspect_stack(level) {
-            let source = debug.source();
+        if let Some(result) = lua.inspect_stack(level, |debug| {
+            let source: mlua::DebugSource = debug.source();
             let line = debug.curr_line();
 
             // Check if this is a Lua source (not a C function)
@@ -1405,10 +1405,15 @@ pub fn filter_source_info(lua: &Lua) -> SourceInfo {
                 && let Some(src) = source.source
             {
                 // The source often starts with "@" for file paths
-                let path = src.strip_prefix("@").unwrap_or(&src);
+                let path: &str = src.strip_prefix("@").unwrap_or(&src);
                 // Convert line number from i32, negative means unknown
                 let line_num = if line >= 0 { line as usize } else { 0 };
-                return SourceInfo::filter_provenance(path.to_string(), line_num);
+                return Some(SourceInfo::filter_provenance(path.to_string(), line_num));
+            }
+            None
+        }) {
+            if let Some(info) = result {
+                return info;
             }
         }
     }

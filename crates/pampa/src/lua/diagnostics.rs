@@ -298,8 +298,8 @@ fn get_caller_location(lua: &Lua) -> (String, i64) {
     // Level 0 is the current function, level 1 is the caller, etc.
     // We start at level 1 to find the actual caller
     for level in 1..=10 {
-        if let Some(debug) = lua.inspect_stack(level) {
-            let source = debug.source();
+        if let Some(result) = lua.inspect_stack(level, |debug| {
+            let source: mlua::DebugSource = debug.source();
             let line = debug.curr_line();
 
             // Skip C functions (internal mlua calls)
@@ -308,10 +308,15 @@ fn get_caller_location(lua: &Lua) -> (String, i64) {
                 && let Some(src) = source.source
             {
                 // Only return if it looks like a real source (has meaningful content)
-                let src_str = src.to_string();
+                let src_str: String = src.to_string();
                 if !src_str.is_empty() && src_str != "=[C]" {
-                    return (src_str, line as i64);
+                    return Some((src_str, line as i64));
                 }
+            }
+            None
+        }) {
+            if let Some(location) = result {
+                return location;
             }
         }
     }
