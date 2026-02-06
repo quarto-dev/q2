@@ -299,7 +299,7 @@ function extractSections(blocks: Block[]): Block[][] {
       // Check if this Div looks like a section
       // (has "section" class OR first block is a header)
       const isSection = classes.includes('section') ||
-                       (innerBlocks.length > 0 && innerBlocks[0].t === 'Header');
+        (innerBlocks.length > 0 && innerBlocks[0].t === 'Header');
 
       if (isSection) {
         sections.push(innerBlocks);
@@ -421,7 +421,7 @@ export function renderSlide(
         alignItems: 'center',
         width: '100%',
         height: '100%',
-        padding: '80px',
+        padding: '60px 80px',
         textAlign: 'center',
         boxSizing: 'border-box'
       }}>
@@ -453,7 +453,7 @@ export function renderSlide(
     <div style={{
       width: '100%',
       height: '100%',
-      padding: '80px',
+      padding: '60px',
       overflow: 'auto',
       fontSize: '28px',
       boxSizing: 'border-box'
