@@ -80,7 +80,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -91,7 +91,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3342,9 +3342,9 @@ dependencies = [
 
 [[package]]
 name = "samod"
-version = "0.6.1"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f07324aff6869bb76943ec7e2c272c82df5378446d8767cb98406a07fa798de"
+checksum = "971b5800aa3321de2a3133913a092451bc800022427b241f76c2af7269bcc3b6"
 dependencies = [
  "async-channel",
  "automerge",
@@ -3363,9 +3363,9 @@ dependencies = [
 
 [[package]]
 name = "samod-core"
-version = "0.6.1"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7301283b272c5491bbb486f5d2dcdabcc67fad13e5e88eb6186f2e0a7a46f38"
+checksum = "3bab909f3bd4ecf787b3221fd4a8b480f385b3e358e84f7ddb379c0d503aa921"
 dependencies = [
  "automerge",
  "base64 0.21.7",

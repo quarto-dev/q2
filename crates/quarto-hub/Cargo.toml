@@ -27,7 +27,7 @@ tower-http = { version = "0.6", features = ["trace", "cors"] }
 
 # Automerge (via samod for JS compatibility)
 automerge = "0.7"
-samod = { version = "0.6", features = ["tokio", "axum", "tungstenite"] }
+samod = { version = "0.7", features = ["tokio", "axum", "tungstenite"] }
 
 # WebSocket client for connecting to sync servers
 tokio-tungstenite = { version = "0.27", features = ["native-tls"] }
