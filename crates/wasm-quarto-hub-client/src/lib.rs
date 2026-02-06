@@ -2012,3 +2012,144 @@ fn json_to_config_value(value: &serde_json::Value) -> ConfigValue {
         merge_op: MergeOp::default(),
     }
 }
+
+// =============================================================================
+// QMD PARSING AND AST CONVERSION API
+// =============================================================================
+
+/// Response type for parse/write operations.
+#[derive(Serialize)]
+struct AstResponse {
+    success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ast: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    qmd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    diagnostics: Option<Vec<JsonDiagnostic>>,
+}
+
+/// Parse QMD content and return the Pandoc JSON AST.
+///
+/// This is the WASM equivalent of `pampa -f qmd -t json`.
+///
+/// # Arguments
+/// * `content` - QMD source text
+///
+/// # Returns
+/// JSON: `{ "success": true, "ast": "<json-ast-string>" }`
+/// or `{ "success": false, "error": "...", "diagnostics": [...] }`
+///
+/// The `ast` field contains the JSON-serialized Pandoc AST with source info,
+/// matching the `RustQmdJson` TypeScript type from `@quarto/annotated-qmd`.
+#[wasm_bindgen]
+pub fn parse_qmd_content(content: &str) -> String {
+    use pampa::wasm_entry_points::qmd_to_pandoc;
+    use pampa::writers::json::{JsonConfig, write_with_config};
+
+    match qmd_to_pandoc(content.as_bytes()) {
+        Ok((pandoc, context)) => {
+            let mut buf = Vec::new();
+            let config = JsonConfig {
+                include_inline_locations: false,
+            };
+            match write_with_config(&pandoc, &context, &mut buf, &config) {
+                Ok(_) => {
+                    let ast_json = String::from_utf8(buf).unwrap_or_default();
+                    serde_json::to_string(&AstResponse {
+                        success: true,
+                        ast: Some(ast_json),
+                        qmd: None,
+                        error: None,
+                        diagnostics: None,
+                    })
+                    .unwrap()
+                }
+                Err(diags) => {
+                    let diagnostics = diagnostics_to_json(&diags, &context.source_context);
+                    serde_json::to_string(&AstResponse {
+                        success: false,
+                        ast: None,
+                        qmd: None,
+                        error: Some("Failed to serialize AST to JSON".to_string()),
+                        diagnostics: Some(diagnostics),
+                    })
+                    .unwrap()
+                }
+            }
+        }
+        Err(error_strings) => {
+            // qmd_to_pandoc returns Vec<String> for backward compat
+            let error_msg = error_strings.join("\n");
+            serde_json::to_string(&AstResponse {
+                success: false,
+                ast: None,
+                qmd: None,
+                error: Some(error_msg),
+                diagnostics: None,
+            })
+            .unwrap()
+        }
+    }
+}
+
+/// Convert a Pandoc JSON AST back to QMD source text.
+///
+/// This is the WASM equivalent of `pampa -f json -t qmd`.
+///
+/// # Arguments
+/// * `ast_json` - JSON-serialized Pandoc AST (as produced by `parse_qmd_content`)
+///
+/// # Returns
+/// JSON: `{ "success": true, "qmd": "<qmd-text>" }`
+/// or `{ "success": false, "error": "..." }`
+#[wasm_bindgen]
+pub fn ast_to_qmd(ast_json: &str) -> String {
+    use pampa::readers::json::read as json_read;
+    use pampa::writers::qmd::write as qmd_write;
+
+    let mut cursor = std::io::Cursor::new(ast_json.as_bytes());
+    match json_read(&mut cursor) {
+        Ok((pandoc, _context)) => {
+            let mut buf = Vec::new();
+            match qmd_write(&pandoc, &mut buf) {
+                Ok(_) => {
+                    let qmd_text = String::from_utf8(buf).unwrap_or_default();
+                    serde_json::to_string(&AstResponse {
+                        success: true,
+                        ast: None,
+                        qmd: Some(qmd_text),
+                        error: None,
+                        diagnostics: None,
+                    })
+                    .unwrap()
+                }
+                Err(diags) => {
+                    let error_msg = diags
+                        .iter()
+                        .map(|d| d.to_text(None))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    serde_json::to_string(&AstResponse {
+                        success: false,
+                        ast: None,
+                        qmd: None,
+                        error: Some(format!("Failed to write QMD: {}", error_msg)),
+                        diagnostics: None,
+                    })
+                    .unwrap()
+                }
+            }
+        }
+        Err(e) => serde_json::to_string(&AstResponse {
+            success: false,
+            ast: None,
+            qmd: None,
+            error: Some(format!("Failed to parse JSON AST: {}", e)),
+            diagnostics: None,
+        })
+        .unwrap(),
+    }
+}

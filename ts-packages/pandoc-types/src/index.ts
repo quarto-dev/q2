@@ -1,13 +1,10 @@
 /**
- * Type definitions for annotated-qmd.
+ * @quarto/pandoc-types
  *
- * Pure Pandoc AST types are provided by @quarto/pandoc-types and re-exported here.
- * This file adds AnnotatedParse, which depends on MappedString from @quarto/mapped-string.
+ * Pure type definitions for Pandoc JSON AST and quarto-markdown-pandoc extensions.
+ * Zero runtime dependencies.
  */
 
-import type { MappedString } from '@quarto/mapped-string';
-
-// Re-export everything from @quarto/pandoc-types
 export type {
   // Supporting types
   Attr,
@@ -157,25 +154,9 @@ export type {
   MetaMapEntry,
   RustFileInfo,
   RustQmdJson,
-} from '@quarto/pandoc-types';
+} from './types.js';
 
-export { isInline, isBlock } from '@quarto/pandoc-types';
-
-// =============================================================================
-// AnnotatedParse — the only type that depends on MappedString
-// =============================================================================
-
-import type { JSONValue, StructuralKind } from '@quarto/pandoc-types';
-
-/**
- * AnnotatedParse structure (matching quarto-cli's interface)
- * This is the output format from all conversion functions.
- */
-export interface AnnotatedParse {
-  start: number;
-  end: number;
-  result: JSONValue;
-  kind: string | StructuralKind;
-  source: MappedString;
-  components: AnnotatedParse[];
-}
+export {
+  isInline,
+  isBlock,
+} from './types.js';

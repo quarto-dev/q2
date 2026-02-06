@@ -81,6 +81,47 @@ export interface SyncClientCallbacks {
    * Called when an error occurs (optional).
    */
   onError?: (error: Error) => void;
+
+  /**
+   * Called when a QMD file's AST changes (optional).
+   * Only fired when `astOptions` is provided to `createSyncClient`.
+   * The AST is the result of parsing the file with the provided `parseQmd` function.
+   * Only called on successful parses — parse failures are logged via console.warn.
+   */
+  onASTChanged?: (path: string, ast: unknown) => void;
+}
+
+// ============================================================================
+// AST Options
+// ============================================================================
+
+/**
+ * Options for AST-level document synchronization.
+ *
+ * When provided, the sync client will automatically parse QMD files on change
+ * and expose an `updateFileAst` function for writing ASTs back to documents.
+ *
+ * The AST type is opaque to the sync client. Consumers provide parser/writer
+ * functions that work with their chosen AST type (e.g., RustQmdJson from
+ * @quarto/annotated-qmd).
+ */
+export interface ASTOptions {
+  /**
+   * Parse QMD text content into an AST.
+   * Return null if parsing fails (the sync client will console.warn and skip).
+   */
+  parseQmd: (content: string) => unknown;
+
+  /**
+   * Convert an AST back to QMD text content.
+   */
+  writeQmd: (ast: unknown) => string;
+
+  /**
+   * Filter which files should be parsed.
+   * Defaults to matching .qmd files only if not provided.
+   */
+  fileFilter?: (path: string) => boolean;
 }
 
 // ============================================================================

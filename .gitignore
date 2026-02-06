@@ -40,3 +40,4 @@ claude-notes/plans/CURRENT.md
 node_modules/
 ts-packages/*/dist/
 ts-packages/*/*.tsbuildinfo
+q2-demos/*/dist/

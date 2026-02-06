@@ -1,7 +1,7 @@
 {
-  "name": "@quarto/annotated-qmd",
-  "version": "0.1.1",
-  "description": "Convert quarto-markdown-pandoc JSON output to AnnotatedParse structures",
+  "name": "@quarto/pandoc-types",
+  "version": "0.1.0",
+  "description": "TypeScript type definitions for Pandoc JSON AST and quarto-markdown-pandoc extensions",
   "license": "MIT",
   "author": {
     "name": "Posit PBC"
@@ -27,17 +27,9 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc",
-    "test": "node --import tsx --test test/*.test.ts",
-    "clean": "rm -rf dist",
-    "prepublishOnly": "npm run clean && npm run build && npm test"
-  },
-  "dependencies": {
-    "@quarto/mapped-string": "^0.1.8",
-    "@quarto/pandoc-types": "*"
+    "clean": "rm -rf dist"
   },
   "devDependencies": {
-    "typescript": "^5.4.2",
-    "tsx": "^4.7.1",
-    "@types/node": "^20.0.0"
+    "typescript": "^5.4.2"
   }
 }

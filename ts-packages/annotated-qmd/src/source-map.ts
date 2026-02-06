@@ -6,15 +6,9 @@
  */
 
 import { MappedString, asMappedString, mappedConcat, mappedSubstring } from '@quarto/mapped-string';
+import type { SerializableSourceInfo, SourceContext, SourceInfoErrorHandler } from './types.js';
 
-/**
- * Serialized SourceInfo from the JSON pool
- */
-export interface SerializableSourceInfo {
-  r: [number, number]; // [start_offset, end_offset]
-  t: number;           // type code (0=Original, 1=Substring, 2=Concat)
-  d: unknown;          // type-specific data (varies by type)
-}
+export type { SerializableSourceInfo, SourceContext, SourceInfoErrorHandler };
 
 /**
  * Type guard for Concat data structure
@@ -26,16 +20,6 @@ function isConcatData(data: unknown): data is [number, number, number][] {
   );
 }
 
-/**
- * Source context containing file information
- */
-export interface SourceContext {
-  files: Array<{
-    id: number;
-    path: string;
-    content: string;
-  }>;
-}
 
 /**
  * Resolved SourceInfo pointing to a file location
@@ -44,11 +28,6 @@ interface ResolvedSource {
   file_id: number;
   range: [number, number];
 }
-
-/**
- * Error handler callback for SourceInfo reconstruction errors
- */
-export type SourceInfoErrorHandler = (msg: string, id?: number) => void;
 
 /**
  * Default error handler that throws on errors

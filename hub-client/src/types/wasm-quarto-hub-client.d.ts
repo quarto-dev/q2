@@ -34,6 +34,34 @@ declare module 'wasm-quarto-hub-client' {
   export function lsp_get_folding_ranges(path: string): string;
   export function lsp_get_diagnostics(path: string): string;
 
+  // QMD parsing and AST conversion functions
+  export function parse_qmd_content(content: string): string;
+  export function ast_to_qmd(ast_json: string): string;
+
+  // Response type for parse/write operations
+  export interface AstResponse {
+    success: boolean;
+    /** JSON-serialized Pandoc AST (on successful parse) */
+    ast?: string;
+    /** QMD source text (on successful AST-to-QMD conversion) */
+    qmd?: string;
+    error?: string;
+    diagnostics?: AstDiagnostic[];
+  }
+
+  export interface AstDiagnostic {
+    kind: string;
+    title: string;
+    code?: string;
+    problem?: string;
+    hints: string[];
+    start_line?: number;
+    start_column?: number;
+    end_line?: number;
+    end_column?: number;
+    details: { kind: string; content: string; start_line?: number; start_column?: number; end_line?: number; end_column?: number }[];
+  }
+
   // SASS compilation functions
   export function sass_available(): boolean;
   export function sass_compiler_name(): string | undefined;

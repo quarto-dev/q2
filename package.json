@@ -4,7 +4,8 @@
   "description": "TypeScript workspace for Quarto Rust monorepo",
   "workspaces": [
     "ts-packages/*",
-    "hub-client"
+    "hub-client",
+    "q2-demos/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

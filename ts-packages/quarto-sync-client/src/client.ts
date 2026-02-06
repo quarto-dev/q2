@@ -25,6 +25,7 @@ import {
 
 import type {
   SyncClientCallbacks,
+  ASTOptions,
   CreateBinaryFileResult,
   CreateProjectOptions,
   CreateProjectResult,
@@ -47,9 +48,21 @@ interface SyncClientState {
 }
 
 /**
- * Create a new sync client with the given callbacks.
+ * Default file filter: only parse .qmd files.
  */
-export function createSyncClient(callbacks: SyncClientCallbacks) {
+function defaultFileFilter(path: string): boolean {
+  return path.endsWith('.qmd');
+}
+
+/**
+ * Create a new sync client with the given callbacks.
+ *
+ * @param callbacks - Callbacks for sync client events
+ * @param astOptions - Optional AST options for automatic parsing of QMD files.
+ *   When provided, the sync client will parse text files on change and fire
+ *   `onASTChanged` on successful parses. Also enables `updateFileAst`.
+ */
+export function createSyncClient(callbacks: SyncClientCallbacks, astOptions?: ASTOptions) {
   const state: SyncClientState = {
     repo: null,
     wsAdapter: null,
@@ -58,6 +71,40 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
     binaryFiles: new Set(),
     cleanupFns: [],
   };
+
+  // AST cache: last successful parse per file (for round-tripping)
+  const astCache = new Map<string, { source: string; ast: unknown }>();
+
+  // Resolved file filter
+  const astFileFilter = astOptions?.fileFilter ?? defaultFileFilter;
+
+  /**
+   * Try parsing a text file and fire onASTChanged if successful.
+   * Parse failures (null return) are logged. Exceptions from the parser
+   * are caught and logged; exceptions from the callback are NOT caught.
+   */
+  function tryParseAndNotify(path: string, text: string): void {
+    if (!astOptions || !callbacks.onASTChanged) return;
+    if (!astFileFilter(path)) return;
+
+    // Parse the text — catch exceptions from the parser only
+    let ast: unknown;
+    try {
+      ast = astOptions.parseQmd(text);
+    } catch (e) {
+      console.warn(`[quarto-sync-client] Parse threw for ${path}:`, e);
+      return;
+    }
+
+    if (ast == null) {
+      console.warn(`[quarto-sync-client] Parse returned null for ${path}`);
+      return;
+    }
+
+    // Cache and notify — exceptions from callback propagate normally
+    astCache.set(path, { source: text, ast });
+    callbacks.onASTChanged(path, ast);
+  }
 
   // Helper: get files from index document
   function getFilesFromIndex(doc: IndexDocument): FileEntry[] {
@@ -107,10 +154,12 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
           mimeType: doc.mimeType,
         });
       } else if (docType === 'text' && isTextDocument(doc)) {
+        const text = doc.text || '';
         callbacks.onFileAdded(path, {
           type: 'text',
-          text: doc.text || '',
+          text,
         });
+        tryParseAndNotify(path, text);
       } else {
         // Invalid or unknown document type - try to infer from extension
         if (isBinaryExtension(path)) {
@@ -134,7 +183,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
         callbacks.onBinaryChanged(path, changedDoc.content, changedDoc.mimeType);
       } else if (docType === 'text' && isTextDocument(changedDoc)) {
         state.binaryFiles.delete(path);
-        callbacks.onFileChanged(path, changedDoc.text || '', patches);
+        const text = changedDoc.text || '';
+        callbacks.onFileChanged(path, text, patches);
+        tryParseAndNotify(path, text);
       }
     };
 
@@ -157,7 +208,9 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
         callbacks.onBinaryChanged(path, changedDoc.content, changedDoc.mimeType);
       } else if (docType === 'text' && isTextDocument(changedDoc)) {
         state.binaryFiles.delete(path);
-        callbacks.onFileChanged(path, changedDoc.text || '', patches);
+        const text = changedDoc.text || '';
+        callbacks.onFileChanged(path, text, patches);
+        tryParseAndNotify(path, text);
       }
     };
 
@@ -199,6 +252,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
       if (!newPaths.has(path)) {
         state.fileHandles.delete(path);
         state.binaryFiles.delete(path);
+        astCache.delete(path);
         callbacks.onFileRemoved(path);
       }
     }
@@ -277,6 +331,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
 
     state.fileHandles.clear();
     state.binaryFiles.clear();
+    astCache.clear();
 
     if (state.wsAdapter) {
       state.wsAdapter.disconnect();
@@ -338,6 +393,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
 
     // Notify callback (local change)
     callbacks.onFileChanged(path, content, []);
+    tryParseAndNotify(path, content);
   }
 
   /**
@@ -360,6 +416,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
 
     await subscribeToFileInternal(path, handle as unknown as DocHandle<FileDocument>);
     callbacks.onFileAdded(path, { type: 'text', text: content });
+    tryParseAndNotify(path, content);
   }
 
   /**
@@ -434,6 +491,7 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
 
     state.fileHandles.delete(path);
     state.binaryFiles.delete(path);
+    astCache.delete(path);
     callbacks.onFileRemoved(path);
   }
 
@@ -586,6 +644,31 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
     }
   }
 
+  /**
+   * Update a file's content by providing a new AST.
+   * The AST is converted to QMD text using the provided writeQmd function,
+   * then the text is synced via updateFileContent.
+   *
+   * Requires astOptions to be provided when creating the sync client.
+   * Throws if writeQmd throws or if astOptions was not configured.
+   */
+  function updateFileAst(path: string, ast: unknown): void {
+    if (!astOptions) {
+      throw new Error('updateFileAst called without astOptions configured');
+    }
+
+    const qmdText = astOptions.writeQmd(ast);
+    updateFileContent(path, qmdText);
+  }
+
+  /**
+   * Get the last successfully parsed AST for a file.
+   * Returns null if the file hasn't been parsed or if astOptions is not configured.
+   */
+  function getFileAst(path: string): unknown {
+    return astCache.get(path)?.ast ?? null;
+  }
+
   // Return the public API
   return {
     connect,
@@ -594,6 +677,8 @@ export function createSyncClient(callbacks: SyncClientCallbacks) {
     getFileContent,
     getBinaryFileContent,
     updateFileContent,
+    updateFileAst,
+    getFileAst,
     createFile,
     createBinaryFile,
     deleteFile,
