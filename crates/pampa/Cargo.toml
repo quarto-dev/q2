@@ -61,7 +61,7 @@ hashlink = { version = "0.11.0", features = ["serde_impl"] }
 indexmap = "2.13"
 quarto-error-message-macros = { path = "../quarto-parse-errors/error-message-macros" }
 ariadne = "0.4"
-crossterm = { version = "0.28", optional = true }
+crossterm = { version = "0.29", optional = true }
 supports-hyperlinks = { version = "3.2", optional = true }
 mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"], optional = true }
 sha1 = "0.10"
