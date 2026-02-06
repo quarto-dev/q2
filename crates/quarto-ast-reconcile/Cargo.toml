@@ -20,7 +20,7 @@ hashlink = { version = "0.10.0", features = ["serde_impl"] }
 rustc-hash = "2.1"
 
 [dev-dependencies]
-proptest = "1.5"
+proptest = "1.10"
 
 [lints]
 workspace = true

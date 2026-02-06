@@ -16,7 +16,7 @@ hashlink = { version = "0.10.0", features = ["serde_impl"] }
 [dev-dependencies]
 pampa = { workspace = true }
 insta = { workspace = true }
-proptest = "1.5"
+proptest = "1.10"
 
 [lints]
 workspace = true

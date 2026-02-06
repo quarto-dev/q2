@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-yaml-rust2 = "0.10.3"
+yaml-rust2 = "0.10.4"
 
 [dependencies.pampa]
 path = ".."
