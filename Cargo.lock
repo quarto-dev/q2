@@ -2600,7 +2600,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-pandoc-types",
  "quarto-source-map",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "yaml-rust2",
 ]
 
@@ -2633,7 +2633,7 @@ dependencies = [
  "serde",
  "serde_json",
  "similar",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2646,7 +2646,7 @@ dependencies = [
  "quarto-pandoc-types",
  "quarto-source-map",
  "quarto-yaml",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "yaml-rust2",
 ]
 
@@ -2678,7 +2678,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-util",
  "tracing",
@@ -2694,7 +2694,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
  "quarto-xml",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2708,7 +2708,7 @@ dependencies = [
  "quarto-treesitter-ast",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tree-sitter",
  "tree-sitter-doctemplate",
 ]
@@ -2733,7 +2733,7 @@ dependencies = [
  "quarto-source-map",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "url",
 ]
 
@@ -2756,7 +2756,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite 0.27.0",
  "tower 0.5.3",
@@ -2775,7 +2775,7 @@ dependencies = [
  "quarto-lsp-core",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "tokio",
  "tower-lsp",
  "tracing",
@@ -2794,7 +2794,7 @@ dependencies = [
  "quarto-yaml",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2830,7 +2830,7 @@ dependencies = [
  "quarto-system-runtime",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2847,7 +2847,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "yaml-rust2",
 ]
 
@@ -2889,7 +2889,7 @@ name = "quarto-util"
 version = "0.1.0"
 dependencies = [
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2900,7 +2900,7 @@ dependencies = [
  "quarto-error-reporting",
  "quarto-source-map",
  "quick-xml",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -2910,7 +2910,7 @@ dependencies = [
  "quarto-source-map",
  "regex",
  "serde",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "yaml-rust2",
 ]
 
@@ -2925,7 +2925,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.18",
  "yaml-rust2",
 ]
 
