@@ -20,6 +20,10 @@ printf '\033[0m' && printf '\033]8;;\007' && echo "Terminal reset"
 
 When the user asks you to "reset the terminal", run this command.
 
+## **Workflow: Plan-Driven Development (TDD)**
+
+Always follow TDD workflow: write/update tests BEFORE implementing features. When creating plans, include test specifications as the first phase. Never skip to implementation without a test plan.
+
 ## **GIT PUSH POLICY**
 
 **NEVER push to the remote repository without explicit user permission.** Always:
@@ -31,6 +35,10 @@ When the user asks you to "reset the terminal", run this command.
 6. Only push after receiving explicit approval
 
 This applies even at the end of sessions. Prepare the commit but wait for approval to push.
+
+## Git Workflow
+
+When asked to 'stage and commit everything' or 'commit all changes', stage ALL modified/untracked files (`git add -A`), not just the files Claude edited in the current session.
 
 ## **WORK TRACKING**
 
@@ -239,6 +247,19 @@ npm run build      # Production build
 
 **Important:** Never run `npm install` from hub-client directly - dependencies are hoisted to the root `node_modules/`.
 
+## Architecture Notes
+
+### VFS Path Conventions
+
+All VFS file paths use the `/project/` prefix. When resolving file paths in WASM context, always account for this prefix. Never assume bare paths will work in the VFS layer.
+
+### Crate Layout
+
+- `pampa` is the core Quarto engine crate
+- `quarto-core` handles higher-level orchestration
+- `wasm-quarto-hub-client` is the WASM client (NOT wasm-qmd-parser)
+- Always check `git diff` for uncommitted changes before starting work on a continuation session
+
 ## hub-client Commit Instructions
 
 **IMPORTANT**: When making commits that include changes to `hub-client/`, you MUST also update `hub-client/changelog.md`.
@@ -268,6 +289,12 @@ The changelog is rendered in the About section of the hub-client UI.
 - **CRITICAL**: Use `cargo nextest run` instead of `cargo test`.
 - **CRITICAL**: Do NOT pipe `cargo nextest run` through `tail` or other commands - it causes hangs. Run it directly.
 - **CRITICAL**: If you'll be writing tests, read the special instructions on file claude-notes/instructions/testing.md
+
+## Build Commands
+
+- WASM build: `npm run build:all` (NOT `cargo build --target wasm32-unknown-unknown`)
+- Always verify WASM changes with the correct build command
+- Fresh clone builds require dist/ directories to exist; run full build before testing
 
 ## Full Project Verification
 
@@ -317,6 +344,10 @@ Add new rules in `crates/xtask/src/lint/`. Each rule should:
 ## Coding instructions
 
 - **CRITICAL** If you'll be writing code, read the special instructions on file claude-notes/instructions/coding.md
+
+## Debugging Approach
+
+When diagnosing issues, do NOT jump to conclusions (e.g., 'race condition') before gathering evidence. Check the actual error path, inspect runtime values, and verify hypotheses with targeted tests before proposing fixes.
 
 ## Claude Code hooks
 
