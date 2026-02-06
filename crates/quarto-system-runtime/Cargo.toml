@@ -16,7 +16,7 @@ serde_json.workspace = true
 # Native-only dependencies
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # For binary lookup on PATH
-which = "7.0"
+which = "8.0"
 # SASS compilation (pure Rust, ~2x faster than dart-sass)
 grass.workspace = true
 

@@ -34,7 +34,7 @@ pampa.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tempfile = "3"
 include_dir = "0.7"
-which = "7"
+which = "8"
 regex = "1.12"
 quarto-sass.workspace = true
 
