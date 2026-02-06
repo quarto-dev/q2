@@ -17,7 +17,7 @@ tokio-util.workspace = true
 pollster.workspace = true
 serde_json.workspace = true
 serde_yaml = "0.9"
-hashlink = "0.10"
+hashlink = "0.11"
 
 quarto-util.workspace = true
 quarto-system-runtime.workspace = true
