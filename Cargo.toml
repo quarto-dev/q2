@@ -24,7 +24,7 @@ edition = "2024"
 [workspace.dependencies]
 anyhow = "1.0.101"
 quick-xml = "0.37"
-ariadne = "0.4"
+ariadne = "0.6"
 clap = { version = "4.5", features = ["derive", "cargo"] }
 insta = "1.46.3"
 memchr = "2.7.6"

@@ -714,8 +714,10 @@ impl DiagnosticMessage {
         // IMPORTANT: Use IndexType::Byte because our offsets are byte offsets, not character offsets
         let mut report = Report::build(
             report_kind,
-            display_path.clone(),
-            start_mapped.location.offset,
+            (
+                display_path.clone(),
+                start_mapped.location.offset..start_mapped.location.offset,
+            ),
         )
         .with_config(Config::default().with_index_type(IndexType::Byte));
 
