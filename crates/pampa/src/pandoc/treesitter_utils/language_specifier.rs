@@ -134,7 +134,7 @@ pub fn process_language_specifier(
 
 /// Find a named child of a tree-sitter node by name.
 fn find_named_child<'a>(node: &'a tree_sitter::Node, name: &str) -> Option<tree_sitter::Node<'a>> {
-    for i in 0..node.named_child_count() as u32 {
+    for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
             if child.kind() == name {
                 return Some(child);
