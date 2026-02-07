@@ -2,7 +2,7 @@
 
 **Beads issue:** `bd-2t4o`
 **Parent plan:** `claude-notes/plans/2026-02-06-ast-sync-client-api.md` (Phase 2)
-**Status:** Phase 2 IN PROGRESS — core implementation done, idempotence + round-trip hand-crafted tests passing (28/28)
+**Status:** Phases 0-3 COMPLETE — all property tests passing. Ready for Phase 4 (integration)
 **Branch:** `feature/incremental-writer`
 
 ## Resumption Notes
@@ -32,7 +32,13 @@ When continuing this work in a new session, read this plan file first. Key conte
    - Coarsening: KeepBefore→Verbatim, UseAfter/RecurseIntoContainer→Rewrite (conservative)
    - Assembly: copy verbatim spans, use original gaps for consecutive verbatim blocks, `\n` separator otherwise
    - BulletList quirk: span ends with `\n\n`, `compute_separator` checks `ends_with("\n\n")` to avoid extra separators
-9. **Next steps:** Set up proptest infrastructure with write-read pipeline and AST mutation generators, implement Property 1/2 proptests, then move to Phase 3 (Properties 3-5)
+9. **Discovered issue:** DefinitionList sugar/desugar is LOSSY — writer produces Pandoc-native `:` syntax, but reader only recognizes `::: {.definition-list}` div syntax. This means Rewrite of a DefinitionList block won't round-trip correctly. KeepBefore (verbatim copy) works fine. Tests document this with `#[ignore]`.
+10. **Test counts:** 47 passing tests + 2 ignored (definition-list roundtrip)
+    - 28 hand-crafted (17 idempotence, 8 roundtrip, 1 verbatim, 2 edge cases)
+    - 12 proptests (4 idempotence levels, 4 roundtrip mutations, 1 equivalence, 1 verbatim, 2 monotonicity)
+    - 7 sugar/desugar tests (2 list-table roundtrip, 3 idempotence, 2 incremental roundtrip near sugared blocks)
+    - 2 ignored (definition-list roundtrip — pre-existing writer bug)
+11. **Next steps:** Phase 4 (integration) — wire into WASM module and hub-client
 
 ## Overview
 
@@ -626,13 +632,13 @@ Property 2 is the simplest to test and should be the FIRST property verified. It
 ### Phase 1: Infrastructure and Testing Framework
 - [x] Create `writers::incremental` module within pampa
 - [x] Add `write_single_block` and `write_metadata` public wrappers to `qmd.rs`
-- [ ] Set up proptest infrastructure
-  - [ ] QMD string generator (AST → write → string)
-  - [ ] AST mutation generator
-  - [ ] Property 1 proptest (round-trip correctness)
-  - [ ] Property 2 proptest (idempotence)
+- [x] Set up proptest infrastructure
+  - [x] QMD string generators (4 levels: paragraphs → leaf blocks → containers → front matter)
+  - [x] QMD mutation generators (single mutation, add block, remove block, mixed types)
+  - [x] Property 1 proptest (round-trip correctness) — 4 generators, all passing
+  - [x] Property 2 proptest (idempotence) — 4 levels, all passing
 - [x] Implement source span investigation as unit tests (20 tests in `tests/incremental_writer_investigation.rs`)
-- [ ] Add sugar/desugar roundtrip property test: `desugar(sugar(node)) ≡ node` for Table, DefinitionList
+- [x] Add sugar/desugar roundtrip tests: Table roundtrips correctly; DefinitionList is LOSSY (writer produces Pandoc-native syntax, reader expects div syntax — ignored tests document this pre-existing bug)
 
 ### Phase 2: Core Implementation
 - [x] Implement plan coarsening (conservative: rewrite entire changed blocks)
@@ -643,13 +649,13 @@ Property 2 is the simplest to test and should be the FIRST property verified. It
 - [x] Hand-crafted round-trip tests passing (8 tests + 1 verbatim preservation)
 - [x] Fix metadata prefix bug (extra `\n` before first block with YAML front matter)
 - [x] Fix removed-first-block bug (falsely triggering metadata prefix)
-- [ ] Make Property 1 and Property 2 proptests pass (pending proptest infrastructure)
+- [x] Make Property 1 and Property 2 proptests pass (36 tests total: 28 hand-crafted + 8 proptests)
 
 ### Phase 3: Property Verification
-- [ ] Implement Property 3 test (equivalence with full writer)
-- [ ] Implement Property 4 test (locality)
-- [ ] Implement Property 5 test (monotonicity)
-- [ ] All property tests green
+- [x] Implement Property 3 proptest (equivalence with full writer)
+- [x] Implement Property 4 proptest (verbatim preservation of unchanged blocks — weaker form; strong form requires fine-grained edits)
+- [x] Implement Property 5 proptest (monotonicity of edit spans + identity produces zero edits)
+- [x] All property tests green (40 tests total: 28 hand-crafted + 12 proptests)
 
 ### Phase 4: Integration
 - [ ] Wire into WASM module (`wasm-quarto-hub-client`)

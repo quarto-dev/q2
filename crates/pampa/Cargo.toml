@@ -69,6 +69,7 @@ base64 = "0.22"
 
 [dev-dependencies]
 insta = { version = "1.46", features = ["json", "redactions"] }
+proptest = "1.10"
 tempfile = "3.24"
 
 [lints]

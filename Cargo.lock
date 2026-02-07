@@ -2328,6 +2328,7 @@ dependencies = [
  "mlua",
  "once_cell",
  "paste",
+ "proptest",
  "quarto-ast-reconcile",
  "quarto-citeproc",
  "quarto-config",
