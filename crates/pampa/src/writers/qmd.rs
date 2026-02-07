@@ -664,6 +664,9 @@ fn write_rawblock(rawblock: &RawBlock, buf: &mut dyn std::io::Write) -> std::io:
     Ok(())
 }
 
+// INCREMENTAL WRITER COUPLING: This is the sugar transform for definition lists. The
+// incremental writer always fully rewrites DefinitionList blocks. See: postprocess.rs
+// transform registry.
 fn write_definitionlist(
     deflist: &DefinitionList,
     buf: &mut dyn std::io::Write,
@@ -863,6 +866,10 @@ fn alignment_to_char(align: &Alignment) -> char {
 
 /// Write a table as a list-table div.
 /// This format supports multi-line cells, rowspan, colspan, etc.
+///
+/// INCREMENTAL WRITER COUPLING: This is the sugar transform for complex tables. The sugared
+/// form uses BulletList (an indentation boundary), so the incremental writer always fully
+/// rewrites tables. See: postprocess.rs transform registry.
 fn write_list_table(
     table: &Table,
     buf: &mut dyn std::io::Write,
@@ -1050,6 +1057,11 @@ fn write_list_table(
     Ok(())
 }
 
+// INCREMENTAL WRITER COUPLING: This is the sugar decision point for tables. It chooses
+// between pipe table format and list-table div format. The incremental writer always fully
+// rewrites Table blocks (never incrementally splices them), so format changes between
+// pipe and list-table on rewrite are acceptable (canonicalization, not a bug).
+// See: postprocess.rs transform registry.
 fn write_table(
     table: &Table,
     buf: &mut dyn std::io::Write,
@@ -1848,6 +1860,57 @@ pub fn write_plain(
         write_inline(inline, buf, ctx)?;
     }
     writeln!(buf)?;
+    Ok(())
+}
+
+/// Write a single block to the given buffer using a fresh writer context.
+///
+/// This is a public wrapper around the private `write_block` function,
+/// intended for use by the incremental writer (writers::incremental) which
+/// needs to rewrite individual blocks.
+///
+/// The output ends with `\n` (each block produces its content + trailing newline).
+pub fn write_single_block<T: std::io::Write>(
+    block: &Block,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut ctx = QmdWriterContext::new();
+    if let Err(e) = write_block(block, buf, &mut ctx) {
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write block: {}", e))
+                .build(),
+        ]);
+    }
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
+    Ok(())
+}
+
+/// Write metadata (YAML front matter) to the given buffer.
+///
+/// This is a public wrapper around `write_config_value_meta`, intended for use
+/// by the incremental writer when metadata has changed and needs to be rewritten.
+///
+/// Returns `Ok(true)` if metadata was written, `Ok(false)` if metadata was empty.
+pub fn write_metadata<T: std::io::Write>(
+    meta: &ConfigValue,
+    buf: &mut T,
+) -> Result<(), Vec<quarto_error_reporting::DiagnosticMessage>> {
+    let mut ctx = QmdWriterContext::new();
+    if let Err(e) = write_config_value_meta(meta, buf, &mut ctx) {
+        return Err(vec![
+            quarto_error_reporting::DiagnosticMessageBuilder::error("IO error during write")
+                .with_code("Q-3-1")
+                .problem(format!("Failed to write metadata: {}", e))
+                .build(),
+        ]);
+    }
+    if !ctx.errors.is_empty() {
+        return Err(ctx.errors);
+    }
     Ok(())
 }
 

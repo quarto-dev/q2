@@ -3,6 +3,35 @@
  * Copyright (c) 2025 Posit, PBC
  */
 
+// =============================================================================
+// Sugar/Desugar Transform Registry
+// =============================================================================
+//
+// This module contains "desugar" transforms applied during QMD reading (postprocessing).
+// Each transform has a corresponding "sugar" transform in writers/qmd.rs applied during
+// writing. Any changes to these transforms must consider the incremental writer
+// (writers::incremental), which relies on the safe-rewrite-boundary assumption.
+//
+// Transform          | Read (desugar)                      | Write (sugar)                        | Sugared form uses
+//                    |                                     |                                      | indentation boundaries?
+// -------------------|-------------------------------------|--------------------------------------|------------------------
+// list-table         | Div(.list-table) → Table            | Table → Div(.list-table) or pipe     | Yes (BulletList inside div)
+//                    | transform_list_table_div()          | write_table() / write_list_table()   |
+// -------------------|-------------------------------------|--------------------------------------|------------------------
+// definition-list    | Div(.definition-list) →             | DefinitionList → term/definition     | No (but always fully
+//                    | DefinitionList                      | syntax                               | rewritten regardless)
+//                    | transform_definition_list_div()     | write_definitionlist()               |
+// -------------------|-------------------------------------|--------------------------------------|------------------------
+//
+// INCREMENTAL WRITER COUPLING:
+// Both transforms' sugared forms are always fully rewritten by the incremental writer
+// (never incrementally spliced), so Option A reconciliation (post-desugared ASTs) is safe.
+// If adding a new sugar/desugar transform, document whether the sugared form uses
+// indentation boundaries. If it does NOT, evaluate whether Option A reconciliation can
+// correctly splice the sugared form — it may require switching to Option B (pre-desugared
+// reconciliation). See: claude-notes/plans/2026-02-07-incremental-writer.md
+// =============================================================================
+
 use crate::filter_context::FilterContext;
 use crate::filters::{
     Filter, FilterReturn::FilterResult, FilterReturn::Unchanged, topdown_traverse,
@@ -758,6 +787,11 @@ fn transform_definition_list_div(div: Div) -> Block {
 /// Transforms applied:
 /// - `definition-list` class divs → DefinitionList blocks
 /// - `list-table` class divs → Table blocks
+///
+/// INCREMENTAL WRITER COUPLING: This is the desugar entry point. The incremental writer
+/// reconciles post-desugared ASTs (Option A), relying on the fact that all sugared forms
+/// are fully rewritten (never incrementally spliced). See the transform registry at the
+/// top of this file.
 pub fn transform_divs(doc: Pandoc, error_collector: &mut DiagnosticCollector) -> Pandoc {
     let error_collector_ref = RefCell::new(error_collector);
 

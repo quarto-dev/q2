@@ -7,6 +7,7 @@
 pub mod ansi;
 pub mod html;
 pub(crate) mod html_source;
+pub mod incremental;
 pub mod json;
 pub mod native;
 pub mod plaintext;
